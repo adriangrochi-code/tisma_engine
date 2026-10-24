@@ -46,6 +46,824 @@
   ]
  },
  {
+  "vendor": "Anycubic",
+  "model": "Kobra 2",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 300,
+  "max_acceleration": 3000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/kobra-2",
+   "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2",
+   "https://store.anycubic.com/products/nozzle"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 2 Max",
+  "build_volume": [
+   420,
+   420,
+   500
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 90,
+  "max_nozzle_temp": 260,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/kobra-2-max",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 2 Neo",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 250,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://eu.anycubic.com/products/kobra-2-neo",
+   "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2-neo",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 2 Plus",
+  "build_volume": [
+   320,
+   320,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 90,
+  "max_nozzle_temp": 260,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/kobra-2-plus",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 2 Pro",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/kobra-2-pro",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 3",
+  "build_volume": [
+   250,
+   250,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "ACE Pro (sold separately), 4 colors; 8 with two ACE Pros",
+  "sources": [
+   "https://store.anycubic.com/products/anycubic-kobra-3",
+   "https://store.anycubic.com/products/ace-2-pro",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra 3 Combo",
+  "build_volume": [
+   250,
+   250,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "ACE Pro included, 4 colors; 8 with two ACE Pros",
+  "sources": [
+   "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo",
+   "https://store.anycubic.com/products/anycubic-kobra-3",
+   "https://store.anycubic.com/products/ace-2-pro",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra Neo",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 100,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/kobra-neo"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Kobra S1",
+  "build_volume": [
+   250,
+   250,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 320,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "ACE Pro (Kobra S1 Combo) or ACE 2 Pro, 4 colors; 8 with two ACE Pros",
+  "sources": [
+   "https://store.anycubic.com/products/kobra-s1",
+   "https://store.anycubic.com/products/ace-2-pro",
+   "https://store.anycubic.com/products/hotend-for-fdm-3d-printers"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "model": "Vyper",
+  "build_volume": [
+   245,
+   245,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 180,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://store.anycubic.com/products/anycubic-vyper"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "M1 Pro",
+  "build_volume": [
+   260,
+   260,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 320,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Artillery MCM (Multi-Color Management) system",
+  "sources": [
+   "https://www.artillery3d.com/products/m1-carbon"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "Sidewinder X2",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.artillery3d.com/pages/manual"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "Sidewinder X3 Plus",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 300,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.artillery3d.com/products/artillery-sidewinder-x3-plus",
+   "https://www.artillery3d.com/products/16pcs-brass-nozzle-kit-for-sw-x3-sw-x4"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "Sidewinder X3 Pro",
+  "build_volume": [
+   240,
+   240,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 250,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.artillery3d.com/pages/sidewinder-x3-pro-support",
+   "https://www.artillery3d.com/products/16pcs-brass-nozzle-kit-for-sw-x3-sw-x4"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "Sidewinder X4 Plus",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.artillery3d.com/products/sidewinder-x4-plus",
+   "https://www.artillery3d.com/products/16pcs-brass-nozzle-kit-for-sw-x3-sw-x4"
+  ]
+ },
+ {
+  "vendor": "Artillery",
+  "model": "Sidewinder X4 Pro",
+  "build_volume": [
+   240,
+   240,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 12000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.artillery3d.com/products/sidewinder-x4-pro",
+   "https://www.artillery3d.com/products/16pcs-brass-nozzle-kit-for-sw-x3-sw-x4"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "A1",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "AMS lite (Combo), 4 spools; AMS/AMS 2 Pro/AMS HT via AMS HUB (SA013)",
+  "sources": [
+   "https://us.store.bambulab.com/products/a1",
+   "https://cdn1.bambulab.com/documentation/quick-start-a75adcb1d5d5e/Quick%20Start%20Guide%20for%20A1.pdf"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "A1 mini",
+  "build_volume": [
+   180,
+   180,
+   180
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 80,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "AMS lite (Combo), 4 spools; AMS/AMS 2 Pro/AMS HT via AMS HUB accessory",
+  "sources": [
+   "https://us.store.bambulab.com/products/a1-mini",
+   "https://store.bblcdn.com/6cddc28fcb5a4a34975cfc7a23c83491.pdf"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "A2L",
+  "build_volume": [
+   330,
+   320,
+   325
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 80,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "AMS lite (Combo); stackable with 2nd-Gen AMS (4/8/16 spools)",
+  "sources": [
+   "https://us.store.bambulab.com/products/a2l",
+   "https://store.bblcdn.com/s7/mqxkp/c59dc3c5d00e4c8284872e2304018c4f/npdf.pdf",
+   "https://wiki.bambulab.com/en/a2l/manual/acc-in-the-box"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "H2C",
+  "build_volume": [
+   305,
+   320,
+   325
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 1000,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual nozzle with induction-hotend rack (up to 6 replaceable hotends); up to 24 materials with AMS",
+  "sources": [
+   "https://us.store.bambulab.com/products/h2c",
+   "https://store.bblcdn.com/s7/default/d741f5a073c94245885065ff89a0b2da/H2C_Spec.pdf",
+   "https://wiki.bambulab.com/en/h2c"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "H2D",
+  "build_volume": [
+   325,
+   320,
+   325
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 1000,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual nozzle; AMS 2 Pro/AMS HT, up to 25 colors",
+  "sources": [
+   "https://us.store.bambulab.com/products/h2d",
+   "https://store.bblcdn.com/4731f4c55a/e8f62a86f5f24c42a764d3d528303526/TDS.pdf",
+   "https://wiki.bambulab.com/en/h2/troubleshooting/first-layer-printing-optimization-guide"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "H2S",
+  "build_volume": [
+   340,
+   320,
+   340
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 1000,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "AMS; up to 4 AMS 2 Pro + 8 AMS HT, 24 slots, up to 24 colors",
+  "sources": [
+   "https://us.store.bambulab.com/products/h2s",
+   "https://store.bblcdn.com/s7/default/3f91ec86de1a4ce28fe8fb660b95cd3e/h2s.pdf",
+   "https://wiki.bambulab.com/en/h2s/maintenance/manual-bed-leveling"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "P1P",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "AMS (optional; 'Filament Odometry: Optional with AMS')",
+  "sources": [
+   "https://public-cdn.bambulab.com/store/bambulab-P1P-tech-specs.pdf",
+   "https://wiki.bambulab.com/en/general/printer-calibration",
+   "https://us.store.bambulab.com/products/extruder-motor"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "P1S",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "AMS (Combo); up to 16 colors with 4 AMS units",
+  "sources": [
+   "https://us.store.bambulab.com/products/p1s",
+   "https://store.bblcdn.com/s7/default/9e9c1948dd61491199a52c3f1497b9c7/bambu-lab-P1S-tech-specs.pdf",
+   "https://us.store.bambulab.com/products/extruder-motor"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "P2S",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "AMS 2 Pro (Combo); up to 4 AMS 2 Pro + 4 AMS HT, 20 slots, up to 20 colors",
+  "sources": [
+   "https://us.store.bambulab.com/products/p2s",
+   "https://store.bblcdn.com/s7/default/2d1a01cd2dca425eb071ccc28c26c9fa/spec.pdf",
+   "https://wiki.bambulab.com/en/p2s/maintenance/manual-bed-tramming"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "X1 Carbon",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "AMS; up to 16 colors",
+  "sources": [
+   "https://public-cdn.bambulab.com/store/bambulab-X1-carbon-tech-specs.pdf",
+   "https://us.store.bambulab.com/products/refurbished-x1c",
+   "https://us.store.bambulab.com/products/extruder-motor"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "X1E",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 320,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "AMS (optional; 'Filament Odometry: Optional with AMS')",
+  "sources": [
+   "https://cdn1.bambulab.com/x1e/spec/X1E%20Spec(EN).pdf",
+   "https://wiki.bambulab.com/en/general/printer-calibration"
+  ]
+ },
+ {
+  "vendor": "Bambu Lab",
+  "model": "X2D",
+  "build_volume": [
+   256,
+   256,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "bambu",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 300,
+  "max_speed": 1000,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Main nozzle + auxiliary (support) extruder; single hotend up to 4 AMS 2 Pro + 8 AMS HT (24 slots)",
+  "sources": [
+   "https://us.store.bambulab.com/products/x2d",
+   "https://store.bblcdn.com/s7/default/9e5a2e55561347cba2838a0c98c15ace/X2D_spec.pdf",
+   "https://blog.bambulab.com/two-extruders-one-purpose-what-is-x2d-direct-drive-extrusion-and-auxiliary-extrusion/",
+   "https://wiki.bambulab.com/en/p2s/maintenance/manual-bed-tramming"
+  ]
+ },
+ {
   "vendor": "BIQU",
   "model": "B1",
   "build_volume": [
@@ -1053,6 +1871,517 @@
   ]
  },
  {
+  "vendor": "Elegoo",
+  "model": "Centauri 2",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 350,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "CANVAS (sold separately or in Centauri 2 Combo), 4 colors",
+  "sources": [
+   "https://www.elegoo.com/products/centauri-2",
+   "https://uk.elegoo.com/products/canvas-for-centauri-carbon-2-centauri-2-series"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Centauri Carbon",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 320,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "CANVAS for Centauri Carbon (sold separately), 4 colors",
+  "sources": [
+   "https://www.elegoo.com/products/centauri-carbon",
+   "https://www.elegoo.com/products/assembled-extruder-hotend-kit-for-centauri-carbon",
+   "https://www.elegoo.com/products/canvas-for-centauri-carbon"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Centauri Carbon 2",
+  "build_volume": [
+   256,
+   256,
+   256
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 350,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "CANVAS (sold separately or in Centauri Carbon 2 Combo), 4 colors",
+  "sources": [
+   "https://www.elegoo.com/products/centauri-carbon-2",
+   "https://us.elegoo.com/products/centauri-carbon-2"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 3",
+  "build_volume": [
+   220,
+   220,
+   280
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 180,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-3-fdm-3d-printer",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%203/4.%20User's%20Guide/1.User%20Manual/NEPTUNE%203%20User%20Guide-EN.pdf"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 3 Max",
+  "build_volume": [
+   420,
+   420,
+   500
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 180,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-3-max-fdm-3d-printer-massive-printing-size-of-420x420x500mm",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%203%20Max/4.%20User's%20Guide/1.%20User%20Manual/NEPTUNE%203%20MAX%20User%20Manual-V1.2.pdf",
+   "https://www.elegoo.com/products/hardened-steel-nozzle-kit-for-neptune-3-pro-3-plus-3-max"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 3 Plus",
+  "build_volume": [
+   320,
+   320,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-3-plus-fdm-3d-printer-with-larger-build-volume-of-320x320x400mm",
+   "https://www.elegoo.com/blogs/3d-printer-user-guide/neptune-3-series-comparison-pro-vs-plus-vs-max",
+   "https://www.elegoo.com/blogs/3d-printer-user-guide/faqs-for-neptune3-pro-plus-max",
+   "https://www.elegoo.com/products/hardened-steel-nozzle-kit-for-neptune-3-pro-3-plus-3-max"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 3 Pro",
+  "build_volume": [
+   225,
+   225,
+   280
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-3-pro-fdm-3d-printer-225x225x280mm",
+   "https://www.elegoo.com/blogs/3d-printer-user-guide/faqs-for-neptune3-pro-plus-max",
+   "https://www.elegoo.com/products/hardened-steel-nozzle-kit-for-neptune-3-pro-3-plus-3-max",
+   "https://us.elegoo.com/products/motherboard-for-neptune-3-pro-plus-max"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 4",
+  "build_volume": [
+   225,
+   225,
+   265
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-4-fdm-3d-printer",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%204/3.%20User's%20Guide/1.User%20Manual/NEPTUNE%204%20%20User%20Manual-English-V1.7.pdf",
+   "https://www.elegoo.com/products/multi-size-brass-nozzle-kit-for-neptune-4-4-pro",
+   "https://www.elegoo.com/products/hardened-steel-nozzle-kit-for-neptune-4-4-pro"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 4 Max",
+  "build_volume": [
+   420,
+   420,
+   480
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 85,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 8000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/neptune-4-max-fdm-3d-printer",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%204%20Max/3.%20User's%20Guide/1.User%20Manual/NEPTUNE%204%20MAX%20User%20Manual-English-V1.8.pdf",
+   "https://us.elegoo.com/products/multi-size-brass-nozzle-kit-for-neptune-4-plus-4-max"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 4 Plus",
+  "build_volume": [
+   320,
+   320,
+   385
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 12000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/neptune-4-plus-fdm-3d-printer",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%204%20Plus/3.%20User's%20Guide/1.User%20Manual/NEPTUNE%204%20PLUS-%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%E3%83%9E%E3%83%8B%E3%83%A5%E3%82%A2%E3%83%AB-V1.6.pdf",
+   "https://us.elegoo.com/products/multi-size-brass-nozzle-kit-for-neptune-4-plus-4-max",
+   "https://www.elegoo.com/products/hardened-steel-nozzle-kit-for-neptune-4-plus-4-max"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "Neptune 4 Pro",
+  "build_volume": [
+   225,
+   225,
+   265
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.elegoo.com/products/elegoo-neptune-4-pro-fdm-3d-printer",
+   "https://download.elegoo.com/06%20FDM%20Printer/02%20ELEGOO%20Neptune%20Series%20Files/Neptune%204%20Pro/3.%20User's%20Guide/1.User%20Manual/V1.5-2/NEPTUNE%204%20RPO%20User%20Manual-English-V1.5.pdf",
+   "https://www.elegoo.com/products/multi-size-brass-nozzle-kit-for-neptune-4-4-pro"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
+  "model": "OrangeStorm Giga",
+  "build_volume": [
+   800,
+   800,
+   1000
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.6,
+   0.4,
+   0.8,
+   1.0
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 300,
+  "max_acceleration": 5000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Up to 4 printheads (3 optional) printing copies of one model at once, one filament each",
+  "sources": [
+   "https://www.elegoo.com/products/orangestorm-giga",
+   "https://us.elegoo.com/pages/elegoo-orangestorm-giga",
+   "https://www.elegoo.com/products/nozzle-kit-for-orangestorm-giga"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "AD5X",
+  "build_volume": [
+   220,
+   220,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Integrated IFS, 4-color filament change module",
+  "sources": [
+   "https://www.flashforge.com/products/flashforge-ad5x-3d-printer",
+   "https://wiki.flashforge.com/resource/pictures/%E4%B8%AD%E6%96%87/orca_ff/ad5x%E4%B8%AD%E8%8B%B1%E6%96%87%E8%AF%B4%E6%98%8E%E4%B9%A6-20250312-tyz.pdf"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "Adventurer 3",
+  "build_volume": [
+   150,
+   150,
+   150
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 240,
+  "max_speed": 100,
+  "auto_leveling": false,
+  "enclosed": true,
+  "sources": [
+   "https://en.fss.flashforge.com/10000/software/e1bc9c105b1f9983ae67f1f94e47690b.pdf"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "Adventurer 4",
+  "build_volume": [
+   220,
+   200,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.3,
+   0.6
+  ],
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 265,
+  "max_speed": 150,
+  "auto_leveling": false,
+  "enclosed": true,
+  "sources": [
+   "https://en.fss.flashforge.com/10000/software/635e457a8071d9ccc1c37d1371145d02.pdf"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "Adventurer 5M",
+  "build_volume": [
+   220,
+   220,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 280,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.flashforge.com/products/adventurer-5m-3d-printer",
+   "https://en.fss.flashforge.com/10000/software/b7d33c3374d4ac67fac5a50e9328c567.pdf",
+   "https://www.flashforge.com/blogs/news/adventurer-5m-vs-adventurer-5m-pro"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "Adventurer 5M Pro",
+  "build_volume": [
+   220,
+   220,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 280,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.flashforge.com/products/adventurer-5m-pro-3d-printer",
+   "https://en.fss.flashforge.com/10000/software/591658f80f34f9653eaf43caccaedb14.pdf",
+   "https://www.flashforge.com/blogs/news/adventurer-5m-vs-adventurer-5m-pro"
+  ]
+ },
+ {
+  "vendor": "Flashforge",
+  "model": "Creator Pro 2",
+  "build_volume": [
+   200,
+   148,
+   150
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_speed": 100,
+  "auto_leveling": false,
+  "enclosed": true,
+  "multi_material": "IDEX: 2 independent extruders (mirror and duplicate modes)",
+  "sources": [
+   "https://en.fss.flashforge.com/10000/software/899daf8848060aa85e584cda439514c0.pdf"
+  ]
+ },
+ {
   "vendor": "Kingroon",
   "model": "KLP1",
   "build_volume": [
@@ -1181,6 +2510,369 @@
   "enclosed": false,
   "sources": [
    "https://peopoly.net/products/magneto-x"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Original Prusa i3 MK3S+",
+  "build_volume": [
+   250,
+   210,
+   210
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
+  "max_speed": 200,
+  "auto_leveling": true,
+  "multi_material": "MMU2S/MMU3 support (up to 5 filaments)",
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-i3-mk3s-10th-anniversary-edition-3d-printer/",
+   "https://www.prusa3d.com/product/original-prusa-mini-semi-assembled-3d-printer-9/",
+   "https://www.prusa3d.com/product/prusa-nozzle-v6-set/"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Original Prusa MINI+",
+  "build_volume": [
+   180,
+   180,
+   180
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 280,
+  "max_speed": 200,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-mini-semi-assembled-3d-printer-9/",
+   "https://www.prusa3d.com/product/original-prusa-i3-mk3s-10th-anniversary-edition-3d-printer/",
+   "https://www.prusa3d.com/product/prusa-nozzle-v6-set/"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Original Prusa MK4",
+  "build_volume": [
+   250,
+   210,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.3,
+   0.5,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
+  "auto_leveling": true,
+  "multi_material": "MMU3 support (5 filaments)",
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-mini-semi-assembled-3d-printer-9/",
+   "https://blog.prusa3d.com/announcing-original-prusa-mk4_76585/",
+   "https://www.prusa3d.com/product/prusa-nozzle-brass/",
+   "https://help.prusa3d.com/glossary/1-75-mm_134813"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Original Prusa MK4S",
+  "build_volume": [
+   250,
+   210,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.3,
+   0.5,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "MMU3 (5 filaments)",
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-mk4s-3d-printer/",
+   "https://www.prusa3d.com/product/prusa-nozzle-brass/"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Prusa CORE One+ (Gen 2)",
+  "build_volume": [
+   250,
+   220,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.3,
+   0.5,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "MMU3 (5 filaments) and INDX (up to 8 filaments)",
+  "sources": [
+   "https://www.prusa3d.com/product/prusa-core-one/",
+   "https://www.prusa3d.com/product/prusa-nozzle-brass/"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Prusa XL+ Five-Head",
+  "build_volume": [
+   360,
+   360,
+   360
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.3,
+   0.5,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 115,
+  "max_nozzle_temp": 290,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Toolchanger with 5 independent toolheads (automatic tool changing)",
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-xl-semi-assembled-5-toolhead-3d-printer/",
+   "https://www.prusa3d.com/p/prusa-xl-business/",
+   "https://www.prusa3d.com/product/prusa-nozzle-brass/"
+  ]
+ },
+ {
+  "vendor": "Prusa Research",
+  "model": "Prusa XL+ Single-Tool",
+  "build_volume": [
+   360,
+   360,
+   360
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.3,
+   0.5,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 115,
+  "max_nozzle_temp": 290,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Single toolhead; upgradable to up to 5 independent toolheads (automatic tool changing)",
+  "sources": [
+   "https://www.prusa3d.com/product/original-prusa-xl-single-toolhead-3d-printer/",
+   "https://www.prusa3d.com/p/prusa-xl-business/",
+   "https://www.prusa3d.com/product/prusa-nozzle-brass/"
+  ]
+ },
+ {
+  "vendor": "QIDI",
+  "model": "Plus4",
+  "build_volume": [
+   305,
+   305,
+   280
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 370,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "QIDI Box (multi-color); up to 4 boxes, 16 materials",
+  "sources": [
+   "https://qidi3d.com/pages/qidi-plus-4-techspecs",
+   "https://qidi3d.com/products/plus4-3d-printer"
+  ]
+ },
+ {
+  "vendor": "QIDI",
+  "model": "Q1 Pro",
+  "build_volume": [
+   245,
+   245,
+   240
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://qidi3d.com/products/q1-pro-3d-printer"
+  ]
+ },
+ {
+  "vendor": "QIDI",
+  "model": "X-Max 3",
+  "build_volume": [
+   325,
+   325,
+   315
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://qidi3d.com/products/qidi-x-max-3"
+  ]
+ },
+ {
+  "vendor": "QIDI",
+  "model": "X-Plus 3",
+  "build_volume": [
+   280,
+   280,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://qidi3d.com/products/qidi-x-max-3"
+  ]
+ },
+ {
+  "vendor": "QIDI",
+  "model": "X-Smart 3",
+  "build_volume": [
+   175,
+   180,
+   170
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://qidi3d.com/products/qidi-x-max-3"
   ]
  },
  {
@@ -1474,6 +3166,263 @@
   ]
  },
  {
+  "vendor": "Sovol",
+  "model": "SV01 Pro",
+  "build_volume": [
+   280,
+   240,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.3,
+   0.5,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_nozzle_temp": 260,
+  "max_speed": 80,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.sovol3d.com/en/SV01PRO",
+   "https://www.sovol3d.com/products/tungsten-nozzles"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV04",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.3,
+   0.5,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "IDEX: 2 independent extruders (dual, duplicate/copy, mirror modes)",
+  "sources": [
+   "https://wiki.sovol3d.com/en/QUICKSTART",
+   "https://www.sovol3d.com/products/sv04-idex-3d-printer-metal-direct-drive-extruder",
+   "https://www.sovol3d.com/products/tungsten-nozzles"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV06",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.3,
+   0.5,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.sovol3d.com/en/SV06",
+   "https://www.sovol3d.com/products/tungsten-nozzles"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV06 ACE",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.sovol3d.com/products/sovol-sv06-ace"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV06 Plus",
+  "build_volume": [
+   300,
+   300,
+   340
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.sovol3d.com/en/SV06PLUS",
+   "https://www.sovol3d.com/products/sv06-plus-hardened-tool-steel-tungsten-nozzles-0-4-0-6-0-8-1mm"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV06 Plus ACE",
+  "build_volume": [
+   300,
+   300,
+   350
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 15000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.sovol3d.com/products/sovol-sv06-plus-ace-3d-printer",
+   "https://www.sovol3d.com/products/sv06-ace-nozzle-kit-0-2-0-4mm-0-6mm-0-8mm"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV07",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.sovol3d.com/en/SV07",
+   "https://www.sovol3d.com/products/sv06-plus-hardened-tool-steel-tungsten-nozzles-0-4-0-6-0-8-1mm"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV07 Plus",
+  "build_volume": [
+   300,
+   300,
+   350
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.sovol3d.com/en/SV07PLUS",
+   "https://www.sovol3d.com/products/sovol-sv07-original-all-metal-planetary-gear-direct-drive-extruder"
+  ]
+ },
+ {
+  "vendor": "Sovol",
+  "model": "SV08",
+  "build_volume": [
+   350,
+   350,
+   345
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 700,
+  "max_acceleration": 40000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.sovol3d.com/products/sovol-sv08-3d-printer",
+   "https://wiki.sovol3d.com/en/SV08"
+  ]
+ },
+ {
   "vendor": "Tronxy",
   "model": "X5SA-500 2E",
   "build_volume": [
@@ -1496,6 +3445,203 @@
   "multi_material": "2-in-1-out (two extruders, one nozzle) dual-color printing",
   "sources": [
    "https://www.tronxy.com/product/x5sa-500-2e-fdm-3d-printer/"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker 2+ Connect",
+  "build_volume": [
+   223,
+   220,
+   205
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "auto_leveling": false,
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-2-connect/"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker Method X Carbon Fiber",
+  "build_volume": [
+   190,
+   190,
+   196
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "other",
+  "extruder": "direct",
+  "max_nozzle_temp": 300,
+  "enclosed": true,
+  "multi_material": "Dual extrusion, swappable extruders (1C, 2A, 2XA)",
+  "sources": [
+   "https://ultimaker.com/3d-printers/method-series/ultimaker-method-x-carbon-fiber/"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker S3",
+  "build_volume": [
+   230,
+   190,
+   200
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 140,
+  "max_nozzle_temp": 280,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Dual extrusion, swappable print cores",
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-s3/",
+   "https://um-support-files.ultimaker.com/manuals/user-manual/S3-&-S5/Ultimaker%20S3-S5%20-%20User%20manual%20ENv2.4.pdf"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker S5",
+  "build_volume": [
+   330,
+   240,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 140,
+  "max_nozzle_temp": 280,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Dual extrusion, swappable print cores",
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-s5/",
+   "https://um-support-files.ultimaker.com/manuals/user-manual/S3-&-S5/Ultimaker%20S3-S5%20-%20User%20manual%20ENv2.4.pdf"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker S6",
+  "build_volume": [
+   330,
+   240,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 340,
+  "max_speed": 500,
+  "max_acceleration": 50000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Dual extrusion, swappable print cores",
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-s6/",
+   "https://ultimaker.com/wp-content/uploads/2025/06/Ultimaker_S6-data_sheet-RGB-2025-05.pdf"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker S7",
+  "build_volume": [
+   330,
+   240,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 125,
+  "max_nozzle_temp": 280,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual extrusion; Pro Bundle Material Station (6 spools)",
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-s7/",
+   "https://um-support-files.ultimaker.com/manuals/user-manual/S7/EN-UltiMaker-S7-V1.2.pdf"
+  ]
+ },
+ {
+  "vendor": "UltiMaker",
+  "model": "UltiMaker S8",
+  "build_volume": [
+   330,
+   240,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.25,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "other",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 340,
+  "max_speed": 500,
+  "max_acceleration": 50000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual extrusion; Material Station: 6 material bays",
+  "sources": [
+   "https://ultimaker.com/3d-printers/s-series/ultimaker-s8/",
+   "https://um-support-files.ultimaker.com/manuals/user-manual/S8/EN-UltiMakerS8-V1.4-2025-07.pdf"
   ]
  },
  {
