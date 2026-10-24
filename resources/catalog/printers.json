@@ -22,8 +22,30 @@
   "max_speed": 500,
   "max_acceleration": 5000,
   "auto_leveling": true,
+  "max_flow": 24,
+  "hardened_nozzle": false,
+  "hotend": "60 W heating rod, 260 C max (all-metal hotend optional)",
+  "bed_surfaces": [
+   "PEI soft magnetic steel plate"
+  ],
+  "connectivity": [
+   "wifi",
+   "usb drive",
+   "app"
+  ],
+  "features": [
+   "input shaping",
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "AI failure detection",
+   "touchscreen"
+  ],
   "sources": [
-   "https://www.eufymake.com/products/m5-with-pla-filament-black"
+   "https://www.eufymake.com/products/m5-with-pla-filament-black",
+   "https://www.eufymake.com/m5",
+   "https://www.eufymake.com/blogs/buying-guides/ankermake-m5c-3d-printer-review",
+   "https://www.eufymake.com/products/m5c-heated-bed-cable"
   ]
  },
  {
@@ -40,9 +62,19 @@
   "max_nozzle_temp": 300,
   "max_speed": 500,
   "auto_leveling": true,
+  "max_flow": 35,
+  "hotend": "all-metal, 300 C",
+  "bed_surfaces": [
+   "PEI soft magnetic plate"
+  ],
+  "connectivity": [
+   "wifi",
+   "app"
+  ],
   "sources": [
    "https://www.eufymake.com/blogs/buying-guides/ankermake-m5c-3d-printer-review",
-   "https://www.eufymake.com/products/m5c-heated-bed-cable"
+   "https://www.eufymake.com/products/m5c-heated-bed-cable",
+   "https://www.eufymake.com/blogs/buying-guides/best-budget-3d-printer"
   ]
  },
  {
@@ -875,6 +907,20 @@
   "max_speed": 100,
   "auto_leveling": false,
   "multi_material": "Optional two-in-one-out dual-color printing upgrade kit",
+  "probe": "none (manual leveling; BLTouch holder and port, sensor not included)",
+  "bed_surfaces": [
+   "PEI spring steel sheet (magnetic, double-sided)"
+  ],
+  "connectivity": [
+   "usb",
+   "sd",
+   "usb drive"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "touchscreen"
+  ],
   "sources": [
    "https://biqu.equipment/products/biqu-b1-3d-printer-skr-v1-4-32bit-motherboard-tft35-b1-v3-0-dual-operation-system-fdm-impressora-3d-printer-beginner"
   ]
@@ -898,6 +944,21 @@
   "max_nozzle_temp": 260,
   "max_speed": 180,
   "auto_leveling": true,
+  "hardened_nozzle": false,
+  "hotend": "40 W heater cartridge, E3D V5/V6-type brass nozzle, 260 C max",
+  "probe": "BIQU MicroProbe",
+  "bed_surfaces": [
+   "PEI spring steel sheet (magnetic)"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb drive"
+  ],
+  "features": [
+   "filament runout sensor"
+  ],
   "sources": [
    "https://biqu.equipment/products/biqu-hurakan-diy-3d-printer"
   ]
@@ -2395,6 +2456,11 @@
   "max_acceleration": 10000,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "hotend": "all-metal, ceramic heating core (CHC)",
+  "features": [
+   "input shaping"
+  ],
   "sources": [
    "https://kingroon.com/products/kingroon-klp1-corexy-3d-printer-with-klipper-firmware"
   ]
@@ -2414,8 +2480,51 @@
   "max_speed": 500,
   "max_acceleration": 10000,
   "auto_leveling": true,
+  "hotend": "ceramic heating tube, 260 C default (up to 300 C)",
+  "connectivity": [
+   "wifi",
+   "usb drive"
+  ],
+  "features": [
+   "input shaping"
+  ],
   "sources": [
    "https://kingroon.com/products/kingroon-kp3s-pro-v2-with-klipper-firmware"
+  ]
+ },
+ {
+  "vendor": "Kingroon",
+  "model": "KP5L Pro",
+  "build_volume": [
+   300,
+   300,
+   340
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 90,
+  "max_nozzle_temp": 260,
+  "max_speed": 150,
+  "auto_leveling": false,
+  "bed_surfaces": [
+   "tempered glass"
+  ],
+  "connectivity": [
+   "usb",
+   "sd"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "touchscreen"
+  ],
+  "sources": [
+   "https://kingroon.com/products/kingroon-kp5l-pro-3d-printer"
   ]
  },
  {
@@ -2437,9 +2546,63 @@
   "max_nozzle_temp": 250,
   "max_speed": 120,
   "auto_leveling": false,
+  "bed_surfaces": [
+   "carborundum (lattice) glass"
+  ],
+  "connectivity": [
+   "sd",
+   "usb"
+  ],
+  "features": [
+   "filament runout sensor",
+   "touchscreen"
+  ],
   "sources": [
    "https://www.longer.net/products/lk5-pro-fdm-3d-printer",
    "https://www.longer.net/pages/download-lk5-pro"
+  ]
+ },
+ {
+  "vendor": "LulzBot",
+  "model": "Mini 3",
+  "build_volume": [
+   180,
+   180,
+   180
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.5
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 290,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "kinematics": "corexz",
+  "hardened_nozzle": false,
+  "hotend": "Meteor 175 tool head, 0.5 mm nickel-plated brass nozzle, 290 C (firmware limited)",
+  "probe": "BLTouch (25-point mesh or adaptive to print area)",
+  "bed_surfaces": [
+   "laminated PEI spring steel sheet (magnetic flex bed)"
+  ],
+  "connectivity": [
+   "wifi",
+   "usb",
+   "usb drive"
+  ],
+  "features": [
+   "input shaping",
+   "filament runout sensor",
+   "auto Z offset",
+   "nozzle wiping",
+   "touchscreen"
+  ],
+  "sources": [
+   "https://buy.lulzbot.com/products/lulzbot-3d-printer-mini-v3-boxed-for-retail-na"
   ]
  },
  {
@@ -2462,9 +2625,63 @@
   "max_speed": 300,
   "auto_leveling": true,
   "multi_material": "Optional Dual Extruder v3 and FlexyDually tool heads (two-color or multi-material)",
+  "max_flow": 16,
+  "hardened_nozzle": false,
+  "hotend": "LulzBot v2 all-metal hot end, beryllium copper nozzle, 290 C",
+  "probe": "automatic Z-axis compensation (self-leveling)",
+  "bed_surfaces": [
+   "PEI on heated borosilicate glass"
+  ],
+  "connectivity": [
+   "usb",
+   "sd"
+  ],
+  "features": [
+   "nozzle wiping"
+  ],
   "sources": [
    "https://lulzbot.com/store/taz-6-product-page",
    "https://assets.lulzbot.com/TAZ6_SpecSheet_FINAL.pdf"
+  ]
+ },
+ {
+  "vendor": "LulzBot",
+  "model": "TAZ 8",
+  "build_volume": [
+   295,
+   295,
+   285
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.5
+  ],
+  "firmware": "marlin",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 290,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Optional dual-extrusion Galaxy series tool head for 2.85 mm filament",
+  "hardened_nozzle": false,
+  "hotend": "Galaxy series tool head, 0.5 mm nickel-plated brass nozzle, 290 C (firmware limited)",
+  "probe": "BLTouch (16-point mesh)",
+  "bed_surfaces": [
+   "magnetic flex bed system (smooth and textured sheets)"
+  ],
+  "connectivity": [
+   "usb",
+   "sd"
+  ],
+  "features": [
+   "filament runout sensor",
+   "auto Z offset",
+   "active bed cooling"
+  ],
+  "sources": [
+   "https://buy.lulzbot.com/products/lulzbot-3d-printer-taz-8",
+   "https://lulzbot.com/learn/TAZ8"
   ]
  },
  {
@@ -2476,12 +2693,32 @@
    285
   ],
   "bed_shape": "rectangular",
+  "firmware": "marlin",
   "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
   "auto_leveling": true,
   "multi_material": "Two active-lifting hot ends (dual extrusion, soluble supports)",
+  "max_flow": 13.82,
+  "hardened_nozzle": true,
+  "hotend": "dual vertically actuated E3D Titan Aero, hardened steel nozzles, 290 C",
+  "probe": "automatic compensation (self-leveling)",
+  "bed_surfaces": [
+   "PEI on heated borosilicate glass"
+  ],
+  "connectivity": [
+   "usb",
+   "usb drive"
+  ],
+  "features": [
+   "filament runout sensor",
+   "nozzle wiping",
+   "auto Z offset"
+  ],
   "sources": [
    "https://lulzbot.com/store/taz-pro",
-   "https://shop.lulzbot.com/products/lulzbot-3d-printer-taz-pro-boxed-for-retail-na"
+   "https://shop.lulzbot.com/products/lulzbot-3d-printer-taz-pro-boxed-for-retail-na",
+   "https://assets.lulzbot.com/taz-pro-specsheet-15175.pdf"
   ]
  },
  {
@@ -2508,6 +2745,23 @@
   "max_acceleration": 22000,
   "auto_leveling": true,
   "enclosed": false,
+  "max_flow": 45,
+  "hardened_nozzle": true,
+  "hotend": "Lancer all-metal, 300 C, swappable melt zones (short/standard included, long optional), E3D V6/Volcano-style nozzles",
+  "probe": "load cell",
+  "bed_surfaces": [
+   "flexible double-sided PEI sheet (magnetic)"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet"
+  ],
+  "features": [
+   "input shaping",
+   "filament runout sensor",
+   "camera",
+   "touchscreen"
+  ],
   "sources": [
    "https://peopoly.net/products/magneto-x"
   ]
@@ -2899,8 +3153,127 @@
   "auto_leveling": true,
   "enclosed": true,
   "multi_material": "IDEX independent dual extruders; dual-extruder area 295×240×240 mm",
+  "kinematics": "idex",
+  "hotend": "V3P (V3 hot end, PTFE version), 300 C",
+  "probe": "mesh leveling with flatness detection",
+  "bed_surfaces": [
+   "flexible steel plate with BuildTak"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen"
+  ],
+  "tools": 2,
   "sources": [
    "https://www.raise3d.com/e2/"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "E2CF",
+  "build_volume": [
+   330,
+   240,
+   240
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 330,
+  "max_speed": 150,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "IDEX independent dual extruders (mirror and duplication modes); dual-extruder area 295×240×240 mm",
+  "kinematics": "idex",
+  "hardened_nozzle": true,
+  "hotend": "V4P, silicon carbide nozzle, 330 C",
+  "probe": "mesh leveling with flatness detection",
+  "bed_surfaces": [
+   "flexible steel plate with BuildTak"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen"
+  ],
+  "tools": 2,
+  "sources": [
+   "https://www.raise3d.com/e2cf/"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "E3",
+  "build_volume": [
+   330,
+   240,
+   240
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 330,
+  "max_speed": 200,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "IDEX independent dual extruders (mirror, duplication, dual-color, dual-material); dual-extruder area 295×240×240 mm",
+  "kinematics": "idex",
+  "max_flow": 16,
+  "probe": "mesh leveling with flatness detection (9-point)",
+  "bed_surfaces": [
+   "flexible double-sided PEI plate (default)",
+   "flexible steel plate with BuildTak (optional)"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen"
+  ],
+  "tools": 2,
+  "sources": [
+   "https://www.raise3d.com/e3/"
   ]
  },
  {
@@ -2927,8 +3300,75 @@
   "auto_leveling": true,
   "enclosed": true,
   "multi_material": "Dual extrusion (dual-head with electronic lifting system); dual-extruder area 255×300×300 mm",
+  "hotend": "interchangeable dual hot ends with single-side nozzle lifting (1.5 mm), 300 C",
+  "probe": "mesh leveling with flatness detection",
+  "bed_surfaces": [
+   "flexible steel plate with BuildTak"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen"
+  ],
   "sources": [
    "https://www.raise3d.com/pro3-series/"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "Pro3 HS",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 320,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "multi_material": "Dual extrusion (dual-head with electronic lifting system); dual-extruder area 255×300×300 mm; auto filament switching between two 2.5 kg spools",
+  "hotend": "strengthened all-metal high-flow hot end (Hyper Speed), 320 C",
+  "probe": "mesh leveling with flatness detection",
+  "bed_surfaces": [
+   "flexible steel plate with BuildTak (magnetic)"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "input shaping",
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen",
+   "RFID filament sensor"
+  ],
+  "sources": [
+   "https://www.raise3d.com/raise3d-pro3-hs-series/"
   ]
  },
  {
@@ -2955,6 +3395,25 @@
   "auto_leveling": true,
   "enclosed": true,
   "multi_material": "Dual extrusion (dual-head with electronic lifting system); dual-extruder area 255×300×605 mm",
+  "hotend": "interchangeable dual hot ends with single-side nozzle lifting (1.5 mm), 300 C",
+  "probe": "mesh leveling with flatness detection",
+  "bed_surfaces": [
+   "flexible steel plate with BuildTak"
+  ],
+  "connectivity": [
+   "wifi",
+   "ethernet",
+   "lan",
+   "usb",
+   "cloud"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "air filtration",
+   "touchscreen"
+  ],
   "sources": [
    "https://www.raise3d.com/pro3-series/"
   ]
@@ -2981,6 +3440,12 @@
   "auto_leveling": true,
   "enclosed": false,
   "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "kinematics": "corexy",
+  "hotend": "Phaetus Rapido 2 Plus UHF, 350 C",
+  "probe": "Beacon (Beacon Contact auto Z calibration)",
+  "features": [
+   "auto Z offset"
+  ],
   "sources": [
    "https://ratrig.com/products/rat-rig-v-core-4-1",
    "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
@@ -3009,6 +3474,12 @@
   "auto_leveling": true,
   "enclosed": false,
   "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "kinematics": "corexy",
+  "hotend": "Phaetus Rapido 2 Plus UHF, 350 C",
+  "probe": "Beacon (Beacon Contact auto Z calibration)",
+  "features": [
+   "auto Z offset"
+  ],
   "sources": [
    "https://ratrig.com/products/rat-rig-v-core-4-1",
    "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
@@ -3037,6 +3508,12 @@
   "auto_leveling": true,
   "enclosed": false,
   "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "kinematics": "corexy",
+  "hotend": "Phaetus Rapido 2 Plus UHF, 350 C",
+  "probe": "Beacon (Beacon Contact auto Z calibration)",
+  "features": [
+   "auto Z offset"
+  ],
   "sources": [
    "https://ratrig.com/products/rat-rig-v-core-4-1",
    "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
@@ -3056,6 +3533,9 @@
   "extruder": "direct",
   "heated_bed": true,
   "enclosed": false,
+  "kinematics": "cartesian",
+  "hotend": "Phaetus Dragonfly BMO (EVA carriage)",
+  "probe": "LJ8 probe (8 mm mount on EVA toolhead)",
   "sources": [
    "https://wiki.ratrig.com/en/products/v-minion/project-details",
    "https://wiki.ratrig.com/en/build-guides/v-minion-eva-assembly",
@@ -3083,6 +3563,21 @@
   "max_speed": 180,
   "enclosed": true,
   "multi_material": "Dual-extrusion module (dual-color/dual-material); dual-nozzle area 350×400×400 mm",
+  "hardened_nozzle": false,
+  "hotend": "quick-swap hot ends, brass nozzle standard (hardened steel optional), 300 C",
+  "bed_surfaces": [
+   "dual textured PEI sheet"
+  ],
+  "connectivity": [
+   "wifi",
+   "usb",
+   "usb drive"
+  ],
+  "features": [
+   "input shaping",
+   "touchscreen",
+   "quick-swap nozzle"
+  ],
   "sources": [
    "https://snapmaker.com/en-US/snapmaker-artisan/specs",
    "https://snapmaker.com/en-US/snapmaker-artisan"
@@ -3113,6 +3608,24 @@
   "auto_leveling": false,
   "enclosed": true,
   "multi_material": "IDEX: Default, Backup, Copy (160 mm wide) and Mirror (150 mm wide) modes; dual-material/dual-color",
+  "kinematics": "idex",
+  "hardened_nozzle": false,
+  "hotend": "easy-swap hot ends with silicone socks, 300 C",
+  "bed_surfaces": [
+   "PEI glass plate (glass one side, PEI coating the other)"
+  ],
+  "connectivity": [
+   "wifi",
+   "usb",
+   "usb drive"
+  ],
+  "features": [
+   "input shaping",
+   "filament runout sensor",
+   "nozzle wiping",
+   "touchscreen"
+  ],
+  "tools": 2,
   "sources": [
    "https://snapmaker.com/en-US/j1s-idex-3d-printer/specs",
    "https://snapmaker.com/en-US/j1s-idex-3d-printer"
@@ -3134,6 +3647,14 @@
   "max_bed_temp": 80,
   "max_nozzle_temp": 275,
   "multi_material": "Optional Dual-extrusion 3D Printing Module (320×315×270 mm)",
+  "connectivity": [
+   "wifi",
+   "usb",
+   "usb drive"
+  ],
+  "features": [
+   "touchscreen"
+  ],
   "sources": [
    "https://snapmaker.com/en-US/snapmaker-2/specs-at"
   ]
@@ -3160,6 +3681,31 @@
   "auto_leveling": true,
   "enclosed": false,
   "multi_material": "Toolchanger with 4 toolheads (SnapSwap), multi-color/multi-material",
+  "kinematics": "corexy",
+  "max_flow": 32,
+  "hardened_nozzle": false,
+  "hotend": "4 SnapSwap toolheads, stainless steel nozzle, 300 C",
+  "bed_surfaces": [
+   "flexible steel sheet with PEI surface"
+  ],
+  "connectivity": [
+   "wifi",
+   "usb drive",
+   "app"
+  ],
+  "features": [
+   "input shaping",
+   "pressure advance",
+   "flow calibration",
+   "automatic toolhead offset calibration",
+   "filament runout sensor",
+   "power loss recovery",
+   "camera",
+   "AI failure detection",
+   "nozzle wiping",
+   "touchscreen"
+  ],
+  "tools": 4,
   "sources": [
    "https://snapmaker.com/en-US/snapmaker-u1/specs",
    "https://snapmaker.com/en-US/snapmaker-u1"
@@ -3443,6 +3989,19 @@
   "max_speed": 150,
   "auto_leveling": true,
   "multi_material": "2-in-1-out (two extruders, one nozzle) dual-color printing",
+  "probe": "TR sensor (16-point auto-leveling)",
+  "bed_surfaces": [
+   "lattice glass"
+  ],
+  "connectivity": [
+   "usb",
+   "sd"
+  ],
+  "features": [
+   "filament runout sensor",
+   "power loss recovery",
+   "touchscreen"
+  ],
   "sources": [
    "https://www.tronxy.com/product/x5sa-500-2e-fdm-3d-printer/"
   ]
@@ -3657,11 +4216,13 @@
   "extruder": "direct",
   "heated_bed": true,
   "enclosed": true,
+  "kinematics": "corexy",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
-   "https://docs.vorondesign.com/build/electrical/v0_miniE3_v30_wiring.html"
+   "https://docs.vorondesign.com/build/electrical/v0_miniE3_v30_wiring.html",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3678,11 +4239,14 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), quad gantry leveling and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
-   "https://vorondesign.com/voron2.4"
+   "https://vorondesign.com/voron2.4",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3699,11 +4263,14 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), quad gantry leveling and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
-   "https://vorondesign.com/voron2.4"
+   "https://vorondesign.com/voron2.4",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3720,11 +4287,14 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), quad gantry leveling and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
-   "https://vorondesign.com/voron2.4"
+   "https://vorondesign.com/voron2.4",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3741,12 +4311,15 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), Z tilt adjust and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
    "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
-   "https://vorondesign.com/voron_trident"
+   "https://vorondesign.com/voron_trident",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3763,12 +4336,15 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), Z tilt adjust and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
    "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
-   "https://vorondesign.com/voron_trident"
+   "https://vorondesign.com/voron_trident",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  },
  {
@@ -3785,12 +4361,15 @@
   "heated_bed": true,
   "auto_leveling": true,
   "enclosed": true,
+  "kinematics": "corexy",
+  "probe": "inductive (BOM PL-08N or Omron), Z tilt adjust and bed mesh",
   "sources": [
    "https://docs.vorondesign.com/hardware.html",
    "https://docs.vorondesign.com/build/software/configuration.html",
    "https://docs.vorondesign.com/build/electrical/",
    "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
-   "https://vorondesign.com/voron_trident"
+   "https://vorondesign.com/voron_trident",
+   "https://docs.vorondesign.com/sourcing.html"
   ]
  }
 ]

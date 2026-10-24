@@ -2844,3 +2844,34 @@ lejos).
 **Sigue:** cargar la tanda de detalles del catálogo cuando terminen los agentes (ya terminaron otras marcas, 29
 entradas con detalles y 6 modelos nuevos, y filamentos del grupo 2, 36 con detalles y 10 nuevos); un perfil de
 impresión rápido desde las capacidades.
+
+## 2026-10-24 — catálogo: tanda de detalles, grupos 1 de 3
+
+**Hecho:** se cargaron con `tools/catalog_merge.py --update` los dos grupos de investigación que terminaron (solo
+páginas oficiales; `BRIEF2.md` en el cuaderno de la sesión):
+- **Impresoras de otras marcas** (AnkerMake, BIQU, Kingroon, Longer, LulzBot, Peopoly, Raise3D, RatRig, Snapmaker,
+  Tronxy, Voron): 29 entradas con detalles y 6 modelos nuevos (Raise3D Pro3 HS, E3, E2CF; Kingroon KP5L Pro; LulzBot
+  TAZ 8, Mini 3).
+- **Filamentos del grupo 2** (Anycubic, colorFabb, Creality, Extrudr, Fiberlogy, Fillamentum, Hatchbox, Overture):
+  36 entradas con detalles y 10 filamentos nuevos (colorFabb PA-CF Low Warp; Fiberlogy Nylon PA12+CF, BVOH, HIPS;
+  Creality Hyper PETG-CF; Fillamentum HIPS Extrafill; Overture PC Professional, Easy Nylon; Anycubic ASA; Extrudr
+  DuraPro PA12 CF).
+
+El catálogo queda en **144 impresoras de 21 fabricantes y 108 filamentos de 14**. Campos de detalle cargados hasta
+ahora: en impresoras, funciones 26, sensor 24, conectividad 23, hot end 22, camas 21, cinemática 18, boquilla
+endurecida 11, flujo máximo 7, cabezales 5; en filamentos, secado 42, HDT 29, camas 29, Tg 16, flujo máximo 12,
+abrasivo 11, dureza 8, contracción 6, soluble 3, cámara 1. La carga no descartó ninguna entrada ni cambió ningún
+valor que ya estaba.
+
+**Lo que los agentes dejaron vacío, y por qué** (una muestra): AnkerMake M5C sin página de producto (datos del blog
+oficial de eufymake); Voron sin hot end ni cama (los documentos oficiales no los fijan); Tronxy X5SA-500 2E sin
+cinemática (la página no la dice); LulzBot TAZ 8 sin diámetro de filamento («según el cabezal»); colorFabb sin flujo
+máximo (dos tablas oficiales con valores distintos); Hatchbox sin hoja técnica publicada. Los rangos de secado se
+guardan por el valor bajo; el HDT, el de 0,45 MPa cuando hay dos.
+
+**Medido:** `tisma_tests "[catalog]"` pasa (1041 comprobaciones, cada entrada del catálogo incluido validada y con
+su perfil).
+
+**Sigue:** los otros cuatro grupos (Creality; Bambu Lab, Prusa, QIDI, Flashforge y UltiMaker; Elegoo, Anycubic,
+Artillery y Sovol; filamentos de Bambu Lab, Elegoo, eSUN, Polymaker, Prusament y SUNLU), cuando terminen.
+

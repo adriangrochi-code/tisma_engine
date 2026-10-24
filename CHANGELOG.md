@@ -12,8 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
-- **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): datos de las páginas oficiales de cada fabricante, con
-  sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
+- **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): 144 impresoras de 21 fabricantes y 108 filamentos de
+  14, con los datos de las páginas oficiales de cada fabricante y sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
   modelo, muestra la ficha y crea el perfil (cama, boquilla, firmware, retracción de partida, G-code de inicio propio;
   temperaturas y ventilador del filamento).
 - **Capacidades de impresoras y filamentos** (`docs/CATALOG.md`, «Capacidades»): el catálogo trae, cuando el
