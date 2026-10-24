@@ -12,6 +12,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`surfaces_infill.md`](surfaces_infill.md): capas sólidas, capa de arriba, `monotonic`, puentes sobre el aire y sobre el relleno, relleno poco denso (`rectilinear`, `grid`, `gyroid`), borde del relleno, zonas chicas | F3 | Para revisar |
 | [`gcode_motion.md`](gcode_motion.md): filamento por tramo, velocidades por tipo, perímetros chicos, viajes, retracción, cambio de capa | F4 | Para revisar |
 | [`cooling.md`](cooling.md): tiempo mínimo de capa con frenado debajo de la velocidad mínima, qué no se frena, ventilador | F4 | Para revisar |
+| [`gcode_firmware.md`](gcode_firmware.md): comandos según el firmware: temperaturas, límites de la máquina, etiquetas de objetos para cancelarlos, avance de la impresión | F4 | Para revisar |
 | [`supports_skirt.md`](supports_skirt.md): qué lleva soporte (umbral automático y fijo), zona, separaciones, interfaz, base, falda y borde | F5 | Para revisar |
 | [`coasting.md`](coasting.md): el final de cada trazo sin extruir | después de F4 | Para revisar |
 | [`ironing.md`](ironing.md): planchado de las superficies de arriba | después de F3 | Para revisar |
