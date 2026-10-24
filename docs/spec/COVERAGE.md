@@ -49,7 +49,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Costura en bufanda (inicio en rampa): dónde, solo en lazos lisos, altura inicial, largo, lazo entero, tramo máximo, también en los internos | `walls_extra.md` | ✔ |
 | Perímetros extra donde hacen falta y en voladizos | `walls_extra.md` | ✔ («donde hacen falta» no cambió nada en las piezas de prueba) |
 | Asegurar el espesor de la cáscara vertical (no, parcial, sí) | `walls_extra.md` | ✔ |
-| Detección de perímetros en voladizo y su velocidad por grado de voladizo | `walls_extra.md` | ◐ falta la velocidad por grado → `speeds_accels.md` |
+| Detección de perímetros en voladizo y su velocidad por grado de voladizo | `walls_extra.md`, `speeds_accels.md` | ✔ |
 | Evitar cruzar voladizos que se curvan | `walls_extra.md` | ✔ (regla de la documentación, sin medir) |
 | Puentes gruesos (cordón redondo) | `gcode_motion.md` | ✔ |
 | Relleno de huecos (activar o no) | `perimeters.md`, `walls_extra.md` | ✔ |
@@ -76,7 +76,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Relleno denso bajo las superficies de arriba (Tisma) | `dense_infill.md` | ✔ |
 | Relleno ondulado entrelazado (Tisma) | `interlock_infill.md` | ✔ |
 | Planchado: arriba, solo la de más arriba o todas las sólidas; flujo, separación, velocidad | `ironing.md` | ✔ |
-| Proporción de flujo de los puentes | — | ✘ → `speeds_accels.md` |
+| Proporción de flujo de los puentes | `speeds_accels.md` | ✔ |
 
 ### Falda, borde y balsa
 
@@ -109,12 +109,12 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Velocidades de paredes, externa, perímetros chicos, relleno, sólido, arriba, puentes, viajes, primera capa, máxima, caudal máximo | `gcode_motion.md` | ✔ |
-| Velocidad de la interfaz del soporte, del relleno de huecos, sobre puentes, del relleno de la primera capa, de Z en los viajes | — | ✘ → `speeds_accels.md` |
+| Velocidad de la interfaz del soporte, del relleno de huecos, sobre puentes, del relleno de la primera capa, de Z en los viajes | `speeds_accels.md`, `supports_more.md` | ✔ |
 | Velocidad del soporte | `docs/CONFIG.md` (motor) | ✔ |
-| Velocidades dinámicas en voladizos (cuatro grados de voladizo) | — | ✘ → `speeds_accels.md` |
-| Aceleraciones por tipo (externa, paredes, arriba, sólido, relleno, puentes, primera capa, sobre la balsa, torre de purga, viajes, viajes cortos, por defecto) | — | ✘ → `speeds_accels.md` |
-| Ecualizador de presión (pendiente máxima del caudal al subir y al bajar) | — | ✘ → `speeds_accels.md` |
-| Velocidad máxima del relleno por filamento y al cruzar el relleno | — | ✘ → `speeds_accels.md` |
+| Velocidades dinámicas en voladizos (cuatro grados de voladizo) | `speeds_accels.md` | ✔ |
+| Aceleraciones por tipo (externa, paredes, arriba, sólido, relleno, puentes, primera capa, sobre la balsa, torre de purga, viajes, viajes cortos, por defecto) | `speeds_accels.md` | ✔ (la de la torre de purga, sin medir) |
+| Ecualizador de presión (pendiente máxima del caudal al subir y al bajar) | `speeds_accels.md` | ✔ |
+| Velocidad máxima del relleno por filamento y al cruzar el relleno | `speeds_accels.md` | ✔ |
 
 ### Enfriamiento
 
