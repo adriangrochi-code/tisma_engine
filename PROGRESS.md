@@ -36,6 +36,13 @@ ASan+UBSan (Debug). Compila sin advertencias con `-Wall -Wextra -Wpedantic -Wsha
 **No probado:** Windows ni macOS (la CI de esos sistemas todavía no se lanzó). Los modelos del banco no están en el
 repositorio.
 
+**CI bloqueada:** en GitHub los tres trabajos de Linux terminan en «failure» a los 2 s sin ejecutar ningún paso (sin
+runner asignado, sin registros), también al reintentarlos una vez. No es un error del código ni del YAML: el YAML se
+leyó bien (los trabajos se crearon con sus nombres y el de Windows/macOS quedó omitido como corresponde). Lo más
+probable es la facturación de Actions de la cuenta (límite de gasto o minutos del repositorio privado) o una política
+que no permite `actions/checkout`. El aviso exacto aparece en la página del run, en Actions. Lo tiene que revisar el
+dueño.
+
 **Medido** (`tisma-engine info`, esfera generada de 1 001 112 triángulos, archivo en caché, 5 corridas, Release):
 
 | Archivo | Tamaño | Lectura |
@@ -44,7 +51,8 @@ repositorio.
 | ASCII | 220 MB | 713–845 ms |
 
 **Sigue:**
-- Lanzar la CI a mano para ver Windows y macOS.
+- Que el dueño desbloquee GitHub Actions (ver «CI bloqueada»); después, confirmar que Linux pasa y lanzar la CI a mano
+  para ver Windows y macOS.
 - Banco de pruebas con los modelos reales (pedir al dueño los archivos y confirmar su licencia).
 - Después, F1: corte de la malla en capas. Necesitará una malla indexada (vértices compartidos) para unir
   segmentos en contornos, y Clipper2 (anotarla en `THIRD_PARTY.md` antes de usarla).
