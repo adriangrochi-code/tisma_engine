@@ -81,5 +81,7 @@ one stopped.
 
 ## CI
 
-- Every push runs the build and the tests on Linux and Windows.
+- Every push runs the build and the tests on Windows.
+- Linux builds run inside the work session (owner's decision, 2026-10-24): run `tools/ci_linux.sh` before every push.
+  It runs the same steps as the Linux CI jobs, which on GitHub now only run when started by hand.
 - macOS comes at the very end of the project, as the last phase of `PLAN.md` (owner's decision, 2026-10-24).

@@ -111,7 +111,8 @@ Las bibliotecas que haga falta (cabeceras y cargador de Vulkan, compilador de sh
 antes de usarlas. Revisadas el 2026-10-24:
 - Vulkan-Headers (Apache-2.0) y volk (MIT) se enlazan;
 - glslang solo se usa como herramienta para compilar los shaders a SPIR-V (ver `THIRD_PARTY.md`);
-- en la CI de Linux, lavapipe (Mesa) corre las pruebas de GPU sin GPU;
+- en las pruebas de Linux (`tools/ci_linux.sh`, dentro de la sesión), lavapipe (Mesa) corre las pruebas de GPU sin
+  GPU;
 - donde no hay Vulkan, el motor usa la CPU.
 
 **Núcleos candidatos por fase:**
@@ -198,6 +199,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Línea de comandos (`slice` solo lee el modelo y responde «not implemented»; `info` imprime el resumen)
 - [x] Lectura de STL binario y ASCII, con pruebas
 - [x] CI en cada envío: Linux (gcc, clang, ASan+UBSan) y Windows (MSVC). macOS pasa a F10, al final
+- [x] Linux pasa a compilarse y probarse dentro de la sesión antes de cada envío (`tools/ci_linux.sh`, decisión del
+  dueño, 2026-10-24); en GitHub, Windows en cada envío y Linux solo a mano
 - [x] `THIRD_PARTY.md`, `PROVENANCE.md`
 - [x] Comprobar que la CI pasa en Linux y Windows (run 4: también pasó macOS)
 - [ ] Banco de pruebas: modelos reales (Benchy, conejo, tornillo), con licencia que permita guardarlos

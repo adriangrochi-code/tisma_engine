@@ -2284,3 +2284,19 @@ Además pidió:
 
 **Además:** la sesión principal subió los logos e íconos de Tisma en el PR #6 (rama `assets/brand`), solo imágenes.
 El motor todavía no los necesita: no tiene interfaz propia.
+
+## 2026-10-24 — Linux se compila dentro de la sesión
+
+**Decisión del dueño:** compilar Linux de forma interna, para no perder tiempo esperando la CI.
+
+**Hecho:**
+- `tools/ci_linux.sh` corre los mismos pasos que los trabajos de Linux de la CI:
+  - la revisión del SPIR-V generado;
+  - gcc y clang en Release y gcc con ASan + UBSan en Debug;
+  - todas las pruebas exigiendo un dispositivo Vulkan (lavapipe acá).
+  Reusa los directorios de compilación y corre las pruebas en paralelo.
+- `.github/workflows/ci.yml`: en cada envío solo corre Windows. Los trabajos de Linux quedan para lanzarlos a mano.
+- `CLAUDE.md` y `PLAN.md` dicen que hay que correr `tools/ci_linux.sh` antes de cada envío.
+
+**Medido:** `tools/ci_linux.sh` tarda 1 min 38 s con todo compilado y pasa 201/201 en las tres compilaciones, con las
+pruebas de GPU en lavapipe. La CI de Linux en GitHub tardaba unos 5 minutos por envío.

@@ -1,7 +1,10 @@
 name: CI
 
-# Linux and Windows build and test every push. macOS is added at the end of
-# the project (see PLAN.md).
+# Windows builds and tests every push. Linux runs inside the work session
+# before every push (tools/ci_linux.sh, the same steps as the Linux jobs
+# here), so on GitHub the Linux jobs only run when started by hand (owner's
+# decision, 2026-10-24). macOS is added at the end of the project (see
+# PLAN.md).
 on:
   push:
   workflow_dispatch:
@@ -18,6 +21,7 @@ concurrency:
 jobs:
   linux:
     name: Linux (${{ matrix.compiler }})
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
       TISMA_REQUIRE_GPU: "1"
@@ -45,6 +49,7 @@ jobs:
 
   linux-sanitizers:
     name: Linux (gcc, ASan + UBSan)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
       TISMA_REQUIRE_GPU: "1"
