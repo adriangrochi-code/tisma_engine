@@ -44,7 +44,9 @@ struct FillParams {
 //    angle, connected into zig-zags;
 //  - grid: lines at the angle and at the angle + 90 in every layer, each set
 //    2 width / density apart (the same material), not connected: the lines
-//    cross each other and their ends touch the walls.
-LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params);
+//    cross each other and their ends touch the walls;
+//  - gyroid: the gyroid's section at height z (gyroid_fill), with the period
+//    for the density.
+LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
 
 } // namespace tisma

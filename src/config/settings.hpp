@@ -15,7 +15,7 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
-enum class InfillPattern { Rectilinear, Grid };
+enum class InfillPattern { Rectilinear, Grid, Gyroid };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
 struct Settings {

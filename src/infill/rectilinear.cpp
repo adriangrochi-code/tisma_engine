@@ -3,6 +3,8 @@
 
 #include "infill/rectilinear.hpp"
 
+#include "infill/gyroid.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -228,7 +230,7 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     return out;
 }
 
-LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params) {
+LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
     const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
@@ -246,6 +248,9 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             out.sparse.push_back(std::move(t));
         break;
     }
+    case InfillPattern::Gyroid:
+        out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
+        break;
     }
     return out;
 }

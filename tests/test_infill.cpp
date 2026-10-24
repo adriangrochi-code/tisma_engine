@@ -1,9 +1,11 @@
+#include "infill/gyroid.hpp"
 #include "infill/rectilinear.hpp"
 #include "perimeters/coverage.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -155,4 +157,43 @@ TEST_CASE("grid infill: both directions in every layer, the same material as rec
                 lines.deposited, grid.target);
     CHECK_THAT(grid.deposited / grid.target, WithinAbs(0.2, 0.02));
     CHECK_THAT(lines.deposited / lines.target, WithinAbs(0.2, 0.03));
+}
+
+TEST_CASE("gyroid infill: points on the surface, the density's material, curves that move with z", "[infill]") {
+    const Polygons region = square(0, 0, 20);
+    const double period = gyroid_period(0.4, 0.2);
+    CHECK_THAT(period, WithinAbs(5.22, 1e-9));
+    const std::vector<Toolpath> at0 = gyroid_fill(region, period, 0.3, 0.4);
+    REQUIRE_FALSE(at0.empty());
+    const double k = 2.0 * 3.14159265358979323846 / period;
+    double worst = 0.0;
+    for (const Toolpath& t : at0)
+        for (const ToolpathPoint& q : t.points) {
+            CHECK(q.width == 0.4);
+            CHECK(q.p.x >= 0.2 - 1e-4);
+            CHECK(q.p.x <= 19.8 + 1e-4);
+            const double X = k * q.p.x, Y = k * q.p.y, Z = k * 0.3;
+            worst = std::max(worst, std::fabs(std::sin(X) * std::cos(Y) + std::sin(Y) * std::cos(Z) + std::sin(Z) * std::cos(X)));
+        }
+    // Linear interpolation on a grid of period / 32: the points are close to the surface.
+    CHECK(worst < 0.01);
+    // The material laid down is about the density times the area (averaged over a period of z).
+    double laid = 0.0;
+    const int heights = 8;
+    for (int i = 0; i < heights; ++i)
+        laid += measure_coverage(region, gyroid_fill(region, period, period * i / heights, 0.4)).deposited;
+    laid /= heights;
+    std::printf("gyroid at 20%% on a 20 mm square: lays %.2f mm2 of 400 (%.1f%%)\n", laid, laid / 4.0);
+    CHECK_THAT(laid / 400.0, WithinAbs(0.2, 0.02));
+    // Another height, other curves.
+    const std::vector<Toolpath> at1 = gyroid_fill(region, period, 1.3, 0.4);
+    REQUIRE_FALSE(at1.empty());
+    CHECK((at1.size() != at0.size() || std::fabs(at1[0].points[0].p.x - at0[0].points[0].p.x) > 1e-3 ||
+           std::fabs(at1[0].points[0].p.y - at0[0].points[0].p.y) > 1e-3));
+    // Through fill_layer, with the layer's z.
+    LayerSurfaces s;
+    s.sparse = region;
+    FillParams p;
+    p.pattern = InfillPattern::Gyroid;
+    CHECK(fill_layer(s, 0, p, 0.3).sparse.size() == at0.size());
 }

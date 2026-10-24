@@ -55,7 +55,7 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
                           settings.infill_pattern};
     out.fills.resize(out.layers.size());
     tbb::parallel_for(std::size_t(0), out.layers.size(),
-                      [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill); });
+                      [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z()); });
     return out;
 }
 

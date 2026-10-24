@@ -1082,3 +1082,35 @@ material depositado con el área.
 a·cos y + b·sin y = −c, con a = sin x, b = cos z y c = sin z·cos x, o sea y = φ ± arccos(−c/R). Eso da las curvas
 muestreando x, sin una grilla 2D. El período se calibra para que deposite densidad × área.
 
+## 2026-10-24 — bloque nocturno 29: relleno giroide
+
+**Hecho:**
+- `gyroid_fill` (`src/infill/gyroid.*`, diseño propio sobre la superficie de `docs/spec/SOURCES.md`):
+  - cuadrados marchantes en una grilla fija al origen, de 32 pasos por período;
+  - senos y cosenos precalculados por fila y columna, así cada muestra son tres productos;
+  - las sillas se resuelven con el promedio de las cuatro esquinas;
+  - los segmentos se encadenan por la identidad del cruce y se recortan como caminos abiertos con Clipper2.
+- Período = 2,61·ancho/densidad (5,22 mm a 0,4 mm y 20 %). La constante 2,61 se midió numéricamente: largo de curva por
+  unidad de área por período, contando cruces sobre líneas de prueba y promediando en z.
+- Cambié el método respecto de lo anotado (resolver y en función de x): los cuadrados marchantes son más simples y no
+  necesitan unir ramas.
+- `infill.pattern = "gyroid"`; `fill_layer` recibe la altura de la capa.
+
+**Probado:** 126/126 pruebas con gcc, clang y ASan+UBSan:
+- los puntos cumplen la ecuación con error < 0,01 (en unidades de la función) y quedan dentro de la región achicada;
+- promediado en 8 alturas, deposita 80,1 mm² en un cuadrado de 20 mm al 20 % (20,0 %);
+- a otra altura las curvas cambian; `fill_layer` da lo mismo que `gyroid_fill`; lectura de `"gyroid"`.
+
+**Medido** (esfera, 500 capas, 4 núcleos), `slice` según el patrón disperso:
+
+| Patrón | Recorridos dispersos | Tiempo |
+|---|---|---|
+| Rectilíneo | 1173 | 1,14–1,15 s |
+| Grilla | 18 916 | 1,13–1,14 s |
+| Giroide | 17 713 | 1,97–2,02 s |
+
+**Sigue:**
+- acelerar el giroide (la grilla recorre toda la caja de cada capa; es candidato a la GPU) y anclarlo a las paredes;
+- puentes;
+- superficies monotónicas.
+
