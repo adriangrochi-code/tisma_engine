@@ -18,6 +18,8 @@ struct AppOptions {
     std::string calibration;        // create this calibration at start (calibration_kind_name), or "extruder"
     std::vector<std::string> profiles; // "kind=name": profiles chosen at start (docs/PROFILES.md)
     std::string save_project;       // with screenshot: save the project here once everything is ready
+    std::string catalog;            // "printer" or "filament": open the catalog at start (docs/CATALOG.md)
+    std::string catalog_query;      // what to search in it
     bool light = false;             // light theme
     int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
     int msaa = -1;                  // multisampling samples; -1: the preference

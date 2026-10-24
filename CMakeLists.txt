@@ -150,6 +150,18 @@ else()
   target_compile_options(tisma_warnings INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
 endif()
 
+# The printer and filament catalog travels inside the engine (docs/CATALOG.md).
+set(TISMA_CATALOG ${PROJECT_SOURCE_DIR}/resources/catalog/printers.json ${PROJECT_SOURCE_DIR}/resources/catalog/filaments.json)
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
+  COMMAND ${CMAKE_COMMAND} "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp" "-DFILES=${TISMA_CATALOG}"
+          "-DNAMESPACE=tisma::catalog_data" "-DHEADER=catalog/catalog_files.hpp"
+          -P ${PROJECT_SOURCE_DIR}/cmake/embed.cmake
+  DEPENDS ${TISMA_CATALOG} ${PROJECT_SOURCE_DIR}/cmake/embed.cmake
+  COMMENT "Embedding the printer and filament catalog"
+  VERBATIM
+)
+
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
@@ -200,6 +212,8 @@ add_library(tisma_core
   src/io/stl.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
+  src/catalog/catalog.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
   src/cli/cli.cpp
 )
 if(TISMA_GPU)

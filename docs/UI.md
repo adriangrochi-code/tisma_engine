@@ -87,6 +87,8 @@ impresión, que se eligen por separado arriba de cada sección del panel.
 - Elegir uno cambia solo sus ajustes. Si después se cambia alguno, el nombre lleva un **asterisco**.
 - **Guardar** (el ícono de guardar) escribe los cambios en el perfil elegido; si es de fábrica, pide un nombre.
 - **⋮** tiene **Guardar como perfil nuevo…** y **Eliminar**.
+- En Impresora y Filamento, **Agregar desde el catálogo…** busca entre las impresoras y los filamentos de los
+  fabricantes, muestra la ficha con sus fuentes y lo agrega a tus perfiles (`docs/CATALOG.md`).
 - La compensación de la calibración de dimensiones y el flujo van con el filamento; la retracción, con la impresora.
 
 **Proyectos** (`docs/PROJECT.md`): **Más → Guardar el proyecto** (Ctrl+S) guarda en un archivo `.tisma` los ajustes,

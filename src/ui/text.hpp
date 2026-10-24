@@ -232,6 +232,34 @@
     X(CannotOpen, "No se pudo abrir el archivo", "The file could not be opened")                                      \
     X(SettingsLoaded, "Ajustes cargados: %s", "Settings loaded: %s")                                                  \
     X(SettingsSaved, "Ajustes guardados: %s", "Settings saved: %s")                                                   \
+    X(FromCatalog, "Agregar desde el catálogo…", "Add from the catalog…")                                             \
+    X(PrinterCatalog, "Catálogo de impresoras", "Printer catalog")                                                    \
+    X(FilamentCatalog, "Catálogo de filamentos", "Filament catalog")                                                  \
+    X(CatalogSearch, "Buscar marca o modelo", "Search brand or model")                                                \
+    X(CatalogCount, "%d de %d", "%d of %d")                                                                           \
+    X(CatalogHint, "Datos de las páginas oficiales de cada fabricante, con sus fuentes. Elegí uno y agregalo a tus perfiles.", "Data from each maker's official pages, with their sources. Pick one and add it to your profiles.") \
+    X(BuildVolume, "Volumen de impresión", "Build volume")                                                            \
+    X(BedRound, "cama redonda de %g mm", "round bed of %g mm")                                                        \
+    X(Firmware, "Firmware", "Firmware")                                                                               \
+    X(Extruder, "Extrusor", "Extruder")                                                                               \
+    X(DirectDrive, "directo", "direct drive")                                                                         \
+    X(Bowden, "Bowden", "Bowden")                                                                                     \
+    X(MaxTemps, "Máximos: boquilla %s, cama %s", "Maximums: nozzle %s, bed %s")                                       \
+    X(MaxMotion, "Velocidad máx. %s, aceleración máx. %s", "Max speed %s, max acceleration %s")                       \
+    X(MultiMaterial, "Multimaterial", "Multi-material")                                                               \
+    X(Enclosed, "Cerrada", "Enclosed")                                                                                \
+    X(Sources, "Fuentes", "Sources")                                                                                  \
+    X(OwnStartGcode, "Este firmware tiene su propia secuencia de inicio: revisá el G-code de inicio antes de imprimir.", "This firmware has its own start sequence: check the start G-code before printing.") \
+    X(NozzleSize, "Boquilla", "Nozzle")                                                                               \
+    X(AddToProfiles, "Agregar a mis perfiles", "Add to my profiles")                                                  \
+    X(Material, "Material", "Material")                                                                               \
+    X(NozzleRange, "Boquilla", "Nozzle")                                                                              \
+    X(BedRange, "Cama", "Bed")                                                                                        \
+    X(Recommended, "recomendada", "recommended")                                                                      \
+    X(Density, "Densidad", "Density")                                                                                 \
+    X(NeedsEnclosure, "Necesita impresora cerrada", "Needs an enclosed printer")                                      \
+    X(CatalogEmpty, "Sin resultados", "No results")                                                                   \
+    X(ProfileAdded, "Agregado a tus perfiles: %s", "Added to your profiles: %s")                                      \
     X(NoProfile, "Sin perfil", "No profile")                                                                          \
     X(BuiltinProfiles, "De fábrica", "Built-in")                                                                      \
     X(MyProfiles, "Mis perfiles", "My profiles")                                                                      \

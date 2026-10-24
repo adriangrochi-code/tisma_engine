@@ -10,6 +10,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): datos de las páginas oficiales de cada fabricante, con
+  sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
+  modelo, muestra la ficha y crea el perfil (cama, boquilla, firmware, retracción de partida, G-code de inicio propio;
+  temperaturas y ventilador del filamento).
+- El plan de Device y conexiones (P2) y el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
+  en el relleno (`docs/MULTIMATERIAL.md`).
+
 ## [0.7.0-alpha.1] - 2026-10-24
 
 Segunda versión publicada. Trae la interfaz propia del motor, `tisma` (el comienzo de P1: el dueño decidió que el

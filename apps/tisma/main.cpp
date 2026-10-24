@@ -17,6 +17,7 @@ constexpr const char* kUsage =
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
+    "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
     "                                   [--layer N]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
@@ -73,6 +74,14 @@ int main(int argc, char** argv) {
             options.layer = std::atoi(value());
         } else if (arg == "--export") {
             options.export_path = value();
+        } else if (arg == "--catalog") {
+            options.catalog = value();
+            if (options.catalog != "printer" && options.catalog != "filament") {
+                std::fprintf(stderr, "error: --catalog must be printer or filament\n");
+                return 2;
+            }
+        } else if (arg == "--catalog-search") {
+            options.catalog_query = value();
         } else if (arg == "--save-project") {
             options.save_project = value();
         } else if (arg == "--profile") {

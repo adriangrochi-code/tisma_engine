@@ -65,6 +65,9 @@ profiles/print/Detalle fino.json
 
 ## Perfiles de fábrica
 
+Además, el catálogo (`docs/CATALOG.md`) hace perfiles de impresoras y filamentos reales desde los datos de sus
+fabricantes.
+
 La interfaz trae perfiles genéricos (`src/ui/presets.*`), para tener de dónde partir. No se pueden sobrescribir:
 **Guardar** sobre uno de ellos pide un nombre nuevo.
 

@@ -33,7 +33,7 @@ semanas dedicando un cuarto del tiempo, pero esa estimación es anterior a la GP
 con lo medido.
 
 **Fuera de la primera versión:**
-- multimaterial y torre de purga;
+- multimaterial y torre de purga (salió el 2026-10-24: ahora es la fase MM, `docs/MULTIMATERIAL.md`);
 - soportes en árbol;
 - capas no planares y 5 ejes (son la visión: fases F7 y F9);
 - resina.
@@ -193,10 +193,21 @@ el dueño; P1 ya empezó, ver «Estado de P1»):
 | Fase | Contenido | Base |
 |---|---|---|
 | P1 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | Fichas de la interfaz de Tisma (qué hay en cada pantalla y cómo se comporta) |
-| P2 | Conexión con impresoras: USB, Bambu Lab, OctoPrint, Moonraker, PrusaLink y las demás | Documentación pública de sus API y fichas del comportamiento de Tisma |
-| P3 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura |
+| P2 | Device y conexión con impresoras de varias marcas (pedido del dueño, 2026-10-24): la página de dispositivos (lista, estado, temperaturas, avance, cámara, controles, subir e imprimir); USB, Bambu Lab, OctoPrint, Moonraker/Klipper, PrusaLink, Duet/RepRapFirmware, Creality, Elegoo, Anycubic, Flashforge y las demás | La ficha de Device que se le pidió al equipo de fichas el 2026-10-24 (comportamiento, sin código: los hosts de Tisma Slicer vienen de código de OrcaSlicer) y la documentación pública oficial de cada API. Donde no hay documentación oficial (por ejemplo, el modo LAN de Bambu Lab), decide el dueño. Las bibliotecas (HTTP, TLS, MQTT, descubrimiento en la red, puerto serie) se revisan con las reglas de licencias antes de usarlas |
+| P3 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante (en curso: `docs/CATALOG.md`) | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura, y no se usan |
 | P4 | Formatos: 3MF (especificación pública), STEP (OCCT es LGPL-2.1 con excepción: no entra en la lista de licencias permitidas; hace falta otra biblioteca o una decisión del dueño), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
 | P5 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | Fichas; el logo lo da el dueño |
+
+**Multimaterial con un cabezal** (pedido del dueño, 2026-10-24: «el efecto de color de Full Spectrum, en el nuestro, con
+impresoras de un solo cabezal, junto con purgas internas en el infill»). El diseño está en `docs/MULTIMATERIAL.md`.
+Antes estaba «fuera de la primera versión»; ahora es una fase.
+
+| Fase | Contenido | Terminada cuando |
+|---|---|---|
+| MM1 | Varias piezas por placa con su ranura, cambio de herramienta por plantilla, matriz de purga, torre de purga | Una pieza de dos colores se imprime con MMU o con `M600` |
+| MM2 | Purga en el relleno y orden de herramientas por capa | Menos de la mitad del filamento tirado que con solo torre; medido |
+| MM3 | Filamentos mezclados por capas, degradados y color buscado: el efecto de color con un solo cabezal | Dos filamentos dan tres tonos o más distinguibles; medido con fotos |
+| MM4 | Pintar caras; mezcla dentro de la capa | Las pruebas de cada parte pasan |
 
 **Al final** (decisión del dueño, 2026-10-24: los 5 ejes son lo último antes de macOS, y macOS va al final de todo):
 

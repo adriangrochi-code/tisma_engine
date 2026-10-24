@@ -9,6 +9,7 @@
 #include "renderer.hpp"
 
 #include "calibration/calibration.hpp"
+#include "catalog/catalog.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "gcode/export.hpp"
@@ -265,6 +266,8 @@ private:
     void save_profile_as(ProfileKind kind, std::string name);
     void refresh_profiles();
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
+    void catalog_dialog();
+    void add_catalog_profile(const Profile& profile);
 
     // Widgets.
     ImTextureRef icon(const char* name) const;
@@ -377,6 +380,13 @@ private:
     std::optional<ProfileKind> save_profile_kind_; // the "save as" dialog, while open
     bool save_profile_open_ = false;
     std::string profile_name_;
+    // The catalog dialog (docs/CATALOG.md): for which kind, the search, the
+    // entry picked (an index in the search's results) and its nozzle.
+    std::optional<ProfileKind> catalog_kind_;
+    bool catalog_open_ = false;
+    std::string catalog_query_;
+    int catalog_pick_ = -1;
+    std::size_t catalog_nozzle_ = 0;
     // The project file last opened or saved.
     std::filesystem::path project_path_;
 
@@ -683,6 +693,11 @@ bool App::init(std::string& error) {
     if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty()) && mesh_ &&
         !result_)
         start_slice();
+    if (!options_.catalog.empty()) {
+        catalog_kind_ = options_.catalog == "filament" ? ProfileKind::Filament : ProfileKind::Printer;
+        catalog_open_ = true;
+        catalog_query_ = options_.catalog_query;
+    }
     if (!options_.browse.empty()) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, from_utf8(options_.browse));
@@ -1100,6 +1115,11 @@ void App::profile_row(ProfileKind kind) {
                 if (ImGui::Selectable(p.name.c_str(), chosen == &p))
                     picked = &p;
         }
+        if (kind != ProfileKind::Print) {
+            ImGui::Separator();
+            if (ImGui::Selectable(tr(T::FromCatalog)))
+                catalog_kind_ = kind, catalog_open_ = true;
+        }
         ImGui::EndCombo();
     }
     if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
@@ -1122,6 +1142,8 @@ void App::profile_row(ProfileKind kind) {
     if (ImGui::BeginPopup("##profile_menu")) {
         if (ImGui::MenuItem(tr(T::SaveProfileAs)))
             save_as();
+        if (kind != ProfileKind::Print && ImGui::MenuItem(tr(T::FromCatalog)))
+            catalog_kind_ = kind, catalog_open_ = true;
         const std::string remove = chosen ? format(tr(T::DeleteProfile), chosen->name.c_str()) : std::string();
         if (chosen && !builtin && ImGui::MenuItem(remove.c_str())) {
             const std::string name = chosen->name;
@@ -1136,6 +1158,191 @@ void App::profile_row(ProfileKind kind) {
     ImGui::PopID();
     if (picked)
         choose_profile(kind, *picked);
+}
+
+// The catalog: search printers or filaments, see an entry with its sources,
+// and add it to the user's profiles.
+void App::catalog_dialog() {
+    if (catalog_open_) {
+        ImGui::OpenPopup("###catalog");
+        catalog_open_ = false;
+        catalog_pick_ = -1;
+        catalog_nozzle_ = 0;
+    }
+    if (!catalog_kind_)
+        return;
+    const bool printers = *catalog_kind_ == ProfileKind::Printer;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(820.0f * scale_, vp->Size.x * 0.9f), std::min(560.0f * scale_, vp->Size.y * 0.85f)),
+                             ImGuiCond_Appearing);
+    const std::string title = std::string(tr(printers ? T::PrinterCatalog : T::FilamentCatalog)) + "###catalog";
+    bool open = true;
+    if (!ImGui::BeginPopupModal(title.c_str(), &open)) {
+        if (!open)
+            catalog_kind_.reset();
+        return;
+    }
+    const Catalog* catalog = nullptr;
+    try {
+        catalog = &builtin_catalog();
+    } catch (const std::exception& e) {
+        ImGui::TextUnformatted(e.what());
+    }
+    if (catalog) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", tr(T::CatalogHint));
+        ImGui::PopTextWrapPos();
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::InputTextWithHint("##search", tr(T::CatalogSearch), &catalog_query_))
+            catalog_pick_ = -1, catalog_nozzle_ = 0;
+        const std::vector<const PrinterModel*> found_printers =
+            printers ? find_printers(*catalog, catalog_query_) : std::vector<const PrinterModel*>{};
+        const std::vector<const FilamentModel*> found_filaments =
+            printers ? std::vector<const FilamentModel*>{} : find_filaments(*catalog, catalog_query_);
+        const int found = int(printers ? found_printers.size() : found_filaments.size());
+        const int total = int(printers ? catalog->printers.size() : catalog->filaments.size());
+        if (catalog_pick_ >= found)
+            catalog_pick_ = -1;
+        if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())
+            catalog_pick_ = 0; // a screenshot shows the first entry
+        ImGui::TextDisabled(tr(T::CatalogCount), found, total);
+
+        const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+        ImGui::BeginChild("##catalog_list", ImVec2(300.0f * scale_, -footer), ImGuiChildFlags_Borders);
+        std::string vendor;
+        for (int i = 0; i < found; ++i) {
+            const std::string& v = printers ? found_printers[std::size_t(i)]->vendor : found_filaments[std::size_t(i)]->vendor;
+            if (v != vendor) {
+                ImGui::SeparatorText(v.c_str());
+                vendor = v;
+            }
+            ImGui::PushID(i);
+            const std::string label = printers ? found_printers[std::size_t(i)]->model : found_filaments[std::size_t(i)]->name;
+            if (ImGui::Selectable(label.c_str(), catalog_pick_ == i))
+                catalog_pick_ = i, catalog_nozzle_ = 0;
+            ImGui::PopID();
+        }
+        if (found == 0)
+            ImGui::TextDisabled("%s", tr(T::CatalogEmpty));
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild("##catalog_entry", ImVec2(0, -footer), ImGuiChildFlags_Borders);
+        ImGui::PushTextWrapPos(0.0f);
+        const auto maybe = [](const std::optional<double>& v, const char* unit) {
+            char text[32];
+            if (!v)
+                return std::string("-");
+            std::snprintf(text, sizeof text, "%g %s", *v, unit);
+            return std::string(text);
+        };
+        const auto range = [](const std::optional<std::array<double, 2>>& r, const char* unit) {
+            char text[48];
+            if (!r)
+                return std::string("-");
+            std::snprintf(text, sizeof text, "%g–%g %s", (*r)[0], (*r)[1], unit);
+            return std::string(text);
+        };
+        const std::vector<std::string>* sources = nullptr;
+        if (catalog_pick_ >= 0 && printers) {
+            const PrinterModel& p = *found_printers[std::size_t(catalog_pick_)];
+            ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+            ImGui::Text("%s %s", p.vendor.c_str(), p.model.c_str());
+            ImGui::PopFont();
+            ImGui::Text("%s: %g × %g × %g mm", tr(T::BuildVolume), p.build_volume[0], p.build_volume[1], p.build_volume[2]);
+            if (p.circular)
+                ImGui::TextDisabled(tr(T::BedRound), p.build_volume[0]);
+            const char* firmware = p.firmware == "marlin"    ? "Marlin"
+                                   : p.firmware == "klipper" ? "Klipper"
+                                   : p.firmware == "reprap"  ? "RepRapFirmware"
+                                   : p.firmware == "bambu"   ? "Bambu Lab"
+                                                             : "-";
+            ImGui::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
+                        p.direct_drive ? tr(T::DirectDrive) : tr(T::Bowden),
+                        p.enclosed ? (std::string(" · ") + tr(T::Enclosed)).c_str() : "");
+            ImGui::Text(tr(T::MaxTemps), maybe(p.max_nozzle_temp, "°C").c_str(), maybe(p.max_bed_temp, "°C").c_str());
+            ImGui::Text(tr(T::MaxMotion), maybe(p.max_speed, "mm/s").c_str(), maybe(p.max_acceleration, "mm/s²").c_str());
+            if (!p.multi_material.empty())
+                ImGui::Text("%s: %s", tr(T::MultiMaterial), p.multi_material.c_str());
+            if (needs_own_start_gcode(p))
+                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::OwnStartGcode));
+            catalog_nozzle_ = std::min(catalog_nozzle_, p.nozzles.size() - 1);
+            ImGui::SetNextItemWidth(120.0f * scale_);
+            char nozzle[24];
+            std::snprintf(nozzle, sizeof nozzle, "%g mm", p.nozzles[catalog_nozzle_]);
+            if (ImGui::BeginCombo(tr(T::NozzleSize), nozzle)) {
+                for (std::size_t n = 0; n < p.nozzles.size(); ++n) {
+                    std::snprintf(nozzle, sizeof nozzle, "%g mm", p.nozzles[n]);
+                    if (ImGui::Selectable(nozzle, n == catalog_nozzle_))
+                        catalog_nozzle_ = n;
+                }
+                ImGui::EndCombo();
+            }
+            sources = &p.sources;
+        } else if (catalog_pick_ >= 0) {
+            const FilamentModel& f = *found_filaments[std::size_t(catalog_pick_)];
+            ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+            ImGui::Text("%s %s", f.vendor.c_str(), f.name.c_str());
+            ImGui::PopFont();
+            ImGui::Text("%s: %s · %g mm", tr(T::Material), f.material.c_str(), f.diameter);
+            ImGui::Text("%s: %s%s", tr(T::NozzleRange), range(f.nozzle_temp, "°C").c_str(),
+                        f.nozzle_recommended ? (" · " + maybe(f.nozzle_recommended, "°C") + " " + tr(T::Recommended)).c_str() : "");
+            ImGui::Text("%s: %s%s", tr(T::BedRange), range(f.bed_temp, "°C").c_str(),
+                        f.bed_recommended ? (" · " + maybe(f.bed_recommended, "°C") + " " + tr(T::Recommended)).c_str() : "");
+            if (f.fan)
+                ImGui::Text("%s: %s", tr(T::FanMin), range(f.fan, "%").c_str());
+            if (f.density)
+                ImGui::Text("%s: %s", tr(T::Density), maybe(f.density, "g/cm³").c_str());
+            if (f.enclosure.value_or(false))
+                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::NeedsEnclosure));
+            sources = &f.sources;
+        }
+        if (sources) {
+            ImGui::SeparatorText(tr(T::Sources));
+            for (const std::string& url : *sources)
+                ImGui::TextLinkOpenURL(url.c_str());
+        }
+        ImGui::PopTextWrapPos();
+        ImGui::EndChild();
+
+        ImGui::BeginDisabled(catalog_pick_ < 0);
+        if (ImGui::Button(tr(T::AddToProfiles), ImVec2(200.0f * scale_, 0))) {
+            const Profile profile =
+                printers ? printer_profile(*found_printers[std::size_t(catalog_pick_)],
+                                           found_printers[std::size_t(catalog_pick_)]->nozzles[catalog_nozzle_])
+                         : filament_profile(*found_filaments[std::size_t(catalog_pick_)]);
+            add_catalog_profile(profile);
+            catalog_kind_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) ||
+        (ImGui::IsKeyPressed(ImGuiKey_Escape) && catalog_kind_)) {
+        catalog_kind_.reset();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// A catalog entry becomes one of the user's profiles, and the chosen one.
+void App::add_catalog_profile(const Profile& profile) {
+    try {
+        const std::filesystem::path root = profiles_root();
+        if (root.empty())
+            throw SettingsError("profile: there is no folder for the settings (no HOME or APPDATA)");
+        save_profile(root, profile);
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    load_profile_lists();
+    if (const Profile* saved = find_profile(profile.kind, profile.name))
+        choose_profile(profile.kind, *saved);
+    notify(format(tr(T::ProfileAdded), profile.name.c_str()));
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
@@ -2392,6 +2599,8 @@ void App::dialogs() {
             ImGui::EndPopup();
         }
     }
+
+    catalog_dialog();
 
     if (about_open_) {
         ImGui::OpenPopup("###about");
