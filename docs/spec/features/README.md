@@ -27,6 +27,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |
 | [`belt_printer.md`](belt_printer.md): laminado para impresoras de cinta con pórtico inclinado y G-code en los ejes de la máquina | después de la primera versión | Para revisar |
 | [`print_review.md`](print_review.md): avisos de lo que probablemente va a fallar, con sus capas | después de F4 | Para revisar |
+| [`calibrations.md`](calibrations.md): pruebas por franjas y por parches, comandos por firmware, bloque de precisión de medidas | después de F4 | Para revisar |
 
 **Pendientes:**
 - Modos no planares por voladizos, tensiones, superficies y automático.
