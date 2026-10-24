@@ -713,3 +713,45 @@ figura 8.
 - sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ);
 - unir los sitios del mismo índice en segmentos por trapecio;
 - encadenarlos en polilíneas de ancho variable.
+
+## 2026-10-24 — bloque nocturno 16: trayectorias de ancho variable
+
+**Hecho:**
+- `medial_sites` (Kuipers et al. 2020, sección 3.6): en cada arista no central, el cordón i del reparto del nodo de
+  arriba cruza donde R = lᵢ, para R_bajo < lᵢ < R_alto. Un cordón justo en R es un sitio del nodo (`on_node`).
+- `extract_toolpaths`: une los sitios del mismo índice dentro de cada trapecio en segmentos y los encadena en
+  polilíneas y lazos con ancho por punto (`Toolpath`, `ToolpathPoint`). El cordón del medio, que corre sobre la
+  arista central, sale solo del lado 0.
+- Encadenado por identidad: cada sitio se nombra por lo que es (nodo y punto de apoyo; nodo; arista del eje; más el
+  índice). Dos trapecios vecinos producen la misma clave, así que no se comparan posiciones ni hay tolerancias. Un
+  sitio con más de dos segmentos corta las polilíneas.
+- Tres errores encontrados con la capa del medio de la esfera (7458 fragmentos en vez de 125 lazos):
+  - la prueba de «interior» usaba una tolerancia absoluta sobre el producto cruz; el vértice de una esquina convexa,
+    calculado en coma flotante, quedaba afuera y se perdían radios (8 de 64 en un 64-gono). Ahora la tolerancia es
+    una distancia: 1 nm;
+  - el Voronoi de un polígono casi regular se junta en el centro en un racimo de vértices a 1e-5 mm. Fusionarlos por
+    cercanía dejaba aristas duplicadas y rompía las cadenas; se descartó la fusión y los nodos se identifican por
+    posición exacta;
+  - en una esquina reflexa, el pie de la perpendicular sobre el segmento cae en la esquina con error de coma
+    flotante; ahora se ajusta al extremo exacto para que los dos trapecios nombren el mismo apoyo.
+- `tisma-engine info` mide las trayectorias de la capa del medio.
+
+**Probado:** 103/103 pruebas con gcc, clang y ASan+UBSan:
+- tira de 30 × 2 mm: 2 lazos con el área exacta de su desplazamiento (0,2 y 0,6 mm) y la línea del medio en y = 1;
+- 64-gono de radio 5: 12 lazos cerrados, cada uno con el área del 64-gono de su radio interior (±0,1 %), ancho
+  2·r/25;
+- L de brazos de 2 mm: 2 lazos y una línea; cada punto queda a (i + ½)·ancho del borde. En la unión el grosor sube
+  a 2,34 mm, la transición a 6 cordones se filtra por corta y los 5 cordones se ensanchan hasta 0,4686 mm;
+- cuña: anchos positivos y puntos adentro;
+- cada esquina del 64-gono tiene su radio y el grafo es un árbol (la prueba falla sin el arreglo).
+
+**Medido** (esfera de 1 001 112 triángulos, capa del medio, 4 núcleos):
+- eje medio: 416 aristas, 5,5–5,7 ms;
+- trayectorias: 125 lazos cerrados (250 cordones), 58–65 ms. Antes: 7458 fragmentos en 117–135 ms.
+
+**Sigue:**
+- acelerar la extracción: hoy usa un `std::map` por trapecio y ordena las claves; con 500 capas serían ~30 s en un
+  núcleo;
+- perímetros de todas las capas en paralelo dentro de `slice_model`;
+- resolución de conflictos de reparto (figura 9) y el punto del cordón central impar en un máximo aislado (hoy no se
+  emite: en el 64-gono falta un punto de 0,4 mm en el centro).

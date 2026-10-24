@@ -148,7 +148,15 @@ private:
         const Segment& s = segments_[cell.source_index()];
         const double px = double(s.p.x), py = double(s.p.y), dx = double(s.q.x) - px, dy = double(s.q.y) - py;
         const double len2 = dx * dx + dy * dy;
-        const double t = len2 > 0.0 ? std::clamp(((v.x - px) * dx + (v.y - py) * dy) / len2, 0.0, 1.0) : 0.0;
+        double t = len2 > 0.0 ? std::clamp(((v.x - px) * dx + (v.y - py) * dy) / len2, 0.0, 1.0) : 0.0;
+        // A foot within kAtEnd of an end is that end, exactly: the trapezoid
+        // of the corner's own cell then names the same support point.
+        constexpr double kAtEnd = 1e-3; // units
+        const double len = std::sqrt(len2);
+        if (t * len <= kAtEnd)
+            t = 0.0;
+        else if ((1.0 - t) * len <= kAtEnd)
+            t = 1.0;
         return {px + t * dx, py + t * dy};
     }
 
@@ -167,9 +175,14 @@ private:
             return cross(double(in.p.x), double(in.p.y), double(in.q.x), double(in.q.y), double(out.q.x),
                          double(out.q.y)) < 0.0;
         }
+        // A vertex at the segment's end, such as the start of a spoke from a
+        // convex corner, is computed in floating point and may land a hair to
+        // the right: accept it within kOnLine of the line.
+        constexpr double kOnLine = 1.0; // units (1 nm)
         const double px = double(s.p.x), py = double(s.p.y), qx = double(s.q.x), qy = double(s.q.y);
-        return cross(px, py, qx, qy, edge.vertex0()->x(), edge.vertex0()->y()) >= -1e-6 &&
-               cross(px, py, qx, qy, edge.vertex1()->x(), edge.vertex1()->y()) >= -1e-6;
+        const double slack = -kOnLine * std::hypot(qx - px, qy - py);
+        return cross(px, py, qx, qy, edge.vertex0()->x(), edge.vertex0()->y()) >= slack &&
+               cross(px, py, qx, qy, edge.vertex1()->x(), edge.vertex1()->y()) >= slack;
     }
 
     // Points along a parabolic edge (equidistant from a corner and a segment's
@@ -251,11 +264,11 @@ std::vector<MedialEdge> medial_axis(const Polygons& region) {
 
 MedialGraph medial_graph(const Polygons& region) {
     MedialGraph g;
-    // Nodes keyed by their position rounded to 1e-9 mm (0.001 units).
-    std::map<std::pair<std::int64_t, std::int64_t>, std::uint32_t> index;
+    // Edges that meet at a Voronoi vertex read the same coordinates, so their
+    // ends are equal bit for bit: nodes are keyed by exact position.
+    std::map<std::pair<double, double>, std::uint32_t> index;
     auto node = [&](const Point2d& p, double r) {
-        const auto key = std::make_pair(std::llround(p.x * 1e6), std::llround(p.y * 1e6));
-        const auto [it, inserted] = index.emplace(key, static_cast<std::uint32_t>(g.nodes.size()));
+        const auto [it, inserted] = index.emplace(std::make_pair(p.x, p.y), static_cast<std::uint32_t>(g.nodes.size()));
         if (inserted)
             g.nodes.push_back({p, r, false});
         return it->second;

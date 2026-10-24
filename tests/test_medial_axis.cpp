@@ -241,3 +241,18 @@ TEST_CASE("supports of a wedge and of a ring are at the radius, on the boundary"
                     corner_support = corner_support || std::hypot(e.support_a[k].x - c.x, e.support_a[k].y - c.y) < 1e-6;
     CHECK(corner_support);
 }
+
+TEST_CASE("every corner of a regular 64-gon starts a spoke, and the graph is a tree", "[medial]") {
+    // The Voronoi vertex at a convex corner is computed in floating point and
+    // may land a hair outside the region; the spoke must be kept anyway.
+    Polygon poly;
+    for (int i = 0; i < 64; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / 64;
+        poly.push_back({to_units(5.0 * std::cos(a)), to_units(5.0 * std::sin(a))});
+    }
+    const auto edges = medial_axis({poly});
+    for (const auto& c : poly)
+        CHECK(has_point(edges, double(c.x) / kUnitsPerMm, double(c.y) / kUnitsPerMm));
+    const MedialGraph g = medial_graph({poly});
+    CHECK(g.edges.size() + 1 == g.nodes.size());
+}

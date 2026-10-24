@@ -6,6 +6,8 @@
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "perimeters/sites.hpp"
+#include "perimeters/transitions.hpp"
 #include "slice/layers.hpp"
 #include "slice/pipeline.hpp"
 
@@ -147,6 +149,17 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - axis_start).count();
         out << "mid_layer_axis_edges: " << axis.edges.size() << "\n";
         out << "mid_layer_axis_ms: " << axis_ms << "\n";
+
+        // Variable-width perimeters of the middle layer (F2, Kuipers et al. 2020).
+        const auto walls_start = std::chrono::steady_clock::now();
+        const BeadingParams beading;
+        filter_marking(axis, beading.preferred_width);
+        const TransitionResult transitions = apply_transitions(axis, beading);
+        const std::vector<Toolpath> walls = extract_toolpaths(axis, node_beadings(axis, transitions.bead_counts, beading));
+        const double walls_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - walls_start).count();
+        out << "mid_layer_toolpaths: " << walls.size() << "\n";
+        out << "mid_layer_toolpaths_ms: " << walls_ms << "\n";
         out << "sliced_volume: " << volume << "\n";
     }
     return kExitOk;

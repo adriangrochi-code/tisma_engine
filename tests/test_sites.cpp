@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <set>
@@ -96,4 +97,136 @@ TEST_CASE("wedge sites are inside the wedge and their widths stay in range", "[s
         CHECK(s.width <= 0.6 + 1e-9); // distributed widths stay below 3/2 w*
     }
     CHECK(indices.size() > 2); // the wedge thickens enough for several beads per side
+}
+
+namespace {
+
+double loop_area(const Toolpath& t) {
+    double a = 0.0;
+    for (std::size_t i = 0; i < t.points.size(); ++i) {
+        const Point2d& p = t.points[i].p;
+        const Point2d& q = t.points[(i + 1) % t.points.size()].p;
+        a += p.x * q.y - q.x * p.y;
+    }
+    return std::fabs(a) / 2.0;
+}
+
+} // namespace
+
+TEST_CASE("the strip's toolpaths: two loops and a middle line", "[sites]") {
+    BeadingParams p;
+    const Prepared r = prepare({rect(0, 0, 30, 2)}, p);
+    const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+    std::vector<const Toolpath*> loops, lines;
+    for (const Toolpath& t : paths)
+        (t.closed ? loops : lines).push_back(&t);
+    REQUIRE(loops.size() == 2);
+    REQUIRE(lines.size() == 1);
+    for (const Toolpath* l : loops) {
+        // Bead 0 runs 0.2 mm in from the outline, bead 1 0.6 mm in.
+        const double inset = l->index == 0 ? 0.2 : 0.6;
+        CHECK_THAT(loop_area(*l), WithinAbs((30 - 2 * inset) * (2 - 2 * inset), 1e-6));
+        for (const ToolpathPoint& q : l->points)
+            CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
+    }
+    // The middle bead is one line along y = 1 between the ends of the middle edge.
+    const Toolpath& middle = *lines[0];
+    CHECK(middle.index == 2);
+    for (const ToolpathPoint& q : middle.points)
+        CHECK_THAT(q.p.y, WithinAbs(1.0, 1e-6));
+}
+
+TEST_CASE("wedge toolpaths have positive widths and stay inside", "[sites]") {
+    BeadingParams p;
+    const double h = std::tan(15.0 * std::numbers::pi / 180.0) * 20.0;
+    const Prepared r = prepare({{{to_units(0), to_units(0)}, {to_units(20), to_units(-h)}, {to_units(20), to_units(h)}}}, p);
+    const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+    REQUIRE_FALSE(paths.empty());
+    for (const Toolpath& t : paths)
+        for (const ToolpathPoint& q : t.points) {
+            CHECK(q.width > 0.0);
+            CHECK(q.p.x >= -1e-6);
+            CHECK(std::fabs(q.p.y) <= q.p.x * std::tan(15.0 * std::numbers::pi / 180.0) + 1e-6);
+        }
+}
+
+namespace {
+
+Polygon regular_polygon(int n, double radius) {
+    Polygon out;
+    for (int i = 0; i < n; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / n;
+        out.push_back({to_units(radius * std::cos(a)), to_units(radius * std::sin(a))});
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("a regular 64-gon gets closed concentric loops", "[sites]") {
+    // Its Voronoi diagram meets at the centre in a cluster of vertices a few
+    // 1e-5 mm apart; the loops must still close.
+    BeadingParams p;
+    const double radius = 5.0;
+    const Prepared r = prepare({regular_polygon(64, radius)}, p);
+    const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+    // The inscribed radius is 5 cos(pi / 64): 25 beads, so 12 loops and a dot at the centre.
+    const double inradius = radius * std::cos(std::numbers::pi / 64);
+    const double width = 2.0 * inradius / 25.0;
+    REQUIRE(paths.size() == 12);
+    std::set<int> indices;
+    for (const Toolpath& t : paths) {
+        CHECK(t.closed);
+        indices.insert(t.index);
+        // Bead i follows the outline (i + 1/2) widths in: a 64-gon of that inradius.
+        const double in = inradius - (t.index + 0.5) * width;
+        const double area = 64.0 * in * in * std::tan(std::numbers::pi / 64);
+        CHECK_THAT(loop_area(t), WithinAbs(area, 1e-3 * area));
+        for (const ToolpathPoint& q : t.points)
+            CHECK_THAT(q.width, WithinAbs(width, 1e-6));
+    }
+    CHECK(indices.size() == 12);
+}
+
+TEST_CASE("an L-shaped strip: two loops around the reflex corner and a middle line", "[sites]") {
+    // Arms 2 mm wide and 20 mm long. Near the reflex corner (2, 2) the loops
+    // follow arcs around it, so the trapezoids of the corner and of the walls
+    // must share their sites there. The joint is 2.34 mm thick, too short a
+    // stretch for a sixth bead (its transitions are filtered), so the five
+    // beads widen there.
+    BeadingParams p;
+    const std::vector<Point2d> corners = {{0, 0}, {20, 0}, {20, 2}, {2, 2}, {2, 20}, {0, 20}};
+    Polygon l;
+    for (const Point2d& c : corners)
+        l.push_back({to_units(c.x), to_units(c.y)});
+    const Prepared r = prepare({l}, p);
+    const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+    auto distance_to_outline = [&](const Point2d& q) {
+        double best = 1e9;
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            const Point2d& a = corners[i];
+            const Point2d& b = corners[(i + 1) % corners.size()];
+            const double dx = b.x - a.x, dy = b.y - a.y;
+            const double t = std::clamp(((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy), 0.0, 1.0);
+            best = std::min(best, std::hypot(q.x - a.x - t * dx, q.y - a.y - t * dy));
+        }
+        return best;
+    };
+    std::vector<const Toolpath*> loops, lines;
+    for (const Toolpath& t : paths)
+        (t.closed ? loops : lines).push_back(&t);
+    REQUIRE(loops.size() == 2);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines[0]->index == 2);
+    std::set<int> indices;
+    for (const Toolpath& t : paths) {
+        indices.insert(t.index);
+        for (const ToolpathPoint& q : t.points) {
+            // Equal widths: bead i is (i + 1/2) widths in from the outline.
+            CHECK_THAT(distance_to_outline(q.p), WithinAbs((t.index + 0.5) * q.width, 1e-6));
+            CHECK(q.width >= 0.4 - 1e-9);
+            CHECK(q.width <= 2.0 * 2.0 * std::sqrt(2.0) / (1.0 + std::sqrt(2.0)) / 5.0 + 1e-9);
+        }
+    }
+    CHECK(indices == std::set<int>{0, 1, 2});
 }

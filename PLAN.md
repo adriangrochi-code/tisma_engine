@@ -202,8 +202,12 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Trapezoidación: apoyos de cada extremo de arista en los dos lados (punto más cercano del borde, ecuación 1)
 - [ ] Dominios por contorno (qué trapecios bordean cada contorno, para encadenar los segmentos)
 - [x] Reparto por nodo (sección 3.5) y sitios sobre los lados de apoyo de los trapecios (sección 3.6)
-- [ ] Sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ) y resolución de conflictos de reparto (figura 9)
-- [ ] Unir los sitios del mismo índice en segmentos por trapecio y encadenarlos en polilíneas de ancho variable
+- [x] Sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ)
+- [x] Unir los sitios del mismo índice en segmentos por trapecio y encadenarlos en polilíneas de ancho variable
+  (por identidad del sitio, sin tolerancias): tira, L, polígonos regulares y la capa del medio de la esfera dan lazos cerrados
+- [ ] Acelerar la extracción (hoy 58–65 ms en la capa del medio de la esfera, 125 lazos)
+- [ ] Resolución de conflictos de reparto (figura 9) y punto del cordón central impar en un máximo aislado
+- [ ] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

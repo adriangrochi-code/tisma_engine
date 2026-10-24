@@ -20,13 +20,18 @@ std::vector<HalfBeading> node_beadings(const MedialGraph& graph, const std::vect
 // A toolpath site (Section 3.6): where bead `index` (counted from the outline)
 // passes, and how wide it is there.
 struct Site {
+    enum class Where { SideA, SideB, Medial };
     Point2d p;
     double width;
     int index;
-    std::uint32_t edge; // medial edge whose trapezoid side holds the site
-    int side;           // 0 or 1: which of the edge's two trapezoids
-    bool at_b;          // on the side from node b to its support (else from node a)
+    std::uint32_t edge; // medial edge of the trapezoid that holds the site
+    int side;           // 0 or 1: which of the edge's two trapezoids (Medial sites belong to both)
+    Where where;        // node a to its support, node b to its support, or on the medial edge itself
+    bool on_node;       // at the node itself (a bead at distance R from the outline)
 };
+
+// A bead within this distance of a node's radius R sits on the node.
+inline constexpr double kOnNode = 1e-9; // mm
 
 // Sites on the trapezoid sides that run from each node to its support: along
 // such a side the distance to the outline grows linearly from 0 at the support
@@ -34,5 +39,32 @@ struct Site {
 // l_i > R do not reach this node. A bead exactly at R (the middle bead of an
 // odd count) sits on the node itself and appears on both sides.
 std::vector<Site> support_sites(const MedialGraph& graph, const std::vector<HalfBeading>& beadings);
+
+// Sites on the non-central medial edges (Section 3.6): on an edge whose
+// radius goes from R_low to R_high, bead i of the upper node's beading crosses
+// it where R = l_i, for R_low < l_i < R_high (a bead at either radius is a
+// site of that node). No sites go on central edges.
+std::vector<Site> medial_sites(const MedialGraph& graph, const std::vector<HalfBeading>& beadings);
+
+// A variable-width toolpath: points with the bead width at each.
+struct ToolpathPoint {
+    Point2d p;
+    double width;
+};
+struct Toolpath {
+    std::vector<ToolpathPoint> points;
+    bool closed = false;
+    int index = 0; // bead index, counted from the outline
+};
+
+// Connects the sites of each bead index inside every trapezoid into extrusion
+// segments and chains the segments into polylines and loops (Section 3.6).
+// Where a trapezoid has a site of some index on only one side (a transition)
+// that site stays unconnected. The middle bead of an odd count lies on the
+// medial edge, so of the two trapezoids of that edge only side 0 emits it.
+// Segments are chained through the sites they share (the same rib, node or
+// medial edge, and the same bead index), never by comparing positions; a site
+// where more than two segments meet ends the polylines there.
+std::vector<Toolpath> extract_toolpaths(const MedialGraph& graph, const std::vector<HalfBeading>& beadings);
 
 } // namespace tisma

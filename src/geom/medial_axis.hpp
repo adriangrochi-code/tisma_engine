@@ -59,7 +59,7 @@ struct MedialGraph {
     std::vector<Edge> edges;
 };
 
-// Builds the graph of medial_axis(region). Ends closer than 1e-9 mm are one node.
+// Builds the graph of medial_axis(region). Ends at the same position are one node.
 MedialGraph medial_graph(const Polygons& region);
 
 // Marks the centre (Section 3.3): an edge is central when it is significant,
