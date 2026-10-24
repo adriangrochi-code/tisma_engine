@@ -19,6 +19,8 @@ jobs:
   linux:
     name: Linux (${{ matrix.compiler }})
     runs-on: ubuntu-24.04
+    env:
+      TISMA_REQUIRE_GPU: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -29,8 +31,11 @@ jobs:
             cxx: clang++
     steps:
       - uses: actions/checkout@v4
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install Ninja, lavapipe and glslang
+        # lavapipe is Mesa's software Vulkan device: the GPU tests run without a GPU.
+        run: sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers glslang-tools
+      - name: Check the generated SPIR-V
+        run: python3 tools/compile_shaders.py --check
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
       - name: Build
@@ -41,10 +46,12 @@ jobs:
   linux-sanitizers:
     name: Linux (gcc, ASan + UBSan)
     runs-on: ubuntu-24.04
+    env:
+      TISMA_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Install Ninja and lavapipe
+        run: sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug

@@ -1,0 +1,44 @@
+#version 450
+// For each triangle, the levels its value range crosses: [first, end).
+// GPU version of triangle_level_ranges (src/slice/layers.cpp); results must
+// match it exactly. Own design; see PROVENANCE.md.
+
+layout(local_size_x = 256) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Values { float values[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Triangles { uint corners[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Levels { float isos[]; };
+layout(std430, set = 0, binding = 3) writeonly buffer First { uint first_level[]; };
+layout(std430, set = 0, binding = 4) writeonly buffer End { uint end_level[]; };
+
+layout(push_constant) uniform Params {
+    uint triangle_count;
+    uint level_count;
+} params;
+
+// Index of the first level greater than v.
+uint upper_bound(float v) {
+    uint lo = 0u;
+    uint hi = params.level_count;
+    while (lo < hi) {
+        uint mid = (lo + hi) / 2u;
+        if (isos[mid] > v)
+            hi = mid;
+        else
+            lo = mid + 1u;
+    }
+    return lo;
+}
+
+void main() {
+    uint t = gl_GlobalInvocationID.x;
+    if (t >= params.triangle_count)
+        return;
+    float a = values[corners[3u * t]];
+    float b = values[corners[3u * t + 1u]];
+    float c = values[corners[3u * t + 2u]];
+    uint first = upper_bound(min(a, min(b, c)));
+    uint end = upper_bound(max(a, max(b, c)));
+    first_level[t] = first;
+    end_level[t] = max(first, end);
+}

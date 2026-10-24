@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(tisma_engine VERSION 0.0.1 LANGUAGES CXX)
+project(tisma_engine VERSION 0.0.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(TISMA_BUILD_TESTS "Build the Catch2 tests" ON)
+option(TISMA_GPU "Build the Vulkan compute backend (used only when a device is present)" ON)
 
 include(FetchContent)
 
@@ -45,6 +46,30 @@ FetchContent_Declare(
   SYSTEM
 )
 FetchContent_MakeAvailable(Clipper2)
+
+if(TISMA_GPU)
+  # Vulkan-Headers (Apache-2.0) and volk (MIT), see THIRD_PARTY.md. volk loads
+  # the Vulkan loader at run time, so the engine starts without Vulkan.
+  set(VULKAN_HEADERS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+  set(VULKAN_HEADERS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+  set(VULKAN_HEADERS_ENABLE_MODULE OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    VulkanHeaders
+    GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
+    GIT_TAG 8864cdc896bbc2a9b6eb36b3218fc9ef57908d77 # vulkan-sdk-1.4.350.1
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(VulkanHeaders)
+  # Point volk at these headers, not at whatever Vulkan SDK the machine has.
+  set(VULKAN_HEADERS_INSTALL_DIR ${vulkanheaders_SOURCE_DIR} CACHE PATH "" FORCE)
+  FetchContent_Declare(
+    volk
+    GIT_REPOSITORY https://github.com/zeux/volk.git
+    GIT_TAG 3ca312a4f38baa63d8006b6905abbeeb89c8087d # vulkan-sdk-1.4.350.1
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(volk)
+endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
 # Warnings for our own targets only.
@@ -65,6 +90,12 @@ add_library(tisma_core
   src/io/stl.cpp
   src/cli/cli.cpp
 )
+if(TISMA_GPU)
+  target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
+  target_link_libraries(tisma_core PRIVATE volk::volk)
+else()
+  target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
+endif()
 target_include_directories(tisma_core PUBLIC src)
 target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE tisma_warnings)
 target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")

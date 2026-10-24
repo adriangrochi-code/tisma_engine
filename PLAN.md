@@ -178,7 +178,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa
 - [x] Paralelo por capas (oneTBB)
 - [x] Offsets con Clipper2 (regiones por capa con la regla no nula, offsets en inglete)
-- [ ] Infraestructura GPU (Vulkan, lavapipe en la CI) y corte en GPU
+- [x] Infraestructura GPU: Vulkan con volk (opcional en tiempo de ejecución), shaders compilados a SPIR-V, lavapipe en la CI de Linux
+- [x] Primer núcleo en GPU: rango de capas por triángulo, igual a la CPU
+- [ ] Corte en GPU: tramos por (triángulo, capa) con suma de prefijos; medir contra la CPU en una GPU real
 - [x] Prueba de áreas por capa con piezas de área conocida (pirámide, cubo; esfera: el volumen cortado coincide con el de la malla al 0,0002 %); tiempos medidos
 - [ ] Compensación XY y de primera capa con los nombres de `docs/spec/SETTINGS_V1.md` (esperando las fichas de corte)
 

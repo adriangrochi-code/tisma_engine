@@ -369,3 +369,35 @@ El dueño agregó a `main`:
 - shaders de cómputo en GLSL compilados a SPIR-V en la compilación;
 - lavapipe en la CI de Linux;
 - primer núcleo: el corte de triángulos en GPU, comparado con la CPU.
+
+## 2026-10-24 — bloque nocturno 4: infraestructura de Vulkan
+
+**Hecho:**
+- Vulkan-Headers (Apache-2.0 y MIT) y volk (MIT), anotadas en `THIRD_PARTY.md` antes de usarlas. glslang y lavapipe
+  quedan anotados como herramientas: no se enlazan ni se distribuyen. El control de licencias frenó la primera
+  compilación porque faltaban en la tabla, como corresponde.
+- `src/gpu/compute.hpp` y `compute_vulkan.cpp`:
+  - `gpu::Context::create()` devuelve nulo si no hay cargador de Vulkan, si no hay un dispositivo adecuado, o si
+    `TISMA_GPU=0`;
+  - los dispositivos por software (lavapipe) se usan solo si se piden, como en las pruebas, porque son más lentos
+    que la ruta propia en CPU;
+  - búferes visibles desde la CPU y un despachador de shaders de cómputo.
+- Opción de CMake `TISMA_GPU` (activada por defecto). Con `OFF` se compila `compute_none.cpp` y no hay dispositivo.
+- Primer núcleo: `level_ranges.comp`, el rango de capas que cruza cada triángulo. La versión de CPU
+  (`triangle_level_ranges`) se separó de `slice_levels` y es la referencia.
+- `tools/compile_shaders.py` genera los SPIR-V en `src/gpu/shaders/generated/` (guardados en el repositorio).
+  `--check` falla si están desactualizados; lo corre la CI de Linux.
+- CI de Linux: instala lavapipe y define `TISMA_REQUIRE_GPU=1`, así las pruebas de GPU fallan en lugar de omitirse si
+  falta el dispositivo. En Windows se omiten si no hay Vulkan (`SKIP_RETURN_CODE 4`).
+
+**Probado:**
+- 60/60 pruebas con gcc, clang y ASan+UBSan.
+- Las 3 pruebas de GPU corren en lavapipe: esfera de 200 segmentos con 334 capas, niveles que pasan por vértices,
+  casos vacíos. Dan lo mismo que la CPU, elemento por elemento.
+- Con `TISMA_GPU=OFF` compila, y las pruebas de GPU quedan omitidas.
+
+**No medido:** la velocidad en GPU. Acá solo hay lavapipe, que corre en la CPU, y medirlo no dice nada. Hace falta
+una máquina con GPU real (Windows con NVIDIA, AMD o Intel).
+
+**Sigue:** el corte en GPU completo: tramos por (triángulo, capa), con una suma de prefijos para ubicar la salida.
+Después, la compensación XY y de primera capa con la ficha de corte, cuando esté aprobada.

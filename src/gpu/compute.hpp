@@ -1,0 +1,47 @@
+#pragma once
+
+#include "mesh/indexed_mesh.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <string>
+#include <vector>
+
+namespace tisma::gpu {
+
+struct ContextOptions {
+    // Software devices (such as Mesa's lavapipe) run on the CPU and are slower
+    // than the engine's own CPU path, so they are skipped unless allowed. The
+    // tests allow them so that CI without a GPU still runs the kernels.
+    bool allow_cpu_device = false;
+};
+
+// A Vulkan compute device. GPU use is optional (design rule 4 in PLAN.md):
+// every kernel has a CPU version that is the reference in the tests.
+class Context {
+public:
+    // Returns null when the engine was built without the GPU backend, when no
+    // Vulkan loader or suitable device is present, or when the environment
+    // variable TISMA_GPU is set to 0.
+    static std::unique_ptr<Context> create(const ContextOptions& options = {});
+
+    ~Context();
+    Context(const Context&) = delete;
+    Context& operator=(const Context&) = delete;
+
+    std::string device_name() const;
+
+    // GPU version of triangle_level_ranges (src/slice/layers.hpp), with the
+    // same results. Throws std::runtime_error on a Vulkan failure.
+    void triangle_level_ranges(const IndexedMesh& mesh, std::span<const float> values, std::span<const float> isos,
+                               std::vector<std::uint32_t>& first, std::vector<std::uint32_t>& end);
+
+    struct Impl;
+
+private:
+    explicit Context(std::unique_ptr<Impl> impl);
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace tisma::gpu

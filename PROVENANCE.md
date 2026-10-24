@@ -11,6 +11,9 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/slice/contours.*` — unión de segmentos en contornos y cierre de huecos | Diseño propio: los tramos se encadenan por la identidad de la arista (índices de vértices), sin comparar coordenadas; primero las cadenas abiertas desde su cabeza, después los lazos cerrados. Los huecos se cierran uniendo fin y comienzo de cadenas abiertas, de a pares y empezando por los más cercanos (codicioso). |
 | `src/slice/layers.*` — plan de capas y corte por niveles | Diseño propio: alturas calculadas desde el índice de la capa; cada triángulo se reparte en los niveles que cruza su rango de valores (filas comprimidas: contar y después llenar), y cada nivel corta solo sus triángulos. |
 | `src/geom/polygons.*` — regiones por capa y offsets | Capa fina sobre Clipper2 (BSL-1.0): unión con la regla no nula y offsets con esquinas en inglete. Unidades enteras de 1 nm. Diseño propio. |
+| `src/gpu/compute*.cpp`, `src/gpu/compute.hpp` — backend de cómputo en Vulkan | Especificación de Vulkan (Khronos) y documentación de volk. Contexto opcional, búferes visibles desde la CPU y un despachador de shaders de cómputo: diseño propio. |
+| `src/gpu/shaders/level_ranges.comp` — rango de capas por triángulo en GPU | Diseño propio: búsqueda binaria del primer nivel mayor que el mínimo y el máximo del triángulo; misma regla que `triangle_level_ranges` en la CPU. |
+| `tools/compile_shaders.py` — SPIR-V generado | Diseño propio; usa `glslangValidator` solo como herramienta. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |

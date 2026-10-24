@@ -18,13 +18,15 @@ add_executable(tisma_tests
   test_contours.cpp
   test_layers.cpp
   test_polygons.cpp
+  test_gpu.cpp
 )
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
-catch_discover_tests(tisma_tests)
+# Exit code 4 is Catch2's "all tests skipped" (for example GPU tests without a device).
+catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 
 # End-to-end checks of the installed program.
 add_test(NAME cli_version COMMAND tisma-engine --version)

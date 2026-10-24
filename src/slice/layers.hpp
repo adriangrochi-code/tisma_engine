@@ -24,6 +24,13 @@ struct Layer {
 // material and is not created. Throws std::invalid_argument on heights <= 0.
 std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& settings);
 
+// For each triangle, the levels its value range crosses: [first[t], end[t]).
+// A triangle is crossed by level iso when min < iso <= max over its vertices
+// (the value >= iso rule of level_set_segments). isos sorted ascending. This
+// is the reference for the GPU kernel of the same name.
+void triangle_level_ranges(const IndexedMesh& mesh, std::span<const float> values, std::span<const float> isos,
+                           std::vector<std::uint32_t>& first, std::vector<std::uint32_t>& end);
+
 // Contours of the level sets values == isos[i] for every i, isos sorted
 // ascending. Each triangle is visited only for the levels its value range
 // crosses, so the cost grows with the segments produced rather than with
