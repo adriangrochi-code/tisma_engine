@@ -5,6 +5,7 @@
 #include "infill/gyroid.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 
 namespace tisma {
@@ -53,11 +54,11 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
         return Clipper2Lib::Point64{to_units(x), to_units(y)};
     };
     // Segments of every cell; each crossing belongs to two cells.
-    constexpr std::size_t kNone = static_cast<std::size_t>(-1);
-    std::vector<std::size_t> first(2 * nx * ny, kNone), second(2 * nx * ny, kNone);
+    constexpr std::uint32_t kNone = 0xFFFFFFFFu;
+    std::vector<std::uint32_t> first(2 * nx * ny, kNone), second(2 * nx * ny, kNone);
     std::vector<std::pair<std::size_t, std::size_t>> segments;
     auto add = [&](std::size_t a, std::size_t b) {
-        const std::size_t s = segments.size();
+        const auto s = static_cast<std::uint32_t>(segments.size());
         segments.push_back({a, b});
         for (std::size_t c : {a, b})
             (first[c] == kNone ? first[c] : second[c]) = s;
@@ -96,11 +97,14 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
     std::vector<bool> used(segments.size(), false);
     Polygons curves;
     auto other = [&](std::size_t s, std::size_t c) { return segments[s].first == c ? segments[s].second : segments[s].first; };
-    auto next = [&](std::size_t c, std::size_t s) { return first[c] == s ? second[c] : first[c]; };
+    auto next = [&](std::size_t c, std::size_t s) -> std::size_t {
+        const std::uint32_t n = first[c] == s ? second[c] : first[c];
+        return n == kNone ? segments.size() : n;
+    };
     auto walk = [&](std::size_t s, std::size_t from) {
         Polygon line{point(from)};
         std::size_t c = from;
-        while (s != kNone && !used[s]) {
+        while (s < segments.size() && !used[s]) {
             used[s] = true;
             c = other(s, c);
             line.push_back(point(c));
@@ -116,6 +120,9 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
         if (!used[s])
             walk(s, segments[s].first);
 
+    // The curves are smooth: points closer than kGyroidTolerance to the line
+    // between their neighbours go before clipping.
+    curves = Clipper2Lib::SimplifyPaths(curves, kGyroidTolerance * kUnitsPerMm, false);
     Clipper2Lib::Clipper64 clipper;
     clipper.AddOpenSubject(curves);
     clipper.AddClip(inner);

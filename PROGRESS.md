@@ -1173,3 +1173,39 @@ anterior más que el ancho de las paredes; `slice` 1,10–1,19 s.
 
 El próximo bloque toma la GPU del giroide, que es lo que más tarda.
 
+## 2026-10-24 — bloque nocturno 32: giroide más rápido
+
+**Medido primero** (esfera, 500 capas, un hilo, con una copia del código con relojes en el scratchpad):
+- 9,4 millones de puntos de giroide, uno cada 0,16 mm; 4,06 s;
+- por fase:
+
+| Fase | ms |
+|---|---|
+| Evaluación | 141 |
+| Reservas | 78 |
+| Marcha | 570 |
+| Encadenado | 511 |
+| Simplificación y recorte | 1070 |
+| Salida | 83 |
+
+**Hecho:**
+- Las curvas se simplifican antes del recorte (`SimplifyPaths` de Clipper2, 5 µm): de 9,4 a 5,5 millones de puntos, de
+  4,06 a 2,39 s. Con 10 o 20 µm quedan menos puntos, pero el tiempo casi no baja (lo que queda es la grilla) y el
+  error pasa el umbral de la prueba; me quedé con 5 µm.
+- La grilla baja de 32 a 24 pasos por período: 1,78 s en un hilo y 4,4 millones de puntos. El error de cuerda sigue
+  debajo de 0,01 mm y el material sigue en 20,0 %.
+- Los arreglos de cruces pasan a 32 bits.
+
+**Probado:** 129/129 pruebas con gcc, clang y ASan+UBSan. La prueba del giroide (puntos sobre la superficie con error
+< 0,01, material 20,0 %) pasa sin cambios.
+
+**Medido** (esfera, `slice` con giroide, 4 núcleos): de 1,97–2,02 s a 1,57–1,64 s. Con rectilíneo tarda 1,13 s, así que
+el giroide pasó de sumar 0,85 s a sumar 0,45 s.
+
+**Nota:** en callgrind apareció un ordenamiento de pares (el índice de aristas de los contornos) con el 32 % de las
+instrucciones. La medición nativa del corte de 500 capas da 66–87 ms, así que no cuadra; queda para revisar.
+
+**Sigue:**
+- anclar el giroide y su núcleo de GPU;
+- el ajuste de las líneas sólidas por tramo.
+

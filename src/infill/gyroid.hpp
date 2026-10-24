@@ -11,8 +11,10 @@ namespace tisma {
 // sin X cos Y + sin Y cos Z + sin Z cos X = 0, with X, Y, Z = 2 pi (x, y, z) /
 // period, at height z, clipped to the region shrunk by width / 2, as open
 // toolpaths of constant width. The curves come from marching squares on a
-// grid fixed to the origin, kGyroidSamples steps per period.
-inline constexpr int kGyroidSamples = 32;
+// grid fixed to the origin, kGyroidSamples steps per period; points within
+// kGyroidTolerance of the line between their neighbours are left out.
+inline constexpr int kGyroidSamples = 24;
+inline constexpr double kGyroidTolerance = 0.005; // mm
 std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width);
 
 // The period for a density (0 to 1) with beads of this width: at fixed z the

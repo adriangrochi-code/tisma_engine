@@ -238,7 +238,8 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
 - [x] Relleno sólido de las superficies, rectilíneo al 100 % (lo monotónico va con su propio ítem)
 - [x] Relleno en grilla (dos direcciones por capa, cada una al doble de separación)
 - [x] Giroide: la superficie de `docs/spec/SOURCES.md` cortada en cada Z (cuadrados marchantes, período por densidad)
-- [ ] Acelerar el giroide (suma 0,85 s en la esfera) y anclarlo a las paredes como el rectilíneo
+- [x] Acelerar el giroide: de 0,85 a 0,45 s en la esfera (24 pasos por período, curvas simplificadas a 5 µm)
+- [ ] Anclar el giroide a las paredes como el rectilíneo, y su núcleo de GPU
 - [x] Anclar las líneas de relleno a los perímetros: zigzag que une los extremos a lo largo del borde, sin entrar en
   las paredes; en las superficies sólidas, líneas ajustadas a la región. En el cuadrado de 7,6 mm, el material depositado
   es el área dentro del 1 % a 0°, 30° y 45°
