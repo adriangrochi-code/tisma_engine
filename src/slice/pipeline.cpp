@@ -49,7 +49,8 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)
         infill[l] = out.walls[l].infill;
-    out.surfaces = classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers);
+    out.surfaces =
+        classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers, settings.wall_width);
     return out;
 }
 

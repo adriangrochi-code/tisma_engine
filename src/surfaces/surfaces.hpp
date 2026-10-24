@@ -17,8 +17,10 @@ struct LayerSurfaces {
 // Part of layer i is top when one of the top_layers layers above it does not
 // cover it (the layers above the last one cover nothing), and bottom likewise
 // with the bottom_layers layers below. A layer covers what its region covers,
-// walls included. Layers run in parallel (oneTBB).
+// walls included. Solid parts narrower than min_width (a bead) could not be
+// filled: they grow by min_width into the infill region, so a gentle slope
+// does not leave holes in its skin. Layers run in parallel (oneTBB).
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
-                                             int top_layers, int bottom_layers);
+                                             int top_layers, int bottom_layers, double min_width = 0.0);
 
 } // namespace tisma

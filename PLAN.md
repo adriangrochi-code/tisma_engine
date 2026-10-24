@@ -233,7 +233,7 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS_V1.md` («Relleno»), con nombres propios.
 
 - [x] Superficies superiores e inferiores por capa: N capas contadas desde cada superficie expuesta (grupo `surfaces`)
-- [ ] Ancho mínimo de las superficies sólidas: quitar o ensanchar franjas más angostas que un cordón
+- [x] Ancho mínimo de las superficies sólidas: las franjas más angostas que un cordón crecen un cordón hacia el relleno
 - [ ] Relleno rectilíneo: líneas paralelas que giran 90° cada capa, ángulo base y densidad
 - [ ] Relleno sólido de las superficies (rectilíneo y monotónico al 100 %)
 - [ ] Relleno en grilla (dos direcciones por capa)

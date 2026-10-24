@@ -87,3 +87,28 @@ TEST_CASE("a step: the lower box's top around the upper box is solid, the upper 
         CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(upper_infill, 1e-6));
     }
 }
+
+TEST_CASE("solid parts narrower than a bead grow by a bead into the infill", "[surfaces]") {
+    // A gentle slope: layer i is a square of side 20 - i (0.5 mm in per side per
+    // layer). With walls 1.2 mm wide, layer i's infill is a square of side
+    // 17.6 - i and layer i + 3 covers a square of side 17 - i, so the top skin is
+    // a ring 0.3 mm wide: too thin for a 0.4 mm bead.
+    std::vector<Polygons> regions, infill;
+    for (int i = 0; i < 10; ++i) {
+        regions.push_back(square(i * 0.5, i * 0.5, 20.0 - i));
+        infill.push_back(square(i * 0.5 + 1.2, i * 0.5 + 1.2, 17.6 - i));
+    }
+    const std::vector<LayerSurfaces> thin = classify_surfaces(regions, infill, 3, 0);
+    const std::vector<LayerSurfaces> wide = classify_surfaces(regions, infill, 3, 0, 0.4);
+    for (int i = 0; i <= 6; ++i) {
+        INFO("layer " << i);
+        const double outer = 17.6 - i;
+        CHECK_THAT(area_mm2(thin[std::size_t(i)].top), WithinAbs(outer * outer - (outer - 0.6) * (outer - 0.6), 1e-6));
+        // Grown inwards by 0.4 mm: a ring 0.7 mm wide, taken from the sparse part.
+        CHECK_THAT(area_mm2(wide[std::size_t(i)].top), WithinAbs(outer * outer - (outer - 1.4) * (outer - 1.4), 1e-6));
+        CHECK_THAT(area_mm2(wide[std::size_t(i)].top) + area_mm2(wide[std::size_t(i)].sparse), WithinAbs(outer * outer, 1e-6));
+    }
+    // Parts already a bead wide do not change: the last 3 layers are all top either way.
+    for (int i = 7; i < 10; ++i)
+        CHECK_THAT(area_mm2(wide[std::size_t(i)].top), WithinAbs(area_mm2(thin[std::size_t(i)].top), 1e-9));
+}

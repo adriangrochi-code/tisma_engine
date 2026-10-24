@@ -26,10 +26,23 @@ Polygons covered_by_all(const std::vector<Polygons>& regions, std::size_t i, int
     return common;
 }
 
+// The solid part with its pieces narrower than min_width grown by min_width,
+// within the infill region.
+Polygons widen_thin(const Polygons& solid, const Polygons& infill, double min_width) {
+    if (min_width <= 0.0 || solid.empty())
+        return solid;
+    const Polygons wide = offset(offset(solid, -min_width / 2.0), min_width / 2.0);
+    const Polygons thin = Clipper2Lib::Difference(solid, wide, FillRule::NonZero);
+    if (thin.empty())
+        return solid;
+    const Polygons grown = Clipper2Lib::Intersect(offset(thin, min_width), infill, FillRule::NonZero);
+    return Clipper2Lib::Union(solid, grown, FillRule::NonZero);
+}
+
 } // namespace
 
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
-                                             int top_layers, int bottom_layers) {
+                                             int top_layers, int bottom_layers, double min_width) {
     std::vector<LayerSurfaces> out(infill.size());
     tbb::parallel_for(std::size_t(0), infill.size(), [&](std::size_t i) {
         LayerSurfaces& s = out[i];
@@ -38,10 +51,12 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
         Polygons rest = infill[i];
         if (top_layers > 0) {
             s.top = Clipper2Lib::Difference(rest, covered_by_all(regions, i, top_layers, +1), FillRule::NonZero);
+            s.top = widen_thin(s.top, rest, min_width);
             rest = Clipper2Lib::Difference(rest, s.top, FillRule::NonZero);
         }
         if (bottom_layers > 0) {
             s.bottom = Clipper2Lib::Difference(rest, covered_by_all(regions, i, bottom_layers, -1), FillRule::NonZero);
+            s.bottom = widen_thin(s.bottom, rest, min_width);
             rest = Clipper2Lib::Difference(rest, s.bottom, FillRule::NonZero);
         }
         s.sparse = std::move(rest);

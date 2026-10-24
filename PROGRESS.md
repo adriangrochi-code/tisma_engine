@@ -980,3 +980,23 @@ perímetros») se cumple y está medido. Quedan:
 
 **Sigue:** el ancho mínimo de las superficies sólidas, y después el relleno rectilíneo.
 
+## 2026-10-24 — bloque nocturno 25: ancho mínimo de las superficies sólidas
+
+**Hecho:**
+- `classify_surfaces` recibe un ancho mínimo (el del cordón; `slice_model` pasa `walls.width`). Las partes sólidas más
+  angostas que eso (lo que quita una apertura de medio cordón) crecen un cordón hacia la región de relleno.
+- Diseño propio. Elegí crecer y no descartar: en una pendiente suave la piel superior de cada capa es un anillo fino
+  junto a las paredes, y descartarlo dejaría el relleno disperso a la vista.
+
+**Probado:** 121/121 pruebas con gcc, clang y ASan+UBSan:
+- en una pirámide escalonada (0,5 mm hacia adentro por lado y por capa), la piel superior es un anillo de 0,3 mm; con el
+  mínimo de 0,4 mm pasa a 0,7 mm, tomado del relleno disperso;
+- las capas que ya son sólidas enteras no cambian.
+
+**Medido** (esfera, 500 capas, 4 núcleos):
+- superficies superior e inferior, sumando capas: de 1580 a 2152–2153 mm²;
+- `slice`: 1,12–1,13 s.
+
+**Sigue:** el relleno rectilíneo (líneas a 45° que giran 90° cada capa, 20 %, sólido al 100 %), con un grupo de ajustes
+`infill` propio.
+
