@@ -186,6 +186,15 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Ajustes propios (`docs/CONFIG.md`) y `slice` con el corte completo: modos de relleno, compensación XY y de primera capa
 - [ ] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables)
 
+## Estado de F2
+
+- [x] Boost.Polygon y Boost.Config (solo cabeceras) anotadas en `THIRD_PARTY.md`
+- [x] Eje medio de una región: aristas del Voronoi de segmentos que quedan adentro, con el radio del círculo inscrito en cada extremo
+- [ ] Discretizar las aristas curvas (parábolas)
+- [ ] Clasificar las aristas interiores sin recorrer todos los contornos por vértice (hoy es O(n) por vértice)
+- [ ] Método de Kuipers et al. 2020: cantidad y ancho de cordones según el radio, trapezoidación, extracción de trayectorias
+- [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

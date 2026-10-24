@@ -472,3 +472,33 @@ Después, la compensación XY y de primera capa con la ficha de corte, cuando es
 
 **Sigue:** F2, los perímetros (Kuipers et al. 2020), cuando la ficha de perímetros esté aprobada. Mientras tanto se
 puede empezar el esqueleto de Voronoi con Boost.Polygon (anotarla antes).
+
+## 2026-10-24 — bloque nocturno 7: comienzo de F2 (eje medio)
+
+**Hecho:**
+- Boost.Polygon y Boost.Config (`boost-1.90.0`, BSL-1.0, solo cabeceras), anotadas en `THIRD_PARTY.md`. El Voronoi
+  de Boost.Polygon solo necesita, fuera de sí misma, `boost/config.hpp` y `boost/cstdint.hpp`, así que no hace falta
+  el resto de Boost. Ninguno de los dos repositorios trae archivo de licencia en la raíz, pero todas las cabeceras
+  llevan el aviso BSL-1.0. Su CMake espera todo el árbol de Boost, así que se usan solo las cabeceras.
+- `src/geom/medial_axis.*`: `medial_axis(region)` construye el Voronoi de los segmentos del borde y devuelve las
+  aristas interiores, primarias y finitas, una vez cada una. Cada extremo trae su radio (la distancia al borde), que
+  según Kuipers et al. 2020 decide cuántos cordones entran. Las aristas curvas se marcan; todavía no se discretizan.
+
+**Probado:**
+- 73/73 pruebas con gcc, clang y ASan+UBSan:
+  - cuadrado: 4 aristas desde el centro (radio 5) a las esquinas (radio 0);
+  - rectángulo de 20 × 10: línea central con radio 5;
+  - anillo cuadrado: el eje se curva alrededor de las esquinas del agujero y llega a 3√2/(1+√2) ≈ 1,757 mm en la
+    diagonal (valor exacto); nada adentro del agujero;
+  - región vacía.
+- La primera versión de la prueba del anillo esperaba un cuadrado con esquinas a 1,5 mm: estaba mal la prueba, no el
+  código.
+- La CI de `f68f030` (ajustes y `slice`) pasó.
+
+**Sin terminar (F2):**
+- la clasificación de aristas interiores recorre todos los contornos por vértice; es O(n) por vértice y hay que
+  mejorarla antes de medir con piezas grandes;
+- falta discretizar las parábolas.
+
+**Sigue:** leer el método de Kuipers et al. 2020 (arXiv 2004.13497): cantidad y ancho de los cordones según el radio
+del eje medio, y trapezoidación. Después, la ficha de perímetros cuando esté en `main`.

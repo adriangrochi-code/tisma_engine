@@ -59,6 +59,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# Boost.Polygon (segment Voronoi) and the only Boost library it needs,
+# Boost.Config; both BSL-1.0 and header-only (see THIRD_PARTY.md). Their own
+# CMake files expect the whole Boost tree, so only the headers are used.
+FetchContent_Declare(
+  BoostConfig
+  GIT_REPOSITORY https://github.com/boostorg/config.git
+  GIT_TAG a7d5a9b05d70c9cfea980dc3539ca3d3461411b3 # boost-1.90.0
+  SOURCE_SUBDIR no-cmake
+)
+FetchContent_Declare(
+  BoostPolygon
+  GIT_REPOSITORY https://github.com/boostorg/polygon.git
+  GIT_TAG 8ba35b57c1436c4b36f7544aadd78c2b24acc7db # boost-1.90.0
+  SOURCE_SUBDIR no-cmake
+)
+FetchContent_MakeAvailable(BoostConfig BoostPolygon)
+add_library(tisma_boost_polygon INTERFACE)
+target_include_directories(tisma_boost_polygon SYSTEM INTERFACE ${boostconfig_SOURCE_DIR}/include ${boostpolygon_SOURCE_DIR}/include)
+
 if(TISMA_GPU)
   # Vulkan-Headers (Apache-2.0) and volk (MIT), see THIRD_PARTY.md. volk loads
   # the Vulkan loader at run time, so the engine starts without Vulkan.
@@ -101,6 +120,7 @@ add_library(tisma_core
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/slice/pipeline.cpp
+  src/geom/medial_axis.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
@@ -115,7 +135,7 @@ target_include_directories(tisma_core PUBLIC src)
 if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)
 endif()
-target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
+target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE nlohmann_json::nlohmann_json tisma_boost_polygon tisma_warnings)
 target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")
 
 add_executable(tisma-engine apps/main.cpp)
