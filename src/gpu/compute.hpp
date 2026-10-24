@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mesh/indexed_mesh.hpp"
+#include "slice/level_set.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -36,6 +37,14 @@ public:
     // same results. Throws std::runtime_error on a Vulkan failure.
     void triangle_level_ranges(const IndexedMesh& mesh, std::span<const float> values, std::span<const float> isos,
                                std::vector<std::uint32_t>& first, std::vector<std::uint32_t>& end);
+
+    // GPU version of level_segments_by_triangle (src/slice/level_set.hpp):
+    // the same segments in the same order, with points that agree to a few
+    // ULP. Throws std::runtime_error on a Vulkan failure.
+    void level_segments_by_triangle(const IndexedMesh& mesh, std::span<const float> values,
+                                    std::span<const float> isos, std::span<const std::uint32_t> first,
+                                    std::span<const std::uint32_t> end, std::vector<std::uint32_t>& offsets,
+                                    std::vector<LevelSegment>& out);
 
     struct Impl;
 

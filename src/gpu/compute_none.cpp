@@ -12,5 +12,8 @@ Context::~Context() = default;
 std::string Context::device_name() const { return {}; }
 void Context::triangle_level_ranges(const IndexedMesh&, std::span<const float>, std::span<const float>,
                                     std::vector<std::uint32_t>&, std::vector<std::uint32_t>&) {}
+void Context::level_segments_by_triangle(const IndexedMesh&, std::span<const float>, std::span<const float>,
+                                         std::span<const std::uint32_t>, std::span<const std::uint32_t>,
+                                         std::vector<std::uint32_t>&, std::vector<LevelSegment>&) {}
 
 } // namespace tisma::gpu

@@ -46,6 +46,15 @@ void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, 
 void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, float iso,
                         std::span<const std::uint32_t> triangles, std::vector<LevelSegment>& out);
 
+// Segments of every crossing (triangle t, level l) with l in [first[t], end[t])
+// (see triangle_level_ranges): triangle by triangle, and level by level within
+// a triangle. A triangle in that range always yields exactly one segment, so
+// offsets[t] is where triangle t's segments start (offsets has n + 1 entries).
+// Reference for the GPU kernel of the same name.
+void level_segments_by_triangle(const IndexedMesh& mesh, std::span<const float> values, std::span<const float> isos,
+                                std::span<const std::uint32_t> first, std::span<const std::uint32_t> end,
+                                std::vector<std::uint32_t>& offsets, std::vector<LevelSegment>& out);
+
 // The planar field: the z coordinate of each vertex.
 std::vector<float> height_field(const IndexedMesh& mesh);
 

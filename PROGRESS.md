@@ -401,3 +401,31 @@ una máquina con GPU real (Windows con NVIDIA, AMD o Intel).
 
 **Sigue:** el corte en GPU completo: tramos por (triángulo, capa), con una suma de prefijos para ubicar la salida.
 Después, la compensación XY y de primera capa con la ficha de corte, cuando esté aprobada.
+
+## 2026-10-24 — bloque nocturno 5: corte en GPU
+
+**Hecho:**
+- La CI de `0e1ace5` pasó entera: Windows compila el backend de Vulkan, Linux corre las pruebas de GPU en lavapipe y
+  la verificación de los SPIR-V da bien (la misma versión de glslang que acá).
+- El punto de cruce se calcula ahora en `float`, en tres pasos redondeados (resta, producto, suma), con
+  `-ffp-contract=off` para que ningún compilador los fusione. Así la CPU y la GPU hacen las mismas operaciones.
+  Vulkan redondea exacto la suma, la resta y el producto, pero la división puede errar hasta 2,5 ULP. Por eso en una
+  GPU real los puntos pueden diferir en unos pocos ULP, mientras la topología (aristas, triángulos, orden) es
+  idéntica.
+- `level_segments_by_triangle` (CPU, referencia) y su núcleo `level_segments.comp`: todos los tramos de cada
+  triángulo, ubicados con una suma de prefijos.
+- `slice_levels(…, gpu)`: calcula en GPU los rangos y los tramos, los reagrupa por capa en el mismo orden que la
+  CPU (ordenamiento por conteo) y une los contornos en paralelo.
+
+**Probado:**
+- 62/62 pruebas con gcc, clang y ASan+UBSan.
+- Pruebas nuevas de GPU:
+  - tramos de la esfera de 200 segmentos con 334 capas: mismas aristas, triángulos y orden; diferencia máxima de
+    coordenadas 0 mm en lavapipe (la prueba admite 0,0001 mm);
+  - corte completo de una esfera en GPU contra CPU: mismos contornos y puntos.
+
+**No medido:** la velocidad en GPU (falta una máquina con GPU real).
+
+**Sigue:**
+- usar la GPU desde `tisma-engine` cuando haya una (opción y medición);
+- compensación XY y de primera capa, cuando la ficha de corte esté en `main`.

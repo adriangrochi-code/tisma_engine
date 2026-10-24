@@ -2,6 +2,10 @@
 
 #include "slice/contours.hpp"
 
+namespace tisma::gpu {
+class Context;
+}
+
 #include <span>
 #include <vector>
 
@@ -40,5 +44,11 @@ void triangle_level_ranges(const IndexedMesh& mesh, std::span<const float> value
 // close_gaps).
 std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
                                                std::span<const float> isos, double max_gap = 0.0);
+
+// Same, with the level ranges and the segments computed on the GPU when gpu is
+// not null. The contours use the same edges in the same order as on the CPU;
+// their points agree to a few ULP.
+std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
+                                               std::span<const float> isos, double max_gap, gpu::Context* gpu);
 
 } // namespace tisma

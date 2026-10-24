@@ -13,6 +13,7 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/geom/polygons.*` — regiones por capa y offsets | Capa fina sobre Clipper2 (BSL-1.0): unión con la regla no nula y offsets con esquinas en inglete. Unidades enteras de 1 nm. Diseño propio. |
 | `src/gpu/compute*.cpp`, `src/gpu/compute.hpp` — backend de cómputo en Vulkan | Especificación de Vulkan (Khronos) y documentación de volk. Contexto opcional, búferes visibles desde la CPU y un despachador de shaders de cómputo: diseño propio. |
 | `src/gpu/shaders/level_ranges.comp` — rango de capas por triángulo en GPU | Diseño propio: búsqueda binaria del primer nivel mayor que el mínimo y el máximo del triángulo; misma regla que `triangle_level_ranges` en la CPU. |
+| `src/gpu/shaders/level_segments.comp` — tramos por (triángulo, capa) en GPU | Diseño propio: las mismas reglas que `level_set_segments`; la salida se ubica con una suma de prefijos de los tramos de cada triángulo. Precisión de las operaciones según la especificación de Vulkan (suma, resta y producto exactos; división con hasta 2,5 ULP). |
 | `tools/compile_shaders.py` — SPIR-V generado | Diseño propio; usa `glslangValidator` solo como herramienta. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |

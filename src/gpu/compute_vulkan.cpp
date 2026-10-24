@@ -5,6 +5,7 @@
 #include "gpu/compute.hpp"
 
 #include "gpu/shaders/generated/level_ranges.spv.h"
+#include "gpu/shaders/generated/level_segments.spv.h"
 
 #include <volk.h>
 
@@ -356,6 +357,65 @@ void Context::triangle_level_ranges(const IndexedMesh& mesh, std::span<const flo
 
     std::memcpy(first.data(), b_first.mapped, n * sizeof(std::uint32_t));
     std::memcpy(end.data(), b_end.mapped, n * sizeof(std::uint32_t));
+}
+
+// Layout of Segment in level_segments.comp (std430, 4-byte members).
+struct GpuSegment {
+    float from_x, from_y, from_z;
+    float to_x, to_y, to_z;
+    std::uint32_t edge_from_hi, edge_from_lo;
+    std::uint32_t edge_to_hi, edge_to_lo;
+    std::uint32_t triangle;
+};
+static_assert(sizeof(GpuSegment) == 44, "must match the std430 layout of the shader");
+
+void Context::level_segments_by_triangle(const IndexedMesh& mesh, std::span<const float> values,
+                                         std::span<const float> isos, std::span<const std::uint32_t> first,
+                                         std::span<const std::uint32_t> end, std::vector<std::uint32_t>& offsets,
+                                         std::vector<LevelSegment>& out) {
+    const std::size_t n = mesh.triangles.size();
+    // Exclusive prefix sum of the segment counts: where each triangle writes.
+    offsets.assign(n + 1, 0);
+    for (std::size_t t = 0; t < n; ++t)
+        offsets[t + 1] = offsets[t] + (end[t] - first[t]);
+    const std::size_t total = offsets[n];
+    out.clear();
+    if (total == 0)
+        return;
+
+    static_assert(sizeof(Vec3f) == 12, "vertices are copied to the GPU as packed float triples");
+    Impl::Buffer b_vertices, b_values, b_tris, b_isos, b_first, b_end, b_offsets, b_out;
+    impl_->make_buffer(b_vertices, mesh.vertices.size() * sizeof(Vec3f));
+    impl_->make_buffer(b_values, values.size_bytes());
+    impl_->make_buffer(b_tris, n * 3 * sizeof(std::uint32_t));
+    impl_->make_buffer(b_isos, isos.size_bytes());
+    impl_->make_buffer(b_first, first.size_bytes());
+    impl_->make_buffer(b_end, end.size_bytes());
+    impl_->make_buffer(b_offsets, offsets.size() * sizeof(std::uint32_t));
+    impl_->make_buffer(b_out, total * sizeof(GpuSegment));
+    std::memcpy(b_vertices.mapped, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vec3f));
+    std::memcpy(b_values.mapped, values.data(), values.size_bytes());
+    std::memcpy(b_tris.mapped, mesh.triangles.data(), n * 3 * sizeof(std::uint32_t));
+    std::memcpy(b_isos.mapped, isos.data(), isos.size_bytes());
+    std::memcpy(b_first.mapped, first.data(), first.size_bytes());
+    std::memcpy(b_end.mapped, end.data(), end.size_bytes());
+    std::memcpy(b_offsets.mapped, offsets.data(), offsets.size() * sizeof(std::uint32_t));
+
+    const std::uint32_t push = static_cast<std::uint32_t>(n);
+    const std::array<Impl::Buffer*, 8> bound = {&b_vertices, &b_values, &b_tris,    &b_isos,
+                                                &b_first,    &b_end,    &b_offsets, &b_out};
+    impl_->run(kLevelSegmentsSpirv, bound, &push, sizeof(push), static_cast<std::uint32_t>((n + 255) / 256));
+
+    const auto* gpu = static_cast<const GpuSegment*>(b_out.mapped);
+    out.resize(total);
+    for (std::size_t i = 0; i < total; ++i) {
+        const GpuSegment& g = gpu[i];
+        out[i] = {{g.from_x, g.from_y, g.from_z},
+                  {g.to_x, g.to_y, g.to_z},
+                  (EdgeKey(g.edge_from_hi) << 32) | g.edge_from_lo,
+                  (EdgeKey(g.edge_to_hi) << 32) | g.edge_to_lo,
+                  g.triangle};
+    }
 }
 
 } // namespace tisma::gpu

@@ -1,0 +1,86 @@
+#version 450
+// Segments of every crossing (triangle, level), triangle by triangle. GPU
+// version of level_segments_by_triangle (src/slice/level_set.cpp): same
+// topology, points within a few ULP (Vulkan allows 2.5 ULP in division).
+// Own design; see PROVENANCE.md.
+
+layout(local_size_x = 256) in;
+
+struct Segment {
+    float from_x, from_y, from_z;
+    float to_x, to_y, to_z;
+    uint edge_from_hi, edge_from_lo; // smaller vertex index, larger vertex index
+    uint edge_to_hi, edge_to_lo;
+    uint triangle;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer Vertices { float xyz[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Values { float values[]; };
+layout(std430, set = 0, binding = 2) readonly buffer Triangles { uint corners[]; };
+layout(std430, set = 0, binding = 3) readonly buffer Levels { float isos[]; };
+layout(std430, set = 0, binding = 4) readonly buffer First { uint first_level[]; };
+layout(std430, set = 0, binding = 5) readonly buffer End { uint end_level[]; };
+layout(std430, set = 0, binding = 6) readonly buffer Offsets { uint offsets[]; };
+layout(std430, set = 0, binding = 7) writeonly buffer Segments { Segment segments[]; };
+
+layout(push_constant) uniform Params {
+    uint triangle_count;
+} params;
+
+// a + t * (b - a) in three rounded steps, as on the CPU; precise forbids fusing.
+float lerp_step(float a, float b, float t) {
+    precise float d = b - a;
+    precise float m = t * d;
+    precise float r = a + m;
+    return r;
+}
+
+vec3 crossing(uint a, uint b, float iso) {
+    if (b < a) {
+        uint s = a;
+        a = b;
+        b = s;
+    }
+    precise float t = (iso - values[a]) / (values[b] - values[a]);
+    return vec3(lerp_step(xyz[3u * a], xyz[3u * b], t), lerp_step(xyz[3u * a + 1u], xyz[3u * b + 1u], t),
+                lerp_step(xyz[3u * a + 2u], xyz[3u * b + 2u], t));
+}
+
+void main() {
+    uint t = gl_GlobalInvocationID.x;
+    if (t >= params.triangle_count)
+        return;
+    uint v[3] = uint[3](corners[3u * t], corners[3u * t + 1u], corners[3u * t + 2u]);
+    uint out_index = offsets[t];
+    for (uint l = first_level[t]; l < end_level[t]; ++l, ++out_index) {
+        float iso = isos[l];
+        bool above[3] = bool[3](values[v[0]] >= iso, values[v[1]] >= iso, values[v[2]] >= iso);
+        Segment s;
+        s.triangle = t;
+        // Walking the triangle in winding order, the contour leaves through the
+        // edge going from above to below and enters through the one going from
+        // below to above.
+        for (uint k = 0u; k < 3u; ++k) {
+            uint k1 = (k + 1u) % 3u;
+            if (above[k] == above[k1])
+                continue;
+            uint a = v[k];
+            uint b = v[k1];
+            vec3 p = crossing(a, b, iso);
+            if (above[k]) {
+                s.from_x = p.x;
+                s.from_y = p.y;
+                s.from_z = p.z;
+                s.edge_from_hi = min(a, b);
+                s.edge_from_lo = max(a, b);
+            } else {
+                s.to_x = p.x;
+                s.to_y = p.y;
+                s.to_z = p.z;
+                s.edge_to_hi = min(a, b);
+                s.edge_to_lo = max(a, b);
+            }
+        }
+        segments[out_index] = s;
+    }
+}

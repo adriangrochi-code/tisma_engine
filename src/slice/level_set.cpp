@@ -9,15 +9,27 @@
 namespace tisma {
 namespace {
 
+// a + t * (b - a) as three rounded steps. Kept out of one expression so that
+// no compiler fuses the multiply and add (the build also passes
+// -ffp-contract=off).
+float lerp_step(float a, float b, float t) {
+    const float d = b - a;
+    const float m = t * d;
+    return a + m;
+}
+
 Vec3f crossing(const IndexedMesh& mesh, std::span<const float> values, float iso, std::uint32_t a, std::uint32_t b) {
     if (b < a)
         std::swap(a, b);
     const Vec3f& pa = mesh.vertices[a];
     const Vec3f& pb = mesh.vertices[b];
     // One end is >= iso and the other < iso, so the denominator is never zero.
-    const double t = (double(iso) - values[a]) / (double(values[b]) - values[a]);
-    return {float(pa.x + t * (double(pb.x) - pa.x)), float(pa.y + t * (double(pb.y) - pa.y)),
-            float(pa.z + t * (double(pb.z) - pa.z))};
+    // Single-precision steps, each a separate operation, repeated by the GPU
+    // kernel (level_segments.comp). Vulkan rounds add, subtract and multiply
+    // exactly but allows 2.5 ULP in division, so GPU points agree with these to
+    // a few ULP; which edges and triangles a contour uses is exactly the same.
+    const float t = (iso - values[a]) / (values[b] - values[a]);
+    return {lerp_step(pa.x, pb.x, t), lerp_step(pa.y, pb.y, t), lerp_step(pa.z, pb.z, t)};
 }
 
 } // namespace
@@ -63,6 +75,20 @@ void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, 
     assert(values.size() == mesh.vertices.size());
     for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
         triangle_segment(mesh, values, iso, static_cast<std::uint32_t>(t), out);
+}
+
+void level_segments_by_triangle(const IndexedMesh& mesh, std::span<const float> values, std::span<const float> isos,
+                                std::span<const std::uint32_t> first, std::span<const std::uint32_t> end,
+                                std::vector<std::uint32_t>& offsets, std::vector<LevelSegment>& out) {
+    const std::size_t n = mesh.triangles.size();
+    offsets.assign(n + 1, 0);
+    for (std::size_t t = 0; t < n; ++t)
+        offsets[t + 1] = offsets[t] + (end[t] - first[t]);
+    out.clear();
+    out.reserve(offsets[n]);
+    for (std::size_t t = 0; t < n; ++t)
+        for (std::uint32_t l = first[t]; l < end[t]; ++l)
+            triangle_segment(mesh, values, isos[l], static_cast<std::uint32_t>(t), out);
 }
 
 void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, float iso,

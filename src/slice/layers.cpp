@@ -3,6 +3,8 @@
 
 #include "slice/layers.hpp"
 
+#include "gpu/compute.hpp"
+
 #include <oneapi/tbb/blocked_range.h>
 #include <oneapi/tbb/parallel_for.h>
 
@@ -74,6 +76,40 @@ std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::spa
             if (max_gap > 0.0)
                 close_gaps(out[l], max_gap);
         }
+    });
+    return out;
+}
+
+std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
+                                               std::span<const float> isos, double max_gap, gpu::Context* gpu) {
+    if (!gpu)
+        return slice_levels(mesh, values, isos, max_gap);
+    const std::size_t level_count = isos.size();
+    std::vector<std::uint32_t> first, end, offsets;
+    std::vector<LevelSegment> by_triangle;
+    gpu->triangle_level_ranges(mesh, values, isos, first, end);
+    gpu->level_segments_by_triangle(mesh, values, isos, first, end, offsets, by_triangle);
+
+    // Regroup by level, keeping triangle order inside each level, as the CPU
+    // path does: counting sort.
+    std::vector<std::uint32_t> row_start(level_count + 1, 0);
+    for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
+        for (std::uint32_t l = first[t]; l < end[t]; ++l)
+            ++row_start[l + 1];
+    for (std::size_t l = 0; l < level_count; ++l)
+        row_start[l + 1] += row_start[l];
+    std::vector<LevelSegment> by_level(by_triangle.size());
+    std::vector<std::uint32_t> fill(row_start.begin(), row_start.end() - 1);
+    for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
+        for (std::uint32_t l = first[t]; l < end[t]; ++l)
+            by_level[fill[l]++] = by_triangle[offsets[t] + (l - first[t])];
+
+    std::vector<std::vector<Contour>> out(level_count);
+    tbb::parallel_for(std::size_t(0), level_count, [&](std::size_t l) {
+        const std::span<const LevelSegment> segs(by_level.data() + row_start[l], row_start[l + 1] - row_start[l]);
+        out[l] = join_segments(segs);
+        if (max_gap > 0.0)
+            close_gaps(out[l], max_gap);
     });
     return out;
 }

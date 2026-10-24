@@ -97,6 +97,10 @@ else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
 target_include_directories(tisma_core PUBLIC src)
+# Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
+if(NOT MSVC)
+  target_compile_options(tisma_core PRIVATE -ffp-contract=off)
+endif()
 target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE tisma_warnings)
 target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")
 
