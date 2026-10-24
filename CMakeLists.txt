@@ -139,6 +139,7 @@ add_library(tisma_core
   src/report/warnings.cpp
   src/slice/printable.cpp
   src/adhesion/adhesion.cpp
+  src/support/support.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

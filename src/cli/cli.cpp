@@ -224,7 +224,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 
     double volume = 0.0;
     std::size_t polygons = 0, walls = 0, solid_lines = 0, sparse_lines = 0, bridge_lines = 0;
-    double top = 0.0, bottom = 0.0, sparse = 0.0;
+    double top = 0.0, bottom = 0.0, sparse = 0.0, support = 0.0;
     for (std::size_t l = 0; l < sliced.layers.size(); ++l) {
         volume += area_mm2(sliced.regions[l]) * (sliced.layers[l].top - sliced.layers[l].bottom);
         polygons += sliced.regions[l].size();
@@ -235,6 +235,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         solid_lines += sliced.fills[l].top.size() + sliced.fills[l].solid.size();
         sparse_lines += sliced.fills[l].sparse.size();
         bridge_lines += sliced.fills[l].bridge.size();
+        if (l < sliced.support_areas.size())
+            support += area_mm2(sliced.support_areas[l]);
     }
     out << "layers: " << sliced.layers.size() << "\n";
     out << "polygons: " << polygons << "\n";
@@ -245,6 +247,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "solid_infill_lines: " << solid_lines << "\n";
     out << "sparse_infill_lines: " << sparse_lines << "\n";
     out << "bridge_lines: " << bridge_lines << "\n";
+    out << "support_area: " << support << "\n";
     out << "sliced_volume: " << volume << "\n";
     out << "slice_ms: " << slice_ms << "\n";
     if (sliced.open_contours > 0)

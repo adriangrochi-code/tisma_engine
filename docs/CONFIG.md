@@ -108,6 +108,18 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 | `skirt_layers` | entero | 1 | 0–1000 | En cuántas capas se repite la falda |
 | `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde |
 
+### `support`
+
+Soportes según `docs/spec/BEHAVIOR.md` («Soportes»). Por ahora el motor calcula dónde van (áreas por capa); las líneas
+del soporte, la interfaz y los puentes cortos vienen después.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | false | | Activa los soportes |
+| `threshold_angle` | número | 0 | 0 a menos de 90 | Una cara más tendida que este ángulo, medido desde la horizontal, lleva soporte; 0 es automático: cada capa puede salir medio cordón más afuera que la de abajo |
+| `z_gap` | número | 0.2 | ≥ 0 | Separación en Z entre el soporte y la pieza de arriba, en mm (se redondea a capas enteras; valor de banco) |
+| `xy_gap` | número | 0.6 | ≥ 0 | Separación horizontal entre el soporte y la pieza, en mm |
+
 ### `cooling`
 
 Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
@@ -128,7 +140,7 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
 
 ## Grupos previstos (todavía no implementados)
 
-`material`, `support`. Se definen acá
+`material`. Se define acá
 cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo

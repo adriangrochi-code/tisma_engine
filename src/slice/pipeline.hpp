@@ -24,6 +24,7 @@ struct SlicedModel {
     std::vector<LayerFill> fills;        // one per layer: solid and sparse infill toolpaths
     std::vector<Toolpath> skirt; // around the first layer, on the first adhesion.skirt_layers layers
     std::vector<Toolpath> brim;  // around the first layer, on the first layer
+    std::vector<Polygons> support_areas; // one per layer (empty unless support.enabled): where support goes
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
     std::vector<std::size_t> open_by_layer; // the same per layer
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)

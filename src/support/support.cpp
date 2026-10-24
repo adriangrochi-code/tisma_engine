@@ -1,0 +1,51 @@
+// Overhangs and support areas. Own design; see PROVENANCE.md.
+
+#include "support/support.hpp"
+
+#include <oneapi/tbb/parallel_for.h>
+
+#include <cmath>
+#include <numbers>
+
+namespace tisma {
+
+std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
+                                const SupportParams& params) {
+    std::vector<Polygons> out(regions.size());
+    tbb::parallel_for(std::size_t(1), std::max<std::size_t>(regions.size(), 1), [&](std::size_t l) {
+        if (regions[l].empty())
+            return;
+        const double reach = params.threshold_angle > 0.0
+                                 ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
+                                 : params.bead / 2.0;
+        out[l] = Clipper2Lib::Difference(regions[l], offset(regions[l - 1], reach), Clipper2Lib::FillRule::NonZero);
+    });
+    return out;
+}
+
+std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
+                                    const SupportParams& params) {
+    const std::vector<Polygons> over = overhangs(regions, heights, params);
+    const std::size_t n = regions.size();
+    std::vector<Polygons> out(n);
+    // From the top down: a column grows with every overhang (gap layers lower)
+    // and loses what the part occupies, where it stands on the part.
+    Polygons column;
+    for (std::size_t l = n; l-- > 0;) {
+        const std::size_t above = l + 1 + std::size_t(std::max(params.z_gap_layers, 0));
+        if (above < n && !over[above].empty()) {
+            // Each overhang leaves out the band its layer holds by itself, so
+            // the overhangs of a slope project as rings with thin gaps between
+            // them: closing by one bead fills those (support needs no detail).
+            column = Clipper2Lib::Union(column, over[above], Clipper2Lib::FillRule::NonZero);
+            column = offset(offset(column, params.bead), -params.bead);
+        }
+        if (column.empty())
+            continue;
+        column = Clipper2Lib::Difference(column, regions[l], Clipper2Lib::FillRule::NonZero);
+        out[l] = Clipper2Lib::Difference(column, offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
+    }
+    return out;
+}
+
+} // namespace tisma

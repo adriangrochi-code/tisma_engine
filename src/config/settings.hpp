@@ -91,6 +91,12 @@ struct Settings {
     int skirt_layers = 1;
     double brim_width = 0.0; // mm; 0: no brim
 
+    // support (docs/spec/BEHAVIOR.md, "Soportes")
+    bool support = false;
+    double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
+    double support_z_gap = 0.2;  // mm between the support and the part above it
+    double support_xy_gap = 0.6; // mm between the support and the part beside it
+
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
     double min_print_speed = 10.0; // mm/s: the first stage slows extrusions down to this

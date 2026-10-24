@@ -293,7 +293,7 @@ Desde `PLAN.md` (fase F5), `docs/spec/BEHAVIOR.md` («Soportes») y el tipo `Ski
 con nombres propios en `docs/CONFIG.md`.
 
 - [x] Falda y borde (grupo `adhesion`, `src/adhesion/*`)
-- [ ] Voladizos por ángulo y su proyección hacia abajo
+- [x] Voladizos por ángulo y su proyección hacia abajo (grupo `support`, `src/support/*`: solo las áreas por capa)
 - [ ] Soporte en grilla con separación en Z y XY, interfaz densa y base
 - [ ] Puentes cortos sin soporte (`max_bridge_length`)
 - [ ] En GPU: voladizos y proyección, si conviene

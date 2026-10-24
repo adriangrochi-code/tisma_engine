@@ -37,7 +37,7 @@ TEST_CASE("settings are read by group", "[settings]") {
         "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "klipper",
                     "start_gcode": "M104 S[temp]", "end_gcode": "M84", "variables": {"temp": 215, "names": ["a", "b"]}},
         "speed": {"walls": 50, "outer_wall": "40%", "travel": 150, "max": 100},
-        "support": {"anything": 1}
+        "material": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -68,7 +68,7 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.travel_speed == 150.0);
     CHECK(s.max_speed == 100.0);
     CHECK(s.infill_speed == 80.0); // default
-    CHECK(s.ignored_groups == std::vector<std::string>{"support"});
+    CHECK(s.ignored_groups == std::vector<std::string>{"material"});
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -130,6 +130,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(Settings{}.brim_width == 0.0);
     CHECK_THROWS_WITH(parse_settings(R"({"adhesion": {"skirt_loops": 1.5}})"), ContainsSubstring("adhesion.skirt_loops: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"adhesion": {"brim_width": -1}})"), ContainsSubstring("adhesion.brim_width: must not be negative"));
+    const Settings sup = parse_settings(R"({"support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.3, "xy_gap": 1}})");
+    CHECK(sup.support);
+    CHECK(sup.support_angle == 50.0);
+    CHECK(sup.support_z_gap == 0.3);
+    CHECK(sup.support_xy_gap == 1.0);
+    CHECK_FALSE(Settings{}.support);
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"threshold_angle": 90}})"), ContainsSubstring("support.threshold_angle: must be from 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"enabled": 1}})"), ContainsSubstring("support.enabled: must be true or false"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"min_speed": 0}})"), ContainsSubstring("cooling.min_speed: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_off_layers": 1.5}})"), ContainsSubstring("cooling.fan_off_layers: must be a whole number"));

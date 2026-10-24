@@ -1654,3 +1654,34 @@ se nota. Escritura 0,64–0,73 s.
 
 **Sigue:**
 - F5: voladizos por ángulo y su proyección, después el soporte en grilla.
+
+## 2026-10-24 — bloque nocturno 46: voladizos y áreas de soporte
+
+**Hecho:**
+- Grupo `support` (`docs/CONFIG.md`): `enabled` false, `threshold_angle` 0 (automático), `z_gap` 0,2 mm (valor de
+  banco), `xy_gap` 0,6 mm. El ángulo se mide desde la horizontal, como en `docs/spec/SETTINGS_V1.md`.
+- Voladizos y áreas de soporte (`src/support/*`, diseño propio con Clipper2):
+  - el voladizo de una capa es su región menos la de abajo agrandada altura / tan(ángulo); en automático, medio cordón;
+  - de arriba hacia abajo, una columna suma los voladizos (con las capas de separación en Z), pierde lo que ocupa la
+    pieza (ahí se apoya en ella) y queda a `xy_gap` de la pieza;
+  - la columna se cierra por un cordón. Cada voladizo deja afuera la franja que su capa sostiene sola, así que una
+    pendiente se proyectaba como cientos de anillos finos con huecos de 0,2 mm: unos 26 000 vértices y 7,7 s en la
+    esfera. Con el cierre, 0,3–0,4 s.
+- `SlicedModel.support_areas` por capa; `slice` informa `support_area`. Todavía no se imprimen: las líneas del soporte,
+  la interfaz y los puentes cortos vienen después.
+
+**Probado:** 166/166 pruebas con gcc, clang y ASan+UBSan:
+- una T: el voladizo bajo el sombrero mide el área exacta, el soporte va de la cama hasta dos capas bajo el sombrero (con
+  separación) con el área exacta a 0,6 mm del tronco, y nada arriba;
+- una pirámide invertida a 45°: sin voladizo con 40° y con soporte con 50°;
+- una repisa sobre una losa: el soporte se apoya en la losa y no sigue hasta la cama;
+- lectura de los ajustes nuevos y sus errores.
+
+**Medido** (esfera, 500 capas):
+- área de soporte sumada por capa: 131 590 mm², con ángulo automático y con 45°; a mano da unos 135 500 mm² para el
+  casquete más tendido que 45°, y la diferencia son las separaciones;
+- corte 1,23–1,29 s sin soporte y 1,58–1,68 s con soporte.
+
+**Sigue:**
+- F5: las líneas del soporte en grilla, la interfaz densa y la base, y los puentes cortos sin soporte;
+- la columna se calcula en serie, de arriba hacia abajo: se puede partir por tramos si hace falta.

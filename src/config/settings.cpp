@@ -16,7 +16,7 @@ namespace {
 
 using nlohmann::json;
 
-const std::vector<std::string> kPlannedGroups = {"material", "support"};
+const std::vector<std::string> kPlannedGroups = {"material"};
 
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
     throw SettingsError("settings: " + key + ": " + message);
@@ -75,7 +75,8 @@ Settings parse_settings(std::string_view text) {
     Settings s;
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
-            group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "compute")
+            group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
+            group == "compute")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -284,6 +285,25 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
+    read_group(root, "support", {"enabled", "threshold_angle", "z_gap", "xy_gap"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "enabled") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.support = g.at(n).get<bool>();
+                       return;
+                   }
+                   const double d = number(g, n, k);
+                   if (n == "threshold_angle") {
+                       if (d < 0.0 || d >= 90.0)
+                           fail(k, "must be from 0 (automatic) to less than 90 degrees");
+                       s.support_angle = d;
+                       return;
+                   }
+                   if (d < 0.0)
+                       fail(k, "must not be negative");
+                   (n == "z_gap" ? s.support_z_gap : s.support_xy_gap) = d;
+               });
     read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "fan_off_layers") {
@@ -373,6 +393,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.skirt_distance", num(s.skirt_distance)},
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
         {"adhesion.brim_width", num(s.brim_width)},
+        {"support.enabled", flag(s.support)},
+        {"support.threshold_angle", num(s.support_angle)},
+        {"support.z_gap", num(s.support_z_gap)},
+        {"support.xy_gap", num(s.support_xy_gap)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
         {"cooling.min_speed", num(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},

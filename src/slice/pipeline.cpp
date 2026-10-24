@@ -3,11 +3,13 @@
 #include "slice/pipeline.hpp"
 
 #include "adhesion/adhesion.hpp"
+#include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace tisma {
 
@@ -68,6 +70,18 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
+    out.support_areas.resize(out.layers.size());
+    if (settings.support) {
+        std::vector<double> thickness;
+        for (const Layer& layer : out.layers)
+            thickness.push_back(layer.top - layer.bottom);
+        SupportParams sp;
+        sp.threshold_angle = settings.support_angle;
+        sp.z_gap_layers = int(std::lround(settings.support_z_gap / settings.layer_height));
+        sp.xy_gap = settings.support_xy_gap;
+        sp.bead = settings.wall_width;
+        out.support_areas = support_areas(out.regions, thickness, sp);
+    }
     if (!out.regions.empty()) {
         out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width);
         out.skirt = skirt_loops(out.regions.front(), settings.brim_width, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
