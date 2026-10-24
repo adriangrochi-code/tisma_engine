@@ -18,9 +18,9 @@ struct PrinterModel {
     std::string vendor, model;
     std::array<double, 3> build_volume{}; // mm; a round bed's diameter is the first
     bool circular = false;                // a round bed centred on the origin (delta printers)
-    std::vector<double> nozzles;          // mm, the stock one first
+    std::vector<double> nozzles;          // mm, the stock one first (0.4 when not stated)
     double filament_diameter = 1.75;
-    std::string firmware;                 // "marlin", "klipper", "reprap", "bambu" or "other"
+    std::string firmware;                 // "marlin", "klipper", "reprap", "bambu", "other", or "" when not stated
     bool direct_drive = true;             // or a Bowden tube
     bool heated_bed = true;
     std::optional<double> max_bed_temp, max_nozzle_temp, max_speed, max_acceleration; // C, mm/s, mm/s2

@@ -241,6 +241,7 @@
     X(BuildVolume, "Volumen de impresión", "Build volume")                                                            \
     X(BedRound, "cama redonda de %g mm", "round bed of %g mm")                                                        \
     X(Firmware, "Firmware", "Firmware")                                                                               \
+    X(OwnFirmware, "propio del fabricante", "the maker's own")                                                        \
     X(Extruder, "Extrusor", "Extruder")                                                                               \
     X(DirectDrive, "directo", "direct drive")                                                                         \
     X(Bowden, "Bowden", "Bowden")                                                                                     \

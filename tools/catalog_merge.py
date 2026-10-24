@@ -21,8 +21,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The makers' own domains: an entry needs a source on one of its vendor's.
 OFFICIAL = {
-    "anker": ["ankermake.com", "anker.com"],
-    "ankermake": ["ankermake.com", "anker.com"],
+    "anker": ["ankermake.com", "anker.com", "eufymake.com"],
+    "ankermake": ["ankermake.com", "anker.com", "eufymake.com"],
     "anycubic": ["anycubic.com"],
     "artillery": ["artillery3d.com"],
     "bambu lab": ["bambulab.com", "bblcdn.com"],
@@ -38,7 +38,7 @@ OFFICIAL = {
     "geeetech": ["geeetech.com"],
     "hatchbox": ["hatchbox3d.com"],
     "kingroon": ["kingroon.com"],
-    "longer": ["longer3d.com"],
+    "longer": ["longer3d.com", "longer.net"],
     "lulzbot": ["lulzbot.com", "fargo3dprinting.com"],
     "overture": ["overture3d.com"],
     "peopoly": ["peopoly.net"],

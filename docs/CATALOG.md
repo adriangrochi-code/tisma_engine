@@ -35,9 +35,9 @@ que el programa no depende de archivos externos.
 | `vendor`, `model` | Fabricante y nombre oficial del modelo |
 | `build_volume` | `[x, y, z]` en mm. En una cama redonda (delta), `x` es el diámetro |
 | `bed_shape` | `rectangular` (por defecto) o `circular` |
-| `nozzle_diameters` | Las boquillas en mm: la de fábrica primero, después las que vende el fabricante |
+| `nozzle_diameters` | Las boquillas en mm: la de fábrica primero, después las que vende el fabricante. Si el fabricante no la dice, 0,4 mm, la más común |
 | `filament_diameter` | 1,75 o 2,85 mm |
-| `firmware` | `marlin`, `klipper`, `reprap`, `bambu` u `other` |
+| `firmware` | `marlin`, `klipper`, `reprap`, `bambu` u `other` (propio del fabricante); vacío si el fabricante no lo dice: G-code genérico |
 | `extruder` | `direct` o `bowden` |
 | `heated_bed`, `max_bed_temp`, `max_nozzle_temp` | Cama caliente y temperaturas máximas (°C) |
 | `max_speed`, `max_acceleration` | Velocidad (mm/s) y aceleración (mm/s²) máximas publicadas |
@@ -70,7 +70,7 @@ entrada), una entrada repetida y las fuentes no permitidas. Las entradas quedan 
 | `machine.bed` | Un rectángulo desde el origen, o un círculo de 64 lados alrededor del origen si la cama es redonda |
 | `machine.max_height` | La altura del volumen |
 | `machine.nozzle_diameter` | La boquilla elegida |
-| `machine.flavor` | `klipper` → Klipper; `reprap` → RepRap; `marlin`, `bambu` y `other` → Marlin |
+| `machine.flavor` | `klipper` → Klipper; `reprap` → RepRap; `marlin`, `bambu`, `other` y sin dato → Marlin (comandos que también entienden los demás) |
 | `retraction.length`, `speed` | Valores de partida propios: extrusor directo 0,8 mm a 35 mm/s; Bowden 4 mm a 40 mm/s. Las torres de calibración encuentran los de cada impresora |
 | `machine.max_feed_x`, `_y`, `acceleration` | Los máximos publicados, si los hay |
 | G-code de inicio y fin | Propios del motor, en comandos que entiende cualquier firmware: calentar, `G28`, `M420 S1` (la malla guardada) en Marlin con nivelación automática, esperar las temperaturas, una línea de cebado junto al borde, y al final apagar, subir y presentar la pieza |

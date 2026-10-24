@@ -1258,6 +1258,7 @@ void App::catalog_dialog() {
                                    : p.firmware == "klipper" ? "Klipper"
                                    : p.firmware == "reprap"  ? "RepRapFirmware"
                                    : p.firmware == "bambu"   ? "Bambu Lab"
+                                   : p.firmware == "other"   ? tr(T::OwnFirmware)
                                                              : "-";
             ImGui::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
                         p.direct_drive ? tr(T::DirectDrive) : tr(T::Bowden),

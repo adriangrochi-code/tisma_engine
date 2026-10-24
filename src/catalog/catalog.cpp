@@ -122,20 +122,21 @@ PrinterModel read_printer(const json& j, std::size_t index) {
     if (!shape.empty() && shape != "rectangular" && shape != "circular")
         fail(r.where, "bed_shape must be rectangular or circular");
     p.circular = shape == "circular";
-    if (!j.contains("nozzle_diameters") || !j.at("nozzle_diameters").is_array() || j.at("nozzle_diameters").empty())
+    // A maker that does not state the nozzle: the common 0.4 mm (docs/CATALOG.md).
+    const json nozzles = j.contains("nozzle_diameters") && !j.at("nozzle_diameters").is_null() ? j.at("nozzle_diameters")
+                                                                                                : json::array({0.4});
+    if (!nozzles.is_array() || nozzles.empty())
         fail(r.where, "nozzle_diameters must list at least the stock nozzle");
-    for (const json& n : j.at("nozzle_diameters")) {
+    for (const json& n : nozzles) {
         if (!n.is_number() || !(n.get<double>() >= 0.1 && n.get<double>() <= 2.0))
             fail(r.where, "nozzle_diameters must be from 0.1 to 2 mm");
         if (std::find(p.nozzles.begin(), p.nozzles.end(), n.get<double>()) == p.nozzles.end())
             p.nozzles.push_back(n.get<double>());
     }
     p.filament_diameter = r.number("filament_diameter", 1.0, 3.5).value_or(1.75);
-    p.firmware = r.text("firmware", false);
-    if (p.firmware.empty())
-        p.firmware = "other";
-    if (p.firmware != "marlin" && p.firmware != "klipper" && p.firmware != "reprap" && p.firmware != "bambu" &&
-        p.firmware != "other")
+    p.firmware = r.text("firmware", false); // empty: the maker does not say
+    if (!p.firmware.empty() && p.firmware != "marlin" && p.firmware != "klipper" && p.firmware != "reprap" &&
+        p.firmware != "bambu" && p.firmware != "other")
         fail(r.where, "firmware must be marlin, klipper, reprap, bambu or other");
     const std::string extruder = r.text("extruder", false);
     if (!extruder.empty() && extruder != "direct" && extruder != "bowden")
