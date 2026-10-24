@@ -122,6 +122,7 @@ add_library(tisma_core
   src/slice/pipeline.cpp
   src/geom/medial_axis.cpp
   src/perimeters/beading.cpp
+  src/perimeters/transitions.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

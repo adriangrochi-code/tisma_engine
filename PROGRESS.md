@@ -597,3 +597,27 @@ discretización o el `std::map` del grafo) antes de seguir con F2.
 
 **Sigue:** el filtro del marcado y las transiciones (Kuipers et al. 2020, sección 3.4); después, el eje medio de
 todas las capas en paralelo.
+
+## 2026-10-24 — bloque nocturno 11: anclas de transición
+
+**Hecho:**
+- La CI de `eddb38e` (parábolas y marcado) pasó; la de `c3d7087` (simplificación) estaba en curso.
+- `src/perimeters/transitions.*` (Kuipers et al. 2020, sección 3.4):
+  - `central_bead_counts`: q(2R) en cada nodo central (ecuación 4);
+  - `transition_anchors`: en cada arista central cuyos extremos tienen distinta cantidad, el punto donde el
+    espesor 2R cruza la transición q⁻¹(n) (ecuaciones 5 y 6), con R interpolado a lo largo de la arista. Pasa por
+    cada cantidad intermedia; en el esquema uniforme salta de a dos.
+- Se releyó la ubicación de la rampa: mide t(n) = w* y empieza a t(n)·(q⁻¹(n)/w* − n) antes del ancla; en el esquema
+  distribuido queda centrada en el ancla.
+- La sesión principal sumó a la ficha de perímetros el caso P11: una cuña de 0 a 3 mm en 30 mm, con cantidad y
+  anchos medidos por milímetro. Sirve para contrastar las transiciones cuando la ficha esté en `main`.
+
+**Probado:**
+- 87/87 pruebas con gcc, clang y ASan+UBSan. En una cuña de 30°:
+  - las cantidades siguen al espesor;
+  - cada ancla cae exactamente donde 2R = (n + ½)·w*, sobre el eje y en orden;
+  - el esquema uniforme salta de a dos;
+  - una tira de ancho constante no tiene transiciones.
+
+**Sigue:** filtro de anclas opuestas a menos de 1 mm, rampas de largo w* con cantidad fraccionaria (ecuación 7), y
+filtro del marcado.
