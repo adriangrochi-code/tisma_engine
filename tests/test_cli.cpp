@@ -164,10 +164,19 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
     CHECK(outside.code == kExitModel);
     CHECK_THAT(outside.err, ContainsSubstring("outside the bed"));
     CHECK_FALSE(std::filesystem::exists(out));
+    // On a bed exactly its size the cube fits, but its skirt does not; without
+    // the skirt it prints.
     const Run edge = run({"slice", kData + "/cube_ascii.stl", "--config",
                           write("tisma_tight_bed.json", R"({"machine": {"bed": [[0, 0], [10, 0], [10, 10], [0, 10]]}})"),
                           "-o", out.string()});
-    CHECK(edge.code == kExitOk);
+    CHECK(edge.code == kExitModel);
+    CHECK_THAT(edge.err, ContainsSubstring("the skirt goes off the bed"));
+    CHECK_FALSE(std::filesystem::exists(out));
+    const Run tight = run({"slice", kData + "/cube_ascii.stl", "--config",
+                           write("tisma_tight_bed_no_skirt.json",
+                                 R"({"machine": {"bed": [[0, 0], [10, 0], [10, 10], [0, 10]]}, "adhesion": {"skirt_loops": 0}})"),
+                           "-o", out.string()});
+    CHECK(tight.code == kExitOk);
     std::filesystem::remove(out);
     // Taller than the machine.
     const Run tall = run({"slice", kData + "/cube_ascii.stl", "--config",

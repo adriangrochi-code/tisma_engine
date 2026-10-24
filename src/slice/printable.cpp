@@ -53,9 +53,40 @@ std::string unprintable_reason(const IndexedMesh& mesh, const Settings& s) {
     return {};
 }
 
-std::string unprintable_reason(const SlicedModel& model) {
+std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     const bool any = std::any_of(model.regions.begin(), model.regions.end(), [](const Polygons& r) { return !r.empty(); });
-    return any ? std::string() : "no layer of the model encloses any area (is the mesh flat or open?)";
+    if (!any)
+        return "no layer of the model encloses any area (is the mesh flat or open?)";
+    // The skirt and the brim go around the model: they must fit on the bed too.
+    if (!s.bed.empty())
+        for (const auto* paths : {&model.skirt, &model.brim})
+            for (const Toolpath& t : *paths)
+                for (const ToolpathPoint& p : t.points)
+                    if (!on_bed(s.bed, p.p.x, p.p.y)) {
+                        char text[200];
+                        std::snprintf(text, sizeof text,
+                                      "the %s goes off the bed (machine.bed) at x %.3f, y %.3f: move the model or "
+                                      "shrink adhesion.%s",
+                                      paths == &model.skirt ? "skirt" : "brim", p.p.x, p.p.y,
+                                      paths == &model.skirt ? "skirt_distance" : "brim_width");
+                        return text;
+                    }
+    // Something to extrude: a wall, infill of any kind, or gap fill. (The
+    // skirt and the brim alone are not a print.)
+    auto has = [](const std::vector<Toolpath>& paths) {
+        return std::any_of(paths.begin(), paths.end(), [](const Toolpath& t) { return t.points.size() >= 2; });
+    };
+    for (std::size_t l = 0; l < model.layers.size(); ++l) {
+        if (l < model.walls.size() && has(model.walls[l].toolpaths))
+            return {};
+        if (l < model.fills.size()) {
+            const LayerFill& f = model.fills[l];
+            if (has(f.top) || has(f.solid) || has(f.sparse) || has(f.bridge) || has(f.gaps))
+                return {};
+        }
+    }
+    return "nothing would be printed: every part of the model is thinner than the lines (check walls.width, "
+           "slicing.xy_offset and the model's scale)";
 }
 
 } // namespace tisma

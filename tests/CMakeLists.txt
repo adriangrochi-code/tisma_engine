@@ -37,6 +37,7 @@ add_executable(tisma_tests
   test_voronoi.cpp
   test_fea.cpp
   test_analysis.cpp
+  test_gcode_check.cpp
 )
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.

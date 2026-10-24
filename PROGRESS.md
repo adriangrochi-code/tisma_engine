@@ -2300,3 +2300,50 @@ El motor todavía no los necesita: no tiene interfaz propia.
 
 **Medido:** `tools/ci_linux.sh` tarda 1 min 38 s con todo compilado y pasa 201/201 en las tres compilaciones, con las
 pruebas de GPU en lavapipe. La CI de Linux en GitHub tardaba unos 5 minutos por envío.
+
+## 2026-10-24 — exportación de G-code verificada
+
+**Pedido del dueño:** asegurarse de que la exportación del G-code se haga correctamente y sin fallos (junto con la
+interfaz, que viene después).
+
+**Hecho:**
+- Verificador propio del G-code (`src/gcode/check.*`, `docs/GCODE_CHECK.md`). Comprueba:
+  - que el archivo esté completo y se pueda leer;
+  - números finitos;
+  - lugar y velocidad de cada movimiento;
+  - capas que suben y extruyen a su altura;
+  - filamento proporcional a cada línea;
+  - retracciones completas y deshechas;
+  - el ventilador.
+
+  El G-code del usuario no se juzga, solo se sigue su estado.
+- Exportación verificada (`src/gcode/export.*`):
+  - se escribe en `.part`, se vuelve a leer desde el disco y se verifica;
+  - solo entonces se renombra;
+  - si no pasa, queda como `.rejected` y `slice` termina con el código de salida nuevo, 6.
+
+  `slice` informa `gcode_check: ok (…)` con líneas, capas y filamento.
+- **Dos errores reales encontrados y corregidos:**
+  - una pieza toda más fina que las líneas daba un G-code sin extrusiones;
+  - con una cama justa, la falda quedaba fuera de la cama y el G-code se escribía igual.
+
+  Los dos ahora se rechazan antes de escribir, con un mensaje claro (código 4).
+- Los íconos y logos de Tisma (PR #6) se fusionaron en `dev` para la interfaz, con su procedencia anotada.
+
+**Probado:** 206/206 pruebas (200 de Catch2 y 6 del programa) con `tools/ci_linux.sh` (gcc, clang, ASan+UBSan, GPU con
+lavapipe). Pruebas nuevas:
+- el cubo limpio;
+- nueve daños detectados, cada uno con su mensaje;
+- G-code de usuario libre sin falsos avisos;
+- matriz fija de 4 piezas × 20 variantes de ajustes, sin un problema;
+- exportación buena, rechazada y sin carpeta;
+- el modelo sin nada que extruir;
+- la cama justa con y sin falda.
+
+Además, fuera del repositorio, una prueba aleatoria de 5300 combinaciones de ajustes y piezas (con esfera, cilindro y
+paredes finas): cero G-code inválidos, 7 piezas rechazadas como no imprimibles.
+
+**Medido:** esfera de 50 mm, 159 200 triángulos y 297 115 líneas (8,4 MB). Laminar tarda 521 ms, escribir 278 ms y
+verificar 72 ms.
+
+**Sigue:** versiones y CHANGELOG, documentación para colaboradores, después la interfaz.

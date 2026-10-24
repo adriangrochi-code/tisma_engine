@@ -17,7 +17,9 @@ struct SlicedModel;
 // - taller than machine.max_height, when that is set.
 std::string unprintable_reason(const IndexedMesh& mesh, const Settings& settings);
 
-// The same after slicing: no layer encloses any area (a flat or open mesh).
-std::string unprintable_reason(const SlicedModel& model);
+// The same after slicing: no layer encloses any area (a flat or open mesh),
+// the skirt or the brim goes off the bed (when machine.bed is set), or no
+// layer has anything to extrude (every part thinner than the lines).
+std::string unprintable_reason(const SlicedModel& model, const Settings& settings);
 
 } // namespace tisma

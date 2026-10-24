@@ -7,6 +7,7 @@
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "report/analysis_json.hpp"
+#include "gcode/export.hpp"
 #include "gcode/writer.hpp"
 #include "report/warnings.hpp"
 #include "geom/medial_axis.hpp"
@@ -274,7 +275,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         sliced = slice_model(mesh, settings, nullptr);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-    if (const std::string reason = unprintable_reason(sliced); !reason.empty()) {
+    if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
         return kExitModel;
     }
@@ -310,16 +311,19 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (sliced.open_contours > 0)
         err << "warning: " << sliced.open_contours
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
-    const auto write_start = std::chrono::steady_clock::now();
     std::vector<Warning> model = model_warnings(sliced);
     warnings.insert(warnings.end(), model.begin(), model.end());
-    if (!write_file(parsed->output, [&](std::ostream& gcode) { write_gcode(gcode, sliced, settings, &warnings); })) {
-        err << "error: cannot write '" << parsed->output << "'\n";
-        return kExitInput;
+    const GcodeExport exported = export_gcode(parsed->output, sliced, settings, &warnings);
+    if (!exported.written) {
+        err << "error: " << exported.error << "\n";
+        for (const GcodeProblem& p : exported.check.problems)
+            err << "  line " << p.line << ": " << p.message << "\n";
+        return exported.check.problem_count > 0 ? kExitGcode : kExitInput;
     }
-    const double write_ms =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - write_start).count();
-    out << "write_ms: " << write_ms << "\n";
+    out << "write_ms: " << exported.write_seconds * 1000.0 << "\n";
+    out << "check_ms: " << exported.check_seconds * 1000.0 << "\n";
+    out << "gcode_check: ok (" << exported.check.stats.lines << " lines, " << exported.check.stats.layers
+        << " layers, " << exported.check.stats.filament << " mm of filament)\n";
     out << "wrote " << parsed->output << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {
