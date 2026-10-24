@@ -27,6 +27,8 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 |---|---|
 | Ahlers, *3D Printing of Nonplanar Layers for Smooth Surface Generation*, tesis, Universidad de Hamburgo, 2018. [PDF](https://tams.informatik.uni-hamburg.de/publications/2018/MSc_Daniel_Ahlers.pdf) | Superficies superiores no planares; límites por el cabezal |
 | Dai et al., *Support-free volume printing by multi-axis motion*, ACM TOG 37(4), 2018. [TU Delft](https://research.tudelft.nl/en/publications/support-free-volume-printing-by-multi-axis-motion) | Capas curvas sin soportes |
+| Etienne, Ray, Panozzo, Hornus, Wang, Martínez, McMains, Alexa, Wyvill, Lefebvre. *CurviSlicer: Slightly curved slicing for 3-axis printers.* ACM Transactions on Graphics 38(4), SIGGRAPH 2019. [HAL](https://hal.science/hal-02120033) | Capas apenas curvas en 3 ejes, con límites de pendiente y espesor |
+| Felzenszwalb y Huttenlocher. *Distance Transforms of Sampled Functions.* Theory of Computing 8, 2012. [Artículo](https://theoryofcomputing.org/articles/v008a019/) | Distancia exacta en una grilla (zonas bajo los voladizos) |
 | Zhang et al., *S³-Slicer*, SIGGRAPH Asia 2022. [ACM SIGGRAPH](https://history.siggraph.org/?p=216073) | Laminado curvo con varios objetivos |
 | Zhang et al., *Support Generation for Robot-Assisted 3D Printing with Curved Layers*, ICRA 2023. [arXiv](https://arxiv.org/pdf/2302.05510) | Soportes para capas curvas |
 | Estudio de acabado con capas curvas (ScienceDirect, 2025). [Artículo](https://www.sciencedirect.com/science/article/pii/S2590123025043178) | Las capas curvas mejoran el acabado hasta unos 55° de inclinación |

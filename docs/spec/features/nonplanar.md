@@ -29,14 +29,14 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `curved.mode` | — | `disabled` | `wave`, `conical`; y `overhangs`, `stress`, `surface`, `automatic` (fichas propias más adelante) |
+| `curved.mode` | — | `disabled` | `wave`, `conical`; `overhangs`, `stress`, `surface` y `automatic` en `nonplanar_modes.md` |
 | `curved.pattern` | — | `egg` | Forma de `wave`: `egg`, `ridges`, `twisted` |
 | `curved.amplitude` | mm | 0,6 | Amplitud `a` de la onda, si no se ajusta a la cabeza |
 | `curved.wavelength` | mm | 16 | Largo `λ` de la onda, si no se ajusta a la cabeza |
 | `curved.angle` | ° | 0 | Dirección de `ridges` y ángulo inicial de `twisted` |
 | `curved.twist` | °/mm | 3 | `twisted`: giro de la dirección por mm de altura |
 | `curved.cone_angle` | ° | 15 | `conical` sin ajuste a la cabeza: pendiente del cono; positivo sube hacia afuera |
-| `curved.fit_head` | — | sí | Las capas tan curvas como permite la cabeza (regla 3) |
+| `curved.fit_head` | — | sí | Las capas tan curvas como permite la cabeza (regla 3). En `conical`, el cono sale de la pieza (`nonplanar_modes.md`) |
 | `curved.flat_below` | mm | 0,6 | Por debajo, capas planas |
 | `curved.ramp_height` | mm | 5 | Alto de la transición de plano a curvo |
 | `curved.flat_top` | — | no | Volver a capas planas arriba de todo |
@@ -65,7 +65,8 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
    - **onda:** `λ = π · head.clearance_height / tan_min`, entre 4 y 100 mm;
    - **amplitud:** la que da la pendiente máxima `tan_min` (`a = tan_min / k`; en `ridges`, con la tangente de su
      dirección), y nunca más que `head.clearance_height / 2`, porque la onda sube `2a` de valle a cresta;
-   - **cono:** pendiente `tan_min`, con el signo pedido;
+   - **cono:** la pendiente de cada radio sale de los voladizos de la pieza, y una pieza sin voladizos queda plana
+     (`nonplanar_modes.md`, reglas 3 a 8). `curved.cone_angle` solo vale sin `curved.fit_head`;
    - **espesor:** si con eso algún punto de la pieza da `J` fuera de [0,6; 1,4], la amplitud (o la pendiente del cono)
      se achica por bisección hasta que entre.
 4. **Material:** cada tramo extruye su material plano multiplicado por `J` en ese punto. Con `preserve`, la velocidad
