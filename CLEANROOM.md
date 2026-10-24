@@ -65,10 +65,11 @@ Todo lo de Tisma Slicer llega acá como **fichas**, nunca como código, también
    - nombres de clases, funciones o archivos de Tisma Slicer o de PrusaSlicer;
    - cómo está organizado ese código.
 
-   Los nombres de los ajustes y las etiquetas del G-code sí se usan: son la interfaz con el usuario y con la vista
-   previa.
-4. **Filtro:** antes de subir una ficha se revisa con un chequeo automático (nada de código ni de nombres internos) y la
-   revisión del dueño o de una sesión limpia.
+   Los ajustes usan los nombres del motor (`docs/spec/SETTINGS_V1.md`); la correspondencia con los de Tisma Slicer
+   queda del lado de Tisma, en lo que llama al motor. Las etiquetas del G-code de `docs/spec/GCODE_OUTPUT.md` sí se
+   usan: son el formato que lee la vista previa.
+4. **Filtro:** antes de subir una ficha se corre `tools/check_spec.py` (de la rama `dev`; solo informa archivo, línea y
+   regla) y se corrigen las líneas marcadas. Después la revisa el dueño en un pull request.
 5. **Cómo se usa:** quien programa el motor parte de la ficha y de las fuentes públicas, decide su propia estructura y
    anota en `PROVENANCE.md` «ficha `docs/spec/features/<nombre>.md`».
 
