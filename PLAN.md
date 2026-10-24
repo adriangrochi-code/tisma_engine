@@ -99,7 +99,11 @@ también la versión GPU, probada contra la CPU.
 - en macOS funciona sobre Metal con MoltenVK, para F10.
 
 Las bibliotecas que haga falta (cabeceras y cargador de Vulkan, compilador de shaders) se anotan en `THIRD_PARTY.md`
-antes de usarlas.
+antes de usarlas. Revisadas el 2026-10-24:
+- Vulkan-Headers (Apache-2.0) y volk (MIT) se enlazan;
+- glslang solo se usa como herramienta para compilar los shaders a SPIR-V (ver `THIRD_PARTY.md`);
+- en la CI de Linux, lavapipe (Mesa) corre las pruebas de GPU sin GPU;
+- donde no hay Vulkan, el motor usa la CPU.
 
 **Núcleos candidatos por fase:**
 

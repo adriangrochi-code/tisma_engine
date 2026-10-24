@@ -354,3 +354,18 @@ El dueño agregó a `main`:
 **Sigue:**
 - compensación XY y de primera capa, cuando lleguen las fichas de corte;
 - mientras tanto, infraestructura de Vulkan (revisar antes la licencia de glslang).
+
+**Licencias para Vulkan (mismo bloque):**
+- Revisadas en `vulkan-sdk-1.4.350.1`:
+  - Vulkan-Headers: Apache-2.0, algunos archivos MIT;
+  - volk: MIT;
+  - glslang: mezcla con una licencia propia de NVIDIA en el preprocesador y el texto GPL-3 con excepción de Bison.
+- Decisión: glslang no se enlaza ni se distribuye. Se usa solo para compilar los shaders a SPIR-V. Queda anotado en
+  `THIRD_PARTY.md` y `PLAN.md`.
+- La CI del merge (`b0bf6ac`) pasó en Linux y en Windows: oneTBB estática funciona también con MSVC.
+
+**Sigue:** infraestructura de Vulkan:
+- volk y Vulkan-Headers con FetchContent;
+- shaders de cómputo en GLSL compilados a SPIR-V en la compilación;
+- lavapipe en la CI de Linux;
+- primer núcleo: el corte de triángulos en GPU, comparado con la CPU.
