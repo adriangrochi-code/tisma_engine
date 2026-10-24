@@ -30,10 +30,19 @@ A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.m
 
 ## Work blocks
 
-Each scheduled block lasts about one hour.
+Each scheduled block lasts about one hour. All blocks work on the branch `dev`, so each one continues where the last
+one stopped.
 
-1. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
-2. Implement it with tests, build, run the tests.
-3. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).
-4. Push to a branch `block/<date>-<topic>` and open a pull request against `main`. Do not merge it: the owner (or the
-   main Tisma session, which reviews only the behavior and the tests) merges.
+1. Fetch `dev`. If it does not exist yet, create it from `main`.
+2. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
+3. Implement it with tests, build, run the tests.
+4. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).
+5. Commit, push `dev`, and make sure a pull request from `dev` to `main` is open. Do not merge it.
+   - The owner merges at the end of each phase.
+   - The main Tisma session may review it, but only the behavior and the tests.
+6. Stop at a point where the build and the tests pass, even if the item is unfinished. Say so in `PROGRESS.md`.
+
+## CI
+
+- Every push runs the build and the tests on Linux.
+- Windows and macOS run only when started by hand and once a week: in a private repository their minutes cost more.

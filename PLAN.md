@@ -33,7 +33,7 @@ actual, que el dueño pueda licenciar como quiera.
 
 | Fase | Semanas | Contenido | Terminada cuando |
 |---|---|---|---|
-| F0 | 1 | Esqueleto: CMake, CI en Linux, Windows y macOS, Catch2, línea de comandos, lectura de STL (binario y ASCII), `THIRD_PARTY.md`, `PROVENANCE.md`, banco de pruebas | Compila y prueba en los 3 sistemas; lee los modelos del banco |
+| F0 | 1 | Esqueleto: CMake, CI (Linux en cada envío; Windows y macOS a mano y una vez por semana, porque en un repositorio privado sus minutos cuestan más), Catch2, línea de comandos, lectura de STL (binario y ASCII), `THIRD_PARTY.md`, `PROVENANCE.md`, banco de pruebas | Compila y prueba en los 3 sistemas; lee los modelos del banco |
 | F1 | 2–3 | Corte de la malla en capas: intersección triángulo-plano, unión de segmentos en contornos, cierre de huecos chicos, alturas de capa (primera capa y resto), offsets con Clipper2 | Las áreas por capa coinciden con las de la malla (prueba con piezas de área conocida); tiempo medido |
 | F2 | 4–7 | Perímetros de ancho variable desde Kuipers et al. 2020: esqueleto de los contornos (Voronoi de segmentos con Boost.Polygon), trapezoidación, cantidad y ancho de cordones (repartido y centrado), extracción de trayectorias | Paredes de 0,3 a 1,2 mm sin huecos ni excesos (área cubierta medida); piezas comunes con 2–3 perímetros |
 | F3 | 8–9 | Superficies: arriba, abajo, sólido y relleno; rellenos rectilíneo, grilla y giroide; puentes con dirección | Un cubo y el Benchy con capas sólidas correctas |
