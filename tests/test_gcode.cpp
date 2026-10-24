@@ -451,3 +451,50 @@ TEST_CASE("skirt and brim come first on their layers as Skirt/Brim", "[gcode]") 
     CHECK(types_of_layer[2] != "Skirt/Brim");
     CHECK(extrusions_in_skirt > 8);
 }
+
+TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gcode][support]") {
+    IndexedMesh m;
+    add_box(m, 4, 4, 6, 6, 2); // stem, layers 0-9
+    const auto base = std::uint32_t(m.vertices.size());
+    add_box(m, 0, 0, 10, 10, 1); // cap, moved up to z 2-3 (layers 10-14)
+    for (std::size_t v = base; v < m.vertices.size(); ++v)
+        m.vertices[v].z += 2.0f;
+    Settings s;
+    s.skirt_loops = 0;
+    {
+        const SlicedModel off = slice_model(m, s);
+        std::ostringstream out;
+        write_gcode(out, off, s);
+        CHECK(out.str().find(";TYPE:Support material") == std::string::npos);
+    }
+    s.support = true;
+    const SlicedModel model = slice_model(m, s);
+    REQUIRE(model.layers.size() == 15);
+    // Base on layers 0-5, interface on 6-8 (3 layers under the 1-layer gap), nothing from 9 up.
+    for (std::size_t l = 0; l < 15; ++l) {
+        CHECK(model.fills[l].support.empty() == (l > 5));
+        CHECK(model.fills[l].support_interface.empty() == (l < 6 || l > 8));
+    }
+    auto length = [](const std::vector<Toolpath>& paths) {
+        double sum = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return sum;
+    };
+    // Lines 2.5 mm apart on layer 0 (along X): rows at multiples of 2.5 in Y.
+    std::set<long> rows;
+    for (const Toolpath& t : model.fills[0].support)
+        for (const ToolpathPoint& p : t.points)
+            rows.insert(std::lround(p.p.y * 100.0));
+    for (long y : rows)
+        CHECK(y % 250 == 0);
+    // Material per area: about 1 / spacing for the base, 1 / bead for the interface.
+    const double area = area_mm2(model.support_areas[0]);
+    CHECK(length(model.fills[0].support) / area < 0.7);
+    CHECK(length(model.fills[7].support_interface) / area_mm2(model.support_areas[7]) > 1.8);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    CHECK(out.str().find(";TYPE:Support material\n") != std::string::npos);
+    CHECK(out.str().find(";TYPE:Support material interface\n") != std::string::npos);
+}

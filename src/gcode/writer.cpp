@@ -333,7 +333,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // bead index in nearest order; then the fills, one kind after the other.
         struct Island {
             std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
-            std::array<std::vector<Toolpath>, 5> fills; // solid, top, bridge, gaps, sparse
+            std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Point2d> ends;                  // where its paths start or end
         };
         const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
@@ -358,8 +358,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 }
         if (l < model.fills.size()) {
             const LayerFill& f = model.fills[l];
-            const std::vector<Toolpath>* kinds[5] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse};
-            for (std::size_t k = 0; k < 5; ++k)
+            const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,
+                                                     &f.support_interface};
+            for (std::size_t k = 0; k < 7; ++k)
                 for (const Toolpath& t : *kinds[k])
                     if (!t.points.empty()) {
                         Island& i = island(t);
@@ -367,9 +368,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                         add(i, t);
                     }
         }
-        const char* const fill_type[5] = {"Solid infill", "Top solid infill", "Bridge infill", "Gap fill", "Internal infill"};
-        const double fill_speed[5] = {s.solid_infill_speed, s.top_solid_infill_speed, s.solid_infill_speed,
-                                      s.solid_infill_speed, s.infill_speed};
+        const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
+                                          "Gap fill",        "Internal infill",  "Support material",
+                                          "Support material interface"};
+        const double fill_speed[7] = {s.solid_infill_speed, s.top_solid_infill_speed, s.solid_infill_speed,
+                                      s.solid_infill_speed, s.infill_speed,          s.support_speed,
+                                      s.support_speed};
         std::vector<bool> done(islands.size(), false);
         for (;;) {
             std::size_t next = islands.size();
@@ -387,7 +391,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 group(paths, outer ? "External perimeter" : "Perimeter",
                       speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
             }
-            for (std::size_t k = 0; k < 5; ++k)
+            for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
         }
     };

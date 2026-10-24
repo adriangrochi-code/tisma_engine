@@ -1685,3 +1685,43 @@ se nota. Escritura 0,64–0,73 s.
 **Sigue:**
 - F5: las líneas del soporte en grilla, la interfaz densa y la base, y los puentes cortos sin soporte;
 - la columna se calcula en serie, de arriba hacia abajo: se puede partir por tramos si hace falta.
+
+## 2026-10-24 — bloque nocturno 47: soporte impreso
+
+**Hecho:**
+- Las áreas de soporte ahora se imprimen:
+  - base en zigzag sobre una grilla fija al origen, con `support.spacing` (2,5 mm, valor de banco), a 0° y 90° en capas
+    alternas;
+  - interfaz densa (líneas a un cordón, a 45° de la base) donde la pieza está en las `support.interface_layers` capas
+    (3, valor de banco) siguientes a la separación en Z;
+  - el escritor las pone después de los rellenos de cada isla, como `;TYPE:Support material` y
+    `;TYPE:Support material interface`, a `speed.support` (80 mm/s).
+- Defecto corregido, del bloque 45: las vueltas de falda y borde tenían índice 0, el mismo que la pared externa, y su
+  costura entraba en la memoria de costuras alineadas. En la esfera eso subía el viaje de 61,3 a 86,7 m y las
+  retracciones de 2056 a 2273. Ahora usan índices negativos (−1 la primera): 61,33 m y 2057 retracciones, una más por
+  la falda.
+
+**Probado:** 167/167 pruebas con gcc, clang y ASan+UBSan:
+- con una T: sin soporte, ningún tipo de soporte en el G-code;
+- con soporte, base en las capas 0–5, interfaz en las 6–8 y nada desde la 9 (la separación);
+- las líneas de la base caen en múltiplos de 2,5 mm;
+- la interfaz pone más de 1,8 mm de línea por mm² y la base menos de 0,7;
+- los dos tipos aparecen en el G-code;
+- las vueltas de falda y borde tienen índices negativos;
+- lectura de los ajustes nuevos.
+
+**Medido** (esfera, 500 capas):
+
+| | Sin soporte | Con soporte |
+|---|---|---|
+| Corte | 1,27 s | 1,73 s |
+| Escritura | 0,77 s | 0,72 s |
+| G-code | 24,9 MB | 26,5 MB |
+| Tiempo estimado | 7 h 28 min | 8 h 4 min |
+
+**Sigue:**
+- F5:
+  - puentes cortos sin soporte (`max_bridge_length`);
+  - base del soporte menos densa abajo, si el spec lo pide;
+  - soporte con el patrón de la ficha cuando llegue;
+- criterio de F4 y F5 en una impresora real (con el dueño).

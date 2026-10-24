@@ -226,7 +226,7 @@ Settings parse_settings(std::string_view text) {
                    }
                });
     read_group(root, "speed",
-               {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "travel", "first_layer", "max"},
+               {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "outer_wall" && v.is_string()) {
@@ -251,6 +251,8 @@ Settings parse_settings(std::string_view text) {
                        s.solid_infill_speed = d;
                    else if (n == "top_solid_infill")
                        s.top_solid_infill_speed = d;
+                   else if (n == "support")
+                       s.support_speed = d;
                    else if (n == "travel")
                        s.travel_speed = d;
                    else if (n == "first_layer")
@@ -285,7 +287,7 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
-    read_group(root, "support", {"enabled", "threshold_angle", "z_gap", "xy_gap"},
+    read_group(root, "support", {"enabled", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "enabled") {
                        if (!g.at(n).is_boolean())
@@ -293,7 +295,20 @@ Settings parse_settings(std::string_view text) {
                        s.support = g.at(n).get<bool>();
                        return;
                    }
+                   if (n == "interface_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
+                           fail(k, "must be a whole number from 0 to 1000");
+                       s.support_interface_layers = static_cast<int>(v.get<long long>());
+                       return;
+                   }
                    const double d = number(g, n, k);
+                   if (n == "spacing") {
+                       if (!(d > 0.0))
+                           fail(k, "must be greater than 0");
+                       s.support_spacing = d;
+                       return;
+                   }
                    if (n == "threshold_angle") {
                        if (d < 0.0 || d >= 90.0)
                            fail(k, "must be from 0 (automatic) to less than 90 degrees");
@@ -382,6 +397,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.infill", num(s.infill_speed)},
         {"speed.solid_infill", num(s.solid_infill_speed)},
         {"speed.top_solid_infill", num(s.top_solid_infill_speed)},
+        {"speed.support", num(s.support_speed)},
         {"speed.travel", num(s.travel_speed)},
         {"speed.first_layer", num(s.first_layer_speed)},
         {"speed.max", num(s.max_speed)},
@@ -397,6 +413,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
         {"support.xy_gap", num(s.support_xy_gap)},
+        {"support.spacing", num(s.support_spacing)},
+        {"support.interface_layers", std::to_string(s.support_interface_layers)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
         {"cooling.min_speed", num(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},

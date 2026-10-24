@@ -14,6 +14,7 @@ namespace tisma {
 //   each the next bead further out; loops of nearby parts merge where they meet;
 // - skirt: `loops` loops, the first `distance` mm away from the part (or from
 //   its brim), outer contours only (no loops in the gaps between parts).
+// Loop k (0 the innermost) has index -1 - k, apart from the walls' indices.
 std::vector<Toolpath> brim_loops(const Polygons& region, double width, double bead);
 std::vector<Toolpath> skirt_loops(const Polygons& region, double brim_width, int loops, double distance,
                                   double bead);

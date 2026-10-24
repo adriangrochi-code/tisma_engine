@@ -16,6 +16,8 @@ Polygons outer_contours(const Polygons& region) {
     return out;
 }
 
+// Skirt and brim loops get negative indices (-1 for the first) so that their
+// seams never count as the seams of a wall index (SeamMemory).
 Toolpath loop_of(const Polygon& polygon, double bead, int index) {
     Toolpath t;
     t.closed = true;
@@ -35,7 +37,7 @@ std::vector<Toolpath> brim_loops(const Polygons& region, double width, double be
     const Polygons outers = outer_contours(region);
     for (int k = 0; k < brim_count(width, bead); ++k)
         for (const Polygon& p : offset(outers, bead * (k + 0.5)))
-            out.push_back(loop_of(p, bead, k));
+            out.push_back(loop_of(p, bead, -1 - k));
     return out;
 }
 
@@ -47,7 +49,7 @@ std::vector<Toolpath> skirt_loops(const Polygons& region, double brim_width, int
     for (int k = 0; k < loops; ++k)
         for (const Polygon& p : offset(outers, base + distance + bead * (k + 0.5)))
             if (Clipper2Lib::Area(p) > 0.0)
-                out.push_back(loop_of(p, bead, k));
+                out.push_back(loop_of(p, bead, -1 - k));
     return out;
 }
 

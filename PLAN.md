@@ -294,7 +294,8 @@ con nombres propios en `docs/CONFIG.md`.
 
 - [x] Falda y borde (grupo `adhesion`, `src/adhesion/*`)
 - [x] Voladizos por ángulo y su proyección hacia abajo (grupo `support`, `src/support/*`: solo las áreas por capa)
-- [ ] Soporte en grilla con separación en Z y XY, interfaz densa y base
+- [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
+  `Support material interface`)
 - [ ] Puentes cortos sin soporte (`max_bridge_length`)
 - [ ] En GPU: voladizos y proyección, si conviene
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)

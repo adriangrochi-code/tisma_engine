@@ -89,7 +89,24 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     }
     out.fills.resize(out.layers.size());
     tbb::parallel_for(std::size_t(0), out.layers.size(),
-                      [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z()); });
+                      [&](std::size_t l) {
+                          out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          if (out.support_areas[l].empty())
+                              return;
+                          // Interface: the support with the part above it within the next
+                          // interface_layers layers past the Z gap; the rest is the base.
+                          const std::size_t gap = std::size_t(std::max(0L, std::lround(settings.support_z_gap / settings.layer_height)));
+                          Polygons above;
+                          for (int k = 1; k <= settings.support_interface_layers; ++k)
+                              if (const std::size_t a = l + gap + std::size_t(k); a < out.regions.size())
+                                  above = Clipper2Lib::Union(above, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                          const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
+                          const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
+                          const double angle = (l % 2 == 0) ? 0.0 : 90.0;
+                          out.fills[l].support = rectilinear_fill(base, settings.support_spacing, angle, settings.wall_width, true);
+                          out.fills[l].support_interface =
+                              rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
+                      });
     return out;
 }
 

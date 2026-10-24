@@ -75,6 +75,7 @@ struct Settings {
     double infill_speed = 80.0;
     double solid_infill_speed = 80.0;
     double top_solid_infill_speed = 50.0;
+    double support_speed = 80.0;
     double travel_speed = 130.0;
     double first_layer_speed = 30.0;
     double max_speed = 80.0; // no extrusion goes faster
@@ -96,6 +97,8 @@ struct Settings {
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
     double support_xy_gap = 0.6; // mm between the support and the part beside it
+    double support_spacing = 2.5;    // mm between support lines
+    int support_interface_layers = 3; // dense layers right under the part
 
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")

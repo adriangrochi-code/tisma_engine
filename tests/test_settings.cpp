@@ -136,6 +136,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(sup.support_z_gap == 0.3);
     CHECK(sup.support_xy_gap == 1.0);
     CHECK_FALSE(Settings{}.support);
+    const Settings sl = parse_settings(R"({"support": {"spacing": 3, "interface_layers": 2}, "speed": {"support": 60}})");
+    CHECK(sl.support_spacing == 3.0);
+    CHECK(sl.support_interface_layers == 2);
+    CHECK(sl.support_speed == 60.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"spacing": 0}})"), ContainsSubstring("support.spacing: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"support": {"threshold_angle": 90}})"), ContainsSubstring("support.threshold_angle: must be from 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"support": {"enabled": 1}})"), ContainsSubstring("support.enabled: must be true or false"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));

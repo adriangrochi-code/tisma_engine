@@ -84,6 +84,7 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 | `infill` | número | 80 | Relleno disperso |
 | `solid_infill` | número | 80 | Superficies inferiores, puentes y relleno de huecos |
 | `top_solid_infill` | número | 50 | Superficies superiores |
+| `support` | número | 80 | > 0 | Soporte e interfaz, en mm/s |
 | `travel` | número | 130 | Viajes |
 | `first_layer` | número | 30 | Tope de la primera capa |
 | `max` | número | 80 | Tope de toda extrusión |
@@ -110,8 +111,8 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 
 ### `support`
 
-Soportes según `docs/spec/BEHAVIOR.md` («Soportes»). Por ahora el motor calcula dónde van (áreas por capa); las líneas
-del soporte, la interfaz y los puentes cortos vienen después.
+Soportes según `docs/spec/BEHAVIOR.md` («Soportes»): base en líneas e interfaz densa bajo la pieza, como tipos
+`Support material` y `Support material interface` del G-code. Los puentes cortos sin soporte vienen después.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
@@ -119,6 +120,8 @@ del soporte, la interfaz y los puentes cortos vienen después.
 | `threshold_angle` | número | 0 | 0 a menos de 90 | Una cara más tendida que este ángulo, medido desde la horizontal, lleva soporte; 0 es automático: cada capa puede salir medio cordón más afuera que la de abajo |
 | `z_gap` | número | 0.2 | ≥ 0 | Separación en Z entre el soporte y la pieza de arriba, en mm (se redondea a capas enteras; valor de banco) |
 | `xy_gap` | número | 0.6 | ≥ 0 | Separación horizontal entre el soporte y la pieza, en mm |
+| `spacing` | número | 2.5 | > 0 | Separación de las líneas del soporte, en mm (valor de banco); líneas en zigzag sobre una grilla fija al origen, a 0° y 90° en capas alternas |
+| `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va con las líneas a un cordón, a 45° de la base |
 
 ### `cooling`
 

@@ -38,6 +38,8 @@ struct LayerFill {
     std::vector<Toolpath> sparse; // the rest, at the infill density
     std::vector<Toolpath> bridge; // bridges: straight lines at the bridge's angle, at 100%
     std::vector<Toolpath> gaps;   // variable-width beads where the solid lines leave a gap (gap_fill)
+    std::vector<Toolpath> support;           // support lines (support_areas)
+    std::vector<Toolpath> support_interface; // dense support right under the part
 };
 
 // What lines leave uncovered in a region, filled with variable-width beads

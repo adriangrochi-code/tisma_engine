@@ -34,6 +34,11 @@ TEST_CASE("skirt: loops around the part at the given distance", "[adhesion]") {
     // Centre line 3.2 mm out: a square of side 16.4 (mitered corners).
     CHECK_THAT(loop_length(one[0]), WithinAbs(4 * 16.4, 1e-6));
     CHECK(skirt_loops(cube, 0.0, 0, 3.0, 0.4).empty());
+    // Negative indices: a skirt's seam must not count as a wall's (aligned seams remember them by index).
+    for (const Toolpath& t : skirt_loops(cube, 2.0, 3, 3.0, 0.4))
+        CHECK(t.index < 0);
+    for (const Toolpath& t : brim_loops(cube, 2.0, 0.4))
+        CHECK(t.index < 0);
     const std::vector<Toolpath> three = skirt_loops(cube, 0.0, 3, 3.0, 0.4);
     REQUIRE(three.size() == 3);
     CHECK_THAT(loop_length(three[2]), WithinAbs(4 * (10 + 2 * 4.0), 1e-6)); // 3 + 2.5 beads
@@ -58,8 +63,8 @@ TEST_CASE("brim: one loop per bead of its width, merged between close parts", "[
     const std::vector<Toolpath> both = brim_loops(two, 2.0, 0.4);
     int first = 0, last = 0;
     for (const Toolpath& t : both) {
-        first += t.index == 0;
-        last += t.index == 4;
+        first += t.index == -1;
+        last += t.index == -5;
     }
     CHECK(first == 2);
     CHECK(last == 1);
