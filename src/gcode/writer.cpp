@@ -2,6 +2,7 @@
 
 #include "gcode/writer.hpp"
 
+#include "gcode/cooling.hpp"
 #include "gcode/order.hpp"
 #include "gcode/travel.hpp"
 
@@ -15,6 +16,7 @@
 #include <cstdio>
 #include <numbers>
 #include <optional>
+#include <sstream>
 
 namespace tisma {
 namespace {
@@ -37,20 +39,46 @@ std::string fixed(double v, int decimals) {
 class Emitter {
 public:
     Emitter(std::ostream& out, const Settings& s)
-        : out_(out), relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
+        : out_(&out), relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
           lift_(s.retract_lift), min_travel_(s.retract_min_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
     }
 
-    void comment(const std::string& line) { out_ << line << "\n"; }
+    void comment(const std::string& line) { *out_ << line << "\n"; }
+
+    void redirect(std::ostream& out) { out_ = &out; }
+
+    // Extrusion speeds of the layer being written go through this.
+    void pace(const Slowdown& slowdown) { pace_ = slowdown; }
+
+    // What the layer's moves take: extruded length per feed, and the time of
+    // everything else (travels, retractions, lifts).
+    void reset_times() {
+        extruded_.clear();
+        other_time_ = 0.0;
+    }
+    const std::map<double, double>& extruded() const { return extruded_; }
+    double other_time() const { return other_time_; }
+
+    // The part-cooling fan in percent: M106 S0-255, or M107 when off.
+    void fan(double percent) {
+        const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
+        if (value == fan_)
+            return;
+        if (value == 0)
+            *out_ << "M107\n";
+        else
+            *out_ << "M106 S" << value << "\n";
+        fan_ = value;
+    }
 
     void new_layer(double z, double height, double travel_feed) {
-        out_ << ";LAYER_CHANGE\n;Z:" << fixed(z, 3) << "\n;HEIGHT:" << fixed(height, 3) << "\n";
+        *out_ << ";LAYER_CHANGE\n;Z:" << fixed(z, 3) << "\n;HEIGHT:" << fixed(height, 3) << "\n";
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retract_ : 0.0;
-            out_ << "G92 E" << fixed(e_, 5) << "\n";
+            *out_ << "G92 E" << fixed(e_, 5) << "\n";
             e_text_.clear();
         }
         move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
@@ -60,7 +88,7 @@ public:
 
     void type(const char* t) {
         if (type_ != t) {
-            out_ << ";TYPE:" << t << "\n";
+            *out_ << ";TYPE:" << t << "\n";
             type_ = t;
         }
     }
@@ -79,8 +107,10 @@ public:
             e_ = relative_ ? -retract_ : e_ - retract_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
             retracted_ = true;
+            other_time_ += retract_ / retract_feed_;
         }
         const bool lift = retract && lift_ > 0.0;
+        other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / feed : 0.0);
         if (lift)
             move("G1", std::nullopt, std::nullopt, z_value_ + lift_, std::nullopt, feed);
         for (const Point2d& q : plan.points)
@@ -95,15 +125,17 @@ public:
             e_ = relative_ ? retract_ : e_ + retract_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
             retracted_ = false;
+            other_time_ += retract_ / retract_feed_;
         }
         const double width = (from.width + to.width) / 2.0;
         const std::string w = fixed(width, 3);
         if (w != width_) {
-            out_ << ";WIDTH:" << w << "\n";
+            *out_ << ";WIDTH:" << w << "\n";
             width_ = w;
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         const double e = width * height_ * length / filament_area_;
+        extruded_[feed] += length;
         total_e_ += e;
         pending_ += e;
         // A piece that rounds to no move at 3 decimals is not written; its E
@@ -112,7 +144,10 @@ public:
             return;
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
-        move("G1", to.p.x, to.p.y, std::nullopt, e_, feed);
+        // A slowed-down feed is rounded down to whole mm/min (as F is written), so
+        // the layer lasts at least the minimum time.
+        const double paced = pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed) * 60.0)) / 60.0;
+        move("G1", to.p.x, to.p.y, std::nullopt, e_, paced);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
     }
 
@@ -143,11 +178,15 @@ private:
             f_ = f;
         }
         if (line != g)
-            out_ << line << "\n";
+            *out_ << line << "\n";
     }
 
-    std::ostream& out_;
+    std::ostream* out_;
     bool relative_;
+    Slowdown pace_;
+    std::map<double, double> extruded_;
+    double other_time_ = 0.0;
+    long fan_ = -1; // not set yet
     double filament_area_ = 1.0;
     double retract_, retract_feed_, lift_, min_travel_;
     double height_ = 0.2;
@@ -207,9 +246,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     Point2d cursor{0.0, 0.0};
     SeamMemory seams;
 
-    for (std::size_t l = 0; l < model.layers.size(); ++l) {
+    auto emit_layer = [&](std::size_t l, double fan) {
         const Layer& layer = model.layers[l];
         g.new_layer(layer.top, layer.top - layer.bottom, s.travel_speed);
+        g.fan(fan);
         seams.next_layer();
         const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
         const bool first = l == 0;
@@ -291,6 +331,33 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
             for (std::size_t k = 0; k < 5; ++k)
                 group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
         }
+    };
+
+    for (std::size_t l = 0; l < model.layers.size(); ++l) {
+        // Each layer goes to a buffer first. One faster than the minimum layer
+        // time is written again from the same state with its extrusions slowed
+        // down and the fan at its maximum (docs/spec/BEHAVIOR.md, "Enfriamiento").
+        const Emitter emitter_before = g;
+        const Point2d cursor_before = cursor;
+        const SeamMemory seams_before = seams;
+        std::ostringstream buffer;
+        g.redirect(buffer);
+        g.reset_times();
+        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0));
+        emit_layer(l, fan_off ? 0.0 : s.fan_min);
+        const Slowdown slowdown = plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
+        if (slowdown.stage != 0) {
+            g = emitter_before;
+            cursor = cursor_before;
+            seams = seams_before;
+            buffer.str("");
+            g.redirect(buffer);
+            g.pace(slowdown);
+            emit_layer(l, fan_off ? 0.0 : s.fan_max);
+            g.pace(Slowdown{});
+        }
+        out << buffer.str();
+        g.redirect(out);
     }
 
     g.type("Custom");

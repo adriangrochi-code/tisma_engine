@@ -298,3 +298,80 @@ TEST_CASE("islands: each one is finished before going to the next", "[gcode]") {
     CHECK(layers == 10);
     CHECK(worst == 1);
 }
+
+TEST_CASE("cooling: short layers slow down to the minimum layer time with the fan at its maximum", "[gcode]") {
+    // The time of every layer, from its G1 moves: distance over feed, E alone for retractions.
+    auto layer_times = [](const std::string& text, std::vector<std::vector<std::string>>& fans) {
+        std::vector<double> times;
+        double x = 0.0, y = 0.0, z = 0.0, e = 0.0, f = 1.0;
+        const std::regex axis("([XYZEF])(-?[0-9.]+)");
+        for (const std::string& line : lines_of(text)) {
+            if (line == ";LAYER_CHANGE") {
+                times.push_back(0.0);
+                fans.emplace_back();
+                continue;
+            }
+            if (!times.empty() && (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0))
+                fans.back().push_back(line);
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G92 ", 0) != 0)
+                continue;
+            double nx = x, ny = y, nz = z, ne = e;
+            for (std::sregex_iterator it(line.begin(), line.end(), axis), end; it != end; ++it) {
+                const double v = std::stod((*it)[2].str());
+                switch ((*it)[1].str()[0]) {
+                case 'X': nx = v; break;
+                case 'Y': ny = v; break;
+                case 'Z': nz = v; break;
+                case 'E': ne = v; break;
+                default: f = v / 60.0;
+                }
+            }
+            if (line.rfind("G1 ", 0) == 0 && !times.empty()) {
+                const double d = std::sqrt((nx - x) * (nx - x) + (ny - y) * (ny - y) + (nz - z) * (nz - z));
+                times.back() += (d > 0.0 ? d : std::abs(ne - e)) / f;
+            }
+            x = nx, y = ny, z = nz, e = ne;
+        }
+        return times;
+    };
+    Settings s;
+    s.min_layer_time = 0.0;
+    std::vector<std::vector<std::string>> fans;
+    const std::vector<double> fast = layer_times(cube_gcode(s), fans);
+    REQUIRE(fast.size() > 3);
+    CHECK(fans[0] == std::vector<std::string>{"M107"}); // the first layer without fan
+    CHECK(fans[1] == std::vector<std::string>{"M106 S89"}); // then 35 %
+    CHECK(fans[2].empty());                                 // only when it changes
+    const double fastest = *std::max_element(fast.begin(), fast.end());
+
+    s.min_layer_time = fastest * 2.0;
+    fans.clear();
+    const std::vector<double> slow = layer_times(cube_gcode(s), fans);
+    REQUIRE(slow.size() == fast.size());
+    for (std::size_t l = 0; l < slow.size(); ++l)
+        CHECK(slow[l] >= s.min_layer_time * 0.98); // F is written in whole mm/min; the layer change is not counted
+    CHECK(fans[0] == std::vector<std::string>{"M107"});
+    CHECK(fans[1] == std::vector<std::string>{"M106 S255"});
+
+    // Slower than the minimum speed allows: stage 2 goes below it.
+    s.min_layer_time = 1000.0;
+    s.min_print_speed = 10.0;
+    fans.clear();
+    const std::string very_slow = cube_gcode(s);
+    const std::vector<double> slowest = layer_times(very_slow, fans);
+    for (std::size_t l = 0; l < slowest.size(); ++l)
+        CHECK(slowest[l] >= 1000.0 * 0.98);
+    bool below_minimum = false;
+    const std::regex feed(" F([0-9]+)");
+    for (const std::string& line : lines_of(very_slow)) {
+        std::smatch m;
+        if (line.find(" X") != std::string::npos && line.find(" E") != std::string::npos && std::regex_search(line, m, feed))
+            below_minimum = below_minimum || std::stoi(m[1].str()) < 600;
+    }
+    CHECK(below_minimum);
+    // Never below 1 mm/min, even when the time cannot be reached.
+    s.min_layer_time = 1e7;
+    const std::string slowest_text = cube_gcode(s);
+    CHECK(slowest_text.find(" F0\n") == std::string::npos);
+    CHECK(slowest_text.find(" F1\n") != std::string::npos);
+}

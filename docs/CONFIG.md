@@ -89,6 +89,18 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 | `lift` | número | 0 | ≥ 0 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
 
+### `cooling`
+
+Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `min_layer_time` | número | 5 | ≥ 0 | Tiempo mínimo de capa, en s; una capa más rápida se imprime más lento (valor de banco) |
+| `min_speed` | número | 10 | > 0 | Primera etapa: las extrusiones bajan todas en la misma proporción, pero no por debajo de esto (en mm/s, valor de banco); si no alcanza, la segunda etapa las pone a todas a una misma velocidad, la más alta que llega al tiempo, nunca por debajo de 1 mm/min; las que ya iban más lento no cambian |
+| `fan_min` | número | 35 | 0–100 | Ventilador en las capas normales, en % |
+| `fan_max` | número | 100 | 0–100 | Ventilador en las capas que tuvieron que ir más lento, en % |
+| `fan_off_layers` | entero | 1 | 0–1000 | Las primeras capas van sin ventilador, aunque se hayan frenado |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -97,7 +109,7 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 
 ## Grupos previstos (todavía no implementados)
 
-`material`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
+`material`, `support`. Se definen acá
 cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo

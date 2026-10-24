@@ -1459,3 +1459,44 @@ la vista previa de Tisma.
 - enfriamiento (tiempo mínimo de capa, dos etapas, ventilador);
 - escribir el G-code más rápido;
 - aceleraciones y estimación de tiempo.
+
+## 2026-10-24 — bloque nocturno 40: enfriamiento
+
+**Hecho:**
+- Grupo `cooling` (`docs/CONFIG.md`): `min_layer_time` 5 s y `min_speed` 10 mm/s (valores de banco), `fan_min` 35 %,
+  `fan_max` 100 %, `fan_off_layers` 1.
+- Tiempo mínimo de capa (`src/gcode/cooling.*`, diseño propio), según `docs/spec/BEHAVIOR.md`:
+  - el escritor arma cada capa en memoria y suma su tiempo (largo sobre velocidad, con viajes y retracciones, sin
+    aceleraciones);
+  - si la capa es más rápida que el mínimo, la primera etapa baja todas las extrusiones en la misma proporción, sin bajar
+    de `min_speed`;
+  - si no alcanza, la segunda las pone a una misma velocidad, la más alta que llega al tiempo; las que ya iban más lento
+    no cambian, y nunca por debajo de 1 mm/min;
+  - la capa se vuelve a escribir desde el mismo estado con esas velocidades (F redondeada hacia abajo a mm/min enteros,
+    para no quedar corta) y el ventilador al máximo.
+- Ventilador: `M107` en las primeras `fan_off_layers` capas, `M106 S<0–255>` después, solo cuando cambia.
+
+**Probado:** 152/152 pruebas con gcc, clang y ASan+UBSan:
+- una capa más lenta que el mínimo no cambia;
+- primera etapa: el mismo factor para todas, ninguna por debajo del mínimo, las más lentas quedan, y el tiempo exacto;
+- segunda etapa: velocidad común exacta (2,5 mm/s en el caso de prueba), las más lentas quedan, piso de 1 mm/min;
+- de punta a punta en el cubo:
+  - sin mínimo, `M107` en la primera capa y `M106 S89` (35 %) en la segunda, una sola vez;
+  - con el doble del tiempo de la capa más larga, todas las capas duran al menos el mínimo (medido desde el G-code) con
+    `M106 S255`;
+  - con 1000 s hace falta la segunda etapa y aparecen velocidades bajo 10 mm/s;
+  - con un tiempo inalcanzable, nada baja de `F1`;
+- lectura de los ajustes nuevos y sus errores.
+
+**Medido** (esfera, 500 capas):
+- una capa frenada (la última, la más chica);
+- tiempo de impresión estimado 6,89 h, igual que antes;
+- `slice` con escritura 2,85–3,25 s, antes 2,70–2,82 s: armar cada capa en memoria cuesta ~0,1 s.
+
+**Pregunta para el equipo de especificación:** si una de las primeras capas (sin ventilador) tiene que frenar, ¿Tisma
+prende el ventilador igual? Hoy el motor lo deja apagado.
+
+**Sigue:**
+- escribir el G-code más rápido;
+- aceleraciones y estimación de tiempo;
+- avisos en JSON.

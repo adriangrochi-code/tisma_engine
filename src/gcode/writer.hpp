@@ -22,10 +22,12 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
 // gap fill and sparse infill, each group in nearest order with loops starting
 // at their seam (order_paths). E follows the volume laid down (width x height x
 // length over the filament's cross-section; a variable-width piece uses its
-// mean width). Travels are straight G1 moves without E; longer than
-// retraction.min_travel they retract first and lift Z by retraction.lift. (The
-// spec also asks to retract when a travel leaves the part; that comes with
-// travel planning.)
+// mean width). Every island of a layer is finished before the next (nearest
+// first). Travels follow TravelPlanner and retract when they leave the part or
+// are longer than retraction.min_travel. A layer faster than
+// cooling.min_layer_time is slowed down (plan_slowdown) and gets the fan at
+// cooling.fan_max; others get cooling.fan_min, and the first
+// cooling.fan_off_layers layers none.
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings);
 
 } // namespace tisma

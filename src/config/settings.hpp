@@ -75,6 +75,13 @@ struct Settings {
     double retract_lift = 0.0;       // mm of Z while travelling
     double retract_min_travel = 2.0; // mm: shorter travels do not retract
 
+    // cooling
+    double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
+    double min_print_speed = 10.0; // mm/s: the first stage slows extrusions down to this
+    double fan_min = 35.0;         // %: the fan on ordinary layers
+    double fan_max = 100.0;        // %: the fan on layers that had to slow down
+    int fan_off_layers = 1;        // the first layers print with the fan off
+
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;
 };

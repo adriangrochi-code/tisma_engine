@@ -276,7 +276,8 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
 - [x] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza
   (`src/gcode/travel.*`)
 - [x] Orden por islas (terminar una isla antes de pasar a la otra)
-- [ ] Enfriamiento: tiempo mínimo de capa con las dos etapas de `BEHAVIOR.md` y ventilador al máximo en esas capas
+- [x] Enfriamiento: tiempo mínimo de capa con las dos etapas de `BEHAVIOR.md` y ventilador al máximo en esas capas
+  (grupo `cooling`, `src/gcode/cooling.*`)
 - [ ] Aceleraciones y límites de la máquina; estimación de tiempo (opcional, como comentario)
 - [ ] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)
 - [ ] Criterio de F4: el Benchy se imprime en una impresora real (necesita al dueño)

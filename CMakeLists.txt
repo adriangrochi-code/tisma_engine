@@ -134,6 +134,7 @@ add_library(tisma_core
   src/gcode/writer.cpp
   src/gcode/order.cpp
   src/gcode/travel.cpp
+  src/gcode/cooling.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

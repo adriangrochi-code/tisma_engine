@@ -37,7 +37,7 @@ TEST_CASE("settings are read by group", "[settings]") {
         "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "klipper",
                     "start_gcode": "M104 S[temp]", "end_gcode": "M84", "variables": {"temp": 215, "names": ["a", "b"]}},
         "speed": {"walls": 50, "outer_wall": "40%", "travel": 150, "max": 100},
-        "cooling": {"anything": 1}
+        "support": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -68,7 +68,7 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.travel_speed == 150.0);
     CHECK(s.max_speed == 100.0);
     CHECK(s.infill_speed == 80.0); // default
-    CHECK(s.ignored_groups == std::vector<std::string>{"cooling"});
+    CHECK(s.ignored_groups == std::vector<std::string>{"support"});
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -96,6 +96,16 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(r.retract_min_travel == 1.5);
     CHECK(r.seam == SeamMode::Rear);
     CHECK(Settings{}.seam == SeamMode::Aligned);
+    const Settings c = parse_settings(R"({"cooling": {"min_layer_time": 8, "min_speed": 15, "fan_min": 20, "fan_max": 90,
+                                                      "fan_off_layers": 3}})");
+    CHECK(c.min_layer_time == 8.0);
+    CHECK(c.min_print_speed == 15.0);
+    CHECK(c.fan_min == 20.0);
+    CHECK(c.fan_max == 90.0);
+    CHECK(c.fan_off_layers == 3);
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"min_speed": 0}})"), ContainsSubstring("cooling.min_speed: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_off_layers": 1.5}})"), ContainsSubstring("cooling.fan_off_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"retraction": {"speed": 0}})"), ContainsSubstring("retraction.speed: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"retraction": {"length": -1}})"), ContainsSubstring("retraction.length: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"seam": "back"}})"), ContainsSubstring("walls.seam: must be one of"));
