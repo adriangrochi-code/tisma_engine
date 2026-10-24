@@ -102,7 +102,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Patrón del soporte (rectilíneo, grilla, panal) y de la interfaz (automático, rectilíneo, concéntrico), separación de la interfaz, lazos de contacto | `supports_skirt.md`, `supports_more.md` | ✔ |
 | Vaina alrededor del soporte, radio de cierre | `supports_more.md` | ✔ |
 | Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md` | ◐ falta la herramienta para pintarlos y agregarlos → `model_tools.md` |
-| Sincronizar las capas del soporte con las de la pieza (multimaterial) | — | ✘ → `multi_extruder.md` |
+| Sincronizar las capas del soporte con las de la pieza (multimaterial) | `multi_extruder.md` | ✔ |
 
 ### Velocidades y aceleraciones
 
@@ -135,7 +135,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Barrido al retraer y cuánto se retrae antes del barrido | `retraction_travel.md` | ✔ |
 | Salto en Z: en rampa, pendiente, máximo, solo antes de un obstáculo, solo por encima o por debajo de una altura | `retraction_travel.md` | ✔ (el del obstáculo, sin medir) |
 | Retracción del firmware (`G10`/`G11`) | `retraction_travel.md` | ✔ |
-| Retracción al cambiar de herramienta | — | ✘ → `multi_extruder.md` |
+| Retracción al cambiar de herramienta | `multi_extruder.md` | ✔ |
 | Preferir el sentido horario | `retraction_travel.md` | ✔ |
 | Coasting (Tisma) | `coasting.md` | ✔ |
 | Pressure advance escrito en el G-code (Tisma, estudio) | `pressure_advance_gcode.md` | ✔ |
@@ -159,7 +159,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
 | G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
 | Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
-| Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | — | ✘ → `multi_extruder.md` |
+| Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | `multi_extruder.md` | ✔ |
 
 ## Impresora y G-code
 
@@ -177,7 +177,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Extrusión relativa o absoluta | `GCODE_OUTPUT.md` | ✔ |
 | E volumétrica | `gcode_extras.md` | ✔ |
 | G-code de inicio y fin, con variables | `GCODE_OUTPUT.md`, `gcode_templates.md` | ✔ |
-| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md` | ◐ falta el del cambio de herramienta → `multi_extruder.md` |
+| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md`, `multi_extruder.md` | ✔ |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
 | Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md` | ◐ falta ponerlos desde la vista previa → `preview.md` |
 | Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`), `gcode_templates.md` | ◐ falta el prefijo con que se usan: no se resolvieron desde la línea de comandos → `presets.md` |
@@ -185,7 +185,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Formato del nombre del archivo de salida, con variables | `gcode_templates.md` | ✔ |
 | Scripts de posproceso | `gcode_templates.md` | ✔ |
 | Impresión secuencial (objeto por objeto), con el espacio del cabezal (radio y alto) | `sequential.md` | ✔ |
-| Boquilla de alto caudal; altura de capa mínima y máxima por extrusor; desfase de cada extrusor | — | ✘ → `multi_extruder.md` |
+| Boquilla de alto caudal; altura de capa mínima y máxima por extrusor; desfase de cada extrusor | `multi_extruder.md` | ✔ |
 | Impresoras de cinta (Tisma) | `belt_printer.md` | ✔ |
 | Cabezal para capas no planares (Tisma) | `nonplanar.md` | ✔ |
 
@@ -194,14 +194,14 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Boquillas de distinto diámetro y mezcla de colores por capas (Tisma) | `multimaterial.md` | ✔ |
-| Extrusor por tipo (paredes, relleno, sólido, soporte, interfaz, torre) y para la temperatura de la cama | — | ✘ → `multi_extruder.md` |
-| Prevención de goteo (bajar la temperatura de los que esperan) | — | ✘ → `multi_extruder.md` |
-| Torre de purga: ancho, borde, puentes, cono, separación, flujo extra, sin capas ralas, cebado | — | ✘ → `multi_extruder.md` |
-| Orden de los cambios de herramienta, cáscaras de interfaz | — | ✘ → `multi_extruder.md` |
-| Regiones pintadas por color: ancho máximo de las franjas, profundidad del entrelazado | — | ✘ → `multi_extruder.md` y `model_tools.md` |
-| Vigas de entrelazado entre materiales | — | ✘ → `multi_extruder.md` |
-| Un extrusor con varios materiales (MMU): tubo de enfriamiento, posición de estacionamiento, carga extra, purga, corriente alta en el cambio | — | ✘ → `multi_extruder.md` |
-| Volúmenes de purga entre filamentos | — | ✘ → `multi_extruder.md` |
+| Extrusor por tipo (paredes, relleno, sólido, soporte, interfaz, torre) y para la temperatura de la cama | `multi_extruder.md` | ✔ |
+| Prevención de goteo (bajar la temperatura de los que esperan) | `multi_extruder.md` | ✔ |
+| Torre de purga: ancho, borde, puentes, cono, separación, flujo extra, sin capas ralas, cebado | `multi_extruder.md` | ✔ (el cono y el cebado, sin medir) |
+| Orden de los cambios de herramienta, cáscaras de interfaz | `multi_extruder.md` | ✔ |
+| Regiones pintadas por color: ancho máximo de las franjas, profundidad del entrelazado | `multi_extruder.md` | ◐ sin medir: hace falta pintar en la interfaz → `model_tools.md` |
+| Vigas de entrelazado entre materiales | `multi_extruder.md` | ✔ |
+| Un extrusor con varios materiales (MMU): tubo de enfriamiento, posición de estacionamiento, carga extra, purga, corriente alta en el cambio | `multi_extruder.md` | ✔ |
+| Volúmenes de purga entre filamentos | `multi_extruder.md` | ✔ |
 
 ## Resina
 
