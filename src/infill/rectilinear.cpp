@@ -233,8 +233,20 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
     const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
     out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
-    if (params.density > 0.0)
+    if (params.density <= 0.0)
+        return out;
+    switch (params.pattern) {
+    case InfillPattern::Rectilinear:
         out.sparse = rectilinear_fill(surfaces.sparse, params.width / params.density, angle, params.width, true);
+        break;
+    case InfillPattern::Grid: {
+        const double spacing = 2.0 * params.width / params.density;
+        out.sparse = rectilinear_fill(surfaces.sparse, spacing, params.angle, params.width);
+        for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 90.0, params.width))
+            out.sparse.push_back(std::move(t));
+        break;
+    }
+    }
     return out;
 }
 

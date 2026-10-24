@@ -1064,3 +1064,21 @@ material depositado con el área.
 
 **Sigue:** ajustar las líneas sólidas por tramo; después grilla y giroide.
 
+## 2026-10-24 — bloque nocturno 28: relleno en grilla
+
+**Hecho:**
+- `infill.pattern = "grid"`: las dos direcciones (ángulo y ángulo + 90°) en cada capa, cada una a 2·ancho/densidad,
+  así deposita el mismo material que el rectilíneo. Las líneas no se unen en zigzag: se cruzan entre sí y sus extremos
+  tocan las paredes (diseño propio).
+- Revisé `docs/spec/SOURCES.md` (pasa `tools/check_spec.py`): el giroide es sin x·cos y + sin y·cos z + sin z·cos x = 0.
+
+**Probado:** 125/125 pruebas con gcc, clang y ASan+UBSan:
+- en un cuadrado de 20 mm hay tantas líneas a 45° como a 135°, en todas las capas;
+- material depositado al 20 %: grilla 78,7 mm² (19,7 % del área), rectilíneo 88,6 mm² (22,2 %; los conectores del
+  zigzag suman);
+- lectura de `"grid"`.
+
+**Sigue:** el giroide. Idea (diseño propio): a z fijo, la ecuación se resuelve para y dado x:
+a·cos y + b·sin y = −c, con a = sin x, b = cos z y c = sin z·cos x, o sea y = φ ± arccos(−c/R). Eso da las curvas
+muestreando x, sin una grilla 2D. El período se calibra para que deposite densidad × área.
+

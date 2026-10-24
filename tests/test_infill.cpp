@@ -122,3 +122,37 @@ TEST_CASE("a solid layer lays down its area: connected lines fitted to the regio
     const Coverage inside = measure_coverage(square(1.6, 1.6, 6.8), fill_layer(s, 0, FillParams{}).solid);
     CHECK(inside.gaps < 1e-3 * inside.target);
 }
+
+TEST_CASE("grid infill: both directions in every layer, the same material as rectilinear", "[infill]") {
+    LayerSurfaces s;
+    s.sparse = square(0, 0, 20);
+    FillParams p; // 20 %
+    p.pattern = InfillPattern::Grid;
+    const LayerFill even = fill_layer(s, 0, p), odd = fill_layer(s, 1, p);
+    auto directions = [](const LayerFill& f) {
+        int at45 = 0, at135 = 0;
+        for (const Toolpath& t : f.sparse) {
+            const double d = std::atan2(t.points.back().p.y - t.points.front().p.y, t.points.back().p.x - t.points.front().p.x) *
+                             180.0 / 3.14159265358979323846;
+            const double a = d < 0.0 ? d + 180.0 : d;
+            at45 += std::fabs(a - 45.0) < 1e-3;
+            at135 += std::fabs(a - 135.0) < 1e-3;
+        }
+        return std::pair<int, int>{at45, at135};
+    };
+    const auto [e45, e135] = directions(even);
+    const auto [o45, o135] = directions(odd);
+    CHECK(e45 > 0);
+    CHECK(e45 == e135); // a square: as many lines each way
+    CHECK(o45 == e45);  // every layer the same
+    CHECK(o135 == e135);
+    CHECK(int(even.sparse.size()) == e45 + e135);
+    // Material laid down: about the density times the area, as with rectilinear lines.
+    const Coverage grid = measure_coverage(s.sparse, even.sparse);
+    p.pattern = InfillPattern::Rectilinear;
+    const Coverage lines = measure_coverage(s.sparse, fill_layer(s, 0, p).sparse);
+    std::printf("20 mm square at 20%%: grid lays %.2f mm2, rectilinear %.2f mm2 (area %.0f)\n", grid.deposited,
+                lines.deposited, grid.target);
+    CHECK_THAT(grid.deposited / grid.target, WithinAbs(0.2, 0.02));
+    CHECK_THAT(lines.deposited / lines.target, WithinAbs(0.2, 0.03));
+}

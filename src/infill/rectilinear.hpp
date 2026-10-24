@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 #include "surfaces/surfaces.hpp"
@@ -32,12 +33,18 @@ struct LayerFill {
 struct FillParams {
     double width = 0.4;   // bead width
     double density = 0.2; // sparse infill, 0 to 1
-    double angle = 45.0;  // degrees; odd layers add 90
+    double angle = 45.0;  // degrees; odd layers add 90 (rectilinear)
+    InfillPattern pattern = InfillPattern::Rectilinear;
 };
 
-// Rectilinear infill of layer `layer`: solid surfaces with lines one bead
-// apart fitted to the region, sparse infill with lines width / density apart
-// on the grid, both at the layer's angle and connected into zig-zags.
+// Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
+// fitted to the region, at the layer's angle, connected into zig-zags. Sparse
+// infill, by pattern:
+//  - rectilinear: lines width / density apart on the grid at the layer's
+//    angle, connected into zig-zags;
+//  - grid: lines at the angle and at the angle + 90 in every layer, each set
+//    2 width / density apart (the same material), not connected: the lines
+//    cross each other and their ends touch the walls.
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params);
 
 } // namespace tisma

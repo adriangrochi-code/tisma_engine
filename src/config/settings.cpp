@@ -131,7 +131,8 @@ Settings parse_settings(std::string_view text) {
     });
     read_group(root, "infill", {"density", "angle", "pattern"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "pattern") {
-            s.infill_pattern = choice<InfillPattern>(g, n, k, {{"rectilinear", InfillPattern::Rectilinear}});
+            s.infill_pattern =
+                choice<InfillPattern>(g, n, k, {{"rectilinear", InfillPattern::Rectilinear}, {"grid", InfillPattern::Grid}});
             return;
         }
         const double v = number(g, n, k);

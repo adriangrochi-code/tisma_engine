@@ -236,7 +236,7 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
 - [x] Ancho mínimo de las superficies sólidas: las franjas más angostas que un cordón crecen un cordón hacia el relleno
 - [x] Relleno rectilíneo: líneas paralelas que giran 90° cada capa, ángulo base y densidad (grupo `infill`)
 - [x] Relleno sólido de las superficies, rectilíneo al 100 % (lo monotónico va con su propio ítem)
-- [ ] Relleno en grilla (dos direcciones por capa)
+- [x] Relleno en grilla (dos direcciones por capa, cada una al doble de separación)
 - [ ] Giroide: la superficie de `docs/spec/SOURCES.md` cortada en cada Z
 - [x] Anclar las líneas de relleno a los perímetros: zigzag que une los extremos a lo largo del borde, sin entrar en
   las paredes; en las superficies sólidas, líneas ajustadas a la región. En el cuadrado de 7,6 mm, el material depositado
