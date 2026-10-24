@@ -25,8 +25,9 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`aerodynamics.md`](aerodynamics.md): arrastre por presión (lattice Boltzmann) y rozamiento con la rugosidad de las capas | F7 | Para revisar |
 | [`nonplanar.md`](nonplanar.md): capas curvas (onda, crestas, cono), rampa, ajuste a la cabeza, material según el espesor local | F7 | Para revisar |
 | [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |
+| [`belt_printer.md`](belt_printer.md): laminado para impresoras de cinta con pórtico inclinado y G-code en los ejes de la máquina | después de la primera versión | Para revisar |
 
 **Pendientes:**
 - Modos no planares por voladizos, tensiones, superficies y automático.
-- Revisión antes de imprimir, impresoras de cinta y resina.
+- Revisión antes de imprimir y resina.
 - Interfaz y conexión con impresoras.
