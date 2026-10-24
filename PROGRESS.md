@@ -1849,3 +1849,9 @@ Quedan en `PLAN.md` como fases nuevas:
 - A3: CFD.
 
 **Sigue:** terminar el Voronoi propio (salida para el eje medio, comparación y reemplazo de Boost); después, A1.
+
+**Decisión del dueño (2026-10-24):** A3 incluye, como opción, la simulación del enfriamiento al imprimir:
+- el aire del ventilador sobre la pieza;
+- el calor de cada capa;
+- el ajuste por zona del ventilador, la velocidad y el tiempo de capa;
+- la deformación anticipada.
