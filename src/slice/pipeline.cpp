@@ -2,6 +2,7 @@
 
 #include "slice/pipeline.hpp"
 
+#include "adhesion/adhesion.hpp"
 #include "surfaces/bridges.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -67,6 +68,11 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
+    if (!out.regions.empty()) {
+        out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width);
+        out.skirt = skirt_loops(out.regions.front(), settings.brim_width, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
+                                settings.skirt_distance, settings.wall_width);
+    }
     out.fills.resize(out.layers.size());
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z()); });

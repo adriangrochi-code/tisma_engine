@@ -1626,3 +1626,31 @@ se nota. Escritura 0,64–0,73 s.
 - según lo que diga Tisma: centrar el modelo en la cama o leerlo ya ubicado;
 - criterio de F4 (Benchy en una impresora real, con el dueño);
 - F5: soportes.
+
+## 2026-10-24 — bloque nocturno 45: falda y borde (empieza F5)
+
+**Hecho:**
+- Grupo `adhesion` (`docs/CONFIG.md`): `skirt_loops` 1, `skirt_distance` 3 mm, `skirt_layers` 1, `brim_width` 0.
+- Falda y borde (`src/adhesion/*`, diseño propio con offsets de Clipper2 de los contornos exteriores de la primera capa):
+  - el borde son vueltas de un cordón, la primera pegada a la pieza; las de piezas cercanas se unen;
+  - la falda va a la distancia pedida de la pieza, o de su borde, y no entra en los agujeros.
+- El escritor las imprime primero en sus capas (falda, después borde) como `;TYPE:Skirt/Brim`, a la velocidad de la
+  primera capa.
+- Nueva sección «Estado de F5» en `PLAN.md`.
+
+**Probado:** 163/163 pruebas con gcc, clang y ASan+UBSan:
+- una vuelta de falda a 3 mm de un cubo de 10 mm mide 4 × 16,4 mm;
+- con 0 vueltas no hay falda; con 3, la tercera a 3 mm más 2,5 cordones;
+- la falda rodea el borde; un agujero no lleva falda dentro;
+- un borde de 2 mm da 5 vueltas, la primera pegada a la pieza;
+- con dos piezas a 1 mm, la primera vuelta va separada en cada una y la última las rodea a las dos;
+- en el G-code del cubo con falda en 2 capas y borde, las dos primeras capas empiezan con `Skirt/Brim` y la tercera no;
+- lectura de los ajustes nuevos y sus errores.
+- La prueba de islas ahora apaga la falda, porque la falda rodea los dos cubos.
+
+**Medido:**
+- esfera: 0,04 m de falda (su primera capa es un círculo chico); corte 1,25–1,31 s, escritura 0,70–0,77 s;
+- 9 cubos con borde de 5 mm: 4,04 m de falda y borde; corte 38 ms.
+
+**Sigue:**
+- F5: voladizos por ángulo y su proyección, después el soporte en grilla.

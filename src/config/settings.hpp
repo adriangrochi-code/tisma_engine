@@ -85,6 +85,12 @@ struct Settings {
     double retract_lift = 0.0;       // mm of Z while travelling
     double retract_min_travel = 2.0; // mm: shorter travels do not retract
 
+    // adhesion
+    int skirt_loops = 1;
+    double skirt_distance = 3.0; // mm from the part (or its brim)
+    int skirt_layers = 1;
+    double brim_width = 0.0; // mm; 0: no brim
+
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
     double min_print_speed = 10.0; // mm/s: the first stage slows extrusions down to this

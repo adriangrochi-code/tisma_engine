@@ -279,6 +279,7 @@ TEST_CASE("islands: each one is finished before going to the next", "[gcode]") {
     add_box(m, 0, 0, 10, 10, 2);
     add_box(m, 14, 0, 24, 10, 2);
     Settings s;
+    s.skirt_loops = 0; // the skirt goes round both cubes
     std::ostringstream out;
     write_gcode(out, slice_model(m, s), s);
     // Per layer, the side (x < 12 or x > 12) of every extruding move changes at most once.
@@ -414,4 +415,39 @@ TEST_CASE("warnings: details thinner than a bead, layers that cannot reach the m
         CHECK(w.value < 1e7);
     }
     CHECK(warnings_json({}) == "{\n  \"version\": 1,\n  \"warnings\": []\n}\n");
+}
+
+TEST_CASE("skirt and brim come first on their layers as Skirt/Brim", "[gcode]") {
+    Settings s;
+    s.skirt_layers = 2;
+    s.brim_width = 1.2;
+    std::vector<std::string> types_of_layer;
+    int layer = -1, skirt_layers = 0, extrusions_in_skirt = 0;
+    std::string type;
+    bool seen_in_layer = false;
+    for (const std::string& line : lines_of(cube_gcode(s))) {
+        if (line == ";LAYER_CHANGE") {
+            ++layer;
+            seen_in_layer = false;
+            continue;
+        }
+        if (line.rfind(";TYPE:", 0) == 0) {
+            type = line.substr(6);
+            if (type == "Skirt/Brim" && !seen_in_layer) {
+                ++skirt_layers;
+                seen_in_layer = true;
+            }
+            if (layer >= 0 && types_of_layer.size() <= std::size_t(layer))
+                types_of_layer.push_back(type); // the first type of every layer
+        }
+        if (type == "Skirt/Brim" && line.rfind("G1 ", 0) == 0 && line.find(" E") != std::string::npos &&
+            line.find(" X") != std::string::npos)
+            ++extrusions_in_skirt;
+    }
+    CHECK(skirt_layers == 2);
+    REQUIRE(types_of_layer.size() > 2);
+    CHECK(types_of_layer[0] == "Skirt/Brim");
+    CHECK(types_of_layer[1] == "Skirt/Brim");
+    CHECK(types_of_layer[2] != "Skirt/Brim");
+    CHECK(extrusions_in_skirt > 8);
 }

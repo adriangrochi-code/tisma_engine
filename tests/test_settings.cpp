@@ -121,6 +121,15 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_height": -1}})"), ContainsSubstring("machine.max_height: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"corner_speed": -1}})"), ContainsSubstring("machine.corner_speed: must not be negative"));
+    const Settings a = parse_settings(R"({"adhesion": {"skirt_loops": 2, "skirt_distance": 5, "skirt_layers": 3, "brim_width": 4}})");
+    CHECK(a.skirt_loops == 2);
+    CHECK(a.skirt_distance == 5.0);
+    CHECK(a.skirt_layers == 3);
+    CHECK(a.brim_width == 4.0);
+    CHECK(Settings{}.skirt_loops == 1);
+    CHECK(Settings{}.brim_width == 0.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"adhesion": {"skirt_loops": 1.5}})"), ContainsSubstring("adhesion.skirt_loops: must be a whole number"));
+    CHECK_THROWS_WITH(parse_settings(R"({"adhesion": {"brim_width": -1}})"), ContainsSubstring("adhesion.brim_width: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"min_speed": 0}})"), ContainsSubstring("cooling.min_speed: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_off_layers": 1.5}})"), ContainsSubstring("cooling.fan_off_layers: must be a whole number"));

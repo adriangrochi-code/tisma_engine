@@ -287,6 +287,18 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   alto), sin G-code a medias (`src/slice/printable.*`)
 - [ ] Criterio de F4: el Benchy se imprime en una impresora real (necesita al dueño)
 
+## Estado de F5
+
+Desde `PLAN.md` (fase F5), `docs/spec/BEHAVIOR.md` («Soportes») y el tipo `Skirt/Brim` de `docs/spec/GCODE_OUTPUT.md`,
+con nombres propios en `docs/CONFIG.md`.
+
+- [x] Falda y borde (grupo `adhesion`, `src/adhesion/*`)
+- [ ] Voladizos por ángulo y su proyección hacia abajo
+- [ ] Soporte en grilla con separación en Z y XY, interfaz densa y base
+- [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [ ] En GPU: voladizos y proyección, si conviene
+- [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

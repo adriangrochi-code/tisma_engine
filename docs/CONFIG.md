@@ -97,6 +97,17 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 | `lift` | número | 0 | ≥ 0 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
 
+### `adhesion`
+
+Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del G-code.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `skirt_loops` | entero | 1 | 0–1000 | Vueltas de falda; 0 no hace falda |
+| `skirt_distance` | número | 3 | ≥ 0 | Distancia en mm entre la pieza (o su borde) y la primera vuelta de falda |
+| `skirt_layers` | entero | 1 | 0–1000 | En cuántas capas se repite la falda |
+| `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde |
+
 ### `cooling`
 
 Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).

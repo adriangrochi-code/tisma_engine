@@ -323,6 +323,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (const Toolpath& t : order_paths(paths, cursor, seam, seed, seams))
                 lay(t, type, feed);
         };
+        // Skirt, then brim, before the part, at the first layer's speed.
+        if (l < std::size_t(std::max(s.skirt_layers, 0)))
+            group(model.skirt, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed), SeamMode::Nearest);
+        if (l == 0)
+            group(model.brim, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed), SeamMode::Nearest);
         // Every island is finished before the next, the nearest one first. In an
         // island: walls from the inside out, the outer wall (bead 0) last, each
         // bead index in nearest order; then the fills, one kind after the other.

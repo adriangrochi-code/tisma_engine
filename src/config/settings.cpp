@@ -75,7 +75,7 @@ Settings parse_settings(std::string_view text) {
     Settings s;
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
-            group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "compute")
+            group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "compute")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -270,6 +270,20 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "length" ? s.retract_length : n == "lift" ? s.retract_lift : s.retract_min_travel) = d;
                });
+    read_group(root, "adhesion", {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "skirt_loops" || n == "skirt_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
+                           fail(k, "must be a whole number from 0 to 1000");
+                       (n == "skirt_loops" ? s.skirt_loops : s.skirt_layers) = static_cast<int>(v.get<long long>());
+                       return;
+                   }
+                   const double d = number(g, n, k);
+                   if (d < 0.0)
+                       fail(k, "must not be negative");
+                   (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
+               });
     read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "fan_off_layers") {
@@ -355,6 +369,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.speed", num(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
         {"retraction.min_travel", num(s.retract_min_travel)},
+        {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
+        {"adhesion.skirt_distance", num(s.skirt_distance)},
+        {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
+        {"adhesion.brim_width", num(s.brim_width)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
         {"cooling.min_speed", num(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},

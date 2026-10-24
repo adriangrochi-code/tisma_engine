@@ -138,6 +138,7 @@ add_library(tisma_core
   src/gcode/print_time.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
+  src/adhesion/adhesion.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
