@@ -116,6 +116,15 @@ def main(argv):
             # Keep only the official sources.
             entry["sources"] = [s for s in sources if official(entry["vendor"], s)]
             clean = {k: entry[k] for k in keys if k in entry and entry[k] is not None and entry[k] != ""}
+            # Ranges need both ends ("up to X" has none below): otherwise left out.
+            for k in ("nozzle_temp", "bed_temp", "fan", "print_speed"):
+                r = clean.get(k)
+                if r is not None and not (isinstance(r, list) and len(r) == 2 and all(isinstance(v, (int, float)) for v in r)
+                                          and r[0] <= r[1]):
+                    del clean[k]
+            if kind == "filaments" and "nozzle_temp" not in clean and "nozzle_temp_recommended" not in clean:
+                dropped.append(f"{label}: no nozzle temperature")
+                continue
             merged[(clean["vendor"].lower(), clean[name_key].lower(), clean.get("diameter", 1.75))] = clean
             kept += 1
     out = sorted(merged.values(), key=lambda e: (e["vendor"].lower(), e[name_key].lower()))
