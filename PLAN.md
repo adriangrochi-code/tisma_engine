@@ -409,6 +409,25 @@ con nombres propios en `docs/CONFIG.md`.
 - [ ] En GPU: voladizos y proyección, si conviene
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
 
+## Estado de P1
+
+La interfaz propia se adelantó (pedido del dueño, 2026-10-24: «hagamos la interfaz con esos íconos y centrémonos en
+eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio (`docs/UI.md`).
+
+- [x] Bibliotecas con licencia permisiva revisadas y anotadas: GLFW, Dear ImGui, nanosvg; cargador de OpenGL propio
+- [x] Ventana con los íconos y la paleta de Tisma, en español e inglés, tema oscuro y claro
+- [x] Vista 3D con cámara orbital, vistas estándar y la cama
+- [x] Abrir STL, G-code y ajustes (explorador propio y soltar archivos)
+- [x] Ajustes de impresión, filamento e impresora; guardar y cargar
+- [x] Laminado en segundo plano, vista previa por capas, exportación verificada
+- [x] Cantidad de vóxeles del análisis (pedido del dueño)
+- [x] Prueba de punta a punta con capturas (`ui_slice_export_screenshot`)
+- [ ] Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño, en curso)
+- [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
+- [ ] Mover, girar y escalar el modelo; varias piezas en la cama
+- [ ] Perfiles de impresoras y filamentos (P3)
+- [ ] Fichas de la interfaz de Tisma, cuando lleguen
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

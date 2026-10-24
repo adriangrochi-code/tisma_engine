@@ -20,6 +20,7 @@ endif()
 
 option(TISMA_BUILD_TESTS "Build the Catch2 tests" ON)
 option(TISMA_GPU "Build the Vulkan compute backend (used only when a device is present)" ON)
+option(TISMA_BUILD_UI "Build the interface, tisma (OpenGL 3.3; on Linux it needs the X11 development packages)" ON)
 
 include(FetchContent)
 
@@ -109,6 +110,36 @@ if(TISMA_GPU)
   )
   FetchContent_MakeAvailable(volk)
 endif()
+if(TISMA_BUILD_UI)
+  # GLFW 3.4 (Zlib), Dear ImGui 1.92.9b (MIT; its Roboto Medium font is
+  # Apache-2.0) and nanosvg (Zlib), see THIRD_PARTY.md: the interface only.
+  # GLFW is built static, with X11 on Linux and without Wayland, examples,
+  # tests or docs. ImGui and nanosvg are used as sources, without their builds.
+  set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+  set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+  set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    glfw
+    GIT_REPOSITORY https://github.com/glfw/glfw.git
+    GIT_TAG 7b6aead9fb88b3623e3b3725ebb42670cbe4c579 # 3.4
+    SYSTEM
+  )
+  FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG f1cc2ae15e53a861a874c3034aae6798fde194ab # v1.92.9b
+    SOURCE_SUBDIR no-cmake
+  )
+  FetchContent_Declare(
+    nanosvg
+    GIT_REPOSITORY https://github.com/memononen/nanosvg.git
+    GIT_TAG 239e102ec2c691f2902e20ace2ed36ee4a35cfe6 # no tags; 2026-07-10
+    SOURCE_SUBDIR no-cmake
+  )
+  FetchContent_MakeAvailable(glfw imgui nanosvg)
+endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
 # Warnings for our own targets only.
@@ -184,6 +215,23 @@ target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${TISMA_VERSION_TEXT
 
 add_executable(tisma-engine apps/main.cpp)
 target_link_libraries(tisma-engine PRIVATE tisma_core tisma_warnings)
+
+if(TISMA_BUILD_UI)
+  # What the interface does without OpenGL (camera, draw data, icons, texts,
+  # files, the slicing job): tested with the engine.
+  add_library(tisma_ui STATIC
+    src/ui/camera.cpp
+    src/ui/scene.cpp
+    src/ui/icons.cpp
+    src/ui/png.cpp
+    src/ui/text.cpp
+    src/ui/files.cpp
+    src/ui/slicing.cpp
+  )
+  target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
+  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)
+  add_subdirectory(apps/tisma)
+endif()
 
 if(TISMA_BUILD_TESTS)
   enable_testing()

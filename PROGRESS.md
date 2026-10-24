@@ -2406,3 +2406,47 @@ el motor y su estabilidad.
 - La búsqueda aleatoria de G-code inválido pasó al repositorio (`tests/fuzz_gcode.cpp`, programa `tisma_fuzz_gcode
   [corridas] [semilla]`), así los bloques de mantenimiento la corren con semillas nuevas. CTest corre 12 casos
   (`fuzz_gcode_smoke`) para que siga compilando y andando.
+
+## 2026-10-24 — primera release y la interfaz `tisma`
+
+**Release:** `v0.6.0-alpha.1` está publicada en GitHub como pre-release, con los paquetes de Windows y Linux. La
+sesión no puede enviar etiquetas (el proxy de git responde 403). Por eso el flujo de releases ahora corre con un
+envío a `dev` o `main` que cambia `VERSION` (o el flujo), y crea la etiqueta él mismo si no existe. La primera se
+publicó así, desde el código de 8eeee3e.
+
+**Hecho (pedido del dueño: la interfaz con los íconos de Tisma, y que exportar el G-code ande bien):**
+- **Bibliotecas** con las licencias leídas en la versión exacta: GLFW 3.4 (Zlib), Dear ImGui 1.92.9b (MIT; Roboto
+  Medium, Apache-2.0) y nanosvg (Zlib). El cargador de OpenGL que trae ImGui es de dominio público (Unlicense, fuera
+  de la lista), así que se escribió uno propio desde la especificación de OpenGL 3.3. El explorador de archivos es
+  propio: GTK y Qt son LGPL.
+- **En el motor, probado sin ventana:**
+  - `settings_json` escribe los ajustes y `parse_settings` los lee iguales (prueba con cada clave cambiada);
+  - `read_gcode_preview` lee el G-code en movimientos con su tipo, ancho, alto, avance, capa y el tiempo estimado.
+    Con el G-code del motor coincide con el verificador en las extrusiones, el filamento y el recorrido;
+  - `analysis_grid_voxels` cuenta la grilla del análisis sin armarla.
+- **`src/ui/`** (`tisma_ui`): cámara, datos de dibujo, íconos, PNG, textos en dos idiomas, carpetas, laminado en
+  segundo plano y estimación de vóxeles, con 10 pruebas.
+- **`apps/tisma/`:**
+  - ventana con la barra superior (logo, pestañas, Abrir, Laminar, Exportar, Más), el panel de ajustes con los
+    íconos de Tisma, la vista 3D y la barra de estado;
+  - la vista previa dibuja cada extrusión como un prisma armado por instancia en la GPU;
+  - la pestaña Análisis muestra los vóxeles de la pieza en calidad normal y alta.
+- **Prueba de punta a punta** con `xvfb-run` (`ui_slice_export_screenshot`): abre el cubo, lamina, exporta el G-code
+  verificado y dibuja la vista previa; falla si algo de eso falla.
+
+**Medido:**
+- Torre hexagonal retorcida de 50 × 43 × 40 mm: laminado, G-code y verificación en 0,08 a 0,12 s; 47 326 líneas
+  verificadas, 200 capas, 1 h 6 min estimados.
+- Esa torre en el análisis, calidad normal: 1 971 052 vóxeles de pieza en una grilla de 10,8 millones, que pasa el
+  máximo de 8 millones. O sea, una pieza de 5 cm ya no entra en el análisis en calidad normal. Es un límite a revisar
+  en A1.
+
+**No probado:**
+- La interfaz en Windows: la CI la compila, pero nadie la abrió.
+- El ratón y los clics: se probó con las capturas automáticas, no a mano.
+- En pantallas con escala mayor a 1, el tamaño de todo sale de la escala del monitor; no se probó en una.
+
+**Sigue:**
+- Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño).
+- Después, el análisis completo desde la interfaz.
+

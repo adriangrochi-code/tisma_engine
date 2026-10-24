@@ -118,6 +118,17 @@ Box resolve_region(const Region& region, const VoxelGrid& g) {
 
 namespace {
 
+// The voxels of the box around the mesh in x and y, times the rows of every layer.
+double grid_count(const IndexedMesh& mesh, double voxel, int rows, std::size_t layers) {
+    double min_x = std::numeric_limits<double>::infinity(), min_y = min_x, max_x = -min_x, max_y = -min_x;
+    for (const Vec3f& v : mesh.vertices) {
+        min_x = std::min(min_x, double(v.x)), max_x = std::max(max_x, double(v.x));
+        min_y = std::min(min_y, double(v.y)), max_y = std::max(max_y, double(v.y));
+    }
+    return std::max(1.0, std::ceil((max_x - min_x) / voxel)) * std::max(1.0, std::ceil((max_y - min_y) / voxel)) *
+           double(layers) * rows;
+}
+
 // The voxels an analysis works on, and what it needs to know about them.
 struct Prepared {
     VoxelGrid grid;
@@ -156,13 +167,7 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
     // Check the size before allocating the voxels.
     if (progress)
         progress("voxels", kSlicingShare);
-    double min_x = std::numeric_limits<double>::infinity(), min_y = min_x, max_x = -min_x, max_y = -min_x;
-    for (const Vec3f& v : mesh.vertices) {
-        min_x = std::min(min_x, double(v.x)), max_x = std::max(max_x, double(v.x));
-        min_y = std::min(min_y, double(v.y)), max_y = std::max(max_y, double(v.y));
-    }
-    const double count = std::max(1.0, std::ceil((max_x - min_x) / p.voxel)) *
-                         std::max(1.0, std::ceil((max_y - min_y) / p.voxel)) * double(p.layers.size()) * p.rows;
+    const double count = grid_count(mesh, p.voxel, p.rows, p.layers.size());
     if (count > double(c.max_voxels))
         throw AnalysisError("the analysis would need " + format(count) + " voxels, more than max_voxels (" +
                             std::to_string(c.max_voxels) + "); use normal quality or larger voxels");
@@ -182,6 +187,18 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
 }
 
 } // namespace
+
+std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c) {
+    if (mesh.vertices.empty())
+        return 0;
+    const auto [voxel, rows] = analysis_resolution(c, settings);
+    double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
+    for (const Vec3f& v : mesh.vertices)
+        min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
+    // The same plan slice_model makes, so the same layers.
+    const std::vector<Layer> layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+    return static_cast<std::size_t>(grid_count(mesh, voxel, rows, layers.size()));
+}
 
 AnalysisEstimate estimate_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
                                    gpu::Context* gpu) {

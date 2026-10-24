@@ -44,6 +44,12 @@ add_executable(tisma_tests
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+# The interface's logic without OpenGL (src/ui/), when the interface is built.
+if(TISMA_BUILD_UI)
+  target_sources(tisma_tests PRIVATE test_ui.cpp)
+  target_link_libraries(tisma_tests PRIVATE tisma_ui)
+  target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets")
+endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
@@ -55,6 +61,20 @@ catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
 target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
 add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
+
+# The whole interface, end to end, where a display can be faked: open a
+# model, slice it, export the checked G-code and draw the preview.
+if(TISMA_BUILD_UI AND NOT WIN32)
+  find_program(TISMA_XVFB_RUN xvfb-run)
+  if(TISMA_XVFB_RUN)
+    add_test(NAME ui_slice_export_screenshot
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_test.png)
+    # Mesa's OpenGL keeps memory until exit; the leak checker would count it.
+    set_tests_properties(ui_slice_export_screenshot PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+  endif()
+endif()
 
 # End-to-end checks of the installed program.
 add_test(NAME cli_version COMMAND tisma-engine --version)

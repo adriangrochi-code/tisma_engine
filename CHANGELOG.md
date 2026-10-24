@@ -10,6 +10,28 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **La interfaz `tisma`** (`docs/UI.md`), con los íconos y la paleta de Tisma, en español e inglés y con tema oscuro
+  o claro:
+  - abre modelos STL, G-code y ajustes (botón, Ctrl+O o soltando el archivo en la ventana);
+  - centra el modelo en la cama;
+  - edita los ajustes de impresión, filamento e impresora;
+  - lamina en segundo plano;
+  - muestra el G-code capa por capa, con color por tipo de línea, velocidad o ancho;
+  - exporta el G-code verificado;
+  - en la pestaña Análisis, muestra cuántos vóxeles tendría el análisis estructural, con su memoria y su tiempo;
+  - recuerda el idioma, el tema, la carpeta y los ajustes.
+- `--screenshot` (con `--export`) dibuja la interfaz sin pantalla, para pruebas y capturas.
+- Los ajustes se pueden escribir como JSON en su formato (`settings_json`), y leer de vuelta iguales.
+- Un lector de G-code para la vista previa, que también abre G-code de otros programas.
+- Las releases traen también la interfaz.
+
+### Cambiado
+
+- `machine.bed` acepta también una lista vacía, su valor por defecto.
+- La release se publica sola al enviar a `dev` o `main` un `VERSION` nuevo: el flujo crea la etiqueta.
+
 ## [0.6.0-alpha.1] - 2026-10-24
 
 Primera versión publicada. Reúne todo lo anterior (las fases F0 a F4, que no se publicaron por separado), el comienzo

@@ -129,6 +129,11 @@ public:
 // The voxel size and rows per layer the case asks for with these settings.
 std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings& settings);
 
+// The voxels of the box around the part that the case would allocate (the
+// number AnalysisCase::max_voxels limits), without slicing or voxelizing:
+// cheap enough to ask before anything else.
+std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c);
+
 // The region's box on these voxels: a face becomes a thin box on the plane of
 // the solid voxels' extent along that axis.
 Box resolve_region(const Region& region, const VoxelGrid& grid);

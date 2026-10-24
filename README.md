@@ -45,6 +45,15 @@ binarios de Windows y Linux (`docs/VERSIONING.md`).
 
 ## Usar
 
+La interfaz, `tisma`, abre un modelo, cambia los ajustes, lamina, muestra el G-code capa por capa y lo exporta
+verificado (`docs/UI.md`):
+
+```sh
+build/apps/tisma/tisma modelo.stl
+```
+
+La línea de comandos hace lo mismo sin ventana:
+
 ```sh
 build/tisma-engine slice modelo.stl --config ajustes.json -o modelo.gcode --warnings avisos.json
 ```

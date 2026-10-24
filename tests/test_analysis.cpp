@@ -282,6 +282,13 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
         "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -10]}]})");
 
     const AnalysisEstimate e = estimate_analysis(column, Settings{}, c);
+    // The cheap count of the box agrees with the grid the estimate built.
+    CHECK(analysis_grid_voxels(column, Settings{}, c) == e.grid.solid.size());
+    AnalysisCase as_printed = c;
+    as_printed.model = AnalysisModel::AsPrinted;
+    as_printed.quality = AnalysisQuality::High;
+    CHECK(analysis_grid_voxels(column, Settings{}, as_printed) ==
+          estimate_analysis(column, Settings{}, as_printed).grid.solid.size());
     CHECK(e.part_voxels == 20000);
     CHECK(e.printed_voxels == 20000);
     CHECK(e.rows_per_layer == 1);

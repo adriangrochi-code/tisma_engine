@@ -15,9 +15,14 @@ cmake --build build
 build/tisma-engine --help
 ```
 
-La configuración descarga las dependencias a la versión exacta de `THIRD_PARTY.md`: oneTBB, Clipper2, nlohmann/json,
-volk, los encabezados de Vulkan, Boost.Polygon con Boost.Config (el eje medio de referencia de las pruebas) y Catch2. Para compilar sin red, cada una acepta
-`-DFETCHCONTENT_SOURCE_DIR_<NOMBRE>=<carpeta>` con una copia del mismo tag.
+La configuración descarga las dependencias a la versión exacta de `THIRD_PARTY.md`:
+- del motor: oneTBB, Clipper2, nlohmann/json, volk y los encabezados de Vulkan;
+- de las pruebas: Boost.Polygon con Boost.Config (el eje medio de referencia) y Catch2;
+- de la interfaz: GLFW, Dear ImGui y nanosvg.
+
+Para compilar sin red, cada una acepta `-DFETCHCONTENT_SOURCE_DIR_<NOMBRE>=<carpeta>` con una copia del mismo tag. En
+Linux, la interfaz necesita además `libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev`, y
+`xvfb` para su prueba de punta a punta.
 
 Opciones:
 
@@ -25,6 +30,7 @@ Opciones:
 |---|---|---|
 | `TISMA_BUILD_TESTS` | `ON` | Compila las pruebas |
 | `TISMA_GPU` | `ON` | Compila el cómputo con Vulkan; sin dispositivo, el motor usa la CPU igual |
+| `TISMA_BUILD_UI` | `ON` | Compila la interfaz `tisma` (`docs/UI.md`); en Linux necesita los paquetes de desarrollo de X11 |
 
 ## Probar
 

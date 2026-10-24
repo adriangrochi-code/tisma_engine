@@ -65,18 +65,20 @@ jobs:
         include:
           - os: windows-2022
             name: windows-x64
-            program: Release/tisma-engine.exe
+            programs: build/Release/tisma-engine.exe build/apps/tisma/Release/tisma.exe
           - os: ubuntu-24.04
             name: linux-x64
-            program: tisma-engine
+            programs: build/tisma-engine build/apps/tisma/tisma
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Install Ninja
+      - name: Install Ninja and X11 (for the interface)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: >-
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
       - name: Configure
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
@@ -92,9 +94,9 @@ jobs:
         run: |
           package="tisma-engine-$(cat VERSION)-${{ matrix.name }}"
           mkdir -p "$package/docs"
-          cp "build/${{ matrix.program }}" "$package/"
+          cp ${{ matrix.programs }} "$package/"
           cp LICENSE README.md CHANGELOG.md THIRD_PARTY.md VERSION "$package/"
-          cp docs/CONFIG.md docs/ANALYSIS.md docs/MATERIALS.md docs/GCODE_CHECK.md docs/VERSIONING.md "$package/docs/"
+          cp docs/CONFIG.md docs/ANALYSIS.md docs/MATERIALS.md docs/GCODE_CHECK.md docs/VERSIONING.md docs/UI.md "$package/docs/"
           cmake -E tar cf "$package.zip" --format=zip "$package"
       - uses: actions/upload-artifact@v4
         with:

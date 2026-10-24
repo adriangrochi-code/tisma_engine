@@ -10,7 +10,7 @@ algoritmo (artículo, especificación o diseño propio) está en `PROVENANCE.md`
 | Carpeta | Qué tiene |
 |---|---|
 | `src/` | El motor: la biblioteca `tisma_core` |
-| `apps/` | Los programas: `apps/main.cpp` es `tisma-engine`, que solo llama a la línea de comandos (`src/cli/`) |
+| `apps/` | Los programas: `apps/main.cpp` es `tisma-engine`, que solo llama a la línea de comandos (`src/cli/`); `apps/tisma/` es la interfaz (`docs/UI.md`) |
 | `tests/` | Pruebas con Catch2, un archivo por módulo (`test_<módulo>.cpp`), y datos en `tests/data/` |
 | `tools/` | Herramientas del proyecto: revisión de licencias y de especificaciones, shaders, comprobaciones de Linux, notas de release |
 | `docs/` | Documentación de uso (ajustes, análisis, materiales, verificación del G-code), esta guía, la de desarrollo, la de versiones |
@@ -153,6 +153,8 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
   Cada capa se arma en un búfer, con los números formateados por `std::to_chars`.
 - **`check.*`:** relee y verifica el G-code.
 - **`export.*`:** junta escribir y verificar en una exportación que nunca deja un archivo malo con el nombre pedido.
+- **`preview.*`:** lee G-code (el propio o cualquier otro) en movimientos con su tipo, ancho, alto, avance y capa,
+  para la vista previa de la interfaz.
 
 ### `gpu/`: cómputo opcional
 
@@ -177,9 +179,25 @@ repositorio. Hoy corren en la GPU el rango de capas por triángulo y los segment
 Las salidas del análisis están en `report/analysis_json.*` (informe), `io/vtk.*` (mapa) e `io/ply.*` (malla). El
 caso se lee en `config/analysis_case.*`.
 
+### `ui/`: la interfaz sin OpenGL
+
+La biblioteca `tisma_ui`, que usa el programa `tisma` (`apps/tisma/`, ver `docs/UI.md`):
+- **`camera.*`:** cámara orbital con +Z arriba, encuadre y vistas estándar.
+- **`scene.*`:** los datos de dibujo, como arreglos contiguos: la malla con normales, la grilla de la cama recortada
+  a su polígono y las instancias de la vista previa (40 bytes por extrusión).
+- **`icons.*`:** los íconos SVG de Tisma a imágenes, con nanosvg, recoloreados al tema.
+- **`png.*`:** escritura de PNG para las capturas.
+- **`text.*`:** todos los textos de la interfaz en español e inglés.
+- **`files.*`:** listado de carpetas para el explorador propio.
+- **`slicing.*`:** el laminado completo en segundo plano (comprobaciones, G-code en memoria, verificación, vista
+  previa) y la estimación de vóxeles del análisis.
+
+El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador propio de OpenGL 3.3 y el dibujo 3D.
+
 ### `config/`, `report/`, `cli/`
 
 - **`settings.*`:** lee los ajustes con nlohmann/json. Una clave desconocida es un error que la nombra.
+  `settings_json` los escribe en el mismo formato.
 - **`report/warnings.*`:** los avisos del laminado en JSON.
 - **`cli/`:** los comandos `slice`, `analyze` e `info`, con sus códigos de salida (`ExitCode` en `cli.hpp`). Cada
   archivo de salida se escribe como `.part` y se renombra al terminar.
