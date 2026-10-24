@@ -12,8 +12,16 @@ namespace tisma {
 // grid fixed to the origin so that the lines of different layers line up,
 // clipped to the region shrunk by width / 2 (the beads stay inside). Each piece
 // is an open toolpath of constant width, ordered across the lines and along
-// each line.
-std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width);
+// each line. With `connect`, pieces on adjacent lines whose ends follow each
+// other along the boundary, at most kMaxJoin spacings apart along it, are
+// joined by that stretch of boundary into zig-zag polylines: the line ends are
+// anchored and part of the edge band is filled, without entering the walls.
+// With `fit`, the lines are not on the grid: as many as fit across the region
+// (per connected piece of the whole region, measured across its extent), centred,
+// so the outer ones run along the shrunk boundary; for solid surfaces.
+inline constexpr double kMaxJoin = 3.0;
+std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
+                                       bool connect = false, bool fit = false);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -28,8 +36,8 @@ struct FillParams {
 };
 
 // Rectilinear infill of layer `layer`: solid surfaces with lines one bead
-// apart, sparse infill with lines width / density apart, both at the layer's
-// angle.
+// apart fitted to the region, sparse infill with lines width / density apart
+// on the grid, both at the layer's angle and connected into zig-zags.
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params);
 
 } // namespace tisma

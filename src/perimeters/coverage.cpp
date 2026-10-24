@@ -57,6 +57,31 @@ Polygons toolpath_area(const Toolpath& t) {
 
 double area(const Polygons& p) { return area_mm2(p); }
 
+// Area of the polygonal disc relative to the true one.
+const double kDiscRatio =
+    kCoverageDiscSides / (2.0 * std::numbers::pi) * std::sin(2.0 * std::numbers::pi / kCoverageDiscSides);
+
+// Material a toolpath lays down: each piece's length times its mean width,
+// plus a half disc at each end of an open path (a whole disc for a dot).
+double deposited(const Toolpath& t) {
+    const std::size_t n = t.points.size();
+    double sum = 0.0;
+    for (std::size_t i = 0; i + 1 < n; ++i) {
+        const ToolpathPoint& a = t.points[i];
+        const ToolpathPoint& b = t.points[i + 1];
+        sum += std::hypot(b.p.x - a.p.x, b.p.y - a.p.y) * (a.width + b.width) / 2.0;
+    }
+    if (t.closed && n > 2) {
+        const ToolpathPoint& a = t.points.back();
+        const ToolpathPoint& b = t.points.front();
+        sum += std::hypot(b.p.x - a.p.x, b.p.y - a.p.y) * (a.width + b.width) / 2.0;
+    } else if (n >= 1) {
+        const double w0 = t.points.front().width, w1 = t.points.back().width;
+        sum += kDiscRatio * std::numbers::pi * (w0 * w0 + w1 * w1) / 8.0;
+    }
+    return sum;
+}
+
 } // namespace
 
 Polygons bead_area(const std::vector<Toolpath>& toolpaths) {
@@ -67,14 +92,14 @@ Polygons bead_area(const std::vector<Toolpath>& toolpaths) {
     return Clipper2Lib::Union(all, FillRule::NonZero);
 }
 
+
+
 Coverage measure_coverage(const Polygons& target, const std::vector<Toolpath>& toolpaths) {
     Coverage c;
-    double own = 0.0;
     Polygons all;
     for (const Toolpath& t : toolpaths) {
-        Polygons a = toolpath_area(t);
-        own += area(a);
-        for (Polygon& p : a)
+        c.deposited += deposited(t);
+        for (Polygon& p : toolpath_area(t))
             all.push_back(std::move(p));
     }
     const Polygons beads = Clipper2Lib::Union(all, FillRule::NonZero);
@@ -82,7 +107,7 @@ Coverage measure_coverage(const Polygons& target, const std::vector<Toolpath>& t
     c.covered = area(Clipper2Lib::Intersect(beads, target, FillRule::NonZero));
     c.gaps = c.target - c.covered;
     c.outside = area(beads) - c.covered;
-    c.overlap = own - area(beads);
+    c.overlap = c.deposited - area(beads);
     return c;
 }
 

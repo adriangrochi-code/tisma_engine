@@ -42,6 +42,7 @@ TEST_CASE("bead area of a straight line: a rectangle with round caps", "[coverag
     CHECK_THAT(c.gaps, WithinAbs(0.0, 1e-6));
     CHECK_THAT(c.outside, WithinAbs(expected - 10.0, 1e-4));
     CHECK_THAT(c.overlap, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(c.deposited, WithinAbs(expected, 1e-4));
     // Two copies overlap completely.
     CHECK_THAT(measure_coverage({}, {t, t}).overlap, WithinAbs(expected, 1e-4));
 }
@@ -55,20 +56,25 @@ TEST_CASE("F2 criterion: walls from 0.3 to 1.2 mm leave no gaps and no excess", 
         const double t = tenths / 10.0;
         const Coverage c = walls_coverage({poly({{0, 0}, {30, 0}, {30, t}, {0, t}})}, p);
         INFO("thickness " << t);
+        const double corners = 4 * 0.3 * 0.3 * (1 - std::numbers::pi / 4) * 1.05;
         CHECK_THAT(c.target, WithinAbs(30.0 * t, 1e-9));
-        CHECK(c.gaps < 4 * 0.3 * 0.3 * (1 - std::numbers::pi / 4) * 1.05);
+        CHECK(c.gaps < corners);
         CHECK(c.outside < 1e-6);
-        CHECK(c.overlap < 1e-6);
+        // A loop's sharp corners lay at the inside what they miss at the outside:
+        // the material laid down is the strip's area but for the corners.
+        CHECK(c.overlap < corners);
+        CHECK(std::fabs(c.deposited - c.target) < corners);
     }
 }
 
 TEST_CASE("F2 criterion: a wedge from 0.3 to 1.2 mm", "[coverage]") {
-    // Measured: gaps 0.073 mm^2 (0.3 %), overlap 0.28 mm^2 (1.3 %), at the
-    // transitions where beads start or end with round caps.
+    // Measured: gaps 0.073 mm^2 (0.3 %), overlap 0.59 mm^2 (2.6 %), so 2.3 % more
+    // material than the area, at the transitions where beads start or end.
     const Coverage c = walls_coverage({poly({{0, -0.15}, {30, -0.6}, {30, 0.6}, {0, 0.15}})}, BeadingParams{});
     CHECK_THAT(c.target, WithinAbs(22.5, 1e-9));
     CHECK(c.gaps < 0.01 * c.target);
-    CHECK(c.overlap < 0.02 * c.target);
+    CHECK(c.overlap < 0.03 * c.target);
+    CHECK(std::fabs(c.deposited - c.target) < 0.03 * c.target);
     CHECK(c.outside < 1e-6);
 }
 
@@ -80,9 +86,12 @@ TEST_CASE("F2 criterion: a 20 mm square with 2 and 3 walls covers its wall band"
         const double band = 400.0 - (20.0 - 0.8 * m) * (20.0 - 0.8 * m);
         CHECK_THAT(c.target, WithinAbs(band, 1e-6));
         // Each loop leaves a round corner of radius 0.2 at each of the 4 corners
-        // (plus a little for the polygonal discs).
-        CHECK(c.gaps < 4 * m * 0.2 * 0.2 * (1 - std::numbers::pi / 4) * 1.05);
+        // (plus a little for the polygonal discs) and lays as much again at the
+        // inside of the corner: the material laid down is the band's area.
+        const double corners = 4 * m * 0.2 * 0.2 * (1 - std::numbers::pi / 4) * 1.05;
+        CHECK(c.gaps < corners);
         CHECK(c.outside < 1e-6);
-        CHECK(c.overlap < 1e-6);
+        CHECK(c.overlap < corners);
+        CHECK_THAT(c.deposited, WithinAbs(band, 1e-3));
     }
 }

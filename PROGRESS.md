@@ -1031,3 +1031,36 @@ perímetros») se cumple y está medido. Quedan:
 **Sigue:** anclar las líneas a los perímetros uniendo los extremos a lo largo del borde, para cerrar los huecos de los
 bordes sin meterse en las paredes; después grilla y giroide.
 
+## 2026-10-24 — bloque nocturno 27: anclaje del relleno
+
+**Hecho:**
+- Las líneas de relleno se anclan a los perímetros en zigzag (diseño propio):
+  - dos extremos de líneas adyacentes que se siguen a lo largo del borde de la región achicada medio cordón, a menos
+    de 3 separaciones, se unen por ese tramo de borde;
+  - una unión-búsqueda evita ciclos; las líneas unidas forman una sola polilínea;
+  - no se mete nada en las paredes.
+- Superficies sólidas: las líneas se ajustan a la región (tantas como entran, centradas) en vez de ir sobre la grilla
+  fija. El relleno disperso sigue en la grilla, para que las capas se alineen.
+- `measure_coverage`: la superposición ahora es material depositado (largo por ancho medio de cada tramo, más medio
+  disco en cada extremo abierto) menos el área cubierta. Así cuenta lo que un mismo recorrido deposita dos veces (el
+  zigzag sobre sus propios extremos, o el lado interno de una esquina viva). Con esa medida, un lazo con esquinas rectas
+  deposita exactamente el área: lo que le falta en la esquina de afuera lo pone en la de adentro.
+
+**Probado:** 124/124 pruebas con gcc, clang y ASan+UBSan. Las pruebas de cobertura de F2 ahora comparan también el
+material depositado con el área.
+
+**Medido** (capa sólida, material depositado menos área; nada entra en las paredes):
+
+| Región | 0° | 30° | 45° |
+|---|---|---|---|
+| Cuadrado de 7,6 mm, antes (líneas sueltas sobre la grilla) | −6,3 % | −5,0 % | −4,7 % |
+| Cuadrado de 7,6 mm, ahora | −0,06 % | −0,9 % | −0,6 % |
+| L de 10 mm con brazos de 3 mm, ahora | −2,9 % | −1,7 % | −1,8 % |
+
+- En la L a 0°, el ajuste es para toda la región y en el codo interior queda una franja de 0,2 mm sin cubrir. Queda en
+  el PLAN ajustar por tramo.
+- Cuña de F2 con la nueva medida: deposita 2,3 % más que su área, en las transiciones.
+- Esfera, 500 capas: las polilíneas bajan de 7743 a 630 (sólidas) y de 18 907 a 1173 (dispersas); `slice` 1,13–1,20 s.
+
+**Sigue:** ajustar las líneas sólidas por tramo; después grilla y giroide.
+

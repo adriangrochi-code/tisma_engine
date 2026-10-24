@@ -238,9 +238,11 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
 - [x] Relleno sólido de las superficies, rectilíneo al 100 % (lo monotónico va con su propio ítem)
 - [ ] Relleno en grilla (dos direcciones por capa)
 - [ ] Giroide: la superficie de `docs/spec/SOURCES.md` cortada en cada Z
-- [ ] Anclar las líneas de relleno a los perímetros sin dejar huecos. Hoy las líneas terminan medio cordón adentro y
-  una capa sólida deja huecos en los bordes (4,7 % en un cuadrado de 7,6 mm a 45°). Llevarlas hasta el borde los baja
-  a 0,4 %, pero mete 3,7 mm² en las paredes. La idea es unir los extremos a lo largo del borde
+- [x] Anclar las líneas de relleno a los perímetros: zigzag que une los extremos a lo largo del borde, sin entrar en
+  las paredes; en las superficies sólidas, líneas ajustadas a la región. En el cuadrado de 7,6 mm, el material depositado
+  es el área dentro del 1 % a 0°, 30° y 45°
+- [ ] Ajustar las líneas sólidas por tramo y no por región: en una L a 0°, el codo interior deja una franja de 0,2 mm
+  (−2,9 % de material)
 - [ ] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
   anterior), tendidos en la dirección del vano más corto
 - [ ] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho
