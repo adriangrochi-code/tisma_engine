@@ -337,10 +337,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     active.retract_speed = s.retract_speed;
     active.flow = s.flow / 100.0;
     std::size_t next_change = 0;
+    // The part prints resting on the bed wherever its mesh is in Z: heights
+    // in the G-code (and of the height changes) count from its bottom.
+    const double base = model.layers.empty() ? 0.0 : model.layers.front().bottom;
 
     auto emit_layer = [&](std::size_t l, double fan, const Active& a) {
         const Layer& layer = model.layers[l];
-        g.new_layer(layer.top, layer.top - layer.bottom, s.travel_speed);
+        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
         g.custom(a.lines);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -451,7 +454,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.reset_times();
         // Changes below this layer's top take effect now.
         active.lines.clear();
-        while (next_change < s.changes.size() && s.changes[next_change].z < model.layers[l].top - 1e-6) {
+        while (next_change < s.changes.size() && s.changes[next_change].z < model.layers[l].top - base - 1e-6) {
             const HeightChange& c = s.changes[next_change++];
             if (c.temperature)
                 active.lines += "M104 S" + std::to_string(std::lround(*c.temperature)) + " ; change at Z " + fixed(c.z, 3) + "\n";
@@ -485,7 +488,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 char text[160];
                 std::snprintf(text, sizeof text, "the layer takes %.1f s even at 1 mm/min, less than the minimum of %.1f s",
                               reached, s.min_layer_time);
-                warnings->push_back({"layer_time", int(l), model.layers[l].top, text, reached});
+                warnings->push_back({"layer_time", int(l), model.layers[l].top - base, text, reached});
             }
         }
         g.end_layer();

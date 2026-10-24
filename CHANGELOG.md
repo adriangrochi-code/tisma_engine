@@ -56,6 +56,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - En la interfaz, la retracción pasó de la sección Filamento a Impresora, como en los perfiles.
 - La release se publica sola al enviar a `dev` o `main` un `VERSION` nuevo: el flujo crea la etiqueta.
 
+### Corregido
+
+- Una pieza cuya malla no empieza en Z = 0 se imprime apoyada en la cama: las alturas del G-code cuentan desde su
+  base. Antes, una pieza debajo de Z = 0 daba G-code que el verificador rechazaba (la esfera del banco, centrada en
+  el origen, no se podía laminar) y una más arriba se habría impreso en el aire.
+- En la interfaz, abrir otra pieza o cambiar ajustes mientras se lamina ya no muestra el resultado anterior como si
+  fuera el nuevo: el de otra pieza se descarta y el de otros ajustes queda marcado como desactualizado.
+- Los nombres de perfil que Windows reserva para dispositivos, también con extensión («NUL.txt»), se guardan con otro
+  nombre de archivo.
+
 ## [0.6.0-alpha.1] - 2026-10-24
 
 Primera versión publicada. Reúne todo lo anterior (las fases F0 a F4, que no se publicaron por separado), el comienzo

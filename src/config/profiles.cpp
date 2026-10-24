@@ -54,16 +54,19 @@ std::string file_stem(const std::string& name) {
         out.pop_back();
     while (!out.empty() && (out.front() == ' ' || out.front() == '.'))
         out.erase(out.begin());
+    // Windows reserves the device names also with an extension ("nul.txt").
     std::string upper;
-    for (const char c : out)
+    for (const char c : out.substr(0, out.find('.')))
         upper += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    while (!upper.empty() && upper.back() == ' ')
+        upper.pop_back();
     const bool device = upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL" ||
                         (upper.size() == 4 && (upper.starts_with("COM") || upper.starts_with("LPT")) &&
                          upper[3] >= '1' && upper[3] <= '9');
     if (out.empty())
         out = "profile";
     else if (device)
-        out += '_';
+        out.insert(0, "_");
     return out;
 }
 

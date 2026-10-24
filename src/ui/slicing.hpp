@@ -8,6 +8,7 @@
 #include "slice/pipeline.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -80,6 +81,21 @@ struct VoxelEstimate {
 // over the analysis's voxel limit is still counted, up to four times the
 // limit, and marked over_limit; beyond that only the grid's box is given.
 VoxelEstimate estimate_voxels(const TriangleMesh& mesh, const Settings& settings);
+
+// What a result made in the background was made from: the model and the
+// settings, each counted up when it changes. The interface keeps working
+// while a job runs, so by the time the result arrives it may belong to a
+// model that is no longer open (it is dropped) or to settings that changed
+// since (it is shown as out of date).
+struct Revision {
+    std::uint64_t model = 0, settings = 0;
+};
+enum class Fit { Current, OutOfDate, OtherModel };
+inline Fit fit(const Revision& made, const Revision& now) {
+    if (made.model != now.model)
+        return Fit::OtherModel;
+    return made.settings != now.settings ? Fit::OutOfDate : Fit::Current;
+}
 
 // A function run on its own thread, whose result the drawing thread picks up
 // when it is ready. Starting again waits for the run before.

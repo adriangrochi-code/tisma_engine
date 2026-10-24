@@ -314,7 +314,8 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         limits.min_x = std::max(limits.min_x, bed_lo[0]), limits.max_x = std::min(limits.max_x, bed_hi[0]);
         limits.min_y = std::max(limits.min_y, bed_lo[1]), limits.max_y = std::min(limits.max_y, bed_hi[1]);
     }
-    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top) + s.retract_lift;
+    // Heights count from the part's bottom, which rests on the bed (write_gcode).
+    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + s.retract_lift;
     double speed_factor = 1.0, retract_speed = s.retract_speed;
     for (const HeightChange& c : s.changes) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);

@@ -2646,3 +2646,43 @@ motor, que los usan).
 **Sigue:**
 - avisar antes de cerrar o abrir otro archivo si el proyecto tiene cambios sin guardar;
 - las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).
+
+## 2026-10-24 — mantenimiento
+
+**Revisado:**
+- `tools/ci_linux.sh` (251/251 en gcc, clang y ASan + UBSan antes de los arreglos);
+- la búsqueda aleatoria de G-code con semillas nuevas: 2000 corridas con una semilla al azar y 2000 con
+  1792863862 en Release, 300 con 1792863864 con ASan + UBSan. 0 fallas (8 piezas rechazadas como no imprimibles, que
+  es lo esperado);
+- los cambios recientes (calibraciones, perfiles, proyectos, la interfaz) buscando casos borde;
+- el banco: la esfera y el análisis del cubo.
+
+**Encontrado y corregido (cada uno con su prueba):**
+- **Las alturas del G-code salían en coordenadas de la malla.** Una pieza que no empezaba en Z = 0 se laminaba a esa
+  altura: debajo de 0, el verificador rechazaba el G-code (la esfera del banco, centrada en el origen, terminaba con
+  código 6, «move to Z-49.6 is out of 0 to 50»); arriba de 0, la primera capa habría ido en el aire sin que nada
+  avisara. Ahora el escritor cuenta las alturas desde la base de la pieza (también las de `changes` y las de los
+  avisos) y el verificador usa el alto de la pieza. Prueba: la mesa corrida −50, −3,5 y +12,25 mm da el mismo G-code
+  que apoyada en 0, con su cambio de temperatura en el mismo lugar.
+- **La interfaz mostraba un laminado viejo como nuevo.** Si mientras laminaba se abría otra pieza (o un G-code), el
+  resultado de la anterior aparecía como el de la nueva y se podía exportar; si cambiaban los ajustes, se mostraba
+  como al día. Ahora cada trabajo en segundo plano guarda de qué pieza y ajustes salió (`Revision`): el de otra pieza
+  se descarta y el de otros ajustes queda marcado como desactualizado (en las capturas se vuelve a laminar). Lo mismo
+  para la estimación de vóxeles, que además se rehace sola en la pestaña Análisis cuando cambian los ajustes. Prueba:
+  `ui: a background result is matched against what changed since it started`.
+- **Nombres de perfil reservados en Windows.** «con» ya se evitaba, pero «NUL.txt» o «Lpt9 .x» también son
+  dispositivos en Windows; ahora se mira el nombre hasta el primer punto. Prueba en `test_profiles.cpp`.
+- **Menores:** el botón ⋮ de los perfiles decía «Guardar el perfil…» al pasar el ratón (ahora «Más»); una suma de
+  `bool` en una prueba.
+
+**Medido** (4 núcleos, Release, CPU):
+- Esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`): 319 200 triángulos, lectura 20 ms, 500 capas.
+  Laminado completo 0,88 a 0,93 s; verificación 0,20 a 0,25 s; 884 537 líneas de G-code. Antes del arreglo no
+  llegaba a escribirse.
+- Análisis del cubo de prueba (5000 vóxeles de 1 mm): preparación 0,5 ms, solución 141 a 151 ms (22 iteraciones de
+  multigrilla, 3 niveles), 0,23 a 0,24 s en total con la estimación de resolución.
+- La fase más lenta del laminado de la esfera son las paredes y el relleno de las 500 capas (unos 0,8 s de 0,9). No
+  se tocó: no hubo tiempo de medir una mejora de verdad en este bloque.
+
+**No probado:** el arreglo de la interfaz a mano (abrir otra pieza mientras lamina); la prueba cubre la decisión, no
+la ventana.

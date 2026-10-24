@@ -415,3 +415,16 @@ TEST_CASE("ui: the built-in profiles start from the interface's settings and rea
     CHECK(petg.name == "PETG");
     CHECK(petg.settings.variables.at("temperature") == std::vector<std::string>{"240"});
 }
+
+TEST_CASE("ui: a background result is matched against what changed since it started", "[ui]") {
+    Revision now;
+    const Revision made = now;
+    CHECK(fit(made, now) == Fit::Current);
+    ++now.settings;
+    CHECK(fit(made, now) == Fit::OutOfDate);
+    ++now.model;
+    CHECK(fit(made, now) == Fit::OtherModel);
+    Revision other_model = made;
+    ++other_model.model;
+    CHECK(fit(made, other_model) == Fit::OtherModel);
+}

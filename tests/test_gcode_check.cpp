@@ -249,3 +249,32 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
     CHECK(!nowhere.written);
     CHECK_THAT(nowhere.error, ContainsSubstring("cannot write"));
 }
+
+TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {
+    // The engine does not move parts in X and Y, but a part can only print
+    // resting on the bed: Z in the G-code counts from the part's bottom.
+    Settings s;
+    s.changes.push_back([] {
+        HeightChange c;
+        c.z = 2.0;
+        c.temperature = 200.0;
+        return c;
+    }());
+    const Output on_bed = slice_and_write(table(), s);
+    REQUIRE_THAT(on_bed.gcode, ContainsSubstring("M104 S200 ; change at Z 2.000"));
+    for (const float shift : {-50.0f, -3.5f, 12.25f}) {
+        INFO("shifted by " << shift);
+        IndexedMesh m = table();
+        for (Vec3f& v : m.vertices)
+            v.z += shift;
+        const Output o = slice_and_write(m, s);
+        const GcodeCheck c = check_gcode(o.gcode, o.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+        CHECK(c.stats.max_z > 3.99); // the table is 4 mm tall
+        CHECK(c.stats.max_z < 4.01);
+        CHECK_THAT(o.gcode, ContainsSubstring(";Z:0.200\n"));
+        // The same G-code as the part on the bed, height changes included.
+        CHECK(o.gcode == on_bed.gcode);
+    }
+}

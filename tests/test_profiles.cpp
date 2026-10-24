@@ -5,6 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 
@@ -59,9 +60,9 @@ TEST_CASE("every setting belongs to one profile kind, except the height changes"
             INFO(group + "." + key);
             const auto kind = setting_kind(group, key);
             REQUIRE(kind);
-            printer += *kind == ProfileKind::Printer;
-            filament += *kind == ProfileKind::Filament;
-            print += *kind == ProfileKind::Print;
+            printer += *kind == ProfileKind::Printer ? 1 : 0;
+            filament += *kind == ProfileKind::Filament ? 1 : 0;
+            print += *kind == ProfileKind::Print ? 1 : 0;
         }
     }
     CHECK(printer > 10);
@@ -221,6 +222,27 @@ TEST_CASE("profiles are saved, listed, replaced and removed in their folders", "
     d.name = "detalle.";
     save_profile(root, d);
     CHECK(load_profiles(root, ProfileKind::Print).size() == 3);
+
+    // Names Windows keeps for devices, also with an extension, get other file names.
+    for (const char* reserved : {"con", "NUL.txt", "com1", "Lpt9 .x"}) {
+        Profile r = b;
+        r.name = reserved;
+        save_profile(root, r);
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(root / "print")) {
+        std::string stem = entry.path().stem().string();
+        stem = stem.substr(0, stem.find('.'));
+        for (char& ch : stem)
+            ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+        INFO(entry.path().filename().string());
+        CHECK(stem != "CON");
+        CHECK(stem != "NUL");
+        CHECK(stem != "COM1");
+        CHECK(stem.substr(0, 4) != "LPT9");
+    }
+    CHECK(load_profiles(root, ProfileKind::Print).size() == 7);
+    for (const char* reserved : {"con", "NUL.txt", "com1", "Lpt9 .x"})
+        CHECK(remove_profile(root, ProfileKind::Print, reserved));
 
     // A damaged file is skipped and reported.
     std::ofstream(root / "print" / "roto.json") << "{";

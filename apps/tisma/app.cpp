@@ -250,6 +250,7 @@ private:
     void frame_all();
     void frame_now();
     void set_tab(Tab tab);
+    void estimate_voxels_if_stale();
     void notify(std::string text, bool error = false);
     void fail(T title, std::string message, std::vector<std::string> details = {});
     void load_preferences();
@@ -292,6 +293,9 @@ private:
     Vec3 offset_{};
     BoundingBox placed_;
 
+    // What the model and the settings are now, and what the running jobs
+    // were started from.
+    Revision revision_, slice_made_, voxels_made_;
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
@@ -807,6 +811,7 @@ void App::load_model(const std::filesystem::path& path) {
 }
 
 void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab) {
+    ++revision_.model;
     mesh_ = std::move(mesh);
     model_path_ = name;
     viewer_ = false;
@@ -862,6 +867,7 @@ void App::load_gcode(const std::filesystem::path& path) {
         fail(T::CannotOpen, utf8(path) + ": no extrusions found");
         return;
     }
+    ++revision_.model; // a slice still running belongs to the model, not to this file
     result_ = std::move(r);
     viewer_ = true;
     stale_ = false;
@@ -1101,7 +1107,6 @@ void App::profile_row(ProfileKind kind) {
     }
     if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", tr(T::ProfileModifiedTip));
-    const T titles[] = {T::SaveProfilePrinter, T::SaveProfileFilament, T::SaveProfilePrint};
     auto save_as = [&] {
         save_profile_kind_ = kind;
         save_profile_open_ = true;
@@ -1115,7 +1120,7 @@ void App::profile_row(ProfileKind kind) {
             save_as();
     }
     ImGui::SameLine(0, gap);
-    if (icon_button("##menu", "tisma_more", tr(titles[k]), size))
+    if (icon_button("##menu", "tisma_more", tr(T::More), size))
         ImGui::OpenPopup("##profile_menu");
     if (ImGui::BeginPopup("##profile_menu")) {
         if (ImGui::MenuItem(tr(T::SaveProfileAs)))
@@ -1165,6 +1170,7 @@ void App::start_slice() {
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
     slice_started_ = glfwGetTime();
+    slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings)]() {
         return slicer_.run(placed, settings);
     });
@@ -1172,6 +1178,16 @@ void App::start_slice() {
 
 void App::poll_jobs() {
     if (std::optional<SliceResult> r = slice_job_.take()) {
+        // Another model was opened while slicing: this result is not its.
+        const Fit made = fit(slice_made_, revision_);
+        if (made == Fit::OtherModel)
+            return;
+        // The settings changed while slicing: a screenshot slices again (it
+        // must show what was asked); the window shows it as out of date.
+        if (made == Fit::OutOfDate && !options_.screenshot.empty()) {
+            start_slice();
+            return;
+        }
         if (!r->ok) {
             fail(T::CannotSlice, r->error);
             failed_ |= !options_.export_path.empty();
@@ -1179,7 +1195,7 @@ void App::poll_jobs() {
         }
         result_ = std::move(*r);
         viewer_ = false;
-        stale_ = false;
+        stale_ = made == Fit::OutOfDate;
         show_preview();
         const bool calibrating = tab_ == Tab::Calibration;
         if (options_.layer > 0)
@@ -1201,8 +1217,17 @@ void App::poll_jobs() {
             fail(T::CannotSlice, format(tr(T::GcodeBad), int(result_->check.problem_count)), std::move(details));
         }
     }
-    if (std::optional<VoxelEstimate> v = voxel_job_.take())
-        voxels_ = std::move(*v);
+    if (std::optional<VoxelEstimate> v = voxel_job_.take()) {
+        if (fit(voxels_made_, revision_) == Fit::Current) {
+            voxels_ = std::move(*v);
+        } else {
+            voxels_.reset();
+            voxels_stale_ = true;
+        }
+    }
+    // The Analysis tab keeps its estimate up to date.
+    if (tab_ == Tab::Analysis)
+        estimate_voxels_if_stale();
 }
 
 void App::show_preview() {
@@ -1217,12 +1242,14 @@ void App::show_preview() {
 }
 
 void App::settings_changed() {
+    ++revision_.settings;
     if (result_ && !viewer_)
         stale_ = true;
     voxels_stale_ = true;
 }
 
 void App::bed_changed() {
+    ++revision_.settings; // the model moves with the bed
     apply_theme(); // remakes the bed's lines
     place_model();
     ++scene_version_;
@@ -1271,14 +1298,20 @@ void App::set_tab(Tab tab) {
     if ((tab == Tab::Calibration) != (tab_ == Tab::Calibration) && !frame_pending_ && view_size_.y > 10.0f)
         camera_.pan((tab == Tab::Calibration ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
     tab_ = tab;
-    if (tab == Tab::Analysis && mesh_ && voxels_stale_ && !voxel_job_.running()) {
-        voxels_stale_ = false;
-        TriangleMesh placed = translated(*mesh_, offset_);
-        Settings settings = settings_;
-        voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
-            return estimate_voxels(placed, settings);
-        });
-    }
+    if (tab == Tab::Analysis)
+        estimate_voxels_if_stale();
+}
+
+void App::estimate_voxels_if_stale() {
+    if (!mesh_ || !voxels_stale_ || voxel_job_.running())
+        return;
+    voxels_stale_ = false;
+    voxels_made_ = revision_;
+    TriangleMesh placed = translated(*mesh_, offset_);
+    Settings settings = settings_;
+    voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
+        return estimate_voxels(placed, settings);
+    });
 }
 
 void App::top_bar() {
