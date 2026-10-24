@@ -18,11 +18,22 @@ struct GcodeLimits {
     double max_feed = 0.0;        // the fastest move, mm/s
     double filament_area = 1.0;   // mm2
     double retract_length = 0.0;  // mm of filament
+    double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
+    // From the height changes of the settings: the values for the layers whose
+    // top is above z, in order of z.
+    struct Change {
+        double z = 0.0;
+        double retract_length = 0.0;
+        double flow = 1.0;
+    };
+    std::vector<Change> changes;
 };
 
 // The part's footprint grown by the skirt, the brim and a bead of slack, the
-// bed's box when one is set, the top layer and the speeds.
+// bed's box when one is set, the top layer, the speeds (a speed change raises
+// the fastest extrusion), the flow and the retraction, with their changes by
+// height.
 GcodeLimits gcode_limits(const SlicedModel& model, const Settings& settings);
 
 struct GcodeProblem {

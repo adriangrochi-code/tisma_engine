@@ -13,10 +13,31 @@
 
 namespace tisma {
 
-SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu) {
+IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
+    if (mesh.vertices.empty() || (settings.scale_x == 100.0 && settings.scale_y == 100.0 && settings.scale_z == 100.0))
+        return mesh;
+    float x0 = mesh.vertices.front().x, x1 = x0, y0 = mesh.vertices.front().y, y1 = y0, z0 = mesh.vertices.front().z;
+    for (const Vec3f& v : mesh.vertices) {
+        x0 = std::min(x0, v.x), x1 = std::max(x1, v.x);
+        y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
+        z0 = std::min(z0, v.z);
+    }
+    const double cx = (double(x0) + double(x1)) / 2.0, cy = (double(y0) + double(y1)) / 2.0;
+    const double sx = settings.scale_x / 100.0, sy = settings.scale_y / 100.0, sz = settings.scale_z / 100.0;
+    IndexedMesh out = mesh;
+    for (Vec3f& v : out.vertices) {
+        v.x = float(cx + (double(v.x) - cx) * sx);
+        v.y = float(cy + (double(v.y) - cy) * sy);
+        v.z = float(double(z0) + (double(v.z) - double(z0)) * sz);
+    }
+    return out;
+}
+
+SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu) {
     SlicedModel out;
-    if (mesh.vertices.empty())
+    if (input.vertices.empty())
         return out;
+    const IndexedMesh mesh = compensated(input, settings);
     float min_z = mesh.vertices.front().z, max_z = min_z;
     for (const Vec3f& v : mesh.vertices) {
         min_z = std::min(min_z, v.z);
@@ -49,7 +70,7 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
         Polygons region =
             layer_region(simplify(to_polygons(contours[l]), settings.simplify_tolerance), settings.fill_mode);
         const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
-        out.regions[l] = offset(region, settings.xy_offset - shrink);
+        out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
         // What an opening by the thinnest bead removes is too thin to print.
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));

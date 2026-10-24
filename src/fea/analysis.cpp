@@ -153,7 +153,12 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
         progress("slicing", 0.0);
     SlicedModel sliced;
     if (c.model == AnalysisModel::AsPrinted) {
-        sliced = slice_model(mesh, settings, gpu);
+        // The part as designed: the printer's compensation makes the print
+        // match it, so the analysis does not apply it.
+        Settings designed = settings;
+        designed.scale_x = designed.scale_y = designed.scale_z = 100.0;
+        designed.hole_offset = 0.0;
+        sliced = slice_model(mesh, designed, gpu);
         p.layers = sliced.layers;
     } else {
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;

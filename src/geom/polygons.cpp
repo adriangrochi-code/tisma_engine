@@ -2,6 +2,8 @@
 
 #include "geom/polygons.hpp"
 
+#include <algorithm>
+
 #include <oneapi/tbb/parallel_for.h>
 
 namespace tisma {
@@ -51,6 +53,42 @@ Polygons offset(const Polygons& region, double delta_mm, double miter_limit) {
         return region;
     return Clipper2Lib::InflatePaths(region, delta_mm * kUnitsPerMm, Clipper2Lib::JoinType::Miter,
                                      Clipper2Lib::EndType::Polygon, miter_limit);
+}
+
+namespace {
+
+void pieces_without_offset_holes(const Clipper2Lib::PolyPath64& outer, double delta_mm, Polygons& out) {
+    Polygons holes;
+    for (const auto& hole : outer) {
+        Polygon filled = hole->Polygon();
+        if (Clipper2Lib::Area(filled) < 0.0)
+            std::reverse(filled.begin(), filled.end());
+        holes.push_back(std::move(filled));
+    }
+    Polygons piece = {outer.Polygon()};
+    if (!holes.empty()) {
+        const Polygons grown = offset(holes, delta_mm);
+        piece = Clipper2Lib::Difference(piece, grown, Clipper2Lib::FillRule::NonZero);
+    }
+    out.insert(out.end(), piece.begin(), piece.end());
+    for (const auto& hole : outer)
+        for (const auto& island : *hole)
+            pieces_without_offset_holes(*island, delta_mm, out);
+}
+
+} // namespace
+
+Polygons offset_holes(const Polygons& region, double delta_mm) {
+    if (delta_mm == 0.0 || region.empty())
+        return region;
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddSubject(region);
+    Clipper2Lib::PolyTree64 tree;
+    clipper.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+    Polygons pieces;
+    for (const auto& outer : tree)
+        pieces_without_offset_holes(*outer, delta_mm, pieces);
+    return Clipper2Lib::Union(pieces, Clipper2Lib::FillRule::NonZero);
 }
 
 std::vector<Polygons> layer_regions(const std::vector<std::vector<Contour>>& layers) {

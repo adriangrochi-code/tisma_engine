@@ -32,7 +32,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 
 | Lugar | Qué tiene |
 |---|---|
-| Barra superior | El logo; las pestañas **Preparar**, **Vista previa** y **Análisis**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (idioma, tema claro u oscuro, acerca de, salir). |
+| Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (idioma, tema claro u oscuro, acerca de, salir). |
 | Panel izquierdo | Los ajustes, en tres secciones con sus íconos: **Impresión** (capas, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, retracción, ventilador) e **Impresora** (cama, altura, boquilla, dialecto, G-code de inicio y fin). Abajo: cargar, guardar y restablecer. |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
@@ -98,6 +98,21 @@ Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/A
 Si una calidad pasa el máximo del análisis (8 millones de vóxeles de grilla), lo avisa. El análisis completo, con
 apoyos y cargas, corre por ahora con `tisma-engine analyze`.
 
+### Calibración
+
+La pestaña **Calibración** (`docs/CALIBRATION.md`) carga las piezas de prueba que genera el motor.
+
+- **Dimensiones:**
+  1. cargar el bloque de 30 × 20 × 15 mm con su agujero, laminarlo e imprimirlo;
+  2. medir X, Y, Z y el agujero, y cargar las medidas;
+  3. la tabla muestra la compensación actual y la nueva, y **Aplicar la compensación** la pasa a los ajustes.
+- **Torres** (temperatura, retracción, flujo, velocidad máxima): se eligen el rango y el alto de cada segmento y se
+  carga la torre.
+  - La torre trae sus cambios por altura en los ajustes, y el panel lista los segmentos con su valor.
+  - En la vista previa, la leyenda dice el valor del segmento de la capa que se mira.
+  - **Quitar los cambios por altura** vuelve a los ajustes de siempre.
+- **El flujo de todas las impresiones** se edita en la sección Flujo.
+
 ### Imagen: luz, oclusión, ray tracing y suavizado
 
 El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D. La elección se recuerda.
@@ -142,7 +157,8 @@ tisma modelo.stl --screenshot vista.png --ray-check
 tisma --screenshot explorador.png --browse /una/carpeta
 ```
 
-`--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
+`--calibration dimensions|temperature|retraction|flow|speed` carga una prueba de calibración, y
+`--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
 sombras en lugar de la luz, para revisarlas.
 

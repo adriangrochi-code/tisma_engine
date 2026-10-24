@@ -11,10 +11,11 @@ struct AppOptions {
     std::vector<std::string> files; // to open at start: models (.stl), G-code or settings (.json)
     int width = 1440, height = 900; // window size, in screen units
     std::string screenshot;         // when set: draw, write the window to this PNG and quit
-    std::string view = "prepare";   // the tab for the screenshot: prepare, preview or analysis
+    std::string view = "prepare";   // the tab for the screenshot: prepare, preview, analysis or calibration
     int layer = -1;                 // the top layer shown in the preview (1-based); -1: all
     std::string export_path;        // with screenshot: after slicing, export the G-code here first
     std::string browse;             // with screenshot: show the file browser on this folder
+    std::string calibration;        // load this calibration test at start: dimensions, temperature, retraction, flow, speed
     bool light = false;             // light theme
     int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
     int msaa = -1;                  // multisampling samples; -1: the preference

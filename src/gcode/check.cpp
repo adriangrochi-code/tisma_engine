@@ -46,7 +46,8 @@ std::optional<double> number(std::string_view t) {
 
 class Checker {
 public:
-    explicit Checker(const GcodeLimits& limits) : limits_(limits) {}
+    explicit Checker(const GcodeLimits& limits)
+        : limits_(limits), retract_length_(limits.retract_length), flow_(limits.flow) {}
 
     void line(std::string_view raw) {
         ++line_;
@@ -122,6 +123,12 @@ private:
                 problem("layer at Z=" + text(*z) + " does not go above the one before (" + text(*layer_z_) + ")");
             layer_z_ = *z;
             awaiting_z_ = false;
+            // The height changes below this layer's top hold from here on.
+            while (next_change_ < limits_.changes.size() && limits_.changes[next_change_].z < *z - 1e-6) {
+                retract_length_ = limits_.changes[next_change_].retract_length;
+                flow_ = limits_.changes[next_change_].flow;
+                ++next_change_;
+            }
         } else if (const std::optional<double> h = value("HEIGHT:")) {
             if (*h <= 0.0)
                 problem("layer height " + text(*h) + " is not positive");
@@ -236,7 +243,7 @@ private:
             if (!width_ || !height_) {
                 problem("extrudes before any ;WIDTH and ;HEIGHT");
             } else if (known_[0] && known_[1]) {
-                const double per_mm = *width_ * *height_ / limits_.filament_area;
+                const double per_mm = *width_ * *height_ / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + 2e-5)
                     problem("extrudes " + text(de) + " mm of filament over " + text(length) + " mm, where width " +
@@ -252,8 +259,8 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("retracts again without undoing the last retraction");
-            if (std::abs(-de - limits_.retract_length) > kRetractSlack)
-                problem("retracts " + text(-de) + " mm instead of " + text(limits_.retract_length));
+            if (std::abs(-de - retract_length_) > kRetractSlack)
+                problem("retracts " + text(-de) + " mm instead of " + text(retract_length_));
             retracted_ = -de;
         } else if (de > 1e-9) {
             out_.stats.filament += de;
@@ -266,6 +273,8 @@ private:
     }
 
     const GcodeLimits& limits_;
+    double retract_length_, flow_;
+    std::size_t next_change_ = 0;
     GcodeCheck out_;
     std::size_t line_ = 0;
     bool custom_ = false;
@@ -306,10 +315,25 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         limits.min_y = std::max(limits.min_y, bed_lo[1]), limits.max_y = std::min(limits.max_y, bed_hi[1]);
     }
     limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top) + s.retract_lift;
-    limits.max_feed = std::max({s.travel_speed, s.max_speed, s.retract_speed});
+    double speed_factor = 1.0, retract_speed = s.retract_speed;
+    for (const HeightChange& c : s.changes) {
+        speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);
+        retract_speed = std::max(retract_speed, c.retract_speed.value_or(0.0));
+    }
+    limits.max_feed = std::max({s.travel_speed, s.max_speed * speed_factor, retract_speed});
     const double r = s.filament_diameter / 2.0;
     limits.filament_area = std::numbers::pi * r * r;
     limits.retract_length = s.retract_length;
+    limits.flow = s.flow / 100.0;
+    GcodeLimits::Change current{0.0, s.retract_length, s.flow / 100.0};
+    for (const HeightChange& c : s.changes) {
+        current.z = c.z;
+        if (c.retract_length)
+            current.retract_length = *c.retract_length;
+        if (c.flow)
+            current.flow = *c.flow / 100.0;
+        limits.changes.push_back(current);
+    }
     limits.relative_extrusion = s.relative_extrusion;
     return limits;
 }

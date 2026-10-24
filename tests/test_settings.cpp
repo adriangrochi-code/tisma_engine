@@ -234,8 +234,16 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5},
         "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
         "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},
-        "compute": {"gpu": "off"}
+        "compute": {"gpu": "off"},
+        "compensation": {"scale_x": 99.6, "scale_y": 100.4, "scale_z": 99.9, "hole_offset": 0.08},
+        "extrusion": {"flow": 97},
+        "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
+                     "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65}]
     })");
+    REQUIRE(s.changes.size() == 2);
+    CHECK(s.changes[0].z == 5.0); // sorted by height
+    CHECK(s.changes[1].gcode == "M117 hi");
+    CHECK(!s.changes[1].fan.has_value());
     const Settings back = parse_settings(settings_json(s));
     CHECK(describe(back) == describe(s));
     CHECK(back.variables == s.variables);
@@ -246,4 +254,24 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
     percent.outer_wall_speed = {40.0, true};
     CHECK(describe(parse_settings(settings_json(percent))) == describe(percent));
     CHECK(describe(parse_settings(settings_json(Settings{}))) == describe(Settings{}));
+}
+
+TEST_CASE("compensation, flow and changes are read with their ranges", "[settings]") {
+    const Settings d = parse_settings("{}");
+    CHECK(d.scale_x == 100.0);
+    CHECK(d.hole_offset == 0.0);
+    CHECK(d.flow == 100.0);
+    CHECK(d.changes.empty());
+    CHECK_THROWS_WITH(parse_settings(R"({"compensation": {"scale_x": 20}})"),
+                      ContainsSubstring("compensation.scale_x: must be a percentage"));
+    CHECK_THROWS_WITH(parse_settings(R"({"compensation": {"hole_offset": 9}})"),
+                      ContainsSubstring("compensation.hole_offset"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"flow": 0}})"), ContainsSubstring("extrusion.flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": {"z": 1}})"), ContainsSubstring("changes: must be a list"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"temperature": 200}]})"),
+                      ContainsSubstring("changes[0].z: is missing"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1, "temprature": 200}]})"),
+                      ContainsSubstring("changes[0].temprature: unknown setting"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1}, {"z": 2, "flow": 1}]})"),
+                      ContainsSubstring("changes[1].flow"));
 }

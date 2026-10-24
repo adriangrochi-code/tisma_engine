@@ -88,6 +88,51 @@
     X(ZoomIn, "Acercar", "Zoom in")                                                                                   \
     X(ZoomOut, "Alejar", "Zoom out")                                                                                  \
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
+    X(TabCalibration, "Calibración", "Calibration")                                                                   \
+    X(CalibrationTitle, "Calibración de la impresora", "Printer calibration")                                         \
+    X(CalibrationHint, "Cargá una pieza de prueba, laminala e imprimila. Después medila o mirala y cargá el resultado acá.", \
+      "Load a test part, slice and print it. Then measure or look at it and enter the result here.")                   \
+    X(CalDimensions, "Dimensiones (precisión geométrica)", "Dimensions (geometric accuracy)")                        \
+    X(CalDimensionsHint, "Bloque de 30 × 20 × 15 mm con un agujero de 10 mm. Medí con calibre: X es el lado largo.",     \
+      "A 30 × 20 × 15 mm block with a 10 mm hole. Measure with calipers: X is the long side.")                        \
+    X(LoadPart, "Cargar la pieza", "Load the part")                                                                   \
+    X(MeasuredX, "X medido", "Measured X")                                                                            \
+    X(MeasuredY, "Y medido", "Measured Y")                                                                            \
+    X(MeasuredZ, "Z medido", "Measured Z")                                                                            \
+    X(MeasuredHole, "Agujero medido", "Measured hole")                                                                \
+    X(Current, "Actual", "Current")                                                                                   \
+    X(New, "Nueva", "New")                                                                                            \
+    X(HoleCorrection, "Agujeros", "Holes")                                                                            \
+    X(ApplyCompensation, "Aplicar la compensación", "Apply the compensation")                                         \
+    X(ResetCompensation, "Quitar la compensación", "Remove the compensation")                                         \
+    X(CompensationApplied, "Compensación aplicada: X %.3f %%, Y %.3f %%, Z %.3f %%, agujeros %+.3f mm",               \
+      "Compensation applied: X %.3f %%, Y %.3f %%, Z %.3f %%, holes %+.3f mm")                                        \
+    X(CalTemperature, "Torre de temperatura", "Temperature tower")                                                    \
+    X(CalTemperatureHint, "Elegí el segmento con el mejor voladizo y menos hilos, y poné esa temperatura en Filamento.", \
+      "Pick the segment with the best overhang and the least stringing, and set that temperature in Filament.")       \
+    X(CalRetraction, "Torre de retracción", "Retraction tower")                                                       \
+    X(CalRetractionHint, "El primer segmento sin hilos entre las columnas es el largo justo: ponelo en Filamento.",    \
+      "The first segment without strings between the columns is the right length: set it in Filament.")              \
+    X(CalFlow, "Flujo", "Flow")                                                                                       \
+    X(CalFlowHint, "Elegí el segmento con la cara de arriba lisa, sin huecos ni rebabas, y poné ese flujo abajo.",     \
+      "Pick the segment with a smooth top, without gaps or ridges, and set that flow below.")                         \
+    X(CalSpeed, "Velocidad máxima", "Maximum speed")                                                                  \
+    X(CalSpeedHint, "Donde las paredes empiezan a fallar está el límite del fusor: usá velocidades por debajo.",       \
+      "Where the walls start to fail is the hot end's limit: use speeds below it.")                                   \
+    X(TowerStart, "Desde", "From")                                                                                    \
+    X(TowerEnd, "Hasta", "To")                                                                                        \
+    X(TowerStep, "Paso", "Step")                                                                                      \
+    X(TowerSegment, "Alto de cada segmento", "Segment height")                                                        \
+    X(LoadTower, "Cargar la torre", "Load the tower")                                                                 \
+    X(FlowAll, "Flujo de todas las impresiones", "Flow of every print")                                               \
+    X(TowerLoaded, "Cargada: %s, %d segmentos. Laminá para verla.", "Loaded: %s, %d segments. Slice to see it.")       \
+    X(Segments, "Segmentos", "Segments")                                                                              \
+    X(SegmentAt, "Segmento: %s", "Segment: %s")                                                                       \
+    X(ClearChanges, "Quitar los cambios por altura", "Remove the height changes")                                     \
+    X(ChangesActive, "%d cambios por altura activos", "%d height changes active")                                     \
+    X(MoreCalibrations, "Próximas calibraciones", "Coming calibrations")                                              \
+    X(MoreCalibrationsList, "Avance de presión · resonancias (input shaping) · primera capa · puentes y voladizos · tolerancias de encastre · ancho de línea variable · adherencia entre capas con el análisis · laminado no planar: altura y ángulo (a definir). Ver docs/CALIBRATION.md.", \
+      "Pressure advance · resonances (input shaping) · first layer · bridges and overhangs · fit tolerances · variable line width · layer adhesion with the analysis · non-planar slicing: height and angle (to be defined). See docs/CALIBRATION.md.") \
     X(Render, "Imagen", "Rendering")                                                                                  \
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \

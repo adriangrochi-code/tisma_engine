@@ -8,6 +8,7 @@
 #include "gl.hpp"
 #include "renderer.hpp"
 
+#include "calibration/calibration.hpp"
 #include "config/settings.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
@@ -192,7 +193,7 @@ std::filesystem::path preferences_path() {
 #endif
 }
 
-enum class Tab { Prepare, Preview, Analysis };
+enum class Tab { Prepare, Preview, Analysis, Calibration };
 enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings };
 
 class App {
@@ -214,6 +215,9 @@ private:
     void view_tools();
     void preview_panels();
     void analysis_panel();
+    void calibration_panel();
+    void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
+    void load_calibration(CalibrationPrint print);
     void empty_hint();
     void toasts();
     void dialogs();
@@ -323,6 +327,17 @@ private:
     std::string error_title_, error_message_;
     std::vector<std::string> error_details_;
     bool about_open_ = false;
+
+    // Calibration: the dimensional test, what was measured on it, the towers'
+    // ranges, and the test loaded last (its segments, without the mesh).
+    DimensionTest dimension_test_;
+    Measurements measured_{30.0, 20.0, 15.0, 10.0};
+    struct TowerRange {
+        double start, end, step, segment;
+    };
+    TowerRange temperature_range_{230.0, 190.0, 5.0, 8.0}, retraction_range_{0.4, 2.4, 0.4, 5.0},
+        flow_range_{90.0, 110.0, 5.0, 5.0}, speed_range_{100.0, 300.0, 25.0, 5.0};
+    std::optional<CalibrationPrint> calibration_;
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -596,6 +611,20 @@ bool App::init(std::string& error) {
     frame_all();
     for (const std::string& file : options_.files)
         open_path(from_utf8(file));
+    if (const std::string& c = options_.calibration; !c.empty()) {
+        if (c == "dimensions")
+            load_calibration(dimension_test(dimension_test_));
+        else if (c == "temperature")
+            load_calibration(temperature_tower(temperature_range_.start, temperature_range_.end, temperature_range_.step,
+                                               temperature_range_.segment));
+        else if (c == "retraction")
+            load_calibration(retraction_tower(retraction_range_.start, retraction_range_.end, retraction_range_.step,
+                                              retraction_range_.segment));
+        else if (c == "flow")
+            load_calibration(flow_tower(flow_range_.start, flow_range_.end, flow_range_.step, flow_range_.segment));
+        else if (c == "speed")
+            load_calibration(speed_tower(speed_range_.start, speed_range_.end, speed_range_.step, speed_range_.segment));
+    }
     if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty()) && mesh_ &&
         !result_)
         start_slice();
@@ -713,21 +742,38 @@ void App::load_model(const std::filesystem::path& path) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
         }
-        mesh_ = std::move(stl.mesh);
-        model_path_ = path;
-        viewer_ = false;
-        result_.reset();
-        renderer_.clear_preview();
-        place_model();
-        voxels_.reset();
-        voxels_stale_ = true;
-        stale_ = false;
-        set_tab(Tab::Prepare);
-        frame_all();
-        glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
+        calibration_.reset();
+        use_mesh(std::move(stl.mesh), path, Tab::Prepare);
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
+}
+
+void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab) {
+    mesh_ = std::move(mesh);
+    model_path_ = name;
+    viewer_ = false;
+    result_.reset();
+    renderer_.clear_preview();
+    place_model();
+    voxels_.reset();
+    voxels_stale_ = true;
+    stale_ = false;
+    set_tab(tab);
+    frame_all();
+    glfwSetWindowTitle(window_, ("Tisma · " + utf8(name.filename())).c_str());
+}
+
+// A calibration part on the bed, with its changes by height in the settings
+// (the dimensional test has none, so it clears them).
+void App::load_calibration(CalibrationPrint print) {
+    settings_.changes = print.changes;
+    settings_changed();
+    TriangleMesh mesh = std::move(print.mesh);
+    print.mesh = {};
+    const std::string name = "tisma_calibration_" + print.kind + ".stl";
+    calibration_ = std::move(print);
+    use_mesh(std::move(mesh), name, Tab::Calibration);
 }
 
 void App::place_model() {
@@ -946,7 +992,8 @@ void App::top_bar() {
     };
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
-                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis}};
+                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
+                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration}};
     for (const TabButton& t : tabs) {
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
@@ -1415,6 +1462,12 @@ void App::preview_panels() {
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     const PreviewLayer& layer = p.layers[std::size_t(top_layer_)];
     ImGui::Text(tr(T::LayerOf), top_layer_ + 1, layers, layer.z);
+    if (calibration_ && !viewer_)
+        for (const CalibrationSegment& seg : calibration_->segments)
+            if (layer.z > seg.z0 + 1e-6 && layer.z <= seg.z1 + 1e-6) {
+                const std::string value = format("%g %s", seg.value, calibration_->unit == "C" ? "°C" : calibration_->unit.c_str());
+                ImGui::TextColored(rgb(theme_.accent_hover), tr(T::SegmentAt), value.c_str());
+            }
     ImGui::Checkbox(tr(T::OnlyThisLayer), &only_layer_);
     ImGui::Separator();
     ImGui::AlignTextToFramePadding();
@@ -1570,6 +1623,161 @@ void App::analysis_panel() {
     ImGui::PopStyleVar(2);
 }
 
+void App::calibration_panel() {
+    const float margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(440.0f * scale_, view_size_.y - 72.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.94f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##calibration", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BeginChild("##calibration_scroll", ImVec2(0, 0), 0, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::CalibrationTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", tr(T::CalibrationHint));
+    const float field = 110.0f * scale_;
+    const auto number = [&](T label, double& v, double lo, double hi, const char* fmt, float speed) {
+        ImGui::SetNextItemWidth(field);
+        ImGui::PushID(&v);
+        ImGui::DragScalar(tr(label), ImGuiDataType_Double, &v, speed, &lo, &hi, fmt, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::PopID();
+    };
+
+    // The loaded test and its segments.
+    if (calibration_ && !calibration_->segments.empty()) {
+        ImGui::Separator();
+        const T names[] = {T::CalTemperature, T::CalRetraction, T::CalFlow, T::CalSpeed};
+        const char* kinds[] = {"temperature", "retraction", "flow", "speed"};
+        const char* name = calibration_->kind.c_str();
+        for (int k = 0; k < 4; ++k)
+            if (calibration_->kind == kinds[k])
+                name = tr(names[k]);
+        ImGui::TextColored(rgb(theme_.accent_hover), tr(T::TowerLoaded), name, int(calibration_->segments.size()));
+        if (ImGui::BeginTable("##segments", 2, ImGuiTableFlags_SizingStretchProp)) {
+            for (auto it = calibration_->segments.rbegin(); it != calibration_->segments.rend(); ++it) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("Z %.1f – %.1f mm", it->z0, it->z1);
+                ImGui::TableNextColumn();
+                ImGui::Text("%g %s", it->value, calibration_->unit == "C" ? "°C" : calibration_->unit.c_str());
+            }
+            ImGui::EndTable();
+        }
+    }
+    if (!settings_.changes.empty()) {
+        ImGui::TextColored(rgb(0xE8A33D), tr(T::ChangesActive), int(settings_.changes.size()));
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::ClearChanges))) {
+            settings_.changes.clear();
+            calibration_.reset();
+            settings_changed();
+        }
+    }
+
+    // Dimensions: measure the block, compute and apply the compensation.
+    ImGui::Separator();
+    if (ImGui::CollapsingHeader(tr(T::CalDimensions), ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled("%s", tr(T::CalDimensionsHint));
+        if (ImGui::Button(tr(T::LoadPart)))
+            load_calibration(dimension_test(dimension_test_));
+        number(T::MeasuredX, measured_.x, 1.0, 1000.0, "%.3f mm", 0.005f);
+        number(T::MeasuredY, measured_.y, 1.0, 1000.0, "%.3f mm", 0.005f);
+        number(T::MeasuredZ, measured_.z, 1.0, 1000.0, "%.3f mm", 0.005f);
+        number(T::MeasuredHole, measured_.hole, 0.5, 1000.0, "%.3f mm", 0.005f);
+        const Compensation next = compensation_from(dimension_test_, measured_, settings_);
+        if (ImGui::BeginTable("##compensation", 3, ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("%s", tr(T::Current));
+            ImGui::TableNextColumn();
+            ImGui::TextDisabled("%s", tr(T::New));
+            const auto line = [](const char* name, double now, double then, const char* fmt) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(name);
+                ImGui::TableNextColumn();
+                ImGui::Text(fmt, now);
+                ImGui::TableNextColumn();
+                ImGui::Text(fmt, then);
+            };
+            line("X", settings_.scale_x, next.scale_x, "%.3f %%");
+            line("Y", settings_.scale_y, next.scale_y, "%.3f %%");
+            line("Z", settings_.scale_z, next.scale_z, "%.3f %%");
+            line(tr(T::HoleCorrection), settings_.hole_offset, next.hole_offset, "%+.3f mm");
+            ImGui::EndTable();
+        }
+        if (ImGui::Button(tr(T::ApplyCompensation))) {
+            settings_.scale_x = next.scale_x, settings_.scale_y = next.scale_y, settings_.scale_z = next.scale_z;
+            settings_.hole_offset = next.hole_offset;
+            // The block printed with these values would now measure as designed.
+            measured_ = {dimension_test_.x, dimension_test_.y, dimension_test_.z, dimension_test_.hole};
+            settings_changed();
+            notify(format(tr(T::CompensationApplied), next.scale_x, next.scale_y, next.scale_z, next.hole_offset));
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ResetCompensation))) {
+            settings_.scale_x = settings_.scale_y = settings_.scale_z = 100.0;
+            settings_.hole_offset = 0.0;
+            settings_changed();
+        }
+    }
+
+    // The towers.
+    struct Tower {
+        T title, hint;
+        TowerRange* range;
+        double lo, hi;
+        const char* fmt;
+        float speed;
+    };
+    const Tower towers[] = {
+        {T::CalTemperature, T::CalTemperatureHint, &temperature_range_, 150.0, 350.0, "%.0f °C", 0.5f},
+        {T::CalRetraction, T::CalRetractionHint, &retraction_range_, 0.0, 10.0, "%.2f mm", 0.01f},
+        {T::CalFlow, T::CalFlowHint, &flow_range_, 50.0, 150.0, "%.1f %%", 0.1f},
+        {T::CalSpeed, T::CalSpeedHint, &speed_range_, 20.0, 600.0, "%.0f %%", 1.0f},
+    };
+    for (int i = 0; i < 4; ++i) {
+        const Tower& t = towers[i];
+        ImGui::PushID(i);
+        if (ImGui::CollapsingHeader(tr(t.title))) {
+            ImGui::TextDisabled("%s", tr(t.hint));
+            number(T::TowerStart, t.range->start, t.lo, t.hi, t.fmt, t.speed);
+            number(T::TowerEnd, t.range->end, t.lo, t.hi, t.fmt, t.speed);
+            number(T::TowerStep, t.range->step, t.speed, t.hi - t.lo, t.fmt, t.speed);
+            number(T::TowerSegment, t.range->segment, 2.0, 30.0, "%.1f mm", 0.05f);
+            if (i == 2) {
+                double flow = settings_.flow;
+                number(T::FlowAll, flow, 10.0, 300.0, "%.1f %%", 0.1f);
+                if (flow != settings_.flow) {
+                    settings_.flow = flow;
+                    settings_changed();
+                }
+            }
+            if (ImGui::Button(tr(T::LoadTower))) {
+                const TowerRange& r = *t.range;
+                load_calibration(i == 0   ? temperature_tower(r.start, r.end, r.step, r.segment)
+                                 : i == 1 ? retraction_tower(r.start, r.end, r.step, r.segment)
+                                 : i == 2 ? flow_tower(r.start, r.end, r.step, r.segment)
+                                          : speed_tower(r.start, r.end, r.step, r.segment));
+            }
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::CollapsingHeader(tr(T::MoreCalibrations)))
+        ImGui::TextDisabled("%s", tr(T::MoreCalibrationsList));
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 void App::toasts() {
     const double now = ImGui::GetTime();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return t.until < now; }),
@@ -1668,6 +1876,8 @@ void App::layout() {
         preview_panels();
     if (tab_ == Tab::Analysis)
         analysis_panel();
+    if (tab_ == Tab::Calibration)
+        calibration_panel();
     toasts();
     dialogs();
 
@@ -1896,6 +2106,8 @@ void App::frame() {
                 set_tab(Tab::Preview);
             else if (options_.view == "prepare")
                 set_tab(Tab::Prepare);
+            else if (options_.view == "calibration")
+                set_tab(Tab::Calibration);
         }
         settled_frames_ = waiting ? 0 : settled_frames_ + 1;
         if (frames_ > 3 && settled_frames_ >= 3) {

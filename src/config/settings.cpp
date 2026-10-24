@@ -76,7 +76,7 @@ Settings parse_settings(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -347,8 +347,99 @@ Settings parse_settings(std::string_view text) {
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
+    read_group(root, "compensation", {"scale_x", "scale_y", "scale_z", "hole_offset"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   const double v = number(g, n, k);
+                   if (n == "hole_offset") {
+                       if (v < -5.0 || v > 5.0)
+                           fail(k, "must be from -5 to 5 mm");
+                       s.hole_offset = v;
+                       return;
+                   }
+                   if (v < 50.0 || v > 200.0)
+                       fail(k, "must be a percentage from 50 to 200");
+                   (n == "scale_x" ? s.scale_x : n == "scale_y" ? s.scale_y : s.scale_z) = v;
+               });
+    read_group(root, "extrusion", {"flow"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const double v = number(g, n, k);
+        if (v < 10.0 || v > 300.0)
+            fail(k, "must be a percentage from 10 to 300");
+        s.flow = v;
+    });
+    if (root.contains("changes")) {
+        const json& list = root.at("changes");
+        if (!list.is_array())
+            fail("changes", "must be a list of {\"z\": height, ...}");
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            const json& item = list[i];
+            const std::string where = "changes[" + std::to_string(i) + "]";
+            if (!item.is_object())
+                fail(where, "must be an object");
+            if (!item.contains("z"))
+                fail(where + ".z", "is missing");
+            HeightChange c;
+            auto ranged = [&](const std::string& n, double lo, double hi, const char* what) {
+                const double v = number(item, n, where + "." + n);
+                if (v < lo || v > hi)
+                    fail(where + "." + n, what);
+                return v;
+            };
+            for (const auto& [n, v] : item.items()) {
+                if (n == "z")
+                    c.z = ranged(n, 0.0, 100000.0, "must not be negative");
+                else if (n == "temperature")
+                    c.temperature = ranged(n, 0.0, 500.0, "must be from 0 to 500 C");
+                else if (n == "bed_temperature")
+                    c.bed_temperature = ranged(n, 0.0, 200.0, "must be from 0 to 200 C");
+                else if (n == "fan")
+                    c.fan = ranged(n, 0.0, 100.0, "must be a percentage from 0 to 100");
+                else if (n == "retraction_length")
+                    c.retract_length = ranged(n, 0.0, 50.0, "must be from 0 to 50 mm");
+                else if (n == "retraction_speed")
+                    c.retract_speed = ranged(n, 1.0, 500.0, "must be from 1 to 500 mm/s");
+                else if (n == "flow")
+                    c.flow = ranged(n, 10.0, 300.0, "must be a percentage from 10 to 300");
+                else if (n == "speed")
+                    c.speed = ranged(n, 5.0, 1000.0, "must be a percentage from 5 to 1000");
+                else if (n == "gcode") {
+                    if (!v.is_string())
+                        fail(where + ".gcode", "must be a string");
+                    c.gcode = v.get<std::string>();
+                } else {
+                    fail(where + "." + n, "unknown setting (see docs/CONFIG.md)");
+                }
+            }
+            s.changes.push_back(std::move(c));
+        }
+        std::stable_sort(s.changes.begin(), s.changes.end(),
+                         [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
+    }
     return s;
 }
+
+namespace {
+
+nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
+    nlohmann::ordered_json list = nlohmann::ordered_json::array();
+    for (const HeightChange& c : changes) {
+        nlohmann::ordered_json j;
+        j["z"] = c.z;
+        const std::pair<const char*, const std::optional<double>*> values[] = {
+            {"temperature", &c.temperature},         {"bed_temperature", &c.bed_temperature},
+            {"fan", &c.fan},                         {"retraction_length", &c.retract_length},
+            {"retraction_speed", &c.retract_speed}, {"flow", &c.flow},
+            {"speed", &c.speed}};
+        for (const auto& [name, v] : values)
+            if (*v)
+                j[name] = **v;
+        if (!c.gcode.empty())
+            j["gcode"] = c.gcode;
+        list.push_back(j);
+    }
+    return list;
+}
+
+} // namespace
 
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
@@ -422,7 +513,14 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_max", num(s.fan_max)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
+        {"compensation.scale_x", num(s.scale_x)},
+        {"compensation.scale_y", num(s.scale_y)},
+        {"compensation.scale_z", num(s.scale_z)},
+        {"compensation.hole_offset", num(s.hole_offset)},
+        {"extrusion.flow", num(s.flow)},
     };
+    if (!s.changes.empty())
+        out.push_back({"changes", changes_json(s.changes).dump()});
     for (const auto& [name, values] : s.variables) {
         std::string v;
         for (const std::string& item : values)
@@ -522,6 +620,10 @@ std::string settings_json(const Settings& s) {
           {"fan_max", s.fan_max},
           {"fan_off_layers", s.fan_off_layers}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+        {"compensation",
+         {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
+        {"extrusion", {{"flow", s.flow}}},
+        {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";
 }

@@ -30,11 +30,18 @@ struct SlicedModel {
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
 };
 
+// The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by
+// compensation.scale_x, _y and _z around the centre of its footprint and its
+// bottom, so it stays where it was on the bed. The mesh itself when the
+// scales are all 100 %.
+IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
+
 // Slices a welded mesh with the given settings: layer plan, level-set
 // contours with gap closing, simplification, regions by fill mode, XY offset,
 // the extra first-layer shrink, the walls of every region, the top, bottom
 // and sparse parts of what the walls leave, and their infill toolpaths (all
-// layers in parallel). Uses the GPU when gpu is not null.
+// layers in parallel). The mesh is compensated first, and the holes of every
+// region offset by compensation.hole_offset. Uses the GPU when gpu is not null.
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr);
 
 } // namespace tisma

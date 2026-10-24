@@ -3,6 +3,7 @@
 #include <array>
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -21,6 +22,21 @@ enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+
+// Values that change from a height up (calibration towers, docs/CONFIG.md,
+// "changes"): each set value takes effect from the first layer whose top is
+// above z and stays until another change sets it again.
+struct HeightChange {
+    double z = 0.0;                        // mm
+    std::optional<double> temperature;     // nozzle, C (M104)
+    std::optional<double> bed_temperature; // C (M140)
+    std::optional<double> fan;             // %, replaces cooling.fan_min and fan_max
+    std::optional<double> retract_length;  // mm of filament
+    std::optional<double> retract_speed;   // mm/s
+    std::optional<double> flow;            // %, replaces extrusion.flow
+    std::optional<double> speed;           // %, of every extrusion's feed
+    std::string gcode;                     // G-code put at that layer's start, with variables
+};
 
 // A speed in mm/s, or a percentage of another speed.
 struct Speed {
@@ -106,6 +122,17 @@ struct Settings {
     double fan_min = 35.0;         // %: the fan on ordinary layers
     double fan_max = 100.0;        // %: the fan on layers that had to slow down
     int fan_off_layers = 1;        // the first layers print with the fan off
+
+    // compensation (docs/CALIBRATION.md): the model is scaled around the centre
+    // of its footprint and its bottom before slicing; holes grow by hole_offset.
+    double scale_x = 100.0, scale_y = 100.0, scale_z = 100.0; // %
+    double hole_offset = 0.0;                                 // mm, on the radius; negative shrinks holes
+
+    // extrusion
+    double flow = 100.0; // %, of the volume every extrusion lays down
+
+    // changes from a height up, sorted by z
+    std::vector<HeightChange> changes;
 
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;

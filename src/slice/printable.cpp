@@ -31,9 +31,10 @@ bool on_bed(const std::vector<std::array<double, 2>>& bed, double x, double y) {
 
 } // namespace
 
-std::string unprintable_reason(const IndexedMesh& mesh, const Settings& s) {
-    if (mesh.triangles.empty())
+std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
+    if (input.triangles.empty())
         return "the model has no triangles";
+    const IndexedMesh mesh = compensated(input, s); // what will be printed
     float top = -std::numeric_limits<float>::max(), bottom = std::numeric_limits<float>::max();
     for (const Vec3f& v : mesh.vertices) {
         top = std::max(top, v.z), bottom = std::min(bottom, v.z);

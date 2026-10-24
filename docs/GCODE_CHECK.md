@@ -70,3 +70,16 @@ Z más alta.
 
 **Costo:** en una esfera de 50 mm (159 200 triángulos, 297 115 líneas, 8,4 MB), verificar tarda 72 ms. Laminar tarda
 521 ms y escribir 278 ms.
+
+## Cambios por altura y flujo
+
+Con `extrusion.flow` y la lista `changes` de los ajustes (`docs/CONFIG.md`), el verificador juzga cada capa con el
+flujo y el largo de retracción que le tocan:
+- `gcode_limits` arma la tabla por altura;
+- el verificador la recorre en cada `;Z:`.
+
+**La velocidad:** un cambio de `speed` sube el tope de avance permitido a `speed.max` por el mayor porcentaje.
+
+**El G-code de un cambio** (`M104`, `M140`, el texto de `gcode`) va como `;TYPE:Custom` y no se juzga. Después el
+escritor vuelve a poner el tipo anterior, así los viajes y retracciones que siguen se juzgan como siempre.
+

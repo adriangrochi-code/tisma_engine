@@ -12,7 +12,9 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis] [--layer N]\n"
+    "             [--calibration dimensions|temperature|retraction|flow|speed]\n"
+    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
+    "                                   [--layer N]\n"
     "                                   [--export out.gcode] [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check]]\n"
     "\n"
@@ -56,8 +58,9 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--view") {
             options.view = value();
-            if (options.view != "prepare" && options.view != "preview" && options.view != "analysis") {
-                std::fprintf(stderr, "error: --view must be prepare, preview or analysis\n");
+            if (options.view != "prepare" && options.view != "preview" && options.view != "analysis" &&
+                options.view != "calibration") {
+                std::fprintf(stderr, "error: --view must be prepare, preview, analysis or calibration\n");
                 return 2;
             }
         } else if (arg == "--layer") {
@@ -90,6 +93,13 @@ int main(int argc, char** argv) {
             options.ray_samples = std::max(1, std::atoi(value()));
         } else if (arg == "--ray-check") {
             options.ray_check = true;
+        } else if (arg == "--calibration") {
+            options.calibration = value();
+            const std::string& c = options.calibration;
+            if (c != "dimensions" && c != "temperature" && c != "retraction" && c != "flow" && c != "speed") {
+                std::fprintf(stderr, "error: --calibration must be dimensions, temperature, retraction, flow or speed\n");
+                return 2;
+            }
         } else if (arg == "--light") {
             options.light = true;
         } else if (arg == "--lang") {

@@ -197,6 +197,7 @@ add_library(tisma_core
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/calibration/calibration.cpp
   src/cli/cli.cpp
 )
 if(TISMA_GPU)

@@ -24,6 +24,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   - recuerda el idioma, el tema, la carpeta y los ajustes.
 - La vista 3D tiene luz por píxel en color lineal, oclusión ambiental (por defecto) y ray tracing activable (sombras
   suaves y oclusión con rayos, que se afinan cuadro a cuadro), con suavizado de bordes MSAA y FXAA (`docs/UI.md`).
+- **Calibraciones** (`docs/CALIBRATION.md`), con su pestaña en la interfaz:
+  - dimensiones: un bloque con agujero; con las medidas se calcula y aplica la compensación;
+  - torres de temperatura, retracción, flujo y velocidad máxima, con un valor por segmento;
+  - el catálogo con las siguientes calibraciones estándar y las nuevas propuestas.
+- Ajustes nuevos:
+  - `compensation`: escala por eje y corrección de agujeros;
+  - `extrusion.flow`;
+  - la lista `changes`: temperatura, cama, ventilador, retracción, flujo, velocidad o G-code desde una altura.
+
+  El verificador del G-code juzga cada capa con los valores que le tocan.
 - `--screenshot` (con `--export`) dibuja la interfaz sin pantalla, para pruebas y capturas.
 - Los ajustes se pueden escribir como JSON en su formato (`settings_json`), y leer de vuelta iguales.
 - Un lector de G-code para la vista previa, que también abre G-code de otros programas.

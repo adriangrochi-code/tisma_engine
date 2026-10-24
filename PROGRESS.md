@@ -2499,3 +2499,54 @@ triángulos.
 
 **Sigue:** calibraciones y opciones de guardar (pedidos del dueño).
 
+## 2026-10-24 — calibraciones, primera parte
+
+**Pedidos del dueño:**
+- una opción de calibraciones: compensación geométrica desde las medidas de una pieza, torres de temperatura y de
+  retracción, pruebas de flujo y, más adelante, pruebas de laminado no planar (a definir);
+- «todas las calibraciones estándar típicas, y analizar calibraciones nuevas que sean muy prácticas»;
+- opciones de guardar.
+
+**Hecho:**
+- **Ajustes nuevos** (`docs/CONFIG.md`):
+  - `compensation`: escala por eje y `hole_offset`;
+  - `extrusion.flow`;
+  - la lista `changes`: temperatura, cama, ventilador, retracción, flujo, velocidad o G-code desde una altura.
+
+  Se leen con sus rangos, se escriben y vuelven iguales.
+- **En el motor:**
+  - la escala se aplica antes de laminar, y las comprobaciones de la cama la ven;
+  - los agujeros crecen por pieza (`offset_holes`);
+  - el escritor aplica los cambios capa por capa (una retracción que cruza un cambio se deshace con su propio largo);
+  - el verificador juzga cada capa con su flujo y su retracción;
+  - el análisis estructural usa la pieza sin compensar.
+- **Corregido, encontrado por el verificador:** un viaje que seguía al G-code de un cambio quedaba bajo
+  `;TYPE:Custom`, así que su retracción no se juzgaba y la vuelta parecía sobrar. Ahora el escritor vuelve al tipo
+  anterior.
+- **`src/calibration/`:** el bloque de dimensiones, las torres de temperatura (con voladizo a 45°), retracción (dos
+  columnas), flujo y velocidad, y `compensation_from`.
+- **Pestaña Calibración** en la interfaz:
+  - cargar cada prueba;
+  - medidas y compensación actual y nueva;
+  - segmentos de la torre;
+  - el valor del segmento en la leyenda de la vista previa.
+- **`docs/CALIBRATION.md`:** el catálogo, con lo hecho, las estándar que siguen y cinco calibraciones nuevas
+  propuestas (mínimos cuadrados, ancho de línea variable, adherencia entre capas con el análisis, contracción por
+  material, no planar).
+
+**Probado:** `tests/test_calibration.cpp`:
+- el volumen del bloque (0,02 %) y el área de su corte (0,2 %);
+- la escala alrededor del centro y desde abajo;
+- los agujeros: ±0,25 mm en el radio cambian el área en lo esperado (2 %);
+- la compensación desde medidas;
+- cada torre: sus `M104` en orden y en su capa; el verificador acepta la retracción, el flujo y la velocidad por
+  altura, y rechaza el mismo G-code si no conoce los cambios.
+
+Capturas: la pestaña con la torre de temperatura y la vista previa con «Segmento: 215 °C».
+
+**No probado:** impreso en una máquina real (necesita al dueño).
+
+**Sigue:**
+- opciones de guardar (perfiles con nombre y proyectos);
+- las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).
+

@@ -47,6 +47,12 @@ Polygons simplify(const Polygons& polygons, double tolerance_mm);
 // as in XY size compensation.
 Polygons offset(const Polygons& region, double delta_mm, double miter_limit = 2.0);
 
+// Grows only the holes of the region by delta_mm (shrinks them when
+// negative), leaving the outer contours where they are: each piece's own
+// holes are offset as filled shapes and taken out of it, so islands inside
+// a hole are kept. The compensation of holes (docs/CALIBRATION.md).
+Polygons offset_holes(const Polygons& region, double delta_mm);
+
 // layer_region(to_polygons(contours)) for every layer, in parallel.
 std::vector<Polygons> layer_regions(const std::vector<std::vector<Contour>>& layers);
 

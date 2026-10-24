@@ -144,6 +144,49 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
 |---|---|---|---|---|
 | `gpu` | texto | `"auto"` | `auto`, `off` | `auto` usa la GPU si hay una (Vulkan); `off` usa solo la CPU |
 
+### `compensation`
+
+Compensación geométrica de la impresora (`docs/CALIBRATION.md`). La pestaña Calibración la calcula desde las medidas
+de la pieza de prueba.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `scale_x`, `scale_y`, `scale_z` | número | 100 | 50 a 200 | Escala del modelo en %, por eje, alrededor del centro de su base (Z desde abajo): la pieza queda donde estaba en la cama. Las comprobaciones de la cama y la altura ven la pieza escalada |
+| `hole_offset` | número | 0 | −5 a 5 | Cuánto crecen los agujeros, en mm sobre el radio (negativo: se achican). Solo los agujeros: los bordes de afuera no se mueven, y una isla dentro de un agujero se conserva |
+
+### `extrusion`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `flow` | número | 100 | 10 a 300 | Flujo en %: la E de cada extrusión es ancho × alto × largo / sección del filamento × flujo |
+
+### `changes` (lista)
+
+Cambios desde una altura, para las torres de calibración. A diferencia de los grupos, es una lista de objetos:
+
+```json
+"changes": [{"z": 0, "temperature": 230}, {"z": 8, "temperature": 225}, {"z": 16, "temperature": 220}]
+```
+
+- **Desde cuándo vale:** cada valor rige desde la primera capa cuya parte de arriba queda por encima de `z`, hasta
+  que otro cambio lo vuelva a poner.
+- **Orden:** los cambios se ordenan por `z`.
+- **Lo que falta:** una clave ausente deja ese valor como venía.
+
+| Clave | Tipo | Rango | Significado |
+|---|---|---|---|
+| `z` | número (obligatorio) | ≥ 0 | Altura en mm |
+| `temperature` | número | 0 a 500 | Temperatura de la boquilla: escribe `M104 S…` al empezar la capa |
+| `bed_temperature` | número | 0 a 200 | Temperatura de la cama: `M140 S…` |
+| `fan` | número | 0 a 100 | Ventilador en %, en lugar de `cooling.fan_min` y `fan_max` |
+| `retraction_length` | número | 0 a 50 | Largo de la retracción en mm |
+| `retraction_speed` | número | 1 a 500 | Velocidad de la retracción en mm/s |
+| `flow` | número | 10 a 300 | Flujo en %, en lugar de `extrusion.flow` |
+| `speed` | número | 5 a 1000 | Porcentaje de la velocidad de cada extrusión (puede pasar `speed.max`: es para la torre de velocidad) |
+| `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
+
+El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).
+
 ## Grupos previstos (todavía no implementados)
 
 `material`. Se define acá
