@@ -111,3 +111,20 @@ anterior.
 fue el último paso por macOS antes de sacarlo de la CI.
 
 **Sigue:** el banco de pruebas y F1, ya con la regla del campo escalar.
+
+## 2026-10-24 — la GPU entra en la primera versión
+
+**Hecho:**
+- Decisión del dueño: la GPU va dentro de F0–F6, porque ahí es donde importa la optimización. Se quitó la fase aparte
+  de GPU y se renumeró: F7 es el no planar en 3 ejes, F8 los 5 ejes y F9 macOS. Las entradas anteriores de este
+  archivo usan la numeración vieja.
+- `PLAN.md`:
+  - nueva sección «GPU en la primera versión», con los núcleos candidatos de cada fase (qué va a GPU y qué queda en
+    CPU);
+  - F1, F3, F5 y F6 suman su parte de GPU;
+  - aviso de que las 16 semanas se estimaron antes de sumar la GPU y se vuelven a estimar al terminar F1.
+- API: Vulkan compute, salvo que el dueño diga otra cosa. Se puede probar en la CI sin GPU con lavapipe (Mesa);
+  CUDA no se puede probar ahí.
+- `CLAUDE.md` suma la GPU a las reglas de rendimiento.
+
+**Sigue:** el banco de pruebas; después F1, con el corte en CPU y la infraestructura de Vulkan.

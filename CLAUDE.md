@@ -32,6 +32,7 @@ follow the rules in "Diseño para la visión" in `PLAN.md`:
   attribution trailer the session requires.
 - Performance matters:
   - parallel by layer (oneTBB);
+  - GPU (Vulkan compute) from F1 on, in the kernels where it pays off, always tested against the CPU version;
   - Clipper2 for polygon operations;
   - contiguous data;
   - measure each phase with the benchmark set and record the numbers.
