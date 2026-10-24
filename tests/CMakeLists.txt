@@ -34,8 +34,10 @@ add_executable(tisma_tests
   test_print_time.cpp
   test_adhesion.cpp
   test_support.cpp
+  test_voronoi.cpp
 )
-target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings Catch2::Catch2WithMain)
+# Boost.Polygon is the oracle the own Voronoi diagram is tested against.
+target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)

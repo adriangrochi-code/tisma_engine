@@ -219,8 +219,13 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   aritmética exacta (`extended_int`), porque cada vértice es extremo de dos segmentos. Es lo que informa el artículo
   (5·10⁻⁶·n·log n s). **Decisión del dueño (2026-10-24): un Voronoi de segmentos propio**, a partir de artículos,
   pensado también para la GPU. Pasos, cada uno de uno o más bloques:
-  - [ ] elegir el método en los artículos (inserción incremental orientada a la topología, barrido, o uno propio de
-    polígonos) y anotar en `PROVENANCE.md` el artículo y la sección de cada parte;
+  - [x] elegir el método en los artículos: inserción incremental orientada a la topología (Sugihara e Iri; Held y
+    Huber 2009, sección 2; Huber 2008, capítulo 2), en coma flotante, robusta por construcción;
+  - [x] diagrama de puntos (`src/geom/voronoi.*`): coincide con Boost en puntos al azar, grillas, un 64-gono y una
+    estrella; con los vértices de un polígono en orden es 4–5 veces más rápido que Boost;
+  - [ ] inserción de segmentos: cono de influencia, semilla en la celda de un extremo, ruptura de ciclos con nodos de
+    grado dos, nodos punto–punto–segmento, punto–segmento–segmento y segmento–segmento–segmento, partición en el
+    vértice de las parábolas;
   - [ ] módulo propio con la misma salida que hoy (`MedialEdge`), probado contra Boost.Polygon como oráculo (Boost es
     BSL-1.0, sirve para comparar) en muchos polígonos: círculos, letras, rendijas, piezas del banco;
   - [ ] medirlo contra Boost en la esfera y reemplazarlo cuando dé lo mismo y sea más rápido;

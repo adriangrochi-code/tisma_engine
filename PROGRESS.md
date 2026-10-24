@@ -1735,3 +1735,40 @@ se nota. Escritura 0,64–0,73 s.
   no lo deja apagado en esas capas; la prueba del cubo lo comprueba (`M106 S255` desde la primera capa cuando todas
   frenan). 167/167 pruebas con gcc, clang y ASan+UBSan.
 - **Centrado en la cama:** se decide con la sesión de Tisma; le mandé la pregunta de comportamiento (sin código).
+
+## 2026-10-24 — Voronoi propio, parte 1: método y diagrama de puntos
+
+**Hecho:**
+- Método elegido en los artículos: inserción incremental orientada a la topología.
+  - Sugihara e Iri 1992 para puntos; Imai 1996 y Held 2001 (VRONI) para segmentos.
+  - Fuentes leídas: Held y Huber 2009 (sección 2) y la tesis de Huber 2008 (capítulo 2). Solo artículos; no se abrió
+    ningún código (OpenVoronoi es GPL y quedó fuera).
+  - Por qué: funciona en coma flotante y es robusta por construcción, porque los números solo eligen entre
+    actualizaciones topológicamente válidas. Además inserta un sitio por vez, con cambios locales.
+- `src/geom/voronoi.*`, diagrama de puntos:
+  - estructura de medias aristas con nodos de grado tres;
+  - tres sitios ficticios, con nodos lejanos fijos y aristas exteriores, para que nada sea infinito;
+  - en cada inserción, nodo semilla, árbol de nodos marcados con las condiciones de Sugihara e Iri (cada celda
+    conserva un nodo y sus nodos marcados quedan contiguos), nodos nuevos en las aristas semimarcadas y la celda nueva;
+  - búsqueda del sitio más cercano por caminata entre celdas vecinas, empezando en una grilla gruesa;
+  - `check()` verifica la estructura entera.
+
+**Probado:** 171/171 pruebas con gcc, clang y ASan+UBSan. Nuevas, contra Boost.Polygon como oráculo (vértices dentro
+de la caja de la entrada): tres puntos (circuncentro), 3000 puntos al azar, una grilla de 40 × 40 (muchos círculos de
+cuatro puntos), un 64-gono (casi todos cocirculares) y una estrella. La estructura pasa `check()` en todos.
+
+**Medido** (100 000 puntos):
+
+| Entrada | Propio | Boost |
+|---|---|---|
+| Vértices de un círculo, en orden | 67–71 ms | 283–305 ms |
+| Puntos al azar en orden espacial | 122–164 ms | 217–248 ms |
+| Puntos al azar en orden aleatorio | 312 ms (2085 ms sin la grilla) | 222 ms |
+
+**Sigue:** la inserción de segmentos:
+- cono de influencia y semilla en la celda de un extremo;
+- ruptura de ciclos con nodos de grado dos;
+- nodos entre puntos y segmentos;
+- partición de las parábolas en su vértice.
+
+Después, la salida `MedialEdge` y la comparación contra Boost en polígonos.
