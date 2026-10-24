@@ -9,8 +9,8 @@ agujeros. Es la entrada de los perímetros, los rellenos y los soportes.
 
 | Clave | Unidad | Rango | Por defecto | Qué hace |
 |---|---|---|---|---|
-| `layers.height` | mm | mayor que 0 y no mayor que `machine.nozzle` | 0,3 | Altura de las capas después de la primera |
-| `layers.first_height` | mm | mayor que 0 y no mayor que `machine.nozzle` | 0,35 | Altura de la primera capa |
+| `layers.height` | mm | mayor que 0 y no mayor que `machine.nozzle_diameter` | 0,3 | Altura de las capas después de la primera |
+| `layers.first_height` | mm | mayor que 0 y no mayor que `machine.nozzle_diameter` | 0,35 | Altura de la primera capa |
 | `slicing.gap_closing_radius` | mm | 0 o más | 0,049 | Las grietas de una sección de hasta el doble de este valor se cierran siempre |
 | `slicing.xy_offset` | mm | cualquier valor | 0 | Agranda (positivo) o achica (negativo) todas las secciones en XY |
 | `slicing.first_layer_shrink` | mm | 0 o más | 0 | Achica solo la primera capa, contra el «pie de elefante» |
@@ -46,7 +46,7 @@ agujeros. Es la entrada de los perímetros, los rellenos y los soportes.
 10. **`slicing.simplify_tolerance`:** quita puntos de los contornos sin apartarse más que la tolerancia (Douglas y Peucker,
     ver `SOURCES.md`) (prueba C17).
 11. **Errores:**
-    - `layers.height` o `layers.first_height` mayores que `machine.nozzle`: error, sin G-code (pruebas C18 y C19);
+    - `layers.height` o `layers.first_height` mayores que `machine.nozzle_diameter`: error, sin G-code (pruebas C18 y C19);
     - una primera capa sin nada que imprimir: error;
     - en los dos casos el motor sale con un código distinto de 0. Tisma Slicer sale con 0 en el primero: eso no se
       copia.
@@ -60,7 +60,7 @@ agujeros. Es la entrada de los perímetros, los rellenos y los soportes.
   - sin esa lista, todas las capas miden `layers.height` (después de la primera).
 - **En el motor, primera versión:** opcional. Si se agrega:
   - la entrada es una lista de pares (Z, altura) por objeto;
-  - cada altura queda entre un mínimo y un máximo de la impresora y nunca supera `machine.nozzle`;
+  - cada altura queda entre un mínimo y un máximo de la impresora y nunca supera `machine.nozzle_diameter`;
   - el plano de corte sigue a mitad de cada capa (regla 2).
 - **Pruebas:** sin pruebas medidas todavía; se agregan cuando el motor lo implemente.
 
@@ -69,7 +69,7 @@ agujeros. Es la entrada de los perímetros, los rellenos y los soportes.
 Medidas en Tisma Slicer (24-10-2026) como caja negra, desde la línea de comandos.
 
 **Ajustes base:**
-- `machine.nozzle` 0,4; `layers.height` 0,2; `layers.first_height` 0,2;
+- `machine.nozzle_diameter` 0,4; `layers.height` 0,2; `layers.first_height` 0,2;
 - `walls.count` 2; `infill.density` 0; `surfaces.top_layers` 0; `surfaces.bottom_layers` 0; sin falda ni borde;
 - pieza centrada en X = 100, Y = 100.
 

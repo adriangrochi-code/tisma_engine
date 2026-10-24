@@ -13,14 +13,14 @@ velocidad, y cómo se viaja entre tramos sin dejar hilos.
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `material.diameter` | mm | 1,75 | Diámetro del filamento |
+| `machine.filament_diameter` | mm | 1,75 | Diámetro del filamento |
 | `material.flow_factor` | — | 1 | Multiplica todo el filamento empujado |
 | `speed.walls` | mm/s | 60 | Perímetros internos |
 | `speed.outer_wall` | mm/s o % de `speed.walls` | 50 % | Perímetro externo |
 | `speed.small_loops` | mm/s o % de `speed.walls` | 15 mm/s | Perímetros cerrados cortos (regla 3) |
 | `speed.infill` | mm/s | 80 | Relleno poco denso |
-| `speed.solid` | mm/s o % de `speed.infill` | 20 mm/s | Relleno sólido |
-| `speed.top` | mm/s o % de `speed.solid` | 15 mm/s | Capa de arriba de todo |
+| `speed.solid_infill` | mm/s o % de `speed.infill` | 20 mm/s | Relleno sólido |
+| `speed.top_solid_infill` | mm/s o % de `speed.solid_infill` | 15 mm/s | Capa de arriba de todo |
 | `speed.bridges` | mm/s | 60 | Puentes y perímetros sobre el aire |
 | `speed.first_layer` | mm/s o % | 30 mm/s | Toda la primera capa |
 | `speed.max` | mm/s | 80 | Tope de las velocidades de extrusión |
