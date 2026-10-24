@@ -29,6 +29,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`belt_printer.md`](belt_printer.md): laminado para impresoras de cinta con pórtico inclinado y G-code en los ejes de la máquina | después de la primera versión | Para revisar |
 | [`print_review.md`](print_review.md): avisos de lo que probablemente va a fallar, con sus capas | después de F4 | Para revisar |
 | [`calibrations.md`](calibrations.md): pruebas por franjas y por parches, comandos por firmware, bloque de precisión de medidas | después de F4 | Para revisar |
+| [`calibration_models.md`](calibration_models.md): las piezas de cada prueba de calibración, con medidas, rangos por defecto y ajustes | después de F4 | Para revisar |
 | [`printer_connections.md`](printer_connections.md): USB, Bambu Lab en red local, interfaces web, botón de enviar | F9 | Para revisar |
 | [`resin.md`](resin.md): imágenes de capa, exposición y movimientos, formato GOO de Elegoo, detector de ventosas, torre de exposición y bloque de medidas | después de la primera versión | Para revisar |
 | [`resin_supports.md`](resin_supports.md): soportes, base y vaciado de resina: ajustes, alturas y medidas como caja negra; el algoritmo es propio del motor | después de la primera versión | Para revisar |
