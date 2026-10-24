@@ -54,8 +54,8 @@
 6. **Obstáculos:** con `travel.lift_before_obstacle`, si la rampa puede chocar con algo al comienzo del viaje, se hace
    más empinada. No se midió.
 7. **Retracción del firmware:** con `retraction.firmware`, cada retracción es un `G10` y cada vuelta un `G11`, sin
-   movimientos de E; el largo y la velocidad los pone el firmware. El salto en Z sigue en el G-code. No se puede usar con
-   `retraction.wipe`: Tisma Slicer rechaza la combinación (prueba R6).
+   movimientos de E; el largo y la velocidad los pone el firmware. El salto en Z sigue en el G-code. No se puede usar
+   con `retraction.wipe`: Tisma Slicer rechaza la combinación (prueba R6).
 8. **Viajes por dentro:** con `travel.avoid_crossing_walls`, un viaje dentro de una isla sigue un camino por dentro de
    la pieza que no cruza los perímetros externos (por ejemplo, rodea un agujero en vez de cruzarlo). Si ese camino es
    más largo que el recto más `travel.max_detour`, el viaje va recto (prueba R7).

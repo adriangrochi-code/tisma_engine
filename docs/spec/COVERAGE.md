@@ -38,7 +38,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Compensación XY de contornos y de agujeros, pata de elefante | `slicing.md` | ✔ |
 | Resolución de los contornos | `slicing.md` | ✔ |
 | Altura de capa variable: adaptativa, suavizado y pintada a mano, con los límites de la boquilla | `slicing.md` | ◐ falta la herramienta de la interfaz y los límites por extrusor → `model_tools.md` |
-| Modo vaso (espiral): una sola pared que sube sin costura | — | ✘ → `vase_mode.md` |
+| Modo vaso (espiral): una sola pared que sube sin costura | `vase_mode.md` | ✔ |
 
 ### Paredes
 
