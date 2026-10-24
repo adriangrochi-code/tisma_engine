@@ -51,6 +51,35 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
 - Cada módulo anota en `PROVENANCE.md` de dónde sale: el artículo y la sección, la especificación, o «diseño propio».
 - La historia de commits es la prueba de procedencia: no se reescribe ni se aplasta.
 
+## Paso de información entre los dos equipos
+
+Hay dos equipos. El que conoce Tisma Slicer (la sesión principal de Tisma, que leyó PrusaSlicer y Cura) dice *qué*
+hay que construir. El equipo del motor lo construye desde cero sin haber visto ese código. Decisión del dueño
+(2026-10-24): la información pasa sin código y con nombres propios, para no romper la licencia del motor.
+
+1. **No pasa código**, ni como archivos del repositorio ni en mensajes o instrucciones de sesión. Tampoco
+   pseudocódigo que copie la estructura de un código existente.
+2. **Solo pasan especificaciones funcionales**, en `docs/spec/`:
+   - comportamiento esperado;
+   - parámetros con rangos y valores por defecto;
+   - fórmulas con la cita del artículo;
+   - casos de prueba de caja negra (modelo y ajustes que dan un resultado medible).
+3. **Nombres propios:** las especificaciones no usan nombres internos de PrusaSlicer, Slic3r, Cura ni Tisma Slicer
+   (tipos, funciones, archivos, variables). Los conceptos y los parámetros llevan nombres del motor. Si hace falta
+   traducir las claves de configuración de Tisma Slicer a las del motor, esa tabla vive del lado de Tisma Slicer (en
+   el adaptador que llama al motor), no en este repositorio.
+4. **Filtro:** `tools/check_spec.py` revisa cada especificación antes de que el equipo del motor la lea. Busca bloques
+   de código, líneas con forma de código, nombres de archivos fuente y nombres internos de los programas prohibidos.
+   Informa solo archivo, línea y regla, sin mostrar el texto, para que quien lo corre no quede expuesto. El equipo
+   que escribe corrige lo marcado. El motor solo lee especificaciones que pasan, y la CI lo comprueba.
+5. **Del motor hacia el otro equipo** solo van preguntas de comportamiento y resultados de caja negra. Las respuestas
+   vuelven como especificaciones. La revisión del PR del motor por la sesión principal se limita al comportamiento y
+   las pruebas.
+6. **Código importado de Tisma Slicer:** `imported/tisma/` y `docs/tisma/`, subidos a `main` el 2026-10-24, no se
+   leen ni se usan. Están dentro del árbol de PrusaSlicer, usan sus tipos, los escribió una sesión que leyó
+   PrusaSlicer y, según el filtro, `docs/tisma/` trae código. Se pidió sacarlos de `main`. Si borrar también su
+   historia, lo deciden el dueño y un abogado.
+
 ## La licencia tiene que poder cerrarse
 
 Decisión del dueño (2026-10-24): el motor tiene que poder pasar a una licencia cerrada (propietaria) en cualquier

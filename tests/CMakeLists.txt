@@ -39,4 +39,9 @@ set_tests_properties(cli_slice_not_implemented PROPERTIES PASS_REGULAR_EXPRESSIO
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
   add_test(NAME license_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_licenses.py ${PROJECT_SOURCE_DIR})
+  # Specs from the team that knows Tisma Slicer carry no code and no internal
+  # names (see CLEANROOM.md).
+  if(EXISTS ${PROJECT_SOURCE_DIR}/docs/spec)
+    add_test(NAME spec_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_spec.py ${PROJECT_SOURCE_DIR}/docs/spec)
+  endif()
 endif()

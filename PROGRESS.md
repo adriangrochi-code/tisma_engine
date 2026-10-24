@@ -270,3 +270,27 @@ Ahora la soldadura tarda menos que el corte de las 500 capas (76–87 ms).
   cortada con `max_gap`. 51/51 pruebas con gcc, clang y ASan+UBSan.
 
 **Sigue:** Clipper2 (leer su licencia en la versión exacta y anotarla antes de usarla).
+
+## 2026-10-24 — paso de información entre equipos
+
+**Pasó:** la sesión principal de Tisma subió a `main` `docs/spec/` (especificaciones funcionales), `imported/tisma/`
+(código de Tisma Slicer, unas 37 000 líneas) y `docs/tisma/`. También cambió las reglas para permitir copiar ese
+código al motor. Esta sesión no mezcló `main` ni leyó ese código. Motivos: los archivos están en el árbol de
+PrusaSlicer y usan sus tipos, los escribió una sesión que leyó PrusaSlicer, y eso choca con la regla de licencia
+cerrable.
+
+**Hecho:**
+- El dueño pidió coordinar con la otra sesión para que la información pase sin código y con nombres propios.
+- `CLEANROOM.md` y `CLAUDE.md`: protocolo «Paso de información entre los dos equipos».
+- `tools/check_spec.py`: filtro de especificaciones. Informa solo archivo, línea y regla, sin mostrar el texto. Corre
+  como prueba de CTest (`spec_check`) cuando existe `docs/spec/`.
+  - Probado con un archivo de ejemplo: detecta nombre interno, bloque de código, instrucción de control, nombre de
+    archivo fuente y asignación.
+  - Resultado sobre `main`, sin leer los archivos: `docs/spec/` da 6 de 6 archivos limpios; `docs/tisma/` da 4 de 19
+    limpios, con 102 problemas.
+- Se le propuso el protocolo a la sesión principal y se le pidió sacar `imported/tisma/` y `docs/tisma/` de `main`.
+
+**Pendiente:**
+- la respuesta de la sesión principal;
+- la decisión del dueño sobre borrar o no la historia de esos archivos (con un abogado);
+- mezclar `main` en `dev` cuando `main` ya no tenga ese código.

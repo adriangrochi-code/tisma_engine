@@ -13,4 +13,5 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |
+| `tools/check_spec.py` — filtro de especificaciones | Diseño propio. La lista de nombres prohibidos son nombres públicos de tipos y módulos, no código. |
 | `.github/workflows/ci.yml`, `CMakeLists.txt` | Diseño propio; documentación pública de GitHub Actions y CMake. |

@@ -15,6 +15,14 @@ A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.m
 - Other slicers may only be compared as black boxes: run their program, compare outputs.
 - Never rewrite or squash history: it is the record of provenance.
 
+## Hand-over between the two teams (owner's decision)
+
+The main Tisma session knows Tisma Slicer and has read PrusaSlicer and Cura. It tells the engine *what* to build;
+the engine team builds it from scratch. See "Paso de información entre los dos equipos" in `CLEANROOM.md`:
+- no code crosses, in files, messages or prompts; specs only, in `docs/spec/`, with the engine's own names;
+- read a spec only if `tools/check_spec.py` passes on it; never read `imported/tisma/` or `docs/tisma/`;
+- send the other team only behavior questions and black-box results.
+
 ## The license must stay closable (owner's decision)
 
 The owner must always be able to move the engine to a closed, proprietary license. Never add anything that would
