@@ -113,6 +113,29 @@ enlace en `docs/MATERIALS.md`. Las reglas de `as_printed` completan el resto.
 Ver `docs/VERSIONING.md`: número en `VERSION`, sección en `CHANGELOG.md`, comprobaciones en verde y la etiqueta
 `v<versión>`. El flujo `release.yml` compila, prueba y publica.
 
+## Mantenimiento
+
+Cada 8 horas de trabajo, un bloque de alrededor de una hora no agrega funciones: pule el motor y su estabilidad
+(decisión del dueño, 2026-10-24). En orden:
+
+1. **Errores:**
+   - correr `tools/ci_linux.sh`;
+   - correr la búsqueda aleatoria de G-code con semillas nuevas (`build/tests/tisma_fuzz_gcode 2000 <semilla>`);
+   - releer los «No probado» de `PROGRESS.md` y los puntos débiles anotados en `PLAN.md`.
+
+   Cada error encontrado se reproduce con una prueba y se corrige.
+2. **Optimización:** medir las fases con el banco (laminado de la esfera, análisis del cubo), buscar la más lenta y
+   acelerarla solo si se puede medir la mejora. Los números se anotan.
+3. **Robustez:**
+   - revisar los cambios recientes buscando casos borde, entradas raras y mensajes poco claros;
+   - las advertencias del compilador;
+   - lo que marquen ASan y UBSan.
+4. **Pendientes:** cerrar puntos abiertos chicos de `PLAN.md` que no pertenecen a una fase en curso.
+5. **Registro:**
+   - una entrada «mantenimiento» en `PROGRESS.md` con lo revisado, lo encontrado, lo corregido y lo medido;
+   - las correcciones visibles en «Sin publicar» de `CHANGELOG.md`;
+   - si son relevantes, una release de corrección (`docs/VERSIONING.md`).
+
 ## Sala limpia
 
 Todo el código se escribe acá, desde especificaciones (`docs/spec/`), artículos, formatos públicos y bibliotecas

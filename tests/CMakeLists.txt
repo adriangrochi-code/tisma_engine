@@ -49,6 +49,12 @@ include(Catch)
 # Exit code 4 is Catch2's "all tests skipped" (for example GPU tests without a device).
 catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 
+# The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
+# short run here, long runs with new seeds in the maintenance blocks.
+add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
+target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
+add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
+
 # End-to-end checks of the installed program.
 add_test(NAME cli_version COMMAND tisma-engine --version)
 add_test(NAME cli_info_ascii_cube COMMAND tisma-engine info ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl)

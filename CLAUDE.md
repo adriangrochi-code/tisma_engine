@@ -79,6 +79,10 @@ one stopped.
    - The main Tisma session may review it, but only the behavior and the tests.
 7. Stop at a point where the build and the tests pass, even if the item is unfinished. Say so in `PROGRESS.md`.
 
+Every 8 hours, one block is a maintenance block instead (owner's decision, 2026-10-24): optimize, hunt bugs and
+errors, and fix what is still unresolved, to polish the engine and keep it stable. What it covers is in
+`docs/DEVELOPMENT.md`, "Mantenimiento".
+
 ## CI
 
 - Every push runs the build and the tests on Windows.

@@ -58,6 +58,7 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |
 | `tools/check_spec.py` — filtro de especificaciones | Diseño propio. La lista de nombres prohibidos son nombres públicos de tipos y módulos, no código. |
 | `tools/ci_linux.sh` — comprobaciones de Linux en la sesión | Diseño propio: los mismos pasos que los trabajos de Linux de la CI. |
+| `tests/fuzz_gcode.cpp` — búsqueda aleatoria de G-code inválido | Diseño propio: ajustes y piezas al azar (cajas, aro, mesa, paredes finas, esfera y cilindro generados) con semilla fija, laminados, escritos y verificados con `check_gcode`. |
 | `tools/release_notes.py`, `.github/workflows/release.yml` — versiones y releases | Diseño propio sobre el versionado semántico 2.0.0 (semver.org) y el formato Keep a Changelog 1.1.0 (keepachangelog.com), ambos documentos públicos: el número sale del archivo `VERSION`, las notas de la sección del `CHANGELOG.md`, y la release se publica con la herramienta `gh` del propio GitHub. |
 | `.github/workflows/ci.yml`, `CMakeLists.txt` | Diseño propio; documentación pública de GitHub Actions y CMake. |
 

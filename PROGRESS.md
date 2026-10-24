@@ -2388,3 +2388,21 @@ verificar 72 ms.
 **Probado:** `tools/ci_linux.sh` pasa (207/207 en las tres compilaciones, con la comprobación nueva del CHANGELOG).
 `tools/release_notes.py` da las notas de `v0.6.0-alpha.1` y rechaza una etiqueta que no coincide. Los dos flujos de
 GitHub son YAML válido. El flujo de releases solo se prueba de verdad al subir la etiqueta.
+
+## 2026-10-24 — bloques de mantenimiento cada 8 horas
+
+**Decisión del dueño:** cada 8 horas, dedicar tiempo a optimizar, buscar errores y resolver lo pendiente, para pulir
+el motor y su estabilidad.
+
+**Hecho:**
+- La regla está en `CLAUDE.md` («Work blocks») y en `docs/DEVELOPMENT.md` («Mantenimiento»):
+  - errores (comprobaciones, búsqueda aleatoria, «No probado», puntos débiles);
+  - optimización medida;
+  - robustez;
+  - pendientes chicos;
+  - registro, y release de corrección si hace falta.
+- Una tarea programada dispara el bloque en esta sesión cada 8 horas (a los :40). Si otra sesión del motor está
+  trabajando sobre `dev`, el bloque no se hace, para que nunca trabajen dos a la vez.
+- La búsqueda aleatoria de G-code inválido pasó al repositorio (`tests/fuzz_gcode.cpp`, programa `tisma_fuzz_gcode
+  [corridas] [semilla]`), así los bloques de mantenimiento la corren con semillas nuevas. CTest corre 12 casos
+  (`fuzz_gcode_smoke`) para que siga compilando y andando.
