@@ -51,7 +51,7 @@ que la persona elija la impresora por su modelo y, aparte, la boquilla y la cama
 6. **Materiales al instalar una impresora:** se instalan sin preguntar los materiales recomendados para ella. Agregar
    un material después no vuelve a pedir la impresora.
 7. **Perfiles propios:** la persona puede guardar, renombrar, borrar y comparar perfiles. Uno propio parte de uno del
-   sistema.
+   sistema. El comportamiento completo está en `presets.md`.
 
 ## De dónde salen los datos
 
