@@ -235,3 +235,27 @@ CI. Si da problemas, la alternativa es enlazarla dinámica y distribuir su DLL j
 - cierre de huecos chicos;
 - Clipper2 (anotarla antes);
 - infraestructura de Vulkan (revisar la licencia de glslang).
+
+## 2026-10-24 — bloque nocturno 2: soldadura con tabla hash
+
+**Hecho:**
+- `weld_exact` usa una tabla hash de direccionamiento abierto (como mucho medio llena) en lugar de ordenar las
+  esquinas.
+  - Los vértices se numeran por orden de primera aparición: el resultado no depende de la cantidad de hilos, y los
+    vértices de triángulos vecinos quedan cerca en memoria.
+  - Es serial y no necesita oneTBB.
+- Prueba nueva: el orden de primera aparición.
+
+**Probado:** 45/45 pruebas con gcc, clang y ASan+UBSan.
+
+**Medido** (esfera de 1 001 112 triángulos, 5 corridas):
+
+| Soldadura | Tiempo |
+|---|---|
+| Tabla hash (serial) | 86–99 ms |
+| Ordenamiento paralelo (4 núcleos) | 168–193 ms |
+| Ordenamiento serial | 445–461 ms |
+
+Ahora la soldadura tarda menos que el corte de las 500 capas (76–87 ms).
+
+**Sigue:** cierre de huecos chicos en mallas abiertas; después Clipper2.

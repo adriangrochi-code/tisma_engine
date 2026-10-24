@@ -20,7 +20,9 @@ struct IndexedMesh {
 
 // Merges corners with bitwise-equal coordinates (STL repeats each shared vertex
 // in every facet that uses it). Triangles keep their order and winding.
-// Triangles with two equal corners are kept; callers decide what to do with them.
+// Vertices are numbered in order of first appearance, so the result does not
+// depend on thread count. Triangles with two equal corners are kept; callers
+// decide what to do with them.
 IndexedMesh weld_exact(const TriangleMesh& mesh);
 
 } // namespace tisma

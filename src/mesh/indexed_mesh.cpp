@@ -1,23 +1,31 @@
 #include "mesh/indexed_mesh.hpp"
 
-#include <oneapi/tbb/parallel_sort.h>
-
 #include <algorithm>
 #include <bit>
-#include <tuple>
 
 namespace tisma {
 namespace {
 
-// Bit pattern of a corner plus its index: equal patterns mean equal vertices.
-// -0.0f and 0.0f differ in bits, so they are normalised first.
-struct CornerKey {
-    std::uint32_t x, y, z, corner;
+// Bit pattern of a point: equal patterns mean equal vertices. -0.0f and 0.0f
+// differ in bits, so they are normalised first.
+struct PointBits {
+    std::uint32_t x, y, z;
+    friend bool operator==(const PointBits&, const PointBits&) = default;
 };
 
-bool same_point(const CornerKey& a, const CornerKey& b) { return a.x == b.x && a.y == b.y && a.z == b.z; }
-
 std::uint32_t bits(float f) { return std::bit_cast<std::uint32_t>(f == 0.0f ? 0.0f : f); }
+
+PointBits point_bits(const Vec3f& p) { return {bits(p.x), bits(p.y), bits(p.z)}; }
+
+std::uint64_t hash(const PointBits& p) {
+    // Multiply-xorshift mix of the three words.
+    std::uint64_t h = (std::uint64_t(p.x) << 32 | p.y) * 0x9E3779B97F4A7C15ull;
+    h ^= (h >> 29) + std::uint64_t(p.z) * 0xC2B2AE3D27D4EB4Full;
+    h ^= h >> 32;
+    return h;
+}
+
+constexpr std::uint32_t kEmpty = 0xFFFFFFFFu;
 
 } // namespace
 
@@ -25,27 +33,30 @@ IndexedMesh weld_exact(const TriangleMesh& mesh) {
     const std::vector<Vec3f>& corners = mesh.corners();
     const std::size_t n = corners.size();
 
-    // Sort the corners by bit pattern, then give each run of equal keys one
-    // vertex. Sorting the keys themselves (16 contiguous bytes each) measured
-    // about 25% faster than sorting indices into a separate key array.
-    std::vector<CornerKey> keys(n);
-    for (std::size_t i = 0; i < n; ++i)
-        keys[i] = {bits(corners[i].x), bits(corners[i].y), bits(corners[i].z), static_cast<std::uint32_t>(i)};
-    tbb::parallel_sort(keys.begin(), keys.end(), [](const CornerKey& a, const CornerKey& b) {
-        return std::tie(a.x, a.y, a.z, a.corner) < std::tie(b.x, b.y, b.z, b.corner);
-    });
+    // Open-addressing hash table from point bits to vertex id, at most half
+    // full. Vertices are numbered in order of first appearance, which keeps the
+    // result deterministic and the vertices of nearby triangles close in memory.
+    // Measured about 2x faster than a parallel sort of the corners on 4 cores
+    // (see PROGRESS.md).
+    const std::size_t table_size = std::bit_ceil(std::max<std::size_t>(2 * n, 16));
+    const std::size_t mask = table_size - 1;
+    std::vector<std::uint32_t> table(table_size, kEmpty);
+    std::vector<PointBits> vertex_bits;
 
     IndexedMesh out;
-    std::vector<std::uint32_t> vertex_of_corner(n);
-    for (std::size_t i = 0; i < n; ++i) {
-        if (i == 0 || !same_point(keys[i - 1], keys[i]))
-            out.vertices.push_back(corners[keys[i].corner]);
-        vertex_of_corner[keys[i].corner] = static_cast<std::uint32_t>(out.vertices.size() - 1);
-    }
-
     out.triangles.resize(mesh.triangle_count());
-    for (std::size_t t = 0; t < out.triangles.size(); ++t)
-        out.triangles[t] = {vertex_of_corner[3 * t], vertex_of_corner[3 * t + 1], vertex_of_corner[3 * t + 2]};
+    for (std::size_t c = 0; c < n; ++c) {
+        const PointBits key = point_bits(corners[c]);
+        std::size_t slot = std::size_t(hash(key)) & mask;
+        while (table[slot] != kEmpty && !(vertex_bits[table[slot]] == key))
+            slot = (slot + 1) & mask;
+        if (table[slot] == kEmpty) {
+            table[slot] = static_cast<std::uint32_t>(out.vertices.size());
+            out.vertices.push_back(corners[c]);
+            vertex_bits.push_back(key);
+        }
+        out.triangles[c / 3][c % 3] = table[slot];
+    }
     return out;
 }
 
