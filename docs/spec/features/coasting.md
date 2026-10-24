@@ -9,13 +9,13 @@ La presión que queda en la boquilla termina la línea. Reduce las gotas en la c
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `coast_distance` | mm | 0 = apagado | Largo del final de cada trazo que se recorre sin extruir |
+| `retraction.coast` | mm | 0 = apagado | Largo del final de cada trazo que se recorre sin extruir |
 
 ## Reglas
 
-1. Los últimos `coast_distance` mm de cada trazo se recorren sin extruir, a la velocidad del trazo (`G1` con X e Y,
+1. Los últimos `retraction.coast` mm de cada trazo se recorren sin extruir, a la velocidad del trazo (`G1` con X e Y,
    sin E).
-2. Un trazo de menos de 3 × `coast_distance` no cambia.
+2. Un trazo de menos de 3 × `retraction.coast` no cambia.
 3. Vale para perímetros, perímetro externo y relleno; después viene lo de siempre (retracción si el viaje la pide).
 4. El filamento total baja en lo que no se extruye en esos tramos.
 
@@ -25,4 +25,4 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra. Ajustes base de `gcode_mot
 
 | # | Pieza | Ajustes | Resultado |
 |---|---|---|---|
-| CO1 | Cubo de 20 × 20 × 10 mm | `coast_distance` 0,5 | Capa 11: tres tramos sin extruir al final de trazos: 0,501 mm a 60 mm/s (perímetro), 0,500 mm a 30 mm/s (externo) y 0,509 mm a 80 mm/s (relleno). Sin coasting no hay ninguno |
+| CO1 | Cubo de 20 × 20 × 10 mm | `retraction.coast` 0,5 | Capa 11: tres tramos sin extruir al final de trazos: 0,501 mm a 60 mm/s (perímetro), 0,500 mm a 30 mm/s (externo) y 0,509 mm a 80 mm/s (relleno). Sin coasting no hay ninguno |
