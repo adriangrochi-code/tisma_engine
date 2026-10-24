@@ -1,3 +1,4 @@
+#include "config/settings.hpp"
 #include "infill/gyroid.hpp"
 #include "infill/rectilinear.hpp"
 #include "perimeters/coverage.hpp"
@@ -56,7 +57,7 @@ TEST_CASE("rectilinear lines on a grid fixed to the origin", "[infill]") {
 
 TEST_CASE("fill_layer: solid at 100%, sparse at the density, angles turn by layer", "[infill]") {
     LayerSurfaces s;
-    s.top = square(0, 0, 10);
+    s.bottom = square(0, 0, 10);
     s.sparse = square(20, 0, 10);
     FillParams p; // 0.4 mm beads, 20%, 45 degrees
     const LayerFill even = fill_layer(s, 0, p);
@@ -104,7 +105,7 @@ TEST_CASE("a solid layer lays down its area: connected lines fitted to the regio
     for (const Polygons* region : {&square_region, &l_region})
         for (double angle : {0.0, 30.0, 45.0}) {
             LayerSurfaces s;
-            s.top = *region;
+            s.bottom = *region; // zig-zags; top surfaces are monotonic
             FillParams p;
             p.angle = angle;
             const LayerFill fill = fill_layer(s, 0, p);
@@ -120,7 +121,7 @@ TEST_CASE("a solid layer lays down its area: connected lines fitted to the regio
         }
     // The interior of the square, a bead in from the edges, is fully covered.
     LayerSurfaces s;
-    s.top = square_region;
+    s.bottom = square_region;
     const Coverage inside = measure_coverage(square(1.6, 1.6, 6.8), fill_layer(s, 0, FillParams{}).solid);
     CHECK(inside.gaps < 1e-3 * inside.target);
 }
@@ -196,4 +197,47 @@ TEST_CASE("gyroid infill: points on the surface, the density's material, curves 
     FillParams p;
     p.pattern = InfillPattern::Gyroid;
     CHECK(fill_layer(s, 0, p, 0.3).sparse.size() == at0.size());
+}
+
+TEST_CASE("monotonic top surfaces: one direction, nothing before the touching line below", "[infill]") {
+    // A U: a 10 x 3 mm bar with two 3 mm arms up to y = 10. At 0 degrees the
+    // lines are horizontal; above y = 3 each line has a piece in each arm.
+    const Polygons u = {{{to_units(0), to_units(0)}, {to_units(10), to_units(0)}, {to_units(10), to_units(10)},
+                         {to_units(7), to_units(10)}, {to_units(7), to_units(3)}, {to_units(3), to_units(3)},
+                         {to_units(3), to_units(10)}, {to_units(0), to_units(10)}}};
+    for (const Polygons* region : {&u, static_cast<const Polygons*>(nullptr)}) {
+        const Polygons sq = square(0, 0, 10);
+        const Polygons& r = region ? *region : sq;
+        LayerSurfaces s;
+        s.top = r;
+        FillParams p;
+        p.angle = 0.0;
+        const std::vector<Toolpath> lines = fill_layer(s, 0, p).solid;
+        REQUIRE_FALSE(lines.empty());
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            const Toolpath& t = lines[i];
+            REQUIRE(t.points.size() == 2);
+            CHECK(t.points.back().p.x > t.points.front().p.x); // every line left to right
+            // Every piece of the line below that touches this one came earlier.
+            for (std::size_t j = 0; j < lines.size(); ++j) {
+                const Toolpath& o = lines[j];
+                const bool below = std::fabs(t.points[0].p.y - o.points[0].p.y - 0.4) < 1e-3;
+                const bool touches = o.points.front().p.x - 0.2 <= t.points.back().p.x + 0.2 &&
+                                     t.points.front().p.x - 0.2 <= o.points.back().p.x + 0.2;
+                if (below && touches)
+                    CHECK(j < i);
+            }
+        }
+        if (region) {
+            // The arms are each laid in one go: after the bar, one arm, then the other.
+            std::size_t switches = 0;
+            for (std::size_t i = 1; i < lines.size(); ++i)
+                if (lines[i].points[0].p.y > 2.9 && lines[i - 1].points[0].p.y > 2.9 &&
+                    (lines[i].points[0].p.x < 5.0) != (lines[i - 1].points[0].p.x < 5.0))
+                    ++switches;
+            CHECK(switches == 1);
+        }
+    }
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "rectilinear"}})").monotonic_top == false);
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "monotonic"}})").monotonic_top == true);
 }

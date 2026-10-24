@@ -1143,3 +1143,33 @@ anterior más que el ancho de las paredes; `slice` 1,10–1,19 s.
 
 **Sigue:** superficies superiores monotónicas.
 
+## 2026-10-24 — bloque nocturno 31: superficies superiores monotónicas
+
+**Hecho:**
+- Orden monotónico (diseño propio desde `docs/spec/BEHAVIOR.md`, «Superficies monotónicas»):
+  - las superficies superiores llevan líneas sueltas, ajustadas a la región, todas en el mismo sentido;
+  - cada pieza espera a las piezas de la línea de abajo que la tocan (tramos ampliados medio cordón);
+  - entre las que pueden ir, va la que empieza más cerca de donde terminó la anterior. Así, en una U cada brazo se hace
+    de una vez.
+- Las superficies inferiores siguen en zigzag.
+- Ajuste `surfaces.top_pattern`: `monotonic` (por defecto, valor de banco de `SETTINGS_V1.md`) o `rectilinear`.
+- Precio: las líneas monotónicas no se unen por el borde, así que la superficie superior vuelve a tener los huecos de
+  los extremos que el zigzag cerraba (4–6 % en un cuadrado de 7,6 mm, según el ángulo).
+
+**Probado:** 129/129 pruebas con gcc, clang y ASan+UBSan:
+- en un cuadrado y en una U, todas las líneas van de izquierda a derecha y ninguna va antes que una pieza que la toca
+  en la línea de abajo;
+- en la U, después de la barra se hace un brazo entero y después el otro (un solo cambio de brazo);
+- lectura de `top_pattern`.
+
+**Medido** (esfera, 500 capas, 4 núcleos): 4201 líneas sólidas (antes 630, porque las superiores ya no se unen);
+`slice` 1,13 s.
+
+**Sigue:** en la lista de F3 quedan:
+- ajustar las líneas sólidas por tramo;
+- acelerar y anclar el giroide;
+- los núcleos de GPU (superficies y giroide);
+- el criterio de F3, que necesita el Benchy del dueño.
+
+El próximo bloque toma la GPU del giroide, que es lo que más tarda.
+

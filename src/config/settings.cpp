@@ -123,7 +123,12 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be greater than 0");
         s.wall_width = v;
     });
-    read_group(root, "surfaces", {"top_layers", "bottom_layers"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern"}, [&](const json& g, const std::string& n,
+                                                                                  const std::string& k) {
+        if (n == "top_pattern") {
+            s.monotonic_top = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
+            return;
+        }
         const json& v = g.at(n);
         if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
             fail(k, "must be a whole number from 0 to 1000");

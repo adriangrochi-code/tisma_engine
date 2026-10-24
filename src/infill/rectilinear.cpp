@@ -157,10 +157,56 @@ Polygons connect_lines(const Polygons& pieces, const Polygons& boundary, double 
     return out;
 }
 
+// Monotonic order (docs/spec/BEHAVIOR.md, "Superficies monotónicas") of
+// horizontal pieces, each running left to right: a piece comes after every
+// piece of the line below that touches it (their spans, widened by half a
+// bead, overlap). Among the pieces that may come next, the one starting
+// nearest to where the last one ended.
+Polygons order_monotonic(Polygons pieces, double step, double half_width) {
+    const std::size_t n = pieces.size();
+    std::vector<std::vector<std::size_t>> after(n); // pieces that wait for this one
+    std::vector<std::size_t> waiting(n, 0);
+    for (std::size_t p = 0; p < n; ++p)
+        for (std::size_t q = 0; q < n; ++q) {
+            const double dy = double(pieces[p].front().y - pieces[q].front().y);
+            if (std::fabs(dy - step) > 0.25 * step)
+                continue; // q is not on the line just below p
+            const double p0 = double(pieces[p].front().x) - half_width, p1 = double(pieces[p].back().x) + half_width;
+            const double q0 = double(pieces[q].front().x) - half_width, q1 = double(pieces[q].back().x) + half_width;
+            if (p0 <= q1 && q0 <= p1) {
+                after[q].push_back(p);
+                ++waiting[p];
+            }
+        }
+    std::vector<bool> done(n, false);
+    Polygons out;
+    out.reserve(n);
+    for (std::size_t k = 0; k < n; ++k) {
+        std::size_t best = n;
+        double nearest = std::numeric_limits<double>::max();
+        for (std::size_t p = 0; p < n; ++p) {
+            if (done[p] || waiting[p] != 0)
+                continue;
+            const double d = out.empty() ? 0.0
+                                         : std::hypot(double(pieces[p].front().x - out.back().back().x),
+                                                      double(pieces[p].front().y - out.back().back().y));
+            if (d < nearest) // pieces come sorted across the lines and along them, so ties keep that order
+                nearest = d, best = p;
+        }
+        if (best == n)
+            break; // cannot happen: the line below always comes first
+        done[best] = true;
+        for (std::size_t p : after[best])
+            --waiting[p];
+        out.push_back(pieces[best]);
+    }
+    return out;
+}
+
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit) {
+                                       bool connect, bool fit, bool monotonic) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -215,7 +261,9 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
         return l.front().y < r.front().y || (l.front().y == r.front().y && l.front().x < r.front().x);
     });
     open.erase(std::remove_if(open.begin(), open.end(), [](const Polygon& p) { return p.size() < 2; }), open.end());
-    if (connect)
+    if (monotonic)
+        open = order_monotonic(std::move(open), step, width / 2.0 * kUnitsPerMm);
+    else if (connect)
         open = connect_lines(open, turned, step, kMaxJoin * step);
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
@@ -233,8 +281,14 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
-    const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
-    out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
+    if (params.monotonic_top) {
+        out.solid = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true);
+        for (Toolpath& t : rectilinear_fill(surfaces.bottom, params.width, angle, params.width, true, true))
+            out.solid.push_back(std::move(t));
+    } else {
+        const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
+        out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
+    }
     // Bridge lines stay straight: a join along the edge would hang in the air.
     out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
     if (params.density <= 0.0)

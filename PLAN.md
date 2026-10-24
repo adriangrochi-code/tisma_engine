@@ -246,7 +246,7 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
   (−2,9 % de material)
 - [x] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
   anterior), tendidos en la dirección que apoya los dos extremos de las líneas
-- [ ] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho
+- [x] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho (`surfaces.top_pattern`)
 - [ ] GPU: detección de superficies y giroide, probados contra la CPU
 - [ ] Criterio de F3: un cubo y el Benchy con capas sólidas correctas; tiempos de CPU y GPU medidos
 

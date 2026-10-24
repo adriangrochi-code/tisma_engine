@@ -20,9 +20,12 @@ namespace tisma {
 // With `fit`, the lines are not on the grid: as many as fit across the region
 // (per connected piece of the whole region, measured across its extent), centred,
 // so the outer ones run along the shrunk boundary; for solid surfaces.
+// With `monotonic` (instead of `connect`), the pieces all run the same way and
+// each comes after every piece of the line below that touches it; among those
+// that may come next, the one starting nearest to the last one's end.
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect = false, bool fit = false);
+                                       bool connect = false, bool fit = false, bool monotonic = false);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -36,10 +39,12 @@ struct FillParams {
     double density = 0.2; // sparse infill, 0 to 1
     double angle = 45.0;  // degrees; odd layers add 90 (rectilinear)
     InfillPattern pattern = InfillPattern::Rectilinear;
+    bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
-// fitted to the region, at the layer's angle, connected into zig-zags. Sparse
+// fitted to the region, at the layer's angle; top surfaces in monotonic order
+// (with monotonic_top), the rest connected into zig-zags. Sparse
 // infill, by pattern:
 //  - rectilinear: lines width / density apart on the grid at the layer's
 //    angle, connected into zig-zags;

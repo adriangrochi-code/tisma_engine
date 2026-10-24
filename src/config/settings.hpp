@@ -30,6 +30,7 @@ struct Settings {
     double wall_width = 0.4; // preferred bead width w*
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
+    bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
