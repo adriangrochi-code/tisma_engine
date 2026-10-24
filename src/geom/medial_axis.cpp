@@ -70,11 +70,20 @@ namespace {
 
 using Diagram = boost::polygon::voronoi_diagram<double>;
 
+// At most this many pieces per edge (a 20 m edge at 0.2 mm), against
+// degenerate input.
+constexpr std::size_t kMaxPieces = 100000;
+
 class Builder {
 public:
     explicit Builder(const Polygons& region) {
         constexpr std::int64_t kLimit = std::numeric_limits<std::int32_t>::max();
-        for (const Polygon& path : region) {
+        for (const Polygon& raw : region) {
+            // Collinear points and spikes make degenerate cells (a corner on its
+            // neighbour segment's line, where the parabola has no width).
+            const Polygon path = Clipper2Lib::TrimCollinear(raw, false);
+            if (path.size() < 3)
+                continue;
             const std::uint32_t first = static_cast<std::uint32_t>(segments_.size());
             for (std::size_t i = 0; i < path.size(); ++i) {
                 const auto& p = path[i];
@@ -196,8 +205,10 @@ private:
     // steps interpolate the radius linearly between nodes.
     static std::vector<Point2d> subdivide(const Point2d& a, const Point2d& b) {
         const double max_piece = kMaxCurvedPiece * kUnitsPerMm;
-        const std::size_t pieces =
-            std::max<std::size_t>(1, std::size_t(std::ceil(std::hypot(b.x - a.x, b.y - a.y) / max_piece)));
+        const double length = std::hypot(b.x - a.x, b.y - a.y);
+        if (!std::isfinite(length) || length > kMaxPieces * max_piece)
+            return {a, b}; // degenerate input (a hair-thin channel): leave the edge whole
+        const std::size_t pieces = std::max<std::size_t>(1, std::size_t(std::ceil(length / max_piece)));
         std::vector<Point2d> chain{a};
         for (std::size_t i = 1; i < pieces; ++i) {
             const double t = double(i) / double(pieces);
@@ -231,6 +242,8 @@ private:
             fv = -fv;
         }
         const double fu = fx * ux + fy * uy;
+        if (!(fv > 1e-9 * len))
+            return {a, b}; // the corner is on the segment's line: no parabola, a straight piece
         auto along = [&](const Point2d& p) { return (p.x - sx) * ux + (p.y - sy) * uy; };
         // On the parabola, height above the line v = ((u - fu)^2 + fv^2) / (2 fv).
         auto at = [&](double u) {
@@ -252,7 +265,7 @@ private:
             for (std::size_t i = 0; i + 1 < chain.size(); ++i)
                 short_enough = short_enough &&
                                std::hypot(chain[i + 1].x - chain[i].x, chain[i + 1].y - chain[i].y) <= max_piece;
-            if (short_enough || pieces > 100000)
+            if (short_enough || pieces > kMaxPieces)
                 return chain;
             pieces *= 2;
         }

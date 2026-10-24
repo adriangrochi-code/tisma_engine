@@ -241,3 +241,28 @@ TEST_CASE("monotonic top surfaces: one direction, nothing before the touching li
     CHECK(parse_settings(R"({"surfaces": {"top_pattern": "rectilinear"}})").monotonic_top == false);
     CHECK(parse_settings(R"({"surfaces": {"top_pattern": "monotonic"}})").monotonic_top == true);
 }
+
+TEST_CASE("gap fill: variable-width beads where the solid lines leave room", "[infill]") {
+    // A monotonic top on the 7.6 mm square at 30 degrees leaves its line ends
+    // unjoined (measured: 4.8 % short); gap filling adds beads where the gaps are
+    // at least half a bead thick (measured: 3.4 % short).
+    LayerSurfaces s;
+    s.top = square(1.2, 1.2, 7.6);
+    FillParams p;
+    p.angle = 30.0;
+    const LayerFill plain = fill_layer(s, 0, p);
+    CHECK(plain.gaps.empty()); // off by default
+    p.gap_fill = true;
+    const LayerFill filled = fill_layer(s, 0, p);
+    REQUIRE_FALSE(filled.gaps.empty());
+    std::vector<Toolpath> all = filled.solid;
+    all.insert(all.end(), filled.gaps.begin(), filled.gaps.end());
+    const Coverage before = measure_coverage(s.top, plain.solid);
+    const Coverage after = measure_coverage(s.top, all);
+    CHECK(after.gaps < before.gaps - 0.005 * before.target);
+    CHECK(after.outside < 1e-3);
+    CHECK(after.overlap < 0.01 * after.target);
+    for (const Toolpath& t : filled.gaps)
+        for (const ToolpathPoint& q : t.points)
+            CHECK(q.width > 0.0);
+}

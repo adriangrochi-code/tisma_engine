@@ -1209,3 +1209,39 @@ instrucciones. La medición nativa del corte de 500 capas da 66–87 ms, así qu
 - anclar el giroide y su núcleo de GPU;
 - el ajuste de las líneas sólidas por tramo.
 
+## 2026-10-24 — bloque nocturno 33: fases del corte, relleno de huecos y robustez del eje medio
+
+**Medido** (esfera, nativo, 4 núcleos, por fase de `slice_model`):
+
+| Fase | ms |
+|---|---|
+| Contornos | 85–89 |
+| Regiones | 9–11 |
+| Paredes | 810–825 |
+| Superficies | 38–40 |
+| Puentes | 35–43 |
+| Relleno | 71–74 |
+
+El ordenamiento que callgrind mostraba con el 32 % no es el índice de contornos: el corte entero tarda menos de 90 ms.
+Lo que domina son las paredes (el Voronoi de Boost), como ya se sabía.
+
+**Hecho:**
+- `gap_fill` (diseño propio): lo que las líneas sólidas no cubren, sin partes de menos de medio cordón, se rellena con
+  cordones de ancho variable de la cadena de paredes, sin límite. Mejora la superficie superior monotónica del cuadrado
+  a 30° de −4,8 % a −3,4 % y la de la L de −7,3 % a −5,1 %. En el codo de la L a 0° casi no ayuda (−2,88 % → −2,79 %):
+  la franja mide justo medio cordón y los conectores del zigzag ya cubren parte. Cuesta 0,5 s en la esfera, así que
+  quedó apagado (`FillParams::gap_fill`).
+- Con eso aparecieron dos errores del eje medio ante entradas degeneradas, ya arreglados:
+  - un foco sobre la recta del segmento (puntos colineales) dejaba una parábola sin ancho y el refinamiento producía
+    NaN: ahora la entrada pasa por `TrimCollinear` y ese caso se trata como recta;
+  - un canal de 0,2 µm entre dos manchas (dos áreas de cordón que casi se tocan) dejaba una bisectriz enorme entre dos
+    esquinas, que `subdivide` intentaba partir en mil millones de pedazos: ahora hay un tope de 100 000 pedazos por
+    arista, y el relleno de huecos abre su región un cuarto de cordón antes del esqueleto.
+
+**Probado:** 131/131 pruebas con gcc, clang y ASan+UBSan. Pruebas nuevas:
+- el polígono del canal capilar, guardado tal cual, ya no rompe el eje medio;
+- el relleno de huecos achica los huecos de una superficie superior a 30°, sin salir de la región ni superponer.
+
+**Sigue:** cerrar los huecos de las superficies sólidas junto a las paredes. Idea: que las líneas de las superficies
+superiores entren un cuarto de cordón en la pared interna.
+

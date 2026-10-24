@@ -4,6 +4,7 @@
 #include "infill/rectilinear.hpp"
 
 #include "infill/gyroid.hpp"
+#include "perimeters/coverage.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -278,6 +279,20 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     return out;
 }
 
+std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width) {
+    if (region.empty())
+        return {};
+    Polygons left = Clipper2Lib::Difference(region, bead_area(lines), Clipper2Lib::FillRule::NonZero);
+    // Parts thinner than half a bead get no bead anyway; dropping them also drops
+    // the hair-thin channels where two bead areas nearly touch.
+    left = offset(offset(left, -width / 4.0), width / 4.0);
+    if (left.empty())
+        return {};
+    BeadingParams beads;
+    beads.preferred_width = width;
+    return layer_walls(left, beads).toolpaths;
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
@@ -289,6 +304,9 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
         out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
     }
+    if (params.gap_fill && !out.solid.empty())
+        out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), out.solid,
+                            params.width);
     // Bridge lines stay straight: a join along the edge would hang in the air.
     out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
     if (params.density <= 0.0)

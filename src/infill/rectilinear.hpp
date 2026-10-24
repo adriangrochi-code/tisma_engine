@@ -3,6 +3,7 @@
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
+#include "perimeters/walls.hpp"
 #include "surfaces/surfaces.hpp"
 
 #include <vector>
@@ -32,7 +33,15 @@ struct LayerFill {
     std::vector<Toolpath> solid;  // top and bottom surfaces, at 100%
     std::vector<Toolpath> sparse; // the rest, at the infill density
     std::vector<Toolpath> bridge; // bridges: straight lines at the bridge's angle, at 100%
+    std::vector<Toolpath> gaps;   // variable-width beads where the solid lines leave a gap (gap_fill)
 };
+
+// What lines leave uncovered in a region, filled with variable-width beads
+// (the wall chain of Kuipers et al. 2020 without a wall limit): a gap of
+// thickness d gets beads summing to d, and gaps thinner than half a bead get
+// none. Used for the solid surfaces: the bands that fitted lines leave at
+// inner corners and the ends of unjoined lines.
+std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width);
 
 struct FillParams {
     double width = 0.4;   // bead width
@@ -40,11 +49,14 @@ struct FillParams {
     double angle = 45.0;  // degrees; odd layers add 90 (rectilinear)
     InfillPattern pattern = InfillPattern::Rectilinear;
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
+    bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
 // fitted to the region, at the layer's angle; top surfaces in monotonic order
-// (with monotonic_top), the rest connected into zig-zags. Sparse
+// (with monotonic_top), the rest connected into zig-zags; with gap_fill, what
+// they leave is filled by gap_fill (off by default: on the sphere it costs
+// 0.5 s for 1 to 2 % of the solid area). Sparse
 // infill, by pattern:
 //  - rectilinear: lines width / density apart on the grid at the layer's
 //    angle, connected into zig-zags;
