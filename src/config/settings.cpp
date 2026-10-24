@@ -161,7 +161,8 @@ Settings parse_settings(std::string_view text) {
         }
     });
     read_group(root, "machine",
-               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables"},
+               {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
+                "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "relative_extrusion") {
@@ -194,11 +195,21 @@ Settings parse_settings(std::string_view text) {
                                list.push_back(as_text(value, k + "." + name));
                            s.variables[name] = std::move(list);
                        }
+                   } else if (n == "corner_speed") {
+                       const double d = number(g, n, k);
+                       if (d < 0.0)
+                           fail(k, "must not be negative");
+                       s.corner_speed = d;
                    } else {
                        const double d = number(g, n, k);
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
-                       (n == "nozzle_diameter" ? s.nozzle_diameter : s.filament_diameter) = d;
+                       const std::map<std::string, double*> targets = {
+                           {"nozzle_diameter", &s.nozzle_diameter}, {"filament_diameter", &s.filament_diameter},
+                           {"max_feed_x", &s.max_feed_x},           {"max_feed_y", &s.max_feed_y},
+                           {"max_feed_z", &s.max_feed_z},           {"max_feed_e", &s.max_feed_e},
+                           {"acceleration", &s.acceleration},       {"travel_acceleration", &s.travel_acceleration}};
+                       *targets.at(n) = d;
                    }
                });
     read_group(root, "speed",
@@ -311,6 +322,13 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.flavor", flavor},
         {"machine.start_gcode", text(s.start_gcode)},
         {"machine.end_gcode", text(s.end_gcode)},
+        {"machine.max_feed_x", num(s.max_feed_x)},
+        {"machine.max_feed_y", num(s.max_feed_y)},
+        {"machine.max_feed_z", num(s.max_feed_z)},
+        {"machine.max_feed_e", num(s.max_feed_e)},
+        {"machine.acceleration", num(s.acceleration)},
+        {"machine.travel_acceleration", num(s.travel_acceleration)},
+        {"machine.corner_speed", num(s.corner_speed)},
         {"speed.walls", num(s.wall_speed)},
         {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
         {"speed.infill", num(s.infill_speed)},

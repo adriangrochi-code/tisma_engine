@@ -102,6 +102,9 @@ TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]
     CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
     CHECK(std::find(lines.begin(), lines.end(), "M84 ; 210") != lines.end());
     CHECK(std::find(lines.begin(), lines.end(), "M82") != lines.end());
+    CHECK(std::any_of(lines.begin(), lines.end(), [](const std::string& l) {
+        return std::regex_match(l, std::regex("; estimated printing time = ([0-9]+h )?([0-9]+m )?[0-9]+s"));
+    }));
 
     const std::set<std::string> types = {"Perimeter",       "External perimeter", "Overhang perimeter", "Internal infill",
                                          "Solid infill",    "Top solid infill",   "Bridge infill",      "Gap fill",

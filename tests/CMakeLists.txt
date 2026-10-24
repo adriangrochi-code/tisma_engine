@@ -31,6 +31,7 @@ add_executable(tisma_tests
   test_order.cpp
   test_travel.cpp
   test_cooling.cpp
+  test_print_time.cpp
 )
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

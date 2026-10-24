@@ -103,6 +103,16 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(c.fan_min == 20.0);
     CHECK(c.fan_max == 90.0);
     CHECK(c.fan_off_layers == 3);
+    const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
+                                                      "travel_acceleration": 3000, "corner_speed": 0}})");
+    CHECK(m.max_feed_x == 300.0);
+    CHECK(m.max_feed_y == 200.0);
+    CHECK(m.max_feed_z == 8.0);
+    CHECK(m.acceleration == 2000.0);
+    CHECK(m.travel_acceleration == 3000.0);
+    CHECK(m.corner_speed == 0.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"corner_speed": -1}})"), ContainsSubstring("machine.corner_speed: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"min_speed": 0}})"), ContainsSubstring("cooling.min_speed: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_off_layers": 1.5}})"), ContainsSubstring("cooling.fan_off_layers: must be a whole number"));

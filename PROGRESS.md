@@ -1524,3 +1524,46 @@ prende el ventilador igual? Hoy el motor lo deja apagado.
 - más velocidad: formato propio exacto para pocos decimales, o capas formateadas en paralelo;
 - aceleraciones y estimación de tiempo;
 - avisos en JSON.
+
+## 2026-10-24 — bloque nocturno 42: límites de la máquina y estimación de tiempo
+
+**Hecho:**
+- Ajustes nuevos en `machine` (`docs/CONFIG.md`), con valores por defecto propios:
+  - velocidad máxima por eje: X e Y 200, Z 12, E 120 mm/s;
+  - aceleración 1000 mm/s² al extruir y 1250 en viajes y retracciones;
+  - `corner_speed` 10 mm/s.
+- Estimación del tiempo de impresión (`src/gcode/print_time.*`, diseño propio con cinemática de libro de texto):
+  - cada movimiento con perfil trapezoidal, o triangular si es corto;
+  - la velocidad se recorta para que ningún eje pase su límite;
+  - en cada unión, la menor de las dos velocidades por el coseno del giro, nunca menos que `corner_speed`;
+  - una pasada hacia atrás y otra hacia adelante por capa, que empieza y termina en reposo.
+- El G-code termina con `; estimated printing time = 7h 27m 56s`, el formato de `docs/spec/GCODE_OUTPUT.md`. No cuenta el
+  G-code de inicio y fin.
+- El enfriamiento sigue usando largo sobre velocidad, sin aceleraciones. Esa cuenta da capas más cortas que la real, así
+  que frena un poco de más.
+
+**Probado:** 157/157 pruebas con gcc, clang y ASan+UBSan:
+- un movimiento largo coincide con la fórmula cerrada;
+- uno corto no llega a su velocidad (triángulo, 2·√(L/a));
+- un cuadrado tarda más que la misma longitud en línea recta, y tramos colineales se unen sin frenar;
+- los límites de Z y de E recortan la velocidad, también en diagonal;
+- formato de las duraciones: `1h 7m 36s`, `7m 36s`, `36s`, `1h 0m 5s`, `2d 1h 0m 5s`;
+- el comentario aparece en el G-code del cubo;
+- lectura de los ajustes nuevos y sus errores.
+
+**Medido:**
+
+| Modelo | Largo / velocidad | Con aceleraciones |
+|---|---|---|
+| Esfera, 500 capas | 6,89 h | 7 h 28 min (+8 %) |
+| Tubo | 24,6 min | 29 min (+18 %) |
+| 9 cubos | 27 min | 34,7 min (+28 %) |
+
+Escritura de la esfera: 0,64–0,76 s, igual que antes. Fuera del comentario nuevo y los ajustes nuevos, el G-code no
+cambia.
+
+**Sigue:**
+- avisos en un JSON aparte;
+- comparar la estimación con el tiempo que calcula Tisma sobre el mismo G-code (caja negra; lo puede hacer el otro
+  equipo);
+- criterio de F4 (Benchy en una impresora real, con el dueño).

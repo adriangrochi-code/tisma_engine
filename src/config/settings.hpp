@@ -58,6 +58,11 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
+    // Motion limits, for the time estimate.
+    double max_feed_x = 200.0, max_feed_y = 200.0, max_feed_z = 12.0, max_feed_e = 120.0; // mm/s
+    double acceleration = 1000.0;        // mm/s2, moves that extrude
+    double travel_acceleration = 1250.0; // mm/s2, travels and retractions
+    double corner_speed = 10.0;          // mm/s through a sharp corner
 
     // speed, mm/s
     double wall_speed = 60.0;

@@ -64,6 +64,12 @@ Reglas:
 | `flavor` | texto | `"reprap"` | `marlin`, `klipper`, `reprap` | Dialecto de G-code (cambiará los comandos de ventilador, temperatura y aceleración) |
 | `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin |
 | `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está |
+| `max_feed_x`, `max_feed_y` | número | 200 | > 0 | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo |
+| `max_feed_z` | número | 12 | > 0 | Ídem para Z |
+| `max_feed_e` | número | 120 | > 0 | Ídem para el extrusor |
+| `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s² |
+| `travel_acceleration` | número | 1250 | > 0 | Aceleración de los viajes y las retracciones, en mm/s² |
+| `corner_speed` | número | 10 | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
 
 ### `speed`
 

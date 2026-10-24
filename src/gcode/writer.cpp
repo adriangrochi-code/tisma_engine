@@ -4,6 +4,7 @@
 
 #include "gcode/cooling.hpp"
 #include "gcode/order.hpp"
+#include "gcode/print_time.hpp"
 #include "gcode/travel.hpp"
 
 #include <algorithm>
@@ -52,11 +53,20 @@ void append_integer(std::string& text, long v) {
 class Emitter {
 public:
     explicit Emitter(const Settings& s)
-        : relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
-          lift_(s.retract_lift), min_travel_(s.retract_min_travel) {
+        : relative_(s.relative_extrusion),
+          time_(Kinematics{{s.max_feed_x, s.max_feed_y, s.max_feed_z, s.max_feed_e},
+                           s.acceleration,
+                           s.travel_acceleration,
+                           s.corner_speed}),
+          retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
+          min_travel_(s.retract_min_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
     }
+
+    // Plans the time of the moves since the last call (they end at rest).
+    void end_layer() { time_.flush(); }
+    double print_time() const { return time_.total(); }
 
     void flush(std::ostream& out) {
         out.write(text_.data(), std::streamsize(text_.size()));
@@ -96,6 +106,7 @@ public:
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retract_ : 0.0;
             text_ += "G92 E" + fixed(e_, 5) + "\n";
+            position_[3] = e_;
             e_text_.clear();
         }
         move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
@@ -205,14 +216,24 @@ private:
             append_integer(text_, f);
             f_ = f;
         }
-        if (text_.size() == bare)
+        if (text_.size() == bare) {
             text_.resize(start); // nothing changed
-        else
-            text_ += '\n';
+            return;
+        }
+        text_ += '\n';
+        // The move for the time estimate, at the feed as written.
+        const double to[4] = {x.value_or(position_[0]), y.value_or(position_[1]), z.value_or(position_[2]),
+                              e ? (relative_ ? position_[3] + *e : *e) : position_[3]};
+        const double de = to[3] - position_[3];
+        time_.add(to[0] - position_[0], to[1] - position_[1], to[2] - position_[2], de, double(f_) / 60.0,
+                  de > 0.0 && (x || y));
+        std::copy(to, to + 4, position_);
     }
 
     std::string text_;
     bool relative_;
+    PrintTime time_;
+    double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
     std::map<double, double> extruded_;
     double other_time_ = 0.0;
@@ -385,6 +406,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
             emit_layer(l, fan_off ? 0.0 : s.fan_max);
             g.pace(Slowdown{});
         }
+        g.end_layer();
         g.flush(out);
     }
 
@@ -392,6 +414,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     g.flush(out);
     if (!s.end_gcode.empty())
         out << substitute_variables(s.end_gcode, s.variables) << "\n";
+    // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
+    out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
     for (const auto& [key, value] : describe(s))
         out << "; " << key << " = " << value << "\n";
 }
