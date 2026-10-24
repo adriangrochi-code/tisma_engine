@@ -94,14 +94,14 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Activar, automático, umbral, separación Z y XY, interfaz, separación de líneas, ángulo, puentes sin soporte | `supports_skirt.md` | ✔ |
-| Soportes en todas las capas hasta una altura (forzar las primeras N capas) | — | ✘ → `supports_more.md` |
-| Solo desde la cama | `interface.md` (chips) | ◐ falta la regla → `supports_more.md` |
-| Estilo: grilla, ajustado («snug») | `supports_skirt.md` | ◐ falta «snug» → `supports_more.md` |
-| Soportes en árbol y orgánicos: ángulos, diámetros de rama y de punta, distancia entre ramas, densidad de las puntas | — | ✘ → `supports_more.md` (fuente: Vanek et al. 2014, en `SOURCES.md`) |
-| Separación Z de abajo, capas de interfaz de abajo | — | ✘ → `supports_more.md` |
-| Patrón del soporte (rectilíneo, grilla, panal) y de la interfaz (automático, rectilíneo, concéntrico), separación de la interfaz, lazos de contacto | `supports_skirt.md` | ◐ solo líneas → `supports_more.md` |
-| Vaina alrededor del soporte, radio de cierre | — | ✘ → `supports_more.md` |
-| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | — | ✘ → `supports_more.md` y `model_tools.md` |
+| Soportes en todas las capas hasta una altura (forzar las primeras N capas) | `supports_more.md` | ✔ |
+| Solo desde la cama | `interface.md` (chips), `supports_more.md` | ✔ |
+| Estilo: grilla, ajustado («snug») | `supports_skirt.md`, `supports_more.md` | ✔ |
+| Soportes en árbol y orgánicos: ángulos, diámetros de rama y de punta, distancia entre ramas, densidad de las puntas | `supports_more.md` | ✔ (los ángulos y las dos paredes, sin medir) |
+| Separación Z de abajo, capas de interfaz de abajo | `supports_more.md` | ✔ |
+| Patrón del soporte (rectilíneo, grilla, panal) y de la interfaz (automático, rectilíneo, concéntrico), separación de la interfaz, lazos de contacto | `supports_skirt.md`, `supports_more.md` | ✔ |
+| Vaina alrededor del soporte, radio de cierre | `supports_more.md` | ✔ |
+| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md` | ◐ falta la herramienta para pintarlos y agregarlos → `model_tools.md` |
 | Sincronizar las capas del soporte con las de la pieza (multimaterial) | — | ✘ → `multi_extruder.md` |
 
 ### Velocidades y aceleraciones
