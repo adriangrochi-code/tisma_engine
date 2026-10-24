@@ -157,7 +157,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Temperatura de la cámara y mínima de la cámara | `gcode_extras.md` | ✔ |
 | Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
-| G-code de inicio y fin del filamento | — | ✘ → `gcode_templates.md` |
+| G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
 | Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
 | Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | — | ✘ → `multi_extruder.md` |
 
@@ -176,14 +176,14 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Arcos `G2`/`G3` (ajuste de arcos) | `gcode_extras.md` | ✔ |
 | Extrusión relativa o absoluta | `GCODE_OUTPUT.md` | ✔ |
 | E volumétrica | `gcode_extras.md` | ✔ |
-| G-code de inicio y fin, con variables | `GCODE_OUTPUT.md` | ◐ faltan condiciones, expresiones y la lista de variables → `gcode_templates.md` |
-| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | — | ✘ → `gcode_templates.md` (entre objetos: `sequential.md`) |
+| G-code de inicio y fin, con variables | `GCODE_OUTPUT.md`, `gcode_templates.md` | ✔ |
+| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md` | ◐ falta el del cambio de herramienta → `multi_extruder.md` |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
-| Cambio de color y pausa en una capa, desde la vista previa | — | ✘ → `gcode_templates.md` y `preview.md` |
-| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`) | ◐ falta por impresión y filamento → `gcode_templates.md` |
+| Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md` | ◐ falta ponerlos desde la vista previa → `preview.md` |
+| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`), `gcode_templates.md` | ◐ falta el prefijo con que se usan: no se resolvieron desde la línea de comandos → `presets.md` |
 | Comentarios detallados en el G-code | `gcode_extras.md` | ✔ |
-| Formato del nombre del archivo de salida, con variables | — | ✘ → `gcode_templates.md` |
-| Scripts de posproceso | — | ✘ → `gcode_templates.md` |
+| Formato del nombre del archivo de salida, con variables | `gcode_templates.md` | ✔ |
+| Scripts de posproceso | `gcode_templates.md` | ✔ |
 | Impresión secuencial (objeto por objeto), con el espacio del cabezal (radio y alto) | `sequential.md` | ✔ |
 | Boquilla de alto caudal; altura de capa mínima y máxima por extrusor; desfase de cada extrusor | — | ✘ → `multi_extruder.md` |
 | Impresoras de cinta (Tisma) | `belt_printer.md` | ✔ |
