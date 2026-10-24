@@ -16,7 +16,7 @@ namespace {
 
 using nlohmann::json;
 
-const std::vector<std::string> kPlannedGroups = {"material", "retraction", "cooling", "support"};
+const std::vector<std::string> kPlannedGroups = {"material", "cooling", "support"};
 
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
     throw SettingsError("settings: " + key + ": " + message);
@@ -75,7 +75,7 @@ Settings parse_settings(std::string_view text) {
     Settings s;
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
-            group == "machine" || group == "speed" || group == "compute")
+            group == "machine" || group == "speed" || group == "retraction" || group == "compute")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -111,7 +111,13 @@ Settings parse_settings(std::string_view text) {
                    else
                        s.simplify_tolerance = v;
                });
-    read_group(root, "walls", {"count", "width"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "walls", {"count", "width", "seam"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "seam") {
+            s.seam = choice<SeamMode>(g, n, k,
+                                      {{"aligned", SeamMode::Aligned}, {"nearest", SeamMode::Nearest},
+                                       {"random", SeamMode::Random}, {"rear", SeamMode::Rear}});
+            return;
+        }
         if (n == "count") {
             const json& v = g.at(n);
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
@@ -228,6 +234,19 @@ Settings parse_settings(std::string_view text) {
                    else
                        s.max_speed = d;
                });
+    read_group(root, "retraction", {"length", "speed", "lift", "min_travel"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   const double d = number(g, n, k);
+                   if (n == "speed") {
+                       if (!(d > 0.0))
+                           fail(k, "must be greater than 0");
+                       s.retract_speed = d;
+                       return;
+                   }
+                   if (d < 0.0)
+                       fail(k, "must not be negative");
+                   (n == "length" ? s.retract_length : n == "lift" ? s.retract_lift : s.retract_min_travel) = d;
+               });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
@@ -253,6 +272,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"slicing.simplify_tolerance", num(s.simplify_tolerance)},
         {"walls.count", std::to_string(s.wall_count)},
         {"walls.width", num(s.wall_width)},
+        {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
+                       : s.seam == SeamMode::Random  ? "random" : "rear"},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
@@ -274,6 +295,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.travel", num(s.travel_speed)},
         {"speed.first_layer", num(s.first_layer_speed)},
         {"speed.max", num(s.max_speed)},
+        {"retraction.length", num(s.retract_length)},
+        {"retraction.speed", num(s.retract_speed)},
+        {"retraction.lift", num(s.retract_lift)},
+        {"retraction.min_travel", num(s.retract_min_travel)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
     };
     for (const auto& [name, values] : s.variables) {

@@ -35,6 +35,7 @@ Reglas:
 |---|---|---|---|---|
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
 | `width` | número | 0.4 | > 0 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine` |
+| `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 
 ### `surfaces`
 
@@ -78,6 +79,15 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 | `travel` | número | 130 | Viajes |
 | `first_layer` | número | 30 | Tope de la primera capa |
 | `max` | número | 80 | Tope de toda extrusión |
+
+### `retraction`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `length` | número | 2 | ≥ 0 | Cuánto filamento se retrae, en mm; 0 no retrae |
+| `speed` | número | 40 | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
+| `lift` | número | 0 | ≥ 0 | Cuánto sube Z durante un viaje que retrae, en mm |
+| `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto no retraen, en mm |
 
 ### `compute`
 

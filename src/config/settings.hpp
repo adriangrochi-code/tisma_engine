@@ -19,6 +19,7 @@ enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
+enum class SeamMode { Aligned, Nearest, Random, Rear };
 
 // A speed in mm/s, or a percentage of another speed.
 struct Speed {
@@ -38,6 +39,7 @@ struct Settings {
     double simplify_tolerance = 0.01;
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
+    SeamMode seam = SeamMode::Aligned;
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
@@ -66,6 +68,12 @@ struct Settings {
     double travel_speed = 130.0;
     double first_layer_speed = 30.0;
     double max_speed = 80.0; // no extrusion goes faster
+
+    // retraction
+    double retract_length = 2.0;     // mm of filament
+    double retract_speed = 40.0;     // mm/s
+    double retract_lift = 0.0;       // mm of Z while travelling
+    double retract_min_travel = 2.0; // mm: shorter travels do not retract
 
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;

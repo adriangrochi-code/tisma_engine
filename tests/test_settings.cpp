@@ -88,6 +88,17 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
     CHECK(parse_settings(R"({"speed": {"outer_wall": 35}})").outer_wall_speed.of(60.0) == 35.0);
+    const Settings r = parse_settings(R"({"retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
+                                          "walls": {"seam": "rear"}})");
+    CHECK(r.retract_length == 0.8);
+    CHECK(r.retract_speed == 35.0);
+    CHECK(r.retract_lift == 0.2);
+    CHECK(r.retract_min_travel == 1.5);
+    CHECK(r.seam == SeamMode::Rear);
+    CHECK(Settings{}.seam == SeamMode::Aligned);
+    CHECK_THROWS_WITH(parse_settings(R"({"retraction": {"speed": 0}})"), ContainsSubstring("retraction.speed: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"retraction": {"length": -1}})"), ContainsSubstring("retraction.length: must not be negative"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"seam": "back"}})"), ContainsSubstring("walls.seam: must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"outer_wall": "fast"}})"), ContainsSubstring("speed.outer_wall: must be a number of mm/s or a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel": 0}})"), ContainsSubstring("speed.travel: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "sailfish"}})"), ContainsSubstring("machine.flavor: must be one of"));

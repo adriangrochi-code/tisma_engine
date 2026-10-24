@@ -2,7 +2,12 @@
 
 #include "gcode/writer.hpp"
 
+#include "gcode/order.hpp"
+
 #include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <map>
 #include <cmath>
 #include <cstdio>
 #include <numbers>
@@ -28,7 +33,9 @@ std::string fixed(double v, int decimals) {
 // Keeps the machine's position and writes only the axes that change.
 class Emitter {
 public:
-    Emitter(std::ostream& out, const Settings& s) : out_(out), relative_(s.relative_extrusion) {
+    Emitter(std::ostream& out, const Settings& s)
+        : out_(out), relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
+          lift_(s.retract_lift), min_travel_(s.retract_min_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
     }
@@ -38,11 +45,14 @@ public:
     void new_layer(double z, double height, double travel_feed) {
         out_ << ";LAYER_CHANGE\n;Z:" << fixed(z, 3) << "\n;HEIGHT:" << fixed(height, 3) << "\n";
         if (!relative_) {
-            out_ << "G92 E0\n";
-            e_ = 0.0;
+            // A retraction carries over the layer change: E restarts at minus its length.
+            e_ = retracted_ ? -retract_ : 0.0;
+            out_ << "G92 E" << fixed(e_, 5) << "\n";
+            e_text_.clear();
         }
         move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
         height_ = height;
+        z_value_ = z;
     }
 
     void type(const char* t) {
@@ -52,9 +62,29 @@ public:
         }
     }
 
-    void travel(const Point2d& p, double feed) { move("G1", p.x, p.y, std::nullopt, std::nullopt, feed); }
+    // A travel; longer than min_travel it retracts first (and lifts Z by lift).
+    void travel(const Point2d& p, double feed) {
+        const bool far = known_ && std::hypot(p.x - x_value_, p.y - y_value_) > min_travel_;
+        if (far && retract_ > 0.0 && !retracted_) {
+            e_ = relative_ ? -retract_ : e_ - retract_;
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+            retracted_ = true;
+        }
+        const bool lift = far && lift_ > 0.0;
+        if (lift)
+            move("G1", std::nullopt, std::nullopt, z_value_ + lift_, std::nullopt, feed);
+        move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+        if (lift)
+            move("G1", std::nullopt, std::nullopt, z_value_, std::nullopt, feed);
+        x_value_ = p.x, y_value_ = p.y, known_ = true;
+    }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
+        if (retracted_) { // unretract: back to where E was
+            e_ = relative_ ? retract_ : e_ + retract_;
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+            retracted_ = false;
+        }
         const double width = (from.width + to.width) / 2.0;
         const std::string w = fixed(width, 3);
         if (w != width_) {
@@ -63,9 +93,16 @@ public:
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         const double e = width * height_ * length / filament_area_;
-        e_ = relative_ ? e : e_ + e;
         total_e_ += e;
+        pending_ += e;
+        // A piece that rounds to no move at 3 decimals is not written; its E
+        // (next to nothing) goes with the next piece.
+        if (fixed(to.p.x, 3) == x_ && fixed(to.p.y, 3) == y_)
+            return;
+        e_ = relative_ ? pending_ : e_ + pending_;
+        pending_ = 0.0;
         move("G1", to.p.x, to.p.y, std::nullopt, e_, feed);
+        x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
     }
 
     double total_e() const { return total_e_; }
@@ -101,8 +138,12 @@ private:
     std::ostream& out_;
     bool relative_;
     double filament_area_ = 1.0;
+    double retract_, retract_feed_, lift_, min_travel_;
     double height_ = 0.2;
-    double e_ = 0.0, total_e_ = 0.0;
+    double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
+    double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
+    bool known_ = false;     // the position is known (after the first move in XY)
+    bool retracted_ = false;
     std::string x_, y_, z_, e_text_, f_, width_;
     const char* type_ = nullptr;
 };
@@ -152,6 +193,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     if (!s.start_gcode.empty())
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     out << "G90\n" << (s.relative_extrusion ? "M83" : "M82") << "\n";
+    Point2d cursor{0.0, 0.0};
+    SeamMemory seams;
 
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
         const Layer& layer = model.layers[l];
@@ -168,30 +211,29 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
             if (t.closed && t.points.size() > 2)
                 g.extrude(t.points.back(), t.points.front(), feed);
         };
-        // Walls from the inside out: the outer wall (bead 0) last.
+        const std::uint64_t seed = std::uint64_t(l) * 1000003u;
+        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
+            for (const Toolpath& t : order_paths(paths, cursor, seam, seed, seams))
+                lay(t, type, feed);
+        };
+        // Walls from the inside out: the outer wall (bead 0) last; each bead index in nearest order.
         if (l < model.walls.size()) {
-            std::vector<const Toolpath*> walls;
+            std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& t : model.walls[l].toolpaths)
-                walls.push_back(&t);
-            std::stable_sort(walls.begin(), walls.end(), [](const Toolpath* a, const Toolpath* b) { return a->index > b->index; });
-            for (const Toolpath* t : walls) {
-                const bool outer = t->index == 0;
-                lay(*t, outer ? "External perimeter" : "Perimeter",
-                    speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed));
+                by_index[t.index].push_back(t);
+            for (const auto& [index, paths] : by_index) {
+                const bool outer = index == 0;
+                group(paths, outer ? "External perimeter" : "Perimeter",
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
             }
         }
         if (l < model.fills.size()) {
             const LayerFill& f = model.fills[l];
-            for (const Toolpath& t : f.solid)
-                lay(t, "Solid infill", speed(s.solid_infill_speed));
-            for (const Toolpath& t : f.top)
-                lay(t, "Top solid infill", speed(s.top_solid_infill_speed));
-            for (const Toolpath& t : f.bridge)
-                lay(t, "Bridge infill", speed(s.solid_infill_speed));
-            for (const Toolpath& t : f.gaps)
-                lay(t, "Gap fill", speed(s.solid_infill_speed));
-            for (const Toolpath& t : f.sparse)
-                lay(t, "Internal infill", speed(s.infill_speed));
+            group(f.solid, "Solid infill", speed(s.solid_infill_speed), SeamMode::Nearest);
+            group(f.top, "Top solid infill", speed(s.top_solid_infill_speed), SeamMode::Nearest);
+            group(f.bridge, "Bridge infill", speed(s.solid_infill_speed), SeamMode::Nearest);
+            group(f.gaps, "Gap fill", speed(s.solid_infill_speed), SeamMode::Nearest);
+            group(f.sparse, "Internal infill", speed(s.infill_speed), SeamMode::Nearest);
         }
     }
 

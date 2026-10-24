@@ -132,6 +132,7 @@ add_library(tisma_core
   src/infill/gyroid.cpp
   src/infill/connect.cpp
   src/gcode/writer.cpp
+  src/gcode/order.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

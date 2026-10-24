@@ -113,12 +113,65 @@ TEST_CASE("relative extrusion: M83, no G92, every move carries its own E", "[gco
     double e_total = 0.0;
     for (const std::string& l : lines_of(g)) {
         const std::size_t e = l.find(" E");
-        if (l.rfind("G1", 0) == 0 && e != std::string::npos) {
-            const double v = std::stod(l.substr(e + 2));
-            CHECK(v > 0.0);
-            CHECK(v < 1.0); // a piece's own E, not a running total
-            e_total += v;
+        if (l.rfind("G1", 0) != 0 || e == std::string::npos)
+            continue;
+        const double v = std::stod(l.substr(e + 2));
+        if (l.find(" X") == std::string::npos && l.find(" Y") == std::string::npos) {
+            CHECK(std::fabs(std::fabs(v) - 2.0) < 1e-9); // a retraction or its return
+            continue;
         }
+        CHECK(v > 0.0);
+        CHECK(v < 1.0); // a piece's own E, not a running total
+        e_total += v;
     }
     CHECK(e_total > 100.0);
+}
+
+TEST_CASE("retraction: around long travels only, and E comes back to where it was", "[gcode]") {
+    Settings s; // 2 mm at 40 mm/s, travels over 2 mm, absolute E
+    s.retract_lift = 0.3;
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    double e = 0.0, before = 0.0, x = 0.0, y = 0.0, z = 0.0;
+    bool retracted = false, known = false;
+    std::size_t retractions = 0;
+    auto field = [](const std::string& l, char axis, double& v) {
+        const std::size_t p = l.find(std::string(" ") + axis);
+        if (p == std::string::npos)
+            return false;
+        v = std::stod(l.substr(p + 2));
+        return true;
+    };
+    for (const std::string& l : lines) {
+        if (l.rfind("G92 E", 0) == 0) {
+            e = std::stod(l.substr(5));
+            continue;
+        }
+        if (l.rfind("G1", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, ne = e;
+        const bool hx = field(l, 'X', nx), hy = field(l, 'Y', ny), hz = field(l, 'Z', nz), he = field(l, 'E', ne);
+        if (he && !hx && !hy) {
+            if (!retracted) { // a retraction: 2 mm back, at 40 mm/s
+                CHECK_THAT(e - ne, Catch::Matchers::WithinAbs(2.0, 1e-9));
+                CHECK(l.find(" F2400") != std::string::npos);
+                before = e;
+                retracted = true;
+                ++retractions;
+            } else { // its return, to exactly where E was
+                CHECK_THAT(ne, Catch::Matchers::WithinAbs(before, 1e-9));
+                retracted = false;
+            }
+        } else if (he) {
+            CHECK_FALSE(retracted); // never extrude while retracted
+            CHECK(ne >= e);         // absolute E only grows while extruding
+        } else if ((hx || hy) && known && !retracted) {
+            CHECK(std::hypot(nx - x, ny - y) <= 2.0 + 1e-6); // a short travel, not retracted
+        }
+        if (hz && retracted)
+            CHECK((std::fabs(nz - z - 0.3) < 1e-9 || std::fabs(z - nz - 0.3) < 1e-9 || std::fabs(nz - z) > 0.1));
+        x = nx, y = ny, z = nz, e = ne;
+        known = known || hx || hy;
+    }
+    CHECK(retractions > 0);
+    CHECK_FALSE(retracted);
 }

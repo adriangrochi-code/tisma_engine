@@ -1348,3 +1348,47 @@ la vista previa de Tisma.
 - viajes por dentro con retracción;
 - enfriamiento.
 
+## 2026-10-24 — bloque nocturno 37: retracción, orden de recorridos y costura
+
+**Hecho:**
+- Grupo `retraction` con valores de banco y nombres propios:
+  - `length` 2 mm, `speed` 40 mm/s, `lift` 0 mm, `min_travel` 2 mm;
+  - antes de un viaje más largo que `min_travel` se retrae (y sube Z si hay salto);
+  - antes de volver a extruir, E vuelve exactamente a donde estaba (absoluta o relativa);
+  - una retracción que cruza el cambio de capa sigue valiendo después del `G92`.
+- Orden (`src/gcode/order.*`, diseño propio): en cada grupo de la capa (cada índice de pared, de adentro hacia afuera;
+  después cada tipo de relleno) va primero el recorrido que empieza más cerca. Las líneas abiertas pueden invertirse y
+  los lazos empiezan en su costura.
+- Costura (`walls.seam`, `aligned` por defecto, valor de banco), según `docs/spec/BEHAVIOR.md`:
+  - `aligned`: esquinas cóncavas, si hay, cerca de la costura de la capa de abajo;
+  - `nearest`, `rear` y `random` (determinista).
+- Defecto corregido: los tramos que se redondean a ningún movimiento (3 decimales) se escribían como líneas con solo E.
+  Ahora no se escriben y su E pasa al siguiente: en la esfera, de 1,26 millones a 853 000 líneas `G1` y de 30 a 24,9 MB.
+
+**Probado:** 139/139 pruebas con gcc, clang y ASan+UBSan:
+- retracción en el cubo:
+  - 2 mm a 40 mm/s antes de viajes de más de 2 mm, y solo ahí;
+  - E vuelve exacta y nunca se extruye retraído;
+  - la E absoluta solo crece al extruir;
+  - el salto en Z sube y baja 0,3 mm;
+- con E relativa, las líneas de solo E son retracciones de ±2 mm;
+- una grilla de 36 cuadrados en orden aleatorio viaja menos de la mitad una vez ordenada, y una línea se invierte si su
+  otro extremo está más cerca;
+- costuras:
+  - `rear` en el punto de Y máxima;
+  - `nearest` en la esquina más cercana;
+  - `random` repetible;
+  - `aligned` en la esquina cóncava de una L, y cerca de la costura anterior en un cuadrado;
+- lectura de los ajustes nuevos.
+
+**Medido** (esfera, 500 capas):
+- viaje total de 70,1 m a 61,3 m (−12,5 %);
+- 2056 retracciones;
+- 24,9 MB de G-code;
+- `slice` 1,25–1,28 s de corte.
+
+**Sigue:**
+- viajes por dentro de la pieza (que no crucen perímetros) y retracción al salir de ella;
+- orden por islas;
+- enfriamiento.
+

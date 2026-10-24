@@ -271,9 +271,10 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   huecos y relleno disperso
 - [ ] Escribir el G-code más rápido (hoy ~1,4 s para los 30 MB de la esfera): `std::to_chars` y capas formateadas en
   paralelo
-- [ ] Orden de islas y de recorridos (el más cercano), y costura de los lazos (`aligned`, `nearest`, `random`, `rear`)
-- [ ] Viajes por dentro de la pieza sin cruzar perímetros; retracción al salir de la pieza o en viajes largos; salto
-  en Z
+- [x] Orden de recorridos (el más cercano) y costura de los lazos (`walls.seam`: `aligned`, `nearest`, `random`, `rear`)
+- [x] Retracción en viajes largos y salto en Z (grupo `retraction`)
+- [ ] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza
+- [ ] Orden por islas (terminar una isla antes de pasar a la otra)
 - [ ] Enfriamiento: tiempo mínimo de capa con las dos etapas de `BEHAVIOR.md` y ventilador al máximo en esas capas
 - [ ] Aceleraciones y límites de la máquina; estimación de tiempo (opcional, como comentario)
 - [ ] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)
