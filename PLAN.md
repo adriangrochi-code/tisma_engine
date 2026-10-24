@@ -41,6 +41,17 @@ actual, que el dueño pueda licenciar como quiera.
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer | Medido y documentado |
 
+## Estado de F0
+
+- [x] CMake, C++20
+- [x] Catch2
+- [x] Línea de comandos (`slice` solo lee el modelo y responde «not implemented»; `info` imprime el resumen)
+- [x] Lectura de STL binario y ASCII, con pruebas
+- [x] CI: Linux en cada envío (gcc, clang, ASan+UBSan); Windows y macOS a mano y los lunes
+- [x] `THIRD_PARTY.md`, `PROVENANCE.md`
+- [ ] Comprobar la CI en Windows y macOS (lanzarla a mano una vez)
+- [ ] Banco de pruebas: modelos reales (Benchy, conejo, tornillo), con licencia que permita guardarlos
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:
