@@ -10,14 +10,14 @@ hunda.
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `dense_infill` | — | no | Activa el relleno denso |
-| `dense_infill_density` | % | 40 % | Densidad de esa capa |
+| `infill.dense_under_top` | — | no | Activa el relleno denso |
+| `infill.dense_density` | % | 40 % | Densidad de esa capa |
 
 ## Reglas
 
-1. La última capa de relleno poco denso bajo las capas sólidas de arriba se imprime con `dense_infill_density`, en la
+1. La última capa de relleno poco denso bajo las capas sólidas de arriba se imprime con `infill.dense_density`, en la
    zona que queda debajo de la superficie.
-2. Las demás capas siguen con `fill_density`.
+2. Las demás capas siguen con `infill.density`.
 3. Mismo patrón y dirección que el resto del relleno; solo cambia la separación entre líneas (`surfaces_infill.md`,
    regla 7).
 
@@ -27,4 +27,4 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra. Ajustes base de `gcode_mot
 
 | # | Pieza | Ajustes | Resultado |
 |---|---|---|---|
-| D1 | Cubo de 20 × 20 × 10 mm | `fill_density` 10 %, `dense_infill` sí | Capas 4 a 46: relleno con separación 4,071 mm (10 %). Capa 47: 1,018 mm (40 %). Capas 48 a 50: las capas sólidas de arriba |
+| D1 | Cubo de 20 × 20 × 10 mm | `infill.density` 10 %, `infill.dense_under_top` sí | Capas 4 a 46: relleno con separación 4,071 mm (10 %). Capa 47: 1,018 mm (40 %). Capas 48 a 50: las capas sólidas de arriba |
