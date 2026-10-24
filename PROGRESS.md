@@ -1772,3 +1772,46 @@ cuatro puntos), un 64-gono (casi todos cocirculares) y una estrella. La estructu
 - partición de las parábolas en su vértice.
 
 Después, la salida `MedialEdge` y la comparación contra Boost en polígonos.
+
+## 2026-10-24 — Voronoi propio, parte 2: segmentos
+
+**Hecho:**
+- Inserción de segmentos en `src/geom/voronoi.*`, según Held y Huber 2009 (secciones 2.1–2.3) y Huber 2008:
+  - cono de influencia;
+  - semilla en las celdas de los extremos;
+  - los nodos que coinciden con un punto de la entrada no se borran;
+  - ciclos rotos con nodos de grado dos en el punto de la arista más cercano al punto encerrado, que se quitan al
+    terminar.
+- Diseño propio:
+  - distancia al segmento cerrado; fuera del cono, un punto cuenta como no tomado, porque el extremo ya es un sitio;
+  - el nodo nuevo se ubica por bisección sobre la arista exacta: la recta sale de los dos sitios, no de los nodos
+    extremos, que arrastran redondeo; la parábola se sigue por el pie sobre la recta del segmento;
+  - una celda puede tener varias tandas marcadas (un segmento que rodea la celda de un punto);
+  - las aristas que salen de cada tanda se marcan por media arista, en tiempo constante.
+- Defectos encontrados y corregidos en el camino:
+  - la bisección se deslizaba por la zona fuera del cono, donde la diferencia de distancias es cero y el redondeo
+    decide;
+  - las rectas interpoladas entre nodos lejanos llevaban hasta 2,7 unidades de error a las esquinas;
+  - la búsqueda de las aristas de cada tanda era cuadrática.
+
+**Probado:** 174/174 pruebas con gcc, clang y ASan+UBSan. Contra Boost como oráculo, vértices dentro de la caja, con
+`check()` después de cada segmento: cuadrado, L, 64-gono, estrella, cuadrado con agujero cuadrado y peine de 10 dientes.
+
+**Medido** (polígonos de radio 25 mm en nm; puntos y segmentos en orden aleatorio, como hace Held), en µs por segmento,
+todo incluido:
+
+| Polígono | 500 lados | 5000 lados | 50 000 lados |
+|---|---|---|---|
+| Círculo, propio | 33 | 32 | 20 |
+| Círculo, Boost | 26 | 23 | 25 |
+| Estrella, propio | 26 | 30 | 48 |
+| Estrella, Boost | 12 | 12 | 12 |
+| Curva ondulada, propio | 23 | 24 | 28 |
+| Curva ondulada, Boost | 34 | 33 | 32 |
+
+En orden de polígono, el círculo de 500 lados costaba 217 µs por segmento: cada segmento nuevo cortaba la mitad de la
+región central.
+
+**Sigue:**
+- nodos por fórmula cerrada en vez de bisección (dos tercios del tiempo);
+- después, la salida `MedialEdge` y la comparación con el eje medio de hoy.

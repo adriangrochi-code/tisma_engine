@@ -223,9 +223,11 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
     Huber 2009, sección 2; Huber 2008, capítulo 2), en coma flotante, robusta por construcción;
   - [x] diagrama de puntos (`src/geom/voronoi.*`): coincide con Boost en puntos al azar, grillas, un 64-gono y una
     estrella; con los vértices de un polígono en orden es 4–5 veces más rápido que Boost;
-  - [ ] inserción de segmentos: cono de influencia, semilla en la celda de un extremo, ruptura de ciclos con nodos de
-    grado dos, nodos punto–punto–segmento, punto–segmento–segmento y segmento–segmento–segmento, partición en el
-    vértice de las parábolas;
+  - [x] inserción de segmentos: cono de influencia, semilla en las celdas de los extremos, ruptura de ciclos con nodos
+    de grado dos, nodos nuevos por bisección sobre la arista exacta; coincide con Boost en cuadrado, L, 64-gono,
+    estrella, cuadrado con agujero y peine;
+  - [ ] nodos por fórmula cerrada (punto–punto–segmento, punto–segmento–segmento, segmento–segmento–segmento) en vez de
+    bisección: hoy la bisección es dos tercios del tiempo de un segmento;
   - [ ] módulo propio con la misma salida que hoy (`MedialEdge`), probado contra Boost.Polygon como oráculo (Boost es
     BSL-1.0, sirve para comparar) en muchos polígonos: círculos, letras, rendijas, piezas del banco;
   - [ ] medirlo contra Boost en la esfera y reemplazarlo cuando dé lo mismo y sea más rápido;
