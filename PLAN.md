@@ -2,8 +2,8 @@
 
 **Objetivo final:** rehacer en sala limpia todo lo que se pueda de Tisma Slicer, para que el dueño lo licencie como
 quiera (código disponible, sin uso comercial de terceros):
-- lo que ya es propio se trae desde `imported/tisma/`;
-- lo demás se escribe desde cero (ver `CLEANROOM.md`).
+- todo se escribe desde cero (ver `CLEANROOM.md`), también lo que el equipo del dueño ya hizo en Tisma Slicer;
+- lo que Tisma Slicer ya hace llega como fichas en `docs/spec/features/`.
 
 **Primer paso:** el motor de laminado, más rápido que el de Tisma Slicer actual.
 
@@ -44,22 +44,20 @@ quiera (código disponible, sin uso comercial de terceros):
 | F4 | 10–12 | G-code: orden de islas, viajes que no cruzan perímetros, retracción, salto en Z, costura (alineada, más cercana, aleatoria), enfriamiento con tiempo mínimo de capa, velocidades, aceleraciones, límites de la máquina, Marlin y Klipper, estimación de tiempo | El Benchy se imprime en una impresora real |
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer | Medido y documentado |
-| F7 | después | Lo propio de Tisma, desde `imported/tisma/` sobre los tipos del motor: análisis estructural y aerodinámico (`libtisma_fea`), capas no planares, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas traídas pasan con los tipos del motor |
+| F7 | después | Lo propio de Tisma, desde sus fichas: análisis estructural y aerodinámico, capas no planares, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas de cada ficha pasan |
 
 **Después del motor** (el orden lo decide el dueño):
 
 | Fase | Contenido | Base |
 |---|---|---|
-| F8 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | `imported/tisma/src/slic3r/GUI/` (lo nuevo de Tisma) y `docs/tisma/NEW_UI.md`; el resto, nuevo |
-| F9 | Conexión con impresoras: USB, Bambu Lab, OctoPrint, Moonraker, PrusaLink y las demás, desde la documentación pública de sus API | `imported/tisma/src/slic3r/Utils/` y sus simuladores |
+| F8 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | Fichas de la interfaz de Tisma (qué hay en cada pantalla y cómo se comporta) |
+| F9 | Conexión con impresoras: USB, Bambu Lab, OctoPrint, Moonraker, PrusaLink y las demás | Documentación pública de sus API y fichas del comportamiento de Tisma |
 | F10 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura |
 | F11 | Formatos: 3MF (especificación pública), STEP (OCCT), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
-| F12 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | `imported/tisma/.github/`, `packaging/`, `resources-src/branding/` |
+| F12 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | Fichas; el logo lo da el dueño |
 
-**Código propio que adelanta fases** (`imported/README.md`):
-- F4: `GCodeMoveLine.hpp` (líneas G0/G1) y `tools/research/pressure_advance_sim.py`.
-- F3: `InterlockInfill.*`, como relleno opcional después de los básicos.
-- Las pruebas de `imported/tisma/tests/` son especificaciones de las funciones de Tisma.
+**Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
+superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de imprimir) y soportes.
 
 ## Avance
 

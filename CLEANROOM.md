@@ -12,9 +12,11 @@ El código fuente de:
 - PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic Slicer y
   cualquier otro derivado de Slic3r;
 - Cura y CuraEngine (de ahí vienen Arachne, Lightning y los soportes en árbol de Thomas Rahm);
-- **Tisma Slicer** (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`): es AGPL. La única excepción es lo que ya
-  está en este repositorio, en `imported/tisma/` y `docs/tisma/` (ver «Código propio» abajo); el resto del fork sigue
-  prohibido, aunque lo hayamos escrito nosotros;
+- **Tisma Slicer** (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`), incluido lo que escribimos dentro de ese fork:
+  es AGPL y lo escribieron sesiones que leyeron PrusaSlicer;
+- **la historia de `imported/` y `docs/tisma/` en este repositorio** (commits `4768a57` y `759eccd`): ahí se copió código
+  de Tisma Slicer y se sacó el 24-10-2026 (decisión del dueño: todo pasa por fichas). No se lee con `git log`,
+  `git show` ni de ninguna otra forma;
 - ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL.
 
 Una sesión o persona que haya leído ese código para este trabajo no escribe código acá.
@@ -39,21 +41,40 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
   | Catch2 | BSL-1.0 |
   | nlohmann/json | MIT |
   | miniz | MIT |
-- **Las especificaciones de `docs/spec/`:** las escribió el equipo que conoce Tisma Slicer, sin código ni estructura
-  copiada (sala limpia de dos equipos).
+- **Las especificaciones de `docs/spec/`,** incluidas las fichas de `docs/spec/features/` (ver «Fichas» abajo).
 - **Buscar en la web** artículos, especificaciones y documentación de usuario (manuales, bases de conocimiento). Nunca
   código fuente de los programas prohibidos.
 - **Comparar con otros slicers solo como caja negra:** ejecutar su programa y comparar el G-code, los tiempos o el
   filamento. Nunca abrir su código.
 
-## Código propio
+## Fichas (cómo pasa lo que ya hace Tisma Slicer)
 
-`imported/tisma/` tiene código que el equipo del dueño escribió en archivos nuevos de Tisma Slicer, sin código de
-PrusaSlicer, y `docs/tisma/` sus documentos. El dueño tiene sus derechos y lo trae con la licencia de este repositorio.
-Se puede leer, adaptar y copiar al motor; `imported/README.md` dice cómo se revisó y qué hay que reemplazar.
+Todo lo de Tisma Slicer llega acá como **fichas**, nunca como código, también lo que escribió el equipo del dueño:
 
-Usa tipos de PrusaSlicer (`TriangleMesh`, `Model`, `PrintConfig` ...). Se cambian por los del motor y **no se busca su
-implementación**.
+1. **Quién las escribe:** el equipo que conoce Tisma Slicer por dentro (el equipo «sucio»), en `docs/spec/features/`.
+   Ese equipo no escribe código en este repositorio.
+2. **Qué dice una ficha:**
+   - qué hace la función y para qué sirve;
+   - sus ajustes, con unidad, rango y valor por defecto;
+   - las reglas que tiene que cumplir;
+   - las fórmulas, con el artículo, la norma o la especificación de donde salen;
+   - los casos límite;
+   - las pruebas como datos: entrada y resultado esperado, medido en Tisma Slicer como caja negra.
+3. **Qué no puede decir una ficha:**
+   - código ni pseudocódigo;
+   - nombres de clases, funciones o archivos de Tisma Slicer o de PrusaSlicer;
+   - cómo está organizado ese código.
+
+   Los nombres de los ajustes y las etiquetas del G-code sí se usan: son la interfaz con el usuario y con la vista
+   previa.
+4. **Filtro:** antes de subir una ficha se revisa con un chequeo automático (nada de código ni de nombres internos) y la
+   revisión del dueño o de una sesión limpia.
+5. **Cómo se usa:** quien programa el motor parte de la ficha y de las fuentes públicas, decide su propia estructura y
+   anota en `PROVENANCE.md` «ficha `docs/spec/features/<nombre>.md`».
+
+Lo que Tisma Slicer tomó de código ajeno (el render de PrusaSlicer 3.0, hosts de impresoras de OrcaSlicer, perfiles de
+OrcaSlicer y Cura) se especifica solo desde fuentes públicas: artículos, especificaciones de formatos, documentación de
+protocolos y datos de los fabricantes.
 
 ## Procedencia
 

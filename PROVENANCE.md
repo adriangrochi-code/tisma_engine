@@ -6,4 +6,4 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 |---|---|
 | (ninguno todavía) | |
 
-Lo que venga de `imported/tisma/` se anota así: «propio, de `imported/tisma/<ruta>`» (ver `imported/README.md`).
+Lo que sale de una ficha se anota así: «ficha `docs/spec/features/<nombre>.md`», más las fuentes públicas que cite.

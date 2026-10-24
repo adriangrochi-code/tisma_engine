@@ -1,20 +1,21 @@
 # Tisma engine — notes for Claude
 
 A slicing engine written from scratch for Tisma, the first step of the owner's final goal: rebuild as much of Tisma
-Slicer as possible in a clean room. What is already the owner's own code is brought in (`imported/tisma/`); the rest
-is written from scratch. Read `CLEANROOM.md` and `PLAN.md` before any work.
+Slicer as possible in a clean room. Everything Tisma Slicer does reaches this repository as functional specifications
+(`docs/spec/`, feature specs in `docs/spec/features/`), never as code. Read `CLEANROOM.md` and `PLAN.md` before any
+work.
 
 ## Clean room (mandatory)
 
 - Never read, copy or translate the source of PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Cura,
   CuraEngine, Tisma Slicer (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`) or any other GPL/AGPL code.
-  - The exception is the owner's own code already in this repository, `imported/tisma/` and `docs/tisma/`: read
-    `imported/README.md`. Adapt it freely. Never look up the implementation of the PrusaSlicer types it uses.
+  - This includes the history of `imported/` and `docs/tisma/` in this repository (commits `4768a57` and `759eccd`,
+    removed on 2026-10-24): never read it, by `git log`, `git show` or any other way.
   - Do not clone them.
   - Do not open them on GitHub.
   - Do not search their code.
-- Work from `docs/spec/` (what to build), `imported/tisma/` (own code to adapt), papers, public format
-  specifications and permissive libraries only. Web search for papers, specifications and user documentation is
+- Work from `docs/spec/` (what to build, including the feature specs), papers, public format specifications and
+  permissive libraries only. Web search for papers, specifications and user documentation is
   allowed. Every library is recorded in
   `THIRD_PARTY.md` (name, version, license, URL) before it is used.
 - Every module records where it comes from in `PROVENANCE.md`: paper and section, specification, or own design.
@@ -41,8 +42,7 @@ one stopped.
 
 1. Fetch `dev`. If it does not exist yet, create it from `main`. Otherwise merge `origin/main` into it (the owner adds
    specifications and code to `main`).
-2. Read `docs/spec/README.md` and `imported/README.md`. Use `imported/tisma/` when
-   it already does what the item needs.
+2. Read `docs/spec/README.md` and the feature specs in `docs/spec/features/` that the item needs.
 3. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
 4. Implement it with tests, build, run the tests.
 5. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).

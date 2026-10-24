@@ -15,7 +15,7 @@ Los escribió el equipo del dueño, que conoce Tisma Slicer por dentro. Así fun
 | `BEHAVIOR.md` | Cómo tiene que comportarse el laminado: requisitos y lecciones medidas en Tisma |
 | `BENCHMARKS.md` | Números de referencia de Tisma Slicer, medidos como caja negra, para comparar |
 
-El código propio del dueño, ya escrito en Tisma Slicer y traído acá, está en `imported/tisma/`, con sus documentos en
-`docs/tisma/` (ver `imported/README.md`).
+Lo que Tisma Slicer ya hace llega como fichas en `features/`, una por función, con las reglas de «Fichas» de
+`CLEANROOM.md`.
 
 Si una especificación contradice `CLEANROOM.md`, manda `CLEANROOM.md`.

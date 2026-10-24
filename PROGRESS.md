@@ -16,8 +16,7 @@ Se creó el repositorio con la licencia, las reglas de sala limpia y el plan. To
 
 El dueño agregó a `main`:
 - `docs/spec/`: especificaciones funcionales (G-code, ajustes, comportamiento, números de referencia) y fuentes públicas;
-- `imported/tisma/` y `docs/tisma/`: código y documentos propios traídos de Tisma Slicer (análisis estructural y
-  aerodinámico, capas no planares, Z anti-aliasing, relleno entrelazado, impresoras de cinta y más), revisados para que
-  no tengan código de PrusaSlicer. Ver `imported/README.md`.
+- `imported/tisma/` y `docs/tisma/`: código y documentos propios traídos de Tisma Slicer. **Se sacaron el mismo día:**
+  el dueño decidió que todo pase por fichas (`CLEANROOM.md`, «Fichas»). Su historia no se lee.
 
 **Sigue:** el bloque siguiente une `main` en `dev` y continúa F0, usando las especificaciones.
