@@ -184,3 +184,55 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
     CHECK_THAT(flat_run.err, ContainsSubstring("encloses"));
     CHECK_FALSE(std::filesystem::exists(out));
 }
+
+TEST_CASE("analyze writes the report and the map", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const auto report = dir / "tisma_test_analysis.json", map = dir / "tisma_test_analysis.vtk";
+    const Run r = run({"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "--case",
+                       kData + "/analysis_case.json", "-o", report.string(), "--vtk", map.string()});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("solver: "));
+    CHECK_THAT(r.out, ContainsSubstring("min_safety: "));
+    CHECK_THAT(r.out, ContainsSubstring("wrote " + map.string()));
+    std::ifstream json(report);
+    std::stringstream text;
+    text << json.rdbuf();
+    CHECK_THAT(text.str(), ContainsSubstring("\"valid\": true"));
+    std::ifstream vtk(map, std::ios::binary);
+    std::string first;
+    std::getline(vtk, first);
+    CHECK(first == "# vtk DataFile Version 3.0");
+}
+
+TEST_CASE("analyze errors", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const std::string report = (dir / "tisma_test_analysis_errors.json").string();
+    const std::string model = kData + "/cube_ascii.stl", config = kData + "/settings.json";
+    SECTION("arguments") {
+        const Run r = run({"analyze", model, "--config", config, "-o", report});
+        CHECK(r.code == kExitUsage);
+        CHECK_THAT(r.err, ContainsSubstring("analyze needs a model, --config, --case and -o"));
+        CHECK(run({"analyze", model, "--config", config, "--case", "x.json", "-o", report, "--warnings", "w.json"}).code ==
+              kExitUsage);
+    }
+    SECTION("a bad case") {
+        const auto bad = dir / "tisma_test_bad_case.json";
+        std::ofstream(bad) << "{\"loads\": [{\"face\": \"top\"}]}";
+        const Run r = run({"analyze", model, "--config", config, "--case", bad.string(), "-o", report});
+        CHECK(r.code == kExitInput);
+        CHECK_THAT(r.err, ContainsSubstring("loads[0]: needs \"force\""));
+    }
+    SECTION("nothing holds the part: a report that says so, and exit code 5") {
+        const auto miss = dir / "tisma_test_miss_case.json";
+        std::ofstream(miss) << R"({"model": "solid", "voxel": 1.0, "rows_per_layer": 1,
+            "fixtures": [{"box": {"min": [100, 100, 0], "max": [101, 101, 1]}}],
+            "loads": [{"face": "top", "force": [0, 0, -1]}]})";
+        const Run r = run({"analyze", model, "--config", config, "--case", miss.string(), "-o", report});
+        CHECK(r.code == kExitAnalysis);
+        CHECK_THAT(r.err, ContainsSubstring("no fixture holds any part of the model"));
+        std::ifstream json(report);
+        std::stringstream text;
+        text << json.rdbuf();
+        CHECK_THAT(text.str(), ContainsSubstring("\"valid\": false"));
+    }
+}

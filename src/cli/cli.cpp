@@ -1,7 +1,11 @@
 #include "cli/cli.hpp"
 
 #include "io/stl.hpp"
+#include "io/vtk.hpp"
+#include "config/analysis_case.hpp"
 #include "config/settings.hpp"
+#include "fea/analysis.hpp"
+#include "report/analysis_json.hpp"
 #include "gcode/writer.hpp"
 #include "report/warnings.hpp"
 #include "geom/medial_axis.hpp"
@@ -28,6 +32,8 @@ namespace {
 constexpr std::string_view kUsage =
     "usage:\n"
     "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
+    "  tisma-engine analyze <model.stl> --config <settings.json> --case <case.json> -o <report.json>\n"
+    "                       [--vtk <map.vtk>]\n"
     "  tisma-engine info <model.stl>\n"
     "  tisma-engine --help | --version\n";
 
@@ -36,10 +42,13 @@ struct SliceArgs {
     std::string config;
     std::string output;
     std::string warnings; // empty: not written
+    std::string analysis_case; // analyze only
+    std::string vtk;           // analyze only; empty: not written
 };
 
-// Returns the arguments of 'slice', or writes the problem to err.
-std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args, std::ostream& err) {
+// Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
+std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args, std::ostream& err,
+                                          bool analyze = false) {
     SliceArgs out;
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string_view a = args[i];
@@ -57,8 +66,14 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         } else if (a == "-o" || a == "--output") {
             if (!value(out.output))
                 return std::nullopt;
-        } else if (a == "--warnings") {
+        } else if (a == "--warnings" && !analyze) {
             if (!value(out.warnings))
+                return std::nullopt;
+        } else if (a == "--case" && analyze) {
+            if (!value(out.analysis_case))
+                return std::nullopt;
+        } else if (a == "--vtk" && analyze) {
+            if (!value(out.vtk))
                 return std::nullopt;
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
@@ -69,6 +84,10 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             err << "error: more than one model given\n";
             return std::nullopt;
         }
+    }
+    if (analyze && (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
+        err << "error: analyze needs a model, --config, --case and -o\n";
+        return std::nullopt;
     }
     if (out.model.empty() || out.config.empty() || out.output.empty()) {
         err << "error: slice needs a model, --config and -o\n";
@@ -285,6 +304,85 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     return kExitOk;
 }
 
+int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    const std::optional<SliceArgs> parsed = parse_slice_args(args, err, true);
+    if (!parsed) {
+        err << kUsage;
+        return kExitUsage;
+    }
+    Settings settings;
+    AnalysisCase analysis;
+    try {
+        settings = load_settings(parsed->config);
+    } catch (const SettingsError& e) {
+        err << "error: " << parsed->config << ": " << e.what() << "\n";
+        return kExitInput;
+    }
+    try {
+        analysis = load_analysis_case(parsed->analysis_case);
+    } catch (const SettingsError& e) {
+        err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
+        return kExitInput;
+    }
+    StlFile stl;
+    double seconds = 0.0;
+    if (int rc = read_model(parsed->model, stl, seconds, err); rc != kExitOk)
+        return rc;
+    out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    const IndexedMesh mesh = weld_exact(stl.mesh);
+    if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
+        err << "error: " << reason << "\n";
+        return kExitModel;
+    }
+    std::unique_ptr<gpu::Context> gpu;
+    if (settings.gpu == GpuMode::Auto && analysis.model == AnalysisModel::AsPrinted)
+        gpu = gpu::Context::create();
+    AnalysisReport report;
+    try {
+        report = run_analysis(mesh, settings, analysis, gpu.get());
+    } catch (const AnalysisError& e) {
+        err << "error: " << e.what() << "\n";
+        return kExitAnalysis;
+    }
+    const ElasticityResult& e = report.result.elasticity;
+    out << "voxels: " << report.grid.count() << " of " << report.grid.solid.size() << " (" << report.grid.hx
+        << " mm, " << report.rows_per_layer << " rows per layer)\n";
+    out << "solver: " << e.levels << " levels, " << e.iterations << " iterations, residual " << e.residual
+        << (e.converged ? "" : " (not converged)") << "\n";
+    out << "prepare_ms: " << report.prepare_seconds * 1000.0 << "\n";
+    out << "solve_ms: " << report.solve_seconds * 1000.0 << "\n";
+    out << "max_displacement_mm: " << e.max_displacement << "\n";
+    out << "max_von_mises_mpa: " << e.max_von_mises << "\n";
+    if (report.weakest_layer >= 0)
+        out << "min_safety: " << report.result.min_safety << " at layer " << report.weakest_layer << " ("
+            << failure_mode_name(report.result.mode[report.result.weakest]) << "); peak in one voxel "
+            << report.result.min_peak_safety << "\n";
+    else
+        out << "min_safety: none (nothing is stressed)\n";
+    for (const AnalysisWarning& w : report.warnings)
+        err << "warning: " << w.message << "\n";
+
+    std::ofstream json(parsed->output, std::ios::binary);
+    json << analysis_json(report, analysis);
+    json.close();
+    if (!json) {
+        err << "error: cannot write '" << parsed->output << "'\n";
+        return kExitInput;
+    }
+    out << "wrote " << parsed->output << "\n";
+    if (!parsed->vtk.empty()) {
+        std::ofstream vtk(parsed->vtk, std::ios::binary);
+        write_analysis_vtk(vtk, report);
+        vtk.close();
+        if (!vtk) {
+            err << "error: cannot write '" << parsed->vtk << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->vtk << "\n";
+    }
+    return report.valid ? kExitOk : kExitAnalysis;
+}
+
 } // namespace
 
 int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
@@ -306,6 +404,8 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         return cmd_slice(rest, out, err);
     if (command == "info")
         return cmd_info(rest, out, err);
+    if (command == "analyze")
+        return cmd_analyze(rest, out, err);
     err << "error: unknown command '" << command << "'\n" << kUsage;
     return kExitUsage;
 }

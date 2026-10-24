@@ -3,6 +3,7 @@
 #include "fea/material.hpp"
 #include "fea/voxels.hpp"
 
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <span>
@@ -64,6 +65,12 @@ struct ElasticityResult {
     double max_von_mises = 0.0;
 };
 
+// The part without the pieces that no fixture holds: voxels joined by faces
+// to a voxel with a corner in a fixture's box that fixes some axis. A loose
+// piece moves freely (its displacement is undetermined), so the solvers below
+// leave it out; loose counts its voxels.
+VoxelGrid held_voxels(const VoxelGrid& grid, std::span<const Fixture> fixtures, std::size_t& loose);
+
 // Solves K u = f by preconditioned conjugate gradients without assembling K:
 // each product gathers, node by node, the 3 x 3 blocks of the elements around
 // it (parallel over nodes, no write conflicts; the same sums in the same
@@ -77,15 +84,30 @@ ElasticityResult solve_elasticity(const VoxelGrid& grid, const Material& materia
                                   std::span<const SurfaceLoad> loads, const SolverOptions& options = {},
                                   std::span<const double> element_scale = {});
 
+// Where the safety factor averages the stress (see solve_as_printed): x and y
+// in mm (0: the voxel alone), and the layers' rows in z (layer_planes splits
+// every layer into rows_per_layer rows; 0 or 1: the voxel's own row).
+struct StressWindow {
+    double x = 0.0, y = 0.0;
+    int rows_per_layer = 0;
+};
+
 // The part as printed: every voxel is the orthotropic material turned to the
 // direction of the line that fills it (PLAN.md, A1: adhesion between layers
 // and between lines). The safety factor is Tsai-Wu's in the line's axes.
 struct AsPrintedResult {
-    ElasticityResult elasticity;   // von Mises of the stresses in global axes
-    std::vector<double> safety;    // per voxel; +infinity for empty or unstressed voxels
-    std::vector<FailureMode> mode; // per voxel: what gives way first at the safety factor
+    ElasticityResult elasticity; // von Mises of the stresses in global axes
+    // Per voxel, from its stress averaged over the window around it (the
+    // voxel's own without a window); +infinity for empty or unstressed voxels.
+    std::vector<double> safety;
+    std::vector<FailureMode> mode; // per voxel: what gives way first at that safety factor
     double min_safety = std::numeric_limits<double>::infinity();
     std::size_t weakest = 0; // the voxel with min_safety
+    // From each voxel's own stress. Where linear elasticity has no finite
+    // stress (the edge of a clamp, a sharp inner corner) this keeps falling
+    // as the voxels shrink; the averaged safety does not.
+    std::vector<double> peak_safety;
+    double min_peak_safety = std::numeric_limits<double>::infinity();
 };
 
 // angle: per voxel, the line's direction in the layer (radians from x, any
@@ -93,10 +115,17 @@ struct AsPrintedResult {
 // stiffness averaged over every direction and the weakest direction for the
 // safety factor. Directions are rounded to kDirections steps over half a
 // turn, so the solver needs only a few element matrices.
+//
+// window: the safety factor compares the strengths with the stress averaged
+// over the part's voxels around each voxel, a box window.x by window.y wide
+// in the layer and the rows of the voxel's layer up (the volume method of the
+// theory of critical distances: Taylor, "The Theory of Critical Distances",
+// 2007). The strengths of a printed material are averages over its lines and
+// layers, so the analysis uses one line width across and one layer up.
 inline constexpr int kDirections = 36; // over half a turn: steps of 5 degrees
 AsPrintedResult solve_as_printed(const VoxelGrid& grid, const OrthotropicMaterial& material,
                                  std::span<const float> angle, std::span<const Fixture> fixtures,
                                  std::span<const SurfaceLoad> loads, const SolverOptions& options = {},
-                                 std::span<const double> element_scale = {});
+                                 std::span<const double> element_scale = {}, const StressWindow& window = {});
 
 } // namespace tisma

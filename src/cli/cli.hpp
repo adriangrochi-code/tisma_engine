@@ -13,6 +13,7 @@ enum ExitCode : int {
     kExitInput = 2,          // an input file is missing or malformed
     kExitNotImplemented = 3, // the command exists but does nothing yet
     kExitModel = 4,          // the model cannot be printed (empty, outside the bed, too tall)
+    kExitAnalysis = 5,       // the analysis gave no valid result (nothing held, no load applied, not converged)
 };
 
 // Runs the command line. args excludes the program name.

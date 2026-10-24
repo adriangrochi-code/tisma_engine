@@ -2093,3 +2093,74 @@ advertencias. Pruebas nuevas:
   seguridad;
 - el núcleo de la GPU (producto con K y ciclo), probado contra la CPU;
 - la multigrilla con huecos: duplicar los nodos gruesos por cada pedazo separado dentro de una celda.
+
+## 2026-10-24 — A1, paso 5: la línea de comandos del análisis
+
+**Pedido del dueño:** seguir con la línea de comandos del análisis.
+
+**Hecho:**
+- `tisma-engine analyze pieza.stl --config ajustes.json --case caso.json -o informe.json [--vtk mapa.vtk]`
+  (`docs/ANALYSIS.md`). Código de salida nuevo: 5, el análisis no dio un resultado válido.
+- El caso, en su propio JSON (`src/config/analysis_case.*`):
+  - el material, por su registro o con constantes cambiadas;
+  - el modelo, `as_printed` o `solid`;
+  - la calidad: `normal`, 2 vóxeles por línea y una fila por capa; `high`, 4 por línea y 2 filas por capa;
+  - los apoyos y las cargas, por caja o por cara de la pieza;
+  - el solucionador.
+  Como en los ajustes, los errores nombran la clave.
+- El análisis completo (`src/fea/analysis.*`):
+  - corta la pieza y arma los vóxeles;
+  - toma las direcciones del laminado y saca los huecos del relleno;
+  - resuelve;
+  - resume: el más débil, el más débil de cada capa y los vóxeles por debajo de 1, 1,5 y 2;
+  - avisa de apoyos que no tocan nada, piezas sueltas, cargas sin aplicar, falta de convergencia y falla.
+- El informe JSON (`src/report/analysis_json.*`) y el mapa VTK para ParaView (`src/io/vtk.*`), escrito desde la
+  descripción pública del formato. Se verificó como caja negra con el lector de VTK 9.7.1, instalado aparte solo para
+  eso: dimensiones, planos, los siete campos y sus rangos coinciden.
+- **Hallazgo y corrección:** el factor de seguridad de un vóxel no converge. En la arista de un empotramiento, en la
+  placa de prueba, va 1,48 → 0,92 → 0,65 → 0,42 al achicar el vóxel de 0,2 a 0,025 mm (el desplazamiento sí
+  converge). Ahora el factor se calcula sobre la tensión promediada:
+  - en un ancho de línea en el plano y en las filas de la capa del vóxel (método de volumen de la teoría de
+    distancias críticas, Taylor 2007);
+  - es la escala a la que valen las resistencias medidas;
+  - el pico de un vóxel queda aparte, como dato.
+  Una primera ventana centrada en cada vóxel también en altura tenía un sesgo: en la capa de abajo se recortaba contra
+  la superficie y se acercaba a ella al afinar. Promediar sobre la capa entera lo corrige.
+
+**Convergencia** (placa de 12 × 4 × 2 mm empotrada, 5 N en la punta; tabla completa en `docs/ANALYSIS.md`):
+
+| Placa | Vóxel de 0,2 mm | 0,1 mm | 0,05 mm |
+|---|---|---|---|
+| Maciza, factor promediado | 1,664 | 1,573 | 1,527 |
+| Maciza, lejos del empotramiento | 1,734 | 1,721 | 1,716 |
+| Como se imprime, factor promediado | 1,615 | 1,499 | 1,380 |
+| Pico de un vóxel (como se imprime) | 1,476 | 0,920 | 0,649 |
+
+La pieza maciza converge. La impresa todavía cambia un 8 % por refinamiento, porque la forma de los cordones en
+vóxeles cambia con la resolución. Queda en `PLAN.md`: estimar ese error con dos calidades y representar mejor el
+contacto entre cordones.
+
+**Medido** (4 núcleos; cubo de 10 mm de PLA Basic de Bambu Lab, base fija, 100 N de corte arriba, comando completo):
+
+| Calidad | Vóxeles analizados | Iteraciones | Tiempo | Factor mín. | Pico de un vóxel | Mapa VTK |
+|---|---|---|---|---|---|---|
+| `normal` (0,2 mm, 1 fila) | 77 258 | 58 | 4,3 s | 2,10 | 1,94 | 3,3 MB |
+| `high` (0,1 mm, 2 filas) | 618 028 | 54 | 29,5 s | 1,98 | 1,28 | 26 MB |
+
+**Probado:** 196/196 pruebas (190 de Catch2 y 6 del programa) con gcc, clang y ASan+UBSan. Pruebas nuevas:
+- el lector del caso: valores por defecto, todas las claves y 16 errores con su clave;
+- la resolución según la calidad;
+- una columna maciza traccionada: tensión y factor exactos (10⁻⁶), el informe JSON y el mapa VTK byte a byte en su
+  estructura;
+- una placa como se imprime: huecos, direcciones y el más débil junto al empotramiento;
+- los avisos: apoyo que no toca, carga que no toca, falla y demasiados vóxeles;
+- la CLI: el informe y el mapa escritos, errores de argumentos, caso mal escrito y salida 5 con el informe igual
+  escrito;
+- `cli_analyze_writes_report` en CTest.
+
+**No probado:** una pieza real rota contra la predicción.
+
+**Sigue:**
+- estimar el error de resolución con dos calidades;
+- el núcleo de la GPU;
+- el criterio de A1, la placa con agujero.

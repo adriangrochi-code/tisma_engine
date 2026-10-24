@@ -50,4 +50,15 @@ Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los a
 
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
-fuera de `machine.bed` o más alto que `machine.max_height`). Con error no queda G-code a medias.
+fuera de `machine.bed` o más alto que `machine.max_height`); 5 el análisis no dio un resultado válido. Con error no
+queda G-code a medias.
+
+Análisis estructural de la pieza tal como se imprimiría (material ortótropo, adherencia entre capas y entre
+líneas, factor de seguridad por vóxel):
+
+```sh
+build/tisma-engine analyze modelo.stl --config ajustes.json --case caso.json -o informe.json --vtk mapa.vtk
+```
+
+El caso (material, calidad, apoyos y cargas), el informe y el mapa para ParaView están en `docs/ANALYSIS.md`; los
+materiales y sus fuentes, en `docs/MATERIALS.md`.

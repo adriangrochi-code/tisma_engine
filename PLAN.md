@@ -346,7 +346,7 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
 - [x] Vóxeles en forma de caja que siguen el laminado (pedido del dueño): hx × hy en el plano, por ejemplo 4 por ancho
   de línea en los modelos de alta calidad, y en altura cada capa partida en filas enteras (la primera capa también),
   así que los límites entre capas caen en caras de elementos
-- [ ] Ajustes del análisis: tamaño del vóxel desde el ancho de línea y la altura de capa (calidad normal y alta)
+- [x] Ajustes del análisis: tamaño del vóxel desde el ancho de línea y la altura de capa (calidad normal y alta)
 - [x] **Adherencia entre capas y entre líneas (pedido del dueño, para la máxima fiabilidad):** material ortótropo «como
   se imprimió» (`src/fea/material.*`): ejes del cordón, entre cordones y entre capas, con rigidez y resistencia propias
   en cada uno; la dirección de cada vóxel tomada del laminado real (`src/fea/as_printed.*`); el solver con una matriz
@@ -362,8 +362,15 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
 - [ ] Multigrilla más fuerte con huecos: nodos gruesos duplicados por cada pedazo separado dentro de una celda gruesa
   (el relleno ralo todavía pide 61 iteraciones contra 11 de la pieza maciza)
 - [ ] Núcleo de la GPU, probado contra la CPU
-- [ ] Cargas y apoyos desde la línea de comandos (JSON) y resultado legible (desplazamientos, tensiones, factor de
-  seguridad)
+- [x] Cargas y apoyos desde la línea de comandos (JSON) y resultado legible: `tisma-engine analyze` con el caso en
+  JSON (material de la base, calidad, apoyos y cargas por caja o por cara), informe JSON y mapa VTK para ParaView
+  (`docs/ANALYSIS.md`)
+- [x] Factor de seguridad sobre la tensión promediada en un ancho de línea y una capa (el pico de un vóxel no converge
+  en las aristas de los apoyos); estudio de convergencia en `docs/ANALYSIS.md`
+- [ ] Estimar el error de resolución: correr también la calidad inferior (cuesta un octavo) y avisar si el factor
+  cambia más que un umbral
+- [ ] Representar mejor el contacto entre cordones en «como se imprime» (vóxeles parcialmente llenos en vez de
+  todo o nada): hoy el factor cambia un 8 % por refinamiento en la placa de prueba
 - [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
 
 **Fuentes de la anisotropía:**

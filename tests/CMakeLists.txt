@@ -36,9 +36,11 @@ add_executable(tisma_tests
   test_support.cpp
   test_voronoi.cpp
   test_fea.cpp
+  test_analysis.cpp
 )
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
-target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon Catch2::Catch2WithMain)
+# nlohmann/json reads the analysis report back.
+target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
@@ -54,6 +56,11 @@ add_test(NAME cli_slice_writes_gcode
   COMMAND tisma-engine slice ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
           --config ${CMAKE_CURRENT_SOURCE_DIR}/data/settings.json -o ${CMAKE_CURRENT_BINARY_DIR}/cube.gcode)
 set_tests_properties(cli_slice_writes_gcode PROPERTIES PASS_REGULAR_EXPRESSION "wrote ")
+add_test(NAME cli_analyze_writes_report
+  COMMAND tisma-engine analyze ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
+          --config ${CMAKE_CURRENT_SOURCE_DIR}/data/settings.json
+          --case ${CMAKE_CURRENT_SOURCE_DIR}/data/analysis_case.json -o ${CMAKE_CURRENT_BINARY_DIR}/cube_analysis.json)
+set_tests_properties(cli_analyze_writes_report PROPERTIES PASS_REGULAR_EXPRESSION "min_safety: ")
 
 # The engine's license must stay closable: every dependency listed in
 # THIRD_PARTY.md with a permissive license, no copyleft text in our files.
