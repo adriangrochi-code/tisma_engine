@@ -197,13 +197,31 @@ TransitionResult apply_transitions(MedialGraph& g, const BeadingParams& params, 
                                        true});
                     result.bead_counts.push_back(-1.0);
                     // Edge i now ends at the new node; a new edge continues to the old end.
+                    // The new node's supports are interpolated along the edge
+                    // (exact on straight edges; pieces of curved ones are at most 0.2 mm).
                     MedialGraph::Edge& old = g.edges[chain.edges[i]];
-                    const std::uint32_t far = old.a == chain.nodes[i] ? old.b : old.a;
-                    if (old.a == chain.nodes[i])
+                    const bool forward = old.a == chain.nodes[i];
+                    const std::uint32_t far = forward ? old.b : old.a;
+                    const double u = forward ? t : 1.0 - t; // position from old.a
+                    Point2d mid[2];
+                    for (int k = 0; k < 2; ++k)
+                        mid[k] = {old.support_a[k].x + u * (old.support_b[k].x - old.support_a[k].x),
+                                  old.support_a[k].y + u * (old.support_b[k].y - old.support_a[k].y)};
+                    MedialGraph::Edge rest{id, far, old.curved, true, {mid[0], mid[1]}, {}};
+                    if (forward) {
+                        rest.support_b[0] = old.support_b[0];
+                        rest.support_b[1] = old.support_b[1];
                         old.b = id;
-                    else
+                        old.support_b[0] = mid[0];
+                        old.support_b[1] = mid[1];
+                    } else {
+                        rest.support_b[0] = old.support_a[0];
+                        rest.support_b[1] = old.support_a[1];
                         old.a = id;
-                    g.edges.push_back({id, far, old.curved, true});
+                        old.support_a[0] = mid[0];
+                        old.support_a[1] = mid[1];
+                    }
+                    g.edges.push_back(rest);
                     chain.nodes.insert(chain.nodes.begin() + std::ptrdiff_t(i + 1), id);
                     chain.edges.insert(chain.edges.begin() + std::ptrdiff_t(i + 1),
                                        static_cast<std::uint32_t>(g.edges.size() - 1));

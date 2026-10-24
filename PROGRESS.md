@@ -667,3 +667,25 @@ figura 8.
 **Sigue:**
 - trapezoidación: aristas de soporte de cada nodo a su punto más cercano del borde, y dominios por contorno;
 - después, propagación del reparto (sección 3.5) y extracción de trayectorias (sección 3.6).
+
+## 2026-10-24 — bloque nocturno 14: apoyos de la trapezoidación
+
+**Hecho:**
+- La CI de `32bc2ee` estaba en curso al empezar el bloque. La de `cdceabe` se canceló porque el gancho de cierre
+  pidió subir los commits pendientes; la de `32bc2ee` prueba todo, incluido ese commit.
+- Apoyos (Kuipers et al. 2020, ecuación 1): cada arista del eje medio guarda, para cada extremo y para cada uno de
+  los dos lados (las dos celdas del Voronoi que separa), el punto más cercano del borde: el pie de la perpendicular
+  sobre el segmento, o la esquina. Cada arista con los apoyos de un lado es un trapecio (o un triángulo) de la
+  trapezoidación del esqueleto (sección 3.2), y ahí se van a ubicar los cordones (sección 3.6).
+- `apply_transitions` interpola los apoyos de los nodos nuevos al partir aristas.
+
+**Probado:** 95/95 pruebas con gcc, clang y ASan+UBSan:
+- en la tira, la línea del medio tiene apoyos justo enfrente, uno en cada lado;
+- en la tira, la cuña y el anillo, cada extremo queda a su radio de sus dos apoyos y los apoyos caen sobre el borde;
+- en el anillo, las piezas parabólicas se apoyan en una esquina del agujero;
+- los nodos nuevos de las rampas conservan sus apoyos a su radio.
+
+**Sigue:**
+- propagación del reparto (sección 3.5);
+- sitios sobre los lados de los trapecios (sección 3.6: el cordón i va donde el radio vale l_i);
+- unión por contorno.

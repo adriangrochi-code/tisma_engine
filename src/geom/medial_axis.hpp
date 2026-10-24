@@ -18,11 +18,19 @@ struct Point2d {
 // circle there); in Kuipers et al. 2020 they decide how many beads fit.
 // Parabolic edges (between a corner and a segment) come as chains of straight
 // pieces of at most kMaxCurvedPiece, marked curved (Section 3.2).
+//
+// support_a[k] and support_b[k] are the closest boundary points of each end on
+// side k (Kuipers et al. 2020, Eq. 1, "support"): side 0 and side 1 are the two
+// Voronoi cells the edge separates. A node and its two supports span the
+// skeletal trapezoidation (Section 3.2): each edge with its supports on one side
+// is a trapezoid (or a triangle when the supports meet).
 struct MedialEdge {
     Point2d a, b;     // mm
     double radius_a;  // mm
     double radius_b;  // mm
     bool curved;
+    Point2d support_a[2];
+    Point2d support_b[2];
 };
 
 inline constexpr double kMaxCurvedPiece = 0.2; // mm, Kuipers et al. 2020, Section 3.2
@@ -44,6 +52,8 @@ struct MedialGraph {
         std::uint32_t a = 0, b = 0;
         bool curved = false;
         bool central = false;
+        Point2d support_a[2]; // closest boundary points of node a on each side
+        Point2d support_b[2];
     };
     std::vector<Node> nodes;
     std::vector<Edge> edges;

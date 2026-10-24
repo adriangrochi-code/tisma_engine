@@ -93,8 +93,7 @@ public:
         boost::polygon::construct_voronoi(segments_.begin(), segments_.end(), &vd_);
     }
 
-    // Calls emit(a, ra, b, rb, curved) for every straight piece of every
-    // interior edge (in units).
+    // Calls emit(piece) for every straight piece of every interior edge (in units).
     template <typename Emit>
     void for_each_piece(Emit emit) const {
         for (const auto& edge : vd_.edges()) {
@@ -105,13 +104,22 @@ public:
                 continue;
             const Point2d a{edge.vertex0()->x(), edge.vertex0()->y()};
             const Point2d b{edge.vertex1()->x(), edge.vertex1()->y()};
-            if (!edge.is_curved()) {
-                emit(a, radius(*edge.cell(), a), b, radius(*edge.cell(), b), false);
-                continue;
+            const std::vector<Point2d> chain = edge.is_curved() ? discretize(edge, a, b) : std::vector<Point2d>{a, b};
+            const auto& c0 = *edge.cell();
+            const auto& c1 = *edge.twin()->cell();
+            for (std::size_t i = 0; i + 1 < chain.size(); ++i) {
+                MedialEdge m;
+                m.a = chain[i];
+                m.b = chain[i + 1];
+                m.radius_a = radius(c0, m.a);
+                m.radius_b = radius(c0, m.b);
+                m.curved = edge.is_curved();
+                m.support_a[0] = support(c0, m.a);
+                m.support_a[1] = support(c1, m.a);
+                m.support_b[0] = support(c0, m.b);
+                m.support_b[1] = support(c1, m.b);
+                emit(m);
             }
-            const std::vector<Point2d> chain = discretize(edge, a, b);
-            for (std::size_t i = 0; i + 1 < chain.size(); ++i)
-                emit(chain[i], radius(*edge.cell(), chain[i]), chain[i + 1], radius(*edge.cell(), chain[i + 1]), true);
         }
     }
 
@@ -128,6 +136,20 @@ private:
             return std::hypot(v.x - double(c.x), v.y - double(c.y));
         }
         return distance_to_segment(v.x, v.y, segments_[cell.source_index()]);
+    }
+
+    // Closest point of a cell's site to v: the corner, or the foot of the
+    // perpendicular on the segment (clamped to it).
+    Point2d support(const Diagram::cell_type& cell, const Point2d& v) const {
+        if (cell.contains_point()) {
+            const auto c = site_point(cell);
+            return {double(c.x), double(c.y)};
+        }
+        const Segment& s = segments_[cell.source_index()];
+        const double px = double(s.p.x), py = double(s.p.y), dx = double(s.q.x) - px, dy = double(s.q.y) - py;
+        const double len2 = dx * dx + dy * dy;
+        const double t = len2 > 0.0 ? std::clamp(((v.x - px) * dx + (v.y - py) * dy) / len2, 0.0, 1.0) : 0.0;
+        return {px + t * dx, py + t * dy};
     }
 
     // Whether the part of the edge in this cell lies inside the region. The
@@ -212,12 +234,17 @@ std::vector<MedialEdge> medial_axis(const Polygons& region) {
     if (region.empty())
         return out;
     const Builder builder(region);
-    builder.for_each_piece([&](const Point2d& a, double ra, const Point2d& b, double rb, bool curved) {
-        out.push_back({{a.x / kUnitsPerMm, a.y / kUnitsPerMm},
-                       {b.x / kUnitsPerMm, b.y / kUnitsPerMm},
-                       ra / kUnitsPerMm,
-                       rb / kUnitsPerMm,
-                       curved});
+    builder.for_each_piece([&](MedialEdge m) {
+        auto mm = [](const Point2d& p) { return Point2d{p.x / kUnitsPerMm, p.y / kUnitsPerMm}; };
+        m.a = mm(m.a);
+        m.b = mm(m.b);
+        m.radius_a /= kUnitsPerMm;
+        m.radius_b /= kUnitsPerMm;
+        for (int k = 0; k < 2; ++k) {
+            m.support_a[k] = mm(m.support_a[k]);
+            m.support_b[k] = mm(m.support_b[k]);
+        }
+        out.push_back(m);
     });
     return out;
 }
@@ -237,7 +264,7 @@ MedialGraph medial_graph(const Polygons& region) {
         const std::uint32_t a = node(e.a, e.radius_a);
         const std::uint32_t b = node(e.b, e.radius_b);
         if (a != b)
-            g.edges.push_back({a, b, e.curved, false});
+            g.edges.push_back({a, b, e.curved, false, {e.support_a[0], e.support_a[1]}, {e.support_b[0], e.support_b[1]}});
     }
     return g;
 }

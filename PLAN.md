@@ -199,7 +199,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Filtro de anclas opuestas a menos de 1 mm y rampas de largo w* con cantidad fraccionaria (ecuación 7)
 - [x] Filtro del marcado (sección 3.3, marcar tramos no centrales de menos de w* entre nodos centrales)
 - [x] Interpolación entre repartos para las cantidades fraccionarias de las rampas (sección 3.5)
-- [ ] Trapezoidación (aristas de soporte de cada nodo a su punto más cercano del borde, dominios por contorno)
+- [x] Trapezoidación: apoyos de cada extremo de arista en los dos lados (punto más cercano del borde, ecuación 1)
+- [ ] Dominios por contorno (qué trapecios bordean cada contorno, para encadenar los segmentos)
 - [ ] Propagación del reparto desde el centro hacia afuera (sección 3.5) y extracción de trayectorias (sección 3.6)
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 

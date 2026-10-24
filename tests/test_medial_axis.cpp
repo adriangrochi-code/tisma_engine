@@ -157,7 +157,7 @@ TEST_CASE("marking filter closes short unmarked gaps on the way up", "[medial]")
         MedialGraph g;
         g.nodes = {{{0.0, 0}, 1.0, true}, {{1.0, 0}, 1.0, true}, {{1.0 + gap_length, 0}, 1.3, true},
                    {{3.0 + gap_length, 0}, 1.3, true}};
-        g.edges = {{0, 1, false, true}, {1, 2, false, false}, {2, 3, false, true}};
+        g.edges = {{0, 1, false, true, {}, {}}, {1, 2, false, false, {}, {}}, {2, 3, false, true, {}, {}}};
         return g;
     };
     MedialGraph short_gap = make(0.3);
@@ -174,9 +174,70 @@ TEST_CASE("marking filter only walks upwards", "[medial]") {
     // finds the other central node, so the gap is closed either way.
     MedialGraph g;
     g.nodes = {{{0.0, 0}, 1.3, true}, {{0.3, 0}, 1.0, true}, {{0.6, 0}, 0.7, false}};
-    g.edges = {{0, 1, false, false}, {1, 2, false, false}};
+    g.edges = {{0, 1, false, false, {}, {}}, {1, 2, false, false, {}, {}}};
     filter_marking(g, 0.4);
     CHECK(g.edges[0].central);       // 1 -> 0 goes up and reaches a central node
     CHECK_FALSE(g.edges[1].central); // 1 -> 2 goes down: never walked
     CHECK_FALSE(g.nodes[2].central);
+}
+
+namespace {
+
+// Every end of every edge is exactly its radius away from both of its supports,
+// and the supports lie on the region's boundary.
+void check_supports(const std::vector<MedialEdge>& edges, const Polygons& region) {
+    auto on_boundary = [&](const Point2d& p) {
+        double best = 1e300;
+        for (const Polygon& path : region)
+            for (std::size_t i = 0; i < path.size(); ++i) {
+                const auto& a = path[i];
+                const auto& b = path[(i + 1) % path.size()];
+                const double ax = to_mm(a.x), ay = to_mm(a.y), bx = to_mm(b.x), by = to_mm(b.y);
+                const double dx = bx - ax, dy = by - ay;
+                const double t = std::clamp(((p.x - ax) * dx + (p.y - ay) * dy) / (dx * dx + dy * dy), 0.0, 1.0);
+                best = std::min(best, std::hypot(p.x - (ax + t * dx), p.y - (ay + t * dy)));
+            }
+        return best;
+    };
+    for (const MedialEdge& e : edges)
+        for (int k = 0; k < 2; ++k) {
+            CHECK_THAT(std::hypot(e.a.x - e.support_a[k].x, e.a.y - e.support_a[k].y), WithinAbs(e.radius_a, 1e-6));
+            CHECK_THAT(std::hypot(e.b.x - e.support_b[k].x, e.b.y - e.support_b[k].y), WithinAbs(e.radius_b, 1e-6));
+            CHECK(on_boundary(e.support_a[k]) < 1e-6);
+            CHECK(on_boundary(e.support_b[k]) < 1e-6);
+        }
+}
+
+} // namespace
+
+TEST_CASE("supports of a strip's middle line are straight across", "[medial]") {
+    const Polygons strip = {rect(0, 0, 30, 2)};
+    const auto edges = medial_axis(strip);
+    check_supports(edges, strip);
+    for (const MedialEdge& e : edges) {
+        if (std::fabs(e.a.y - 1.0) > 1e-6 || std::fabs(e.b.y - 1.0) > 1e-6)
+            continue; // a corner bisector
+        for (int k = 0; k < 2; ++k) {
+            CHECK_THAT(e.support_a[k].x, WithinAbs(e.a.x, 1e-6)); // feet of the perpendiculars
+            CHECK((std::fabs(e.support_a[k].y) < 1e-6 || std::fabs(e.support_a[k].y - 2.0) < 1e-6));
+        }
+        CHECK_THAT(e.support_a[0].y + e.support_a[1].y, WithinAbs(2.0, 1e-6)); // one on each side
+    }
+}
+
+TEST_CASE("supports of a wedge and of a ring are at the radius, on the boundary", "[medial]") {
+    const double h = std::tan(15.0 * std::numbers::pi / 180.0) * 20.0;
+    const Polygons wedge = {{{to_units(0), to_units(0)}, {to_units(20), to_units(-h)}, {to_units(20), to_units(h)}}};
+    check_supports(medial_axis(wedge), wedge);
+    const Polygons ring = {rect(0, 0, 10, 10), rect(3, 3, 4, 4, true)};
+    const auto edges = medial_axis(ring);
+    check_supports(edges, ring);
+    // On a parabolic piece one support is a corner of the hole.
+    bool corner_support = false;
+    for (const MedialEdge& e : edges)
+        if (e.curved)
+            for (int k = 0; k < 2; ++k)
+                for (const Point2d c : {Point2d{3, 3}, Point2d{7, 3}, Point2d{3, 7}, Point2d{7, 7}})
+                    corner_support = corner_support || std::hypot(e.support_a[k].x - c.x, e.support_a[k].y - c.y) < 1e-6;
+    CHECK(corner_support);
 }

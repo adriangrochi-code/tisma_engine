@@ -109,6 +109,14 @@ TEST_CASE("ramps of length w* around each anchor with fractional counts", "[tran
     for (std::size_t i = 0; i < g.nodes.size(); ++i)
         if (g.nodes[i].central)
             CHECK(r.bead_counts[i] >= 0.0);
+    // Nodes added at the ramp ends keep supports at their radius (the wedge's axis is straight).
+    for (const MedialGraph::Edge& e : g.edges)
+        for (int k = 0; k < 2; ++k) {
+            const MedialGraph::Node& a = g.nodes[e.a];
+            const MedialGraph::Node& b = g.nodes[e.b];
+            CHECK_THAT(std::hypot(a.p.x - e.support_a[k].x, a.p.y - e.support_a[k].y), WithinAbs(a.radius, 1e-6));
+            CHECK_THAT(std::hypot(b.p.x - e.support_b[k].x, b.p.y - e.support_b[k].y), WithinAbs(b.radius, 1e-6));
+        }
 }
 
 TEST_CASE("opposite anchors closer than 1 mm cancel out", "[transitions]") {
