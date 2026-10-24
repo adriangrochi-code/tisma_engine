@@ -22,6 +22,8 @@ endif()
 
 add_library(tisma_core
   src/mesh/mesh.cpp
+  src/mesh/indexed_mesh.cpp
+  src/slice/level_set.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

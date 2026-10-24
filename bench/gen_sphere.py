@@ -15,6 +15,13 @@ def sphere(n, radius=50.0):
     rings = n
 
     def point(i, j):
+        # Exact poles and seam, so that shared vertices are bitwise equal and
+        # the mesh is closed.
+        if i == 0:
+            return (0.0, 0.0, radius)
+        if i == rings:
+            return (0.0, 0.0, -radius)
+        j %= n
         theta = math.pi * i / rings
         phi = 2.0 * math.pi * j / n
         return (radius * math.sin(theta) * math.cos(phi),

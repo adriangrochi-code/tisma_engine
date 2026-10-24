@@ -128,3 +128,37 @@ fue el último paso por macOS antes de sacarlo de la CI.
 - `CLAUDE.md` suma la GPU a las reglas de rendimiento.
 
 **Sigue:** el banco de pruebas; después F1, con el corte en CPU y la infraestructura de Vulkan.
+
+## 2026-10-24 — F1, primer bloque nocturno de 20 minutos
+
+**Hecho:**
+- Bloques nocturnos: el dueño pidió bloques autónomos de 20 minutos de 1 a 8 (Montevideo) cuando no haya otra sesión
+  del motor trabajando. Una tarea programada por hora arranca la cadena, y cada bloque agenda el siguiente.
+- Malla indexada (`src/mesh/indexed_mesh.*`): `weld_exact` une las esquinas con coordenadas idénticas bit a bit
+  (normaliza -0 y 0), conservando el orden y el sentido de los triángulos.
+- Contornos de nivel (`src/slice/level_set.*`): `level_set_segments` saca los tramos de contorno de un campo dado por
+  vértice (regla 1 del diseño: las capas son conjuntos de nivel; el corte plano usa `height_field`, que es z).
+  - Un vértice con valor >= nivel cuenta como «arriba»; así cada triángulo se cruza por 0 o 2 aristas, aunque haya
+    vértices justo sobre el nivel.
+  - Los puntos se calculan en el orden de los índices de la arista, así que los dos triángulos de una arista dan el
+    mismo punto bit a bit.
+  - Cada tramo sabe por qué arista entra y por cuál sale, para unirlos después sin comparar coordenadas.
+  - Con el campo z, los contornos exteriores salen en sentido antihorario visto desde arriba.
+- `tisma-engine info` también imprime los vértices y el tiempo de soldadura.
+- `bench/gen_sphere.py`: polos y costura exactos. Antes la esfera no era cerrada bit a bit, porque sin(π) no es 0.
+
+**Probado:** 34/34 pruebas con gcc 13.3, clang 18 y gcc con ASan+UBSan, sin advertencias.
+- Malla indexada: cubo → 8 vértices, -0 y 0, malla vacía.
+- Contornos: cuadrado cerrado y antihorario (área 100 mm²), niveles que pasan por vértices, sentido invertido y un
+  campo no plano (x + z) que también da un contorno cerrado.
+
+**Medido** (esfera de 1 001 112 triángulos, 5 corridas): la lectura tarda 61–66 ms y la soldadura 445–461 ms
+(500 558 vértices; V − A + C = 2, cerrada). Ordenar las claves contiguas en lugar de índices bajó la soldadura de
+559–626 ms a ese valor, un 25 % más rápido.
+
+**Sin terminar (F1):**
+- la soldadura es 7 veces más lenta que la lectura; probar un ordenamiento radix o una tabla hash, y paralelizar
+  con oneTBB;
+- unir los segmentos en contornos.
+
+**Sigue:** unir segmentos en contornos cerrados; después, alturas de capa y corte por capas.

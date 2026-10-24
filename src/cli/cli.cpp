@@ -1,6 +1,7 @@
 #include "cli/cli.hpp"
 
 #include "io/stl.hpp"
+#include "mesh/indexed_mesh.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -95,6 +96,11 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     if (int rc = read_model(std::string(args[0]), stl, seconds, err); rc != kExitOk)
         return rc;
     print_mesh_summary(stl, seconds, out);
+    const auto start = std::chrono::steady_clock::now();
+    const IndexedMesh indexed = weld_exact(stl.mesh);
+    const double weld_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    out << "vertices: " << indexed.vertices.size() << "\n";
+    out << "weld_ms: " << weld_ms << "\n";
     return kExitOk;
 }
 
