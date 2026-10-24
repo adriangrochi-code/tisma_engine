@@ -1,20 +1,63 @@
 name: Release
 
-# A version tag (v<VERSION>, see docs/VERSIONING.md) builds, tests and packages
-# the engine on Windows and Linux, and publishes a GitHub release with the
-# tag's section of CHANGELOG.md as its notes. A version with a pre-release
-# label (such as 0.6.0-alpha.1) is published as a pre-release.
+# Publishes a GitHub release of the version in VERSION (docs/VERSIONING.md):
+# builds, tests and packages the engine on Windows and Linux, and publishes the
+# release with that version's section of CHANGELOG.md as its notes. A version
+# with a pre-release label (such as 0.6.0-alpha.1) is published as a
+# pre-release.
+#
+# It runs when:
+# - a push to dev or main changes VERSION (or this workflow) and the tag
+#   v<VERSION> does not exist yet: the release creates the tag on that commit;
+# - a tag v<VERSION> is pushed: the release goes on the tagged commit.
 on:
   push:
+    branches:
+      - dev
+      - main
+    paths:
+      - VERSION
+      - .github/workflows/release.yml
     tags:
       - "v*"
 
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  version:
+    name: Is there a version to release?
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag, VERSION and CHANGELOG.md
+        id: version
+        run: |
+          tag="v$(cat VERSION)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            # A pushed tag must name the version of its commit.
+            python3 tools/release_notes.py "$GITHUB_REF_NAME" > /dev/null
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "::notice::$tag already exists: nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            python3 tools/release_notes.py "$tag" > /dev/null
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build (${{ matrix.name }})
+    needs: version
+    if: needs.version.outputs.release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -31,10 +74,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: Check the tag, VERSION and CHANGELOG.md
-        run: |
-          python="$(command -v python3 || command -v python)"
-          "$python" tools/release_notes.py "${{ github.ref_name }}" > /dev/null
       - name: Install Ninja
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
@@ -65,7 +104,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -78,10 +117,17 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
           python3 tools/release_notes.py "$TAG" > notes.md
           version="$(cat VERSION)"
           prerelease=""
           case "$version" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$TAG" packages/*.zip --title "Tisma engine $version" --notes-file notes.md --verify-tag $prerelease
+          # A pushed tag is used as it is; otherwise the release creates the
+          # tag on the commit that was built.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            where="--verify-tag"
+          else
+            where="--target $GITHUB_SHA"
+          fi
+          gh release create "$TAG" packages/*.zip --title "Tisma engine $version" --notes-file notes.md $where $prerelease

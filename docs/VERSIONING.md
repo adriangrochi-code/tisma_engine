@@ -45,19 +45,22 @@ Hay release cuando se junta un grupo de mejoras grandes o relevantes para quien 
 - varias correcciones que cambian lo que sale.
 
 No hace falta release por cada envío. Antes de publicar:
-1. **Todo verde:** `tools/ci_linux.sh` pasa en la sesión y la CI de Windows pasa en GitHub para ese commit.
+1. **Todo verde:** `tools/ci_linux.sh` pasa en la sesión y la CI de Windows pasa en GitHub para el commit anterior.
 2. **Número:** `VERSION` tiene el número nuevo.
 3. **Notas:** `CHANGELOG.md` tiene su sección `## [versión] - fecha`, con lo de «Sin publicar» movido ahí, y los
    enlaces del final actualizados.
 4. **Comprobación:** `tools/release_notes.py --check` pasa (CTest lo corre).
-5. **Etiqueta:** una etiqueta anotada `v<versión>` en ese commit, enviada a GitHub (`git push origin v<versión>`).
+5. **Envío:** el commit que cambia `VERSION` se envía a `dev`.
 
-Con la etiqueta, el flujo `.github/workflows/release.yml`:
+El flujo `.github/workflows/release.yml` corre cuando un envío a `dev` o a `main` cambia `VERSION` y la etiqueta
+`v<versión>` todavía no existe. También corre si alguien envía esa etiqueta a mano. El flujo:
 - compila y prueba en Windows y en Linux;
 - empaqueta el programa con la licencia, el README, el registro de cambios y la documentación de uso;
-- publica la release con las notas de su sección del CHANGELOG, marcada como pre-release si el número tiene etiqueta.
+- publica la release con las notas de su sección del CHANGELOG, marcada como pre-release si el número tiene etiqueta;
+- crea la etiqueta `v<versión>` en el commit compilado, salvo que ya la hayan enviado.
 
-Si la etiqueta no coincide con `VERSION`, o el CHANGELOG no tiene la sección, el flujo falla antes de compilar.
+Las sesiones de trabajo solo pueden enviar a `dev`, no etiquetas: por eso es el flujo el que crea la etiqueta. Si la
+etiqueta enviada no coincide con `VERSION`, o el CHANGELOG no tiene la sección, el flujo falla antes de compilar.
 
 ## Los formatos tienen su propia versión
 
