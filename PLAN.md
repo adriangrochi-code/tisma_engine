@@ -1,7 +1,11 @@
 # Plan del motor de laminado de Tisma
 
-**Objetivo:** un motor de laminado propio, escrito desde cero (ver `CLEANROOM.md`), más rápido que el de Tisma Slicer
-actual, que el dueño pueda licenciar como quiera.
+**Objetivo final:** rehacer en sala limpia todo lo que se pueda de Tisma Slicer, para que el dueño lo licencie como
+quiera (hoy código disponible sin uso comercial de terceros; tiene que poder cerrarse en cualquier momento):
+- todo se escribe desde cero (ver `CLEANROOM.md`), también lo que el equipo del dueño ya hizo en Tisma Slicer;
+- lo que Tisma Slicer ya hace llega como fichas en `docs/spec/features/`.
+
+**Primer paso:** el motor de laminado, más rápido que el de Tisma Slicer actual.
 
 **Visión (decisión del dueño, 2026-10-24):** laminado **no planar** y **de 5 ejes**, con **aceleración por GPU**. La
 primera versión plana es la base: la malla, el corte, los perímetros, los rellenos y el G-code se reutilizan. Por eso
@@ -14,7 +18,7 @@ con lo medido.
 **Fuera de la primera versión:**
 - multimaterial y torre de purga;
 - soportes en árbol;
-- capas no planares y 5 ejes (son la visión: fases F7 y F8);
+- capas no planares y 5 ejes (son la visión: fases F7 y F9);
 - resina;
 - interfaz propia.
 
@@ -42,7 +46,7 @@ Reglas que se cumplen desde F1, aunque la primera versión sea plana, para no te
 
 1. **Las capas son conjuntos de nivel de un campo escalar.** F1 corta con el campo f(p) = z (capas planas). Aun así,
    la extracción de contornos recibe un valor por vértice, así que un campo curvo puede reemplazar a z sin reescribir el
-   corte. Para 5 ejes el campo vive dentro del volumen y hará falta una malla de tetraedros; eso queda para F8.
+   corte. Para 5 ejes el campo vive dentro del volumen y hará falta una malla de tetraedros; eso queda para F9.
 2. **Las trayectorias son 3D y tienen orientación.** Cada punto guarda x, y, z y la dirección de la boquilla; en una capa
    plana esa dirección es (0, 0, 1). La cinemática de cada máquina es un módulo aparte que traduce a ejes y G-code:
    3 ejes, mesa giratoria A/C, cabezal B/C, etc. El resto del motor no sabe de ejes.
@@ -57,7 +61,7 @@ Reglas que se cumplen desde F1, aunque la primera versión sea plana, para no te
    usuarios tienen una buena.
 5. **Operaciones 2D en capas curvas.** Las capas curvas de 3 ejes son funciones de altura sobre XY, como en CurviSlicer.
    Ahí los offsets y rellenos (Clipper2) se calculan en XY y después se proyectan sobre la capa. Para 5 ejes hay que
-   parametrizar la superficie, y eso se investiga en F8.
+   parametrizar la superficie, y eso se investiga en F9.
 
 **Fuentes** (solo los artículos; el código que los acompaña no se lee, ver `CLEANROOM.md`):
 
@@ -92,7 +96,7 @@ también la versión GPU, probada contra la CPU.
 - funciona con NVIDIA, AMD e Intel, y el controlador ya la trae, así que el usuario no instala nada;
 - se puede probar en la CI sin GPU, con lavapipe, la implementación de Vulkan en CPU de Mesa. Las máquinas de GitHub no
   tienen GPU, y CUDA no se puede probar ahí;
-- en macOS funciona sobre Metal con MoltenVK, para F9.
+- en macOS funciona sobre Metal con MoltenVK, para F10.
 
 Las bibliotecas que haga falta (cabeceras y cargador de Vulkan, compilador de shaders) se anotan en `THIRD_PARTY.md`
 antes de usarlas.
@@ -111,8 +115,9 @@ antes de usarlas.
 ## Decisiones del dueño (2026-10-24)
 
 - La GPU entra en la primera versión, desde F1, con Vulkan compute salvo que el dueño diga otra cosa.
-- Después de la primera versión: F7 (no planar en 3 ejes), F8 (5 ejes) y F9 (macOS).
-- La máquina de 5 ejes de referencia se elige al empezar F8, la última fase antes de macOS. Hasta entonces la
+- Después de la primera versión: F7 (no planar en 3 ejes) y F8 (lo propio de Tisma, desde sus fichas); después las
+  fases de producto P1–P5, en el orden que decida el dueño; al final F9 (5 ejes) y F10 (macOS).
+- La máquina de 5 ejes de referencia se elige al empezar F9, la última fase antes de macOS. Hasta entonces la
   cinemática queda como módulo aparte, sin atarse a ninguna máquina.
 
 ## Fases
@@ -127,8 +132,27 @@ antes de usarlas.
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde. En GPU: voladizos y proyección | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer, con y sin GPU | Medido y documentado |
 | F7 | después de F6 | No planar en 3 ejes: capas apenas curvas cerca de la superficie superior (CurviSlicer, Ahlers et al.), con control de choques del cabezal | Una pieza con techo curvo se imprime sin escalones visibles en una impresora común; medido |
-| F8 | después de F7 | 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina, choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 5 ejes (hace falta decidir cuál) |
-| F9 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
+| F8 | después de F7 | Lo propio de Tisma, desde sus fichas: análisis estructural y aerodinámico, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas de cada ficha pasan |
+
+**Después del motor** (el orden lo decide el dueño):
+
+| Fase | Contenido | Base |
+|---|---|---|
+| P1 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | Fichas de la interfaz de Tisma (qué hay en cada pantalla y cómo se comporta) |
+| P2 | Conexión con impresoras: USB, Bambu Lab, OctoPrint, Moonraker, PrusaLink y las demás | Documentación pública de sus API y fichas del comportamiento de Tisma |
+| P3 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura |
+| P4 | Formatos: 3MF (especificación pública), STEP (OCCT es LGPL-2.1 con excepción: no entra en la lista de licencias permitidas; hace falta otra biblioteca o una decisión del dueño), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
+| P5 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | Fichas; el logo lo da el dueño |
+
+**Al final** (decisión del dueño, 2026-10-24: los 5 ejes son lo último antes de macOS, y macOS va al final de todo):
+
+| Fase | Cuándo | Contenido | Terminada cuando |
+|---|---|---|---|
+| F9 | antes de macOS | 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina, choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 5 ejes (hace falta decidir cuál) |
+| F10 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
+
+**Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
+superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de imprimir) y soportes.
 
 ## Estado de F0
 
@@ -136,7 +160,7 @@ antes de usarlas.
 - [x] Catch2
 - [x] Línea de comandos (`slice` solo lee el modelo y responde «not implemented»; `info` imprime el resumen)
 - [x] Lectura de STL binario y ASCII, con pruebas
-- [x] CI en cada envío: Linux (gcc, clang, ASan+UBSan) y Windows (MSVC). macOS pasa a F9, al final
+- [x] CI en cada envío: Linux (gcc, clang, ASan+UBSan) y Windows (MSVC). macOS pasa a F10, al final
 - [x] `THIRD_PARTY.md`, `PROVENANCE.md`
 - [x] Comprobar que la CI pasa en Linux y Windows (run 4: también pasó macOS)
 - [ ] Banco de pruebas: modelos reales (Benchy, conejo, tornillo), con licencia que permita guardarlos

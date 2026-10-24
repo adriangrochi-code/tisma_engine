@@ -294,3 +294,32 @@ cerrable.
 - la respuesta de la sesión principal;
 - la decisión del dueño sobre borrar o no la historia de esos archivos (con un abogado);
 - mezclar `main` en `dev` cuando `main` ya no tenga ese código.
+
+## 2026-10-24 — información para el motor
+
+El dueño agregó a `main`:
+- `docs/spec/`: especificaciones funcionales (G-code, ajustes, comportamiento, números de referencia) y fuentes públicas;
+- `imported/tisma/` y `docs/tisma/`: código y documentos propios traídos de Tisma Slicer. **Se sacaron el mismo día:**
+  el dueño decidió que todo pase por fichas (`CLEANROOM.md`, «Fichas»). Su historia no se lee.
+
+**Sigue:** el bloque siguiente une `main` en `dev` y continúa F0, usando las especificaciones.
+
+## 2026-10-24 — `main` mezclado en `dev`
+
+**Hecho:**
+- La sesión principal confirmó el protocolo de paso de información. Sacó `imported/tisma/` y `docs/tisma/` de `main`
+  (`db6db5a`) y alineó la sección «Fichas» (`66d6d1b`).
+- Antes de mezclar se comprobó que el árbol de `main` no tiene archivos en `imported/` ni en `docs/tisma/`, y que
+  `docs/spec/` pasa el filtro (7 de 7 archivos limpios). La historia de esos directorios no se leyó.
+- Conflictos resueltos:
+  - `CLEANROOM.md`: se juntan las dos listas de lo prohibido, se suma la sección «Fichas» de `main` y se conservan
+    el protocolo y la licencia cerrable.
+  - `PLAN.md`: se juntan las fases. Quedan F7 (no planar en 3 ejes) y F8 (lo propio de Tisma desde sus fichas);
+    después las fases de producto P1–P5 de `main`, en el orden que decida el dueño; al final F9 (5 ejes) y F10
+    (macOS), como decidió el dueño.
+  - `PROVENANCE.md` y `PROGRESS.md`: se conservan las dos partes.
+- Aviso en `PLAN.md`: STEP con OCCT no sirve tal cual, porque OCCT es LGPL-2.1 con excepción y no está en la lista
+  de licencias permitidas.
+- `docs/spec/` ya está en el árbol, así que la prueba `spec_check` corre en la CI.
+
+**Sigue:** Clipper2; leer `docs/spec/README.md` y las fichas que pide F1.

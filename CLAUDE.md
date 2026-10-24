@@ -1,15 +1,22 @@
 # Tisma engine — notes for Claude
 
-A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.md` before any work.
+A slicing engine written from scratch for Tisma, the first step of the owner's final goal: rebuild as much of Tisma
+Slicer as possible in a clean room. Everything Tisma Slicer does reaches this repository as functional specifications
+(`docs/spec/`, feature specs in `docs/spec/features/`), never as code. Read `CLEANROOM.md` and `PLAN.md` before any
+work.
 
 ## Clean room (mandatory)
 
 - Never read, copy or translate the source of PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Cura,
   CuraEngine, Tisma Slicer (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`) or any other GPL/AGPL code.
+  - This includes the history of `imported/` and `docs/tisma/` in this repository (commits `4768a57` and `759eccd`,
+    removed on 2026-10-24): never read it, by `git log`, `git show` or any other way.
   - Do not clone them.
   - Do not open them on GitHub.
   - Do not search their code.
-- Work from papers, public format specifications and permissive libraries only. Every library is recorded in
+- Work from `docs/spec/` (what to build, including the feature specs), papers, public format specifications and
+  permissive libraries only. Web search for papers, specifications and user documentation is
+  allowed. Every library is recorded in
   `THIRD_PARTY.md` (name, version, license, URL) before it is used.
 - Every module records where it comes from in `PROVENANCE.md`: paper and section, specification, or own design.
 - Other slicers may only be compared as black boxes: run their program, compare outputs.
@@ -60,14 +67,17 @@ follow the rules in "Diseño para la visión" in `PLAN.md`:
 Each scheduled block lasts about one hour. All blocks work on the branch `dev`, so each one continues where the last
 one stopped.
 
-1. Fetch `dev`. If it does not exist yet, create it from `main`.
-2. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
-3. Implement it with tests, build, run the tests.
-4. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).
-5. Commit, push `dev`, and make sure a pull request from `dev` to `main` is open. Do not merge it.
+1. Fetch `dev`. If it does not exist yet, create it from `main`. Otherwise merge `origin/main` into it (the owner adds
+   specifications to `main`).
+2. Read `docs/spec/README.md` and the feature specs in `docs/spec/features/` that the item needs, only if
+   `tools/check_spec.py` passes on them.
+3. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
+4. Implement it with tests, build, run the tests.
+5. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).
+6. Commit, push `dev`, and make sure a pull request from `dev` to `main` is open. Do not merge it.
    - The owner merges at the end of each phase.
    - The main Tisma session may review it, but only the behavior and the tests.
-6. Stop at a point where the build and the tests pass, even if the item is unfinished. Say so in `PROGRESS.md`.
+7. Stop at a point where the build and the tests pass, even if the item is unfinished. Say so in `PROGRESS.md`.
 
 ## CI
 

@@ -14,7 +14,10 @@ El código fuente de:
   cualquier otro derivado de Slic3r;
 - Cura y CuraEngine (de ahí vienen Arachne, Lightning y los soportes en árbol de Thomas Rahm);
 - **Tisma Slicer** (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`), incluido lo que escribimos dentro de ese fork:
-  es AGPL;
+  es AGPL y lo escribieron sesiones que leyeron PrusaSlicer;
+- **la historia de `imported/` y `docs/tisma/` en este repositorio** (commits `4768a57` y `759eccd`): ahí se copió código
+  de Tisma Slicer y se sacó el 24-10-2026 (decisión del dueño: todo pasa por fichas). No se lee con `git log`,
+  `git show` ni de ninguna otra forma;
 - ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL;
 - el slicer no planar de Ahlers et al. (una rama GPLv3 de Slic3r);
 - el código publicado junto con los artículos de laminado no planar y de varios ejes (por ejemplo S3_DeformFDM o
@@ -43,8 +46,41 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
   | Catch2 | BSL-1.0 |
   | nlohmann/json | MIT |
   | miniz | MIT |
+- **Las especificaciones de `docs/spec/`,** incluidas las fichas de `docs/spec/features/` (ver «Fichas» abajo).
+- **Buscar en la web** artículos, especificaciones y documentación de usuario (manuales, bases de conocimiento). Nunca
+  código fuente de los programas prohibidos.
 - **Comparar con otros slicers solo como caja negra:** ejecutar su programa y comparar el G-code, los tiempos o el
   filamento. Nunca abrir su código.
+
+## Fichas (cómo pasa lo que ya hace Tisma Slicer)
+
+Todo lo de Tisma Slicer llega acá como **fichas**, nunca como código, también lo que escribió el equipo del dueño:
+
+1. **Quién las escribe:** el equipo que conoce Tisma Slicer por dentro (el equipo «sucio»), en `docs/spec/features/`.
+   Ese equipo no escribe código en este repositorio.
+2. **Qué dice una ficha:**
+   - qué hace la función y para qué sirve;
+   - sus ajustes, con unidad, rango y valor por defecto;
+   - las reglas que tiene que cumplir;
+   - las fórmulas, con el artículo, la norma o la especificación de donde salen;
+   - los casos límite;
+   - las pruebas como datos: entrada y resultado esperado, medido en Tisma Slicer como caja negra.
+3. **Qué no puede decir una ficha:**
+   - código ni pseudocódigo;
+   - nombres de clases, funciones o archivos de Tisma Slicer o de PrusaSlicer;
+   - cómo está organizado ese código.
+
+   Los ajustes usan los nombres del motor (`docs/spec/SETTINGS_V1.md`); la correspondencia con los de Tisma Slicer
+   queda del lado de Tisma, en lo que llama al motor. Las etiquetas del G-code de `docs/spec/GCODE_OUTPUT.md` sí se
+   usan: son el formato que lee la vista previa.
+4. **Filtro:** antes de subir una ficha se corre `tools/check_spec.py` (de la rama `dev`; solo informa archivo, línea y
+   regla) y se corrigen las líneas marcadas. Después la revisa el dueño en un pull request.
+5. **Cómo se usa:** quien programa el motor parte de la ficha y de las fuentes públicas, decide su propia estructura y
+   anota en `PROVENANCE.md` «ficha `docs/spec/features/<nombre>.md`».
+
+Lo que Tisma Slicer tomó de código ajeno (el render de PrusaSlicer 3.0, hosts de impresoras de OrcaSlicer, perfiles de
+OrcaSlicer y Cura) se especifica solo desde fuentes públicas: artículos, especificaciones de formatos, documentación de
+protocolos y datos de los fabricantes.
 
 ## Procedencia
 
@@ -75,10 +111,10 @@ hay que construir. El equipo del motor lo construye desde cero sin haber visto e
 5. **Del motor hacia el otro equipo** solo van preguntas de comportamiento y resultados de caja negra. Las respuestas
    vuelven como especificaciones. La revisión del PR del motor por la sesión principal se limita al comportamiento y
    las pruebas.
-6. **Código importado de Tisma Slicer:** `imported/tisma/` y `docs/tisma/`, subidos a `main` el 2026-10-24, no se
-   leen ni se usan. Están dentro del árbol de PrusaSlicer, usan sus tipos, los escribió una sesión que leyó
-   PrusaSlicer y, según el filtro, `docs/tisma/` trae código. Se pidió sacarlos de `main`. Si borrar también su
-   historia, lo deciden el dueño y un abogado.
+6. **Código importado de Tisma Slicer:** `imported/tisma/` y `docs/tisma/` se subieron a `main` y se sacaron el mismo
+   día, 2026-10-24 (commit `db6db5a`). Estaban dentro del árbol de PrusaSlicer, usaban sus tipos, los escribió una
+   sesión que leyó PrusaSlicer y, según el filtro, `docs/tisma/` traía código. Su historia no se lee (ver arriba). Si
+   borrar también esa historia del repositorio, lo deciden el dueño y un abogado.
 
 ## La licencia tiene que poder cerrarse
 

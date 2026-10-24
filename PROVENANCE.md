@@ -15,3 +15,5 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |
 | `tools/check_spec.py` — filtro de especificaciones | Diseño propio. La lista de nombres prohibidos son nombres públicos de tipos y módulos, no código. |
 | `.github/workflows/ci.yml`, `CMakeLists.txt` | Diseño propio; documentación pública de GitHub Actions y CMake. |
+
+Lo que sale de una ficha se anota así: «ficha `docs/spec/features/<nombre>.md`», más las fuentes públicas que cite.
