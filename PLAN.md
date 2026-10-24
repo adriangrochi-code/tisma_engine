@@ -357,7 +357,10 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   escritas para lo que falta (`src/fea/materials.*`, `docs/MATERIALS.md`)
 - [ ] La unión entre capas según la temperatura de la capa de abajo al imprimir la de arriba (con la simulación del
   enfriamiento de A3 y los datos de CNC Kitchen)
-- [ ] Multigrilla: hoy las iteraciones se duplican cada vez que el vóxel se achica a la mitad
+- [x] Multigrilla como precondicionador del gradiente conjugado (`src/fea/multigrid.*`): las iteraciones ya no crecen
+  al achicar el vóxel (11–12 en el voladizo de 1 a 0,125 mm); las piezas sueltas quedan fuera del cálculo
+- [ ] Multigrilla más fuerte con huecos: nodos gruesos duplicados por cada pedazo separado dentro de una celda gruesa
+  (el relleno ralo todavía pide 61 iteraciones contra 11 de la pieza maciza)
 - [ ] Núcleo de la GPU, probado contra la CPU
 - [ ] Cargas y apoyos desde la línea de comandos (JSON) y resultado legible (desplazamientos, tensiones, factor de
   seguridad)

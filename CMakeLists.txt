@@ -144,6 +144,8 @@ add_library(tisma_core
   src/fea/voxels.cpp
   src/fea/hex8.cpp
   src/fea/elasticity.cpp
+  src/fea/operator.cpp
+  src/fea/multigrid.cpp
   src/fea/material.cpp
   src/fea/as_printed.cpp
   src/fea/materials.cpp

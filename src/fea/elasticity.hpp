@@ -37,27 +37,45 @@ struct SurfaceLoad {
     double force[3] = {0.0, 0.0, 0.0};
 };
 
+// How to solve: conjugate gradients until |r| / |f| < tolerance, with a
+// multigrid V-cycle as the preconditioner (fast at every voxel size) or
+// Jacobi's (the simple reference).
+enum class Preconditioner : std::uint8_t { Multigrid, Jacobi };
+struct SolverOptions {
+    double tolerance = 1e-8;
+    int max_iterations = 20000;
+    Preconditioner preconditioner = Preconditioner::Multigrid;
+};
+
 struct ElasticityResult {
     std::vector<double> displacement; // 3 per node; node (i, j, k) of the grid's (nx + 1) (ny + 1) (nz + 1)
     std::vector<double> von_mises;    // per voxel, at its centre; 0 for empty voxels
     int iterations = 0;
+    int levels = 1; // multigrid levels (1 with Jacobi)
+    // Voxels left out because no fixture holds them (joined by faces to a
+    // voxel with a corner in a fixture's box), and loads that found no
+    // boundary face of the held part in their box: both mean the setup is
+    // probably wrong.
+    std::size_t loose_voxels = 0;
+    int unapplied_loads = 0;
     double residual = 0.0; // |r| / |f| at the end
     bool converged = false;
     double max_displacement = 0.0;
     double max_von_mises = 0.0;
 };
 
-// Solves K u = f by conjugate gradients with a Jacobi preconditioner, without
-// assembling K: each product gathers, node by node, the 3 x 3 blocks of the
-// elements around it (parallel over nodes, no write conflicts; the same sums
-// in the same order on every run). element_scale, when given (one per voxel),
+// Solves K u = f by preconditioned conjugate gradients without assembling K:
+// each product gathers, node by node, the 3 x 3 blocks of the elements around
+// it (parallel over nodes, no write conflicts; the same sums in the same
+// order on every run). The preconditioner is a multigrid V-cycle
+// (fea/multigrid.hpp) or Jacobi's. element_scale, when given (one per voxel),
 // multiplies each element's stiffness (for topology optimization, A2).
 // Textbook method (Shewchuk 1994, "An Introduction to the Conjugate Gradient
 // Method Without the Agonizing Pain"; Saad 2003, Ch. 9). Own implementation;
 // see PROVENANCE.md.
 ElasticityResult solve_elasticity(const VoxelGrid& grid, const Material& material, std::span<const Fixture> fixtures,
-                                  std::span<const SurfaceLoad> loads, double tolerance = 1e-8,
-                                  int max_iterations = 20000, std::span<const double> element_scale = {});
+                                  std::span<const SurfaceLoad> loads, const SolverOptions& options = {},
+                                  std::span<const double> element_scale = {});
 
 // The part as printed: every voxel is the orthotropic material turned to the
 // direction of the line that fills it (PLAN.md, A1: adhesion between layers
@@ -78,7 +96,7 @@ struct AsPrintedResult {
 inline constexpr int kDirections = 36; // over half a turn: steps of 5 degrees
 AsPrintedResult solve_as_printed(const VoxelGrid& grid, const OrthotropicMaterial& material,
                                  std::span<const float> angle, std::span<const Fixture> fixtures,
-                                 std::span<const SurfaceLoad> loads, double tolerance = 1e-8,
-                                 int max_iterations = 20000, std::span<const double> element_scale = {});
+                                 std::span<const SurfaceLoad> loads, const SolverOptions& options = {},
+                                 std::span<const double> element_scale = {});
 
 } // namespace tisma

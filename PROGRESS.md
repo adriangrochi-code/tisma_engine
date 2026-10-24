@@ -2019,3 +2019,77 @@ habrá que homogeneizarlo.
   factor de seguridad;
 - más adelante, la unión entre capas según la temperatura (A3) y elementos de interfaz si el promedio en el vóxel no
   alcanza.
+
+## 2026-10-24 — A1, paso 4: multigrilla
+
+**Pedido del dueño:** seguir con la multigrilla.
+
+**Hecho:**
+- El operador de rigidez sin ensamblar pasó a su propio archivo (`src/fea/operator.*`), sin cambios de cálculo.
+- Multigrilla geométrica (`src/fea/multigrid.*`), usada como precondicionador del gradiente conjugado:
+  - cada nivel parte en dos los elementos de cada eje que tenga más de uno (una placa de un vóxel de espesor se
+    engruesa solo en el plano); la interpolación es trilineal y respeta la altura real de cada fila de capa;
+  - operador grueso de Galerkin (Pᵀ K P) armado elemento por elemento, sin los grados de libertad fijos ni vacíos: los
+    agujeros, las líneas finas y los apoyos llegan a todos los niveles;
+  - suavizado polinomial de Chebyshev de grado 3, que solo usa productos con K (paralelo y listo para la GPU);
+  - Cholesky denso en el nivel más grueso (menos de 256 nodos);
+  - todo por nodo, en paralelo y determinista: dos corridas dan el mismo resultado bit a bit.
+- El solucionador recibe `SolverOptions` (tolerancia, iteraciones, precondicionador). La multigrilla es la opción por
+  defecto y Jacobi queda como referencia.
+- Las piezas que ningún apoyo sostiene quedan fuera del cálculo. Antes su desplazamiento quedaba indeterminado, y la
+  multigrilla les sumaba un movimiento rígido. El resultado informa:
+  - `loose_voxels`: cuántos vóxeles quedaron sueltos;
+  - `unapplied_loads`: las cargas que no encontraron dónde aplicarse.
+
+**Ajuste del suavizador** (cubo de 10 mm, vóxeles de 0,1 mm; tiempos con huecos / macizo):
+
+| Suavizador | Iteraciones | Tiempo |
+|---|---|---|
+| Jacobi, 1 barrido | 172 / 34 | 19,4 s / 6,3 s |
+| Jacobi, 2 barridos | 122 / 24 | 23,2 s / 7,6 s |
+| Jacobi, 4 barridos | 88 / 17 | 28,0 s / 8,6 s |
+| Ciclo W con Jacobi, 1 barrido | 166 / 28 | 24,5 s / 6,6 s |
+| Chebyshev, grado 2, [λ/30, 1,1 λ] | 82 / 16 | 16,0 s / 5,6 s |
+| **Chebyshev, grado 3, [λ/30, 1,1 λ]** | **61 / 11** | **16,8 s / 5,4 s** |
+| Chebyshev, grado 4, [λ/100, 1,1 λ] | 46 / 11 | 15,9 s / 6,2 s |
+
+El ciclo W no ayuda: lo que limita con huecos es el nivel fino, no los gruesos. Para el límite del suavizador, la
+cota de Gershgorin da el doble que la estimación por potencias, así que se usa la de potencias con un margen de 10 %.
+
+**Medido** (4 núcleos, tolerancia 10⁻⁸ en el voladizo y 10⁻⁶ en el cubo):
+
+| Caso | Elementos | Jacobi | Multigrilla |
+|---|---|---|---|
+| Voladizo, vóxel de 1 mm | 640 | 180 it., 28 ms | 11 it., 28 ms (2 niveles) |
+| Voladizo, 0,5 mm | 5120 | 360 it., 214 ms | 11 it., 92 ms (3 niveles) |
+| Voladizo, 0,25 mm | 40 960 | 718 it., 2,8 s | 11 it., 0,53 s (4 niveles) |
+| Voladizo, 0,125 mm | 327 680 | — | 12 it., 3,6 s (5 niveles) |
+| Cubo macizo, 0,2 mm | 125 000 | 441 it., 4,7 s | 12 it., 1,4 s |
+| Cubo macizo, 0,1 mm | 500 000 | 840 it., 36,8 s | 11 it., 5,4 s |
+| Cubo como se imprimió (relleno 20 %), 0,1 mm | 309 014 | 2488 it., 71,5 s | 61 it., 16,9 s |
+
+Los resultados coinciden con los de Jacobi: la misma flecha y, en el cubo, el mismo desplazamiento máximo y el mismo
+factor de seguridad. Desglose con 327 680 elementos: armar la multigrilla 0,75 s, un producto con K 25 ms, un ciclo
+0,2 s.
+
+**Probado:** 187/187 pruebas (182 de Catch2 y 5 del programa) con gcc, clang y ASan+UBSan; clang compila sin
+advertencias. Pruebas nuevas:
+- la multigrilla da lo mismo que Jacobi (10⁻⁸) con diez veces menos iteraciones;
+- al achicar el vóxel a la mitad, las iteraciones casi no cambian;
+- dos corridas dan el resultado idéntico;
+- una placa de un vóxel de espesor con lados impares y otra altura de fila: 3 niveles que no engruesan el espesor;
+- un reticulado con agujeros: lo mismo que Jacobi;
+- un bloque suelto: queda fuera, su desplazamiento es cero, el resto da igual que sin él, y una carga puesta solo
+  sobre él se informa como no aplicada.
+
+**No probado:**
+- la multigrilla en la GPU;
+- piezas de varios millones de vóxeles. Por cada vóxel fino, la multigrilla ocupa unos 180 bytes de matrices gruesas
+  (precisión simple, solo los bloques de arriba) y 120 bytes de vectores del ciclo. Con 8 millones de vóxeles serían
+  unos 2,4 GB, además de los vectores del gradiente conjugado.
+
+**Sigue:**
+- línea de comandos del análisis: material de la base por su nombre, cargas y apoyos en JSON, mapa del factor de
+  seguridad;
+- el núcleo de la GPU (producto con K y ciclo), probado contra la CPU;
+- la multigrilla con huecos: duplicar los nodos gruesos por cada pedazo separado dentro de una celda.

@@ -3,6 +3,8 @@
 #include "fea/hex8.hpp"
 #include "fea/material.hpp"
 #include "fea/materials.hpp"
+#include "fea/multigrid.hpp"
+#include "fea/operator.hpp"
 #include "fea/voxels.hpp"
 #include "io/stl.hpp"
 #include "slice/pipeline.hpp"
@@ -101,7 +103,7 @@ TEST_CASE("a bar in tension: the exact stretch, contraction and stress", "[fea]"
     SurfaceLoad load;
     load.box = face(0, 20.0);
     load.force[0] = 100.0;
-    const ElasticityResult r = solve_elasticity(g, m, fixtures, std::span(&load, 1), 1e-12);
+    const ElasticityResult r = solve_elasticity(g, m, fixtures, std::span(&load, 1), {.tolerance = 1e-12});
     REQUIRE(r.converged);
     const double stress = 100.0 / 16.0;
     auto u = [&](int i, int j, int k, int axis) { return r.displacement[3 * ((std::size_t(k) * 5 + std::size_t(j)) * 21 + std::size_t(i)) + std::size_t(axis)]; };
@@ -122,7 +124,7 @@ TEST_CASE("a cantilever beam bends as beam theory says", "[fea]") {
     SurfaceLoad load;
     load.box = face(0, length);
     load.force[2] = -force;
-    const ElasticityResult r = solve_elasticity(g, m, std::span(&clamp, 1), std::span(&load, 1), 1e-10);
+    const ElasticityResult r = solve_elasticity(g, m, std::span(&clamp, 1), std::span(&load, 1), {.tolerance = 1e-10});
     REQUIRE(r.converged);
     const double inertia = std::pow(side, 4) / 12.0, area = side * side, shear = m.young / (2.0 * (1.0 + m.poisson));
     const double expected = force * std::pow(length, 3) / (3.0 * m.young * inertia) + force * length / (5.0 / 6.0 * shear * area);
@@ -153,7 +155,7 @@ TEST_CASE("box voxels that follow the layers: still exact in tension", "[fea]") 
     SurfaceLoad load;
     load.box = face(0, 2.0);
     load.force[0] = 2.8;
-    const ElasticityResult r = solve_elasticity(g, m, fixtures, std::span(&load, 1), 1e-12);
+    const ElasticityResult r = solve_elasticity(g, m, fixtures, std::span(&load, 1), {.tolerance = 1e-12});
     REQUIRE(r.converged);
     const double stress = 2.8 / (0.4 * 0.7);
     auto u = [&](int i, int j, int k, int axis) { return r.displacement[3 * ((std::size_t(k) * 5 + std::size_t(j)) * 21 + std::size_t(i)) + std::size_t(axis)]; };
@@ -270,7 +272,7 @@ TEST_CASE("as printed: bars along the lines, across them and across the layers",
         SurfaceLoad load;
         load.box = face(axis, length);
         load.force[axis] = sigma * side * side;
-        return solve_as_printed(g, m, angle, fixtures, std::span(&load, 1), 1e-12);
+        return solve_as_printed(g, m, angle, fixtures, std::span(&load, 1), {.tolerance = 1e-12});
     };
     auto stretch = [](const AsPrintedResult& r, int nx, int ny, int i, int j, int k, int axis) {
         return r.elasticity.displacement[3 * ((std::size_t(k) * std::size_t(ny + 1) + std::size_t(j)) * std::size_t(nx + 1) + std::size_t(i)) + std::size_t(axis)];
@@ -403,4 +405,120 @@ TEST_CASE("printed materials: every record gives a usable material, measured val
     CHECK(abs.zt == 21.0);
     CHECK(cantrell.s12 == 28.8);
     CHECK(cantrell.s23 == 25.8);
+}
+
+TEST_CASE("multigrid: the same answer as Jacobi in a few iterations at any voxel size", "[fea]") {
+    // The cantilever of the beam test at two voxel sizes.
+    auto cantilever = [](double h, Preconditioner preconditioner) {
+        const VoxelGrid g = block(int(40 / h), int(4 / h), int(4 / h), h);
+        const Fixture clamp{face(0, 0.0)};
+        SurfaceLoad load;
+        load.box = face(0, 40.0);
+        load.force[2] = -10.0;
+        return solve_elasticity(g, Material{}, std::span(&clamp, 1), std::span(&load, 1),
+                                {.tolerance = 1e-10, .preconditioner = preconditioner});
+    };
+    const ElasticityResult jacobi = cantilever(1.0, Preconditioner::Jacobi);
+    const ElasticityResult coarse = cantilever(1.0, Preconditioner::Multigrid);
+    const ElasticityResult fine = cantilever(0.5, Preconditioner::Multigrid);
+    REQUIRE(jacobi.converged);
+    REQUIRE(coarse.converged);
+    REQUIRE(fine.converged);
+    INFO("Jacobi " << jacobi.iterations << " iterations; multigrid " << coarse.iterations << " and " << fine.iterations);
+    CHECK(jacobi.levels == 1);
+    CHECK(coarse.levels == 2);
+    CHECK(fine.levels == 3);
+    for (std::size_t q = 0; q < jacobi.displacement.size(); ++q)
+        CHECK_THAT(coarse.displacement[q], WithinAbs(jacobi.displacement[q], 1e-8));
+    CHECK(coarse.iterations < jacobi.iterations / 10);
+    // Halving the voxels doubles Jacobi's iterations but barely changes these.
+    CHECK(fine.iterations <= coarse.iterations + 4);
+
+    // Twice the same answer, to the last bit.
+    const ElasticityResult again = cantilever(1.0, Preconditioner::Multigrid);
+    CHECK(again.iterations == coarse.iterations);
+    CHECK(again.displacement == coarse.displacement);
+}
+
+TEST_CASE("multigrid: odd sizes, flat parts, holes and parts that nothing holds", "[fea]") {
+    auto compare = [](const VoxelGrid& g, std::span<const Fixture> fixtures, std::span<const SurfaceLoad> loads) {
+        const ElasticityResult jacobi =
+            solve_elasticity(g, Material{}, fixtures, loads, {.tolerance = 1e-11, .preconditioner = Preconditioner::Jacobi});
+        const ElasticityResult multigrid = solve_elasticity(g, Material{}, fixtures, loads, {.tolerance = 1e-11});
+        REQUIRE(jacobi.converged);
+        REQUIRE(multigrid.converged);
+        INFO("Jacobi " << jacobi.iterations << " iterations, multigrid " << multigrid.iterations << " on " << multigrid.levels << " levels");
+        CHECK(multigrid.iterations < jacobi.iterations);
+        double largest = 0.0;
+        for (double u : jacobi.displacement)
+            largest = std::max(largest, std::abs(u));
+        for (std::size_t q = 0; q < jacobi.displacement.size(); ++q)
+            CHECK_THAT(multigrid.displacement[q], WithinAbs(jacobi.displacement[q], 1e-7 * largest));
+        return multigrid;
+    };
+    SECTION("a plate one voxel thick with odd sides, layers of two heights") {
+        VoxelGrid g = block(33, 21, 1, 1.0);
+        g.z = {0.0, 0.6};
+        const Fixture clamp{face(0, 0.0)};
+        SurfaceLoad load;
+        load.box = face(0, 33.0);
+        load.force[2] = -0.01;
+        compare(g, std::span(&clamp, 1), std::span(&load, 1));
+        // Its levels: the thickness stays one element.
+        const VoxelOperator op(g, std::vector<Stiffness>{isotropic_stiffness(3500.0, 0.35)}, {}, {});
+        std::vector<std::uint8_t> free(3 * op.nodes(), 1);
+        const Multigrid mg(op, free, op.diagonal());
+        REQUIRE(mg.levels() == 3);
+        CHECK(mg.elements(0) == std::array<int, 3>{33, 21, 1});
+        CHECK(mg.elements(1) == std::array<int, 3>{17, 11, 1});
+        CHECK(mg.elements(2) == std::array<int, 3>{9, 6, 1});
+    }
+    SECTION("a lattice: columns and beams with holes between them") {
+        VoxelGrid g = block(14, 14, 8, 0.5);
+        for (int k = 0; k < g.nz; ++k)
+            for (int j = 0; j < g.ny; ++j)
+                for (int i = 0; i < g.nx; ++i)
+                    g.solid[g.index(i, j, k)] = (i % 4 < 2) + (j % 4 < 2) + (k % 4 < 2) >= 2;
+        Box bottom;
+        bottom.max[2] = 1e-9;
+        const Fixture fixed{bottom};
+        SurfaceLoad load;
+        load.box.min[2] = 4.0 - 1e-9;
+        load.force[0] = 1.0;
+        load.force[2] = -2.0;
+        compare(g, std::span(&fixed, 1), std::span(&load, 1));
+    }
+    SECTION("a loose block that nothing holds") {
+        // A gap splits a bar standing on its clamped base: the upper block
+        // touches no fixture, so it takes no part and stays put.
+        VoxelGrid g = block(4, 4, 9, 1.0);
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i)
+                g.solid[g.index(i, j, 4)] = 0;
+        Box bottom;
+        bottom.max[2] = 1e-9;
+        const Fixture clamp{bottom};
+        SurfaceLoad load;
+        load.box = face(2, 4.0);
+        load.force[0] = 5.0;
+        const ElasticityResult r = solve_elasticity(g, Material{}, std::span(&clamp, 1), std::span(&load, 1), {.tolerance = 1e-12});
+        REQUIRE(r.converged);
+        CHECK(r.loose_voxels == 4 * 4 * 4);
+        CHECK(r.unapplied_loads == 0);
+        VoxelGrid lower = g;
+        for (std::size_t v = std::size_t(4) * 4 * 4; v < lower.solid.size(); ++v)
+            lower.solid[v] = 0;
+        const ElasticityResult reference =
+            solve_elasticity(lower, Material{}, std::span(&clamp, 1), std::span(&load, 1), {.tolerance = 1e-12});
+        CHECK(reference.loose_voxels == 0);
+        const std::size_t below = std::size_t(5) * 5 * 5; // nodes up to the top of the lower part
+        for (std::size_t q = 0; q < 3 * below; ++q)
+            CHECK_THAT(r.displacement[q], WithinAbs(reference.displacement[q], 1e-12));
+        for (std::size_t q = 3 * below; q < r.displacement.size(); ++q)
+            CHECK(r.displacement[q] == 0.0);
+        // A load on the loose block alone finds nothing to push.
+        load.box = face(2, 9.0);
+        const ElasticityResult lost = solve_elasticity(g, Material{}, std::span(&clamp, 1), std::span(&load, 1));
+        CHECK(lost.unapplied_loads == 1);
+    }
 }
