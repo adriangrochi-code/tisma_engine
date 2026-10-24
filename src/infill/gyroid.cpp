@@ -4,6 +4,9 @@
 
 #include "infill/gyroid.hpp"
 
+#include "infill/connect.hpp"
+
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
@@ -128,6 +131,9 @@ std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double 
     clipper.AddClip(inner);
     Polygons closed, open;
     clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+    open.erase(std::remove_if(open.begin(), open.end(), [](const Polygon& p) { return p.size() < 2; }), open.end());
+    // Anchor the curve ends: join them along the boundary, up to half a period apart.
+    open = join_along_boundary(open, inner, period / 2.0 * kUnitsPerMm);
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
             continue;

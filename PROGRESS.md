@@ -1278,3 +1278,30 @@ menos área, y lo que entra en la pared interna):
 - anclar el giroide;
 - el criterio de F3, que necesita el Benchy (decisión del dueño).
 
+## 2026-10-24 — bloque nocturno 35: giroide anclado, la GPU de F3 y el plan de F4
+
+**Hecho:**
+- La unión por el borde pasó a su propio módulo (`src/infill/connect.*`, `join_along_boundary`). Sirve para líneas de
+  filas vecinas (el zigzag del rectilíneo) o para cualquier par de piezas.
+- El giroide une los extremos de sus curvas a lo largo del borde, hasta medio período, así queda anclado a las paredes
+  como pide `docs/spec/BEHAVIOR.md`.
+- GPU de F3, decidido con números: no paga.
+  - La grilla del giroide cuesta ~80 ms en un hilo para las 500 capas (~20 ms en 4 núcleos). Pasarla a Vulkan movería
+    ~0,8 MB por capa en cada sentido, más caro que calcularla.
+  - La clasificación de superficies son operaciones booleanas de Clipper2.
+- `PLAN.md`: lista «Estado de F4» desde `docs/spec/GCODE_OUTPUT.md` y `BEHAVIOR.md` (pasan `tools/check_spec.py`).
+
+**Probado:** 132/132 pruebas con gcc, clang y ASan+UBSan:
+- el giroide deposita 21,3 % al 20 % (las uniones suman 1,3 puntos) y queda en menos de 40 recorridos en un cuadrado
+  de 20 mm;
+- los puntos que no están sobre el borde siguen sobre la superficie (error < 0,01).
+
+**Medido** (esfera, giroide, 4 núcleos): los recorridos dispersos bajan de 17 713 a 8867; `slice` 1,67–1,77 s (antes
+1,57–1,64 s).
+
+**Estado de F3:** está hecho todo lo que no depende del dueño. Quedan el criterio con el Benchy (modelos de banco) y la
+decisión sobre el eje medio.
+
+**Sigue:** F4. Primero los ajustes de máquina y velocidades, y un escritor de G-code mínimo con las etiquetas que lee
+la vista previa de Tisma.
+

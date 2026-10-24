@@ -173,19 +173,25 @@ TEST_CASE("gyroid infill: points on the surface, the density's material, curves 
             CHECK(q.width == 0.4);
             CHECK(q.p.x >= 0.2 - 1e-4);
             CHECK(q.p.x <= 19.8 + 1e-4);
+            const bool on_boundary = std::fabs(q.p.x - 0.2) < 1e-3 || std::fabs(q.p.x - 19.8) < 1e-3 ||
+                                     std::fabs(q.p.y - 0.2) < 1e-3 || std::fabs(q.p.y - 19.8) < 1e-3;
+            if (on_boundary)
+                continue; // the joins between curve ends follow the shrunk boundary
             const double X = k * q.p.x, Y = k * q.p.y, Z = k * 0.3;
             worst = std::max(worst, std::fabs(std::sin(X) * std::cos(Y) + std::sin(Y) * std::cos(Z) + std::sin(Z) * std::cos(X)));
         }
     // Linear interpolation on a grid of period / 32: the points are close to the surface.
     CHECK(worst < 0.01);
-    // The material laid down is about the density times the area (averaged over a period of z).
+    // The material laid down is about the density times the area (averaged over a period of z);
+    // the joins along the edge add a little (measured: 21.3 %).
     double laid = 0.0;
     const int heights = 8;
     for (int i = 0; i < heights; ++i)
         laid += measure_coverage(region, gyroid_fill(region, period, period * i / heights, 0.4)).deposited;
     laid /= heights;
     std::printf("gyroid at 20%% on a 20 mm square: lays %.2f mm2 of 400 (%.1f%%)\n", laid, laid / 4.0);
-    CHECK_THAT(laid / 400.0, WithinAbs(0.2, 0.02));
+    CHECK_THAT(laid / 400.0, WithinAbs(0.21, 0.02));
+    CHECK(at0.size() < 40); // the curve ends are joined into a few long paths
     // Another height, other curves.
     const std::vector<Toolpath> at1 = gyroid_fill(region, period, 1.3, 0.4);
     REQUIRE_FALSE(at1.empty());

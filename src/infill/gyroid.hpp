@@ -12,7 +12,9 @@ namespace tisma {
 // period, at height z, clipped to the region shrunk by width / 2, as open
 // toolpaths of constant width. The curves come from marching squares on a
 // grid fixed to the origin, kGyroidSamples steps per period; points within
-// kGyroidTolerance of the line between their neighbours are left out.
+// kGyroidTolerance of the line between their neighbours are left out. Curve
+// ends that follow each other along the boundary, up to half a period apart,
+// are joined along it (join_along_boundary), anchoring them to the walls.
 inline constexpr int kGyroidSamples = 24;
 inline constexpr double kGyroidTolerance = 0.005; // mm
 std::vector<Toolpath> gyroid_fill(const Polygons& region, double period, double z, double width);

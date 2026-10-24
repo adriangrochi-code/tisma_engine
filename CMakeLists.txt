@@ -130,6 +130,7 @@ add_library(tisma_core
   src/surfaces/bridges.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
+  src/infill/connect.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
