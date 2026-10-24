@@ -47,3 +47,7 @@ Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los a
 - `layer_time`: segundos que dura una capa que no llega al tiempo mínimo ni a 1 mm/min;
 - `open_contours`: contornos abiertos descartados en la capa;
 - `gpu_fallback`: la GPU falló y se laminó con la CPU (sin capa: `layer` y `z` son `null`).
+
+Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
+escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
+fuera de `machine.bed` o más alto que `machine.max_height`). Con error no queda G-code a medias.

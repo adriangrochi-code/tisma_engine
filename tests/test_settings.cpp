@@ -111,6 +111,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(m.acceleration == 2000.0);
     CHECK(m.travel_acceleration == 3000.0);
     CHECK(m.corner_speed == 0.0);
+    CHECK(m.bed.empty()); // not checked unless given
+    const Settings b = parse_settings(R"({"machine": {"bed": [[0, 0], [200, 0], [100, 180]], "max_height": 150}})");
+    REQUIRE(b.bed.size() == 3);
+    CHECK(b.bed[2][0] == 100.0);
+    CHECK(b.max_height == 150.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1]]}})"), ContainsSubstring("machine.bed: must be a list of at least 3"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1], [2]]}})"), ContainsSubstring("machine.bed: must be a list of at least 3"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_height": -1}})"), ContainsSubstring("machine.max_height: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"corner_speed": -1}})"), ContainsSubstring("machine.corner_speed: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"fan_max": 120}})"), ContainsSubstring("cooling.fan_max: must be a percentage"));

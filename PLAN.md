@@ -283,6 +283,8 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   (`src/gcode/print_time.*`)
 - [x] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)
   (`src/report/warnings.*`, `slice --warnings`)
+- [x] Entradas imposibles con mensaje claro y código 4 (malla vacía, sin capas cerradas, fuera de la cama, demasiado
+  alto), sin G-code a medias (`src/slice/printable.*`)
 - [ ] Criterio de F4: el Benchy se imprime en una impresora real (necesita al dueño)
 
 ## Avance

@@ -162,7 +162,8 @@ Settings parse_settings(std::string_view text) {
     });
     read_group(root, "machine",
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
-                "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed"},
+                "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
+                "bed", "max_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "relative_extrusion") {
@@ -195,11 +196,22 @@ Settings parse_settings(std::string_view text) {
                                list.push_back(as_text(value, k + "." + name));
                            s.variables[name] = std::move(list);
                        }
-                   } else if (n == "corner_speed") {
+                   } else if (n == "bed") {
+                       const char* what = "must be a list of at least 3 [x, y] points in mm";
+                       if (!v.is_array() || v.size() < 3)
+                           fail(k, what);
+                       std::vector<std::array<double, 2>> bed;
+                       for (const json& p : v) {
+                           if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                               fail(k, what);
+                           bed.push_back({p[0].get<double>(), p[1].get<double>()});
+                       }
+                       s.bed = std::move(bed);
+                   } else if (n == "corner_speed" || n == "max_height") {
                        const double d = number(g, n, k);
                        if (d < 0.0)
                            fail(k, "must not be negative");
-                       s.corner_speed = d;
+                       (n == "corner_speed" ? s.corner_speed : s.max_height) = d;
                    } else {
                        const double d = number(g, n, k);
                        if (!(d > 0.0))
@@ -329,6 +341,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.acceleration", num(s.acceleration)},
         {"machine.travel_acceleration", num(s.travel_acceleration)},
         {"machine.corner_speed", num(s.corner_speed)},
+        {"machine.bed", json(s.bed).dump()},
+        {"machine.max_height", num(s.max_height)},
         {"speed.walls", num(s.wall_speed)},
         {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
         {"speed.infill", num(s.infill_speed)},

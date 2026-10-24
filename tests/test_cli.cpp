@@ -141,3 +141,46 @@ TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", "x", "--warnings"}).code ==
           kExitUsage);
 }
+
+TEST_CASE("models that cannot be printed end with a clear error and no G-code", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const auto out = dir / "tisma_test_unprintable.gcode";
+    auto write = [&](const std::string& name, const std::string& text) {
+        const auto path = dir / name;
+        std::ofstream(path) << text;
+        return path.string();
+    };
+    std::filesystem::remove(out);
+    // An STL without triangles.
+    const Run empty = run({"slice", write("tisma_empty.stl", "solid e\nendsolid e\n"), "--config",
+                           kData + "/settings.json", "-o", out.string()});
+    CHECK(empty.code == kExitModel);
+    CHECK_THAT(empty.err, ContainsSubstring("no triangles"));
+    CHECK_FALSE(std::filesystem::exists(out));
+    // The 10 mm cube on a bed far from it, and on a bed exactly its size (the edge counts as inside).
+    const Run outside = run({"slice", kData + "/cube_ascii.stl", "--config",
+                             write("tisma_far_bed.json", R"({"machine": {"bed": [[100, 100], [150, 100], [150, 150], [100, 150]]}})"),
+                             "-o", out.string()});
+    CHECK(outside.code == kExitModel);
+    CHECK_THAT(outside.err, ContainsSubstring("outside the bed"));
+    CHECK_FALSE(std::filesystem::exists(out));
+    const Run edge = run({"slice", kData + "/cube_ascii.stl", "--config",
+                          write("tisma_tight_bed.json", R"({"machine": {"bed": [[0, 0], [10, 0], [10, 10], [0, 10]]}})"),
+                          "-o", out.string()});
+    CHECK(edge.code == kExitOk);
+    std::filesystem::remove(out);
+    // Taller than the machine.
+    const Run tall = run({"slice", kData + "/cube_ascii.stl", "--config",
+                          write("tisma_low.json", R"({"machine": {"max_height": 5}})"), "-o", out.string()});
+    CHECK(tall.code == kExitModel);
+    CHECK_THAT(tall.err, ContainsSubstring("max_height"));
+    // A flat square: triangles, but no layer encloses anything.
+    const std::string flat = "solid f\n"
+                             "facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 10 10 0\nendloop\nendfacet\n"
+                             "facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 10 0\nvertex 0 10 0\nendloop\nendfacet\n"
+                             "endsolid f\n";
+    const Run flat_run = run({"slice", write("tisma_flat.stl", flat), "--config", kData + "/settings.json", "-o", out.string()});
+    CHECK(flat_run.code == kExitModel);
+    CHECK_THAT(flat_run.err, ContainsSubstring("encloses"));
+    CHECK_FALSE(std::filesystem::exists(out));
+}

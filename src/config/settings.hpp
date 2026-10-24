@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <map>
 #include <stdexcept>
@@ -63,6 +64,10 @@ struct Settings {
     double acceleration = 1000.0;        // mm/s2, moves that extrude
     double travel_acceleration = 1250.0; // mm/s2, travels and retractions
     double corner_speed = 10.0;          // mm/s through a sharp corner
+    // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
+    // engine does not move models, and the bench models are centred on the origin).
+    std::vector<std::array<double, 2>> bed;
+    double max_height = 0.0; // mm; 0: not checked
 
     // speed, mm/s
     double wall_speed = 60.0;

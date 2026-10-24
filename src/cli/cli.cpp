@@ -12,6 +12,7 @@
 #include "perimeters/transitions.hpp"
 #include "slice/layers.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/printable.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -196,6 +197,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
+    if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
+        err << "error: " << reason << "\n";
+        return kExitModel;
+    }
     std::unique_ptr<gpu::Context> gpu;
     if (settings.gpu == GpuMode::Auto)
         gpu = gpu::Context::create();
@@ -212,6 +217,10 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         sliced = slice_model(mesh, settings, nullptr);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    if (const std::string reason = unprintable_reason(sliced); !reason.empty()) {
+        err << "error: " << reason << "\n";
+        return kExitModel;
+    }
 
     double volume = 0.0;
     std::size_t polygons = 0, walls = 0, solid_lines = 0, sparse_lines = 0, bridge_lines = 0;

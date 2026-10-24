@@ -1594,3 +1594,35 @@ se nota. Escritura 0,64–0,73 s.
 - objeto fuera de la cama (necesita `bed_shape`) como error claro;
 - criterio de F4 (Benchy en una impresora real, con el dueño);
 - F5: soportes.
+
+## 2026-10-24 — bloque nocturno 44: entradas imposibles
+
+**Hecho:**
+- Defecto corregido: un STL sin triángulos terminaba con código 0 y un G-code vacío.
+- `src/slice/printable.*` (diseño propio), según `docs/spec/BEHAVIOR.md` («Errores y avisos»). `slice` termina con un
+  mensaje de una línea y el código nuevo 4 cuando:
+  - el modelo no tiene triángulos;
+  - ninguna capa encierra área (malla plana o abierta);
+  - algún vértice queda fuera de `machine.bed` (polígono; el borde cuenta como dentro);
+  - el modelo es más alto que `machine.max_height`.
+- La comprobación se hace antes de abrir la salida, así que no queda G-code a medias.
+- Ajustes nuevos `machine.bed` y `machine.max_height`. Los códigos de salida están en `README.md`.
+- **Decisión pendiente:** la esfera del banco está centrada en el origen (de −50 a 50), y con la cama del banco
+  (250 × 210 desde el origen) quedaría fuera. Como el motor no mueve los modelos, `bed` vacío por defecto no comprueba
+  nada. Hay que saber si Tisma manda los modelos ya ubicados en la cama, o si el motor tiene que centrarlos.
+
+**Probado:** 160/160 pruebas con gcc, clang y ASan+UBSan:
+- STL vacío: código 4, «no triangles», sin archivo de salida;
+- el cubo con una cama lejos: código 4, «outside the bed», sin salida;
+- con una cama justo de su tamaño: se lamina (el borde cuenta como dentro);
+- más alto que `max_height`: código 4;
+- un cuadrado plano: código 4, «encloses», sin salida;
+- lectura de `bed` (menos de 3 puntos o puntos mal formados son errores) y de `max_height`.
+
+**Medido** (esfera): sin cama, igual que antes (corte 1,24–1,38 s; escritura 0,67–0,71 s). Con una cama centrada de
+250 × 210, la comprobación de 500 000 vértices no se nota (1,32 s).
+
+**Sigue:**
+- según lo que diga Tisma: centrar el modelo en la cama o leerlo ya ubicado;
+- criterio de F4 (Benchy en una impresora real, con el dueño);
+- F5: soportes.
