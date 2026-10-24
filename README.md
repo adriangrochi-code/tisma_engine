@@ -34,3 +34,16 @@ build/tisma-engine --help
 ```
 
 Hace falta CMake 3.25 o más nuevo y un compilador de C++20. La configuración descarga oneTBB y, para las pruebas, Catch2.
+
+## Usar
+
+```sh
+build/tisma-engine slice modelo.stl --config ajustes.json -o modelo.gcode --warnings avisos.json
+```
+
+Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los avisos del laminado en JSON:
+`{"version": 1, "warnings": [{"kind", "layer", "z", "message", "value"}]}`. Los tipos de aviso son:
+- `thin_detail`: área en mm² de una capa más fina que el cordón más fino, que no se imprime;
+- `layer_time`: segundos que dura una capa que no llega al tiempo mínimo ni a 1 mm/min;
+- `open_contours`: contornos abiertos descartados en la capa;
+- `gpu_fallback`: la GPU falló y se laminó con la CPU (sin capa: `layer` y `z` son `null`).

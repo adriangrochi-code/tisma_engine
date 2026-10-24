@@ -281,7 +281,8 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   (grupo `cooling`, `src/gcode/cooling.*`)
 - [x] Aceleraciones y límites de la máquina; estimación de tiempo (opcional, como comentario)
   (`src/gcode/print_time.*`)
-- [ ] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)
+- [x] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)
+  (`src/report/warnings.*`, `slice --warnings`)
 - [ ] Criterio de F4: el Benchy se imprime en una impresora real (necesita al dueño)
 
 ## Avance

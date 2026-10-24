@@ -122,3 +122,22 @@ TEST_CASE("info prints the mesh summary", "[cli]") {
     CHECK_THAT(r.out, ContainsSubstring("contours: 50"));
     CHECK_THAT(r.out, ContainsSubstring("sliced_volume: 1000"));
 }
+
+TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
+    const auto gcode = std::filesystem::temp_directory_path() / "tisma_test_warn.gcode";
+    const auto json = std::filesystem::temp_directory_path() / "tisma_test_warn.json";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode.string(),
+                       "--warnings", json.string()});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("warnings: 0"));
+    std::ifstream f(json);
+    std::stringstream text;
+    text << f.rdbuf();
+    CHECK_THAT(text.str(), ContainsSubstring("\"version\": 1"));
+    CHECK_THAT(text.str(), ContainsSubstring("\"warnings\": []"));
+    f.close();
+    std::filesystem::remove(gcode);
+    std::filesystem::remove(json);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", "x", "--warnings"}).code ==
+          kExitUsage);
+}

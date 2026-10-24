@@ -3,6 +3,7 @@
 #include "io/stl.hpp"
 #include "config/settings.hpp"
 #include "gcode/writer.hpp"
+#include "report/warnings.hpp"
 #include "geom/medial_axis.hpp"
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
@@ -25,7 +26,7 @@ namespace {
 
 constexpr std::string_view kUsage =
     "usage:\n"
-    "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode>\n"
+    "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
     "  tisma-engine info <model.stl>\n"
     "  tisma-engine --help | --version\n";
 
@@ -33,6 +34,7 @@ struct SliceArgs {
     std::string model;
     std::string config;
     std::string output;
+    std::string warnings; // empty: not written
 };
 
 // Returns the arguments of 'slice', or writes the problem to err.
@@ -53,6 +55,9 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
                 return std::nullopt;
         } else if (a == "-o" || a == "--output") {
             if (!value(out.output))
+                return std::nullopt;
+        } else if (a == "--warnings") {
+            if (!value(out.warnings))
                 return std::nullopt;
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
@@ -196,12 +201,14 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         gpu = gpu::Context::create();
     out << "gpu: " << (gpu ? gpu->device_name() : std::string("none, using the CPU")) << "\n";
     SlicedModel sliced;
+    std::vector<Warning> warnings;
     try {
         sliced = slice_model(mesh, settings, gpu.get());
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
+        warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
         sliced = slice_model(mesh, settings, nullptr);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
@@ -240,7 +247,9 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         return kExitInput;
     }
     const auto write_start = std::chrono::steady_clock::now();
-    write_gcode(gcode, sliced, settings);
+    std::vector<Warning> model = model_warnings(sliced);
+    warnings.insert(warnings.end(), model.begin(), model.end());
+    write_gcode(gcode, sliced, settings, &warnings);
     gcode.close();
     if (!gcode) {
         err << "error: writing '" << parsed->output << "' failed\n";
@@ -250,6 +259,17 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - write_start).count();
     out << "write_ms: " << write_ms << "\n";
     out << "wrote " << parsed->output << "\n";
+    out << "warnings: " << warnings.size() << "\n";
+    if (!parsed->warnings.empty()) {
+        std::ofstream report(parsed->warnings, std::ios::binary);
+        report << warnings_json(warnings);
+        report.close();
+        if (!report) {
+            err << "error: cannot write '" << parsed->warnings << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->warnings << "\n";
+    }
     return kExitOk;
 }
 

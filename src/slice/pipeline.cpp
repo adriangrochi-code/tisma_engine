@@ -34,6 +34,12 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     beading.preferred_width = settings.wall_width;
     beading.wall_count = settings.wall_count;
     std::vector<std::size_t> open(out.layers.size(), 0);
+    out.thin_area.assign(out.layers.size(), 0.0);
+    // The thinnest feature that gets a bead (bead_count grows with the thickness).
+    double lo = 0.0, hi = 4.0 * beading.preferred_width;
+    for (int i = 0; i < 40; ++i)
+        (bead_count(beading, (lo + hi) / 2.0) > 0 ? hi : lo) = (lo + hi) / 2.0;
+    const double thinnest = hi;
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         for (const Contour& c : contours[l])
             open[l] += c.closed ? 0 : 1;
@@ -41,6 +47,9 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
             layer_region(simplify(to_polygons(contours[l]), settings.simplify_tolerance), settings.fill_mode);
         const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
         out.regions[l] = offset(region, settings.xy_offset - shrink);
+        // What an opening by the thinnest bead removes is too thin to print.
+        const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
+        out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
         if (settings.wall_count > 0)
             out.walls[l] = layer_walls(out.regions[l], beading);
         else
@@ -48,6 +57,7 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     });
     for (std::size_t n : open)
         out.open_contours += n;
+    out.open_by_layer = std::move(open);
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)
         infill[l] = out.walls[l].infill;

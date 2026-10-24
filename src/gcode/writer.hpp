@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/settings.hpp"
+#include "report/warnings.hpp"
 #include "slice/pipeline.hpp"
 
 #include <ostream>
@@ -27,7 +28,9 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
 // are longer than retraction.min_travel. A layer faster than
 // cooling.min_layer_time is slowed down (plan_slowdown) and gets the fan at
 // cooling.fan_max; others get cooling.fan_min, and the first
-// cooling.fan_off_layers layers none.
-void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings);
+// cooling.fan_off_layers layers none. Layers that stay shorter than the
+// minimum time even at 1 mm/min are added to warnings, when given.
+void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings,
+                 std::vector<Warning>* warnings = nullptr);
 
 } // namespace tisma

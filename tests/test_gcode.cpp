@@ -1,5 +1,6 @@
 #include "config/settings.hpp"
 #include "gcode/writer.hpp"
+#include "report/warnings.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
@@ -377,4 +378,40 @@ TEST_CASE("cooling: short layers slow down to the minimum layer time with the fa
     const std::string slowest_text = cube_gcode(s);
     CHECK(slowest_text.find(" F0\n") == std::string::npos);
     CHECK(slowest_text.find(" F1\n") != std::string::npos);
+}
+
+TEST_CASE("warnings: details thinner than a bead, layers that cannot reach the minimum time", "[gcode][warnings]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 10, 10, 1);
+    add_box(m, 12, 0, 12.1f, 5, 1); // a fin 0.1 mm thin: no bead fits
+    Settings s;
+    const SlicedModel model = slice_model(m, s);
+    const std::vector<Warning> thin = model_warnings(model);
+    REQUIRE(thin.size() == model.layers.size());
+    for (const Warning& w : thin) {
+        CHECK(w.kind == "thin_detail");
+        CHECK_THAT(w.value, WithinRel(0.5, 0.05)); // 0.1 x 5 mm
+    }
+    CHECK(thin.front().layer == 0);
+    CHECK_THAT(warnings_json(thin), ContainsSubstring("\"kind\": \"thin_detail\""));
+
+    // A clean cube: nothing to report, also from the writer.
+    const IndexedMesh cube = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel clean = slice_model(cube, s);
+    CHECK(model_warnings(clean).empty());
+    std::vector<Warning> written;
+    std::ostringstream out;
+    write_gcode(out, clean, s, &written);
+    CHECK(written.empty());
+
+    // A minimum time no layer can reach, even at 1 mm/min.
+    s.min_layer_time = 1e7;
+    out.str("");
+    write_gcode(out, clean, s, &written);
+    REQUIRE(written.size() == clean.layers.size());
+    for (const Warning& w : written) {
+        CHECK(w.kind == "layer_time");
+        CHECK(w.value < 1e7);
+    }
+    CHECK(warnings_json({}) == "{\n  \"version\": 1,\n  \"warnings\": []\n}\n");
 }

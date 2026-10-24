@@ -1567,3 +1567,30 @@ cambia.
 - comparar la estimación con el tiempo que calcula Tisma sobre el mismo G-code (caja negra; lo puede hacer el otro
   equipo);
 - criterio de F4 (Benchy en una impresora real, con el dueño).
+
+## 2026-10-24 — bloque nocturno 43: avisos en JSON
+
+**Hecho:**
+- Avisos (`src/report/warnings.*`, diseño propio), según `docs/spec/BEHAVIOR.md` («Errores y avisos»):
+  - `thin_detail`: por capa, el área más fina que el cordón más fino que acepta `bead_count`. Se calcula con una
+    apertura (achicar y agrandar) dentro del paso en paralelo por capa; se avisa desde 0,01 mm²;
+  - `layer_time`: capas que no llegan a `cooling.min_layer_time` ni a 1 mm/min;
+  - `open_contours`: contornos abiertos por capa (antes solo había el total);
+  - `gpu_fallback`: la GPU falló y se laminó con la CPU.
+- `tisma-engine slice ... --warnings avisos.json` los escribe como `{"version": 1, "warnings": [...]}` y la salida
+  informa `warnings: N`. Documentado en `README.md`.
+
+**Probado:** 159/159 pruebas con gcc, clang y ASan+UBSan:
+- un cubo con una aleta de 0,1 mm da un aviso `thin_detail` por capa, de 0,5 mm² (0,1 × 5);
+- el cubo limpio no da avisos, ni del modelo ni del escritor;
+- con un tiempo mínimo imposible, un aviso `layer_time` por capa;
+- el JSON vacío exacto;
+- desde la línea de comandos, el JSON se escribe y `--warnings` sin valor es un error de uso.
+
+**Medido** (esfera): 0 avisos. Corte 1,16–1,24 s, dentro del rango de antes (1,13–1,28 s): la apertura por capa no
+se nota. Escritura 0,64–0,73 s.
+
+**Sigue:**
+- objeto fuera de la cama (necesita `bed_shape`) como error claro;
+- criterio de F4 (Benchy en una impresora real, con el dueño);
+- F5: soportes.

@@ -136,6 +136,7 @@ add_library(tisma_core
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
+  src/report/warnings.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

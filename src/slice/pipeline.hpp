@@ -23,6 +23,8 @@ struct SlicedModel {
     std::vector<LayerSurfaces> surfaces; // one per layer: the infill region as top, bottom and sparse
     std::vector<LayerFill> fills;        // one per layer: solid and sparse infill toolpaths
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
+    std::vector<std::size_t> open_by_layer; // the same per layer
+    std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
 };
 
 // Slices a welded mesh with the given settings: layer plan, level-set
