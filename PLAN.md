@@ -194,7 +194,7 @@ el dueño; P1 ya empezó, ver «Estado de P1»):
 |---|---|---|
 | P1 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | Fichas de la interfaz de Tisma (qué hay en cada pantalla y cómo se comporta) |
 | P2 | Device y conexión con impresoras de varias marcas (pedido del dueño, 2026-10-24): la página de dispositivos (lista, estado, temperaturas, avance, cámara, controles, subir e imprimir); USB, Bambu Lab, OctoPrint, Moonraker/Klipper, PrusaLink, Duet/RepRapFirmware, Creality, Elegoo, Anycubic, Flashforge y las demás | La ficha de Device que se le pidió al equipo de fichas el 2026-10-24 (comportamiento, sin código: los hosts de Tisma Slicer vienen de código de OrcaSlicer) y la documentación pública oficial de cada API. Donde no hay documentación oficial (por ejemplo, el modo LAN de Bambu Lab), decide el dueño. Las bibliotecas (HTTP, TLS, MQTT, descubrimiento en la red, puerto serie) se revisan con las reglas de licencias antes de usarlas |
-| P6 | App móvil de Android que sigue la impresión (decisión del dueño, 2026-10-24: la opción 1, con soporte USB, y la estética de la app de Prusa —EasyPrint— como caja negra): impresoras, impresión, cámara, controles, archivos y avisos, con la capa de dispositivos de P2 compartida en C++ (USB primero, por OTG); después, laminar simple desde el teléfono con el motor | `docs/MOBILE.md`; la ficha de Device; la documentación pública de la API USB Host de Android y de los chips serie; las bibliotecas revisadas con las reglas de licencias |
+| P6 | App móvil de Android que sigue la impresión (decisión del dueño, 2026-10-24: la opción 1, la estética de la app de Prusa —EasyPrint— como caja negra, y el teléfono solo por WiFi: el USB es del laminador de PC): impresoras, impresión, cámara, controles, archivos y avisos, con la capa de dispositivos de P2 compartida en C++; las impresoras por USB de la PC se siguen a través de un servicio local de `tisma`; después, laminar simple desde el teléfono con el motor | `docs/MOBILE.md`; la ficha de Device; la documentación pública de la API USB Host de Android y de los chips serie; las bibliotecas revisadas con las reglas de licencias |
 | P3 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante (en curso: `docs/CATALOG.md`) | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura, y no se usan |
 | P4 | Formatos: 3MF (especificación pública), STEP (OCCT es LGPL-2.1 con excepción: no entra en la lista de licencias permitidas; hace falta otra biblioteca o una decisión del dueño), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
 | P5 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | Fichas; el logo lo da el dueño |
@@ -437,6 +437,21 @@ con nombres propios en `docs/CONFIG.md`.
 - [ ] En GPU: voladizos y proyección, si conviene
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
 
+## Estado de P2
+
+Empezado el 2026-10-24 por pedido del dueño («arrancá con `src/device` y el host serie»), antes de que la ficha de
+Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la ficha no cambia. Diseño en
+`docs/DEVICE.md`.
+
+- [x] La capa de dispositivos `src/device/`: `Printer`, `ByteStream`, el puerto serie (Linux y Windows), el host de
+  G-code por serie (numeración, suma de verificación, reenvíos, temperaturas, pausa y cancelación) y la impresora
+  simulada, con pruebas de punta a punta
+- [ ] La página Device de `tisma`: puertos, conectar, estado, imprimir lo exportado, pausar y cancelar; el simulador
+  como impresora de prueba
+- [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Probado con una impresora real por USB (necesita al dueño)
+
 ## Estado de P1
 
 La interfaz propia se adelantó (pedido del dueño, 2026-10-24: «hagamos la interfaz con esos íconos y centrémonos en
@@ -463,8 +478,8 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
 - [ ] Calibraciones estándar que faltan: puentes y voladizos
 - [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24). Decidido: la opción 1 (seguir
-  la impresión, no la interfaz entera), con soporte USB, con la estética de la app de Prusa (EasyPrint) como caja
-  negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)
+  la impresión, no la interfaz entera), solo por WiFi (el USB es de la PC), con la estética de la app de Prusa
+  (EasyPrint) como caja negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7

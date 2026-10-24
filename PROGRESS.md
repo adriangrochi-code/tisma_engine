@@ -2920,6 +2920,37 @@ soporte USB» y «algo similar a Prusa EasyPrint en estética, con nuestras func
   archivos y avisos → laminar simple desde el teléfono (a confirmar);
 - tres preguntas al dueño: teléfono e impresora de prueba, cámara, instalación.
 
+**Aclaración del dueño, después:** «el slicer de PC puede imprimir por USB; el celular, solo por WiFi». El plan
+quedó así: sin USB en el teléfono; las impresoras por USB de la PC se siguen por la red a través de un servicio
+local de `tisma` (estado, avance, controles, cámara, con vinculación), y las que tienen API de red, directo.
+
 **Sigue:** empezar `src/device/` con el host serie y el simulador cuando la ficha de Device esté en `main` (PR #11)
 o antes, con la documentación pública de Marlin y RepRapFirmware; mientras, los grupos del catálogo que faltan.
+
+## 2026-10-24 — Device: la capa de dispositivos y el host serie
+
+**Pedido del dueño:** «arrancá con `src/device` y el host serie». Diseño en `docs/DEVICE.md`.
+
+**Hecho:**
+- `src/device/printer.hpp`: `Printer`, `PrinterStatus`, `PrinterEvent` y los controles de siempre como comandos.
+- `src/device/stream.*`: `ByteStream` y el tubo en memoria (`make_pipe`).
+- `src/device/serial_port.*`: el puerto serie, 8N1, cualquier velocidad en Linux (`termios2`, `BOTHER`: 250 000
+  incluido) y el puerto COM en Windows; la lista de puertos.
+- `src/device/gcode_host.*`: el host de G-code en su hilo: conexión con `M110 N0` hasta el primer `ok`, `M115`,
+  `M155 S2` con `M105` de respaldo; líneas numeradas con suma de verificación; un `ok` por línea; reenvíos (traga
+  el `ok` del pedido, renumera si la placa se reinició, 5 intentos); `echo:busy` reinicia la espera; temperaturas,
+  posición y firmware desde los informes; trabajos con avance, pausa y cancelación (apaga calefactores y
+  ventilador, suelta motores); comandos sueltos en el primer hueco; errores de conexión claros.
+- `src/device/simulator.*`: la impresora simulada tipo Marlin, con reenvío provocado (`fail_line`), temperaturas
+  que se mueven, `M109`/`M190` que esperan con `echo:busy`, y el registro de comandos.
+- `tests/test_device.cpp`: seis casos (ver `docs/DEVICE.md`, «Pruebas»).
+
+**Medido:** `tisma_tests "[device]"`: 108 comprobaciones en 6 casos; el trabajo de prueba (1265 líneas con una
+rota) se imprime al simulador en menos de un segundo, con un solo reenvío y cada `G1` recibido una vez.
+
+**No probado:** una impresora real por USB (necesita al dueño: qué impresora y en qué sistema); el puerto COM de
+Windows se compila en el CI de Windows pero no se ejecutó contra un puerto real.
+
+**Sigue:** la página Device en `tisma` (puertos, conectar, estado, imprimir lo exportado, pausar, cancelar; el
+simulador como impresora de prueba); después el servicio local para la app y las conexiones de red de la ficha.
 

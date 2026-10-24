@@ -196,7 +196,7 @@ La biblioteca `tisma_ui`, que usa el programa `tisma` (`apps/tisma/`, ver `docs/
 
 El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador propio de OpenGL 3.3 y el dibujo 3D.
 
-### `calibration/`, `project/`, `catalog/`
+### `calibration/`, `project/`, `catalog/`, `device/`
 
 - **`calibration/calibration.*`:** las piezas de prueba de las calibraciones, generadas (bloque de dimensiones,
   torres), sus cambios por altura, los rangos automáticos, usar el valor elegido y la compensación desde medidas
@@ -205,6 +205,8 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
   `resources/catalog/`, y los perfiles que salen de cada entrada (`docs/CATALOG.md`).
 - **`project/project.*`:** el archivo de proyecto `.tisma`: un JSON con los ajustes, los perfiles, las piezas y la
   calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
+- **`device/`:** las impresoras conectadas (`docs/DEVICE.md`): la interfaz `Printer`, el puerto serie, el host de
+  G-code por USB en su propio hilo y la impresora simulada de las pruebas.
 
 ### `config/`, `report/`, `cli/`
 

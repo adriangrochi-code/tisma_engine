@@ -1,9 +1,10 @@
 # App móvil de Android
 
 **Decisión del dueño (2026-10-24):** «ve por la opción 1 y luego por devices, así podemos conectar impresoras;
-tiene que tener soporte USB». La app de Android **sigue la impresión** (opción 1 de las dos que se le plantearon:
-no es la interfaz entera del laminador en el teléfono), y la capa de conexiones que necesita es la misma de Device
-(P2 de `PLAN.md`), con el **USB** primero.
+tiene que tener soporte USB», y la aclaración: «el slicer de PC puede imprimir por USB; el celular, solo por WiFi».
+La app de Android **sigue la impresión** (opción 1 de las dos que se le plantearon: no es la interfaz entera del
+laminador en el teléfono) y se conecta **solo por la red**. El USB es del laminador de escritorio: la capa de
+conexiones es la misma de Device (P2 de `PLAN.md`), y el escritorio la usa con el puerto serie primero.
 
 Todo es diseño propio, en sala limpia (`CLEANROOM.md`): nada de OctoPrint, Printoid, OctoApp, Mobileraker ni de los
 hosts de Tisma Slicer (vienen de código de OrcaSlicer). Los protocolos salen de la documentación pública de cada
@@ -28,15 +29,16 @@ públicas, para el aire general; ningún ícono, texto, color ni código se copi
 
 ## Conexiones
 
-La app no tiene conexiones propias: usa la capa de dispositivos del motor.
+La app no tiene conexiones propias: usa la capa de dispositivos del motor, por WiFi.
 
-- **USB (primero).** El teléfono es el host USB (OTG, API USB Host de Android, que es parte de la plataforma) y la
-  impresora el dispositivo. Sirve para las impresoras que hablan G-code por el puerto serie: Marlin y derivados,
-  RepRapFirmware por USB. Klipper no habla G-code por su USB (es el enlace con el microcontrolador): va por
-  Moonraker en red. El host de G-code es propio (abajo).
-- **En red,** las de la ficha de Device, compartidas con el escritorio: Moonraker (Klipper), OctoPrint, PrusaLink,
-  Duet/RepRapFirmware, Bambu Lab, Creality, Elegoo, Anycubic, Flashforge. Donde no hay documentación oficial (por
-  ejemplo, el modo LAN de Bambu Lab), decide el dueño.
+- **Impresoras con API de red,** directo desde el teléfono: las de la ficha de Device, compartidas con el
+  escritorio: Moonraker (Klipper), OctoPrint, PrusaLink, Duet/RepRapFirmware, Bambu Lab, Creality, Elegoo, Anycubic,
+  Flashforge. Donde no hay documentación oficial (por ejemplo, el modo LAN de Bambu Lab), decide el dueño.
+- **Impresoras conectadas por USB a la PC,** a través de la PC: `tisma` las maneja con su host de G-code por puerto
+  serie (abajo) y ofrece en la red local un servicio propio y chico (HTTP y WebSocket, con un código de vinculación
+  que se muestra en pantalla) con el estado, el avance, los controles y la cámara. El teléfono lo sigue como a
+  cualquier impresora de red. Así, con una sola capa, el teléfono ve todas las impresoras que la PC ve.
+- **Sin USB en el teléfono** (decisión del dueño).
 
 ## Cómo se hace
 
@@ -48,8 +50,8 @@ Compartida por `tisma` (la página Device) y la app (por NDK/JNI), así cada pro
   avance y tiempos, lista de archivos, subir, imprimir, pausar, reanudar, cancelar, mover, extruir, dirección de la
   cámara, y un canal de eventos (cambios de estado, avisos). Todo sin bloquear: la interfaz pregunta y recibe
   eventos.
-- **Transportes:** puerto serie (termios en Linux, el puerto COM en Windows, código propio; en Android, el
-  descriptor que entrega la API USB Host), HTTP y WebSocket, MQTT, descubrimiento en la red. Cada biblioteca que
+- **Transportes:** puerto serie (termios en Linux, el puerto COM en Windows, código propio; solo en el
+  escritorio), HTTP y WebSocket, MQTT, descubrimiento en la red. Cada biblioteca que
   haga falta se revisa y se anota en `THIRD_PARTY.md` antes de usarla; donde el protocolo es chico, código propio.
 - **El host de G-code por serie (propio):** abre el puerto (115 200 o 250 000 baudios), espera el saludo, manda
   las líneas con número y suma de verificación (`N… *…`), espera el `ok` de cada una, reenvía la que el firmware
@@ -65,9 +67,8 @@ Compartida por `tisma` (la página Device) y la app (por NDK/JNI), así cada pro
 - **Kotlin + Jetpack Compose** (Apache-2.0) para las pantallas, con los íconos y la paleta de `assets/brand/`.
 - **El núcleo en C++** (`src/device/` y lo que haga falta del motor: lectura de G-code para el avance por capas)
   compilado con el NDK; JNI delgado.
-- **USB:** la API USB Host de Android da el dispositivo; los controladores de los chips serie (CDC-ACM, que es un
-  estándar USB; CH340, CP210x y FTDI, que son los de casi todas las placas) van con una biblioteca permisiva
-  revisada o, si no la hay, controladores propios desde la documentación pública de cada chip.
+- **Solo red:** WiFi, por la capa compartida; sin USB en el teléfono. Para las impresoras por USB de la PC, el
+  servicio local de `tisma`.
 - **Cámara:** la imagen que da la impresora (MJPEG o la que diga la ficha), o la cámara del teléfono con CameraX.
 - **Avisos:** notificaciones de Android desde un servicio en segundo plano mientras hay una impresión.
 - **Publicación:** APK firmado para instalar directo; la Play Store, si el dueño la quiere, con su cuenta.
@@ -77,10 +78,10 @@ Compartida por `tisma` (la página Device) y la app (por NDK/JNI), así cada pro
 1. **`src/device/` con USB en el escritorio:** el host serie y el simulador, y la página Device mínima en `tisma`:
    conectar por USB, ver estado y temperaturas, imprimir el G-code recién exportado, pausar y cancelar. Con pruebas
    en CI contra el simulador.
-2. **La app de Android con USB:** la misma capa por OTG; pantallas de Impresoras, Impresión y Controles. Prueba en un
-   teléfono real con una impresora real (necesita al dueño).
-3. **Las conexiones de red de la ficha de Device**, en la capa compartida: primero Moonraker y OctoPrint (API pública
-   y documentada), después PrusaLink y Duet, después las marcas.
+2. **El servicio local de `tisma`** (estado, avance, controles, cámara, con vinculación) y **la app de Android** que
+   lo sigue por WiFi: pantallas de Impresoras, Impresión y Controles. Prueba en un teléfono real (necesita al dueño).
+3. **Las conexiones de red de la ficha de Device**, en la capa compartida (las usan la PC y el teléfono): primero
+   Moonraker y OctoPrint (API pública y documentada), después PrusaLink y Duet, después las marcas.
 4. **Cámara, archivos y avisos** en la app; la página Device completa en el escritorio.
 5. **Laminar desde el teléfono, simple** (lo que EasyPrint hace con la nube, acá con el motor en el teléfono): elegir
    un modelo (STL o proyecto `.tisma`), la impresora y el filamento (del catálogo o de los perfiles guardados), una
@@ -90,6 +91,6 @@ Compartida por `tisma` (la página Device) y la app (por NDK/JNI), así cada pro
 
 ## Preguntas al dueño
 
-- Qué teléfono y qué impresora se usan para probar el USB (el chip serie de la placa define el controlador).
+- Qué teléfono y qué impresora se usan para probar (y si la impresora va por USB a la PC o tiene red).
 - La cámara: la de la impresora, la del teléfono, o las dos.
 - Instalación: APK directo, Play Store, o las dos.

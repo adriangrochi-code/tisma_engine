@@ -213,6 +213,11 @@ add_library(tisma_core
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
+  src/device/gcode_host.cpp
+  src/device/printer.cpp
+  src/device/serial_port.cpp
+  src/device/simulator.cpp
+  src/device/stream.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
   src/cli/cli.cpp
 )
