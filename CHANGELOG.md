@@ -24,9 +24,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   - recuerda el idioma, el tema, la carpeta y los ajustes.
 - La vista 3D tiene luz por píxel en color lineal, oclusión ambiental (por defecto) y ray tracing activable (sombras
   suaves y oclusión con rayos, que se afinan cuadro a cuadro), con suavizado de bordes MSAA y FXAA (`docs/UI.md`).
-- **Calibraciones** (`docs/CALIBRATION.md`), con su pestaña en la interfaz:
+- **Calibraciones** (`docs/CALIBRATION.md`), con su pestaña guiada en la interfaz:
+  - cada prueba se crea con un clic, con su rango elegido desde los ajustes, y se lamina sola; después la pestaña
+    guía en tres pasos (exportar, qué mirar, elegir el segmento) y **Usar** pasa el valor al ajuste;
   - dimensiones: un bloque con agujero; con las medidas se calcula y aplica la compensación;
-  - torres de temperatura, retracción, flujo y velocidad máxima, con un valor por segmento;
+  - torres de temperatura, retracción, flujo y velocidad máxima, con un valor por segmento escrito en relieve;
+  - la torre de temperatura trae una cresta de ángulo variable (30° a 72°), un estante plano sin soporte (para el
+    futuro Arc Overhang), un perno para probar la unión entre capas y detalle en números y figuras;
   - el catálogo con las siguientes calibraciones estándar y las nuevas propuestas.
 - Ajustes nuevos:
   - `compensation`: escala por eje y corrección de agujeros;

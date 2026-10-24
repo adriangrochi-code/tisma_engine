@@ -2550,3 +2550,56 @@ Capturas: la pestaña con la torre de temperatura y la vista previa con «Segmen
 - opciones de guardar (perfiles con nombre y proyectos);
 - las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).
 
+
+## 2026-10-24 — calibraciones automáticas y guiadas; la torre de temperatura nueva
+
+**Pedidos del dueño:**
+- «Las creaciones tienen que ser automáticas, no que trate de configurarlas»: cómodo, intuitivo y fácil de usar;
+- la torre de temperatura con una cresta de ángulo variable, una zona para probar la resistencia haciendo fuerza,
+  detalle en letras y figuras, y una zona plana para probar el futuro Arc Overhang.
+
+**Hecho:**
+- **`automatic_calibration`:** cada prueba con su rango elegido desde los ajustes (`docs/CALIBRATION.md`, «Rangos
+  automáticos»): la temperatura en uso ± 20 °C, la retracción según el extrusor (corta o larga), el flujo ± 10 %, la
+  velocidad de 100 a 300 %.
+- **`apply_calibration`:** pasa el valor elegido a su ajuste y quita los cambios por altura.
+- **La torre de temperatura nueva**, segmentos de 10 mm:
+  - cresta de 4 mm cuyo ángulo crece de 30° a 72° a lo largo;
+  - estante plano de 8 × 8 mm sin nada debajo (zona de prueba del Arc Overhang);
+  - perno de 2,4 mm sobre una ménsula a 45°, para empujar con el dedo;
+  - el número, un rombo y un anillo en relieve.
+- **Valores en relieve en todas las torres**, con una tipografía propia de siete segmentos (`label_strokes`,
+  `add_label`).
+- **Pestaña Calibración guiada:** una tarjeta por prueba con **Crear**; la pieza se arma y se lamina sola, y la tarjeta
+  sigue en tres pasos (exportar, qué mirar, elegir). Al elegir un segmento, la vista muestra la torre laminada hasta
+  él; **Usar** aplica el valor. El rango se puede ajustar, opcional.
+- **Corregido en la interfaz:**
+  - el encuadre se hacía antes de conocer el tamaño de la vista (la torre salía fuera de cuadro en las capturas):
+    ahora espera al primer dibujo;
+  - al entrar o salir de la pestaña Calibración la pieza se corre al lado del panel y vuelve;
+  - `--screenshot` se queda en la pestaña pedida después de laminar.
+- **Arc Overhang** anotado en `PLAN.md` como función planeada, en sala limpia: desde la descripción pública de la
+  idea, sin leer código GPL.
+
+**Probado:**
+- `tests/test_calibration.cpp`, 6 casos y 94 comprobaciones:
+  - las zonas de la torre de temperatura, capa por capa: el perno a la altura de su segmento, la cresta y el estante
+    en el ancho esperado;
+  - la tipografía;
+  - cada calibración automática se lamina y pasa el verificador, y usar un valor lo deja en su ajuste.
+- Capturas con `--calibration temperature`: la pestaña guiada con la torre a la derecha del panel, y la torre con ray
+  tracing en Preparar.
+
+**Medido** (torre de temperatura automática, ajustes por defecto, interfaz bajo xvfb):
+- 9 segmentos de 230 a 190 °C;
+- 3 444 triángulos, 44,3 × 16,6 × 90,0 mm;
+- laminada en 3,1 a 3,4 s;
+- 653 999 líneas de G-code, verificadas sin problemas;
+- 1 h 26 min de impresión estimada.
+
+**No probado:** impresa en una máquina real (necesita al dueño); en particular, si el perno y el estante dan
+diferencias claras entre temperaturas.
+
+**Sigue:**
+- opciones de guardar (perfiles con nombre y proyectos);
+- las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).

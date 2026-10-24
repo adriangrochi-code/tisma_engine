@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 
 // Small vector and matrix helpers for the interface's 3D view. Matrices are
 // column-major, as OpenGL takes them. Own design; see PROVENANCE.md.
@@ -31,10 +32,10 @@ inline Mat4 identity() { return {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}
 
 inline Mat4 operator*(const Mat4& a, const Mat4& b) {
     Mat4 m{};
-    for (int c = 0; c < 4; ++c)
-        for (int r = 0; r < 4; ++r) {
+    for (std::size_t c = 0; c < 4; ++c)
+        for (std::size_t r = 0; r < 4; ++r) {
             float s = 0;
-            for (int k = 0; k < 4; ++k)
+            for (std::size_t k = 0; k < 4; ++k)
                 s += a[k * 4 + r] * b[c * 4 + k];
             m[c * 4 + r] = s;
         }
@@ -45,10 +46,10 @@ inline Mat4 operator*(const Mat4& a, const Mat4& b) {
 // the transposed rotation and the translation turned back.
 inline Mat4 rigid_inverse(const Mat4& m) {
     Mat4 r{};
-    for (int c = 0; c < 3; ++c)
-        for (int k = 0; k < 3; ++k)
+    for (std::size_t c = 0; c < 3; ++c)
+        for (std::size_t k = 0; k < 3; ++k)
             r[c * 4 + k] = m[k * 4 + c];
-    for (int k = 0; k < 3; ++k)
+    for (std::size_t k = 0; k < 3; ++k)
         r[12 + k] = -(r[k] * m[12] + r[4 + k] * m[13] + r[8 + k] * m[14]);
     r[15] = 1.0f;
     return r;

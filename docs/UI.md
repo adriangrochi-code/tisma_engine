@@ -100,18 +100,23 @@ apoyos y cargas, corre por ahora con `tisma-engine analyze`.
 
 ### Calibración
 
-La pestaña **Calibración** (`docs/CALIBRATION.md`) carga las piezas de prueba que genera el motor.
+La pestaña **Calibración** (`docs/CALIBRATION.md`) es una lista de tarjetas, una por prueba: dimensiones, temperatura,
+retracción, flujo y velocidad máxima. Cada una dice en una línea para qué sirve y tiene un botón **Crear**. No hay
+nada que configurar: la pieza se arma con un rango elegido desde los ajustes actuales y se lamina sola. Después, la
+tarjeta activa guía en tres pasos:
 
-- **Dimensiones:**
-  1. cargar el bloque de 30 × 20 × 15 mm con su agujero, laminarlo e imprimirlo;
-  2. medir X, Y, Z y el agujero, y cargar las medidas;
-  3. la tabla muestra la compensación actual y la nueva, y **Aplicar la compensación** la pasa a los ajustes.
-- **Torres** (temperatura, retracción, flujo, velocidad máxima): se eligen el rango y el alto de cada segmento y se
-  carga la torre.
-  - La torre trae sus cambios por altura en los ajustes, y el panel lista los segmentos con su valor.
-  - En la vista previa, la leyenda dice el valor del segmento de la capa que se mira.
-  - **Quitar los cambios por altura** vuelve a los ajustes de siempre.
-- **El flujo de todas las impresiones** se edita en la sección Flujo.
+1. **Creada y laminada:** cuántos segmentos y cuánto tarda, con **Exportar G-code**.
+2. **Imprimila y mirala:** qué mirar en esa pieza (en la de temperatura: la cresta, el estante plano, el número y las
+   figuras, y el perno que se empuja con el dedo).
+3. **Elegir:**
+   - **Torres:** un botón por segmento, con su valor. Al elegir uno, la vista muestra la torre laminada hasta ese
+     segmento, y **Usar** pasa el valor a su ajuste y quita los cambios por altura.
+   - **Dimensiones:** se cargan las medidas de X, Y, Z y el agujero; la tabla muestra la compensación actual y la
+     nueva, y **Aplicar** la pasa a los ajustes (**Restablecer** vuelve a 100 %).
+
+**Ajustar el rango (opcional)** cambia el inicio, el fin, el paso y el alto de los segmentos, y vuelve a crear la
+torre. Al pie, **Próximas calibraciones** lista las que siguen. La pieza se corre a la derecha para que el panel no
+la tape. En la vista previa, la leyenda dice el valor del segmento de la capa que se mira.
 
 ### Imagen: luz, oclusión, ray tracing y suavizado
 
@@ -157,7 +162,7 @@ tisma modelo.stl --screenshot vista.png --ray-check
 tisma --screenshot explorador.png --browse /una/carpeta
 ```
 
-`--calibration dimensions|temperature|retraction|flow|speed` carga una prueba de calibración, y
+`--calibration dimensions|temperature|retraction|flow|speed` crea una prueba de calibración como su botón **Crear**, y
 `--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
 sombras en lugar de la luz, para revisarlas.

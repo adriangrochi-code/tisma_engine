@@ -425,12 +425,18 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño)
 - [x] Calibraciones, primera parte (pedido del dueño, 2026-10-24; `docs/CALIBRATION.md`): compensación geométrica
   desde medidas (escala por eje, agujeros), torres de temperatura, retracción, flujo y velocidad máxima
+- [x] Calibraciones automáticas y guiadas (pedido del dueño): crear con un clic con rangos desde los ajustes, pasos
+  guiados, usar el valor elegido; torre de temperatura con cresta de ángulo variable, estante plano, perno de
+  resistencia y detalle en relieve
 - [ ] Calibraciones estándar siguientes: velocidad de retracción, avance de presión, resonancias, primera capa,
   puentes y voladizos, tolerancias de encastre, pasos del extrusor, flujo volumétrico máximo
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7
 - [ ] Opciones de guardar: perfiles con nombre (impresora, filamento, impresión) y proyectos (pedido del dueño)
+- [ ] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
+  borde apoyado. En sala limpia: desde la descripción pública de la idea, con diseño propio, sin leer código GPL.
+  Se prueba con el estante plano de la torre de temperatura
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
 - [ ] Mover, girar y escalar el modelo; varias piezas en la cama
 - [ ] Perfiles de impresoras y filamentos (P3)

@@ -11,6 +11,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <sstream>
@@ -144,7 +145,12 @@ TEST_CASE("calibration: towers write each segment's value", "[calibration]") {
         const CalibrationPrint p = temperature_tower(230, 200, 10);
         REQUIRE(p.segments.size() == 4);
         CHECK(p.mesh.signed_volume() > 0.0);
-        CHECK_THAT(p.mesh.bounding_box().max.z, WithinAbs(32.0, 1e-5));
+        const BoundingBox box = p.mesh.bounding_box();
+        CHECK_THAT(box.max.z, WithinAbs(40.0, 1e-5));
+        CHECK_THAT(box.min.x, WithinAbs(-12.0 - 4.0 * std::tan(72.0 * std::numbers::pi / 180.0), 1e-4)); // the ridge
+        CHECK_THAT(box.max.x, WithinAbs(20.0, 1e-5));  // the shelf
+        CHECK_THAT(box.max.y, WithinAbs(10.0, 1e-5));  // the bracket and its pin
+        CHECK_THAT(box.min.y, WithinAbs(-6.6, 1e-5));  // the relief
         Settings s = plain();
         s.changes = p.changes;
         const SlicedModel m = slice_model(weld_exact(p.mesh), s);
@@ -152,10 +158,28 @@ TEST_CASE("calibration: towers write each segment's value", "[calibration]") {
         CHECK(count(g, "M104 S") == 4);
         CHECK(g.find("M104 S230") < g.find("M104 S220"));
         CHECK(g.find("M104 S210") < g.find("M104 S200"));
-        // The 200 C segment starts after Z 24: its M104 comes with the first layer above it.
+        // The 200 C segment starts after Z 30: its M104 comes with the first layer above it.
         const std::size_t at = g.find("M104 S200");
-        CHECK(g.rfind(";Z:24.2", at) != std::string::npos);
+        CHECK(g.rfind(";Z:30.2", at) != std::string::npos);
         CHECK(checks(g, gcode_limits(m, s)));
+
+        // What each zone adds to the layers: the pin stands free (a small
+        // square away from the body), and the top of the second segment holds
+        // the ridge's widest point and the shelf.
+        const auto box_at = [&](double z) {
+            double lo[2] = {1e9, 1e9}, hi[2] = {-1e9, -1e9};
+            for (std::size_t l = 0; l < m.layers.size(); ++l)
+                if (m.layers[l].bottom <= z && z < m.layers[l].top)
+                    for (const auto& poly : m.regions[l])
+                        for (const auto& q : poly) {
+                            lo[0] = std::min(lo[0], to_mm(q.x)), hi[0] = std::max(hi[0], to_mm(q.x));
+                            lo[1] = std::min(lo[1], to_mm(q.y)), hi[1] = std::max(hi[1], to_mm(q.y));
+                        }
+            return std::array<double, 4>{lo[0], lo[1], hi[0], hi[1]};
+        };
+        CHECK_THAT(box_at(17.0)[3], WithinAbs(10.0, 0.05));   // the pin of the second segment
+        CHECK_THAT(box_at(18.9)[0], WithinAbs(-24.3, 0.3));   // the ridge, at its widest
+        CHECK_THAT(box_at(18.9)[2], WithinAbs(20.0, 0.05));   // the shelf
     }
     SECTION("retraction, checked by height") {
         const CalibrationPrint p = retraction_tower(0.5, 2.0, 0.5);
@@ -210,4 +234,54 @@ TEST_CASE("calibration: a global flow and the changes' G-code", "[calibration]")
     Settings full = s;
     full.flow = 100.0;
     CHECK_FALSE(check_gcode(g, gcode_limits(m, full)).ok());
+}
+
+TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibration]") {
+    CHECK(label_strokes("230", 3, 5, 1).size() == 5 + 5 + 6);
+    CHECK(label_strokes("1.2", 3, 5, 1).size() == 2 + 1 + 5);
+    CHECK(label_strokes("8", 3, 5, 1).size() == 7);
+    const std::vector<Stroke> one = label_strokes("1", 3, 5, 1);
+    for (const Stroke& st : one)
+        CHECK((st.x0 == 3.0 && st.x1 == 3.0)); // the right side only
+    const std::vector<Stroke> two = label_strokes("11", 3, 5, 1);
+    CHECK(two.back().x0 == 7.0); // the second cell starts at width + gap
+
+    Settings s;
+    s.variables["temperature"] = {"215"};
+    CalibrationPrint t = automatic_calibration(CalibrationKind::Temperature, s);
+    REQUIRE(!t.segments.empty());
+    CHECK(t.segments.front().value == 235.0);
+    CHECK(t.segments.back().value == 195.0);
+    s.retract_length = 0.8;
+    CHECK(automatic_calibration(CalibrationKind::Retraction, s).segments.front().value == 0.2);
+    s.retract_length = 4.0;
+    CHECK(automatic_calibration(CalibrationKind::Retraction, s).segments.front().value == 1.0);
+    s.flow = 98.0;
+    const CalibrationPrint f = automatic_calibration(CalibrationKind::Flow, s);
+    CHECK(f.segments.front().value == 88.0);
+    CHECK(f.segments.back().value == 108.0);
+    CHECK(automatic_calibration(CalibrationKind::Dimensions, s).kind == "dimensions");
+
+    s.changes = t.changes;
+    REQUIRE(apply_calibration(CalibrationKind::Temperature, 220.0, s));
+    CHECK(s.variables["temperature"] == std::vector<std::string>{"220"});
+    CHECK(s.changes.empty());
+    const double walls = s.wall_speed, top = s.max_speed;
+    REQUIRE(apply_calibration(CalibrationKind::Speed, 150.0, s));
+    CHECK(s.wall_speed == walls * 1.5);
+    CHECK(s.max_speed == top * 1.5);
+    REQUIRE(apply_calibration(CalibrationKind::Flow, 96.5, s));
+    CHECK(s.flow == 96.5);
+    CHECK_FALSE(apply_calibration(CalibrationKind::Dimensions, 1.0, s));
+
+    // Every automatic print slices into G-code that passes its check.
+    for (CalibrationKind k : {CalibrationKind::Dimensions, CalibrationKind::Temperature, CalibrationKind::Retraction,
+                              CalibrationKind::Flow, CalibrationKind::Speed}) {
+        Settings run = plain();
+        const CalibrationPrint p = automatic_calibration(k, run);
+        run.changes = p.changes;
+        const SlicedModel m = slice_model(weld_exact(p.mesh), run);
+        INFO(p.kind);
+        CHECK(checks(gcode_of(m, run), gcode_limits(m, run)));
+    }
 }

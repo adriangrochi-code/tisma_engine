@@ -9,12 +9,20 @@ Todo es diseño propio: las piezas de prueba las genera el motor (`src/calibrati
 
 ## Cómo funciona
 
-1. En la pestaña **Calibración** de la interfaz (`docs/UI.md`) se elige una prueba y se carga su pieza.
-2. Se lamina e imprime como cualquier otra. Las torres traen sus **cambios por altura**: cada segmento prueba un
-   valor (temperatura, retracción, flujo, velocidad) y el G-code lo cambia al empezar el segmento.
-3. Se mide o se mira la pieza impresa y se carga el resultado:
-   - la compensación se calcula y se aplica a los ajustes;
-   - en las torres, el valor del mejor segmento se pasa a su ajuste.
+El dueño pidió que las pruebas se creen solas: «cómodo, intuitivo y fácil de usar», sin configurarlas a mano. En la
+pestaña **Calibración** de la interfaz (`docs/UI.md`) cada prueba es una tarjeta con un botón **Crear**, y los pasos
+aparecen en orden:
+
+1. **Crear:** la pieza se arma con un rango elegido desde los ajustes actuales (ver «Rangos automáticos») y se
+   lamina sola. La tarjeta dice cuántos segmentos tiene y cuánto tarda, y ofrece **Exportar G-code**.
+2. **Imprimir y mirar:** la tarjeta dice qué mirar en esa pieza.
+3. **Elegir:**
+   - en las torres, cada segmento es un botón con su valor. Al elegir uno, la vista muestra la torre laminada hasta
+     ese segmento, y **Usar** pasa el valor a su ajuste (`apply_calibration`) y quita los cambios por altura;
+   - en las dimensiones, se cargan las medidas con calibre, la tabla muestra la compensación actual y la nueva, y
+     **Aplicar** la pasa a los ajustes.
+
+Quien quiera otro rango lo cambia en **Ajustar el rango (opcional)** y vuelve a crear la torre.
 
 Los tres mecanismos del motor están en `docs/CONFIG.md`:
 
@@ -36,10 +44,51 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 | Prueba | Pieza | Qué se mide o se mira | Qué se ajusta |
 |---|---|---|---|
 | **Dimensiones** | Bloque de 30 × 20 × 15 mm con un agujero de 10 mm (lados distintos: X es el largo) | X, Y, Z y el diámetro del agujero, con calibre | `compensation.scale_x`, `_y`, `_z` y `hole_offset` |
-| **Temperatura** | Torre de segmentos de 8 mm con un voladizo a 45°; de 230 a 190 °C de a 5 por defecto | El segmento con mejor voladizo, menos hilos y buena unión | La temperatura de la boquilla |
-| **Retracción** | Dos columnas a 30 mm; el largo de 0,4 a 2,4 mm por defecto | El primer segmento sin hilos entre columnas | `retraction.length` |
-| **Flujo** | Torre de 20 × 20 mm; de 90 a 110 % por defecto. Cada segmento deja una cara superior en el cuello | La cara superior lisa, sin huecos ni rebabas | `extrusion.flow` |
-| **Velocidad máxima** | Torre de 30 × 30 mm; de 100 a 300 % de las velocidades | Dónde las paredes empiezan a fallar: el límite del fusor | Las velocidades, por debajo de ese segmento |
+| **Temperatura** | Torre de segmentos de 10 mm con cresta de ángulo variable, estante plano sin soporte, perno para empujar, el número y figuras en relieve (ver abajo) | Hasta qué ángulo sale prolija la cresta, el estante, el perno que más resiste, el detalle, los hilos | La temperatura de la boquilla |
+| **Retracción** | Dos columnas a 30 mm, segmentos de 5 mm | El primer segmento sin hilos entre columnas | `retraction.length` |
+| **Flujo** | Torre de 20 × 20 mm, segmentos de 5 mm. Cada segmento deja una cara superior en el cuello | La cara superior lisa, sin huecos ni rebabas | `extrusion.flow` |
+| **Velocidad máxima** | Torre de 30 × 30 mm, segmentos de 5 mm, en % de las velocidades actuales | Dónde las paredes empiezan a fallar: el límite del fusor | Las velocidades, por debajo de ese segmento |
+
+Cada segmento de una torre lleva su valor escrito en relieve en la cara del frente (−Y), con una tipografía propia
+de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza impresa se lee sin la pantalla.
+
+#### Rangos automáticos
+
+| Prueba | Rango | Por qué |
+|---|---|---|
+| Temperatura | La temperatura de la boquilla en uso, redondeada a 5 °C, ± 20 °C, de a 5 (9 segmentos, de la más caliente a la más fría) | Cubre el rango útil de casi cualquier filamento alrededor de lo que ya funciona |
+| Retracción | Si el largo actual es de 1,5 mm o menos: de 0,2 a 2,0 mm de a 0,2. Si no: de 1,0 a 6,0 mm de a 0,5 | Un largo corto indica extrusor directo; uno largo, tubo Bowden |
+| Flujo | El flujo actual ± 10 %, de a 2,5 | Corrige alrededor de lo que hay |
+| Velocidad máxima | De 100 a 300 % de las velocidades actuales, de a 25 | Desde lo que ya imprime bien hasta el triple |
+
+**Al usar un valor** (`apply_calibration`):
+- la temperatura va a la variable `temperature` (la que usa el G-code de inicio);
+- la retracción a `retraction.length`;
+- el flujo a `extrusion.flow`;
+- la velocidad multiplica las velocidades de paredes, relleno, relleno sólido, superficie, soportes y la máxima (y la
+  de la pared exterior si es absoluta);
+- en todos los casos se quitan los cambios por altura de la torre.
+
+#### La torre de temperatura
+
+Pedido del dueño: una cresta de ángulo variable para ver dónde se deforma, una zona para probar la resistencia
+haciendo fuerza, detalle en letras y figuras, y una zona plana para probar el techo sin soporte del futuro Arc
+Overhang. Cada segmento (10 mm, 9 por defecto) es un bloque de 24 × 12 mm con:
+
+| Zona | Dónde | Qué es | Qué se mira |
+|---|---|---|---|
+| **Cresta de ángulo variable** | Izquierda (−X) | Un voladizo de 4 mm de alto cuyo ángulo desde la vertical crece a lo largo de la cresta, de 30° (frente) a 72° (fondo) | Hasta qué ángulo sale prolija: a más temperatura, el plástico tarda más en enfriarse y el voladizo cae antes |
+| **Estante plano** | Derecha (+X) | Una losa de 8 × 8 mm y 1,6 mm de espesor, en el aire, sin nada debajo | Cómo queda un techo plano sin soporte a cada temperatura. Es la zona de prueba del **Arc Overhang** (ver abajo) |
+| **Perno de resistencia** | Atrás (+Y) | Un perno de 2,4 × 2,4 mm parado sobre una ménsula a 45° | Se empuja con el dedo: se rompe entre capas, así que el segmento cuyo perno más resiste une mejor las capas |
+| **Detalle** | Frente (−Y) | El número de la temperatura, un rombo y un anillo octogonal, en relieve de 0,6 mm | Cómo trata la temperatura los detalles chicos: bordes, puntas, hilos |
+
+Un cuello de 1 mm, más angosto, separa los segmentos: así se distinguen y cada uno tiene su cara superior.
+
+**Arc Overhang (planeado):** el dueño va a trabajar en una función de voladizos por arcos: los cordones crecen en
+arcos concéntricos desde el borde apoyado, cada uno sobre el anterior, para imprimir un techo plano en el aire sin
+soporte. Se implementará en sala limpia (`CLEANROOM.md`), desde la descripción pública de la idea y con diseño
+propio, sin leer el código de ningún programa GPL. El estante de la torre ya sirve para comparar: hoy sale con
+puentes y voladizo común; con la función, debería salir plano.
 
 **Cómo se calcula la compensación** (`compensation_from`):
 - **Escala:** la pieza se imprimió con las escalas actuales, así que cada escala nueva es la actual × nominal /
@@ -77,6 +126,8 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 - **`src/calibration/calibration.*`:**
   - las piezas: `dimension_test`, `temperature_tower`, `retraction_tower`, `flow_tower`, `speed_tower`;
   - `tower_values`;
+  - `automatic_calibration` (los rangos automáticos) y `apply_calibration` (usar un valor);
+  - la tipografía en relieve: `label_strokes`, `add_label`;
   - `compensation_from`.
 - **`compensated` (`src/slice/pipeline.*`):** la escala.
 - **`offset_holes` (`src/geom/polygons.*`):** los agujeros.
@@ -86,4 +137,6 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
   - la pieza tiene su volumen exacto y el laminado su área;
   - la escala y los agujeros mueven lo que deben;
   - la compensación desde medidas;
-  - cada torre escribe sus valores, y el verificador la rechaza si no conoce los cambios.
+  - cada torre escribe sus valores, y el verificador la rechaza si no conoce los cambios;
+  - las zonas de la torre de temperatura están donde deben, capa por capa (cresta, estante, perno);
+  - cada calibración automática se lamina y pasa el verificador, y usar un valor lo deja en su ajuste.
