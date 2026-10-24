@@ -530,3 +530,34 @@ del eje medio, y trapezoidación. Después, la ficha de perímetros cuando esté
 - La CI de `445a441` (eje medio, primera descarga de Boost por git) seguía en curso al empezar el bloque.
 
 **Sigue:** marcado del centro y transiciones (secciones 3.3 y 3.4); antes, discretizar las aristas parabólicas.
+
+## 2026-10-24 — bloque nocturno 9: eje medio completo y marcado del centro
+
+**Hecho:**
+- La CI de `445a441` (Boost por git, también en Windows) pasó.
+- Aristas parabólicas discretizadas en tramos de hasta 0,2 mm (Kuipers et al. 2020, sección 3.2). Los puntos se
+  calculan sobre la parábola, equidistantes de la esquina y de la recta del segmento.
+- La prueba de «adentro» ya no recorre los contornos por vértice. Usa el sitio de cada celda del Voronoi: la celda de
+  un segmento está adentro de su lado izquierdo, y la de una esquina solo si la esquina es reflexa.
+- `MedialGraph`: el eje medio como grafo con nodos compartidos.
+- `mark_central` (sección 3.3): una arista es central si su ángulo bisector α = 2·arccos(|ΔR|/|Δv|) supera αmax
+  (135° por defecto); un nodo es central si su radio es un máximo local. La desigualdad de la ecuación 3 se escribió
+  a partir de esa definición, porque en el texto extraído del PDF el signo no se lee con claridad. Queda anotado en
+  `PROVENANCE.md`.
+- `tisma-engine info` mide el eje medio de la capa del medio.
+
+**Probado:**
+- 82/82 pruebas con gcc, clang y ASan+UBSan. Pruebas nuevas:
+  - tramos parabólicos de hasta 0,2 mm, cada punto equidistante de la esquina del agujero y de la pared;
+  - en una tira, solo la línea del medio es central (las bisectrices de esquinas de 90° tienen α = 90°);
+  - el centro de un cuadrado es un máximo local;
+  - una cuña de 30° (α = 150°) es central con αmax = 135° y deja de serlo con 160°.
+- Dos fallas durante el bloque eran errores de la prueba: una comparaba cada punto con el radio del otro extremo.
+
+**Medido** (capa del medio de la esfera, círculo de 708 segmentos, 2788 aristas, 3 corridas): eje medio y marcado
+en 39–40 ms. Con 500 capas serían unos 20 s en un hilo: hay que ver dónde se va el tiempo (construcción de Boost,
+discretización o el `std::map` del grafo) antes de seguir con F2.
+
+**Sigue:**
+- perfilar y acelerar el eje medio;
+- después, el filtro del marcado y las transiciones (sección 3.4).

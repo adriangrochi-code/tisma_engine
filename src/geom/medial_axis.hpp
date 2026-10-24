@@ -2,6 +2,7 @@
 
 #include "geom/polygons.hpp"
 
+#include <cstdint>
 #include <vector>
 
 namespace tisma {
@@ -15,8 +16,8 @@ struct Point2d {
 // boundary segments that lies inside the region. radius_a and radius_b are the
 // distances from its ends to the boundary (the radius of the largest inscribed
 // circle there); in Kuipers et al. 2020 they decide how many beads fit.
-// Curved edges (between a corner and a segment, a parabola) are given by
-// their two ends for now.
+// Parabolic edges (between a corner and a segment) come as chains of straight
+// pieces of at most kMaxCurvedPiece, marked curved (Section 3.2).
 struct MedialEdge {
     Point2d a, b;     // mm
     double radius_a;  // mm
@@ -24,9 +25,38 @@ struct MedialEdge {
     bool curved;
 };
 
+inline constexpr double kMaxCurvedPiece = 0.2; // mm, Kuipers et al. 2020, Section 3.2
+
 // Medial axis of a region (outer contours counter-clockwise, holes clockwise),
 // from Boost.Polygon's segment Voronoi diagram. Each edge appears once.
 // Coordinates must fit in 32 bits of the 1 nm unit (about +-2 m).
 std::vector<MedialEdge> medial_axis(const Polygons& region);
+
+// The medial axis as a graph with shared nodes, and the central part marked
+// (Kuipers et al. 2020, Section 3.3).
+struct MedialGraph {
+    struct Node {
+        Point2d p;
+        double radius = 0.0;
+        bool central = false;
+    };
+    struct Edge {
+        std::uint32_t a = 0, b = 0;
+        bool curved = false;
+        bool central = false;
+    };
+    std::vector<Node> nodes;
+    std::vector<Edge> edges;
+};
+
+// Builds the graph of medial_axis(region). Ends closer than 1e-9 mm are one node.
+MedialGraph medial_graph(const Polygons& region);
+
+// Marks the centre (Section 3.3): an edge is central when it is significant,
+// that is when the bisector angle alpha = 2 acos(|dR| / |dv|) along it exceeds
+// alpha_max (so the ridge slope |dR| / |dv| is below cos(alpha_max / 2)); its
+// ends become central too. A node is also central when its radius is larger
+// than all its neighbours' (a local maximum).
+void mark_central(MedialGraph& graph, double alpha_max_degrees = 135.0);
 
 } // namespace tisma

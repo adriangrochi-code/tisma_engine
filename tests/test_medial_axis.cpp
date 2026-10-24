@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
+#include <utility>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -79,4 +81,71 @@ TEST_CASE("medial axis of a square ring bends around the hole's corners", "[medi
 
 TEST_CASE("medial axis of an empty region", "[medial]") {
     CHECK(medial_axis({}).empty());
+}
+
+TEST_CASE("parabolic edges come in pieces of at most 0.2 mm", "[medial]") {
+    const auto edges = medial_axis({rect(0, 0, 10, 10), rect(3, 3, 4, 4, true)});
+    std::size_t curved = 0;
+    for (const MedialEdge& e : edges) {
+        if (!e.curved)
+            continue;
+        ++curved;
+        CHECK(std::hypot(e.b.x - e.a.x, e.b.y - e.a.y) <= kMaxCurvedPiece + 1e-9);
+        // Every piece end is as far from the boundary as its radius says: here the
+        // nearest boundary is a hole corner or an outer wall.
+        const std::pair<Point2d, double> ends[] = {{e.a, e.radius_a}, {e.b, e.radius_b}};
+        for (const auto& [p, r] : ends) {
+            const double to_walls = std::min({p.x, p.y, 10.0 - p.x, 10.0 - p.y});
+            const double to_corners = std::min({std::hypot(p.x - 3, p.y - 3), std::hypot(p.x - 7, p.y - 3),
+                                                std::hypot(p.x - 3, p.y - 7), std::hypot(p.x - 7, p.y - 7)});
+            CHECK_THAT(std::min(to_walls, to_corners), WithinAbs(r, 1e-6));
+            CHECK_THAT(to_walls, WithinAbs(to_corners, 1e-6)); // on the parabola: equidistant
+        }
+    }
+    CHECK(curved >= 8); // four hole corners, a parabola on each side of each
+}
+
+TEST_CASE("central marking: the middle line of a strip, not the corner bisectors", "[medial]") {
+    MedialGraph g = medial_graph({rect(0, 0, 20, 10)});
+    mark_central(g);
+    std::size_t central_edges = 0;
+    for (const MedialGraph::Edge& e : g.edges) {
+        const MedialGraph::Node& a = g.nodes[e.a];
+        const MedialGraph::Node& b = g.nodes[e.b];
+        const bool middle_line = std::fabs(a.p.y - 5) < 1e-6 && std::fabs(b.p.y - 5) < 1e-6;
+        CHECK(e.central == middle_line); // bisectors of 90 degree corners have alpha = 90 < 135
+        central_edges += e.central ? 1 : 0;
+    }
+    CHECK(central_edges == 1);
+}
+
+TEST_CASE("central marking: a square's centre is a local maximum", "[medial]") {
+    MedialGraph g = medial_graph({rect(0, 0, 10, 10)});
+    mark_central(g);
+    REQUIRE(g.nodes.size() == 5);
+    for (const MedialGraph::Node& n : g.nodes)
+        CHECK(n.central == (std::hypot(n.p.x - 5, n.p.y - 5) < 1e-6));
+    for (const MedialGraph::Edge& e : g.edges)
+        CHECK_FALSE(e.central);
+}
+
+TEST_CASE("central marking follows the bisector angle threshold", "[medial]") {
+    // A thin wedge: the bisector angle along its axis is 180 - wedge angle.
+    // With a 30 degree wedge (alpha = 150 > 135) the axis is central; raising
+    // alpha_max to 160 degrees makes it not significant.
+    const double h = std::tan(15.0 * std::numbers::pi / 180.0) * 20.0;
+    const Polygon wedge = {{to_units(0), to_units(0)}, {to_units(20), to_units(-h)}, {to_units(20), to_units(h)}};
+    MedialGraph g = medial_graph({wedge});
+    mark_central(g, 135.0);
+    bool axis_central = false;
+    for (const MedialGraph::Edge& e : g.edges)
+        if (std::fabs(g.nodes[e.a].p.y) < 1e-6 && std::fabs(g.nodes[e.b].p.y) < 1e-6)
+            axis_central = axis_central || e.central;
+    CHECK(axis_central);
+    mark_central(g, 160.0);
+    bool still_central = false;
+    for (const MedialGraph::Edge& e : g.edges)
+        if (std::fabs(g.nodes[e.a].p.y) < 1e-6 && std::fabs(g.nodes[e.b].p.y) < 1e-6)
+            still_central = still_central || e.central;
+    CHECK_FALSE(still_central);
 }

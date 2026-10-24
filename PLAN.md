@@ -190,10 +190,12 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 
 - [x] Boost.Polygon y Boost.Config (solo cabeceras) anotadas en `THIRD_PARTY.md`
 - [x] Eje medio de una región: aristas del Voronoi de segmentos que quedan adentro, con el radio del círculo inscrito en cada extremo
-- [ ] Discretizar las aristas curvas (parábolas)
-- [ ] Clasificar las aristas interiores sin recorrer todos los contornos por vértice (hoy es O(n) por vértice)
+- [x] Discretizar las aristas curvas (parábolas) en tramos de hasta 0,2 mm
+- [x] Clasificar las aristas interiores por el sitio de cada celda, sin recorrer los contornos
+- [ ] Medir y acelerar el eje medio: 39 ms en una capa circular de 708 segmentos es mucho
 - [x] Esquemas de reparto de cordones (Kuipers et al. 2020, sección 4): uniforme, distribuido y distribuido hacia adentro
-- [ ] Marcado del centro por significancia (sección 3.3, ecuación 3, αmax = 135°) y transiciones (sección 3.4, ecuaciones 5–7)
+- [x] Grafo del eje medio y marcado del centro por significancia (sección 3.3, αmax = 135°) y máximos locales
+- [ ] Filtro del marcado y transiciones (sección 3.4, ecuaciones 5–7)
 - [ ] Trapezoidación, propagación del reparto (sección 3.5) y extracción de trayectorias (sección 3.6)
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 

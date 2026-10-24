@@ -2,6 +2,7 @@
 
 #include "io/stl.hpp"
 #include "config/settings.hpp"
+#include "geom/medial_axis.hpp"
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -134,6 +135,16 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         for (std::size_t l = 0; l < regions.size(); ++l)
             volume += area_mm2(regions[l]) * 0.2;
         out << "region_ms: " << region_ms << "\n";
+
+        // Medial axis of the middle layer (F2), with the centre marked.
+        const std::size_t mid = regions.size() / 2;
+        const auto axis_start = std::chrono::steady_clock::now();
+        MedialGraph axis = medial_graph(regions[mid]);
+        mark_central(axis);
+        const double axis_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - axis_start).count();
+        out << "mid_layer_axis_edges: " << axis.edges.size() << "\n";
+        out << "mid_layer_axis_ms: " << axis_ms << "\n";
         out << "sliced_volume: " << volume << "\n";
     }
     return kExitOk;
