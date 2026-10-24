@@ -222,8 +222,10 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Resolución de conflictos de reparto (figura 9)
 - [x] Aristas entre dos esquinas en tramos de 0,2 mm (su radio no es lineal; antes los sitios se desviaban hasta ~0,2 mm)
 - [x] Punto del cordón central impar en un máximo aislado: un recorrido de un solo punto con su ancho
-- [ ] Criterio de F2: medir el área cubierta en paredes de 0,3 a 1,2 mm (huecos y excesos), uniendo los cordones como
-  franjas de ancho variable con Clipper2, y en piezas comunes con 2–3 perímetros
+- [x] Criterio de F2: medir el área cubierta en paredes de 0,3 a 1,2 mm (huecos y excesos), uniendo los cordones como
+  franjas de ancho variable con Clipper2, y en piezas comunes con 2–3 perímetros. Sin superposición ni nada afuera; los
+  únicos huecos son las esquinas redondeadas de los extremos (0,13–0,43 % en tiras de 30 mm). Cuña de 0,3 a 1,2 mm:
+  huecos 0,3 %, superposición 1,3 %, en las transiciones
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

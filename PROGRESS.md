@@ -913,3 +913,41 @@ nodo más grueso, donde el último cordón existe solo ahí; lo revisé y es cor
 - medir el área cubierta para el criterio de F2;
 - la decisión del dueño sobre el eje medio.
 
+## 2026-10-24 — bloque nocturno 23: área cubierta (criterio de F2)
+
+**Hecho:**
+- `bead_area` y `measure_coverage` (`src/perimeters/coverage.*`, diseño propio), con Clipper2. Cada tramo de un
+  recorrido es el cuadrilátero de medios anchos w0/2 y w1/2, y cada punto suma un disco de radio w/2 (uniones y
+  extremos redondos, polígono de 64 lados). Informa:
+  - el área cubierta del objetivo;
+  - los huecos;
+  - lo que queda afuera;
+  - la superposición: la suma de las áreas de cada recorrido menos el área de su unión.
+
+**Probado:** 117/117 pruebas con gcc, clang y ASan+UBSan.
+
+**Medido** (área cubierta; las tres primeras filas son pruebas, la última sale del arnés):
+
+| Pieza | Huecos | Superposición | Afuera |
+|---|---|---|---|
+| Tiras de 30 mm × 0,3 a 1,2 mm (de a 0,1) | 0,019–0,078 mm² (0,13–0,43 %) | 0 | 0 |
+| Cuña de 0,3 a 1,2 mm | 0,073 mm² (0,3 %) | 0,28 mm² (1,3 %) | 0 |
+| Cuadrado de 20 mm, 2 y 3 paredes (franja de paredes) | 0,069 y 0,104 mm² (0,11 %) | 0 | 0 |
+| Esfera, capa del medio, lleno completo / 3 paredes | 0,0003 % / 0,0003 % | 0,0001 % / 0 | 0 |
+
+- En las tiras, los huecos son exactamente las esquinas redondeadas de los extremos: 4·(w/2)²·(1 − π/4). En la tira
+  de 0,3 mm la cuenta da 0,0193 mm² y medí 0,0194. A lo largo de las paredes no queda nada sin cubrir.
+- En la cuña, la superposición está en las transiciones, donde un cordón empieza o termina con extremo redondo.
+- La tira de 0,6 mm sale con un solo cordón de 0,6: 0,6/0,4 en coma flotante da 1,4999…, justo en el límite entre 1
+  y 2 cordones. Cualquiera de los dos cubre bien.
+- Medir el lleno completo de la capa de la esfera tarda 5 s (unión de unos 87 000 discos). Es una herramienta de
+  medición y no corre en el corte.
+
+**Estado de F2:** el criterio de la fase («paredes de 0,3 a 1,2 mm sin huecos ni excesos; piezas comunes con 2–3
+perímetros») se cumple y está medido. Quedan:
+- la decisión del dueño sobre cómo acelerar el eje medio;
+- contrastar con la ficha de perímetros cuando esté en `main`.
+
+**Sigue:** F3 (superficies y rellenos), a partir de `docs/spec/BEHAVIOR.md` («Superficies y rellenos»), si pasa
+`tools/check_spec.py`.
+
