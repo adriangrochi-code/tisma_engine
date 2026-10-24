@@ -27,9 +27,17 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 |---|---|
 | Ahlers, *3D Printing of Nonplanar Layers for Smooth Surface Generation*, tesis, Universidad de Hamburgo, 2018. [PDF](https://tams.informatik.uni-hamburg.de/publications/2018/MSc_Daniel_Ahlers.pdf) | Superficies superiores no planares; límites por el cabezal |
 | Dai et al., *Support-free volume printing by multi-axis motion*, ACM TOG 37(4), 2018. [TU Delft](https://research.tudelft.nl/en/publications/support-free-volume-printing-by-multi-axis-motion) | Capas curvas sin soportes |
+| Etienne, Ray, Panozzo, Hornus, Wang, Martínez, McMains, Alexa, Wyvill, Lefebvre. *CurviSlicer: Slightly curved slicing for 3-axis printers.* ACM Transactions on Graphics 38(4), SIGGRAPH 2019. [HAL](https://hal.science/hal-02120033) | Capas apenas curvas en 3 ejes, con límites de pendiente y espesor |
+| Felzenszwalb y Huttenlocher. *Distance Transforms of Sampled Functions.* Theory of Computing 8, 2012. [Artículo](https://theoryofcomputing.org/articles/v008a019/) | Distancia exacta en una grilla (zonas bajo los voladizos) |
 | Zhang et al., *S³-Slicer*, SIGGRAPH Asia 2022. [ACM SIGGRAPH](https://history.siggraph.org/?p=216073) | Laminado curvo con varios objetivos |
 | Zhang et al., *Support Generation for Robot-Assisted 3D Printing with Curved Layers*, ICRA 2023. [arXiv](https://arxiv.org/pdf/2302.05510) | Soportes para capas curvas |
 | Estudio de acabado con capas curvas (ScienceDirect, 2025). [Artículo](https://www.sciencedirect.com/science/article/pii/S2590123025043178) | Las capas curvas mejoran el acabado hasta unos 55° de inclinación |
+
+## Estabilidad durante la impresión
+
+| Fuente | Para qué |
+|---|---|
+| J. M. Gere y B. J. Goodno, *Mechanics of Materials* (Cengage), tabla de flechas de vigas en voladizo | Flecha de una parte esbelta empujada por la boquilla, `F L³ / (3 E I)` (`features/stability.md`) |
 
 ## Formatos
 
@@ -37,6 +45,8 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 |---|---|
 | [Especificación 3MF](https://3mf.io/spec/) (3MF Consortium, ISO/IEC 25422:2025) | Leer proyectos 3MF |
 | STL binario y ASCII (formato público) | Leer mallas |
+| Elegoo, [«Goo Format Spec V1.2»](https://raw.githubusercontent.com/elegooofficial/GOO/main/Goo%20Format%20Spec%20V1.2.pdf) (PDF; el repositorio tiene licencia GPL v3, se lee solo el PDF) | Escribir archivos GOO para impresoras de resina Elegoo |
+| Mango3D, [«Cupping»](https://doc.mango3d.io/?p=2272) | Ventosas en la impresión de resina |
 | Documentación de G-code de [Marlin](https://marlinfw.org/docs/gcode/G092.html), [Klipper](https://www.klipper3d.org/G-Codes.html) y [RepRap](https://reprap.org/wiki/G-code) | Qué hace cada comando; se lee la documentación, no el firmware |
 | Base de conocimiento de Prusa: [macros](https://help.prusa3d.com/article/macros_1775) y [lista de variables](https://help.prusa3d.com/article/list-of-placeholders_205643) | Sintaxis de las variables en el G-code de inicio y fin de los perfiles de Tisma (`GCODE_OUTPUT.md`) |
 

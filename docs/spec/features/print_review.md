@@ -49,7 +49,8 @@ Orden: los más graves primero; a igual gravedad, de abajo hacia arriba. Va tamb
    - partes finas que se pueden quebrar mientras se imprimen.
 
    Este análisis tiene que ser diseño propio del motor, a partir de la física (centro de masa, área de apoyo,
-   adherencia a la cama, rigidez de la parte ya impresa). Tisma Slicer usa ahí código ajeno que no se describe.
+   adherencia a la cama, rigidez de la parte ya impresa). Tisma Slicer usa ahí código ajeno que no se describe. La
+   ficha `stability.md` lo propone.
 
 ## Pruebas
 

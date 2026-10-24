@@ -29,14 +29,14 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `curved.mode` | — | `disabled` | `wave`, `conical`; y `overhangs`, `stress`, `surface`, `automatic` (fichas propias más adelante) |
+| `curved.mode` | — | `disabled` | `wave`, `conical`; `overhangs`, `stress`, `surface` y `automatic` en `nonplanar_modes.md` |
 | `curved.pattern` | — | `egg` | Forma de `wave`: `egg`, `ridges`, `twisted` |
 | `curved.amplitude` | mm | 0,6 | Amplitud `a` de la onda, si no se ajusta a la cabeza |
 | `curved.wavelength` | mm | 16 | Largo `λ` de la onda, si no se ajusta a la cabeza |
 | `curved.angle` | ° | 0 | Dirección de `ridges` y ángulo inicial de `twisted` |
 | `curved.twist` | °/mm | 3 | `twisted`: giro de la dirección por mm de altura |
 | `curved.cone_angle` | ° | 15 | `conical` sin ajuste a la cabeza: pendiente del cono; positivo sube hacia afuera |
-| `curved.fit_head` | — | sí | Las capas tan curvas como permite la cabeza (regla 3) |
+| `curved.fit_head` | — | sí | Las capas tan curvas como permite la cabeza (regla 3). En `conical`, el cono sale de la pieza (`nonplanar_modes.md`) |
 | `curved.flat_below` | mm | 0,6 | Por debajo, capas planas |
 | `curved.ramp_height` | mm | 5 | Alto de la transición de plano a curvo |
 | `curved.flat_top` | — | no | Volver a capas planas arriba de todo |
@@ -45,6 +45,7 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
 | `head.free_angle_x`, `head.free_angle_y` | ° | 0 = no medido | La pendiente más empinada que la cabeza deja subir a lo largo de X y de Y |
 | `head.clearance_height` | mm | 3 | Distancia vertical de la punta de la boquilla a lo más bajo de la cabeza a su alrededor |
 | `head.clearance_radius` | mm | 15 | Distancia horizontal de la boquilla a lo más lejano de esas partes bajas |
+| `head.profile` | pares altura:ángulo | vacío | El ángulo libre medido a varias alturas, por ejemplo `2:45;5:30;10:20`. Si está, el control de choques lo usa en lugar de `head.clearance_height` |
 | `curved.flow_policy` | — | `preserve` | `preserve`: mantener el caudal planeado ajustando la velocidad; `uniform`: todo (salvo externos, voladizos, puentes y relleno de huecos) al mismo caudal; `off`: no tocar velocidades |
 | `curved.uniform_flow` | mm³/s | 0 = 80 % del caudal máximo | Caudal de `uniform` |
 
@@ -65,7 +66,8 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
    - **onda:** `λ = π · head.clearance_height / tan_min`, entre 4 y 100 mm;
    - **amplitud:** la que da la pendiente máxima `tan_min` (`a = tan_min / k`; en `ridges`, con la tangente de su
      dirección), y nunca más que `head.clearance_height / 2`, porque la onda sube `2a` de valle a cresta;
-   - **cono:** pendiente `tan_min`, con el signo pedido;
+   - **cono:** la pendiente de cada radio sale de los voladizos de la pieza, y una pieza sin voladizos queda plana
+     (`nonplanar_modes.md`, reglas 3 a 8). `curved.cone_angle` solo vale sin `curved.fit_head`;
    - **espesor:** si con eso algún punto de la pieza da `J` fuera de [0,6; 1,4], la amplitud (o la pendiente del cono)
      se achica por bisección hasta que entre.
 4. **Material:** cada tramo extruye su material plano multiplicado por `J` en ese punto. Con `preserve`, la velocidad
@@ -74,8 +76,26 @@ código. Para capas curvas con límites de pendiente y espesor, ver CurviSlicer 
    de la impresora.
 6. **Cabeza:** donde la pieza ya impresa subiría junto a la boquilla más que `head.clearance_height` dentro de
    `head.clearance_radius`, las capas se suavizan. Una capa más empinada que lo que permite la cabeza es un error.
+   - **Cabeza asimétrica** (ventilador de capa, sensor): se trata como un cono elíptico alrededor de la boquilla. Una
+     capa con pendiente `(gx, gy)` entra si `(gx / tan αx)² + (gy / tan αy)² ≤ 1`, con αx y αy los ángulos libres.
+     Las crestas a lo largo de X usan αx, y las de a lo largo de Y, αy; la huevera y las crestas torcidas, el
+     menor.
+   - **Con `head.profile`:** cerca de la punta la cabeza deja subidas empinadas pero bajas; más lejos, solo suaves.
+     El control de choques usa el ángulo de cada altura.
 7. **Requisito:** E relativa (`M83`); sin eso, error.
 8. **Primeras capas:** las capas debajo de `curved.flat_below` salen planas.
+
+## Cómo se miden los ángulos libres
+
+Con la impresora fría, la boquilla se baja dentro de ranuras en V de apertura φ creciente, con las paredes a lo
+largo de X y, aparte, a lo largo de Y:
+- la ranura más angosta en la que la punta llega al fondo sin que toque nada más da φ;
+- el ángulo libre a esa profundidad es `(180° − φ) / 2`;
+- con filas de ranuras de profundidad H/3, 2H/3 y H (todas con la misma cara de arriba) sale `head.profile`, y la
+  fila elegida da `head.free_angle_x` y `head.free_angle_y`.
+
+Tisma Slicer tuvo una galga impresa y un asistente para esto, que el dueño quitó para rehacerlos de otra manera: el
+motor no los copia.
 
 ## Pruebas
 

@@ -82,6 +82,19 @@ El resultado vuelve al laminado como ajustes del objeto y zonas con su propio re
 9. **Capas curvas:** con capas no planares, en cada vóxel la dirección débil es la normal de la capa curva que pasa
    por él. Las normales se agrupan cada unos 2°, cada grupo con su propia matriz. No se modela el encastre entre capas
    onduladas: la mejora real puede ser mayor que la calculada.
+10. **Resina: paredes y relleno interior.** Con una impresora de resina es la única optimización; las de arriba son
+    de FDM y no se ofrecen.
+    - la pieza se analiza maciza, o hueca con paredes del espesor del perfil y el relleno interior (`resin_supports.md`)
+      como un lattice homogeneizado, con exponente 1,5;
+    - la resina curada es casi isótropa: mismas propiedades a través de las capas, sin factor de adherencia;
+    - el material sale del nombre del perfil de resina («Tough» y «ABS-like» usan la Tough de la tabla; el resto, la
+      estándar), y se puede cambiar;
+    - para paredes de 1; 1,5; 2; 3; 4 y 5 mm se prueba primero el hueco vacío y, si no cumple, el menor relleno que
+      cumple, entre la barra más fina que se imprime en la celda del perfil (mínimo 5 %) y 60 %;
+    - se muestra la tabla y se recomienda la opción más liviana. «Aplicar» pone en el objeto el vaciado, el espesor y
+      el relleno (se puede deshacer). Si ninguna hueca cumple, se propone imprimirla maciza;
+    - el vaciado real cierra los huecos angostos (`resin.hollow_closing`): en piezas finas queda más resina que la
+      calculada, del lado seguro.
 
 ## Pruebas
 
@@ -98,3 +111,4 @@ Medidas con el análisis de Tisma Slicer. PLA de la tabla salvo que se diga otra
 | O7 | Cubo de 30 mm a compresión, 6000 N, factor de seguridad 2 | Barras de 2,08 mm: 16,8 g frente a 33,5 g macizo. El diámetro variable no mejora: la tensión es uniforme |
 | O8 | Voladizo de 90 × 20 × 20 mm, 200 N, factor de seguridad 2 | Lattice uniforme: barras de 2,25 mm (25,4 g). Variable: de 1,0 a 2,5 mm, unos 17 g (−30 %), más gruesas junto al empotramiento |
 | O9 | Barra tirada hacia arriba con capas inclinadas ±25° | Factor de seguridad de 4,7 (capas planas) a 5,2 |
+| O10 | Barra de resina de 6 mm, paredes de 1 mm y relleno interior al 51 % | El análisis cuenta 2,9 ml; el laminado da 3,60 ml (maciza: 3,74 ml): el vaciado cerró parte del hueco |

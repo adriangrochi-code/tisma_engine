@@ -75,6 +75,29 @@ llamada que describe la documentación oficial de esa API:
 
 No se copian llamadas de otro programa: se leen de la documentación y se prueban contra un simulador propio.
 
+## Cámara USB de la computadora
+
+Lo diseñó el equipo del dueño. Una cámara USB (UVC) conectada a la computadora sirve de cámara de una impresora: para
+las que no tienen, o tienen una lenta (las A1 y P1 de Bambu Lab mandan pocas imágenes por segundo por la red local).
+
+1. **Elección:** en Dispositivos, cada impresora elige «La cámara de la impresora» (si tiene), «Sin cámara» o una de
+   las cámaras USB conectadas. Se guarda por impresora y vuelve sola al abrir el programa. Al lado se ve lo que da la
+   cámara: tamaño, formato e imágenes por segundo reales.
+2. **Formato:**
+   - el más grande hasta 1280 × 720 que dé al menos 10 imágenes por segundo;
+   - MJPEG antes que sin comprimir: usa menos ancho de banda USB, y entra una segunda cámara en el mismo puerto.
+3. **En pantalla:**
+   - hasta 15 imágenes por segundo;
+   - las que la interfaz no alcanza a dibujar se saltean, no se acumulan;
+   - si la cámara se desconecta o pasa 10 s sin mandar imágenes, se avisa en la vista.
+4. **Privacidad:** las imágenes quedan solo en memoria: no se guardan ni salen de la computadora.
+5. **Dónde se ve:** en una impresora USB, en su panel; en una de red, debajo de sus datos (en las Bambu Lab, en lugar
+   de su cámara).
+6. **Bibliotecas:** una opción con licencia MIT es [openpnp-capture](https://github.com/openpnp/openpnp-capture). Usa
+   DirectShow en Windows, AVFoundation en macOS y V4L2 en Linux. Se anota en `THIRD_PARTY.md` antes de usarla.
+7. **macOS:** el programa declara para qué usa la cámara y pide el permiso de cámara. Sin eso, macOS lo cierra al
+   abrirla.
+
 ## Botón principal
 
 - **Prueba de conexión:** si la impresora elegida tiene una impresora de red guardada, cada 20 s se prueba si se puede
@@ -99,3 +122,6 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | BL2 | El mismo con un código de acceso equivocado | Error de autenticación claro, sin escribir el código en ningún registro |
 | BL3 | Certificado distinto del guardado | No se conecta y se avisa |
 | N1 | Simulador de cada interfaz web | Probar, subir y empezar funcionan con credenciales buenas; error claro con credenciales malas |
+| CA1 | Cámara simulada que ofrece MJPEG de 1920 × 1080, 1280 × 720 y 640 × 480 a 30 imágenes por segundo | Elige 1280 × 720 MJPEG; muestra 15 imágenes por segundo; la elección vuelve al reiniciar |
+| CA2 | Sin cámaras conectadas | La lista ofrece solo «Sin cámara» (y la de la impresora, si tiene) |
+| CA3 | La cámara deja de mandar imágenes | A los 10 s, aviso en la vista |
