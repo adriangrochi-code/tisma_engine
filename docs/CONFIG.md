@@ -43,6 +43,14 @@ Reglas:
 | `top_layers` | entero | 3 | 0 a 1000 | Capas sólidas debajo de cada superficie superior expuesta |
 | `bottom_layers` | entero | 3 | 0 a 1000 | Capas sólidas encima de cada superficie inferior expuesta |
 
+### `infill`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `walls.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
+| `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
+| `pattern` | texto | `"rectilinear"` | `rectilinear` | Patrón del relleno disperso; `grid` y `gyroid` vendrán después |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -51,7 +59,7 @@ Reglas:
 
 ## Grupos previstos (todavía no implementados)
 
-`machine`, `material`, `infill`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
+`machine`, `material`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
 cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo

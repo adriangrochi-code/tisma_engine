@@ -15,6 +15,7 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
+enum class InfillPattern { Rectilinear };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
 struct Settings {
@@ -29,6 +30,9 @@ struct Settings {
     double wall_width = 0.4; // preferred bead width w*
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
+    double infill_density = 20.0; // percent
+    double infill_angle = 45.0;   // degrees
+    InfillPattern infill_pattern = InfillPattern::Rectilinear;
     GpuMode gpu = GpuMode::Auto;
 
     // Groups present in the file that the engine does not use yet.

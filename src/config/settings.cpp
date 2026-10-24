@@ -15,8 +15,7 @@ namespace {
 
 using nlohmann::json;
 
-const std::vector<std::string> kPlannedGroups = {"machine", "material", "infill",  "speed",
-                                                 "retraction", "cooling", "support"};
+const std::vector<std::string> kPlannedGroups = {"machine", "material", "speed", "retraction", "cooling", "support"};
 
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
     throw SettingsError("settings: " + key + ": " + message);
@@ -74,7 +73,8 @@ Settings parse_settings(std::string_view text) {
 
     Settings s;
     for (const auto& [group, value] : root.items()) {
-        if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "compute")
+        if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
+            group == "compute")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -128,6 +128,20 @@ Settings parse_settings(std::string_view text) {
         if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
+    });
+    read_group(root, "infill", {"density", "angle", "pattern"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "pattern") {
+            s.infill_pattern = choice<InfillPattern>(g, n, k, {{"rectilinear", InfillPattern::Rectilinear}});
+            return;
+        }
+        const double v = number(g, n, k);
+        if (n == "density") {
+            if (v < 0.0 || v > 100.0)
+                fail(k, "must be from 0 to 100");
+            s.infill_density = v;
+        } else {
+            s.infill_angle = v;
+        }
     });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});

@@ -51,6 +51,10 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
         infill[l] = out.walls[l].infill;
     out.surfaces =
         classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers, settings.wall_width);
+    const FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle};
+    out.fills.resize(out.layers.size());
+    tbb::parallel_for(std::size_t(0), out.layers.size(),
+                      [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill); });
     return out;
 }
 

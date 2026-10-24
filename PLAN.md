@@ -234,11 +234,13 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
 
 - [x] Superficies superiores e inferiores por capa: N capas contadas desde cada superficie expuesta (grupo `surfaces`)
 - [x] Ancho mínimo de las superficies sólidas: las franjas más angostas que un cordón crecen un cordón hacia el relleno
-- [ ] Relleno rectilíneo: líneas paralelas que giran 90° cada capa, ángulo base y densidad
-- [ ] Relleno sólido de las superficies (rectilíneo y monotónico al 100 %)
+- [x] Relleno rectilíneo: líneas paralelas que giran 90° cada capa, ángulo base y densidad (grupo `infill`)
+- [x] Relleno sólido de las superficies, rectilíneo al 100 % (lo monotónico va con su propio ítem)
 - [ ] Relleno en grilla (dos direcciones por capa)
 - [ ] Giroide: la superficie de `docs/spec/SOURCES.md` cortada en cada Z
-- [ ] Anclar las líneas de relleno a los perímetros sin dejar huecos
+- [ ] Anclar las líneas de relleno a los perímetros sin dejar huecos. Hoy las líneas terminan medio cordón adentro y
+  una capa sólida deja huecos en los bordes (4,7 % en un cuadrado de 7,6 mm a 45°). Llevarlas hasta el borde los baja
+  a 0,4 %, pero mete 3,7 mm² en las paredes. La idea es unir los extremos a lo largo del borde
 - [ ] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
   anterior), tendidos en la dirección del vano más corto
 - [ ] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho

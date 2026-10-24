@@ -1000,3 +1000,34 @@ perímetros») se cumple y está medido. Quedan:
 **Sigue:** el relleno rectilíneo (líneas a 45° que giran 90° cada capa, 20 %, sólido al 100 %), con un grupo de ajustes
 `infill` propio.
 
+## 2026-10-24 — bloque nocturno 26: relleno rectilíneo
+
+**Hecho:**
+- `rectilinear_fill` (`src/infill/rectilinear.*`, diseño propio): líneas paralelas en una grilla fija al origen, así
+  las de distintas capas se alinean. Se recortan como caminos abiertos con Clipper2 a la región achicada medio
+  cordón y salen como recorridos de ancho constante, ordenados entre líneas y a lo largo de cada una.
+- `fill_layer`:
+  - superficies superior e inferior al 100 % (un cordón de separación);
+  - relleno disperso a ancho / densidad;
+  - ángulo base, más 90° en las capas impares.
+- `slice_model` arma el relleno de todas las capas en paralelo (`SlicedModel::fills`); `slice` informa
+  `solid_infill_lines` y `sparse_infill_lines`.
+- Ajustes: grupo `infill` con `density` (20), `angle` (45) y `pattern` (`rectilinear`), valores de banco de la
+  especificación con nombres propios.
+
+**Probado:** 124/124 pruebas con gcc, clang y ASan+UBSan:
+- un cuadrado de 10 mm con líneas a 1 mm da 9 líneas en y = 1…9, de x = 0,2 a 9,8; a 90° son verticales en x enteros;
+  corrido 0,5 mm, da las mismas líneas de la grilla;
+- las capas pares van a 45° y las impares a 135°; las líneas dispersas al 20 % son unas cinco veces menos que las
+  sólidas; densidad 0 no da relleno disperso;
+- una capa sólida de 7,6 mm a 45°: el interior, un cordón hacia adentro, queda cubierto (huecos < 0,1 %).
+
+**Medido:**
+- capa sólida de 7,6 mm, 25 líneas a 45°: huecos de 2,72 mm² (4,7 %) en los bordes, nada afuera ni superpuesto;
+- si las líneas llegan hasta el borde, los huecos bajan a 0,22 mm² (0,4 %), pero 3,69 mm² se meten en las paredes. A 0°
+  la alineación con la grilla deja además una franja sin cubrir junto a un borde;
+- esfera, 500 capas, 4 núcleos: 7743 líneas sólidas y 18 907 dispersas; `slice` 1,04–1,12 s (el relleno casi no suma).
+
+**Sigue:** anclar las líneas a los perímetros uniendo los extremos a lo largo del borde, para cerrar los huecos de los
+bordes sin meterse en las paredes; después grilla y giroide.
+

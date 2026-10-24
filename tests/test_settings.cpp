@@ -33,7 +33,8 @@ TEST_CASE("settings are read by group", "[settings]") {
         "compute": {"gpu": "off"},
         "walls": {"count": 2, "width": 0.45},
         "surfaces": {"top_layers": 4, "bottom_layers": 0},
-        "infill": {"anything": 1}
+        "infill": {"density": 35, "angle": 30, "pattern": "rectilinear"},
+        "speed": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -47,7 +48,10 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.wall_width == 0.45);
     CHECK(s.top_layers == 4);
     CHECK(s.bottom_layers == 0);
-    CHECK(s.ignored_groups == std::vector<std::string>{"infill"});
+    CHECK(s.infill_density == 35.0);
+    CHECK(s.infill_angle == 30.0);
+    CHECK(s.infill_pattern == InfillPattern::Rectilinear);
+    CHECK(s.ignored_groups == std::vector<std::string>{"speed"});
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -65,6 +69,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "honeycomb"}})"), ContainsSubstring("infill.pattern: must be one of"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {
