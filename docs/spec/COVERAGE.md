@@ -184,7 +184,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Comentarios detallados en el G-code | — | ✘ → `gcode_extras.md` |
 | Formato del nombre del archivo de salida, con variables | — | ✘ → `gcode_extras.md` |
 | Scripts de posproceso | — | ✘ → `gcode_extras.md` |
-| Impresión secuencial (objeto por objeto), con el espacio del cabezal (radio y alto) | — | ✘ → `sequential.md` |
+| Impresión secuencial (objeto por objeto), con el espacio del cabezal (radio y alto) | `sequential.md` | ✔ |
 | Boquilla de alto caudal; altura de capa mínima y máxima por extrusor; desfase de cada extrusor | — | ✘ → `multi_extruder.md` |
 | Impresoras de cinta (Tisma) | `belt_printer.md` | ✔ |
 | Cabezal para capas no planares (Tisma) | `nonplanar.md` | ✔ |
