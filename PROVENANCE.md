@@ -15,6 +15,8 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/gpu/shaders/level_ranges.comp` — rango de capas por triángulo en GPU | Diseño propio: búsqueda binaria del primer nivel mayor que el mínimo y el máximo del triángulo; misma regla que `triangle_level_ranges` en la CPU. |
 | `src/gpu/shaders/level_segments.comp` — tramos por (triángulo, capa) en GPU | Diseño propio: las mismas reglas que `level_set_segments`; la salida se ubica con una suma de prefijos de los tramos de cada triángulo. Precisión de las operaciones según la especificación de Vulkan (suma, resta y producto exactos; división con hasta 2,5 ULP). |
 | `tools/compile_shaders.py` — SPIR-V generado | Diseño propio; usa `glslangValidator` solo como herramienta. |
+| `src/config/settings.*`, `docs/CONFIG.md` — ajustes del motor | Diseño propio: formato y nombres propios, agrupados. Sobre nlohmann/json (MIT). |
+| `src/slice/pipeline.*` — corte plano completo | Diseño propio: plan de capas, contornos con cierre de huecos, regiones según el modo de relleno, compensación XY y de primera capa. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |

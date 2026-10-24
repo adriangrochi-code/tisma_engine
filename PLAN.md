@@ -183,7 +183,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Corte en GPU: tramos por (triángulo, capa) con suma de prefijos, reagrupados por capa; misma topología que la CPU
 - [ ] Medir el corte en GPU contra la CPU en una GPU real (acá solo hay lavapipe)
 - [x] Prueba de áreas por capa con piezas de área conocida (pirámide, cubo; esfera: el volumen cortado coincide con el de la malla al 0,0002 %); tiempos medidos
-- [ ] Compensación XY y de primera capa con los nombres de `docs/spec/SETTINGS_V1.md` (esperando las fichas de corte)
+- [x] Ajustes propios (`docs/CONFIG.md`) y `slice` con el corte completo: modos de relleno, compensación XY y de primera capa
+- [ ] Contrastar el corte con los casos de la ficha `docs/spec/features/slicing.md` cuando esté en `main` (simplificación, alturas variables)
 
 ## Avance
 

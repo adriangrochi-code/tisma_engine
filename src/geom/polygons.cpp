@@ -25,6 +25,21 @@ Polygons layer_region(const Polygons& polygons) {
     return Clipper2Lib::Union(polygons, Clipper2Lib::FillRule::NonZero);
 }
 
+Polygons layer_region(const Polygons& polygons, FillMode mode) {
+    switch (mode) {
+    case FillMode::Union: return layer_region(polygons);
+    case FillMode::EvenOdd: return Clipper2Lib::Union(polygons, Clipper2Lib::FillRule::EvenOdd);
+    case FillMode::FillHoles: {
+        Polygons outer;
+        for (Polygon& p : layer_region(polygons))
+            if (Clipper2Lib::Area(p) > 0)
+                outer.push_back(std::move(p)); // holes are clockwise: negative area
+        return Clipper2Lib::Union(outer, Clipper2Lib::FillRule::NonZero);
+    }
+    }
+    return layer_region(polygons);
+}
+
 Polygons offset(const Polygons& region, double delta_mm, double miter_limit) {
     if (delta_mm == 0.0)
         return region;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/settings.hpp"
 #include "slice/contours.hpp"
 
 #include <clipper2/clipper.h>
@@ -30,6 +31,11 @@ Polygons to_polygons(const std::vector<Contour>& contours);
 // (as level_set_segments produces them) cancel inside holes, overlapping
 // volumes add up, and a mesh wound the wrong way still gives a region.
 Polygons layer_region(const Polygons& polygons);
+
+// Same with a choice of rule (docs/CONFIG.md, slicing.fill_mode): Union is the
+// non-zero rule above; EvenOdd alternates inside and outside at every crossing;
+// FillHoles is Union with the holes filled in.
+Polygons layer_region(const Polygons& polygons, FillMode mode);
 
 // Grows the region by delta_mm (shrinks it when negative): outer contours move
 // out and holes move in. Corners are mitered up to miter_limit times delta,

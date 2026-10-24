@@ -1,12 +1,16 @@
 #include "cli/cli.hpp"
 
 #include "io/stl.hpp"
+#include "config/settings.hpp"
 #include "geom/polygons.hpp"
+#include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/layers.hpp"
+#include "slice/pipeline.hpp"
 
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -141,17 +145,53 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         err << kUsage;
         return kExitUsage;
     }
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(parsed->config, ec)) {
-        err << "error: config file not found: " << parsed->config << "\n";
+    Settings settings;
+    try {
+        settings = load_settings(parsed->config);
+    } catch (const SettingsError& e) {
+        err << "error: " << parsed->config << ": " << e.what() << "\n";
         return kExitInput;
     }
+    for (const std::string& group : settings.ignored_groups)
+        err << "warning: settings group '" << group << "' is not used yet\n";
+
     StlFile stl;
     double seconds = 0.0;
     if (int rc = read_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-    err << "slice: not implemented yet\n";
+
+    const auto start = std::chrono::steady_clock::now();
+    const IndexedMesh mesh = weld_exact(stl.mesh);
+    std::unique_ptr<gpu::Context> gpu;
+    if (settings.gpu == GpuMode::Auto)
+        gpu = gpu::Context::create();
+    out << "gpu: " << (gpu ? gpu->device_name() : std::string("none, using the CPU")) << "\n";
+    SlicedModel sliced;
+    try {
+        sliced = slice_model(mesh, settings, gpu.get());
+    } catch (const std::runtime_error& e) {
+        if (!gpu)
+            throw;
+        err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
+        sliced = slice_model(mesh, settings, nullptr);
+    }
+    const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+
+    double volume = 0.0;
+    std::size_t polygons = 0;
+    for (std::size_t l = 0; l < sliced.layers.size(); ++l) {
+        volume += area_mm2(sliced.regions[l]) * (sliced.layers[l].top - sliced.layers[l].bottom);
+        polygons += sliced.regions[l].size();
+    }
+    out << "layers: " << sliced.layers.size() << "\n";
+    out << "polygons: " << polygons << "\n";
+    out << "sliced_volume: " << volume << "\n";
+    out << "slice_ms: " << slice_ms << "\n";
+    if (sliced.open_contours > 0)
+        err << "warning: " << sliced.open_contours
+            << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
+    err << "slice: G-code output is not implemented yet (" << parsed->output << " not written)\n";
     return kExitNotImplemented;
 }
 

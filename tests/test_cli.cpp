@@ -3,6 +3,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -55,6 +57,27 @@ TEST_CASE("slice reads the model and says it is not implemented", "[cli]") {
     CHECK_THAT(r.err, ContainsSubstring("not implemented"));
 }
 
+TEST_CASE("slice runs the slicing with the settings", "[cli]") {
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", "out.gcode"});
+    CHECK_THAT(r.out, ContainsSubstring("layers: 50")); // defaults: 0.2 mm layers on a 10 mm cube
+    CHECK_THAT(r.out, ContainsSubstring("polygons: 50"));
+    CHECK_THAT(r.out, ContainsSubstring("sliced_volume: 1000"));
+    CHECK_THAT(r.err, ContainsSubstring("G-code output is not implemented yet"));
+}
+
+TEST_CASE("slice reports bad settings", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const auto path = dir / "tisma_test_bad_settings.json";
+    {
+        std::ofstream f(path);
+        f << R"({"layers": {"height": -1}})";
+    }
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", path.string(), "-o", "x"});
+    std::filesystem::remove(path);
+    CHECK(r.code == kExitInput);
+    CHECK_THAT(r.err, ContainsSubstring("layers.height"));
+}
+
 TEST_CASE("slice argument errors", "[cli]") {
     CHECK(run({"slice", kData + "/cube_ascii.stl"}).code == kExitUsage);
     CHECK(run({"slice", kData + "/cube_ascii.stl", "--config"}).code == kExitUsage);
@@ -65,7 +88,7 @@ TEST_CASE("slice argument errors", "[cli]") {
 TEST_CASE("slice input errors", "[cli]") {
     const Run no_config = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/nope.json", "-o", "x"});
     CHECK(no_config.code == kExitInput);
-    CHECK_THAT(no_config.err, ContainsSubstring("config file not found"));
+    CHECK_THAT(no_config.err, ContainsSubstring("cannot open"));
 
     const Run no_model = run({"slice", kData + "/nope.stl", "--config", kData + "/settings.json", "-o", "x"});
     CHECK(no_model.code == kExitInput);

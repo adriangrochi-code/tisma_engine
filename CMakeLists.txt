@@ -47,6 +47,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Clipper2)
 
+# nlohmann/json 3.12.0, MIT (see THIRD_PARTY.md): the settings file. Only its
+# headers are used; its tests (one of them GPL) are not built.
+set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+set(JSON_Install OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG 55f93686c01528224f448c19128836e7df245f72 # v3.12.0
+  SYSTEM
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
 if(TISMA_GPU)
   # Vulkan-Headers (Apache-2.0) and volk (MIT), see THIRD_PARTY.md. volk loads
   # the Vulkan loader at run time, so the engine starts without Vulkan.
@@ -87,6 +99,8 @@ add_library(tisma_core
   src/slice/contours.cpp
   src/slice/layers.cpp
   src/geom/polygons.cpp
+  src/config/settings.cpp
+  src/slice/pipeline.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
@@ -101,7 +115,7 @@ target_include_directories(tisma_core PUBLIC src)
 if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)
 endif()
-target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE tisma_warnings)
+target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
 target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")
 
 add_executable(tisma-engine apps/main.cpp)

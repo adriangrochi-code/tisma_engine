@@ -429,3 +429,46 @@ Después, la compensación XY y de primera capa con la ficha de corte, cuando es
 **Sigue:**
 - usar la GPU desde `tisma-engine` cuando haya una (opción y medición);
 - compensación XY y de primera capa, cuando la ficha de corte esté en `main`.
+
+## 2026-10-24 — bloque nocturno 6: ajustes propios y `slice` con el corte completo
+
+**Hecho:**
+- La CI de `f31a014` (corte en GPU) estaba en curso al empezar el bloque; la anterior (`0e1ace5`) había pasado.
+- **Nombres de los ajustes:** varias claves de `docs/spec/SETTINGS_V1.md` coinciden con claves de configuración de
+  PrusaSlicer (por ejemplo `seam_position`, `slowdown_below_layer_time`, `extrusion_multiplier`,
+  `retract_before_travel`). El dueño pidió nombres propios, así que el motor define su propio formato en
+  `docs/CONFIG.md`: grupos (`layers`, `slicing`, `compute`; los demás se definen al implementarlos) y nombres elegidos
+  acá. Se le pidió a la sesión principal que las fichas usen esos nombres o describan los ajustes por su significado.
+  La traducción desde Tisma Slicer va del lado de Tisma.
+- nlohmann/json 3.12.0 (MIT), anotada en `THIRD_PARTY.md`. Su repositorio trae un archivo GPL-3.0 solo entre sus
+  pruebas, que no se compilan ni se distribuyen.
+- `src/config/settings.*`: lectura del formato. Las claves desconocidas son error, con el nombre de la clave. Los
+  grupos previstos todavía no implementados se aceptan con un aviso.
+- Modos de relleno: `union` (regla no nula), `even_odd` y `fill_holes`.
+- `src/slice/pipeline.*` (`slice_model`): plan de capas, contornos con cierre de huecos, regiones según el modo de
+  relleno, compensación XY y de primera capa, y GPU si hay una.
+- `tisma-engine slice`:
+  - lee los ajustes y corta el modelo completo;
+  - usa la GPU si hay una y `compute.gpu` no es `off`, y vuelve a la CPU si la GPU falla;
+  - avisa de los contornos abiertos que se descartan;
+  - el G-code sigue sin implementar (código de salida 3).
+
+**Probado:**
+- 69/69 pruebas con gcc, clang y ASan+UBSan.
+- Pruebas nuevas:
+  - ajustes por defecto y por grupo;
+  - errores con el nombre de la clave;
+  - los tres modos de relleno con un anillo con isla y cuadrados anidados;
+  - XY −0,1 mm y primera capa −0,2 mm en el cubo (9,4 mm y 9,8 mm de lado);
+  - `slice` de punta a punta y con ajustes inválidos.
+
+**Medido** (esfera de 1 001 112 triángulos, 500 capas, 4 núcleos, sin GPU, 5 corridas): `tisma-engine slice` tarda
+0,28–0,36 s en total, de los cuales la lectura son 58–68 ms y la soldadura más el corte 205–275 ms.
+
+**Pendiente:**
+- que la ficha de corte llegue a `main`, para contrastar con sus 19 casos;
+- que `SETTINGS_V1.md` use los nombres de `docs/CONFIG.md`;
+- después, sumar al filtro (`tools/check_spec.py`) una lista de claves típicas de esos programas.
+
+**Sigue:** F2, los perímetros (Kuipers et al. 2020), cuando la ficha de perímetros esté aprobada. Mientras tanto se
+puede empezar el esqueleto de Voronoi con Boost.Polygon (anotarla antes).
