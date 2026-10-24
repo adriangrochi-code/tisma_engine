@@ -153,11 +153,11 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Color, diámetro, temperaturas de boquilla y cama (primera capa y resto), cama por tipo de cama | `profiles.md`, `gcode_motion.md` | ✔ |
-| Densidad, costo, peso del carrete: peso y costo de la impresión | `interface.md` (los muestra) | ◐ falta la cuenta → `gcode_extras.md` |
-| Temperatura de la cámara y mínima de la cámara | — | ✘ → `gcode_extras.md` |
+| Densidad, costo, peso del carrete: peso y costo de la impresión | `interface.md` (los muestra), `gcode_extras.md` | ✔ |
+| Temperatura de la cámara y mínima de la cámara | `gcode_extras.md` | ✔ |
 | Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
-| Compensación de la contracción en XY y en Z | `docs/CONFIG.md` (escala por eje) | ◐ falta que salga del filamento → `gcode_extras.md` |
-| G-code de inicio y fin del filamento | — | ✘ → `gcode_extras.md` |
+| Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
+| G-code de inicio y fin del filamento | — | ✘ → `gcode_templates.md` |
 | Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
 | Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | — | ✘ → `multi_extruder.md` |
 
@@ -166,24 +166,24 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Forma de la cama, altura máxima, tipo de cama por defecto | `placement.md`, `profiles.md` | ✔ |
-| Desfase de Z | — | ✘ → `gcode_extras.md` |
-| Firmware (dialectos) | `gcode_firmware.md` | ◐ Tisma tiene además Repetier, Teacup, MakerWare, Sailfish, Smoothie, Mach3, Machinekit y sin extrusión → `gcode_extras.md` |
+| Desfase de Z | `gcode_extras.md` | ✔ |
+| Firmware (dialectos) | `gcode_firmware.md`, `gcode_extras.md` | ✔ |
 | Límites de la máquina (avance, aceleración, jerk, avance mínimo) y su uso (escribir, solo estimar, ignorar) | `gcode_firmware.md` | ✔ |
-| Modo silencioso (segunda estimación de tiempo) | — | ✘ → `gcode_extras.md` |
+| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md` | ✔ |
 | Tiempo restante, etiquetas de objetos | `gcode_firmware.md` | ✔ |
-| Miniaturas en el G-code (tamaños y formatos PNG, JPG, QOI, la de las pantallas de BTT) | — | ✘ → `gcode_extras.md` |
-| G-code binario | — | ✘ → `gcode_extras.md` |
-| Arcos `G2`/`G3` (ajuste de arcos) | — | ✘ → `gcode_extras.md` |
+| Miniaturas en el G-code (tamaños y formatos PNG, JPG, QOI, la de las pantallas de BTT) | `gcode_extras.md` | ◐ falta el formato exacto: solo la interfaz las escribe → `formats.md` |
+| G-code binario | `gcode_extras.md` | ✔ |
+| Arcos `G2`/`G3` (ajuste de arcos) | `gcode_extras.md` | ✔ |
 | Extrusión relativa o absoluta | `GCODE_OUTPUT.md` | ✔ |
-| E volumétrica | — | ✘ → `gcode_extras.md` |
-| G-code de inicio y fin, con variables | `GCODE_OUTPUT.md` | ◐ faltan condiciones, expresiones y la lista de variables → `gcode_extras.md` |
-| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | — | ✘ → `gcode_extras.md` |
+| E volumétrica | `gcode_extras.md` | ✔ |
+| G-code de inicio y fin, con variables | `GCODE_OUTPUT.md` | ◐ faltan condiciones, expresiones y la lista de variables → `gcode_templates.md` |
+| G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | — | ✘ → `gcode_templates.md` (entre objetos: `sequential.md`) |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
-| Cambio de color y pausa en una capa, desde la vista previa | — | ✘ → `gcode_extras.md` y `preview.md` |
-| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`) | ◐ falta por impresión y filamento → `gcode_extras.md` |
-| Comentarios detallados en el G-code | — | ✘ → `gcode_extras.md` |
-| Formato del nombre del archivo de salida, con variables | — | ✘ → `gcode_extras.md` |
-| Scripts de posproceso | — | ✘ → `gcode_extras.md` |
+| Cambio de color y pausa en una capa, desde la vista previa | — | ✘ → `gcode_templates.md` y `preview.md` |
+| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`) | ◐ falta por impresión y filamento → `gcode_templates.md` |
+| Comentarios detallados en el G-code | `gcode_extras.md` | ✔ |
+| Formato del nombre del archivo de salida, con variables | — | ✘ → `gcode_templates.md` |
+| Scripts de posproceso | — | ✘ → `gcode_templates.md` |
 | Impresión secuencial (objeto por objeto), con el espacio del cabezal (radio y alto) | `sequential.md` | ✔ |
 | Boquilla de alto caudal; altura de capa mínima y máxima por extrusor; desfase de cada extrusor | — | ✘ → `multi_extruder.md` |
 | Impresoras de cinta (Tisma) | `belt_printer.md` | ✔ |
@@ -212,7 +212,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` | ◐ faltan absoluta, gamma y Z → `resin.md` (actualizar) |
 | Formatos de salida además de GOO, y su precisión | `resin.md` | ◐ → `formats.md` |
 | Soportes, base y vaciado | `resin_supports.md` | ◐ faltan tipo de árbol, solo forzados, y las opciones finas de cabeza, pilar, uniones y base → `resin_supports.md` (actualizar) |
-| Costo del frasco, volumen, peso, densidad: costo de la impresión | — | ✘ → `gcode_extras.md` |
+| Costo del frasco, volumen, peso, densidad: costo de la impresión | `gcode_extras.md` | ✔ |
 | Agujeros de drenaje y puntos de soporte a mano | `resin_supports.md` | ◐ falta la herramienta → `model_tools.md` |
 
 ## Herramientas sobre los modelos
@@ -323,6 +323,6 @@ Para no dejar a los usuarios sin sus proyectos y perfiles, hay dos caminos. Deci
 | Lote | Fichas |
 |---|---|
 | 5 | `walls_extra.md`, `infill_patterns.md`, `skirt_brim_raft.md`, `supports_more.md`, `speeds_accels.md`, `cooling_more.md`, `retraction_travel.md`, `vase_mode.md`, `fuzzy_skin.md` |
-| 6 | `gcode_extras.md`, `sequential.md`, `multi_extruder.md` |
+| 6 | `gcode_extras.md`, `gcode_templates.md`, `sequential.md`, `multi_extruder.md` |
 | 7 | `model_tools.md`, `preview.md`, `formats.md`, `presets.md`, `preferences.md` |
 | 8 | `cloud.md`, `problem_reports.md`, `thingiverse.md`, `mobile_app.md`; actualizar `printer_connections.md`, `resin.md`, `resin_supports.md`, `profiles.md` |
