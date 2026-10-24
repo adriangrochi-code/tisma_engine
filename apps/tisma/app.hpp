@@ -16,6 +16,11 @@ struct AppOptions {
     std::string export_path;        // with screenshot: after slicing, export the G-code here first
     std::string browse;             // with screenshot: show the file browser on this folder
     bool light = false;             // light theme
+    int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
+    int msaa = -1;                  // multisampling samples; -1: the preference
+    int fxaa = -1;                  // 0 off, 1 on; -1: the preference
+    int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool language_given = false;
     Language language = Language::Spanish;
 };

@@ -22,6 +22,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   - exporta el G-code verificado;
   - en la pestaña Análisis, muestra cuántos vóxeles tendría el análisis estructural, con su memoria y su tiempo;
   - recuerda el idioma, el tema, la carpeta y los ajustes.
+- La vista 3D tiene luz por píxel en color lineal, oclusión ambiental (por defecto) y ray tracing activable (sombras
+  suaves y oclusión con rayos, que se afinan cuadro a cuadro), con suavizado de bordes MSAA y FXAA (`docs/UI.md`).
 - `--screenshot` (con `--export`) dibuja la interfaz sin pantalla, para pruebas y capturas.
 - Los ajustes se pueden escribir como JSON en su formato (`settings_json`), y leer de vuelta iguales.
 - Un lector de G-code para la vista previa, que también abre G-code de otros programas.

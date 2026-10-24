@@ -2450,3 +2450,52 @@ publicó así, desde el código de 8eeee3e.
 - Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño).
 - Después, el análisis completo desde la interfaz.
 
+## 2026-10-24 — luz, oclusión ambiental, ray tracing y suavizado en la vista 3D
+
+**Pedidos del dueño:** «oclusión ambiental y mejor iluminación, con la posibilidad de activar ray tracing», y
+«antialiasing para mejorar la calidad visual».
+
+**Hecho:**
+- **El render se rehízo fuera de pantalla** (`apps/tisma/renderer.*`):
+  1. normales y profundidad;
+  2. visibilidad de la luz;
+  3. la escena iluminada con MSAA;
+  4. resolución y FXAA hacia la ventana.
+- **Luz por píxel en color lineal:**
+  - hemisférica de cielo y suelo;
+  - luz principal y de relleno, que siguen a la cámara;
+  - Blinn-Phong con Fresnel de Schlick;
+  - contorno;
+  - curva de tono.
+- **Oclusión ambiental en pantalla**, según McGuire et al. 2011, con desenfoque bilateral. Se recalcula solo si cambia
+  la imagen.
+- **Ray tracing activable:**
+  - una jerarquía de volúmenes propia (SAH con cubetas, según Wald 2007) en `src/ui/raytrace.*`: es la referencia en
+    CPU, probada contra la fuerza bruta en 4000 rayos al azar;
+  - viaja a la GPU como texturas, y un shader la recorre igual que la CPU (Möller–Trumbore, losas de Kay–Kajiya);
+  - sombras suaves y oclusión con rayos, que se promedian cuadro a cuadro hasta 256 muestras;
+  - la escena es el modelo con la cama, o los cordones de la vista previa (como cajas) con la cama, filtrados por las
+    capas y los tipos que se muestran.
+- **Suavizado:** MSAA 1×, 2×, 4× u 8× y FXAA (versión propia según Lottes 2009).
+- **Menú «Imagen»** en la barra de vistas: modo, intensidad de la oclusión, MSAA y FXAA. Se recuerda entre usos.
+- **Opciones para las capturas:** `--render`, `--msaa`, `--fxaa`, `--ray-samples` y `--ray-check`.
+- **La ventana espera eventos cuando nada se mueve.**
+
+**Probado y medido (llvmpipe, sin GPU):**
+- Comparación de la GPU con la CPU (`ui_raytrace_matches_cpu` y a mano), con los mismos rayos de sombra desde las
+  mismas superficies:
+
+  | Escena | Píxeles | En sombra | Coinciden |
+  |---|---|---|---|
+  | Torre, preparar | 28 845 | 1112 | 99,997 % |
+  | Torre, vista previa | 28 845 | 613 | 100 % |
+  | Cubo de las pruebas | 18 781 | 51 | 100 % |
+
+- Ray tracing de la torre en 1000 × 640: 24 muestras en 4 s (malla) y en 23 s (47 mil cordones), en la CPU.
+- Bordes con y sin suavizado comparados en un recorte ampliado: sin suavizado, escalones; con MSAA 4× y FXAA, lisos.
+
+**No probado:** en una GPU real (solo llvmpipe), y la velocidad del ray tracing con modelos de millones de
+triángulos.
+
+**Sigue:** calibraciones y opciones de guardar (pedidos del dueño).
+

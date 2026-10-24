@@ -11,14 +11,18 @@ namespace {
 
 constexpr const char* kUsage =
     "usage: tisma [model.stl | file.gcode | settings.json]...\n"
-    "             [--lang es|en] [--light]\n"
+    "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis] [--layer N]\n"
-    "                                   [--export out.gcode] [--browse folder]]\n"
+    "                                   [--export out.gcode] [--browse folder]\n"
+    "                                   [--ray-samples N] [--ray-check]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
     "--export it first slices and exports the checked G-code as the Export button\n"
-    "does, and exits with 1 if that fails. --browse shows the file browser.\n";
+    "does, and exits with 1 if that fails. --browse shows the file browser.\n"
+    "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
+    "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
+    "shadow rays with the CPU's and exits with 1 if they differ).\n";
 
 } // namespace
 
@@ -62,6 +66,30 @@ int main(int argc, char** argv) {
             options.export_path = value();
         } else if (arg == "--browse") {
             options.browse = value();
+        } else if (arg == "--render") {
+            const std::string_view mode = value();
+            options.render = mode == "fast" ? 0 : mode == "ao" ? 1 : mode == "rt" ? 2 : -2;
+            if (options.render < 0) {
+                std::fprintf(stderr, "error: --render must be fast, ao or rt\n");
+                return 2;
+            }
+        } else if (arg == "--msaa") {
+            options.msaa = std::atoi(value());
+            if (options.msaa < 1 || options.msaa > 16) {
+                std::fprintf(stderr, "error: --msaa must be 1 to 16\n");
+                return 2;
+            }
+        } else if (arg == "--fxaa") {
+            const std::string_view on = value();
+            if (on != "on" && on != "off") {
+                std::fprintf(stderr, "error: --fxaa must be on or off\n");
+                return 2;
+            }
+            options.fxaa = on == "on" ? 1 : 0;
+        } else if (arg == "--ray-samples") {
+            options.ray_samples = std::max(1, std::atoi(value()));
+        } else if (arg == "--ray-check") {
+            options.ray_check = true;
         } else if (arg == "--light") {
             options.light = true;
         } else if (arg == "--lang") {
@@ -79,9 +107,11 @@ int main(int argc, char** argv) {
             options.files.emplace_back(arg);
         }
     }
-    if ((!options.export_path.empty() || !options.browse.empty()) && options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export and --browse go with --screenshot\n");
+    if ((!options.export_path.empty() || !options.browse.empty() || options.ray_check) && options.screenshot.empty()) {
+        std::fprintf(stderr, "error: --export, --browse and --ray-check go with --screenshot\n");
         return 2;
     }
+    if (options.ray_check)
+        options.render = 2;
     return tisma::ui::run_app(options);
 }

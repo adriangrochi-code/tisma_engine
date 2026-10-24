@@ -46,7 +46,7 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets")
 endif()
@@ -72,7 +72,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
               --export ${CMAKE_CURRENT_BINARY_DIR}/ui_test.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_test.png)
     # Mesa's OpenGL keeps memory until exit; the leak checker would count it.
-    set_tests_properties(ui_slice_export_screenshot PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The ray tracing on the GPU against RayScene, the CPU reference: the same
+    # shadow rays from the same surfaces must give the same answers.
+    add_test(NAME ui_raytrace_matches_cpu
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
+    set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu PROPERTIES
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()
 

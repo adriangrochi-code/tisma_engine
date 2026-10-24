@@ -422,7 +422,14 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Laminado en segundo plano, vista previa por capas, exportación verificada
 - [x] Cantidad de vóxeles del análisis (pedido del dueño)
 - [x] Prueba de punta a punta con capturas (`ui_slice_export_screenshot`)
-- [ ] Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño, en curso)
+- [x] Iluminación mejorada, oclusión ambiental, ray tracing activable y suavizado de bordes (pedido del dueño)
+- [ ] Calibraciones (pedido del dueño, 2026-10-24):
+  - compensación geométrica desde medidas (escala por eje, agujeros);
+  - torre de temperatura y torre de retracción;
+  - prueba de flujo;
+  - más adelante, pruebas de laminado no planar para saber qué altura y qué ángulo admite la máquina: a definir con
+    el dueño cuando llegue F7.
+- [ ] Opciones de guardar: perfiles con nombre (impresora, filamento, impresión) y proyectos (pedido del dueño)
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
 - [ ] Mover, girar y escalar el modelo; varias piezas en la cama
 - [ ] Perfiles de impresoras y filamentos (P3)

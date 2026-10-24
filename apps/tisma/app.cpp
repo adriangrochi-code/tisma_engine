@@ -16,6 +16,7 @@
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/png.hpp"
+#include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 
@@ -33,6 +34,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <utility>
@@ -71,6 +73,7 @@ struct Theme {
     std::uint32_t window, panel, frame, frame_hover, frame_active, border, text, text_dim;
     std::uint32_t accent = 0x7A24C9, accent_hover = 0x9D40E9, accent_active = 0x5B0FA7, lavender = 0xD9BDF5;
     std::uint32_t view_top, view_bottom, plate, model;
+    std::uint32_t sky, ground; // the ambient light from above and from below
     std::uint32_t grid_minor, grid_major;
 };
 
@@ -79,7 +82,8 @@ Theme dark_theme() {
     t.dark = true;
     t.window = 0x1E1E23, t.panel = 0x25252B, t.frame = 0x33333B, t.frame_hover = 0x3E3E48, t.frame_active = 0x4A4A56;
     t.border = 0x393943, t.text = 0xE9E9EE, t.text_dim = 0x9B9BA8;
-    t.view_top = 0x2C2C34, t.view_bottom = 0x17171B, t.plate = 0x34343D, t.model = 0xB07CE8;
+    t.view_top = 0x2C2C34, t.view_bottom = 0x17171B, t.plate = 0x2E2E36, t.model = 0xA05BE6;
+    t.sky = 0xC9CCE3, t.ground = 0x4B4540;
     t.grid_minor = 0x2EFFFFFF, t.grid_major = 0x5CFFFFFF;
     return t;
 }
@@ -90,6 +94,7 @@ Theme light_theme() {
     t.window = 0xF2F2F4, t.panel = 0xFFFFFF, t.frame = 0xE7E7EC, t.frame_hover = 0xDCDCE3, t.frame_active = 0xCFCFD8;
     t.border = 0xD2D2DA, t.text = 0x0B0B0B, t.text_dim = 0x5E5E6A;
     t.view_top = 0xFAFAFC, t.view_bottom = 0xD9D9E1, t.plate = 0xC4C4CE, t.model = 0x8E44D8;
+    t.sky = 0xEEF0FA, t.ground = 0x8C857F;
     t.grid_minor = 0x33000000, t.grid_major = 0x66000000;
     return t;
 }
@@ -223,6 +228,9 @@ private:
     void start_slice();
     void poll_jobs();
     void show_preview();
+    void update_ray_scene();
+    void check_rays(const ViewFrame& f);
+    ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
     void bed_changed();
     void place_model();
@@ -281,6 +289,24 @@ private:
     ColorMode color_mode_ = ColorMode::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
     float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0};
+    PreviewBuffers preview_buffers_;
+
+    // How the view is drawn, and the scene its rays are traced against.
+    RenderMode render_mode_ = RenderMode::Ambient;
+    int msaa_ = 4;
+    bool fxaa_ = true;
+    float ao_strength_ = 1.0f;
+    struct RayBuild {
+        std::uint64_t version = 0;
+        bool preview = false;
+        std::shared_ptr<RayScene> scene;
+        std::vector<float> nodes, primitives;
+    };
+    Background<RayBuild> ray_job_;
+    std::uint64_t scene_version_ = 1, ray_version_ = 0;
+    bool ray_preview_ = false, ray_failed_ = false;
+    std::shared_ptr<RayScene> ray_scene_;
+    bool ray_checked_ = false;
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -469,7 +495,6 @@ bool App::init(std::string& error) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_SAMPLES, 4);
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, options_.screenshot.empty() ? GLFW_TRUE : GLFW_FALSE);
     window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
     if (!window_) {
@@ -559,6 +584,12 @@ bool App::init(std::string& error) {
         theme_ = light_theme();
     if (options_.language_given)
         set_language(options_.language);
+    if (options_.render >= 0)
+        render_mode_ = static_cast<RenderMode>(std::clamp(options_.render, 0, 2));
+    if (options_.msaa >= 0)
+        msaa_ = std::max(options_.msaa, 1);
+    if (options_.fxaa >= 0)
+        fxaa_ = options_.fxaa != 0;
     apply_theme();
     bed_changed();
     camera_.set_view(StandardView::Iso);
@@ -618,6 +649,10 @@ void App::load_preferences() {
         if (j.value("theme", "dark") == "light")
             theme_ = light_theme();
         last_folder_ = from_utf8(j.value("folder", std::string()));
+        render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
+        msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
+        fxaa_ = j.value("fxaa", true);
+        ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (j.contains("settings"))
             settings_ = parse_settings(j.at("settings").dump());
     } catch (const std::exception&) {
@@ -634,6 +669,10 @@ void App::save_preferences() {
         j["language"] = language() == Language::English ? "en" : "es";
         j["theme"] = theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
+        j["render"] = int(render_mode_);
+        j["msaa"] = msaa_;
+        j["fxaa"] = fxaa_;
+        j["ao_strength"] = ao_strength_;
         j["settings"] = nlohmann::json::parse(settings_json(settings_));
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
@@ -700,6 +739,7 @@ void App::place_model() {
     placed_.min = {box.min.x + offset_.x, box.min.y + offset_.y, box.min.z + offset_.z};
     placed_.max = {box.max.x + offset_.x, box.max.y + offset_.y, box.max.z + offset_.z};
     renderer_.set_model(mesh_vertices(*mesh_, offset_));
+    ++scene_version_;
 }
 
 void App::load_gcode(const std::filesystem::path& path) {
@@ -808,7 +848,9 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
-    const PreviewBuffers buffers = preview_buffers(result_->preview);
+    preview_buffers_ = preview_buffers(result_->preview);
+    const PreviewBuffers& buffers = preview_buffers_;
+    ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
     renderer_.set_preview(buffers);
@@ -825,6 +867,7 @@ void App::settings_changed() {
 void App::bed_changed() {
     apply_theme(); // remakes the bed's lines
     place_model();
+    ++scene_version_;
 }
 
 void App::frame_all() {
@@ -1203,8 +1246,8 @@ void App::view_tools() {
                           {"tisma_zoom_out", T::ZoomOut, -2},
                           {"tisma_zoom_fit", T::ZoomFit, -3}};
     const float size = 32.0f * scale_;
-    const float width = size * 9.0f + 4.0f * scale_ * 8.0f + 12.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + (view_size_.x - width) * 0.5f, view_pos_.y + 10.0f * scale_));
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 10.0f * scale_), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.85f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 4.0f * scale_));
@@ -1230,7 +1273,51 @@ void App::view_tools() {
         }
         ImGui::SameLine();
     }
-    ImGui::NewLine();
+
+    // How the view is drawn.
+    ImGui::SameLine(0, 10.0f * scale_);
+    const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
+    const T mode_tips[] = {T::RenderFastTip, T::RenderAmbientTip, T::RenderRayTip};
+    if (button("##render", nullptr, tr(modes[int(render_mode_)]), false, false, true, tr(T::RenderTip), size))
+        ImGui::OpenPopup("##render_menu");
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * scale_, 7.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
+    if (ImGui::BeginPopup("##render_menu")) {
+        ImGui::TextDisabled("%s", tr(T::Render));
+        for (int m = 0; m < 3; ++m) {
+            if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m))
+                render_mode_ = static_cast<RenderMode>(m);
+            ImGui::SetItemTooltip("%s", tr(mode_tips[m]));
+        }
+        if (render_mode_ != RenderMode::Fast) {
+            ImGui::SetNextItemWidth(200.0f * scale_);
+            ImGui::SliderFloat(tr(T::AoStrength), &ao_strength_, 0.0f, 1.5f, "%.2f");
+        }
+        if (render_mode_ == RenderMode::RayTraced) {
+            if (ray_failed_)
+                ImGui::TextColored(rgb(0xE5484D), "%s", tr(T::RayTooBig));
+            else if (!renderer_.has_ray_scene())
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::RayPreparing));
+            else
+                ImGui::TextDisabled(tr(T::RaySamples), renderer_.ray_samples(), 256);
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", tr(T::Antialiasing));
+        std::vector<int> choices = {1};
+        for (int n = 2; n <= std::min(renderer_.max_samples(), 8); n *= 2)
+            choices.push_back(n);
+        const auto name = [](int n) { return n == 1 ? std::string(tr(T::MsaaOff)) : "MSAA " + std::to_string(n) + "×"; };
+        ImGui::SetNextItemWidth(200.0f * scale_);
+        if (ImGui::BeginCombo("##msaa", name(std::min(msaa_, choices.back())).c_str())) {
+            for (int n : choices)
+                if (ImGui::Selectable(name(n).c_str(), n == msaa_))
+                    msaa_ = n;
+            ImGui::EndCombo();
+        }
+        ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
@@ -1599,8 +1686,167 @@ void App::layout() {
     }
 }
 
+// The frame of the 3D view: where it is, the camera, the lights (they follow
+// the camera: the key from above, left and in front, the fill from the right)
+// and what to show.
+ViewFrame App::view_frame(int fb_w, int fb_h) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const float sx = io.DisplayFramebufferScale.x, sy = io.DisplayFramebufferScale.y;
+    ViewFrame f;
+    f.x = int(view_pos_.x * sx);
+    f.width = std::max(int(view_size_.x * sx), 1);
+    f.height = std::max(int(view_size_.y * sy), 1);
+    f.y = fb_h - int((view_pos_.y + view_size_.y) * sy);
+    (void)fb_w;
+    f.view = camera_.view();
+    f.projection = camera_.projection(float(f.width) / float(f.height));
+    f.eye = camera_.eye();
+    const Vec3 forward = camera_.forward(), right = camera_.right();
+    Vec3 back{-forward.x, -forward.y, 0.0f};
+    if (length(back) < 1e-3f) // looking straight down: "back" is the bottom of the screen
+        back = Vec3{-camera_.up().x, -camera_.up().y, 0.0f};
+    back = normalize(back);
+    f.key = normalize(right * -0.45f + back * 0.45f + Vec3{0, 0, 0.8f});
+    f.fill = normalize(right * 0.6f + back * 0.25f + Vec3{0, 0, 0.3f});
+    f.sky = vec(theme_.sky);
+    f.ground = vec(theme_.ground);
+    f.background_top = vec(theme_.view_top);
+    f.background_bottom = vec(theme_.view_bottom);
+    f.plate = vec(theme_.plate);
+    f.model = vec(theme_.model);
+    const bool preview = tab_ == Tab::Preview && result_;
+    f.show_model = mesh_.has_value() && !preview;
+    f.show_preview = preview;
+    f.show_travels = show_travels_;
+    f.first_layer = std::size_t(bottom_layer_);
+    f.last_layer = std::size_t(top_layer_);
+    f.kind_mask = kind_mask_;
+    f.color_mode = color_mode_;
+    for (std::size_t k = 0; k < kLineKinds; ++k)
+        f.kind_colours[k] = vec(kind_colour(LineKind(k)));
+    f.mode = render_mode_;
+    f.samples = msaa_;
+    f.fxaa = fxaa_;
+    f.ao_strength = ao_strength_;
+    static const bool debug = [] {
+        const char* v = std::getenv("TISMA_DEBUG_VISIBILITY");
+        return v && *v == '1';
+    }();
+    f.debug_visibility = debug;
+    // Occlusion reaches about a line's width or two in the preview, and a
+    // part of the model's size before slicing.
+    const bool ray = render_mode_ == RenderMode::RayTraced;
+    if (preview) {
+        const auto& p = result_->preview;
+        const float size = length(Vec3{p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]});
+        f.ao_radius = ray ? std::clamp(size * 0.04f, 1.5f, 20.0f) : std::clamp(size * 0.03f, 1.0f, 10.0f);
+    } else {
+        const float size = mesh_ ? length(Vec3{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y,
+                                               placed_.max.z - placed_.min.z})
+                                 : 100.0f;
+        f.ao_radius = ray ? std::clamp(size * 0.12f, 2.0f, 60.0f) : std::clamp(size * 0.05f, 1.0f, 25.0f);
+    }
+    return f;
+}
+
+// Keeps the ray tracing scene in step with what the view shows: the model
+// (with the plate) or the preview's extrusions (with the plate), built on
+// another thread and uploaded when ready.
+void App::update_ray_scene() {
+    if (render_mode_ != RenderMode::RayTraced)
+        return;
+    const bool want_preview = tab_ == Tab::Preview && result_.has_value();
+    if (std::optional<RayBuild> b = ray_job_.take(); b && b->version == scene_version_ && b->preview == want_preview) {
+        ray_version_ = b->version;
+        ray_preview_ = b->preview;
+        ray_failed_ = !renderer_.set_ray_scene(b->nodes, b->primitives);
+        ray_scene_ = ray_failed_ ? nullptr : b->scene;
+        if (ray_failed_)
+            notify(tr(T::RayTooBig), true);
+    }
+    if ((ray_version_ == scene_version_ && ray_preview_ == want_preview) || ray_job_.running())
+        return;
+    renderer_.clear_ray_scene();
+    ray_scene_.reset();
+    std::vector<RayPrimitive> primitives;
+    if (want_preview)
+        primitives = preview_primitives(preview_buffers_);
+    else if (mesh_)
+        primitives = model_primitives(*mesh_, offset_);
+    const std::vector<RayPrimitive> plate = plate_primitives(settings_.bed);
+    primitives.insert(primitives.end(), plate.begin(), plate.end());
+    const std::uint64_t version = scene_version_;
+    ray_job_.start([primitives = std::move(primitives), version, want_preview]() mutable {
+        RayBuild b;
+        b.version = version;
+        b.preview = want_preview;
+        b.scene = std::make_shared<RayScene>();
+        b.scene->build(std::move(primitives));
+        b.nodes = b.scene->node_texels();
+        b.primitives = b.scene->primitive_texels();
+        return b;
+    });
+}
+
+// The GPU's shadow rays of the first ray traced frame against the CPU's
+// (RayScene, the reference): the same surfaces, read back from the G-buffer,
+// the same origins and the same direction to the light.
+void App::check_rays(const ViewFrame& f) {
+    ray_checked_ = true;
+    const RayReadback r = renderer_.read_back();
+    const Mat4 inverse = rigid_inverse(f.view);
+    const Mat4& m = f.projection;
+    RayFilter filter;
+    filter.first_layer = f.show_preview ? std::uint32_t(f.first_layer) : 0;
+    filter.last_layer = f.show_preview ? std::uint32_t(f.last_layer) : 0;
+    filter.kind_mask = f.kind_mask;
+    std::size_t compared = 0, same = 0, shadowed = 0;
+    for (int y = 0; y < r.height; y += 3)
+        for (int x = 0; x < r.width; x += 3) {
+            const std::size_t i = std::size_t(y) * std::size_t(r.width) + std::size_t(x);
+            const float depth = r.depth[i];
+            if (depth >= 1.0f)
+                continue;
+            const float ndc = depth * 2.0f - 1.0f;
+            const float z = -m[14] / (ndc + m[10]);
+            const float nx = (float(x) + 0.5f) / float(r.width) * 2.0f - 1.0f;
+            const float ny = (float(y) + 0.5f) / float(r.height) * 2.0f - 1.0f;
+            const Vec3 pv{nx * -z / m[0], ny * -z / m[5], z};
+            const Vec3 nv = normalize(Vec3{r.normal[i * 4] / 255.0f * 2.0f - 1.0f, r.normal[i * 4 + 1] / 255.0f * 2.0f - 1.0f,
+                                           r.normal[i * 4 + 2] / 255.0f * 2.0f - 1.0f});
+            const Vec3 position = transform_point(inverse, pv);
+            const Vec3 n = normalize(Vec3{inverse[0] * nv.x + inverse[4] * nv.y + inverse[8] * nv.z,
+                                          inverse[1] * nv.x + inverse[5] * nv.y + inverse[9] * nv.z,
+                                          inverse[2] * nv.x + inverse[6] * nv.y + inverse[10] * nv.z});
+            const Vec3 origin = position + n * (0.0015f * -pv.z + 0.002f);
+            float light = 1.0f;
+            if (dot(n, f.key) > 0.0f)
+                light = ray_scene_->occluded({origin, f.key}, filter) ? 0.0f : 1.0f;
+            const float gpu = r.visibility[i * 4];
+            ++compared;
+            same += std::abs(gpu - light) < 0.5f;
+            shadowed += light < 0.5f;
+        }
+    const double agreement = compared ? double(same) / double(compared) : 0.0;
+    std::printf("ray check: %zu pixels, %zu in shadow, GPU and CPU agree on %.3f %%\n", compared, shadowed,
+                agreement * 100.0);
+    if (compared < 1000 || shadowed == 0 || agreement < 0.99) {
+        std::fprintf(stderr, "error: the GPU's rays do not match the CPU's\n");
+        failed_ = true;
+    }
+}
+
 void App::frame() {
-    glfwPollEvents();
+    // With nothing moving, sleep until an event (or a tenth of a second)
+    // instead of drawing at the screen's rate.
+    const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||
+                      ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
+                      (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
+                       renderer_.ray_samples() < 256);
+    if (busy)
+        glfwPollEvents();
+    else
+        glfwWaitEventsTimeout(0.1);
     for (const std::filesystem::path& path : std::exchange(dropped_, {}))
         open_path(path);
     poll_jobs();
@@ -1619,31 +1865,15 @@ void App::frame() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // The 3D view, under the panels.
-    const ImGuiIO& io = ImGui::GetIO();
-    const float sx = io.DisplayFramebufferScale.x, sy = io.DisplayFramebufferScale.y;
-    ViewFrame f;
-    f.x = int(view_pos_.x * sx);
-    f.width = std::max(int(view_size_.x * sx), 1);
-    f.height = std::max(int(view_size_.y * sy), 1);
-    f.y = fb_h - int((view_pos_.y + view_size_.y) * sy);
-    f.view = camera_.view();
-    f.projection = camera_.projection(float(f.width) / float(f.height));
-    f.light = normalize(camera_.up() * 0.6f - camera_.forward() + camera_.right() * 0.3f);
-    f.background_top = vec(theme_.view_top);
-    f.background_bottom = vec(theme_.view_bottom);
-    f.plate = vec(theme_.plate);
-    f.model = vec(theme_.model);
-    const bool preview = tab_ == Tab::Preview && result_;
-    f.show_model = mesh_.has_value() && !preview;
-    f.show_preview = preview;
-    f.show_travels = show_travels_;
-    f.first_layer = std::size_t(bottom_layer_);
-    f.last_layer = std::size_t(top_layer_);
-    f.kind_mask = kind_mask_;
-    f.color_mode = color_mode_;
-    for (std::size_t k = 0; k < kLineKinds; ++k)
-        f.kind_colours[k] = vec(kind_colour(LineKind(k)));
+    update_ray_scene();
+    ViewFrame f = view_frame(fb_w, fb_h);
+    const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
+                           renderer_.has_ray_scene() && ray_scene_;
+    if (check_now)
+        f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
     renderer_.draw(f);
+    if (check_now && renderer_.ray_samples() == 1)
+        check_rays(f);
 
     glViewport(0, 0, fb_w, fb_h);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1653,7 +1883,12 @@ void App::frame() {
         ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending = options_.view == "preview" && mesh_ && !result_ && error_title_.empty();
-        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending;
+        // Ray tracing waits for its scene and for enough samples.
+        const bool rays_pending = render_mode_ == RenderMode::RayTraced && !ray_failed_ &&
+                                  (ray_job_.running() || !renderer_.has_ray_scene() ||
+                                   renderer_.ray_samples() < std::min(options_.ray_samples, 256) ||
+                                   (options_.ray_check && !ray_checked_));
+        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending;
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);

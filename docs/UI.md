@@ -98,6 +98,27 @@ Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/A
 Si una calidad pasa el máximo del análisis (8 millones de vóxeles de grilla), lo avisa. El análisis completo, con
 apoyos y cargas, corre por ahora con `tisma-engine analyze`.
 
+### Imagen: luz, oclusión, ray tracing y suavizado
+
+El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D. La elección se recuerda.
+
+| Modo | Qué hace | Costo |
+|---|---|---|
+| **Rápida** | Luz por píxel: cielo y suelo, luz principal, luz de relleno, brillo especular con Fresnel y contorno, en espacio de color lineal | El más liviano |
+| **Oclusión ambiental** (por defecto) | Además oscurece rincones, uniones entre líneas y el contacto con la cama, calculado en pantalla desde la profundidad y las normales | Solo se recalcula cuando cambia la imagen |
+| **Ray tracing** | Sombras suaves de la luz principal y oclusión ambiental con rayos de verdad contra la escena (el modelo y la cama, o los cordones de la vista previa). La imagen se afina cuadro a cuadro hasta 256 muestras y después se queda quieta | Mientras afina usa la GPU; quieto, nada |
+
+- **Suavizado de bordes:** multimuestreo (MSAA 2×, 4× u 8×, según la GPU; 4× por defecto) y además FXAA, que suaviza
+  bordes finos y brillos que el multimuestreo no alcanza.
+- **Intensidad de la oclusión:** se elige entre 0 y 1,5.
+- **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
+  jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
+  - El recorrido de la GPU es una copia del de la CPU (`src/ui/raytrace.*`), que es la referencia.
+  - La prueba `ui_raytrace_matches_cpu` dispara en la GPU los rayos de sombra del primer cuadro, repite los mismos
+    rayos en la CPU y exige que coincidan.
+- **Modelos muy grandes:** si la escena no entra en las texturas de la GPU (más de 4 millones de primitivas, o
+  texturas chicas), el ray tracing avisa y la vista sigue con oclusión ambiental.
+
 ### Ajustes y preferencias
 
 - **Guardar…** escribe los ajustes en el formato de `docs/CONFIG.md`, y **Cargar…** los lee. Un archivo `.json`
@@ -116,15 +137,22 @@ apoyos y cargas, corre por ahora con `tisma-engine analyze`.
 ```sh
 tisma modelo.stl --screenshot vista.png --size 1440x900 --view preview --layer 120
 tisma modelo.stl --screenshot vista.png --view preview --export pieza.gcode
+tisma modelo.stl --screenshot vista.png --render rt --ray-samples 64
+tisma modelo.stl --screenshot vista.png --ray-check
 tisma --screenshot explorador.png --browse /una/carpeta
 ```
+
+`--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
+los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
+sombras en lugar de la luz, para revisarlas.
 
 - `--screenshot` espera a que esté listo lo pedido: el laminado para `--view preview`, la estimación para
   `--view analysis`. Después escribe la ventana como PNG y termina.
 - `--export` además exporta el G-code verificado, como el botón. Si eso falla, el programa termina con el código 1.
 - En Linux sin pantalla corre bajo `xvfb-run`.
-- CTest corre así la prueba `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la
-  vista previa. Se registra solo si hay `xvfb-run`.
+- CTest corre así dos pruebas, que se registran solo si hay `xvfb-run`:
+  - `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la vista previa;
+  - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU.
 
 ## Cómo está hecha
 
@@ -137,6 +165,12 @@ tisma --screenshot explorador.png --browse /una/carpeta
 - **Dibujo de la vista previa:** cada extrusión es una instancia de 40 bytes (extremos, ancho, alto, avance, tipo y
   capa). El shader de vértices arma un prisma de sección rómbica con normales de elipse. Los datos son contiguos y
   quedan en la GPU; mostrar otra capa no los vuelve a subir.
+- **Un cuadro de la vista 3D, todo fuera de pantalla y del tamaño de la vista:**
+  1. normales y profundidad de la escena;
+  2. cuánta luz principal y cuánta luz ambiente llega a cada píxel: oclusión en pantalla o rayos;
+  3. la escena iluminada, con multimuestreo;
+  4. resolución, FXAA y copia a la ventana.
+- **Cuando nada se mueve,** la ventana espera eventos en lugar de dibujar 60 cuadros por segundo.
 - **Íconos:** se dibujan blancos y la interfaz los tiñe con el color del texto del tema, como pide
   `assets/brand/README.md`.
 - **Sin GTK ni Qt:** el explorador de archivos es propio, dibujado con Dear ImGui, porque esas bibliotecas son LGPL y

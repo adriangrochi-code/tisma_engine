@@ -77,6 +77,9 @@ TEST_CASE("ui: the camera's axes and matrices", "[ui]") {
             CHECK_THAT(t.x, WithinAbs(0.0, 1e-3));
             CHECK_THAT(t.y, WithinAbs(0.0, 1e-3));
             CHECK_THAT(t.z, WithinAbs(-300.0, 1e-2));
+            const Vec3 back = transform_point(rigid_inverse(cam.view()), Vec3{0, 0, -300});
+            CHECK_THAT(back.x, WithinAbs(100.0, 1e-2));
+            CHECK_THAT(back.z, WithinAbs(10.0, 1e-2));
             const Mat4 clip = cam.projection(1.5f) * cam.view();
             const Vec3 c = transform_point(clip, cam.target);
             CHECK_THAT(c.x, WithinAbs(0.0, 1e-4));

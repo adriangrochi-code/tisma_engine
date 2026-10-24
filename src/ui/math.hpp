@@ -41,6 +41,19 @@ inline Mat4 operator*(const Mat4& a, const Mat4& b) {
     return m;
 }
 
+// The inverse of a rotation followed by a translation (a camera's view):
+// the transposed rotation and the translation turned back.
+inline Mat4 rigid_inverse(const Mat4& m) {
+    Mat4 r{};
+    for (int c = 0; c < 3; ++c)
+        for (int k = 0; k < 3; ++k)
+            r[c * 4 + k] = m[k * 4 + c];
+    for (int k = 0; k < 3; ++k)
+        r[12 + k] = -(r[k] * m[12] + r[4 + k] * m[13] + r[8 + k] * m[14]);
+    r[15] = 1.0f;
+    return r;
+}
+
 // The point p transformed by m, divided by w.
 inline Vec3 transform_point(const Mat4& m, Vec3 p) {
     const float x = m[0] * p.x + m[4] * p.y + m[8] * p.z + m[12];

@@ -88,6 +88,24 @@
     X(ZoomIn, "Acercar", "Zoom in")                                                                                   \
     X(ZoomOut, "Alejar", "Zoom out")                                                                                  \
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
+    X(Render, "Imagen", "Rendering")                                                                                  \
+    X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
+      "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \
+    X(RenderFast, "Rápida", "Fast")                                                                                   \
+    X(RenderAmbient, "Oclusión ambiental", "Ambient occlusion")                                                       \
+    X(RenderRay, "Ray tracing", "Ray tracing")                                                                        \
+    X(RenderFastTip, "Luz por píxel, sin oclusión: lo más liviano", "Per-pixel light, no occlusion: the lightest")     \
+    X(RenderAmbientTip, "Oscurece rincones y uniones entre líneas, calculado en pantalla",                            \
+      "Darkens corners and the joints between lines, computed on screen")                                             \
+    X(RenderRayTip, "Sombras suaves y oclusión con rayos contra la escena; la imagen se afina cuadro a cuadro",       \
+      "Soft shadows and occlusion with rays against the scene; the picture refines frame after frame")               \
+    X(AoStrength, "Intensidad de la oclusión", "Occlusion strength")                                                  \
+    X(Antialiasing, "Suavizado de bordes", "Anti-aliasing")                                                           \
+    X(MsaaOff, "Sin multimuestreo", "No multisampling")                                                               \
+    X(Fxaa, "FXAA (bordes finos y brillos)", "FXAA (thin edges and highlights)")                                      \
+    X(RaySamples, "Muestras: %d de %d", "Samples: %d of %d")                                                          \
+    X(RayPreparing, "Preparando la escena para los rayos…", "Preparing the scene for the rays…")                     \
+    X(RayTooBig, "La escena es demasiado grande para el ray tracing en esta GPU", "The scene is too large for ray tracing on this GPU") \
     X(DropHint, "Arrastrá un STL o un G-code acá, o usá Abrir", "Drop an STL or G-code file here, or use Open")      \
     X(KindTravel, "Viajes", "Travel")                                                                                 \
     X(KindOuterWall, "Pared externa", "Outer wall")                                                                   \

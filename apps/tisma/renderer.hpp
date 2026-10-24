@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ui/math.hpp"
+#include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
 
 #include <array>
@@ -12,11 +13,18 @@ namespace tisma::ui {
 
 enum class ColorMode : int { Kind = 0, Speed = 1, Width = 2 };
 
+// How the 3D view is lit: light only; light with screen-space ambient
+// occlusion; light with shadows and ambient occlusion traced as rays against
+// the scene, refined frame after frame.
+enum class RenderMode : int { Fast = 0, Ambient = 1, RayTraced = 2 };
+
 // What one frame of the 3D view shows, and how.
 struct ViewFrame {
     int x = 0, y = 0, width = 1, height = 1; // the view's rectangle in framebuffer pixels, from the bottom left
     Mat4 view = identity(), projection = identity();
-    Vec3 light{0, 0, 1};     // towards the light, world space
+    Vec3 eye{0, 0, 1};
+    Vec3 key{0, 0, 1}, fill{0, 0, 1}; // towards the key and fill lights, world space, unit
+    Vec3 sky{0.80f, 0.82f, 0.95f}, ground{0.30f, 0.28f, 0.27f}; // sRGB colours of the ambient light
     Vec3 background_top{0.17f, 0.17f, 0.19f}, background_bottom{0.10f, 0.10f, 0.12f};
     Vec3 plate{0.20f, 0.20f, 0.23f};
     Vec3 model{0.62f, 0.37f, 0.86f};
@@ -27,10 +35,29 @@ struct ViewFrame {
     std::uint32_t kind_mask = 0xFFFFFFFFu;        // bit k: LineKind k is drawn
     ColorMode color_mode = ColorMode::Kind;
     std::array<Vec3, kLineKinds> kind_colours{};
+
+    RenderMode mode = RenderMode::Ambient;
+    int samples = 4;          // multisampling; 1: none
+    bool fxaa = true;         // the edge smoothing pass after it
+    float ao_radius = 2.0f;   // mm: how far ambient occlusion looks
+    float ao_strength = 1.0f; // 0: none
+    float sun_radius = 0.05f; // radians: the key light's size, for soft ray traced shadows
+    int max_ray_samples = 256;
+    bool debug_visibility = false; // paint the visibility instead of the light (TISMA_DEBUG_VISIBILITY=1)
 };
 
-// Draws the bed, the model and the G-code preview with OpenGL 3.3. Every
-// method needs the OpenGL context current. Own design; see PROVENANCE.md.
+// The ray traced frame's inputs and output, read back for checking the GPU
+// against RayScene (the CPU reference).
+struct RayReadback {
+    int width = 0, height = 0;
+    std::vector<float> depth;          // window depth per pixel, rows from the bottom
+    std::vector<std::uint8_t> normal;  // view-space normal * 0.5 + 0.5, RGBA
+    std::vector<float> visibility;     // RGBA: r direct light, g ambient
+};
+
+// Draws the bed, the model and the G-code preview with OpenGL 3.3 into the
+// view's rectangle. Every method needs the OpenGL context current. Own
+// design on the cited methods; see PROVENANCE.md.
 class Renderer {
 public:
     // Compiles the shaders and makes the buffers; false with a message if the
@@ -43,20 +70,55 @@ public:
     void set_preview(const PreviewBuffers& preview);
     void clear_preview();
 
+    // The scene the rays are traced against (RayScene::node_texels and
+    // primitive_texels); false if this GPU's textures are too small for it.
+    bool set_ray_scene(const std::vector<float>& node_texels, const std::vector<float>& primitive_texels);
+    void clear_ray_scene();
+    bool has_ray_scene() const { return ray_nodes_ != 0; }
+    int ray_samples() const { return ray_samples_; }
+    int max_samples() const { return max_samples_; }
+
     void draw(const ViewFrame& frame);
+
+    // After a ray traced frame: its G-buffer and visibility.
+    RayReadback read_back();
 
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;
         int count = 0;
     };
-    void draw_preview(const ViewFrame& frame, const Mat4& view_projection);
+    struct Programs {
+        unsigned background = 0, line = 0, plate = 0, mesh = 0, preview = 0;
+        unsigned ao = 0, blur = 0, ray = 0, composite = 0;
+    };
+    void resize(int width, int height, int samples);
+    void release_targets();
+    void draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
+    void lit_uniforms(unsigned program, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
+    void draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
+    unsigned ambient_pass(const ViewFrame& f);
+    unsigned ray_pass(const ViewFrame& f);
 
-    unsigned background_program_ = 0, flat_program_ = 0, line_program_ = 0, mesh_program_ = 0, preview_program_ = 0;
-    unsigned empty_vao_ = 0;
+    Programs p_;
+    unsigned empty_vao_ = 0, white_ = 0;
     Buffer plate_, grid_, model_, extrusions_, travels_;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0;
+    int max_samples_ = 1, max_texture_ = 1024;
+
+    // Offscreen targets, the size of the view.
+    int width_ = 0, height_ = 0, samples_ = 0;
+    unsigned g_fbo_ = 0, g_normal_ = 0, g_depth_ = 0;          // normals and depth
+    unsigned ao_fbo_[3] = {}, ao_tex_[3] = {};                  // raw occlusion, blurred once, final
+    unsigned ray_fbo_[2] = {}, ray_tex_[2] = {};                // ray traced visibility, ping-pong
+    unsigned msaa_fbo_ = 0, msaa_colour_ = 0, msaa_depth_ = 0;  // the lit scene, multisampled
+    unsigned colour_fbo_ = 0, colour_ = 0, colour_depth_ = 0;   // the lit scene, resolved
+
+    unsigned ray_nodes_ = 0, ray_prims_ = 0;
+    int ray_samples_ = 0, ray_current_ = 0;
+    std::uint32_t ray_frame_ = 0;
+    std::vector<float> ray_signature_;
 };
 
 } // namespace tisma::ui

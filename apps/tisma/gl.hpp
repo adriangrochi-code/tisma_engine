@@ -119,12 +119,49 @@ using GLintptr = std::ptrdiff_t;
 #define GL_INFO_LOG_LENGTH 0x8B84
 #define GL_CURRENT_PROGRAM 0x8B8D
 #define GL_PRIMITIVE_RESTART 0x8F9D
+#define GL_DEPTH_COMPONENT 0x1902
+#define GL_RED 0x1903
+#define GL_RGBA8 0x8058
+#define GL_DEPTH_COMPONENT24 0x81A6
+#define GL_RG 0x8227
+#define GL_R8 0x8229
+#define GL_RG16F 0x822F
+#define GL_RGBA32F 0x8814
+#define GL_RGBA16F 0x881A
+#define GL_HALF_FLOAT 0x140B
+#define GL_FRAMEBUFFER_BINDING 0x8CA6
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_RENDERBUFFER 0x8D41
+#define GL_MAX_SAMPLES 0x8D57
 #define GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 0x00000002
 #define GL_CONTEXT_PROFILE_MASK 0x9126
 
 // X(return type, name, parameters)
 #define TISMA_GL_FUNCTIONS(X)                                                                                        \
     X(void, glActiveTexture, (GLenum texture))                                                                       \
+    X(void, glBindFramebuffer, (GLenum target, GLuint framebuffer))                                                  \
+    X(void, glBindRenderbuffer, (GLenum target, GLuint renderbuffer))                                                \
+    X(void, glBlitFramebuffer, (GLint sx0, GLint sy0, GLint sx1, GLint sy1, GLint dx0, GLint dy0, GLint dx1,        \
+                                GLint dy1, GLbitfield mask, GLenum filter))                                          \
+    X(GLenum, glCheckFramebufferStatus, (GLenum target))                                                             \
+    X(void, glDeleteFramebuffers, (GLsizei n, const GLuint* framebuffers))                                           \
+    X(void, glDeleteRenderbuffers, (GLsizei n, const GLuint* renderbuffers))                                         \
+    X(void, glFramebufferRenderbuffer, (GLenum target, GLenum attachment, GLenum renderbuffer_target,              \
+                                        GLuint renderbuffer))                                                        \
+    X(void, glFramebufferTexture2D, (GLenum target, GLenum attachment, GLenum texture_target, GLuint texture,       \
+                                     GLint level))                                                                   \
+    X(void, glGenFramebuffers, (GLsizei n, GLuint* framebuffers))                                                    \
+    X(void, glGenRenderbuffers, (GLsizei n, GLuint* renderbuffers))                                                  \
+    X(void, glRenderbufferStorageMultisample, (GLenum target, GLsizei samples, GLenum internal_format,              \
+                                               GLsizei width, GLsizei height))                                       \
+    X(void, glUniform2fv, (GLint location, GLsizei count, const GLfloat* value))                                      \
+    X(void, glUniform2i, (GLint location, GLint v0, GLint v1))                                                       \
+    X(void, glUniform4fv, (GLint location, GLsizei count, const GLfloat* value))                                     \
     X(void, glAttachShader, (GLuint program, GLuint shader))                                                         \
     X(void, glBindBuffer, (GLenum target, GLuint buffer))                                                            \
     X(void, glBindSampler, (GLuint unit, GLuint sampler))                                                            \
@@ -215,6 +252,20 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #undef TISMA_GL_DECLARE
 
 #define glActiveTexture tisma_glActiveTexture
+#define glBindFramebuffer tisma_glBindFramebuffer
+#define glBindRenderbuffer tisma_glBindRenderbuffer
+#define glBlitFramebuffer tisma_glBlitFramebuffer
+#define glCheckFramebufferStatus tisma_glCheckFramebufferStatus
+#define glDeleteFramebuffers tisma_glDeleteFramebuffers
+#define glDeleteRenderbuffers tisma_glDeleteRenderbuffers
+#define glFramebufferRenderbuffer tisma_glFramebufferRenderbuffer
+#define glFramebufferTexture2D tisma_glFramebufferTexture2D
+#define glGenFramebuffers tisma_glGenFramebuffers
+#define glGenRenderbuffers tisma_glGenRenderbuffers
+#define glRenderbufferStorageMultisample tisma_glRenderbufferStorageMultisample
+#define glUniform2fv tisma_glUniform2fv
+#define glUniform2i tisma_glUniform2i
+#define glUniform4fv tisma_glUniform4fv
 #define glAttachShader tisma_glAttachShader
 #define glBindBuffer tisma_glBindBuffer
 #define glBindSampler tisma_glBindSampler
