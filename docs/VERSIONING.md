@@ -27,13 +27,27 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.6.0 | F5 (empezada), A1 y exportación verificada; primera publicada como 0.6.0-alpha.1 |
 | 0.7.0 | P1 (empezada): la interfaz `tisma`, calibraciones guiadas, perfiles y proyectos; publicada como 0.7.0-alpha.1 |
 
+## Las ramas (decisión del dueño, 2026-10-24)
+
+Hay tres ramas, nada más:
+
+| Rama | Qué tiene | Quién la mueve |
+|---|---|---|
+| `dev` | El trabajo de cada bloque | Las sesiones de trabajo, en cada envío |
+| `alpha` | La última release alfa (o beta o candidata) publicada | La sesión, al publicar: fusiona la PR `dev` → `alpha` |
+| `main` | Lo que el dueño cierra: las fases terminadas, las fichas y los recursos de marca | El dueño, con la PR `alpha` → `main` |
+
+- **PRs abiertas, siempre dos:** `dev` → `alpha` y `alpha` → `main`.
+- **Las fichas** (`docs/spec/`) y los recursos de marca (`assets/brand/`) se fusionaron en `main` el 2026-10-24.
+  `dev` trae `main` al empezar cada bloque.
+
 ## Las etiquetas de pre-release
 
 | Etiqueta | Cuándo | Dónde |
 |---|---|---|
-| `-alpha.N` | Una fase en curso: funciona, se puede probar, todavía faltan partes | rama `dev` |
-| `-beta.N` | La fase está completa y se está validando (criterios del plan, pruebas reales) | rama `dev` |
-| `-rc.N` | Candidata: lista para que el dueño la fusione en `main` | rama `dev` |
+| `-alpha.N` | Una fase en curso: funciona, se puede probar, todavía faltan partes | rama `alpha` |
+| `-beta.N` | La fase está completa y se está validando (criterios del plan, pruebas reales) | rama `alpha` |
+| `-rc.N` | Candidata: lista para que el dueño la fusione en `main` | rama `alpha` |
 | ninguna | La fase fusionada en `main` por el dueño | rama `main` |
 
 N empieza en 1 y sube con cada release de la misma versión y etiqueta.
@@ -51,16 +65,18 @@ No hace falta release por cada envío. Antes de publicar:
 3. **Notas:** `CHANGELOG.md` tiene su sección `## [versión] - fecha`, con lo de «Sin publicar» movido ahí, y los
    enlaces del final actualizados.
 4. **Comprobación:** `tools/release_notes.py --check` pasa (CTest lo corre).
-5. **Envío:** el commit que cambia `VERSION` se envía a `dev`.
+5. **Envío:** el commit que cambia `VERSION` se envía a `dev`, y la CI de Windows pasa con él.
+6. **Publicación:** la sesión fusiona la PR `dev` → `alpha` (con un commit de fusión) y abre la siguiente.
 
-El flujo `.github/workflows/release.yml` corre cuando un envío a `dev` o a `main` cambia `VERSION` y la etiqueta
+El flujo `.github/workflows/release.yml` corre cuando un envío a `alpha` o a `main` cambia `VERSION` y la etiqueta
 `v<versión>` todavía no existe. También corre si alguien envía esa etiqueta a mano. El flujo:
 - compila y prueba en Windows y en Linux;
 - empaqueta el programa con la licencia, el README, el registro de cambios y la documentación de uso;
 - publica la release con las notas de su sección del CHANGELOG, marcada como pre-release si el número tiene etiqueta;
 - crea la etiqueta `v<versión>` en el commit compilado, salvo que ya la hayan enviado.
 
-Las sesiones de trabajo solo pueden enviar a `dev`, no etiquetas: por eso es el flujo el que crea la etiqueta. Si la
+Las sesiones de trabajo solo pueden enviar a `dev`, ni etiquetas ni otras ramas: por eso es el flujo el que crea la
+etiqueta, y `alpha` avanza fusionando la PR desde GitHub. Si la
 etiqueta enviada no coincide con `VERSION`, o el CHANGELOG no tiene la sección, el flujo falla antes de compilar.
 
 ## Los formatos tienen su propia versión

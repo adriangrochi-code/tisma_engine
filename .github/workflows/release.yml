@@ -7,13 +7,15 @@ name: Release
 # pre-release.
 #
 # It runs when:
-# - a push to dev or main changes VERSION (or this workflow) and the tag
-#   v<VERSION> does not exist yet: the release creates the tag on that commit;
+# - a push to alpha or main changes VERSION (or this workflow) and the tag
+#   v<VERSION> does not exist yet: the release creates the tag on that commit
+#   (alpha gets each pre-release from dev, main what the owner closes:
+#   docs/VERSIONING.md, "Las ramas");
 # - a tag v<VERSION> is pushed: the release goes on the tagged commit.
 on:
   push:
     branches:
-      - dev
+      - alpha
       - main
     paths:
       - VERSION

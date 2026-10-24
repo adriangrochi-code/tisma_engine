@@ -78,9 +78,11 @@ one stopped.
 3. Take the next unfinished item of `PLAN.md`. Continue the last one if `PROGRESS.md` says it is unfinished.
 4. Implement it with tests, build, run the tests.
 5. Update `PROVENANCE.md`, `PLAN.md` and `PROGRESS.md` (date, what was done, measurements, what is next).
-6. Commit, push `dev`, and make sure a pull request from `dev` to `main` is open. Do not merge it.
-   - The owner merges at the end of each phase.
-   - The main Tisma session may review it, but only the behavior and the tests.
+6. Commit, push `dev`, and make sure the two pull requests are open: `dev` to `alpha` and `alpha` to `main` (owner's
+   decision, 2026-10-24: three branches only, `main`, `dev` and `alpha`; `docs/VERSIONING.md`, «Las ramas»).
+   - Merge `dev` into `alpha` only to publish a release (`docs/VERSIONING.md`), then open the next `dev` to `alpha`.
+   - Never merge `alpha` into `main`: the owner merges at the end of each phase.
+   - The main Tisma session may review them, but only the behavior and the tests.
 7. Stop at a point where the build and the tests pass, even if the item is unfinished. Say so in `PROGRESS.md`.
 
 Every 8 hours, one block is a maintenance block instead (owner's decision, 2026-10-24): optimize, hunt bugs and
