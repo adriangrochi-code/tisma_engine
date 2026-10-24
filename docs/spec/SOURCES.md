@@ -39,6 +39,8 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 |---|---|
 | [Especificación 3MF](https://3mf.io/spec/) (3MF Consortium, ISO/IEC 25422:2025) | Leer proyectos 3MF |
 | STL binario y ASCII (formato público) | Leer mallas |
+| Elegoo, [«Goo Format Spec V1.2»](https://raw.githubusercontent.com/elegooofficial/GOO/main/Goo%20Format%20Spec%20V1.2.pdf) (PDF; el repositorio tiene licencia GPL v3, se lee solo el PDF) | Escribir archivos GOO para impresoras de resina Elegoo |
+| Mango3D, [«Cupping»](https://doc.mango3d.io/?p=2272) | Ventosas en la impresión de resina |
 | Documentación de G-code de [Marlin](https://marlinfw.org/docs/gcode/G092.html), [Klipper](https://www.klipper3d.org/G-Codes.html) y [RepRap](https://reprap.org/wiki/G-code) | Qué hace cada comando; se lee la documentación, no el firmware |
 | Base de conocimiento de Prusa: [macros](https://help.prusa3d.com/article/macros_1775) y [lista de variables](https://help.prusa3d.com/article/list-of-placeholders_205643) | Sintaxis de las variables en el G-code de inicio y fin de los perfiles de Tisma (`GCODE_OUTPUT.md`) |
 
