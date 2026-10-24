@@ -32,8 +32,11 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`resin.md`](resin.md): imágenes de capa, exposición y movimientos, formato GOO de Elegoo, detector de ventosas, torre de exposición y bloque de medidas | después de la primera versión | Para revisar |
 | [`orientation.md`](orientation.md): orientación automática, menos soporte en FDM y menor fuerza de despegue en resina | después de la primera versión | Para revisar |
 | [`fragment.md`](fragment.md): dividir un objeto que no entra, con cortes en las secciones chicas y encastres (pernos o espigas) | después de la primera versión | Para revisar |
+| [`interface.md`](interface.md): la ventana: barra superior, grupos de herramientas, panel de la placa, botón principal, vista previa, páginas de ajustes, Más, asistente, panel de Ingeniería | P1 | Para revisar |
 
 **Pendientes:**
-- Resina: soportes, pad y vaciado (desde la documentación de usuario de Prusa); orientación automática.
+- Resina: soportes, pad y vaciado (desde la documentación de usuario de Prusa).
 - Análisis de estabilidad propio para la revisión antes de imprimir.
-- Interfaz.
+- Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
+- Perfiles de impresoras y filamentos desde los datos de cada fabricante (P3).
+- Formatos: proyectos 3MF y lo que guarda Tisma en ellos (P4).
