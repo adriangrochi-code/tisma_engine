@@ -1,4 +1,4 @@
-// STL reader written from the public description of the format: the 3D Systems
+// STL reader and writer written from the public description of the format: the 3D Systems
 // "StereoLithography Interface Specification" (1989) and its common binary
 // variant (80-byte header, little-endian uint32 count, 50 bytes per facet).
 // See PROVENANCE.md.
@@ -232,6 +232,42 @@ StlFile read_stl(const std::filesystem::path& path) {
     if (!in.read(buffer.data(), size))
         throw StlError("cannot read '" + path.string() + "'");
     return parse_stl(buffer);
+}
+
+std::string stl_binary(const TriangleMesh& mesh, std::string_view header) {
+    std::string out(kPreambleSize, '\0');
+    if (!header.empty())
+        std::memcpy(out.data(), header.data(), std::min(header.size(), kHeaderSize));
+    const auto count = static_cast<std::uint32_t>(mesh.triangle_count());
+    for (std::size_t i = 0; i < 4; ++i)
+        out[kHeaderSize + i] = static_cast<char>((count >> (8 * i)) & 0xFF);
+    out.reserve(kPreambleSize + kFacetSize * mesh.triangle_count());
+    const auto put = [&out](float v) {
+        const auto bits = std::bit_cast<std::uint32_t>(v);
+        for (int i = 0; i < 4; ++i)
+            out += static_cast<char>((bits >> (8 * i)) & 0xFF);
+    };
+    for (std::size_t t = 0; t < mesh.triangle_count(); ++t) {
+        const Vec3f& a = mesh.corner(t, 0);
+        const Vec3f& b = mesh.corner(t, 1);
+        const Vec3f& c = mesh.corner(t, 2);
+        const double ux = double(b.x) - a.x, uy = double(b.y) - a.y, uz = double(b.z) - a.z;
+        const double vx = double(c.x) - a.x, vy = double(c.y) - a.y, vz = double(c.z) - a.z;
+        double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const double length = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (length > 0.0)
+            nx /= length, ny /= length, nz /= length;
+        for (const double v : {nx, ny, nz})
+            put(static_cast<float>(v));
+        for (const Vec3f* p : {&a, &b, &c}) {
+            put(p->x);
+            put(p->y);
+            put(p->z);
+        }
+        out += '\0';
+        out += '\0';
+    }
+    return out;
 }
 
 } // namespace tisma

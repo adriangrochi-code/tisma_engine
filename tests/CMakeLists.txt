@@ -40,6 +40,8 @@ add_executable(tisma_tests
   test_gcode_check.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
+  test_profiles.cpp
+  test_project.cpp
 )
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
@@ -79,7 +81,26 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
-    set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu PROPERTIES
+    # A project saved with chosen profiles opens again to the same G-code.
+    add_test(NAME ui_project_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+              --profile filament=PETG "--profile" "print=0.28 mm"
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_project.tisma
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.png)
+    add_test(NAME ui_project_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project.tisma --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.png)
+    add_test(NAME ui_project_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode)
+    set_tests_properties(ui_project_save PROPERTIES FIXTURES_SETUP ui_project)
+    set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
+    set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")
+    set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_project_save ui_project_reopen PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()

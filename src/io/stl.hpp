@@ -32,4 +32,10 @@ StlFile parse_stl(std::string_view data);
 // Reads and parses an STL file. Throws StlError if it cannot be read or parsed.
 StlFile read_stl(const std::filesystem::path& path);
 
+// The mesh as a binary STL: the header (the text, cut to 80 bytes and padded
+// with zeros; never read back as ASCII, since the size matches the count), the
+// triangle count, and per triangle its unit normal from the winding (zero for
+// a degenerate one), its three corners and a zero attribute, little-endian.
+std::string stl_binary(const TriangleMesh& mesh, std::string_view header = {});
+
 } // namespace tisma

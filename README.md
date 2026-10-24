@@ -46,7 +46,8 @@ binarios de Windows y Linux (`docs/VERSIONING.md`).
 ## Usar
 
 La interfaz, `tisma`, abre un modelo, cambia los ajustes, lamina, muestra el G-code capa por capa y lo exporta
-verificado (`docs/UI.md`):
+verificado (`docs/UI.md`). Guarda perfiles de impresora, filamento e impresión (`docs/PROFILES.md`) y proyectos
+`.tisma` (`docs/PROJECT.md`), y trae calibraciones guiadas (`docs/CALIBRATION.md`):
 
 ```sh
 build/apps/tisma/tisma modelo.stl

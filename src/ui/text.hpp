@@ -10,7 +10,7 @@
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(Open, "Abrir", "Open")                                                                                          \
-    X(OpenTip, "Abrir un modelo STL, un G-code o ajustes (Ctrl+O)", "Open an STL model, a G-code file or settings (Ctrl+O)") \
+    X(OpenTip, "Abrir un modelo STL, un proyecto, un G-code o ajustes (Ctrl+O)", "Open an STL model, a project, a G-code file or settings (Ctrl+O)") \
     X(Slice, "Laminar", "Slice")                                                                                      \
     X(SliceTip, "Laminar el modelo con estos ajustes (Ctrl+R)", "Slice the model with these settings (Ctrl+R)")       \
     X(Export, "Exportar G-code", "Export G-code")                                                                     \
@@ -200,6 +200,29 @@
     X(CannotOpen, "No se pudo abrir el archivo", "The file could not be opened")                                      \
     X(SettingsLoaded, "Ajustes cargados: %s", "Settings loaded: %s")                                                  \
     X(SettingsSaved, "Ajustes guardados: %s", "Settings saved: %s")                                                   \
+    X(NoProfile, "Sin perfil", "No profile")                                                                          \
+    X(BuiltinProfiles, "De fábrica", "Built-in")                                                                      \
+    X(MyProfiles, "Mis perfiles", "My profiles")                                                                      \
+    X(ProfileModifiedTip, "Cambiaste ajustes de este perfil: guardalos con el botón de guardar, o como un perfil nuevo con ⋮.", "You changed settings of this profile: save them with the save button, or as a new profile with ⋮.") \
+    X(SaveProfileTip, "Guardar los cambios en el perfil", "Save the changes to the profile")                          \
+    X(SaveProfileAs, "Guardar como perfil nuevo…", "Save as a new profile…")                                          \
+    X(DeleteProfile, "Eliminar «%s»", "Delete \"%s\"")                                                                \
+    X(SaveProfilePrinter, "Guardar el perfil de la impresora", "Save the printer profile")                            \
+    X(SaveProfileFilament, "Guardar el perfil del filamento", "Save the filament profile")                            \
+    X(SaveProfilePrint, "Guardar el perfil de impresión", "Save the print profile")                                   \
+    X(ProfileIsBuiltin, "Ese nombre es de un perfil de fábrica.", "That name belongs to a built-in profile.")         \
+    X(ProfileReplaces, "Reemplaza el perfil que ya existe.", "Replaces the profile that already exists.")             \
+    X(ProfileSaved, "Perfil guardado: %s", "Profile saved: %s")                                                       \
+    X(ProfileDeleted, "Perfil eliminado: %s", "Profile deleted: %s")                                                  \
+    X(ProfilesSkipped, "%d archivos de perfil no se pudieron leer", "%d profile files could not be read")             \
+    X(CannotSave, "No se pudo guardar", "Could not save")                                                             \
+    X(SaveProject, "Guardar el proyecto", "Save the project")                                                         \
+    X(SaveProjectAs, "Guardar el proyecto como…", "Save the project as…")                                             \
+    X(ProjectSaved, "Proyecto guardado: %s", "Project saved: %s")                                                     \
+    X(ProjectOpened, "Proyecto abierto: %s", "Project opened: %s")                                                    \
+    X(ProjectFirstModel, "El proyecto tiene %d piezas; por ahora se abre la primera.", "The project has %d models; for now the first one opens.") \
+    X(FlowRow, "Flujo", "Flow")                                                                                       \
+    X(FlowTip, "El porcentaje del volumen que se extruye en todas las líneas; lo ajusta la calibración de flujo", "The percentage of the volume every line extrudes; the flow calibration sets it") \
     X(GcodeOpened, "G-code abierto: %s", "G-code opened: %s")                                                         \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \
     X(Details, "Detalles", "Details")                                                                                 \

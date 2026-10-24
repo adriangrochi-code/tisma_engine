@@ -1,0 +1,228 @@
+// Project files (docs/PROJECT.md), on nlohmann/json (MIT). Own design; see
+// PROVENANCE.md.
+
+#include "project/project.hpp"
+
+#include "config/profiles.hpp"
+#include "io/stl.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cmath>
+#include <cstdint>
+#include <fstream>
+#include <sstream>
+
+namespace tisma {
+namespace {
+
+using nlohmann::ordered_json;
+
+constexpr std::string_view kMagic = "TISMAPRJ";
+constexpr std::uint32_t kVersion = 1;
+
+// A path as UTF-8 text for messages (string() can throw on Windows for
+// names the code page cannot hold).
+std::string text_of(const std::filesystem::path& path) {
+    const std::u8string text = path.u8string();
+    return std::string(text.begin(), text.end());
+}
+
+[[noreturn]] void fail(const std::string& message) { throw ProjectError("project: " + message); }
+
+void put_le(std::string& out, std::uint64_t value, int bytes) {
+    for (int i = 0; i < bytes; ++i)
+        out += static_cast<char>((value >> (8 * i)) & 0xFF);
+}
+
+std::uint64_t get_le(std::string_view data, std::size_t at, int bytes) {
+    std::uint64_t value = 0;
+    for (int i = 0; i < bytes; ++i)
+        value |= std::uint64_t(static_cast<unsigned char>(data[at + std::size_t(i)])) << (8 * i);
+    return value;
+}
+
+void put_chunk(std::string& out, std::string_view tag, std::string_view bytes) {
+    out += tag;
+    put_le(out, bytes.size(), 8);
+    out += bytes;
+}
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        fail("cannot open '" + text_of(path) + "'");
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+double number(const ordered_json& j, const std::string& what) {
+    if (!j.is_number() || !std::isfinite(j.get<double>()))
+        fail(what + ": must be a number");
+    return j.get<double>();
+}
+
+} // namespace
+
+std::string write_project(const Project& project) {
+    ordered_json profiles = ordered_json::object();
+    for (const ProfileKind kind : kProfileKinds)
+        if (const std::string& name = project.profiles[std::size_t(kind)]; !name.empty())
+            profiles[std::string(profile_kind_name(kind))] = name;
+    ordered_json models = ordered_json::array();
+    for (std::size_t i = 0; i < project.models.size(); ++i) {
+        const ProjectModel& m = project.models[i];
+        models.push_back({{"name", m.name}, {"mesh", i}, {"offset", m.offset}});
+    }
+    ordered_json root = {
+        {"format", "tisma-project"},
+        {"version", kVersion},
+        {"settings", ordered_json::parse(settings_json(project.settings))},
+        {"profiles", profiles},
+        {"models", models},
+    };
+    if (project.calibration) {
+        ordered_json segments = ordered_json::array();
+        for (const CalibrationSegment& s : project.calibration->segments)
+            segments.push_back({s.z0, s.z1, s.value});
+        root["calibration"] = {
+            {"kind", project.calibration->kind}, {"unit", project.calibration->unit}, {"segments", segments}};
+    }
+
+    std::string out(kMagic);
+    put_le(out, kVersion, 4);
+    put_chunk(out, "JSON", root.dump(2));
+    for (const ProjectModel& m : project.models)
+        put_chunk(out, "MESH", stl_binary(m.mesh, m.name));
+    return out;
+}
+
+Project read_project(std::string_view data) {
+    if (data.size() < kMagic.size() + 4 || data.substr(0, kMagic.size()) != kMagic)
+        fail("not a project file");
+    const auto version = get_le(data, kMagic.size(), 4);
+    if (version > kVersion)
+        fail("version " + std::to_string(version) + " is newer than this program reads");
+
+    std::string_view json_text;
+    bool has_json = false;
+    std::vector<std::string_view> meshes;
+    for (std::size_t at = kMagic.size() + 4; at < data.size();) {
+        if (data.size() - at < 12)
+            fail("cut short in a chunk header");
+        const std::string_view tag = data.substr(at, 4);
+        const std::uint64_t size = get_le(data, at + 4, 8);
+        at += 12;
+        if (size > data.size() - at)
+            fail("the " + std::string(tag) + " chunk is cut short");
+        const std::string_view bytes = data.substr(at, std::size_t(size));
+        at += std::size_t(size);
+        if (!has_json && tag != "JSON")
+            fail("the first chunk must be JSON");
+        if (tag == "JSON") {
+            if (has_json)
+                fail("more than one JSON chunk");
+            json_text = bytes;
+            has_json = true;
+        } else if (tag == "MESH") {
+            meshes.push_back(bytes);
+        }
+    }
+    if (!has_json)
+        fail("no JSON chunk");
+
+    ordered_json root;
+    try {
+        root = ordered_json::parse(json_text.begin(), json_text.end());
+    } catch (const ordered_json::parse_error& e) {
+        fail(std::string("the JSON chunk is not valid JSON: ") + e.what());
+    }
+    if (!root.is_object() || root.value("format", std::string()) != "tisma-project")
+        fail("\"format\" must be \"tisma-project\"");
+
+    Project p;
+    try {
+        p.settings = parse_settings(root.contains("settings") ? root.at("settings").dump() : "{}");
+    } catch (const SettingsError& e) {
+        fail(e.what());
+    }
+    if (root.contains("profiles")) {
+        const ordered_json& profiles = root.at("profiles");
+        if (!profiles.is_object())
+            fail("profiles: must be an object");
+        for (const auto& [kind_name, name] : profiles.items()) {
+            const auto kind = profile_kind_from_name(kind_name);
+            if (!kind || !name.is_string())
+                fail("profiles." + kind_name + ": must be a printer, filament or print profile's name");
+            p.profiles[std::size_t(*kind)] = name.get<std::string>();
+        }
+    }
+    if (root.contains("models")) {
+        const ordered_json& models = root.at("models");
+        if (!models.is_array())
+            fail("models: must be a list");
+        for (std::size_t i = 0; i < models.size(); ++i) {
+            const ordered_json& m = models[i];
+            const std::string what = "models[" + std::to_string(i) + "]";
+            if (!m.is_object() || !m.contains("mesh") || !m.at("mesh").is_number_unsigned())
+                fail(what + ".mesh: must be the number of a MESH chunk");
+            const auto index = m.at("mesh").get<std::size_t>();
+            if (index >= meshes.size())
+                fail(what + ".mesh: there is no MESH chunk " + std::to_string(index));
+            ProjectModel model;
+            model.name = m.value("name", std::string());
+            try {
+                model.mesh = parse_stl(meshes[index]).mesh;
+            } catch (const StlError& e) {
+                fail(what + ": " + e.what());
+            }
+            if (m.contains("offset")) {
+                const ordered_json& o = m.at("offset");
+                if (!o.is_array() || o.size() != 3)
+                    fail(what + ".offset: must be [x, y, z]");
+                for (std::size_t k = 0; k < 3; ++k)
+                    model.offset[k] = number(o[k], what + ".offset");
+            }
+            p.models.push_back(std::move(model));
+        }
+    }
+    if (root.contains("calibration")) {
+        const ordered_json& c = root.at("calibration");
+        if (!c.is_object() || !c.contains("segments") || !c.at("segments").is_array())
+            fail("calibration: must have a list of segments");
+        ProjectCalibration cal;
+        cal.kind = c.value("kind", std::string());
+        cal.unit = c.value("unit", std::string());
+        for (const ordered_json& s : c.at("segments")) {
+            if (!s.is_array() || s.size() != 3)
+                fail("calibration.segments: each must be [z0, z1, value]");
+            cal.segments.push_back({number(s[0], "calibration.segments"), number(s[1], "calibration.segments"),
+                                    number(s[2], "calibration.segments")});
+        }
+        p.calibration = std::move(cal);
+    }
+    return p;
+}
+
+void save_project(const std::filesystem::path& path, const Project& project) {
+    const std::string bytes = write_project(project);
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    {
+        std::ofstream out(temporary, std::ios::binary);
+        out.write(bytes.data(), std::streamsize(bytes.size()));
+        if (!out)
+            fail("cannot write '" + text_of(temporary) + "'");
+    }
+    std::error_code ec;
+    std::filesystem::rename(temporary, path, ec);
+    if (ec) {
+        std::filesystem::remove(temporary, ec);
+        fail("cannot write '" + text_of(path) + "'");
+    }
+}
+
+Project load_project(const std::filesystem::path& path) { return read_project(read_file(path)); }
+
+} // namespace tisma

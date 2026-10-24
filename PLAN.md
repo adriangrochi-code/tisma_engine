@@ -433,7 +433,8 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7
-- [ ] Opciones de guardar: perfiles con nombre (impresora, filamento, impresión) y proyectos (pedido del dueño)
+- [x] Opciones de guardar (pedido del dueño): perfiles con nombre de impresora, filamento e impresión, con perfiles de
+  fábrica genéricos (`docs/PROFILES.md`), y proyectos `.tisma` (`docs/PROJECT.md`)
 - [ ] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
   borde apoyado. En sala limpia: desde la descripción pública de la idea, con diseño propio, sin leer código GPL.
   Se prueba con el estante plano de la torre de temperatura

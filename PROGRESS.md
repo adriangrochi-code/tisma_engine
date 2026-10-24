@@ -2603,3 +2603,46 @@ diferencias claras entre temperaturas.
 **Sigue:**
 - opciones de guardar (perfiles con nombre y proyectos);
 - las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).
+
+## 2026-10-24 — opciones de guardar: perfiles con nombre y proyectos
+
+**Pedido del dueño:** «opciones de guardar».
+
+**Hecho:**
+- **Perfiles con nombre** (`docs/PROFILES.md`, `src/config/profiles.*`):
+  - cada ajuste pertenece a la impresora, al filamento o a la impresión; los cambios por altura, a ninguno;
+  - las variables del G-code se reparten por nombre (las de temperatura, al filamento);
+  - la compensación de dimensiones va con el filamento, por la contracción de cada material;
+  - elegir un perfil cambia solo sus ajustes (`with_profile`);
+  - archivo propio (`tisma-profile`, versión 1), uno por perfil en `profiles/<tipo>/` al lado de `interface.json`.
+- **Perfiles de fábrica** (`src/ui/presets.*`): Marlin 256 × 256 mm; PLA, PETG, ABS, TPU; capas de 0,12, 0,20 y 0,28 mm.
+  El primero de cada tipo es lo que trae la interfaz.
+- **En el panel:** arriba de cada sección, la lista de perfiles con un asterisco si los ajustes cambiaron, guardar, y
+  ⋮ con guardar como y eliminar. El flujo pasó a editarse en Filamento y la retracción a Impresora.
+- **Proyectos `.tisma`** (`docs/PROJECT.md`, `src/project/`): firma, versión y partes con etiqueta; el JSON con los
+  ajustes, los perfiles, las piezas y la calibración, y cada malla como STL binario (`stl_binary`, nuevo). Ctrl+S y
+  Ctrl+Mayús+S; **Abrir** también abre proyectos. Una torre de calibración vuelve a su pestaña, laminada.
+- **Línea de comandos de la interfaz:** `--profile tipo=nombre` y `--save-project`.
+
+**Probado:**
+- `tests/test_profiles.cpp` (4 casos): cada ajuste tiene un solo tipo; elegir un perfil cambia solo lo suyo y los tres
+  juntos dan todo de vuelta; el archivo vuelve igual y los errores nombran la clave; guardar, reemplazar, listar,
+  eliminar, nombres que chocan y archivos rotos.
+- `tests/test_project.cpp` (4 casos): el STL binario sigue el formato y vuelve exacto; un proyecto con dos piezas,
+  cambios por altura, perfiles y calibración vuelve igual, también por archivo; una torre vuelve con su malla y sus
+  segmentos; los archivos dañados o más nuevos se rechazan con su motivo.
+- `tests/test_ui.cpp`: cada perfil de fábrica vuelve igual de su archivo y lamina el cubo a G-code verificado.
+- CTest con la interfaz: el cubo con PETG y 0.28 mm se exporta y se guarda como proyecto; el proyecto se abre y se
+  exporta de nuevo; los dos G-code son idénticos byte a byte (`ui_project_same_gcode`).
+- Capturas: el panel con las filas de perfil; la torre de temperatura guardada y abierta de nuevo, en su paso 3.
+
+**Medido:** el proyecto del cubo ocupa 3,7 kB; el de la torre de temperatura (3 444 triángulos), 177 kB, casi todo la
+malla (50 bytes por triángulo).
+
+**No probado:** guardar y cargar perfiles a mano en la ventana (las pruebas usan la línea de comandos y las funciones
+del motor); en Windows, los nombres de perfil con caracteres que no son ASCII (la CI de Windows corre las pruebas del
+motor, que los usan).
+
+**Sigue:**
+- avisar antes de cerrar o abrir otro archivo si el proyecto tiene cambios sin guardar;
+- las calibraciones estándar siguientes (velocidad de retracción y avance de presión primero).

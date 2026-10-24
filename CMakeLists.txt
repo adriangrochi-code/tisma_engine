@@ -158,6 +158,7 @@ add_library(tisma_core
   src/slice/layers.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
+  src/config/profiles.cpp
   src/slice/pipeline.cpp
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
@@ -198,6 +199,7 @@ add_library(tisma_core
   src/io/ply.cpp
   src/io/stl.cpp
   src/calibration/calibration.cpp
+  src/project/project.cpp
   src/cli/cli.cpp
 )
 if(TISMA_GPU)
@@ -228,6 +230,7 @@ if(TISMA_BUILD_UI)
     src/ui/text.cpp
     src/ui/files.cpp
     src/ui/slicing.cpp
+    src/ui/presets.cpp
     src/ui/raytrace.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)

@@ -12,6 +12,8 @@ Reglas:
 - Los nombres de los grupos y las claves son estables. Si alguno cambia, se anuncia y se documenta acá.
 - Los grupos todavía no implementados se aceptan, pero el motor avisa que no los usa.
 - Las longitudes van en milímetros.
+- La interfaz reparte estos grupos en perfiles de impresora, filamento e impresión (`docs/PROFILES.md`); un archivo de
+  perfil usa este mismo formato, solo con los ajustes de su tipo.
 
 ## Grupos implementados
 

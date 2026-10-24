@@ -4,6 +4,7 @@
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/png.hpp"
+#include "ui/presets.hpp"
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 #include "ui/text.hpp"
@@ -380,4 +381,37 @@ TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     REQUIRE(got.has_value());
     CHECK(*got == 42);
     CHECK_FALSE(job.running());
+}
+
+TEST_CASE("ui: the built-in profiles start from the interface's settings and read back", "[ui][profiles]") {
+    const Settings defaults = default_settings();
+    for (const ProfileKind kind : kProfileKinds) {
+        const std::vector<Profile> profiles = builtin_profiles(kind);
+        REQUIRE_FALSE(profiles.empty());
+        INFO(std::string(profile_kind_name(kind)));
+        // The first is what the interface starts with, so it shows unchanged.
+        CHECK(same_profile(kind, profiles.front().settings, defaults));
+        for (std::size_t i = 0; i < profiles.size(); ++i) {
+            const Profile& p = profiles[i];
+            INFO(p.name);
+            CHECK(p.kind == kind);
+            for (std::size_t j = 0; j < i; ++j)
+                CHECK(profiles[j].name != p.name);
+            const Profile back = parse_profile(profile_file_json(p));
+            CHECK(same_profile(kind, back.settings, p.settings));
+            if (i > 0)
+                CHECK_FALSE(same_profile(kind, p.settings, defaults));
+            // Each one slices, with the others' first profiles, to checked G-code.
+            Settings mixed = with_profile(defaults, kind, p.settings);
+            mixed.gpu = GpuMode::Off;
+            const TriangleMesh cube = read_cube();
+            Slicer slicer;
+            const SliceResult r = slicer.run(translated(cube, centre_on_bed(cube.bounding_box(), mixed.bed)), mixed);
+            REQUIRE(r.ok);
+            CHECK(r.check.ok());
+        }
+    }
+    const Profile petg = builtin_profiles(ProfileKind::Filament)[1];
+    CHECK(petg.name == "PETG");
+    CHECK(petg.settings.variables.at("temperature") == std::vector<std::string>{"240"});
 }

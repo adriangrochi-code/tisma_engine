@@ -101,7 +101,8 @@ radianes. Las fuerzas del análisis van en N y las tensiones en MPa.
 ### `io/`, `mesh/`: entrada
 
 `read_stl` acepta STL binario y ASCII. Un binario cuya cabecera empieza con `solid` sigue siendo binario. Rechaza
-archivos truncados y números no finitos. `weld_exact` une los vértices iguales bit a bit con una tabla hash abierta.
+archivos truncados y números no finitos. `stl_binary` escribe una malla como STL binario (para los proyectos).
+`weld_exact` une los vértices iguales bit a bit con una tabla hash abierta.
 
 ### `slice/`: capas y contornos
 
@@ -191,13 +192,24 @@ La biblioteca `tisma_ui`, que usa el programa `tisma` (`apps/tisma/`, ver `docs/
 - **`files.*`:** listado de carpetas para el explorador propio.
 - **`slicing.*`:** el laminado completo en segundo plano (comprobaciones, G-code en memoria, verificación, vista
   previa) y la estimación de vóxeles del análisis.
+- **`presets.*`:** los perfiles de fábrica (`docs/PROFILES.md`).
 
 El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador propio de OpenGL 3.3 y el dibujo 3D.
+
+### `calibration/`, `project/`
+
+- **`calibration/calibration.*`:** las piezas de prueba de las calibraciones, generadas (bloque de dimensiones,
+  torres), sus cambios por altura, los rangos automáticos, usar el valor elegido y la compensación desde medidas
+  (`docs/CALIBRATION.md`).
+- **`project/project.*`:** el archivo de proyecto `.tisma`: un JSON con los ajustes, los perfiles, las piezas y la
+  calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
 
 ### `config/`, `report/`, `cli/`
 
 - **`settings.*`:** lee los ajustes con nlohmann/json. Una clave desconocida es un error que la nombra.
   `settings_json` los escribe en el mismo formato.
+- **`profiles.*`:** los perfiles con nombre: a qué perfil (impresora, filamento, impresión) pertenece cada ajuste,
+  elegir uno, su archivo y la carpeta donde se guardan (`docs/PROFILES.md`).
 - **`report/warnings.*`:** los avisos del laminado en JSON.
 - **`cli/`:** los comandos `slice`, `analyze` e `info`, con sus códigos de salida (`ExitCode` en `cli.hpp`). Cada
   archivo de salida se escribe como `.part` y se renombra al terminar.

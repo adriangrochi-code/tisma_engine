@@ -26,9 +26,9 @@ void bed_box(const BedPolygon& bed, double& x0, double& y0, double& x1, double& 
 
 // Where the line x = c (axis 0) or y = c (axis 1) is inside the polygon: the
 // crossings with its edges along the other axis, sorted, in pairs.
-std::vector<double> crossings(const BedPolygon& bed, int axis, double c) {
+std::vector<double> crossings(const BedPolygon& bed, int axis_index, double c) {
     std::vector<double> t;
-    const int other = 1 - axis;
+    const auto axis = static_cast<std::size_t>(axis_index), other = 1 - axis;
     for (std::size_t i = 0; i < bed.size(); ++i) {
         const auto& a = bed[i];
         const auto& b = bed[(i + 1) % bed.size()];

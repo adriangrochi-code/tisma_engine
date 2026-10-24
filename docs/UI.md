@@ -24,6 +24,7 @@ Se compila junto con el motor (opción `TISMA_BUILD_UI`, encendida por defecto).
 ```sh
 tisma                          # la interfaz vacía
 tisma modelo.stl               # con un modelo
+tisma proyecto.tisma           # un proyecto guardado
 tisma pieza.gcode              # para mirar un G-code
 tisma ajustes.json modelo.stl  # con esos ajustes
 ```
@@ -32,8 +33,8 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 
 | Lugar | Qué tiene |
 |---|---|
-| Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (idioma, tema claro u oscuro, acerca de, salir). |
-| Panel izquierdo | Los ajustes, en tres secciones con sus íconos: **Impresión** (capas, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, retracción, ventilador) e **Impresora** (cama, altura, boquilla, dialecto, G-code de inicio y fin). Abajo: cargar, guardar y restablecer. |
+| Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (guardar el proyecto, idioma, tema claro u oscuro, acerca de, salir). |
+| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
 
@@ -46,6 +47,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Acercar o alejar | La rueda |
 | Encuadrar | Doble clic, o el botón de encuadrar |
 | Abrir | Ctrl+O, el botón Abrir o soltar el archivo sobre la ventana |
+| Guardar el proyecto | Ctrl+S (Ctrl+Mayús+S: guardar como) |
 | Laminar | Ctrl+R |
 | Exportar | Ctrl+E |
 | Capas de la vista previa | Flechas arriba y abajo, Re Pág y Av Pág, Inicio y Fin, o la rueda sobre la barra de capas |
@@ -75,6 +77,21 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
 
 **Abrir** un `.gcode` lo muestra igual, también si no lo escribió el motor: el lector entiende G-code sin los
 comentarios del motor. Ese G-code no se puede volver a laminar ni exportar.
+
+### Perfiles y proyectos
+
+**Perfiles** (`docs/PROFILES.md`): los ajustes se reparten en tres perfiles con nombre, la impresora, el filamento y la
+impresión, que se eligen por separado arriba de cada sección del panel.
+- La lista tiene los perfiles **de fábrica** (una impresora Marlin genérica; PLA, PETG, ABS y TPU; capas de 0,12, 0,20
+  y 0,28 mm) y **mis perfiles**.
+- Elegir uno cambia solo sus ajustes. Si después se cambia alguno, el nombre lleva un **asterisco**.
+- **Guardar** (el ícono de guardar) escribe los cambios en el perfil elegido; si es de fábrica, pide un nombre.
+- **⋮** tiene **Guardar como perfil nuevo…** y **Eliminar**.
+- La compensación de la calibración de dimensiones y el flujo van con el filamento; la retracción, con la impresora.
+
+**Proyectos** (`docs/PROJECT.md`): **Más → Guardar el proyecto** (Ctrl+S) guarda en un archivo `.tisma` los ajustes,
+los perfiles elegidos, la pieza y la calibración en curso. **Abrir** lo trae de vuelta; una torre de calibración vuelve
+a su pestaña, laminada, lista para elegir el segmento.
 
 ### Exportar
 
@@ -146,8 +163,9 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
 - **Ajustes de la interfaz:** parten de una impresora genérica de 256 × 256 × 256 mm con Marlin. Su G-code de
   inicio calienta la cama y la boquilla con las variables `[bed_temperature]` y `[temperature]`, que se editan en
   Filamento.
-- **Lo que se recuerda entre usos:** el idioma, el tema, la última carpeta y los ajustes. Se guardan en
-  `%APPDATA%\Tisma\interface.json` (Windows) o `~/.config/tisma/interface.json` (Linux).
+- **Lo que se recuerda entre usos:** el idioma, el tema, la última carpeta, los ajustes y los perfiles elegidos. Se
+  guardan en `%APPDATA%\Tisma\interface.json` (Windows) o `~/.config/tisma/interface.json` (Linux); los perfiles del
+  usuario, en la carpeta `profiles` de al lado.
 - **Idiomas:** español (por defecto) e inglés. Se elige en **Más** o con `--lang en`.
 
 ## Capturas y pruebas automáticas
@@ -160,6 +178,7 @@ tisma modelo.stl --screenshot vista.png --view preview --export pieza.gcode
 tisma modelo.stl --screenshot vista.png --render rt --ray-samples 64
 tisma modelo.stl --screenshot vista.png --ray-check
 tisma --screenshot explorador.png --browse /una/carpeta
+tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
 
 `--calibration dimensions|temperature|retraction|flow|speed` crea una prueba de calibración como su botón **Crear**, y
@@ -170,16 +189,20 @@ sombras en lugar de la luz, para revisarlas.
 - `--screenshot` espera a que esté listo lo pedido: el laminado para `--view preview`, la estimación para
   `--view analysis`. Después escribe la ventana como PNG y termina.
 - `--export` además exporta el G-code verificado, como el botón. Si eso falla, el programa termina con el código 1.
+- `--profile printer|filament|print=NOMBRE` elige un perfil al empezar; `--save-project` guarda el proyecto antes de
+  la captura. Las capturas no leen los perfiles del usuario, así salen iguales en cualquier máquina.
 - En Linux sin pantalla corre bajo `xvfb-run`.
-- CTest corre así dos pruebas, que se registran solo si hay `xvfb-run`:
+- CTest corre así estas pruebas, que se registran solo si hay `xvfb-run`:
   - `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la vista previa;
-  - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU.
+  - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU;
+  - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
+    exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
 
 ## Cómo está hecha
 
 | Parte | Dónde | Qué hace |
 |---|---|---|
-| Lógica sin OpenGL | `src/ui/` (biblioteca `tisma_ui`) | Cámara orbital, datos de dibujo (cama, malla, cordones de la vista previa), íconos SVG a imagen, PNG, textos en dos idiomas, listado de carpetas, el trabajo de laminado en segundo plano. Se prueba con el motor (`tests/test_ui.cpp`). |
+| Lógica sin OpenGL | `src/ui/` (biblioteca `tisma_ui`) | Cámara orbital, datos de dibujo (cama, malla, cordones de la vista previa), íconos SVG a imagen, PNG, textos en dos idiomas, listado de carpetas, el trabajo de laminado en segundo plano, los perfiles de fábrica. Se prueba con el motor (`tests/test_ui.cpp`). Los perfiles y los proyectos son del motor (`src/config/profiles.*`, `src/project/`). |
 | Programa | `apps/tisma/` | Ventana (GLFW), paneles (Dear ImGui), cargador propio de OpenGL 3.3 (`gl.hpp`), dibujo 3D (`renderer.*`), explorador de archivos propio, recursos incrustados. |
 | Recursos | `assets/brand/`, `cmake/embed.cmake` | Los íconos de Tisma y la fuente Roboto Medium van dentro del programa, que corre desde cualquier carpeta. |
 

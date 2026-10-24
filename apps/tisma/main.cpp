@@ -10,18 +10,21 @@
 namespace {
 
 constexpr const char* kUsage =
-    "usage: tisma [model.stl | file.gcode | settings.json]...\n"
+    "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--calibration dimensions|temperature|retraction|flow|speed]\n"
+    "             [--profile printer|filament|print=NAME]...\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
     "                                   [--layer N]\n"
-    "                                   [--export out.gcode] [--browse folder]\n"
+    "                                   [--export out.gcode] [--save-project out.tisma]\n"
+    "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
     "--export it first slices and exports the checked G-code as the Export button\n"
-    "does, and exits with 1 if that fails. --browse shows the file browser.\n"
+    "does, and exits with 1 if that fails; --save-project saves the project before\n"
+    "the picture. --browse shows the file browser. --profile chooses a profile.\n"
     "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
     "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
     "shadow rays with the CPU's and exits with 1 if they differ).\n";
@@ -67,6 +70,16 @@ int main(int argc, char** argv) {
             options.layer = std::atoi(value());
         } else if (arg == "--export") {
             options.export_path = value();
+        } else if (arg == "--save-project") {
+            options.save_project = value();
+        } else if (arg == "--profile") {
+            const std::string choice = value();
+            const std::string kind = choice.substr(0, choice.find('='));
+            if (choice.find('=') == std::string::npos || (kind != "printer" && kind != "filament" && kind != "print")) {
+                std::fprintf(stderr, "error: --profile must be printer=NAME, filament=NAME or print=NAME\n");
+                return 2;
+            }
+            options.profiles.push_back(choice);
         } else if (arg == "--browse") {
             options.browse = value();
         } else if (arg == "--render") {
@@ -117,8 +130,9 @@ int main(int argc, char** argv) {
             options.files.emplace_back(arg);
         }
     }
-    if ((!options.export_path.empty() || !options.browse.empty() || options.ray_check) && options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export, --browse and --ray-check go with --screenshot\n");
+    if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check) &&
+        options.screenshot.empty()) {
+        std::fprintf(stderr, "error: --export, --save-project, --browse and --ray-check go with --screenshot\n");
         return 2;
     }
     if (options.ray_check)

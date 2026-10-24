@@ -38,7 +38,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   - la lista `changes`: temperatura, cama, ventilador, retracción, flujo, velocidad o G-code desde una altura.
 
   El verificador del G-code juzga cada capa con los valores que le tocan.
-- `--screenshot` (con `--export`) dibuja la interfaz sin pantalla, para pruebas y capturas.
+- **Perfiles con nombre** (`docs/PROFILES.md`): los ajustes se reparten en impresora, filamento e impresión, que se
+  eligen, guardan y eliminan por separado desde el panel. Trae perfiles de fábrica genéricos (Marlin 256 mm; PLA, PETG,
+  ABS, TPU; capas de 0,12, 0,20 y 0,28 mm). Un asterisco avisa que los ajustes cambiaron desde el perfil.
+- **Proyectos `.tisma`** (`docs/PROJECT.md`): los ajustes, los perfiles elegidos, la pieza y la calibración en curso en
+  un archivo, con Ctrl+S. Una torre de calibración vuelve a su pestaña, laminada.
+- El flujo (`extrusion.flow`) se edita en la sección Filamento.
+- `--screenshot` (con `--export`) dibuja la interfaz sin pantalla, para pruebas y capturas; `--profile` elige perfiles
+  y `--save-project` guarda el proyecto.
 - Los ajustes se pueden escribir como JSON en su formato (`settings_json`), y leer de vuelta iguales.
 - Un lector de G-code para la vista previa, que también abre G-code de otros programas.
 - Las releases traen también la interfaz.
@@ -46,6 +53,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Cambiado
 
 - `machine.bed` acepta también una lista vacía, su valor por defecto.
+- En la interfaz, la retracción pasó de la sección Filamento a Impresora, como en los perfiles.
 - La release se publica sola al enviar a `dev` o `main` un `VERSION` nuevo: el flujo crea la etiqueta.
 
 ## [0.6.0-alpha.1] - 2026-10-24

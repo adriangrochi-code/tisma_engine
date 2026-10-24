@@ -9,14 +9,17 @@
 #include "renderer.hpp"
 
 #include "calibration/calibration.hpp"
+#include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
 #include "io/stl.hpp"
+#include "project/project.hpp"
 #include "ui/camera.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/png.hpp"
+#include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
@@ -29,6 +32,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -58,7 +62,7 @@ constexpr const char* kIcons[] = {
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".tisma", ".gcode", ".gco", ".g", ".json"};
 
 ImVec4 rgb(std::uint32_t c, float alpha = 1.0f) {
     return ImVec4(float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f, alpha);
@@ -194,7 +198,7 @@ std::filesystem::path preferences_path() {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings };
+enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject };
 
 class App {
 public:
@@ -230,6 +234,9 @@ private:
     void load_gcode(const std::filesystem::path& path);
     void load_settings_file(const std::filesystem::path& path);
     void save_settings_file(const std::filesystem::path& path);
+    void open_project(const std::filesystem::path& path);
+    void begin_save_project(bool ask);
+    void save_project_to(const std::filesystem::path& path);
     void export_gcode_to(const std::filesystem::path& path);
     void start_slice();
     void poll_jobs();
@@ -248,6 +255,15 @@ private:
     void load_preferences();
     void save_preferences();
     void apply_theme();
+
+    // Profiles (docs/PROFILES.md).
+    std::filesystem::path profiles_root() const;
+    void load_profile_lists();
+    void profile_row(ProfileKind kind);
+    void choose_profile(ProfileKind kind, const Profile& profile);
+    void save_profile_as(ProfileKind kind, std::string name);
+    void refresh_profiles();
+    const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
 
     // Widgets.
     ImTextureRef icon(const char* name) const;
@@ -342,6 +358,19 @@ private:
     std::optional<CalibrationPrint> calibration_;
     CalibrationKind calibration_kind_ = CalibrationKind::Dimensions;
     std::optional<double> chosen_value_;
+
+    // Named profiles: the built-in ones and the user's of each kind (by
+    // ProfileKind), the one chosen, and whether the settings still match it
+    // (worked out again when the settings change).
+    std::array<std::vector<Profile>, 3> builtin_profiles_, user_profiles_;
+    std::array<std::string, 3> chosen_profile_;
+    std::array<bool, 3> profile_modified_{};
+    std::string profiles_checked_;
+    std::optional<ProfileKind> save_profile_kind_; // the "save as" dialog, while open
+    bool save_profile_open_ = false;
+    std::string profile_name_;
+    // The project file last opened or saved.
+    std::filesystem::path project_path_;
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -610,12 +639,33 @@ bool App::init(std::string& error) {
         msaa_ = std::max(options_.msaa, 1);
     if (options_.fxaa >= 0)
         fxaa_ = options_.fxaa != 0;
+    // The profiles; with none chosen yet, the ones the settings match.
+    load_profile_lists();
+    for (const ProfileKind kind : kProfileKinds) {
+        std::string& chosen = chosen_profile_[std::size_t(kind)];
+        if (!chosen.empty())
+            continue;
+        for (const auto* list : {&builtin_profiles_[std::size_t(kind)], &user_profiles_[std::size_t(kind)]})
+            for (const Profile& p : *list)
+                if (chosen.empty() && same_profile(kind, settings_, p.settings))
+                    chosen = p.name;
+    }
     apply_theme();
     bed_changed();
     camera_.set_view(StandardView::Iso);
     frame_all();
     for (const std::string& file : options_.files)
         open_path(from_utf8(file));
+    for (const std::string& choice : options_.profiles) {
+        const std::size_t eq = choice.find('=');
+        const auto kind = profile_kind_from_name(choice.substr(0, eq));
+        const Profile* p = kind && eq != std::string::npos ? find_profile(*kind, choice.substr(eq + 1)) : nullptr;
+        if (!p) {
+            error = "--profile " + choice + ": no such profile";
+            return false;
+        }
+        choose_profile(*kind, *p);
+    }
     if (const std::string& c = options_.calibration; !c.empty()) {
         const CalibrationKind kind = c == "temperature"  ? CalibrationKind::Temperature
                                      : c == "retraction" ? CalibrationKind::Retraction
@@ -683,6 +733,10 @@ void App::load_preferences() {
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (j.contains("settings"))
             settings_ = parse_settings(j.at("settings").dump());
+        if (j.contains("profiles") && j.at("profiles").is_object())
+            for (const auto& [kind, name] : j.at("profiles").items())
+                if (const auto k = profile_kind_from_name(kind); k && name.is_string())
+                    chosen_profile_[std::size_t(*k)] = name.get<std::string>();
     } catch (const std::exception&) {
         // Unreadable preferences: start from the defaults.
     }
@@ -702,6 +756,8 @@ void App::save_preferences() {
         j["fxaa"] = fxaa_;
         j["ao_strength"] = ao_strength_;
         j["settings"] = nlohmann::json::parse(settings_json(settings_));
+        for (const ProfileKind kind : kProfileKinds)
+            j["profiles"][std::string(profile_kind_name(kind))] = chosen_profile_[std::size_t(kind)];
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
         std::ofstream out(path, std::ios::binary);
@@ -726,12 +782,14 @@ void App::open_path(const std::filesystem::path& path) {
     last_folder_ = path.parent_path();
     if (ext == ".stl")
         load_model(path);
+    else if (ext == ".tisma")
+        open_project(path);
     else if (ext == ".gcode" || ext == ".gco" || ext == ".g")
         load_gcode(path);
     else if (ext == ".json")
         load_settings_file(path);
     else
-        fail(T::CannotOpen, utf8(path) + ": only .stl, .gcode and .json files");
+        fail(T::CannotOpen, utf8(path) + ": only .stl, .tisma, .gcode and .json files");
 }
 
 void App::load_model(const std::filesystem::path& path) {
@@ -833,6 +891,249 @@ void App::save_settings_file(const std::filesystem::path& path) {
         fail(T::CannotOpen, utf8(path));
     else
         notify(format(tr(T::SettingsSaved), utf8(path.filename()).c_str()));
+}
+
+// A project brings back the settings, the profiles chosen and the model; a
+// calibration tower comes back in its tab, sliced, to choose its segment.
+void App::open_project(const std::filesystem::path& path) {
+    Project p;
+    try {
+        p = load_project(path);
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+        return;
+    }
+    settings_ = std::move(p.settings);
+    chosen_profile_ = p.profiles;
+    profiles_checked_.clear();
+    bed_changed();
+    settings_changed();
+    if (!p.models.empty()) {
+        if (p.models.size() > 1)
+            notify(format(tr(T::ProjectFirstModel), int(p.models.size())));
+        ProjectModel& model = p.models.front();
+        if (p.calibration) {
+            CalibrationPrint print;
+            print.kind = p.calibration->kind;
+            print.unit = p.calibration->unit;
+            print.segments = p.calibration->segments;
+            print.changes = settings_.changes;
+            const std::string& k = print.kind;
+            calibration_kind_ = k == "temperature"  ? CalibrationKind::Temperature
+                                : k == "retraction" ? CalibrationKind::Retraction
+                                : k == "flow"       ? CalibrationKind::Flow
+                                : k == "speed"      ? CalibrationKind::Speed
+                                                    : CalibrationKind::Dimensions;
+            calibration_ = std::move(print);
+            chosen_value_.reset();
+            use_mesh(std::move(model.mesh), from_utf8(model.name), Tab::Calibration);
+            if (calibration_kind_ != CalibrationKind::Dimensions)
+                start_slice();
+        } else {
+            calibration_.reset();
+            use_mesh(std::move(model.mesh), from_utf8(model.name), Tab::Prepare);
+        }
+    }
+    project_path_ = path;
+    glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
+    notify(format(tr(T::ProjectOpened), utf8(path.filename()).c_str()));
+}
+
+// Saves to the project's file, or asks where (always, with `ask`).
+void App::begin_save_project(bool ask) {
+    if (!ask && !project_path_.empty()) {
+        save_project_to(project_path_);
+        return;
+    }
+    std::filesystem::path name = project_path_.filename();
+    if (name.empty())
+        name = mesh_ ? model_path_.stem() : std::filesystem::path("tisma");
+    name.replace_extension(".tisma");
+    purpose_ = Purpose::SaveProject;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma"},
+                  project_path_.empty() ? last_folder_ : project_path_.parent_path(), utf8(name));
+}
+
+void App::save_project_to(const std::filesystem::path& path) {
+    Project p;
+    p.settings = settings_;
+    p.profiles = chosen_profile_;
+    if (mesh_)
+        p.models.push_back({utf8(model_path_.filename()), *mesh_, {offset_.x, offset_.y, offset_.z}});
+    if (calibration_)
+        p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
+    try {
+        save_project(path, p);
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        failed_ = true;
+        return;
+    }
+    project_path_ = path;
+    glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
+    notify(format(tr(T::ProjectSaved), utf8(path.filename()).c_str()));
+}
+
+// User profiles live next to the preferences; without a place for those,
+// there are only the built-in ones.
+std::filesystem::path App::profiles_root() const {
+    const std::filesystem::path prefs = preferences_path();
+    return prefs.empty() ? prefs : prefs.parent_path() / "profiles";
+}
+
+void App::load_profile_lists() {
+    // Screenshots do not read the user's profiles, so they come out the same
+    // on every machine.
+    const std::filesystem::path root = options_.screenshot.empty() ? profiles_root() : std::filesystem::path();
+    std::vector<std::string> errors;
+    for (const ProfileKind kind : kProfileKinds) {
+        const std::size_t k = std::size_t(kind);
+        builtin_profiles_[k] = builtin_profiles(kind);
+        user_profiles_[k].clear();
+        if (root.empty())
+            continue;
+        for (Profile& p : load_profiles(root, kind, &errors)) {
+            bool builtin = false;
+            if (find_profile(kind, p.name, &builtin) && builtin)
+                errors.push_back(p.name + ": the name of a built-in profile");
+            else
+                user_profiles_[k].push_back(std::move(p));
+        }
+    }
+    if (!errors.empty())
+        notify(format(tr(T::ProfilesSkipped), int(errors.size())), true);
+    profiles_checked_.clear();
+}
+
+const Profile* App::find_profile(ProfileKind kind, const std::string& name, bool* builtin) const {
+    const std::size_t k = std::size_t(kind);
+    for (const Profile& p : builtin_profiles_[k])
+        if (p.name == name) {
+            if (builtin)
+                *builtin = true;
+            return &p;
+        }
+    for (const Profile& p : user_profiles_[k])
+        if (p.name == name) {
+            if (builtin)
+                *builtin = false;
+            return &p;
+        }
+    return nullptr;
+}
+
+// Whether the settings still match each chosen profile; worked out only when
+// the settings change.
+void App::refresh_profiles() {
+    std::string now = settings_json(settings_);
+    if (now == profiles_checked_)
+        return;
+    profiles_checked_ = std::move(now);
+    for (const ProfileKind kind : kProfileKinds) {
+        const std::size_t k = std::size_t(kind);
+        const Profile* p = find_profile(kind, chosen_profile_[k]);
+        if (!p)
+            chosen_profile_[k].clear();
+        profile_modified_[k] = p && !same_profile(kind, settings_, p->settings);
+    }
+}
+
+void App::choose_profile(ProfileKind kind, const Profile& profile) {
+    try {
+        settings_ = with_profile(settings_, kind, profile.settings);
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+        return;
+    }
+    chosen_profile_[std::size_t(kind)] = profile.name;
+    profiles_checked_.clear();
+    if (kind == ProfileKind::Printer)
+        bed_changed();
+    settings_changed();
+}
+
+void App::save_profile_as(ProfileKind kind, std::string name) {
+    Profile p;
+    p.kind = kind;
+    p.name = name;
+    p.settings = settings_;
+    try {
+        const std::filesystem::path root = profiles_root();
+        if (root.empty())
+            throw SettingsError("profile: there is no folder for the settings (no HOME or APPDATA)");
+        save_profile(root, p);
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    load_profile_lists();
+    chosen_profile_[std::size_t(kind)] = name;
+    profiles_checked_.clear();
+    notify(format(tr(T::ProfileSaved), name.c_str()));
+}
+
+// The profile row at the top of a settings section: the list, save, and a
+// menu with save as and delete.
+void App::profile_row(ProfileKind kind) {
+    const std::size_t k = std::size_t(kind);
+    ImGui::PushID(int(k));
+    const float size = ImGui::GetFrameHeight();
+    const float gap = ImGui::GetStyle().ItemSpacing.x;
+    bool builtin = false;
+    const Profile* chosen = find_profile(kind, chosen_profile_[k], &builtin);
+    std::string preview = chosen ? chosen->name : std::string(tr(T::NoProfile));
+    if (chosen && profile_modified_[k])
+        preview += " *";
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
+    const Profile* picked = nullptr;
+    if (ImGui::BeginCombo("##profile", preview.c_str())) {
+        ImGui::SeparatorText(tr(T::BuiltinProfiles));
+        for (const Profile& p : builtin_profiles_[k])
+            if (ImGui::Selectable(p.name.c_str(), chosen == &p))
+                picked = &p;
+        if (!user_profiles_[k].empty()) {
+            ImGui::SeparatorText(tr(T::MyProfiles));
+            for (const Profile& p : user_profiles_[k])
+                if (ImGui::Selectable(p.name.c_str(), chosen == &p))
+                    picked = &p;
+        }
+        ImGui::EndCombo();
+    }
+    if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tr(T::ProfileModifiedTip));
+    const T titles[] = {T::SaveProfilePrinter, T::SaveProfileFilament, T::SaveProfilePrint};
+    auto save_as = [&] {
+        save_profile_kind_ = kind;
+        save_profile_open_ = true;
+        profile_name_ = chosen && !builtin ? chosen->name : std::string();
+    };
+    ImGui::SameLine(0, gap);
+    if (icon_button("##save", "tisma_save", tr(T::SaveProfileTip), size)) {
+        if (chosen && !builtin)
+            save_profile_as(kind, chosen->name);
+        else
+            save_as();
+    }
+    ImGui::SameLine(0, gap);
+    if (icon_button("##menu", "tisma_more", tr(titles[k]), size))
+        ImGui::OpenPopup("##profile_menu");
+    if (ImGui::BeginPopup("##profile_menu")) {
+        if (ImGui::MenuItem(tr(T::SaveProfileAs)))
+            save_as();
+        const std::string remove = chosen ? format(tr(T::DeleteProfile), chosen->name.c_str()) : std::string();
+        if (chosen && !builtin && ImGui::MenuItem(remove.c_str())) {
+            const std::string name = chosen->name;
+            if (remove_profile(profiles_root(), kind, name)) {
+                load_profile_lists();
+                chosen_profile_[k].clear();
+                notify(format(tr(T::ProfileDeleted), name.c_str()));
+            }
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    if (picked)
+        choose_profile(kind, *picked);
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
@@ -1056,6 +1357,11 @@ void App::top_bar() {
     if (icon_button("##more", "tisma_more", tr(T::More), button_h))
         ImGui::OpenPopup("##more_menu");
     if (ImGui::BeginPopup("##more_menu")) {
+        if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
+            begin_save_project(false);
+        if (ImGui::MenuItem(tr(T::SaveProjectAs), "Ctrl+Shift+S"))
+            begin_save_project(true);
+        ImGui::Separator();
         if (ImGui::BeginMenu(tr(T::Language))) {
             if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
                 set_language(Language::Spanish);
@@ -1110,7 +1416,11 @@ void App::settings_panel() {
         return true;
     };
 
-    if (section("print", "tisma_print", T::Print) && begin_rows("##print")) {
+    refresh_profiles();
+    const bool print_open = section("print", "tisma_print", T::Print);
+    if (print_open)
+        profile_row(ProfileKind::Print);
+    if (print_open && begin_rows("##print")) {
         changed |= row(T::LayerHeight, s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
         changed |= row(T::FirstLayerHeight, s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
         changed |= row(T::Walls, s.wall_count, 0, 50);
@@ -1153,19 +1463,23 @@ void App::settings_panel() {
             ImGui::TreePop();
         }
     }
-    if (section("filament", "tisma_filament", T::Filament) && begin_rows("##filament")) {
+    const bool filament_open = section("filament", "tisma_filament", T::Filament);
+    if (filament_open)
+        profile_row(ProfileKind::Filament);
+    if (filament_open && begin_rows("##filament")) {
         changed |= row(T::FilamentDiameter, s.filament_diameter, 1.0, 3.5, "%.2f mm", 0.005f);
         changed |= variable_row(T::NozzleTemp, s, "temperature", 0, 450, "%d °C", tr(T::TempTip));
         changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
-        changed |= row(T::Retraction, s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
-        changed |= row(T::RetractSpeed, s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
-        changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
+        changed |= row(T::FlowRow, s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
         changed |= row(T::FanMin, s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
         changed |= row(T::FanMax, s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
         changed |= row(T::MinLayerTime, s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
         ImGui::EndTable();
     }
-    if (section("printer", "tisma_printer", T::Printer, false) && begin_rows("##printer")) {
+    const bool printer_open = section("printer", "tisma_printer", T::Printer, false);
+    if (printer_open)
+        profile_row(ProfileKind::Printer);
+    if (printer_open && begin_rows("##printer")) {
         double width = 0, depth = 0;
         if (rectangle_bed(s, width, depth)) {
             bool b = row(T::BedWidth, width, 20.0, 2000.0, "%.0f mm", 0.5f);
@@ -1183,6 +1497,9 @@ void App::settings_panel() {
         changed |= row(T::Flavor, s.flavor,
                        {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
         changed |= row(T::RelativeE, s.relative_extrusion);
+        changed |= row(T::Retraction, s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
+        changed |= row(T::RetractSpeed, s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
+        changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
         ImGui::EndTable();
         ImGui::TextUnformatted(tr(T::StartGcode));
         changed |= ImGui::InputTextMultiline("##start", &s.start_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 7));
@@ -1206,6 +1523,8 @@ void App::settings_panel() {
     ImGui::SameLine();
     if (ImGui::Button(tr(T::ResetSettings), ImVec2(third, 0))) {
         settings_ = default_settings();
+        for (const ProfileKind kind : kProfileKinds)
+            chosen_profile_[std::size_t(kind)] = builtin_profiles_[std::size_t(kind)].front().name;
         bed = changed = true;
     }
     ImGui::End();
@@ -1895,6 +2214,7 @@ void App::dialogs() {
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
+        case Purpose::SaveProject: save_project_to(chosen); break;
         }
     }
     if (!browser_.is_open() && !browser_.folder().empty())
@@ -1921,6 +2241,50 @@ void App::dialogs() {
         if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
+    }
+
+    // Saving the settings as a new profile: its name.
+    if (save_profile_open_) {
+        ImGui::OpenPopup("###save_profile");
+        save_profile_open_ = false;
+    }
+    if (save_profile_kind_) {
+        const ProfileKind kind = *save_profile_kind_;
+        const T titles[] = {T::SaveProfilePrinter, T::SaveProfileFilament, T::SaveProfilePrint};
+        const std::string heading = std::string(tr(titles[std::size_t(kind)])) + "###save_profile";
+        ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal(heading.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetKeyboardFocusHere();
+            ImGui::SetNextItemWidth(360.0f * scale_);
+            const bool enter = ImGui::InputTextWithHint("##name", tr(T::FileName), &profile_name_,
+                                                        ImGuiInputTextFlags_EnterReturnsTrue);
+            std::string name = profile_name_;
+            while (!name.empty() && name.back() == ' ')
+                name.pop_back();
+            while (!name.empty() && name.front() == ' ')
+                name.erase(name.begin());
+            bool builtin = false;
+            const bool exists = find_profile(kind, name, &builtin) != nullptr;
+            if (exists && builtin)
+                ImGui::TextColored(rgb(0xE5484D), "%s", tr(T::ProfileIsBuiltin));
+            else if (exists)
+                ImGui::TextDisabled("%s", tr(T::ProfileReplaces));
+            const bool ok = !name.empty() && !(exists && builtin);
+            ImGui::BeginDisabled(!ok);
+            if (ImGui::Button(tr(T::SaveButton), ImVec2(120.0f * scale_, 0)) || (enter && ok)) {
+                save_profile_as(kind, name);
+                save_profile_kind_.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                save_profile_kind_.reset();
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     if (about_open_) {
@@ -1970,6 +2334,10 @@ void App::layout() {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+        begin_save_project(false);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+        begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
         start_slice();
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
@@ -2206,6 +2574,8 @@ void App::frame() {
         }
         settled_frames_ = waiting ? 0 : settled_frames_ + 1;
         if (frames_ > 3 && settled_frames_ >= 3) {
+            if (!options_.save_project.empty())
+                save_project_to(from_utf8(options_.save_project));
             std::vector<std::uint8_t> pixels(std::size_t(fb_w) * std::size_t(fb_h) * 4);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
