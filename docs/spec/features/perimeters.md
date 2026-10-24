@@ -73,6 +73,7 @@ X = 100, Y = 100), con `walls.count` 3 salvo que se diga otra cosa. Las posicion
 | P8 | Cilindro de P6 | `nearest` | El inicio gira poco a poco: de −87° a −60° entre las capas 3 y 24 (ángulo medido desde +X) |
 | P9 | Cilindro de P6 | `random` | Un ángulo distinto en cada capa, sin patrón |
 | P10 | Cubo de P1 | `walls.outer_first` | Mismas vueltas que P1, en orden inverso: la externa primero |
+| P11 | Cuña en planta: triángulo de 30 mm de largo cuyo espesor crece de 0 (X = −15) a 3 mm (X = +15), 3 mm de alto | — | Tabla P11: el espesor cambia de a poco, así que las transiciones quedan a lo largo de la pieza |
 
 **Tabla P2.** Cordones de la capa 11 de cada pared: posición del eje respecto del centro de la pared (mm) y ancho
 (mm). E es el cordón externo y P uno interno. Las paredes de 2,9 mm o más dejan un hueco en el centro, que llena el
@@ -117,3 +118,33 @@ Lo que muestra la tabla:
 - **Transiciones:** entre 0,6 y 0,7 mm la pared pasa de 1 a 2 cordones; entre 1,1 y 1,2 a 3; entre 1,4 y 1,5 a 4;
   entre 1,9 y 2,0 a 5; entre 2,2 y 2,3 a 6.
 - **Reparto del ancho:** los cordones nominales quedan a 0,45 mm, y el o los del centro absorben la diferencia.
+
+**Tabla P11.** Cuña de la prueba P11, capa 8: cordones que cruzan la sección X = c (posición en Y: ancho del G-code;
+E externo, P interno).
+
+| X | Espesor | Cordones |
+|---|---|---|
+| −14 | 0,10 | ninguno |
+| −13 | 0,20 | E 0: 0,426 |
+| −11 | 0,40 | E 0: 0,553 |
+| −9 | 0,60 | E 0: 0,639 |
+| −8 | 0,70 | E ±0,16: 0,408 |
+| −5 | 1,00 | E ±0,24: 0,551 |
+| −4 | 1,10 | E ±0,26: 0,599 |
+| −3 | 1,20 | E ±0,37: 0,450; P 0: 0,424 |
+| −1 | 1,40 | E ±0,47: 0,450; P 0: 0,596 |
+| 0 | 1,50 | E ±0,52: 0,450; P ±0,16: 0,408 |
+| +4 | 1,90 | E ±0,72: 0,450; P ±0,26: 0,599 |
+| +5 | 2,00 | E ±0,77: 0,450; P ±0,35: 0,500 |
+| +6 | 2,10 | E ±0,82: 0,450; P ±0,42: 0,450; P 0: 0,510 |
+| +7 | 2,20 | E ±0,87: 0,450; P ±0,47: 0,450; P 0: 0,596 |
+| +8 | 2,30 | E ±0,92: 0,450; P ±0,52: 0,450; P ±0,12: 0,453 |
+| +9 | 2,40 | E ±0,97: 0,450; P ±0,57: 0,450; P −0,18: 0,406 (en la transición, uno solo) |
+| +11 | 2,60 | E ±1,07: 0,450; P ±0,67: 0,450; P ±0,23: 0,543 |
+| +13 | 2,80 | E ±1,17: 0,450; P ±0,77: 0,450; P ±0,28: 0,634 |
+
+Comparada con las paredes rectas de P2:
+- las transiciones caen en espesores parecidos (de 1 a 2 cordones entre 0,6 y 0,7; de 5 a 6 entre 2,2 y 2,3);
+- de 4 a 5 cordones, la cuña cambia entre 2,0 y 2,1, una décima después que la pared recta;
+- los anchos del G-code son algo mayores que en la pared recta del mismo espesor, porque la cuña se ensancha a lo
+  largo de cada tramo.
