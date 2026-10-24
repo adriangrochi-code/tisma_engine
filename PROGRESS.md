@@ -1815,3 +1815,37 @@ región central.
 **Sigue:**
 - nodos por fórmula cerrada en vez de bisección (dos tercios del tiempo);
 - después, la salida `MedialEdge` y la comparación con el eje medio de hoy.
+
+## 2026-10-24 — Voronoi propio: nodos por falsa posición; los análisis van antes
+
+**Hecho:**
+- Los nodos nuevos se ubican por falsa posición con la variante Illinois, siempre dentro del intervalo y con un paso de
+  bisección cada tres, en vez de 64 bisecciones. Precisión: 10⁻¹⁵ del tamaño de la caja.
+- Las pruebas comparan los vértices dentro de la caja con un margen igual a la tolerancia: una esquina puede caer a
+  10⁻⁹ por fuera.
+
+**Probado:** 174/174 pruebas con gcc, clang y ASan+UBSan.
+
+**Medido** (µs por segmento, orden aleatorio):
+
+| Polígono | 500 lados | 5000 lados | 50 000 lados |
+|---|---|---|---|
+| Círculo, propio | 20 | 18 | 19 |
+| Círculo, Boost | 38 | 25 | 27 |
+| Estrella, propio | 22 | 26 | 41 |
+| Estrella, Boost | 13 | 16 | 14 |
+| Curva ondulada, propio | 18 | 20 | 24 |
+| Curva ondulada, Boost | 34 | 33 | 34 |
+
+El propio ya es más rápido que Boost en círculos y curvas onduladas. En la estrella es 1,6–2,8 veces más lento.
+
+**Decisión del dueño:**
+- los análisis van antes de F5–F7, porque condicionan el diseño de la pieza;
+- el diseño es generativo e iterativo, con optimización topológica.
+
+Quedan en `PLAN.md` como fases nuevas:
+- A1: elementos finitos;
+- A2: optimización topológica y diseño generativo;
+- A3: CFD.
+
+**Sigue:** terminar el Voronoi propio (salida para el eje medio, comparación y reemplazo de Boost); después, A1.

@@ -106,7 +106,9 @@ void compare_with_boost(const std::vector<IntPoint>& points, double tolerance) {
     boost::polygon::construct_voronoi(points.begin(), points.end(), &reference);
     // Within the input's box: far outside, circles through three input points
     // can hold a dummy site, and the own diagram is not meant to be exact there.
-    auto in_box = [&](double x, double y) { return x >= min_x && x <= max_x && y >= min_y && y <= max_y; };
+    auto in_box = [&](double x, double y) {
+        return x >= min_x - tolerance && x <= max_x + tolerance && y >= min_y - tolerance && y <= max_y + tolerance;
+    };
     std::vector<std::pair<double, double>> expected, own;
     for (const auto& v : reference.vertices())
         if (in_box(v.x(), v.y()))
@@ -198,7 +200,9 @@ void compare_polygons(const std::vector<std::vector<IntPoint>>& polygons, double
         }
     boost::polygon::voronoi_diagram<double> reference;
     boost::polygon::construct_voronoi(segments.begin(), segments.end(), &reference);
-    auto in_box = [&](double x, double y) { return x >= min_x && x <= max_x && y >= min_y && y <= max_y; };
+    auto in_box = [&](double x, double y) {
+        return x >= min_x - tolerance && x <= max_x + tolerance && y >= min_y - tolerance && y <= max_y + tolerance;
+    };
     std::vector<std::pair<double, double>> expected, own;
     for (const auto& v : reference.vertices())
         if (in_box(v.x(), v.y()))

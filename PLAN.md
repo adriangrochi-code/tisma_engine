@@ -18,7 +18,7 @@ terceros (la licencia de hoy), que sigue pudiendo cerrarse:
   propio);
 - **lo que Tisma Slicer ya hace**, integrado desde sus fichas;
 - **análisis para imprimir mejor:** análisis estructural (elementos finitos) y de fluidos (CFD) que alimentan el
-  laminado. Es la parte «análisis estructural y aerodinámico» de F8; su orden frente a F5–F7 se decide con el dueño.
+  laminado, más la optimización topológica para diseño generativo iterativo: fases A1–A3, antes de F5–F7.
 
 **Primera versión:** FDM, una boquilla, capas planas, **con aceleración por GPU desde F1**. Se estimó en unas 16
 semanas dedicando un cuarto del tiempo, pero esa estimación es anterior a la GPU. Se vuelve a estimar al terminar F1,
@@ -146,10 +146,30 @@ antes de usarlas. Revisadas el 2026-10-24:
 | F2 | 4–7 | Perímetros de ancho variable desde Kuipers et al. 2020: esqueleto de los contornos (Voronoi de segmentos con Boost.Polygon), trapezoidación, cantidad y ancho de cordones (repartido y centrado), extracción de trayectorias | Paredes de 0,3 a 1,2 mm sin huecos ni excesos (área cubierta medida); piezas comunes con 2–3 perímetros |
 | F3 | 8–9 | Superficies: arriba, abajo, sólido y relleno; rellenos rectilíneo, grilla y giroide; puentes con dirección. En GPU: detección de superficies y giroide | Un cubo y el Benchy con capas sólidas correctas; tiempos de CPU y GPU medidos |
 | F4 | 10–12 | G-code: orden de islas, viajes que no cruzan perímetros, retracción, salto en Z, costura (alineada, más cercana, aleatoria), enfriamiento con tiempo mínimo de capa, velocidades, aceleraciones, límites de la máquina, Marlin y Klipper, estimación de tiempo | El Benchy se imprime en una impresora real |
+| A1 | — | Análisis estructural por elementos finitos: la pieza en vóxeles (hexaedros), elasticidad lineal, cargas y apoyos que da el usuario, solucionador iterativo sin matriz (gradiente conjugado con multigrilla), CPU de referencia y GPU; desplazamientos y tensiones | Casos de solución conocida (viga en voladizo, placa con agujero) dentro del error esperado |
+| A2 | — | Optimización topológica y diseño generativo iterativo: densidades (SIMP), filtro, volumen objetivo, regiones fijas, restricción de voladizo para imprimir sin soportes; isosuperficie, malla nueva y laminado; laminado guiado por tensiones (relleno y paredes donde hacen falta) | Casos clásicos (viga MBB, ménsula) dan la forma conocida; la pieza optimizada se lamina |
+| A3 | — | Fluidos (CFD): aerodinámica de la pieza (y, si sirve, el enfriamiento al imprimir) con Lattice Boltzmann en vóxeles, en GPU | Casos de referencia (cilindro, escalón) dentro del error esperado |
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde. En GPU: voladizos y proyección | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer, con y sin GPU | Medido y documentado |
 | F7 | después de F6 | No planar en 3 ejes: capas apenas curvas cerca de la superficie superior (CurviSlicer, Ahlers et al.), con control de choques del cabezal | Una pieza con techo curvo se imprime sin escalones visibles en una impresora común; medido |
-| F8 | después de F7 | Lo propio de Tisma, desde sus fichas: análisis estructural y aerodinámico, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas de cada ficha pasan |
+| F8 | después de F7 | Lo propio de Tisma, desde sus fichas (los análisis pasaron a A1–A3): Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas de cada ficha pasan |
+
+**Orden (decisión del dueño, 2026-10-24):** los análisis (A1–A3) van antes de F5–F7, porque condicionan el diseño
+de la pieza, y el diseño es generativo e iterativo: la optimización topológica cambia la forma para que use las fuerzas
+que necesita. Antes se termina el Voronoi propio, que está en curso (F2). Lo hecho de F5 (falda, borde, soportes)
+queda; el resto de F5 sigue después de A3.
+
+**Fuentes de A1–A3** (solo los artículos y libros; el código publicado junto a algunos, como los programas cortos de
+optimización topológica, no se transcribe):
+- Bendsøe, *Optimal shape design as a material distribution problem*, Struct. Optim. 1:193–202, 1989 (SIMP).
+- Bendsøe y Sigmund, *Topology Optimization: Theory, Methods and Applications*, Springer, 2003.
+- Svanberg, *The method of moving asymptotes*, Int. J. Numer. Methods Eng. 24:359–373, 1987.
+- Langelaar, *An additive manufacturing filter for topology optimization of print-ready designs*, Struct. Multidisc.
+  Optim. 55:871–883, 2017.
+- Wu, Dick y Westermann, *A System for High-Resolution Topology Optimization*, IEEE TVCG 22(3), 2016 (multigrilla en
+  GPU).
+- Aage et al., *Giga-voxel computational morphogenesis for structural design*, Nature 550:84–86, 2017.
+- Krüger et al., *The Lattice Boltzmann Method: Principles and Practice*, Springer, 2017.
 
 **Después del motor** (el orden lo decide el dueño):
 

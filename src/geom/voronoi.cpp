@@ -16,7 +16,8 @@ namespace {
 constexpr double kDummyScale = 10.0; // dummy sites this many box radii from the centre
 constexpr double kFarScale = 1000.0; // far nodes this many box radii away
 constexpr double kOnPoint = 1e-9;    // relative to the box radius: a node this close to its sites is on an input point
-constexpr int kBisection = 64;       // halvings when placing a node on an edge
+constexpr int kBisection = 100;      // steps at most when placing a node on an edge
+constexpr double kPlace = 1e-15;     // relative to the box radius: how closely a node is placed
 constexpr int kSamples = 32;         // samples when an edge shows no clean sign change
 
 double dist2(double ax, double ay, double bx, double by) {
@@ -443,7 +444,8 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
         return distance(site, px, py) - distance(left, px, py);
     };
     double lo = 0.0, hi = 1.0;
-    if (!(f(lo) < 0.0 && f(hi) >= 0.0)) {
+    double flo = f(lo), fhi = f(hi);
+    if (!(flo < 0.0 && fhi >= 0.0)) {
         // No clean change of sign (rounding): the sample closest to equidistance.
         double best = 0.5, best_f = std::abs(f(0.5));
         for (int k = 0; k <= kSamples; ++k) {
@@ -454,9 +456,34 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
         at(best, x, y);
         return;
     }
-    for (int k = 0; k < kBisection; ++k) {
-        const double mid = (lo + hi) / 2.0;
-        (f(mid) < 0.0 ? lo : hi) = mid;
+    // Regula falsi with the Illinois change (the end kept twice in a row has
+    // its value halved), always inside the bracket, with a bisection every
+    // third step so that a jump of f (at the edge of a cone of influence)
+    // cannot slow it down to a crawl. Stops when the bracket is shorter than
+    // kPlace (relative to the box) or f is zero.
+    double ex, ey, fx, fy;
+    at(0.0, ex, ey);
+    at(1.0, fx, fy);
+    const double tolerance = kPlace * on_point_ / kOnPoint / std::max(std::hypot(fx - ex, fy - ey), 1e-300);
+    int kept = 0; // -1: lo kept last time, +1: hi kept
+    for (int k = 0; k < kBisection && hi - lo > tolerance; ++k) {
+        double t = (k % 3 == 2) ? (lo + hi) / 2.0 : (lo * fhi - hi * flo) / (fhi - flo);
+        if (!(t > lo && t < hi))
+            t = (lo + hi) / 2.0;
+        const double ft = f(t);
+        if (ft < 0.0) {
+            lo = t, flo = ft;
+            if (kept == -1)
+                fhi /= 2.0;
+            kept = -1;
+        } else {
+            hi = t, fhi = ft;
+            if (kept == 1)
+                flo /= 2.0;
+            kept = 1;
+            if (ft == 0.0)
+                break;
+        }
     }
     at(hi, x, y);
 }
