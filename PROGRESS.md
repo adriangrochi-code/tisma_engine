@@ -1428,3 +1428,34 @@ la vista previa de Tisma.
 - orden por islas;
 - enfriamiento;
 - escribir el G-code más rápido.
+
+## 2026-10-24 — bloque nocturno 39: orden por islas
+
+**Hecho:**
+- Islas (`split_islands`, `island_of` en `src/gcode/order.*`, diseño propio): las piezas conexas de la región de la capa,
+  cada contorno exterior con sus agujeros. Una isla dentro de un agujero es otra isla.
+- El escritor termina cada isla antes de pasar a la siguiente, siempre la más cercana. Dentro de la isla sigue el orden
+  de antes: paredes de adentro hacia afuera con la externa al final, después los rellenos por tipo.
+- Defecto corregido en las costuras alineadas: se guardaba una sola costura por índice de pared, la última, y con varios
+  lazos del mismo índice (islas, agujeros) cada uno se alineaba con la del otro. Ahora se guardan todas las de la capa de
+  abajo y cada lazo toma la más cercana.
+
+**Probado:** 148/148 pruebas con gcc, clang y ASan+UBSan:
+- islas de una región: un marco con agujero, una isla dentro del agujero y un cuadrado aparte dan 3 islas; un punto en
+  el agujero no está en ninguna; el borde cuenta como dentro;
+- de punta a punta, dos cubos: en cada capa se cambia de cubo una sola vez (antes, 5 veces);
+- costuras: la más cercana de varias costuras de abajo; `next_layer` conserva los índices que la capa no usó.
+
+**Medido:**
+- 9 cubos de 10 mm en una grilla de 3 × 3, 50 capas:
+  - viajes entre cubos, de 1623 a 400 (8 por capa, el mínimo);
+  - viaje total de 25,2 a 11,2 m (−56 %);
+  - retracciones de 1841 a 1031 (−44 %);
+  - `slice` con escritura ~0,1 s;
+- tubo cuadrado (por las costuras): viaje de 7,09 a 6,86 m, retracciones de 581 a 532;
+- esfera: igual que antes (una isla por capa); corte 1,18 s.
+
+**Sigue:**
+- enfriamiento (tiempo mínimo de capa, dos etapas, ventilador);
+- escribir el G-code más rápido;
+- aceleraciones y estimación de tiempo.

@@ -275,7 +275,7 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
 - [x] Retracción en viajes largos y salto en Z (grupo `retraction`)
 - [x] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza
   (`src/gcode/travel.*`)
-- [ ] Orden por islas (terminar una isla antes de pasar a la otra)
+- [x] Orden por islas (terminar una isla antes de pasar a la otra)
 - [ ] Enfriamiento: tiempo mínimo de capa con las dos etapas de `BEHAVIOR.md` y ventilador al máximo en esas capas
 - [ ] Aceleraciones y límites de la máquina; estimación de tiempo (opcional, como comentario)
 - [ ] Avisos en un JSON aparte (detalles que no se imprimen, capas que no llegan al tiempo mínimo)

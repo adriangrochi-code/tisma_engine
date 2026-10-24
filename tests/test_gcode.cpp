@@ -9,6 +9,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -61,6 +62,22 @@ IndexedMesh tube_mesh() {
         quad(i, 4 + i, 4 + j, j);             // bottom ring
     }
     return m;
+}
+
+// Adds a box from (x0, y0, 0) to (x1, y1, h), facing out.
+void add_box(IndexedMesh& m, float x0, float y0, float x1, float y1, float h) {
+    const auto base = std::uint32_t(m.vertices.size());
+    for (float z : {0.0f, h})
+        for (const auto& p : {std::array<float, 2>{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}})
+            m.vertices.push_back({p[0], p[1], z});
+    auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+        m.triangles.push_back({base + a, base + b, base + c});
+        m.triangles.push_back({base + a, base + c, base + d});
+    };
+    quad(0, 3, 2, 1); // bottom
+    quad(4, 5, 6, 7); // top
+    for (std::uint32_t i = 0; i < 4; ++i)
+        quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
 }
 
 } // namespace
@@ -251,4 +268,33 @@ TEST_CASE("travels go round the hole of a tube instead of across it", "[gcode]")
     }
     CHECK(travels > 20);
     CHECK(across == 0);
+}
+
+TEST_CASE("islands: each one is finished before going to the next", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 10, 10, 2);
+    add_box(m, 14, 0, 24, 10, 2);
+    Settings s;
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    // Per layer, the side (x < 12 or x > 12) of every extruding move changes at most once.
+    int layers = 0, worst = 0, switches = -1, side = 0;
+    const std::regex x_axis("X(-?[0-9.]+)");
+    for (const std::string& line : lines_of(out.str())) {
+        if (line == ";LAYER_CHANGE") {
+            worst = std::max(worst, switches);
+            switches = -1, side = 0;
+            ++layers;
+            continue;
+        }
+        std::smatch x;
+        if (line.rfind("G1 ", 0) != 0 || line.find(" E") == std::string::npos || !std::regex_search(line, x, x_axis))
+            continue;
+        const int now = std::stod(x[1].str()) < 12.0 ? 1 : 2;
+        if (now != side)
+            ++switches, side = now;
+    }
+    worst = std::max(worst, switches);
+    CHECK(layers == 10);
+    CHECK(worst == 1);
 }

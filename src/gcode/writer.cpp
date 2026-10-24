@@ -6,8 +6,10 @@
 #include "gcode/travel.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <map>
 #include <cmath>
 #include <cstdio>
@@ -208,6 +210,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
         const Layer& layer = model.layers[l];
         g.new_layer(layer.top, layer.top - layer.bottom, s.travel_speed);
+        seams.next_layer();
         const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
         const bool first = l == 0;
         auto speed = [&](double v) { return std::min(first ? std::min(v, s.first_layer_speed) : v, s.max_speed); };
@@ -226,24 +229,67 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
             for (const Toolpath& t : order_paths(paths, cursor, seam, seed, seams))
                 lay(t, type, feed);
         };
-        // Walls from the inside out: the outer wall (bead 0) last; each bead index in nearest order.
-        if (l < model.walls.size()) {
-            std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
+        // Every island is finished before the next, the nearest one first. In an
+        // island: walls from the inside out, the outer wall (bead 0) last, each
+        // bead index in nearest order; then the fills, one kind after the other.
+        struct Island {
+            std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
+            std::array<std::vector<Toolpath>, 5> fills; // solid, top, bridge, gaps, sparse
+            std::vector<Point2d> ends;                  // where its paths start or end
+        };
+        const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
+        std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
+        auto island = [&](const Toolpath& t) -> Island& {
+            if (pieces.size() <= 1)
+                return islands.front();
+            const int k = island_of(pieces, t.points.front().p);
+            return islands[k < 0 ? pieces.size() : std::size_t(k)];
+        };
+        auto add = [&](Island& i, const Toolpath& t) {
+            i.ends.push_back(t.points.front().p);
+            if (!t.closed)
+                i.ends.push_back(t.points.back().p);
+        };
+        if (l < model.walls.size())
             for (const Toolpath& t : model.walls[l].toolpaths)
-                by_index[t.index].push_back(t);
-            for (const auto& [index, paths] : by_index) {
+                if (!t.points.empty()) {
+                    Island& i = island(t);
+                    i.walls[t.index].push_back(t);
+                    add(i, t);
+                }
+        if (l < model.fills.size()) {
+            const LayerFill& f = model.fills[l];
+            const std::vector<Toolpath>* kinds[5] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse};
+            for (std::size_t k = 0; k < 5; ++k)
+                for (const Toolpath& t : *kinds[k])
+                    if (!t.points.empty()) {
+                        Island& i = island(t);
+                        i.fills[k].push_back(t);
+                        add(i, t);
+                    }
+        }
+        const char* const fill_type[5] = {"Solid infill", "Top solid infill", "Bridge infill", "Gap fill", "Internal infill"};
+        const double fill_speed[5] = {s.solid_infill_speed, s.top_solid_infill_speed, s.solid_infill_speed,
+                                      s.solid_infill_speed, s.infill_speed};
+        std::vector<bool> done(islands.size(), false);
+        for (;;) {
+            std::size_t next = islands.size();
+            double nearest = std::numeric_limits<double>::max();
+            for (std::size_t k = 0; k < islands.size(); ++k)
+                for (const Point2d& p : islands[k].ends)
+                    if (!done[k] && std::hypot(p.x - cursor.x, p.y - cursor.y) < nearest)
+                        nearest = std::hypot(p.x - cursor.x, p.y - cursor.y), next = k;
+            if (next == islands.size())
+                break;
+            done[next] = true;
+            const Island& i = islands[next];
+            for (const auto& [index, paths] : i.walls) {
                 const bool outer = index == 0;
                 group(paths, outer ? "External perimeter" : "Perimeter",
                       speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
             }
-        }
-        if (l < model.fills.size()) {
-            const LayerFill& f = model.fills[l];
-            group(f.solid, "Solid infill", speed(s.solid_infill_speed), SeamMode::Nearest);
-            group(f.top, "Top solid infill", speed(s.top_solid_infill_speed), SeamMode::Nearest);
-            group(f.bridge, "Bridge infill", speed(s.solid_infill_speed), SeamMode::Nearest);
-            group(f.gaps, "Gap fill", speed(s.solid_infill_speed), SeamMode::Nearest);
-            group(f.sparse, "Internal infill", speed(s.infill_speed), SeamMode::Nearest);
+            for (std::size_t k = 0; k < 5; ++k)
+                group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
         }
     }
 

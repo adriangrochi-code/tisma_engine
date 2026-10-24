@@ -34,6 +34,12 @@ std::uint64_t mix(std::uint64_t z) {
 
 } // namespace
 
+void SeamMemory::next_layer() {
+    for (auto& [index, seams] : current)
+        below[index] = std::move(seams);
+    current.clear();
+}
+
 std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
                        const SeamMemory& memory) {
     const std::size_t n = loop.points.size();
@@ -76,13 +82,15 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
                 corners.push_back(i); // turns against the loop's direction: a concave corner
         }
         const std::vector<std::size_t>& candidates = corners.empty() ? all : corners;
-        const auto it = memory.last.find(loop.index);
-        if (it == memory.last.end())
+        const auto it = memory.below.find(loop.index);
+        if (it == memory.below.end() || it->second.empty())
             return rear_point(loop, candidates);
         std::size_t best = candidates.front();
+        double nearest = std::numeric_limits<double>::max();
         for (std::size_t i : candidates)
-            if (distance(loop.points[i].p, it->second) < distance(loop.points[best].p, it->second))
-                best = i;
+            for (const Point2d& seam : it->second)
+                if (const double d = distance(loop.points[i].p, seam); d < nearest)
+                    nearest = d, best = i;
         return best;
     }
     }
@@ -128,7 +136,7 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
         Toolpath t = std::move(paths[best]);
         if (t.closed) {
             std::rotate(t.points.begin(), t.points.begin() + std::ptrdiff_t(seams[best]), t.points.end());
-            memory.last[t.index] = t.points.front().p;
+            memory.current[t.index].push_back(t.points.front().p);
             cursor = t.points.front().p; // a loop ends where it starts
         } else {
             if (reverse)
@@ -138,6 +146,42 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
         out.push_back(std::move(t));
     }
     return out;
+}
+
+std::vector<Polygons> split_islands(const Polygons& region) {
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddSubject(region);
+    Clipper2Lib::PolyTree64 tree;
+    clipper.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+    std::vector<Polygons> islands;
+    std::vector<const Clipper2Lib::PolyPath64*> outers;
+    for (const auto& outer : tree)
+        outers.push_back(outer.get());
+    for (std::size_t k = 0; k < outers.size(); ++k) {
+        Polygons island{outers[k]->Polygon()};
+        for (const auto& hole : *outers[k]) {
+            island.push_back(hole->Polygon());
+            for (const auto& inner : *hole)
+                outers.push_back(inner.get());
+        }
+        islands.push_back(std::move(island));
+    }
+    return islands;
+}
+
+int island_of(const std::vector<Polygons>& islands, const Point2d& p) {
+    const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+    for (std::size_t k = 0; k < islands.size(); ++k) {
+        const Polygons& island = islands[k];
+        if (island.empty() || Clipper2Lib::PointInPolygon(q, island.front()) == Clipper2Lib::PointInPolygonResult::IsOutside)
+            continue;
+        bool in_hole = false;
+        for (std::size_t h = 1; h < island.size() && !in_hole; ++h)
+            in_hole = Clipper2Lib::PointInPolygon(q, island[h]) == Clipper2Lib::PointInPolygonResult::IsInside;
+        if (!in_hole)
+            return int(k);
+    }
+    return -1;
 }
 
 } // namespace tisma

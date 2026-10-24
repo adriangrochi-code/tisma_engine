@@ -75,7 +75,7 @@ TEST_CASE("seams: rear, nearest, random, aligned", "[order]") {
     CHECK(l.points[corner].p.x == 4.0);
     CHECK(l.points[corner].p.y == 4.0);
     // aligned on a square (no concave corner): near the seam of the layer below
-    memory.last[0] = {9.5, 9.0};
+    memory.below[0] = {{-20.0, -20.0}, {9.5, 9.0}}; // the nearest seam below counts
     const std::size_t aligned = seam_point(sq, SeamMode::Aligned, {0, 0}, 1, memory);
     CHECK(sq.points[aligned].p.x == 10.0);
     CHECK(sq.points[aligned].p.y == 10.0);
@@ -84,5 +84,38 @@ TEST_CASE("seams: rear, nearest, random, aligned", "[order]") {
     SeamMemory fresh;
     const std::vector<Toolpath> ordered = order_paths({sq}, cursor, SeamMode::Rear, 1, fresh);
     CHECK(ordered[0].points.front().p.y == 10.0);
-    CHECK(fresh.last.at(0).y == 10.0);
+    CHECK(fresh.current.at(0).front().y == 10.0);
+    // next_layer: this layer's seams go below; an index not used keeps its older seams
+    fresh.below[5] = {{1.0, 1.0}};
+    fresh.next_layer();
+    CHECK(fresh.current.empty());
+    CHECK(fresh.below.at(0).front().y == 10.0);
+    CHECK(fresh.below.at(5).front().x == 1.0);
+}
+
+TEST_CASE("islands: connected pieces of a region, an island in a hole on its own", "[order]") {
+    auto square = [](double x0, double y0, double x1, double y1, bool hole = false) {
+        Polygon p{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                  {to_units(x0), to_units(y1)}};
+        if (hole)
+            std::reverse(p.begin(), p.end());
+        return p;
+    };
+    // A frame with a hole and an island in it, and a separate square.
+    const Polygons region{square(0, 0, 30, 30), square(5, 5, 25, 25, true), square(12, 12, 18, 18), square(40, 0, 50, 10)};
+    const std::vector<Polygons> islands = split_islands(region);
+    REQUIRE(islands.size() == 3);
+    const int frame = island_of(islands, {2, 2});
+    const int inner = island_of(islands, {15, 15});
+    const int apart = island_of(islands, {45, 5});
+    CHECK(frame >= 0);
+    CHECK(inner >= 0);
+    CHECK(apart >= 0);
+    CHECK(frame != inner);
+    CHECK(frame != apart);
+    CHECK(inner != apart);
+    CHECK(islands[std::size_t(frame)].size() == 2); // with its hole
+    CHECK(island_of(islands, {8, 8}) == -1);        // in the hole, outside the island
+    CHECK(island_of(islands, {35, 5}) == -1);
+    CHECK(island_of(islands, {0, 15}) == frame);    // on the boundary
 }
