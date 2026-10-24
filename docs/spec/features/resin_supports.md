@@ -31,6 +31,8 @@
 | `resin.hollow` | — | no | Vaciar la pieza |
 | `resin.hollow_wall` | mm | 3 | Espesor mínimo de la pared |
 | `resin.hollow_closing` | mm | 2 | Cuánto se redondea el hueco: no sigue los detalles chicos de la pieza |
+| `resin.hollow_infill` | % | 0 | Relleno interior del hueco, de 0 a 60 % (propio de Tisma Slicer) |
+| `resin.hollow_infill_cell` | mm | 8 | Tamaño de la celda del relleno interior |
 
 Los valores por defecto son los de Tisma Slicer.
 
@@ -54,7 +56,13 @@ Los valores por defecto son los de Tisma Slicer.
    - el hueco queda a `resin.hollow_wall` o más de la superficie, también arriba y abajo;
    - se redondea en `resin.hollow_closing`, así que la pared es más gruesa en las esquinas;
    - el hueco cerrado es una ventosa hasta que tiene agujeros de drenaje (`resin.md`, reglas 13 a 15). Se avisa.
-5. **Agujeros de drenaje:**
+5. **Relleno interior** (lo diseñó el equipo del dueño):
+   - barras de sección cuadrada en cinco direcciones: vertical y a 45° hacia los dos lados en los planos XZ e YZ.
+     Cada barra se apoya en las capas de abajo, así que el hueco no necesita soportes;
+   - densidad = 5 · (ancho de la barra / celda)², de donde sale el ancho para la densidad pedida;
+   - las barras de menos de 0,8 mm se avisan: no se imprimen bien;
+   - las barras se dejan dentro del hueco; el vaciado no las borra.
+6. **Agujeros de drenaje:**
    - la persona los pone en la pieza con su diámetro y su profundidad;
    - atraviesan la pared hasta el hueco;
    - Prusa recomienda al menos dos ([anuncio de PrusaSlicer 2.2](https://blog.prusa3d.com/prusaslicer-2-2-0-is-out-hollowing-support-for-3rd-party-printers-and-more_32728/)):
