@@ -11,6 +11,7 @@
 #include <charconv>
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <map>
@@ -63,6 +64,10 @@ public:
           min_travel_(s.retract_min_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
+        // The melt limit: the lower of the hot end's and the filament's (0: none).
+        for (const double limit : {s.machine_max_flow, s.filament_max_flow})
+            if (limit > 0.0)
+                max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
     }
 
     // Plans the time of the moves since the last call (they end at rest).
@@ -192,6 +197,13 @@ public:
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         const double e = width * height_ * length / filament_area_ * flow_;
+        // No faster than the hot end and the filament can melt: the feed is
+        // capped at the volumetric limit, rounded down to whole mm/min.
+        if (max_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+            const double cap = max_flow_ / (width * height_ * flow_);
+            if (feed > cap)
+                feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
+        }
         extruded_[feed] += length;
         total_e_ += e;
         pending_ += e;
@@ -260,6 +272,7 @@ private:
     double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
     std::map<double, double> extruded_;
+    double max_flow_ = 0.0; // mm3/s; 0: no limit
     double other_time_ = 0.0;
     long fan_ = -1; // not set yet
     double filament_area_ = 1.0;
@@ -314,6 +327,48 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
     return out;
 }
 
+std::string chamber_gcode(GcodeFlavor flavor, double celsius) {
+    const std::string t = std::to_string(std::lround(celsius));
+    return flavor == GcodeFlavor::Klipper ? "SET_HEATER_TEMPERATURE HEATER=chamber TARGET=" + t + " ; the chamber"
+                                          : "M141 S" + t + " ; the chamber";
+}
+
+std::vector<Warning> capability_warnings(const Settings& s) {
+    std::vector<Warning> out;
+    const auto number = [&](const char* variable) {
+        const auto it = s.variables.find(variable);
+        return it == s.variables.end() || it->second.empty() ? 0.0 : std::atof(it->second.front().c_str());
+    };
+    const auto add = [&](const char* kind, std::string message, double value) {
+        out.push_back({kind, -1, 0.0, std::move(message), value});
+    };
+    char text[200];
+    if (const double t = number("temperature"); s.max_nozzle_temp > 0.0 && t > s.max_nozzle_temp) {
+        std::snprintf(text, sizeof text, "the filament wants %.0f C at the nozzle; the printer reaches %.0f C", t,
+                      s.max_nozzle_temp);
+        add("nozzle_temperature", text, t);
+    }
+    if (const double t = number("bed_temperature"); s.max_bed_temp > 0.0 && t > s.max_bed_temp) {
+        std::snprintf(text, sizeof text, "the filament wants the bed at %.0f C; the printer reaches %.0f C", t,
+                      s.max_bed_temp);
+        add("bed_temperature", text, t);
+    }
+    if (s.chamber_temperature > 0.0 && s.max_chamber_temp <= 0.0) {
+        std::snprintf(text, sizeof text, "the filament wants a chamber at %.0f C; the printer does not heat one",
+                      s.chamber_temperature);
+        add("chamber", text, s.chamber_temperature);
+    } else if (s.chamber_temperature > s.max_chamber_temp && s.max_chamber_temp > 0.0) {
+        std::snprintf(text, sizeof text, "the filament wants a chamber at %.0f C; the printer heats it to %.0f C",
+                      s.chamber_temperature, s.max_chamber_temp);
+        add("chamber", text, s.chamber_temperature);
+    }
+    if (s.needs_enclosure && !s.enclosed)
+        add("enclosure", "the filament wants an enclosed printer, and this one is not marked as enclosed", 0.0);
+    if (s.abrasive && !s.hardened_nozzle)
+        add("abrasive", "the filament is abrasive and the nozzle is not marked as hardened: a brass nozzle wears out", 0.0);
+    return out;
+}
+
 std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     const std::string v = fixed(value, 4);
     switch (flavor) {
@@ -337,6 +392,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     if (s.pressure_advance > 0.0)
         out << pressure_advance_gcode(s.flavor, s.pressure_advance) << "\n";
+    // The chamber the filament wants, when the machine heats one.
+    const double chamber = std::min(s.chamber_temperature, s.max_chamber_temp);
+    if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
+        out << chamber_gcode(s.flavor, chamber) << "\n";
+    if (warnings) {
+        const std::vector<Warning> capability = capability_warnings(s);
+        warnings->insert(warnings->end(), capability.begin(), capability.end());
+    }
     out << "G90\n" << (s.relative_extrusion ? "M83" : "M82") << "\n";
     Point2d cursor{0.0, 0.0};
     SeamMemory seams;
@@ -516,6 +579,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     g.flush(out);
     if (!s.end_gcode.empty())
         out << substitute_variables(s.end_gcode, s.variables) << "\n";
+    if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
+        out << chamber_gcode(s.flavor, 0.0) << "\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
     out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
     for (const auto& [key, value] : describe(s))

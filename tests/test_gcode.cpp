@@ -418,6 +418,106 @@ TEST_CASE("warnings: details thinner than a bead, layers that cannot reach the m
     CHECK(warnings_json({}) == "{\n  \"version\": 1,\n  \"warnings\": []\n}\n");
 }
 
+namespace {
+
+// The highest volumetric flow of the extruding moves longer than 1 mm, from
+// the written G-code (relative extrusion: every move carries its own E).
+double highest_flow(const std::string& gcode, double filament_diameter) {
+    const double area = std::numbers::pi * filament_diameter * filament_diameter / 4.0;
+    double x = 0.0, y = 0.0, f = 0.0, highest = 0.0;
+    for (const std::string& line : lines_of(gcode)) {
+        if (!line.starts_with("G1 ") && !line.starts_with("G0 "))
+            continue;
+        double nx = x, ny = y, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w && w[0] != ';';) {
+            const double v = std::stod(w.substr(1));
+            if (w[0] == 'X') nx = v;
+            else if (w[0] == 'Y') ny = v;
+            else if (w[0] == 'E') e = v;
+            else if (w[0] == 'F') f = v;
+        }
+        const double length = std::hypot(nx - x, ny - y);
+        if (e > 0.0 && length > 1.0 && f > 0.0)
+            highest = std::max(highest, e * area / (length / (f / 60.0)));
+        x = nx, y = ny;
+    }
+    return highest;
+}
+
+} // namespace
+
+TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, and what does not fit is warned",
+          "[gcode][warnings]") {
+    Settings s;
+    s.relative_extrusion = true;
+    const double free_flow = highest_flow(cube_gcode(s), s.filament_diameter);
+    REQUIRE(free_flow > 4.0); // the limits below cut into it
+
+    // The lower of the hot end's and the filament's limit.
+    s.machine_max_flow = 4.0;
+    CHECK(highest_flow(cube_gcode(s), s.filament_diameter) <= 4.0 * 1.02);
+    s.filament_max_flow = 3.0;
+    const std::string capped = cube_gcode(s);
+    CHECK(highest_flow(capped, s.filament_diameter) <= 3.0 * 1.02);
+    CHECK(highest_flow(capped, s.filament_diameter) > 3.0 * 0.8);
+    s.machine_max_flow = 0.0;
+    CHECK(highest_flow(cube_gcode(s), s.filament_diameter) <= 3.0 * 1.02);
+    s.filament_max_flow = 0.0;
+
+    // The chamber: heated at the start and turned off at the end, no hotter than the machine heats it.
+    CHECK(chamber_gcode(GcodeFlavor::Marlin, 45.0) == "M141 S45 ; the chamber");
+    CHECK(chamber_gcode(GcodeFlavor::Klipper, 45.0) == "SET_HEATER_TEMPERATURE HEATER=chamber TARGET=45 ; the chamber");
+    CHECK_THAT(cube_gcode(s), !ContainsSubstring("M141"));
+    s.chamber_temperature = 45.0;
+    CHECK_THAT(cube_gcode(s), !ContainsSubstring("M141")); // the machine heats none
+    s.max_chamber_temp = 60.0;
+    const std::string heated = cube_gcode(s);
+    const std::size_t on = heated.find("M141 S45");
+    const std::size_t off = heated.find("M141 S0");
+    REQUIRE(on != std::string::npos);
+    REQUIRE(off != std::string::npos);
+    CHECK(on < heated.find("G1 "));
+    CHECK(off > heated.rfind("G1 "));
+    s.chamber_temperature = 80.0;
+    CHECK_THAT(cube_gcode(s), ContainsSubstring("M141 S60"));
+
+    // Warnings: one per thing the filament asks and the printer does not give.
+    Settings fits;
+    fits.variables["temperature"] = {"250"};
+    fits.variables["bed_temperature"] = {"100"};
+    fits.max_nozzle_temp = 300.0;
+    fits.max_bed_temp = 110.0;
+    fits.chamber_temperature = 50.0;
+    fits.max_chamber_temp = 60.0;
+    fits.needs_enclosure = fits.enclosed = true;
+    fits.abrasive = fits.hardened_nozzle = true;
+    CHECK(capability_warnings(fits).empty());
+    CHECK(capability_warnings(Settings{}).empty()); // nothing known, nothing warned
+
+    Settings asks = fits;
+    asks.variables["temperature"] = {"320"};
+    asks.variables["bed_temperature"] = {"120"};
+    asks.max_chamber_temp = 0.0;
+    asks.enclosed = false;
+    asks.hardened_nozzle = false;
+    std::vector<std::string> kinds;
+    for (const Warning& w : capability_warnings(asks))
+        kinds.push_back(w.kind);
+    CHECK(kinds == std::vector<std::string>{"nozzle_temperature", "bed_temperature", "chamber", "enclosure", "abrasive"});
+    asks.max_chamber_temp = 40.0;
+    const std::vector<Warning> cooler = capability_warnings(asks);
+    REQUIRE(cooler.size() == 5);
+    CHECK_THAT(cooler[2].message, ContainsSubstring("heats it to 40 C"));
+
+    // The writer reports them with the rest.
+    const IndexedMesh cube = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    std::vector<Warning> written;
+    std::ostringstream out;
+    write_gcode(out, slice_model(cube, asks), asks, &written);
+    CHECK(std::count_if(written.begin(), written.end(), [](const Warning& w) { return w.kind == "abrasive"; }) == 1);
+}
+
 TEST_CASE("skirt and brim come first on their layers as Skirt/Brim", "[gcode]") {
     Settings s;
     s.skirt_layers = 2;

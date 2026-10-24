@@ -16,6 +16,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
   modelo, muestra la ficha y crea el perfil (cama, boquilla, firmware, retracción de partida, G-code de inicio propio;
   temperaturas y ventilador del filamento).
+- **Capacidades de impresoras y filamentos** (`docs/CATALOG.md`, «Capacidades»): el catálogo trae, cuando el
+  fabricante lo dice, la cinemática, el flujo máximo, la cámara calefaccionada, la boquilla endurecida, el hot end, el
+  sensor, las camas, la conectividad y las funciones de cada impresora, y el secado, la dureza, si es abrasivo o
+  soluble y las temperaturas del material de cada filamento. El motor las usa:
+  - ninguna extrusión pasa del flujo máximo del hot end ni del filamento (`machine.max_flow`, `extrusion.max_flow`);
+  - calienta la cámara que pide el filamento si la impresora puede (`M141` o `SET_HEATER_TEMPERATURE`) y la apaga al
+    final;
+  - avisa cuando el filamento pide más de lo que la impresora da: temperatura de boquilla o cama, cámara, impresora
+    cerrada, boquilla endurecida.
 - El plan de Device y conexiones (P2) y el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
   en el relleno (`docs/MULTIMATERIAL.md`).
 

@@ -181,6 +181,73 @@ TEST_CASE("catalog: filament profiles from a data sheet", "[catalog]") {
     CHECK(parse_profile(profile_file_json(abs)).kind == ProfileKind::Filament);
 }
 
+TEST_CASE("catalog: capabilities in detail reach the profiles", "[catalog]") {
+    const std::string printers = replaced(kPrinters, R"("multi_material": "4 filaments",)",
+                                          R"("multi_material": "4 filaments", "kinematics": "corexy", "max_flow": 32,
+   "chamber_heating": 65, "hardened_nozzle": true, "hotend": "all-metal", "probe": "eddy current",
+   "bed_surfaces": ["textured PEI"], "connectivity": ["wifi", "lan"], "features": ["input shaping"],
+   "material_slots": 4, "tools": 2, "max_nozzle_temp": 320, "max_bed_temp": 120,)");
+    const std::string filaments = replaced(kFilaments, R"("enclosure": true,)",
+                                           R"("enclosure": true, "max_flow": 16, "chamber_temp": [40, 60],
+   "drying_temp": 80, "drying_hours": 6, "soluble": false, "hardness": "75D", "glass_transition": 105,
+   "heat_deflection": 98, "shrinkage": 0.7, "bed_surfaces": ["smooth PEI", "glue"],)");
+    const Catalog c = parse_catalog(printers, filaments);
+    const PrinterModel& x1 = c.printers[2];
+    CHECK(x1.kinematics == "corexy");
+    CHECK(x1.max_flow == 32.0);
+    CHECK(x1.probe == "eddy current");
+    CHECK(x1.connectivity == std::vector<std::string>{"wifi", "lan"});
+    CHECK(x1.material_slots == 4);
+    CHECK(x1.tools == 2);
+    const Settings ps = printer_profile(x1, 0.4).settings;
+    CHECK(ps.machine_max_flow == 32.0);
+    CHECK(ps.max_nozzle_temp == 320.0);
+    CHECK(ps.max_bed_temp == 120.0);
+    CHECK(ps.max_chamber_temp == 65.0);
+    CHECK(ps.enclosed);
+    CHECK(ps.hardened_nozzle);
+    // Not stated: not known, nothing limited.
+    const Settings delta = printer_profile(c.printers[1], 0.4).settings;
+    CHECK(delta.machine_max_flow == 0.0);
+    CHECK_FALSE(delta.hardened_nozzle);
+
+    const FilamentModel& abs = *find_filaments(c, "bolt abs").front();
+    CHECK(abs.drying_hours == 6.0);
+    CHECK(abs.hardness == "75D");
+    CHECK(abs.bed_surfaces.size() == 2);
+    const Settings fs = filament_profile(abs).settings;
+    CHECK(fs.filament_max_flow == 16.0);
+    CHECK(fs.chamber_temperature == 50.0); // the middle of 40-60
+    CHECK(fs.needs_enclosure);
+    CHECK_FALSE(fs.abrasive);
+    // A printer and a filament profile together: the ABS fits the X1.
+    Settings both = with_profile(Settings{}, ProfileKind::Printer, ps);
+    both = with_profile(both, ProfileKind::Filament, fs);
+    CHECK(both.machine_max_flow == 32.0);
+    CHECK(both.filament_max_flow == 16.0);
+    CHECK(capability_warnings(both).empty());
+    // And not the delta: open, and no chamber.
+    both = with_profile(both, ProfileKind::Printer, delta);
+    CHECK(capability_warnings(both).size() == 2);
+
+    // Abrasive: as the sheet says, else a fibre-filled material.
+    FilamentModel f = abs;
+    f.material = "PA-CF";
+    CHECK(is_abrasive(f));
+    f.abrasive = false;
+    CHECK_FALSE(is_abrasive(f));
+    f.abrasive.reset();
+    f.material = "PETG-GF";
+    CHECK(is_abrasive(f));
+    f.material = "PLA";
+    CHECK_FALSE(is_abrasive(f));
+
+    fails(replaced(printers, R"("tools": 2)", R"("tools": 1.5)"), kFilaments, "tools must be a whole number");
+    fails(replaced(printers, R"("connectivity": ["wifi", "lan"])", R"("connectivity": "wifi")"), kFilaments,
+          "connectivity must be a list of texts");
+    fails(kPrinters, replaced(filaments, R"("shrinkage": 0.7)", R"("shrinkage": 40)"), "shrinkage");
+}
+
 TEST_CASE("catalog: the built-in catalog is valid", "[catalog]") {
     const Catalog& c = builtin_catalog();
     for (const PrinterModel& p : c.printers) {

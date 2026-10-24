@@ -227,7 +227,8 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
                     "variables": {"temp": 215, "name": "PLA", "list": [1, "b", true]},
                     "max_feed_x": 300, "max_feed_y": 290, "max_feed_z": 15, "max_feed_e": 100, "acceleration": 2000,
                     "travel_acceleration": 3000, "corner_speed": 8, "bed": [[0, 0], [220, 0], [220, 230.5], [0, 230.5]],
-                    "max_height": 250},
+                    "max_height": 250, "max_flow": 24, "max_nozzle_temp": 300, "max_bed_temp": 110,
+                    "max_chamber_temp": 60, "enclosed": true, "hardened_nozzle": true},
         "speed": {"walls": 55, "outer_wall": 35, "infill": 90, "solid_infill": 70, "top_solid_infill": 45, "support": 60,
                   "travel": 150, "first_layer": 25, "max": 120},
         "retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
@@ -236,7 +237,8 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},
         "compute": {"gpu": "off"},
         "compensation": {"scale_x": 99.6, "scale_y": 100.4, "scale_z": 99.9, "hole_offset": 0.08},
-        "extrusion": {"flow": 97},
+        "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
+                      "needs_enclosure": true},
         "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
                      "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65}]
     })");
@@ -267,6 +269,16 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
     CHECK_THROWS_WITH(parse_settings(R"({"compensation": {"hole_offset": 9}})"),
                       ContainsSubstring("compensation.hole_offset"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"flow": 0}})"), ContainsSubstring("extrusion.flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"max_flow": -1}})"), ContainsSubstring("extrusion.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"chamber_temperature": 300}})"),
+                      ContainsSubstring("extrusion.chamber_temperature"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"abrasive": 1}})"),
+                      ContainsSubstring("extrusion.abrasive: must be true or false"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_flow": 2000}})"), ContainsSubstring("machine.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_nozzle_temp": 900}})"),
+                      ContainsSubstring("machine.max_nozzle_temp"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"enclosed": "yes"}})"),
+                      ContainsSubstring("machine.enclosed: must be true or false"));
     CHECK_THROWS_WITH(parse_settings(R"({"changes": {"z": 1}})"), ContainsSubstring("changes: must be a list"));
     CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"temperature": 200}]})"),
                       ContainsSubstring("changes[0].z: is missing"));

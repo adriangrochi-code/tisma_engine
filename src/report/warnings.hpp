@@ -11,7 +11,8 @@ struct Settings;
 // A slicing problem for Tisma to show (docs/spec/BEHAVIOR.md, "Errores y
 // avisos"). layer is -1 (and z unused) for the whole model.
 struct Warning {
-    std::string kind; // "thin_detail", "layer_time", "open_contours", "gpu_fallback"
+    std::string kind; // "thin_detail", "layer_time", "open_contours", "gpu_fallback", and the machine's
+                      // capabilities: "nozzle_temperature", "bed_temperature", "chamber", "enclosure", "abrasive"
     int layer = -1;
     double z = 0.0;
     std::string message;

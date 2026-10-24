@@ -1267,6 +1267,33 @@ void App::catalog_dialog() {
             ImGui::Text(tr(T::MaxMotion), maybe(p.max_speed, "mm/s").c_str(), maybe(p.max_acceleration, "mm/s²").c_str());
             if (!p.multi_material.empty())
                 ImGui::Text("%s: %s", tr(T::MultiMaterial), p.multi_material.c_str());
+            // The capabilities in detail, those the maker states.
+            const auto join = [](const std::vector<std::string>& items) {
+                std::string out;
+                for (const std::string& i : items)
+                    out += (out.empty() ? "" : ", ") + i;
+                return out;
+            };
+            const auto line = [](T label, const std::string& value) {
+                if (!value.empty())
+                    ImGui::Text("%s: %s", tr(label), value.c_str());
+            };
+            line(T::Kinematics, p.kinematics);
+            if (p.max_flow)
+                line(T::MaxFlow, maybe(p.max_flow, "mm³/s"));
+            if (p.chamber_heating)
+                line(T::ChamberHeating, maybe(p.chamber_heating, "°C"));
+            if (p.hardened_nozzle)
+                line(T::HardenedNozzle, *p.hardened_nozzle ? tr(T::Yes) : tr(T::No));
+            line(T::Hotend, p.hotend);
+            line(T::Probe, p.probe);
+            line(T::BedSurfaces, join(p.bed_surfaces));
+            line(T::Connectivity, join(p.connectivity));
+            line(T::Features, join(p.features));
+            if (p.material_slots)
+                line(T::MaterialSlots, std::to_string(*p.material_slots));
+            if (p.tools)
+                line(T::Tools, std::to_string(*p.tools));
             if (needs_own_start_gcode(p))
                 ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::OwnStartGcode));
             catalog_nozzle_ = std::min(catalog_nozzle_, p.nozzles.size() - 1);
@@ -1298,6 +1325,31 @@ void App::catalog_dialog() {
                 ImGui::Text("%s: %s", tr(T::Density), maybe(f.density, "g/cm³").c_str());
             if (f.enclosure.value_or(false))
                 ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::NeedsEnclosure));
+            if (is_abrasive(f))
+                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::AbrasiveFilament));
+            if (f.max_flow)
+                ImGui::Text("%s: %s", tr(T::MaxFlow), maybe(f.max_flow, "mm³/s").c_str());
+            if (f.chamber_temp)
+                ImGui::Text("%s: %s", tr(T::ChamberHeating), range(f.chamber_temp, "°C").c_str());
+            if (f.drying_temp)
+                ImGui::Text("%s: %s%s", tr(T::Drying), maybe(f.drying_temp, "°C").c_str(),
+                            f.drying_hours ? (", " + maybe(f.drying_hours, "h")).c_str() : "");
+            if (f.soluble.value_or(false))
+                ImGui::Text("%s", tr(T::Soluble));
+            if (!f.hardness.empty())
+                ImGui::Text("%s: %s", tr(T::Hardness), f.hardness.c_str());
+            if (f.glass_transition)
+                ImGui::Text("Tg: %s", maybe(f.glass_transition, "°C").c_str());
+            if (f.heat_deflection)
+                ImGui::Text("HDT: %s", maybe(f.heat_deflection, "°C").c_str());
+            if (f.shrinkage)
+                ImGui::Text("%s: %s", tr(T::Shrinkage), maybe(f.shrinkage, "%").c_str());
+            if (!f.bed_surfaces.empty()) {
+                std::string surfaces;
+                for (const std::string& b : f.bed_surfaces)
+                    surfaces += (surfaces.empty() ? "" : ", ") + b;
+                ImGui::Text("%s: %s", tr(T::BedSurfaces), surfaces.c_str());
+            }
             sources = &f.sources;
         }
         if (sources) {
@@ -1808,6 +1860,21 @@ void App::status_bar() {
                                format(tr(T::GcodeOk), number_text(result_->check.stats.lines).c_str()).c_str());
         else
             ImGui::TextColored(rgb(0xE5484D), "%s", format(tr(T::GcodeBad), int(result_->check.problem_count)).c_str());
+        // The slicing's warnings (thin details, short layers, what the
+        // machine cannot give the filament), listed when hovered.
+        if (!result_->warnings.empty()) {
+            ImGui::SameLine(0, 16.0f * scale_);
+            ImGui::TextColored(rgb(0xE8A33D), "%s", format(tr(T::Warnings), int(result_->warnings.size())).c_str());
+            if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
+                for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i)
+                    ImGui::BulletText("%s", result_->warnings[i].message.c_str());
+                if (result_->warnings.size() > 20)
+                    ImGui::TextDisabled("…");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+        }
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }

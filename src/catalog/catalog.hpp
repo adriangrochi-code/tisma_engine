@@ -27,6 +27,14 @@ struct PrinterModel {
     std::optional<bool> auto_leveling;
     bool enclosed = false;
     std::string multi_material;           // the maker's multi-material option, if any
+    // The capabilities in detail (docs/CATALOG.md, "Capacidades"), when the maker states them.
+    std::string kinematics;               // "cartesian", "corexy", "delta", "idex", "belt", ...
+    std::optional<double> max_flow;       // mm3/s the hot end melts
+    std::optional<double> chamber_heating; // C an actively heated chamber reaches
+    std::optional<bool> hardened_nozzle;  // the stock nozzle takes abrasive filaments
+    std::string hotend, probe;            // the maker's words, short
+    std::vector<std::string> bed_surfaces, connectivity, features;
+    std::optional<int> material_slots, tools; // filaments one unit feeds; independent tool heads
     std::vector<std::string> sources;     // the official pages the numbers come from
 };
 
@@ -37,8 +45,20 @@ struct FilamentModel {
     std::optional<std::array<double, 2>> nozzle_temp, bed_temp, fan, print_speed; // C, C, %, mm/s
     std::optional<double> nozzle_recommended, bed_recommended;
     std::optional<bool> enclosure;
+    // The rest of the data sheet, when it states it.
+    std::optional<double> max_flow;                    // mm3/s
+    std::optional<std::array<double, 2>> chamber_temp; // C
+    std::optional<double> drying_temp, drying_hours;   // C, h
+    std::optional<bool> abrasive, soluble;
+    std::string hardness;                              // "95A", "40D"
+    std::optional<double> glass_transition, heat_deflection, shrinkage; // C, C, %
+    std::vector<std::string> bed_surfaces;
     std::vector<std::string> sources;
 };
+
+// Whether a filament wears a brass nozzle: as its data sheet says, else by
+// its material (filled with carbon or glass fibre: "-CF", "-GF").
+bool is_abrasive(const FilamentModel& filament);
 
 struct Catalog {
     std::vector<PrinterModel> printers;   // sorted by vendor, then model
@@ -68,13 +88,15 @@ std::string filament_profile_name(const FilamentModel& filament);
 // A printer profile for the model with that nozzle (docs/CATALOG.md, "Perfiles"):
 // its bed (a rectangle from the origin, or a circle around it), height,
 // nozzle, G-code flavor, retraction for its extruder, its speed and
-// acceleration limits when known, and the engine's own start and end G-code.
+// acceleration limits and its capabilities (flow, temperatures, chamber,
+// enclosure, hardened nozzle) when known, and the engine's own start and end
+// G-code.
 Profile printer_profile(const PrinterModel& printer, double nozzle);
 
 // A filament profile: its diameter, the nozzle and bed temperatures (the
-// recommended ones, else the middle of the range rounded to 5 C), and the fan
+// recommended ones, else the middle of the range rounded to 5 C), the fan
 // from the data sheet or, when it gives no numbers, the engine's default for
-// its material.
+// its material, and its flow limit, chamber, abrasiveness and enclosure.
 Profile filament_profile(const FilamentModel& filament);
 
 // Firmwares that need more than plain G-code to start well (their own

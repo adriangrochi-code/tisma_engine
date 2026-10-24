@@ -15,6 +15,16 @@ namespace tisma {
 // are left as they are.
 std::string substitute_variables(std::string_view text, const std::map<std::string, std::vector<std::string>>& variables);
 
+// The command that sets the chamber's temperature: M141 S, or Klipper's
+// SET_HEATER_TEMPERATURE for a heater named "chamber".
+std::string chamber_gcode(GcodeFlavor flavor, double celsius);
+
+// What the filament asks that the machine cannot give (docs/CATALOG.md,
+// "Capacidades"): a nozzle or bed hotter than its maximum, a chamber it does
+// not heat, an enclosure, a hardened nozzle. write_gcode adds them to its
+// warnings.
+std::vector<Warning> capability_warnings(const Settings& settings);
+
 // The command that sets the firmware's pressure advance: M900 K (Marlin's
 // linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S
 // (RepRapFirmware), from each firmware's public documentation.

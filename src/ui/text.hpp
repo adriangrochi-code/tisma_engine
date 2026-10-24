@@ -261,6 +261,23 @@
     X(NeedsEnclosure, "Necesita impresora cerrada", "Needs an enclosed printer")                                      \
     X(CatalogEmpty, "Sin resultados", "No results")                                                                   \
     X(ProfileAdded, "Agregado a tus perfiles: %s", "Added to your profiles: %s")                                      \
+    X(Kinematics, "Cinemática", "Kinematics")                                                                         \
+    X(MaxFlow, "Flujo máximo", "Maximum flow")                                                                        \
+    X(ChamberHeating, "Cámara", "Chamber")                                                                            \
+    X(HardenedNozzle, "Boquilla endurecida", "Hardened nozzle")                                                       \
+    X(Hotend, "Hotend", "Hot end")                                                                                    \
+    X(Probe, "Nivelación", "Leveling probe")                                                                          \
+    X(BedSurfaces, "Superficies de cama", "Bed surfaces")                                                             \
+    X(Connectivity, "Conexión", "Connectivity")                                                                       \
+    X(Features, "Funciones", "Features")                                                                              \
+    X(MaterialSlots, "Ranuras de filamento", "Filament slots")                                                        \
+    X(Tools, "Cabezales", "Tool heads")                                                                               \
+    X(AbrasiveFilament, "Abrasivo: necesita boquilla endurecida", "Abrasive: needs a hardened nozzle")                \
+    X(Drying, "Secado", "Drying")                                                                                     \
+    X(Soluble, "Soluble (para soportes)", "Soluble (for supports)")                                                   \
+    X(Hardness, "Dureza", "Hardness")                                                                                 \
+    X(Shrinkage, "Contracción", "Shrinkage")                                                                          \
+    X(Warnings, "%d avisos", "%d warnings")                                                                           \
     X(NoProfile, "Sin perfil", "No profile")                                                                          \
     X(BuiltinProfiles, "De fábrica", "Built-in")                                                                      \
     X(MyProfiles, "Mis perfiles", "My profiles")                                                                      \

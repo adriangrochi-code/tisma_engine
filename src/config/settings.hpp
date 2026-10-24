@@ -85,6 +85,15 @@ struct Settings {
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
     double max_height = 0.0; // mm; 0: not checked
+    // What the machine can do (docs/CATALOG.md, "Capacidades"); 0 or false:
+    // not known. The writer keeps to the flow and heats the chamber; the
+    // checks warn when a filament asks for more.
+    double machine_max_flow = 0.0;  // mm3/s the hot end melts
+    double max_nozzle_temp = 0.0;   // C
+    double max_bed_temp = 0.0;      // C
+    double max_chamber_temp = 0.0;  // C of an actively heated chamber; 0: none
+    bool enclosed = false;
+    bool hardened_nozzle = false;   // takes abrasive filaments
 
     // speed, mm/s
     double wall_speed = 60.0;
@@ -134,6 +143,10 @@ struct Settings {
     // The firmware's pressure advance, written at the start in the flavor's
     // command (M900 K, SET_PRESSURE_ADVANCE, M572); 0: not written.
     double pressure_advance = 0.0;
+    double filament_max_flow = 0.0;    // mm3/s the filament takes; 0: no limit of its own
+    double chamber_temperature = 0.0;  // C the filament wants in the chamber; 0: none
+    bool abrasive = false;             // wears a brass nozzle
+    bool needs_enclosure = false;
 
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;

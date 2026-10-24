@@ -164,13 +164,23 @@ Settings parse_settings(std::string_view text) {
     read_group(root, "machine",
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
-                "bed", "max_height"},
+                "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
+                "hardened_nozzle"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
-                   if (n == "relative_extrusion") {
+                   if (n == "relative_extrusion" || n == "enclosed" || n == "hardened_nozzle") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
-                       s.relative_extrusion = v.get<bool>();
+                       (n == "relative_extrusion" ? s.relative_extrusion : n == "enclosed" ? s.enclosed : s.hardened_nozzle) =
+                           v.get<bool>();
+                   } else if (n == "max_flow" || n == "max_nozzle_temp" || n == "max_bed_temp" || n == "max_chamber_temp") {
+                       const double d = number(g, n, k);
+                       if (d < 0.0 || d > (n == "max_flow" ? 1000.0 : 600.0))
+                           fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 600 C");
+                       (n == "max_flow"          ? s.machine_max_flow
+                        : n == "max_nozzle_temp" ? s.max_nozzle_temp
+                        : n == "max_bed_temp"    ? s.max_bed_temp
+                                                 : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(
                            g, n, k, {{"marlin", GcodeFlavor::Marlin}, {"klipper", GcodeFlavor::Klipper}, {"reprap", GcodeFlavor::RepRap}});
@@ -360,8 +370,21 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must be a percentage from 50 to 200");
                    (n == "scale_x" ? s.scale_x : n == "scale_y" ? s.scale_y : s.scale_z) = v;
                });
-    read_group(root, "extrusion", {"flow", "pressure_advance"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "extrusion", {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "abrasive" || n == "needs_enclosure") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "abrasive" ? s.abrasive : s.needs_enclosure) = g.at(n).get<bool>();
+            return;
+        }
         const double v = number(g, n, k);
+        if (n == "max_flow" || n == "chamber_temperature") {
+            if (v < 0.0 || v > (n == "max_flow" ? 1000.0 : 200.0))
+                fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 200 C");
+            (n == "max_flow" ? s.filament_max_flow : s.chamber_temperature) = v;
+            return;
+        }
         if (n == "pressure_advance") {
             if (v < 0.0 || v > 2.0)
                 fail(k, "must be from 0 to 2");
@@ -527,6 +550,16 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"compensation.hole_offset", num(s.hole_offset)},
         {"extrusion.flow", num(s.flow)},
         {"extrusion.pressure_advance", num(s.pressure_advance)},
+        {"extrusion.max_flow", num(s.filament_max_flow)},
+        {"extrusion.chamber_temperature", num(s.chamber_temperature)},
+        {"extrusion.abrasive", flag(s.abrasive)},
+        {"extrusion.needs_enclosure", flag(s.needs_enclosure)},
+        {"machine.max_flow", num(s.machine_max_flow)},
+        {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
+        {"machine.max_bed_temp", num(s.max_bed_temp)},
+        {"machine.max_chamber_temp", num(s.max_chamber_temp)},
+        {"machine.enclosed", flag(s.enclosed)},
+        {"machine.hardened_nozzle", flag(s.hardened_nozzle)},
     };
     if (!s.changes.empty())
         out.push_back({"changes", changes_json(s.changes).dump()});
@@ -594,7 +627,13 @@ std::string settings_json(const Settings& s) {
           {"travel_acceleration", s.travel_acceleration},
           {"corner_speed", s.corner_speed},
           {"bed", bed},
-          {"max_height", s.max_height}}},
+          {"max_height", s.max_height},
+          {"max_flow", s.machine_max_flow},
+          {"max_nozzle_temp", s.max_nozzle_temp},
+          {"max_bed_temp", s.max_bed_temp},
+          {"max_chamber_temp", s.max_chamber_temp},
+          {"enclosed", s.enclosed},
+          {"hardened_nozzle", s.hardened_nozzle}}},
         {"speed",
          {{"walls", s.wall_speed},
           {"outer_wall", outer_wall},
@@ -631,7 +670,13 @@ std::string settings_json(const Settings& s) {
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
-        {"extrusion", {{"flow", s.flow}, {"pressure_advance", s.pressure_advance}}},
+        {"extrusion",
+         {{"flow", s.flow},
+          {"pressure_advance", s.pressure_advance},
+          {"max_flow", s.filament_max_flow},
+          {"chamber_temperature", s.chamber_temperature},
+          {"abrasive", s.abrasive},
+          {"needs_enclosure", s.needs_enclosure}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

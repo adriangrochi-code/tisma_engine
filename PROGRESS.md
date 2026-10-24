@@ -2761,3 +2761,50 @@ Slicer (dos opciones en `docs/spec/COVERAGE.md`, «Migración»).
 **Pendiente de las fichas:** `COVERAGE.md` y las fichas nuevas (interfaz, paredes extra, piel difusa, rellenos,
 falda/borde/balsa, más soportes, velocidades y aceleraciones, enfriamiento, retracción y viajes, modo jarrón) están en
 las PRs #2 a #8, todavía sin fusionar en `main`. Se leen cuando estén en `main` y pasen `tools/check_spec.py`.
+
+## 2026-10-24 — capacidades de impresoras y filamentos
+
+**Pedido del dueño:** integrar las capacidades de cada impresora «a lo mayor cantidad de detalles posible» y lo mismo
+para los filamentos, para que el laminador use lo importante (más capacidad de la máquina); no le interesa que los
+perfiles sean comerciales. Los perfiles de otros programas siguen afuera por la regla de sala limpia.
+
+**Hecho:**
+- **El catálogo** (`docs/CATALOG.md`, «Capacidades en detalle») acepta por impresora la cinemática, el flujo máximo,
+  la cámara calefaccionada, la boquilla endurecida, el hot end, el sensor, las camas, la conectividad, las funciones,
+  las ranuras multimaterial y los cabezales; por filamento el flujo máximo, la cámara, el secado, abrasivo, soluble,
+  la dureza, Tg, HDT, la contracción y las camas. Todo opcional y validado con rangos (`parse_catalog`).
+- **Los ajustes** (`docs/CONFIG.md`): `machine.max_flow`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp`,
+  `enclosed`, `hardened_nozzle`; `extrusion.max_flow`, `chamber_temperature`, `abrasive`, `needs_enclosure`. Van al
+  perfil de impresora y de filamento respectivamente, y los llenan `printer_profile` y `filament_profile`.
+- **El motor los usa** (`src/gcode/writer.cpp`):
+  - tope de flujo volumétrico: la velocidad de cada tramo no pasa de flujo / (ancho × alto × flujo %), con el menor
+    de los dos límites, redondeada a mm/min enteros;
+  - la cámara: `M141 S` (o `SET_HEATER_TEMPERATURE HEATER=chamber` en Klipper) después del G-code de inicio, sin
+    pasar del máximo de la impresora, y apagada al final;
+  - `capability_warnings`: boquilla o cama más calientes que el máximo, cámara que no calienta o no alcanza,
+    impresora cerrada, boquilla endurecida (tipos `nozzle_temperature`, `bed_temperature`, `chamber`, `enclosure`,
+    `abrasive`), sumados a los avisos del G-code.
+- **La interfaz:** la ficha del catálogo muestra todos los detalles; los avisos van en la barra de estado con su
+  texto al pasar el puntero.
+- **`tools/catalog_merge.py`:** valida los valores contra los rangos del catálogo y tiene `--update`, que suma a una
+  entrada existente solo las claves que no tenía y las fuentes nuevas.
+- **Pruebas:** `tests/test_gcode.cpp` «capabilities» (el flujo medido del G-code del cubo baja al tope, 4 y 3 mm³/s;
+  la cámara al principio y al final; los cinco avisos y ninguno cuando todo cabe o nada se sabe);
+  `tests/test_catalog.cpp` «capabilities in detail» (los campos, los perfiles, los dos perfiles juntos con y sin
+  avisos, `is_abrasive`, los errores de formato); `tests/test_settings.cpp` (ida y vuelta de las claves nuevas y
+  sus rangos).
+
+**Medido:** `tools/ci_linux.sh` pasa entero (264 pruebas por compilador, gcc, clang y ASan + UBSan, 215 s la
+última). El cubo de prueba sin límite pasa de 4 mm³/s; con tope de 3 mm³/s, el flujo más alto medido en su G-code
+queda entre 2,4 y 3,06 mm³/s (el redondeo a mm/min enteros).
+
+**No probado:** una impresora real con cámara (`M141` sale de la documentación de Marlin y RepRapFirmware; la
+calefacción de cámara de Klipper depende del nombre del calentador en la configuración de cada máquina); los
+detalles del catálogo todavía no están cargados (la tanda de detalles, abajo).
+
+**Sigue:**
+- la tanda de detalles del catálogo (seis agentes de investigación, solo páginas oficiales; cayeron por el límite
+  de la sesión y se retoman);
+- el filtro de moiré de la vista 3D (pedido del dueño, 2026-10-24);
+- un perfil de impresión «rápido» armado desde las capacidades (velocidad y aceleración máximas, flujo).
+
