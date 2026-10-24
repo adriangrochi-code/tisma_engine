@@ -218,7 +218,7 @@ TEST_CASE("monotonic top surfaces: one direction, nothing before the touching li
         s.top = r;
         FillParams p;
         p.angle = 0.0;
-        const std::vector<Toolpath> lines = fill_layer(s, 0, p).solid;
+        const std::vector<Toolpath> lines = fill_layer(s, 0, p).top;
         REQUIRE_FALSE(lines.empty());
         for (std::size_t i = 0; i < lines.size(); ++i) {
             const Toolpath& t = lines[i];
@@ -262,9 +262,9 @@ TEST_CASE("gap fill: variable-width beads where the solid lines leave room", "[i
     p.gap_fill = true;
     const LayerFill filled = fill_layer(s, 0, p);
     REQUIRE_FALSE(filled.gaps.empty());
-    std::vector<Toolpath> all = filled.solid;
+    std::vector<Toolpath> all = filled.top;
     all.insert(all.end(), filled.gaps.begin(), filled.gaps.end());
-    const Coverage before = measure_coverage(s.top, plain.solid);
+    const Coverage before = measure_coverage(s.top, plain.top);
     const Coverage after = measure_coverage(s.top, all);
     CHECK(after.gaps < before.gaps - 0.005 * before.target);
     CHECK(after.outside < 1e-3);
@@ -287,12 +287,12 @@ TEST_CASE("monotonic tops reach a quarter bead into the walls: the area is laid"
             s.top = *region;
             FillParams p;
             p.angle = angle;
-            const Coverage c = measure_coverage(*region, fill_layer(s, 0, p).solid);
+            const Coverage c = measure_coverage(*region, fill_layer(s, 0, p).top);
             INFO("angle " << angle);
             CHECK(std::fabs(c.deposited - c.target) < 0.02 * c.target);
             CHECK(c.outside < 0.04 * c.target);
             p.wall_overlap = 0.0;
-            const Coverage inside = measure_coverage(*region, fill_layer(s, 0, p).solid);
+            const Coverage inside = measure_coverage(*region, fill_layer(s, 0, p).top);
             CHECK(inside.outside < 1e-3);
             CHECK(inside.deposited < c.deposited);
         }

@@ -33,7 +33,8 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
 
 // The infill toolpaths of one layer.
 struct LayerFill {
-    std::vector<Toolpath> solid;  // top and bottom surfaces, at 100%
+    std::vector<Toolpath> top;    // top surfaces, at 100%
+    std::vector<Toolpath> solid;  // bottom surfaces, at 100%
     std::vector<Toolpath> sparse; // the rest, at the infill density
     std::vector<Toolpath> bridge; // bridges: straight lines at the bridge's angle, at 100%
     std::vector<Toolpath> gaps;   // variable-width beads where the solid lines leave a gap (gap_fill)

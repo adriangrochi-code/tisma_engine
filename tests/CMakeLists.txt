@@ -27,6 +27,7 @@ add_executable(tisma_tests
   test_coverage.cpp
   test_surfaces.cpp
   test_infill.cpp
+  test_gcode.cpp
 )
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings Catch2::Catch2WithMain)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
@@ -40,10 +41,10 @@ catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 add_test(NAME cli_version COMMAND tisma-engine --version)
 add_test(NAME cli_info_ascii_cube COMMAND tisma-engine info ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl)
 set_tests_properties(cli_info_ascii_cube PROPERTIES PASS_REGULAR_EXPRESSION "triangles: 12")
-add_test(NAME cli_slice_not_implemented
+add_test(NAME cli_slice_writes_gcode
   COMMAND tisma-engine slice ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
-          --config ${CMAKE_CURRENT_SOURCE_DIR}/data/settings.json -o out.gcode)
-set_tests_properties(cli_slice_not_implemented PROPERTIES PASS_REGULAR_EXPRESSION "not implemented")
+          --config ${CMAKE_CURRENT_SOURCE_DIR}/data/settings.json -o ${CMAKE_CURRENT_BINARY_DIR}/cube.gcode)
+set_tests_properties(cli_slice_writes_gcode PROPERTIES PASS_REGULAR_EXPRESSION "wrote ")
 
 # The engine's license must stay closable: every dependency listed in
 # THIRD_PARTY.md with a permissive license, no copyleft text in our files.

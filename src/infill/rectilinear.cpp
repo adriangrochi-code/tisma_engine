@@ -159,18 +159,18 @@ std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpat
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
-    if (params.monotonic_top) {
-        out.solid = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true,
-                                     params.wall_overlap * params.width);
-        for (Toolpath& t : rectilinear_fill(surfaces.bottom, params.width, angle, params.width, true, true))
-            out.solid.push_back(std::move(t));
-    } else {
-        const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
-        out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
-    }
-    if (params.gap_fill && !out.solid.empty())
-        out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), out.solid,
+    if (params.monotonic_top)
+        out.top = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true,
+                                   params.wall_overlap * params.width);
+    else
+        out.top = rectilinear_fill(surfaces.top, params.width, angle, params.width, true, true);
+    out.solid = rectilinear_fill(surfaces.bottom, params.width, angle, params.width, true, true);
+    if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
+        std::vector<Toolpath> lines = out.top;
+        lines.insert(lines.end(), out.solid.begin(), out.solid.end());
+        out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), lines,
                             params.width);
+    }
     // Bridge lines stay straight: a join along the edge would hang in the air.
     out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
     if (params.density <= 0.0)

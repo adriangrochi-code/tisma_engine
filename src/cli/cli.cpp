@@ -2,6 +2,7 @@
 
 #include "io/stl.hpp"
 #include "config/settings.hpp"
+#include "gcode/writer.hpp"
 #include "geom/medial_axis.hpp"
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
@@ -13,6 +14,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -214,7 +216,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         top += area_mm2(sliced.surfaces[l].top);
         bottom += area_mm2(sliced.surfaces[l].bottom);
         sparse += area_mm2(sliced.surfaces[l].sparse);
-        solid_lines += sliced.fills[l].solid.size();
+        solid_lines += sliced.fills[l].top.size() + sliced.fills[l].solid.size();
         sparse_lines += sliced.fills[l].sparse.size();
         bridge_lines += sliced.fills[l].bridge.size();
     }
@@ -232,8 +234,19 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (sliced.open_contours > 0)
         err << "warning: " << sliced.open_contours
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
-    err << "slice: G-code output is not implemented yet (" << parsed->output << " not written)\n";
-    return kExitNotImplemented;
+    std::ofstream gcode(std::string(parsed->output), std::ios::binary);
+    if (!gcode) {
+        err << "error: cannot write '" << parsed->output << "'\n";
+        return kExitInput;
+    }
+    write_gcode(gcode, sliced, settings);
+    gcode.close();
+    if (!gcode) {
+        err << "error: writing '" << parsed->output << "' failed\n";
+        return kExitInput;
+    }
+    out << "wrote " << parsed->output << "\n";
+    return kExitOk;
 }
 
 } // namespace

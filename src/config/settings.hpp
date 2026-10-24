@@ -1,9 +1,11 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace tisma {
@@ -16,6 +18,14 @@ public:
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid };
+enum class GcodeFlavor { Marlin, Klipper, RepRap };
+
+// A speed in mm/s, or a percentage of another speed.
+struct Speed {
+    double value = 0.0;
+    bool percent = false;
+    double of(double base) const { return percent ? base * value / 100.0 : value; }
+};
 
 // The engine's own settings format, documented in docs/CONFIG.md.
 struct Settings {
@@ -37,9 +47,32 @@ struct Settings {
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     GpuMode gpu = GpuMode::Auto;
 
+    // machine
+    double nozzle_diameter = 0.4;   // mm
+    double filament_diameter = 1.75; // mm
+    bool relative_extrusion = false;
+    GcodeFlavor flavor = GcodeFlavor::RepRap;
+    std::string start_gcode, end_gcode;
+    // Values for [name], {name} and {name[i]} in the start and end G-code, given
+    // by the caller: a single value is a list of one. Numbers keep their JSON text.
+    std::map<std::string, std::vector<std::string>> variables;
+
+    // speed, mm/s
+    double wall_speed = 60.0;
+    Speed outer_wall_speed{50.0, true}; // of wall_speed
+    double infill_speed = 80.0;
+    double solid_infill_speed = 80.0;
+    double top_solid_infill_speed = 50.0;
+    double travel_speed = 130.0;
+    double first_layer_speed = 30.0;
+    double max_speed = 80.0; // no extrusion goes faster
+
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;
 };
+
+// Every setting as "group.key" and its value, for the end of the G-code.
+std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);

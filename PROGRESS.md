@@ -1305,3 +1305,46 @@ decisión sobre el eje medio.
 **Sigue:** F4. Primero los ajustes de máquina y velocidades, y un escritor de G-code mínimo con las etiquetas que lee
 la vista previa de Tisma.
 
+## 2026-10-24 — bloque nocturno 36: F4, ajustes de máquina y velocidades, y el primer G-code
+
+**Hecho:**
+- Ajustes con nombres propios (los perfiles de Tisma los traduce su adaptador):
+  - `machine`: boquilla, filamento, E relativa o absoluta, dialecto, G-code de inicio y fin, y un mapa `variables`;
+  - `speed`: paredes, pared externa en mm/s o «50%», relleno, sólido, superior, viajes, primera capa y máximo;
+  - valores de banco de `SETTINGS_V1.md` donde los hay.
+- Las variables del G-code de inicio y fin (`[nombre]`, `{nombre}`, `{nombre[i]}`) se toman del mapa que entrega quien
+  llama. Así los nombres de los perfiles de Tisma no entran al motor.
+- Escritor de G-code (`src/gcode/writer.*`), siguiendo `docs/spec/GCODE_OUTPUT.md` al pie de la letra:
+  - cabecera y G-code de inicio con `;TYPE:Custom`, `G90` y `M82` o `M83`;
+  - por capa: `;LAYER_CHANGE`, `;Z:`, `;HEIGHT:`, `G92 E0` si la E es absoluta, y el movimiento en Z;
+  - `;TYPE:` con las palabras exactas y `;WIDTH:` cuando cambia;
+  - E por volumen, con el ancho medio de cada tramo para las paredes de ancho variable;
+  - solo los ejes que cambian, XYZ con 3 decimales, E con 5 y F entera;
+  - G-code de fin y un comentario por ajuste.
+- Orden dentro de la capa: paredes de adentro hacia afuera con la externa al final, superficies inferiores,
+  superiores, puentes, huecos y relleno disperso. Los viajes son rectos, todavía sin planificar.
+- `LayerFill` separa las líneas superiores (`top`) de las demás sólidas, porque llevan otra etiqueta.
+- `tisma-engine slice` escribe el archivo y sale con 0.
+
+**Probado:** 136/136 pruebas con gcc, clang y ASan+UBSan:
+- variables: valor, lista con índice, y nombres desconocidos que quedan como están;
+- cubo de 10 mm:
+  - la primera línea, el G-code de inicio y fin sustituido, `M82`;
+  - 50 capas, cada una con `;Z:` y `;HEIGHT:0.200`;
+  - solo etiquetas de la lista de la especificación, con las cinco que corresponden;
+  - todas las líneas `G1` con los decimales pedidos;
+  - la E total es el volumen esperado dentro del 10 %;
+  - los comentarios de ajustes al final;
+- con E relativa: `M83`, sin `G92`, y cada movimiento con su propia E;
+- lectura de los grupos nuevos y sus errores.
+
+**Medido** (esfera, 500 capas, 4 núcleos):
+- `slice` completo con escritura en 3,0 s, de los cuales el corte son 1,27 s;
+- 30 MB de G-code con 1,26 millones de líneas `G1`; escribir tarda ~1,4 s.
+
+**Sigue:**
+- escribir más rápido;
+- orden de islas y recorridos, y costura;
+- viajes por dentro con retracción;
+- enfriamiento.
+

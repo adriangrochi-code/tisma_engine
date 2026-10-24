@@ -34,7 +34,10 @@ TEST_CASE("settings are read by group", "[settings]") {
         "walls": {"count": 2, "width": 0.45},
         "surfaces": {"top_layers": 4, "bottom_layers": 0},
         "infill": {"density": 35, "angle": 30, "pattern": "rectilinear"},
-        "speed": {"anything": 1}
+        "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "klipper",
+                    "start_gcode": "M104 S[temp]", "end_gcode": "M84", "variables": {"temp": 215, "names": ["a", "b"]}},
+        "speed": {"walls": 50, "outer_wall": "40%", "travel": 150, "max": 100},
+        "cooling": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -51,7 +54,21 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.infill_density == 35.0);
     CHECK(s.infill_angle == 30.0);
     CHECK(s.infill_pattern == InfillPattern::Rectilinear);
-    CHECK(s.ignored_groups == std::vector<std::string>{"speed"});
+    CHECK(s.nozzle_diameter == 0.6);
+    CHECK(s.filament_diameter == 2.85);
+    CHECK(s.relative_extrusion);
+    CHECK(s.flavor == GcodeFlavor::Klipper);
+    CHECK(s.start_gcode == "M104 S[temp]");
+    CHECK(s.end_gcode == "M84");
+    CHECK(s.variables.at("temp") == std::vector<std::string>{"215"});
+    CHECK(s.variables.at("names") == std::vector<std::string>{"a", "b"});
+    CHECK(s.wall_speed == 50.0);
+    CHECK(s.outer_wall_speed.percent);
+    CHECK(s.outer_wall_speed.of(s.wall_speed) == 20.0);
+    CHECK(s.travel_speed == 150.0);
+    CHECK(s.max_speed == 100.0);
+    CHECK(s.infill_speed == 80.0); // default
+    CHECK(s.ignored_groups == std::vector<std::string>{"cooling"});
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -70,6 +87,12 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
+    CHECK(parse_settings(R"({"speed": {"outer_wall": 35}})").outer_wall_speed.of(60.0) == 35.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"outer_wall": "fast"}})"), ContainsSubstring("speed.outer_wall: must be a number of mm/s or a percentage"));
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel": 0}})"), ContainsSubstring("speed.travel: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "sailfish"}})"), ContainsSubstring("machine.flavor: must be one of"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"relative_extrusion": 1}})"), ContainsSubstring("machine.relative_extrusion: must be true or false"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"variables": {"x": {"y": 1}}}})"), ContainsSubstring("machine.variables.x: values must be"));
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "honeycomb"}})"), ContainsSubstring("infill.pattern: must be one of"));
