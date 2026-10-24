@@ -7,47 +7,61 @@
 #include "gcode/travel.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <map>
 #include <cmath>
-#include <cstdio>
+#include <cstring>
 #include <numbers>
 #include <optional>
-#include <sstream>
+#include <string_view>
 
 namespace tisma {
 namespace {
 
-std::string fixed(double v, int decimals) {
-    char buffer[64];
-    std::snprintf(buffer, sizeof buffer, "%.*f", decimals, v);
-    std::string s = buffer;
-    if (s == "-0" || s.rfind("-0.", 0) == 0) { // no negative zero
-        bool zero = true;
-        for (char c : s)
-            zero = zero && (c == '-' || c == '0' || c == '.');
-        if (zero)
-            s.erase(0, 1);
+// A number with fixed decimals, as printf's "%.*f" writes it (std::to_chars
+// is specified to round the same way, and is much faster), without a negative
+// zero. Returns the length written to buffer.
+constexpr std::size_t kNumberCapacity = 400; // any finite double with a few decimals
+std::size_t format_fixed(char* buffer, double v, int decimals) {
+    const auto result = std::to_chars(buffer, buffer + kNumberCapacity, v, std::chars_format::fixed, decimals);
+    std::size_t n = std::size_t(result.ptr - buffer);
+    if (n > 1 && buffer[0] == '-' && std::all_of(buffer + 1, buffer + n, [](char c) { return c == '0' || c == '.'; })) {
+        std::memmove(buffer, buffer + 1, n - 1);
+        --n;
     }
-    return s;
+    return n;
 }
 
-// Keeps the machine's position and writes only the axes that change.
+std::string fixed(double v, int decimals) {
+    char buffer[kNumberCapacity];
+    return std::string(buffer, format_fixed(buffer, v, decimals));
+}
+
+void append_integer(std::string& text, long v) {
+    char buffer[24];
+    const auto result = std::to_chars(buffer, buffer + sizeof buffer, v);
+    text.append(buffer, result.ptr);
+}
+
+// Keeps the machine's position and writes only the axes that change. The
+// text goes to a buffer that flush() hands to the stream.
 class Emitter {
 public:
-    Emitter(std::ostream& out, const Settings& s)
-        : out_(&out), relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
+    explicit Emitter(const Settings& s)
+        : relative_(s.relative_extrusion), retract_(s.retract_length), retract_feed_(s.retract_speed),
           lift_(s.retract_lift), min_travel_(s.retract_min_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
     }
 
-    void comment(const std::string& line) { *out_ << line << "\n"; }
-
-    void redirect(std::ostream& out) { out_ = &out; }
+    void flush(std::ostream& out) {
+        out.write(text_.data(), std::streamsize(text_.size()));
+        text_.clear();
+    }
 
     // Extrusion speeds of the layer being written go through this.
     void pace(const Slowdown& slowdown) { pace_ = slowdown; }
@@ -66,19 +80,22 @@ public:
         const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
         if (value == fan_)
             return;
-        if (value == 0)
-            *out_ << "M107\n";
-        else
-            *out_ << "M106 S" << value << "\n";
+        if (value == 0) {
+            text_ += "M107\n";
+        } else {
+            text_ += "M106 S";
+            append_integer(text_, value);
+            text_ += '\n';
+        }
         fan_ = value;
     }
 
     void new_layer(double z, double height, double travel_feed) {
-        *out_ << ";LAYER_CHANGE\n;Z:" << fixed(z, 3) << "\n;HEIGHT:" << fixed(height, 3) << "\n";
+        text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retract_ : 0.0;
-            *out_ << "G92 E" << fixed(e_, 5) << "\n";
+            text_ += "G92 E" + fixed(e_, 5) + "\n";
             e_text_.clear();
         }
         move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
@@ -88,7 +105,9 @@ public:
 
     void type(const char* t) {
         if (type_ != t) {
-            *out_ << ";TYPE:" << t << "\n";
+            text_ += ";TYPE:";
+            text_ += t;
+            text_ += '\n';
             type_ = t;
         }
     }
@@ -128,10 +147,13 @@ public:
             other_time_ += retract_ / retract_feed_;
         }
         const double width = (from.width + to.width) / 2.0;
-        const std::string w = fixed(width, 3);
-        if (w != width_) {
-            *out_ << ";WIDTH:" << w << "\n";
-            width_ = w;
+        char w[kNumberCapacity];
+        const std::string_view width_text(w, format_fixed(w, width, 3));
+        if (width_text != width_) {
+            text_ += ";WIDTH:";
+            text_ += width_text;
+            text_ += '\n';
+            width_.assign(width_text);
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         const double e = width * height_ * length / filament_area_;
@@ -140,7 +162,9 @@ public:
         pending_ += e;
         // A piece that rounds to no move at 3 decimals is not written; its E
         // (next to nothing) goes with the next piece.
-        if (fixed(to.p.x, 3) == x_ && fixed(to.p.y, 3) == y_)
+        char tx[kNumberCapacity], ty[kNumberCapacity];
+        if (std::string_view(tx, format_fixed(tx, to.p.x, 3)) == x_ &&
+            std::string_view(ty, format_fixed(ty, to.p.y, 3)) == y_)
             return;
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
@@ -156,32 +180,38 @@ public:
 private:
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
               std::optional<double> e, double feed) {
-        std::string line = g;
+        const std::size_t start = text_.size();
+        text_ += g;
+        const std::size_t bare = text_.size();
         auto axis = [&](char name, std::optional<double> v, int decimals, std::string& last) {
             if (!v)
                 return;
-            const std::string t = fixed(*v, decimals);
+            char buffer[kNumberCapacity];
+            const std::string_view t(buffer, format_fixed(buffer, *v, decimals));
             if (t != last || name == 'E') {
-                line += ' ';
-                line += name;
-                line += t;
-                last = t;
+                text_ += ' ';
+                text_ += name;
+                text_ += t;
+                last.assign(t);
             }
         };
         axis('X', x, 3, x_);
         axis('Y', y, 3, y_);
         axis('Z', z, 3, z_);
         axis('E', e, 5, e_text_);
-        const std::string f = std::to_string(std::lround(feed * 60.0));
+        const long f = std::lround(feed * 60.0);
         if (f != f_) {
-            line += " F" + f;
+            text_ += " F";
+            append_integer(text_, f);
             f_ = f;
         }
-        if (line != g)
-            *out_ << line << "\n";
+        if (text_.size() == bare)
+            text_.resize(start); // nothing changed
+        else
+            text_ += '\n';
     }
 
-    std::ostream* out_;
+    std::string text_;
     bool relative_;
     Slowdown pace_;
     std::map<double, double> extruded_;
@@ -194,7 +224,8 @@ private:
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
     bool known_ = false;     // the position is known (after the first move in XY)
     bool retracted_ = false;
-    std::string x_, y_, z_, e_text_, f_, width_;
+    std::string x_, y_, z_, e_text_, width_;
+    long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
 };
 
@@ -238,8 +269,9 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
 
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s) {
     out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
-    Emitter g(out, s);
+    Emitter g(s);
     g.type("Custom");
+    g.flush(out);
     if (!s.start_gcode.empty())
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     out << "G90\n" << (s.relative_extrusion ? "M83" : "M82") << "\n";
@@ -334,14 +366,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     };
 
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
-        // Each layer goes to a buffer first. One faster than the minimum layer
-        // time is written again from the same state with its extrusions slowed
-        // down and the fan at its maximum (docs/spec/BEHAVIOR.md, "Enfriamiento").
+        // Each layer is built in the emitter's buffer first. One faster than the
+        // minimum layer time is built again from the same state with its
+        // extrusions slowed down and the fan at its maximum
+        // (docs/spec/BEHAVIOR.md, "Enfriamiento").
         const Emitter emitter_before = g;
         const Point2d cursor_before = cursor;
         const SeamMemory seams_before = seams;
-        std::ostringstream buffer;
-        g.redirect(buffer);
         g.reset_times();
         const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0));
         emit_layer(l, fan_off ? 0.0 : s.fan_min);
@@ -350,17 +381,15 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
             g = emitter_before;
             cursor = cursor_before;
             seams = seams_before;
-            buffer.str("");
-            g.redirect(buffer);
             g.pace(slowdown);
             emit_layer(l, fan_off ? 0.0 : s.fan_max);
             g.pace(Slowdown{});
         }
-        out << buffer.str();
-        g.redirect(out);
+        g.flush(out);
     }
 
     g.type("Custom");
+    g.flush(out);
     if (!s.end_gcode.empty())
         out << substitute_variables(s.end_gcode, s.variables) << "\n";
     for (const auto& [key, value] : describe(s))

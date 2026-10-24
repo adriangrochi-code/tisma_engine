@@ -269,8 +269,9 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
 - [x] Ancho variable: las paredes de Kuipers cambian de ancho por punto; la E de cada tramo usa el ancho medio
 - [x] Orden dentro de la capa: paredes de adentro hacia afuera con la externa al final; después superficies, puentes,
   huecos y relleno disperso
-- [ ] Escribir el G-code más rápido (hoy ~1,4 s para los 30 MB de la esfera): `std::to_chars` y capas formateadas en
-  paralelo
+- [x] Escribir el G-code más rápido: números con `std::to_chars` y sin cadenas por línea; la esfera pasa de 1,6 s a
+  0,65 s de escritura con el mismo archivo byte a byte (más adelante: formato propio exacto o capas formateadas en
+  paralelo)
 - [x] Orden de recorridos (el más cercano) y costura de los lazos (`walls.seam`: `aligned`, `nearest`, `random`, `rear`)
 - [x] Retracción en viajes largos y salto en Z (grupo `retraction`)
 - [x] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza

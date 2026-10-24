@@ -1500,3 +1500,27 @@ prende el ventilador igual? Hoy el motor lo deja apagado.
 - escribir el G-code más rápido;
 - aceleraciones y estimación de tiempo;
 - avisos en JSON.
+
+## 2026-10-24 — bloque nocturno 41: escritura de G-code más rápida
+
+**Hecho:**
+- Perfil (callgrind, tubo): el 82 % de las instrucciones del escritor estaban en `snprintf` para formatear números.
+- Los números se escriben con `std::to_chars` en formato fijo (la norma lo define con el mismo redondeo que `printf`),
+  sin crear cadenas por eje ni por línea: cada capa se arma en un búfer y se escribe de una vez.
+- `tisma-engine slice` informa `write_ms`.
+
+**Probado:** 152/152 pruebas con gcc, clang y ASan+UBSan. El G-code es idéntico byte a byte al de antes (`cmp`) en:
+- la esfera;
+- el tubo y los 9 cubos, con los ajustes por defecto y con E relativa, giroide, salto en Z y tiempo mínimo de capa de
+  20 s;
+- el cubo con esos mismos ajustes.
+
+**Medido** (esfera, 500 capas, 24,9 MB):
+- escritura de 1,56–1,65 s a 0,63–0,77 s;
+- en el perfil del tubo, el escritor baja de 1188 a 486 millones de instrucciones; `std::to_chars` es ahora dos
+  tercios de lo que queda.
+
+**Sigue:**
+- más velocidad: formato propio exacto para pocos decimales, o capas formateadas en paralelo;
+- aceleraciones y estimación de tiempo;
+- avisos en JSON.

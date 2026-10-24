@@ -239,12 +239,16 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }
+    const auto write_start = std::chrono::steady_clock::now();
     write_gcode(gcode, sliced, settings);
     gcode.close();
     if (!gcode) {
         err << "error: writing '" << parsed->output << "' failed\n";
         return kExitInput;
     }
+    const double write_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - write_start).count();
+    out << "write_ms: " << write_ms << "\n";
     out << "wrote " << parsed->output << "\n";
     return kExitOk;
 }
