@@ -24,9 +24,9 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`structural_optimization.md`](structural_optimization.md): relleno mínimo uniforme y por zonas, nervios a lo largo de las tensiones, refuerzos, lattice, orientación recomendada | F7 | Para revisar |
 | [`aerodynamics.md`](aerodynamics.md): arrastre por presión (lattice Boltzmann) y rozamiento con la rugosidad de las capas | F7 | Para revisar |
 | [`nonplanar.md`](nonplanar.md): capas curvas (onda, crestas, cono), rampa, ajuste a la cabeza, material según el espesor local | F7 | Para revisar |
+| [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |
 
 **Pendientes:**
-- Z anti-aliasing: la primera prueba, con un techo de 15°, no dio una medición clara; se repite con otra pieza.
 - Modos no planares por voladizos, tensiones, superficies y automático.
 - Revisión antes de imprimir, impresoras de cinta y resina.
 - Interfaz y conexión con impresoras.
