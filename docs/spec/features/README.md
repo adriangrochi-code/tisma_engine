@@ -3,6 +3,8 @@
 Una ficha por función de Tisma Slicer, con las reglas de «Fichas» de `CLEANROOM.md`: qué hace, ajustes, reglas,
 fórmulas con su fuente, casos límite y pruebas como datos. Sin código ni nombres internos.
 
+Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mismo formato (ver `SETTINGS_V1.md`).
+
 | Ficha | Fase | Estado |
 |---|---|---|
 | [`slicing.md`](slicing.md): corte en capas, cierre de grietas, compensaciones en XY, modos de relleno de la malla | F1 | Para revisar |

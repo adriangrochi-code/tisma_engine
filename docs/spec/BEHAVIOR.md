@@ -46,14 +46,14 @@ Requisitos de **qué** tiene que pasar, y lecciones medidas en Tisma Slicer. El 
 ## Viajes y retracción
 
 - **Por dentro:** los viajes no cruzan perímetros si pueden ir por dentro de la pieza.
-- **Retracción:** se retrae cuando el viaje sale de la pieza o es más largo que `retract_before_travel`. Un viaje por
+- **Retracción:** se retrae cuando el viaje sale de la pieza o es más largo que `retraction.min_travel`. Un viaje por
   el aire sin retracción deja hilos (Tisma lo avisa en su revisión antes de imprimir).
 
 ## Enfriamiento
 
 Comportamiento acordado con el dueño, implementado así en Tisma:
 
-1. Si una capa tarda menos que `slowdown_below_layer_time`, se bajan las velocidades hasta `min_print_speed` para que
+1. Si una capa tarda menos que `cooling.min_layer_time`, se bajan las velocidades hasta `cooling.min_speed` para que
    tarde ese tiempo.
 2. Si aun así es corta, se baja más: todas las extrusiones de la capa a una misma velocidad (la más alta que alcanza
    el tiempo), y las que ya iban más lento no cambian. Nunca por debajo de 1 mm/min.
@@ -64,7 +64,7 @@ El motor tiene que hacer lo mismo.
 ## Soportes (fase F5)
 
 - **Voladizos:** se soporta lo que cuelga más que el ángulo límite.
-- **Puentes cortos:** los que la impresora puede hacer (`max_bridge_length`) no llevan soporte.
+- **Puentes cortos:** los que la impresora puede hacer (`support.free_bridge_length`) no llevan soporte.
 - **Separaciones:** el soporte deja una separación en Z y en XY con la pieza.
 - **Interfaz:** bajo la pieza, capas densas; abajo, una base menos densa.
 - **Retiro:** el soporte tiene que poder sacarse a mano. Más adelante: interfaz planchada y patrón concéntrico.

@@ -13,55 +13,55 @@ velocidad, y cómo se viaja entre tramos sin dejar hilos.
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `filament_diameter` | mm | 1,75 | Diámetro del filamento |
-| `extrusion_multiplier` | — | 1 | Multiplica todo el filamento empujado |
-| `perimeter_speed` | mm/s | 60 | Perímetros internos |
-| `external_perimeter_speed` | mm/s o % de `perimeter_speed` | 50 % | Perímetro externo |
-| `small_perimeter_speed` | mm/s o % de `perimeter_speed` | 15 mm/s | Perímetros cerrados cortos (regla 3) |
-| `infill_speed` | mm/s | 80 | Relleno poco denso |
-| `solid_infill_speed` | mm/s o % de `infill_speed` | 20 mm/s | Relleno sólido |
-| `top_solid_infill_speed` | mm/s o % de `solid_infill_speed` | 15 mm/s | Capa de arriba de todo |
-| `bridge_speed` | mm/s | 60 | Puentes y perímetros sobre el aire |
-| `first_layer_speed` | mm/s o % | 30 mm/s | Toda la primera capa |
-| `max_print_speed` | mm/s | 80 | Tope de las velocidades de extrusión |
-| `max_volumetric_speed` | mm³/s | 0 = sin tope | Tope del caudal |
-| `travel_speed` | mm/s | 130 | Viajes, también en Z |
-| `retract_length` | mm | 2 | Retracción |
-| `retract_speed` | mm/s | 40 | Velocidad de la retracción y de la vuelta |
-| `retract_before_travel` | mm | 2 | Viaje mínimo que retrae |
-| `retract_lift` | mm | 0 | Salto en Z al viajar |
+| `material.diameter` | mm | 1,75 | Diámetro del filamento |
+| `material.flow_factor` | — | 1 | Multiplica todo el filamento empujado |
+| `speed.walls` | mm/s | 60 | Perímetros internos |
+| `speed.outer_wall` | mm/s o % de `speed.walls` | 50 % | Perímetro externo |
+| `speed.small_loops` | mm/s o % de `speed.walls` | 15 mm/s | Perímetros cerrados cortos (regla 3) |
+| `speed.infill` | mm/s | 80 | Relleno poco denso |
+| `speed.solid` | mm/s o % de `speed.infill` | 20 mm/s | Relleno sólido |
+| `speed.top` | mm/s o % de `speed.solid` | 15 mm/s | Capa de arriba de todo |
+| `speed.bridges` | mm/s | 60 | Puentes y perímetros sobre el aire |
+| `speed.first_layer` | mm/s o % | 30 mm/s | Toda la primera capa |
+| `speed.max` | mm/s | 80 | Tope de las velocidades de extrusión |
+| `speed.max_flow` | mm³/s | 0 = sin tope | Tope del caudal |
+| `speed.travel` | mm/s | 130 | Viajes, también en Z |
+| `retraction.length` | mm | 2 | Retracción |
+| `retraction.speed` | mm/s | 40 | Velocidad de la retracción y de la vuelta |
+| `retraction.min_travel` | mm | 2 | Viaje mínimo que retrae |
+| `retraction.lift` | mm | 0 | Salto en Z al viajar |
 
 ## Reglas
 
 1. **Filamento por tramo:**
    - sección del cordón: `A = (w − h)·h + π·(h/2)²`, con `w` el ancho y `h` la altura (rectángulo con costados
      redondeados);
-   - filamento por mm de tramo: `E = A · multiplicador / (π · (filament_diameter / 2)²)`;
+   - filamento por mm de tramo: `E = A · multiplicador / (π · (material.diameter / 2)²)`;
    - con `w` = 0,45, `h` = 0,2 y filamento de 1,75: 0,033849 mm por mm de tramo (prueba M1);
    - **puentes:** sección redonda de diámetro igual al ancho del puente (unos 0,40 mm): 0,052735 mm por mm (prueba M2).
-2. **Velocidad de cada tipo:** la de su ajuste. En la primera capa todo va a `first_layer_speed` (prueba M1).
-3. **Perímetros chicos:** un perímetro cerrado de menos de unos 41 mm de largo va a `small_perimeter_speed`, también el
+2. **Velocidad de cada tipo:** la de su ajuste. En la primera capa todo va a `speed.first_layer` (prueba M1).
+3. **Perímetros chicos:** un perímetro cerrado de menos de unos 41 mm de largo va a `speed.small_loops`, también el
    externo. Medido: con 40,6 mm sí, con 42,2 mm no (prueba M4). Es el largo de una circunferencia de 6,5 mm de radio.
-4. **Topes:** ninguna extrusión supera `max_print_speed`; si `max_volumetric_speed` no es 0, tampoco su caudal
+4. **Topes:** ninguna extrusión supera `speed.max`; si `speed.max_flow` no es 0, tampoco su caudal
    (`A × velocidad`). Todavía sin prueba: en las de abajo ninguna velocidad llega a los topes.
 5. **Viajes:**
-   - van a `travel_speed`, en línea recta;
-   - si el viaje es más largo que `retract_before_travel`, se retrae antes de viajar y se vuelve a empujar al llegar,
-     las dos cosas a `retract_speed` (prueba M3).
+   - van a `speed.travel`, en línea recta;
+   - si el viaje es más largo que `retraction.min_travel`, se retrae antes de viajar y se vuelve a empujar al llegar,
+     las dos cosas a `retraction.speed` (prueba M3).
 6. **Fin de un perímetro externo:** al terminarlo, la boquilla sigue sin extruir unos 0,4 mm por el borde de la pieza
    y recién ahí retrae, así la retracción no queda en la costura (prueba M3).
 7. **Cambio de capa:**
    1. el comando del ventilador de la capa nueva, si cambia;
    2. `;LAYER_CHANGE`, `;Z:`, `;HEIGHT:`;
    3. la retracción, si el viaje al primer punto la pide;
-   4. el movimiento en Z, a `travel_speed`;
+   4. el movimiento en Z, a `speed.travel`;
    5. el viaje al primer punto y la vuelta del filamento.
 
 ## Pruebas
 
 Medidas en Tisma Slicer (24-10-2026) como caja negra, desde la línea de comandos.
 
-**Ajustes base:** los de `surfaces_infill.md` (boquilla 0,4, capas de 0,2, `perimeters` 2, 3 capas sólidas arriba y
+**Ajustes base:** los de `surfaces_infill.md` (boquilla 0,4, capas de 0,2, `walls.count` 2, 3 capas sólidas arriba y
 abajo, relleno `rectilinear` al 20 %, sin falda ni borde), con E absoluta.
 
 | # | Pieza | Ajustes | Resultado |
