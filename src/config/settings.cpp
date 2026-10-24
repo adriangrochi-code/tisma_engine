@@ -198,8 +198,9 @@ Settings parse_settings(std::string_view text) {
                            s.variables[name] = std::move(list);
                        }
                    } else if (n == "bed") {
-                       const char* what = "must be a list of at least 3 [x, y] points in mm";
-                       if (!v.is_array() || v.size() < 3)
+                       // Empty is the default (not checked), so it may be written too.
+                       const char* what = "must be empty or a list of at least 3 [x, y] points in mm";
+                       if (!v.is_array() || v.size() == 1 || v.size() == 2)
                            fail(k, what);
                        std::vector<std::array<double, 2>> bed;
                        for (const json& p : v) {
@@ -429,6 +430,100 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         out.push_back({"machine.variables." + name, v});
     }
     return out;
+}
+
+std::string settings_json(const Settings& s) {
+    using nlohmann::ordered_json;
+    const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
+    const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
+                          : s.infill_pattern == InfillPattern::Grid      ? "grid"
+                                                                         : "gyroid";
+    const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
+    const char* seam = s.seam == SeamMode::Aligned ? "aligned"
+                       : s.seam == SeamMode::Nearest ? "nearest"
+                       : s.seam == SeamMode::Random  ? "random"
+                                                     : "rear";
+    ordered_json variables = ordered_json::object();
+    // Values are kept as text (numbers keep their JSON text), so they go back
+    // as strings: parse_settings reads a string as that same text.
+    for (const auto& [name, values] : s.variables)
+        variables[name] = values.size() == 1 ? ordered_json(values.front()) : ordered_json(values);
+    ordered_json bed = ordered_json::array();
+    for (const auto& p : s.bed)
+        bed.push_back({p[0], p[1]});
+    const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
+                                                               : ordered_json(s.outer_wall_speed.value);
+    const ordered_json root = {
+        {"layers", {{"height", s.layer_height}, {"first_height", s.first_layer_height}}},
+        {"slicing",
+         {{"fill_mode", fill_mode},
+          {"gap_closing_radius", s.gap_closing_radius},
+          {"xy_offset", s.xy_offset},
+          {"first_layer_shrink", s.first_layer_shrink},
+          {"simplify_tolerance", s.simplify_tolerance}}},
+        {"walls", {{"count", s.wall_count}, {"width", s.wall_width}, {"seam", seam}}},
+        {"surfaces",
+         {{"top_layers", s.top_layers},
+          {"bottom_layers", s.bottom_layers},
+          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"}}},
+        {"infill",
+         {{"density", s.infill_density},
+          {"angle", s.infill_angle},
+          {"pattern", pattern},
+          {"wall_overlap", s.infill_wall_overlap}}},
+        {"machine",
+         {{"nozzle_diameter", s.nozzle_diameter},
+          {"filament_diameter", s.filament_diameter},
+          {"relative_extrusion", s.relative_extrusion},
+          {"flavor", flavor},
+          {"start_gcode", s.start_gcode},
+          {"end_gcode", s.end_gcode},
+          {"variables", variables},
+          {"max_feed_x", s.max_feed_x},
+          {"max_feed_y", s.max_feed_y},
+          {"max_feed_z", s.max_feed_z},
+          {"max_feed_e", s.max_feed_e},
+          {"acceleration", s.acceleration},
+          {"travel_acceleration", s.travel_acceleration},
+          {"corner_speed", s.corner_speed},
+          {"bed", bed},
+          {"max_height", s.max_height}}},
+        {"speed",
+         {{"walls", s.wall_speed},
+          {"outer_wall", outer_wall},
+          {"infill", s.infill_speed},
+          {"solid_infill", s.solid_infill_speed},
+          {"top_solid_infill", s.top_solid_infill_speed},
+          {"support", s.support_speed},
+          {"travel", s.travel_speed},
+          {"first_layer", s.first_layer_speed},
+          {"max", s.max_speed}}},
+        {"retraction",
+         {{"length", s.retract_length},
+          {"speed", s.retract_speed},
+          {"lift", s.retract_lift},
+          {"min_travel", s.retract_min_travel}}},
+        {"adhesion",
+         {{"skirt_loops", s.skirt_loops},
+          {"skirt_distance", s.skirt_distance},
+          {"skirt_layers", s.skirt_layers},
+          {"brim_width", s.brim_width}}},
+        {"support",
+         {{"enabled", s.support},
+          {"threshold_angle", s.support_angle},
+          {"z_gap", s.support_z_gap},
+          {"xy_gap", s.support_xy_gap},
+          {"spacing", s.support_spacing},
+          {"interface_layers", s.support_interface_layers}}},
+        {"cooling",
+         {{"min_layer_time", s.min_layer_time},
+          {"min_speed", s.min_print_speed},
+          {"fan_min", s.fan_min},
+          {"fan_max", s.fan_max},
+          {"fan_off_layers", s.fan_off_layers}}},
+        {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+    };
+    return root.dump(2) + "\n";
 }
 
 Settings load_settings(const std::filesystem::path& path) {

@@ -112,12 +112,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(m.travel_acceleration == 3000.0);
     CHECK(m.corner_speed == 0.0);
     CHECK(m.bed.empty()); // not checked unless given
+    CHECK(parse_settings(R"({"machine": {"bed": []}})").bed.empty());
     const Settings b = parse_settings(R"({"machine": {"bed": [[0, 0], [200, 0], [100, 180]], "max_height": 150}})");
     REQUIRE(b.bed.size() == 3);
     CHECK(b.bed[2][0] == 100.0);
     CHECK(b.max_height == 150.0);
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1]]}})"), ContainsSubstring("machine.bed: must be a list of at least 3"));
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1], [2]]}})"), ContainsSubstring("machine.bed: must be a list of at least 3"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1], [2]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_height": -1}})"), ContainsSubstring("machine.max_height: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"corner_speed": -1}})"), ContainsSubstring("machine.corner_speed: must not be negative"));
@@ -209,4 +210,40 @@ TEST_CASE("slice_model builds the walls of every layer and leaves the middle for
         CHECK(bare.walls[l].toolpaths.empty());
         CHECK_THAT(area_mm2(bare.walls[l].infill), WithinAbs(area_mm2(bare.regions[l]), 1e-9));
     }
+}
+
+TEST_CASE("settings written as JSON read back the same", "[settings]") {
+    // Every setting away from its default, so a key written under the wrong
+    // name or forgotten shows as a difference.
+    const Settings s = parse_settings(R"({
+        "layers": {"height": 0.15, "first_height": 0.25},
+        "slicing": {"fill_mode": "fill_holes", "gap_closing_radius": 0.07, "xy_offset": -0.03, "first_layer_shrink": 0.1,
+                    "simplify_tolerance": 0.02},
+        "walls": {"count": 4, "width": 0.42, "seam": "rear"},
+        "surfaces": {"top_layers": 5, "bottom_layers": 4, "top_pattern": "rectilinear"},
+        "infill": {"density": 15.5, "angle": 30, "pattern": "gyroid", "wall_overlap": 12},
+        "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "marlin",
+                    "start_gcode": "G28\nM104 S[temp] ; \"quoted\"", "end_gcode": "M84",
+                    "variables": {"temp": 215, "name": "PLA", "list": [1, "b", true]},
+                    "max_feed_x": 300, "max_feed_y": 290, "max_feed_z": 15, "max_feed_e": 100, "acceleration": 2000,
+                    "travel_acceleration": 3000, "corner_speed": 8, "bed": [[0, 0], [220, 0], [220, 230.5], [0, 230.5]],
+                    "max_height": 250},
+        "speed": {"walls": 55, "outer_wall": 35, "infill": 90, "solid_infill": 70, "top_solid_infill": 45, "support": 60,
+                  "travel": 150, "first_layer": 25, "max": 120},
+        "retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
+        "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5},
+        "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
+        "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},
+        "compute": {"gpu": "off"}
+    })");
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(describe(back) == describe(s));
+    CHECK(back.variables == s.variables);
+    CHECK(back.bed == s.bed);
+
+    // A percentage speed stays a percentage, and the defaults come back as defaults.
+    Settings percent;
+    percent.outer_wall_speed = {40.0, true};
+    CHECK(describe(parse_settings(settings_json(percent))) == describe(percent));
+    CHECK(describe(parse_settings(settings_json(Settings{}))) == describe(Settings{}));
 }

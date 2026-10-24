@@ -114,6 +114,12 @@ struct Settings {
 // Every setting as "group.key" and its value, for the end of the G-code.
 std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);
 
+// The settings as JSON in the format of docs/CONFIG.md, every key written, in
+// the order of that document: parse_settings(settings_json(s)) gives s back
+// (machine.variables come back as text, as they were stored). Groups the
+// engine ignored are not written.
+std::string settings_json(const Settings& settings);
+
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 

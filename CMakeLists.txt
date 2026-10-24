@@ -143,6 +143,7 @@ add_library(tisma_core
   src/gcode/writer.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp
+  src/gcode/preview.cpp
   src/gcode/order.cpp
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
