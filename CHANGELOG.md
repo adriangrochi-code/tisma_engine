@@ -31,10 +31,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   - torres de temperatura, retracción, flujo y velocidad máxima, con un valor por segmento escrito en relieve;
   - la torre de temperatura trae una cresta de ángulo variable (30° a 72°), un estante plano sin soporte (para el
     futuro Arc Overhang), un perno para probar la unión entre capas y detalle en números y figuras;
+  - primera capa (cinco cuadrados de una capa repartidos en la cama), velocidad de retracción, avance de presión
+    (tubo de esquinas vivas, con el comando de Marlin, Klipper o RepRapFirmware), tolerancias de encastre (pernos
+    impresos dentro de agujeros con 0,1 a 0,5 mm de juego) y pasos del extrusor (G-code de prueba y la cuenta del
+    valor nuevo, con el comando para guardarlo);
+  - la torre de velocidad muestra el flujo volumétrico (mm³/s) del segmento elegido;
   - el catálogo con las siguientes calibraciones estándar y las nuevas propuestas.
 - Ajustes nuevos:
   - `compensation`: escala por eje y corrección de agujeros;
-  - `extrusion.flow`;
+  - `extrusion.flow` y `extrusion.pressure_advance`;
   - la lista `changes`: temperatura, cama, ventilador, retracción, flujo, velocidad o G-code desde una altura.
 
   El verificador del G-code juzga cada capa con los valores que le tocan.

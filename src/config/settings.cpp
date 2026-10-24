@@ -360,8 +360,14 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must be a percentage from 50 to 200");
                    (n == "scale_x" ? s.scale_x : n == "scale_y" ? s.scale_y : s.scale_z) = v;
                });
-    read_group(root, "extrusion", {"flow"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "extrusion", {"flow", "pressure_advance"}, [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
+        if (n == "pressure_advance") {
+            if (v < 0.0 || v > 2.0)
+                fail(k, "must be from 0 to 2");
+            s.pressure_advance = v;
+            return;
+        }
         if (v < 10.0 || v > 300.0)
             fail(k, "must be a percentage from 10 to 300");
         s.flow = v;
@@ -401,6 +407,8 @@ Settings parse_settings(std::string_view text) {
                     c.flow = ranged(n, 10.0, 300.0, "must be a percentage from 10 to 300");
                 else if (n == "speed")
                     c.speed = ranged(n, 5.0, 1000.0, "must be a percentage from 5 to 1000");
+                else if (n == "pressure_advance")
+                    c.pressure_advance = ranged(n, 0.0, 2.0, "must be from 0 to 2");
                 else if (n == "gcode") {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
@@ -428,7 +436,7 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
             {"temperature", &c.temperature},         {"bed_temperature", &c.bed_temperature},
             {"fan", &c.fan},                         {"retraction_length", &c.retract_length},
             {"retraction_speed", &c.retract_speed}, {"flow", &c.flow},
-            {"speed", &c.speed}};
+            {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance}};
         for (const auto& [name, v] : values)
             if (*v)
                 j[name] = **v;
@@ -518,6 +526,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"compensation.scale_z", num(s.scale_z)},
         {"compensation.hole_offset", num(s.hole_offset)},
         {"extrusion.flow", num(s.flow)},
+        {"extrusion.pressure_advance", num(s.pressure_advance)},
     };
     if (!s.changes.empty())
         out.push_back({"changes", changes_json(s.changes).dump()});
@@ -622,7 +631,7 @@ std::string settings_json(const Settings& s) {
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
-        {"extrusion", {{"flow", s.flow}}},
+        {"extrusion", {{"flow", s.flow}, {"pressure_advance", s.pressure_advance}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

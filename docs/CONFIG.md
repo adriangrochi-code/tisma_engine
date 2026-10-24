@@ -161,6 +161,7 @@ de la pieza de prueba.
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `flow` | número | 100 | 10 a 300 | Flujo en %: la E de cada extrusión es ancho × alto × largo / sección del filamento × flujo |
+| `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 
 ### `changes` (lista)
 
@@ -185,6 +186,7 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 | `retraction_speed` | número | 1 a 500 | Velocidad de la retracción en mm/s |
 | `flow` | número | 10 a 300 | Flujo en %, en lugar de `extrusion.flow` |
 | `speed` | número | 5 a 1000 | Porcentaje de la velocidad de cada extrusión (puede pasar `speed.max`: es para la torre de velocidad) |
+| `pressure_advance` | número | 0 a 2 | Avance de presión, con el comando del dialecto (como `extrusion.pressure_advance`; acá 0 sí se escribe) |
 | `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).

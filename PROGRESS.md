@@ -2686,3 +2686,55 @@ motor, que los usan).
 
 **No probado:** el arreglo de la interfaz a mano (abrir otra pieza mientras lamina); la prueba cubre la decisión, no
 la ventana.
+
+## 2026-10-24 — calibraciones estándar, segunda tanda
+
+**Pedido del dueño:** «seguí con las calibraciones estándar siguientes».
+
+**Hecho:**
+- **Primera capa** (`first_layer_test`): cinco cuadrados de 30 × 30 mm y una capa, en el medio y a 30 mm de cada
+  esquina de la cama (en una cama chica, solo el del medio). La tarjeta explica qué significa cada aspecto (líneas
+  separadas, rugosa, un cuadrado distinto) y que la altura se corrige en la impresora.
+- **Velocidad de retracción** (`retraction_speed_tower`): las dos columnas de la retracción, de 20 a 60 mm/s.
+- **Avance de presión:**
+  - ajuste nuevo `extrusion.pressure_advance` y la clave `pressure_advance` en `changes`;
+  - el escritor pone el comando del dialecto (`M900 K`, `SET_PRESSURE_ADVANCE`, `M572 D0 S`) al empezar y en cada
+    cambio (`pressure_advance_gcode`);
+  - la torre (`pressure_advance_tower`): un tubo cuadrado de esquinas vivas con una ranura entre segmentos; de 0 a
+    0,08 con extrusor directo, de 0 a 0,8 con Bowden.
+- **Tolerancias de encastre** (`fit_test`): siete bloques, cada uno con un perno de 8 mm impreso dentro de su agujero,
+  con 0,1 a 0,5 mm de juego. Al elegir uno, la tarjeta dice cuánto juego dejar en los diseños.
+- **Pasos del extrusor:** sin pieza. Exporta un G-code que extruye 100 mm despacio, pide el valor actual y lo que
+  quedó hasta la marca de 120 mm, y da el nuevo con su comando (`M92 E` y `M500`, o `rotation_distance` en Klipper),
+  con un botón para copiarlo.
+- **Flujo volumétrico:** al elegir un segmento de la torre de velocidad, los mm³/s de su línea más rápida.
+- **En la interfaz:** las tarjetas nuevas; el rango ajustable solo en las torres, con límites y decimales por tipo;
+  «Lista: … de impresión» en las pruebas que no son torres; el aviso de la vista vacía ya no queda tapado por el
+  panel; `--calibration` acepta todas (y `extruder`).
+- `CalibrationKind` con nombre (`calibration_kind_name`), `is_tower` y `calibration_tower`; los proyectos y la línea
+  de comandos usan esos nombres.
+
+**Probado:** `tests/test_calibration.cpp`, ahora 10 casos y 234 comprobaciones:
+- cada tipo vuelve de su nombre, sabe si es torre, y su prueba automática se lamina y pasa el verificador;
+- la torre de velocidad de retracción retrae exactamente a 25, 35, 45 y 55 mm/s (F1500 a F3300);
+- el avance de presión en Marlin, Klipper y RepRapFirmware: cada segmento escribe su comando, en orden; el ajuste se
+  lee, se escribe y se rechaza fuera de rango; 0 no escribe nada;
+- el tubo: área de las paredes en un segmento y en la ranura;
+- los cuadrados de la primera capa: una sola capa, 5 × 900 mm², en su lugar; en una cama de 100 mm, uno solo;
+- los encastres: el área del bloque y de los pernos, y 15 contornos a 4,5 mm (cada juego queda abierto, el de 0,1 mm
+  también);
+- el flujo volumétrico (6,4 mm³/s al 100 %) y la cuenta de los pasos en los dos sentidos.
+
+Capturas: las tarjetas de avance de presión, encastres, primera capa y pasos del extrusor.
+
+**Medido:** la torre de avance de presión automática (Bowden, 9 segmentos) lamina en 5,9 s en la interfaz bajo xvfb,
+132 793 líneas verificadas, 1 h 3 min; la de encastres en 1,3 s, 424 719 líneas, 39 min; la primera capa, 1261
+líneas, 7 min.
+
+**No probado:** impreso en una máquina real (necesita al dueño); el avance de presión en una impresora con cada
+firmware.
+
+**Sigue:**
+- resonancias (que el motor escriba la aceleración), puentes y voladizos, tope de flujo volumétrico, pata de
+  elefante;
+- después, la release 0.7.0-alpha.1.

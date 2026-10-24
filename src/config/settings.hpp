@@ -35,6 +35,7 @@ struct HeightChange {
     std::optional<double> retract_speed;   // mm/s
     std::optional<double> flow;            // %, replaces extrusion.flow
     std::optional<double> speed;           // %, of every extrusion's feed
+    std::optional<double> pressure_advance; // the firmware's pressure advance (0 included)
     std::string gcode;                     // G-code put at that layer's start, with variables
 };
 
@@ -130,6 +131,9 @@ struct Settings {
 
     // extrusion
     double flow = 100.0; // %, of the volume every extrusion lays down
+    // The firmware's pressure advance, written at the start in the flavor's
+    // command (M900 K, SET_PRESSURE_ADVANCE, M572); 0: not written.
+    double pressure_advance = 0.0;
 
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;

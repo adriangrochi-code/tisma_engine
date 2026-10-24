@@ -117,8 +117,9 @@ apoyos y cargas, corre por ahora con `tisma-engine analyze`.
 
 ### Calibración
 
-La pestaña **Calibración** (`docs/CALIBRATION.md`) es una lista de tarjetas, una por prueba: dimensiones, temperatura,
-retracción, flujo y velocidad máxima. Cada una dice en una línea para qué sirve y tiene un botón **Crear**. No hay
+La pestaña **Calibración** (`docs/CALIBRATION.md`) es una lista de tarjetas, una por prueba: dimensiones, primera capa,
+temperatura, flujo, retracción, velocidad de retracción, avance de presión, velocidad máxima, tolerancias de encastre y
+pasos del extrusor. Cada una dice en una línea para qué sirve y tiene un botón **Crear**. No hay
 nada que configurar: la pieza se arma con un rango elegido desde los ajustes actuales y se lamina sola. Después, la
 tarjeta activa guía en tres pasos:
 
@@ -130,6 +131,13 @@ tarjeta activa guía en tres pasos:
      segmento, y **Usar** pasa el valor a su ajuste y quita los cambios por altura.
    - **Dimensiones:** se cargan las medidas de X, Y, Z y el agujero; la tabla muestra la compensación actual y la
      nueva, y **Aplicar** la pasa a los ajustes (**Restablecer** vuelve a 100 %).
+   - **Primera capa:** qué significa cada aspecto de los cuadrados y qué corregir en la impresora.
+   - **Tolerancias de encastre:** un botón por juego; al elegir uno, dice cuánto dejar en los diseños.
+   - **Velocidad máxima:** al elegir un segmento, además el flujo volumétrico de su línea más rápida.
+
+**Pasos del extrusor** no tiene pieza: **Abrir** muestra los pasos. Exporta un G-code de prueba que extruye 100 mm,
+pide el valor actual del firmware y cuánto quedó hasta la marca, y da el valor nuevo con el comando o la línea para
+guardarlo (Marlin, RepRapFirmware o Klipper, según el dialecto), con **Copiar**.
 
 **Ajustar el rango (opcional)** cambia el inicio, el fin, el paso y el alto de los segmentos, y vuelve a crear la
 torre. Al pie, **Próximas calibraciones** lista las que siguen. La pieza se corre a la derecha para que el panel no
@@ -181,7 +189,8 @@ tisma --screenshot explorador.png --browse /una/carpeta
 tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
 
-`--calibration dimensions|temperature|retraction|flow|speed` crea una prueba de calibración como su botón **Crear**, y
+`--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit` crea una
+prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
 `--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
 sombras en lugar de la luz, para revisarlas.

@@ -15,6 +15,11 @@ namespace tisma {
 // are left as they are.
 std::string substitute_variables(std::string_view text, const std::map<std::string, std::vector<std::string>>& variables);
 
+// The command that sets the firmware's pressure advance: M900 K (Marlin's
+// linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S
+// (RepRapFirmware), from each firmware's public documentation.
+std::string pressure_advance_gcode(GcodeFlavor flavor, double value);
+
 // Writes the G-code of a sliced model, following docs/spec/GCODE_OUTPUT.md:
 // the header line, the start G-code, every layer with the comments the Tisma
 // preview reads (;LAYER_CHANGE, ;Z:, ;HEIGHT:, ;TYPE:, ;WIDTH:), the end

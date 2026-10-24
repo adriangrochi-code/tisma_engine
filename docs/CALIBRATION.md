@@ -30,7 +30,8 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 |---|---|---|
 | Compensación | grupo `compensation` | Escala el modelo por eje antes de laminar, alrededor del centro de su base, y agranda o achica los agujeros |
 | Flujo | `extrusion.flow` | El porcentaje del volumen que se extruye en cada línea |
-| Cambios por altura | lista `changes` | Desde una altura: temperatura, cama, ventilador, retracción, flujo, velocidad o G-code propio |
+| Avance de presión | `extrusion.pressure_advance` | El valor del firmware, escrito al empezar con el comando del dialecto |
+| Cambios por altura | lista `changes` | Desde una altura: temperatura, cama, ventilador, retracción (largo y velocidad), flujo, velocidad, avance de presión o G-code propio |
 
 - **El verificador del G-code conoce los cambios por altura** (`docs/GCODE_CHECK.md`): comprueba cada retracción y
   cada extrusión con el valor de su capa. Un G-code de torre se exporta verificado como cualquier otro.
@@ -47,7 +48,12 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 | **Temperatura** | Torre de segmentos de 10 mm con cresta de ángulo variable, estante plano sin soporte, perno para empujar, el número y figuras en relieve (ver abajo) | Hasta qué ángulo sale prolija la cresta, el estante, el perno que más resiste, el detalle, los hilos | La temperatura de la boquilla |
 | **Retracción** | Dos columnas a 30 mm, segmentos de 5 mm | El primer segmento sin hilos entre columnas | `retraction.length` |
 | **Flujo** | Torre de 20 × 20 mm, segmentos de 5 mm. Cada segmento deja una cara superior en el cuello | La cara superior lisa, sin huecos ni rebabas | `extrusion.flow` |
-| **Velocidad máxima** | Torre de 30 × 30 mm, segmentos de 5 mm, en % de las velocidades actuales | Dónde las paredes empiezan a fallar: el límite del fusor | Las velocidades, por debajo de ese segmento |
+| **Velocidad máxima** | Torre de 30 × 30 mm, segmentos de 5 mm, en % de las velocidades actuales | Dónde las paredes empiezan a fallar: el límite del fusor. Al elegir un segmento, la interfaz muestra el flujo volumétrico de su línea más rápida (mm³/s, `volumetric_flow`) | Las velocidades, por debajo de ese segmento |
+| **Primera capa** | Cinco cuadrados de 30 × 30 mm y una capa: en el medio y a 30 mm de cada esquina de la cama (en una cama chica, solo el del medio) | Líneas redondas y separadas: boquilla alta. Rugosa o transparente: baja. Un cuadrado distinto: esa esquina desnivelada | Nada en los ajustes: la altura se corrige en la impresora (Z offset). La interfaz explica qué hacer en cada caso |
+| **Velocidad de retracción** | Las dos columnas de la retracción, segmentos de 5 mm | El segmento más lento sin hilos | `retraction.speed` |
+| **Avance de presión** | Tubo cuadrado de 36 mm con paredes de 1,6 mm y esquinas vivas, con una ranura entre segmentos de 5 mm. Cada segmento escribe el comando del dialecto (ver abajo) | Esquinas abultadas: poco avance. Finas o con huecos al empezar las líneas: mucho | `extrusion.pressure_advance` |
+| **Tolerancias de encastre** | Siete bloques de 14 × 16 × 5 mm en fila, cada uno con un perno de 8 mm impreso adentro de su agujero, con 0,1, 0,15, 0,2, 0,25, 0,3, 0,4 y 0,5 mm de juego en el radio | El de menos juego cuyo perno sale o gira | Nada: es el juego que hay que dejar en los diseños que encastran. La interfaz lo dice al elegirlo |
+| **Pasos del extrusor** | Sin pieza: un G-code que calienta y extruye 100 mm a 1 mm/s, con una marca en el filamento 120 mm arriba de la entrada | Cuánto quedó hasta la marca | El valor del firmware: `M92 E` (y `M500`) en Marlin, `M92 E` en `config.g` de RepRapFirmware, `rotation_distance` en `printer.cfg` de Klipper. La interfaz calcula el nuevo y lo deja para copiar |
 
 Cada segmento de una torre lleva su valor escrito en relieve en la cara del frente (−Y), con una tipografía propia
 de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza impresa se lee sin la pantalla.
@@ -60,11 +66,14 @@ de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza
 | Retracción | Si el largo actual es de 1,5 mm o menos: de 0,2 a 2,0 mm de a 0,2. Si no: de 1,0 a 6,0 mm de a 0,5 | Un largo corto indica extrusor directo; uno largo, tubo Bowden |
 | Flujo | El flujo actual ± 10 %, de a 2,5 | Corrige alrededor de lo que hay |
 | Velocidad máxima | De 100 a 300 % de las velocidades actuales, de a 25 | Desde lo que ya imprime bien hasta el triple |
+| Velocidad de retracción | De 20 a 60 mm/s, de a 5 | El rango habitual de directos y Bowden |
+| Avance de presión | Extrusor directo (retracción de 1,5 mm o menos): de 0 a 0,08, de a 0,01. Bowden: de 0 a 0,8, de a 0,1 | Un tubo Bowden necesita unas diez veces más |
 
 **Al usar un valor** (`apply_calibration`):
 - la temperatura va a la variable `temperature` (la que usa el G-code de inicio);
-- la retracción a `retraction.length`;
+- la retracción a `retraction.length`, y su velocidad a `retraction.speed`;
 - el flujo a `extrusion.flow`;
+- el avance de presión a `extrusion.pressure_advance`;
 - la velocidad multiplica las velocidades de paredes, relleno, relleno sólido, superficie, soportes y la máxima (y la
   de la pared exterior si es absoluta);
 - en todos los casos se quitan los cambios por altura de la torre.
@@ -98,18 +107,28 @@ puentes y voladizo común; con la función, debería salir plano.
 - **Medida en 0:** deja ese valor como estaba.
 - **Límites:** los rangos de `docs/CONFIG.md`.
 
+#### El avance de presión
+
+Cada segmento de la torre escribe, al empezar, el comando de su dialecto (`pressure_advance_gcode`, desde la
+documentación pública de cada firmware):
+
+| Dialecto | Comando |
+|---|---|
+| Marlin | `M900 K…` (linear advance: el firmware tiene que tenerlo compilado, `LIN_ADVANCE`) |
+| Klipper | `SET_PRESSURE_ADVANCE ADVANCE=…` |
+| RepRapFirmware | `M572 D0 S…` |
+
+El valor elegido queda en `extrusion.pressure_advance`, que se escribe una vez al empezar cada impresión. Con 0 no
+se escribe nada y vale lo que tenga la impresora.
+
 ### Siguientes (estándar)
 
 | Prueba | Pieza o G-code | Qué ajusta |
 |---|---|---|
-| Velocidad de retracción | La torre de retracción, cambiando la velocidad (`changes[].retraction_speed` ya existe) | `retraction.speed` |
-| Avance de presión | Torre de esquinas vivas a velocidad alta; cada segmento escribe el comando del dialecto (`M900 K` en Marlin, `SET_PRESSURE_ADVANCE` en Klipper, `M572` en RepRap) con `changes[].gcode` | Un ajuste nuevo de avance de presión |
-| Resonancias (input shaping) | Torre con aristas y aceleración creciente por segmento (`M204`, o `SET_VELOCITY_LIMIT` en Klipper) | Aceleraciones y, en Klipper, la frecuencia del filtro |
-| Primera capa | Cuadrados de una capa repartidos en la cama | La altura de la boquilla (en la impresora) y `slicing.first_layer_shrink` (pata de elefante) |
-| Puentes y voladizos | Puentes de 10 a 50 mm y voladizos de 20° a 70° | Velocidad y ventilador de puentes; el ángulo de los soportes |
-| Tolerancias de encastre | Pernos en agujeros con juegos de 0,1 a 0,5 mm | El juego para piezas que encastran |
-| Pasos del extrusor | G-code que extruye 100 mm en el aire | La calibración del extrusor (en la impresora) |
-| Flujo volumétrico máximo | La torre de velocidad, mostrando los mm³/s de cada segmento | El tope de flujo del filamento |
+| Resonancias (input shaping) | Torre con aristas y aceleración creciente por segmento (`M204`, o `SET_VELOCITY_LIMIT` en Klipper) | Aceleraciones y, en Klipper, la frecuencia del filtro. Falta que el motor escriba la aceleración (hoy `machine.acceleration` solo sirve para estimar el tiempo) |
+| Puentes y voladizos | Puentes de 10 a 50 mm y voladizos de 20° a 70° | El ángulo de los soportes; la velocidad y el ventilador de puentes cuando existan esos ajustes |
+| Tope de flujo volumétrico | La torre de velocidad ya muestra los mm³/s de cada segmento | Un ajuste nuevo que limite cada extrusión a ese flujo |
+| Pata de elefante | Medir la base del bloque de dimensiones | `slicing.first_layer_shrink` |
 
 ### Nuevas (propias de este motor)
 
@@ -124,14 +143,19 @@ puentes y voladizo común; con la función, debería salir plano.
 ## En el código
 
 - **`src/calibration/calibration.*`:**
-  - las piezas: `dimension_test`, `temperature_tower`, `retraction_tower`, `flow_tower`, `speed_tower`;
+  - las piezas: `dimension_test`, `first_layer_test`, `fit_test`, y las torres `temperature_tower`,
+    `retraction_tower`, `retraction_speed_tower`, `flow_tower`, `speed_tower`, `pressure_advance_tower`;
+  - `calibration_kind_name`, `is_tower`, `calibration_tower` (una torre con otro rango);
+  - `volumetric_flow`;
+  - los pasos del extrusor: `extruder_test_gcode`, `extruder_steps_from`, `extruder_steps_text`;
   - `tower_values`;
   - `automatic_calibration` (los rangos automáticos) y `apply_calibration` (usar un valor);
   - la tipografía en relieve: `label_strokes`, `add_label`;
   - `compensation_from`.
 - **`compensated` (`src/slice/pipeline.*`):** la escala.
 - **`offset_holes` (`src/geom/polygons.*`):** los agujeros.
-- **Cambios por altura:** el escritor y el verificador del G-code.
+- **Cambios por altura:** el escritor y el verificador del G-code. **`pressure_advance_gcode`** (`src/gcode/writer.*`):
+  el comando de cada dialecto.
 - **`apps/tisma/app.cpp`:** la pestaña.
 - **Pruebas:** `tests/test_calibration.cpp`:
   - la pieza tiene su volumen exacto y el laminado su área;
@@ -139,4 +163,8 @@ puentes y voladizo común; con la función, debería salir plano.
   - la compensación desde medidas;
   - cada torre escribe sus valores, y el verificador la rechaza si no conoce los cambios;
   - las zonas de la torre de temperatura están donde deben, capa por capa (cresta, estante, perno);
-  - cada calibración automática se lamina y pasa el verificador, y usar un valor lo deja en su ajuste.
+  - cada calibración automática se lamina y pasa el verificador, y usar un valor lo deja en su ajuste;
+  - la torre de velocidad de retracción retrae a la velocidad de cada segmento;
+  - el avance de presión en los tres dialectos, en orden, y el ajuste;
+  - los cuadrados de la primera capa (una capa, en su lugar), los pernos de encastre (cada juego queda abierto, el
+    de 0,1 mm también), el flujo volumétrico y la cuenta de los pasos del extrusor.

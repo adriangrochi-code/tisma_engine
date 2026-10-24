@@ -13,6 +13,8 @@
 
 #include <array>
 #include <cmath>
+#include <regex>
+#include <set>
 #include <numbers>
 #include <sstream>
 #include <string>
@@ -275,8 +277,8 @@ TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibr
     CHECK_FALSE(apply_calibration(CalibrationKind::Dimensions, 1.0, s));
 
     // Every automatic print slices into G-code that passes its check.
-    for (CalibrationKind k : {CalibrationKind::Dimensions, CalibrationKind::Temperature, CalibrationKind::Retraction,
-                              CalibrationKind::Flow, CalibrationKind::Speed}) {
+    for (int i = 0; i < kCalibrationKinds; ++i) {
+        const CalibrationKind k = CalibrationKind(i);
         Settings run = plain();
         const CalibrationPrint p = automatic_calibration(k, run);
         run.changes = p.changes;
@@ -284,4 +286,179 @@ TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibr
         INFO(p.kind);
         CHECK(checks(gcode_of(m, run), gcode_limits(m, run)));
     }
+}
+
+TEST_CASE("calibration: kinds by name, which are towers, what each applies", "[calibration]") {
+    for (int i = 0; i < kCalibrationKinds; ++i) {
+        const auto k = CalibrationKind(i);
+        CHECK(calibration_kind_from_name(calibration_kind_name(k)) == k);
+        const CalibrationPrint p = automatic_calibration(k, Settings{});
+        CHECK(p.kind == calibration_kind_name(k));
+        CHECK(!p.mesh.empty());
+        CHECK(is_tower(k) == !p.changes.empty());
+        if (is_tower(k)) {
+            const CalibrationPrint again = calibration_tower(k, p.segments.front().value, p.segments.back().value,
+                                                             p.segments[1].value - p.segments[0].value,
+                                                             p.segments[0].z1 - p.segments[0].z0);
+            CHECK(again.segments.size() == p.segments.size());
+        } else {
+            CHECK(calibration_tower(k, 1, 2, 1, 5).mesh.empty());
+        }
+    }
+    CHECK_FALSE(calibration_kind_from_name("pressure"));
+
+    Settings s;
+    s.changes.push_back({});
+    REQUIRE(apply_calibration(CalibrationKind::RetractionSpeed, 35.0, s));
+    CHECK(s.retract_speed == 35.0);
+    CHECK(s.changes.empty());
+    REQUIRE(apply_calibration(CalibrationKind::PressureAdvance, 0.045, s));
+    CHECK(s.pressure_advance == 0.045);
+    const Settings before = s;
+    CHECK_FALSE(apply_calibration(CalibrationKind::FirstLayer, 1.0, s));
+    CHECK_FALSE(apply_calibration(CalibrationKind::Fit, 0.2, s));
+    CHECK(settings_json(s) == settings_json(before));
+
+    // Automatic ranges for the new towers.
+    s.retract_length = 0.8;
+    const CalibrationPrint direct = automatic_calibration(CalibrationKind::PressureAdvance, s);
+    CHECK(direct.segments.front().value == 0.0);
+    CHECK_THAT(direct.segments.back().value, WithinAbs(0.08, 1e-9));
+    s.retract_length = 5.0;
+    CHECK_THAT(automatic_calibration(CalibrationKind::PressureAdvance, s).segments.back().value, WithinAbs(0.8, 1e-9));
+    const CalibrationPrint speeds = automatic_calibration(CalibrationKind::RetractionSpeed, s);
+    CHECK(speeds.segments.front().value == 20.0);
+    CHECK(speeds.segments.back().value == 60.0);
+}
+
+TEST_CASE("calibration: the retraction speed tower retracts at each segment's speed", "[calibration]") {
+    Settings s = plain();
+    const CalibrationPrint p = retraction_speed_tower(25.0, 55.0, 10.0);
+    REQUIRE(p.segments.size() == 4);
+    CHECK(p.unit == "mm/s");
+    s.changes = p.changes;
+    const SlicedModel m = slice_model(weld_exact(p.mesh), s);
+    const std::string g = gcode_of(m, s);
+    CHECK(checks(g, gcode_limits(m, s)));
+    // Retractions and their returns: lines with E and F only.
+    std::set<int> feeds;
+    const std::regex retraction(R"(^G1 E-?[0-9.]+ F([0-9]+)$)");
+    std::istringstream in(g);
+    for (std::string line; std::getline(in, line);)
+        if (std::smatch match; std::regex_match(line, match, retraction))
+            feeds.insert(std::stoi(match[1]));
+    CHECK(feeds == std::set<int>{1500, 2100, 2700, 3300});
+}
+
+TEST_CASE("calibration: pressure advance, a setting and a tower in each flavor's command", "[calibration]") {
+    CHECK(pressure_advance_gcode(GcodeFlavor::Marlin, 0.05) == "M900 K0.0500 ; pressure advance");
+    CHECK(pressure_advance_gcode(GcodeFlavor::Klipper, 0.05) == "SET_PRESSURE_ADVANCE ADVANCE=0.0500");
+    CHECK(pressure_advance_gcode(GcodeFlavor::RepRap, 0.05) == "M572 D0 S0.0500 ; pressure advance");
+
+    // The setting: read, written, its range, and written once at the start.
+    Settings s = parse_settings(R"({"extrusion": {"pressure_advance": 0.035},
+                                    "changes": [{"z": 2, "pressure_advance": 0.0}]})");
+    CHECK(s.pressure_advance == 0.035);
+    REQUIRE(s.changes.size() == 1);
+    CHECK(s.changes[0].pressure_advance == 0.0);
+    CHECK(settings_json(parse_settings(settings_json(s))) == settings_json(s));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"pressure_advance": 3}})"),
+                      ContainsSubstring("extrusion.pressure_advance"));
+    s = plain();
+    s.flavor = GcodeFlavor::Marlin;
+    s.pressure_advance = 0.035;
+    const CalibrationPrint cube = flow_tower(100, 100, 1);
+    SlicedModel m = slice_model(weld_exact(cube.mesh), s);
+    std::string g = gcode_of(m, s);
+    CHECK(count(g, "M900 K0.0350") == 1);
+    CHECK(g.find("M900 K0.0350") < g.find("G90\n"));
+    s.pressure_advance = 0.0;
+    CHECK(count(gcode_of(m, s), "M900") == 0);
+
+    // The tower: the hollow square, its groove, and each segment's command.
+    const CalibrationPrint p = pressure_advance_tower(0.0, 0.04, 0.01);
+    REQUIRE(p.segments.size() == 5);
+    CHECK(p.unit.empty());
+    const BoundingBox box = p.mesh.bounding_box();
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(36.0, 1e-4));
+    CHECK_THAT(box.max.z, WithinAbs(25.0, 1e-4));
+    for (const GcodeFlavor flavor : {GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}) {
+        Settings run = plain();
+        run.flavor = flavor;
+        run.changes = p.changes;
+        m = slice_model(weld_exact(p.mesh), run);
+        g = gcode_of(m, run);
+        CHECK(checks(g, gcode_limits(m, run)));
+        std::size_t at = 0;
+        for (const CalibrationSegment& seg : p.segments) {
+            const std::size_t found = g.find(pressure_advance_gcode(flavor, seg.value), at);
+            REQUIRE(found != std::string::npos);
+            CHECK(found > at); // in order, up the tower
+            at = found;
+        }
+    }
+    // The walls: 36 mm squared less the hole, and narrower at the groove.
+    const SlicedModel tower = slice_model(weld_exact(p.mesh), plain());
+    CHECK_THAT(area_at(tower, 2.5), WithinRel(36.0 * 36.0 - 32.8 * 32.8, 1e-2));
+    CHECK_THAT(area_at(tower, 4.7), WithinRel(35.2 * 35.2 - 32.8 * 32.8, 3e-2));
+}
+
+TEST_CASE("calibration: first layer squares, fit test, volumetric flow and extruder steps", "[calibration]") {
+    Settings s = plain();
+    s.bed = {{0, 0}, {256, 0}, {256, 256}, {0, 256}};
+    CalibrationPrint p = first_layer_test(s);
+    CHECK(p.segments.empty());
+    BoundingBox box = p.mesh.bounding_box();
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(256.0 - 60.0, 1e-3));
+    CHECK_THAT(box.max.z, WithinAbs(s.first_layer_height, 1e-6));
+    // Centred on the bed, as the interface puts it: one layer of five squares.
+    IndexedMesh placed = weld_exact(p.mesh);
+    for (Vec3f& v : placed.vertices)
+        v.x += 128.0f, v.y += 128.0f;
+    SlicedModel m = slice_model(placed, s);
+    REQUIRE(m.layers.size() == 1);
+    CHECK_THAT(area_mm2(m.regions[0]), WithinRel(5 * 900.0, 1e-3));
+    CHECK(checks(gcode_of(m, s), gcode_limits(m, s)));
+    // A small bed keeps only the middle one.
+    s.bed = {{0, 0}, {100, 0}, {100, 100}, {0, 100}};
+    CHECK_THAT(first_layer_test(s).mesh.signed_volume(), WithinRel(900.0 * s.first_layer_height, 1e-4));
+
+    // Fit: seven blocks with a pin in each hole, the clearance on the radius.
+    p = fit_test();
+    REQUIRE(p.segments.size() == 7);
+    box = p.mesh.bounding_box();
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(98.0, 1e-3));
+    double holes = 0.0;
+    for (const CalibrationSegment& seg : p.segments)
+        holes += std::numbers::pi * (4.0 + seg.value) * (4.0 + seg.value);
+    const double pins = 7.0 * std::numbers::pi * 16.0;
+    m = slice_model(weld_exact(p.mesh), plain());
+    // Above the labels (1 to 4 mm) and below the block's top; then the pins alone.
+    CHECK_THAT(area_at(m, 4.5), WithinRel(98.0 * 16.0 - holes + pins, 5e-3));
+    CHECK_THAT(area_at(m, 6.5), WithinRel(pins, 5e-3));
+    // Every gap stays open, the 0.1 mm one too: the plate's outline, its seven
+    // holes and the seven pins.
+    for (std::size_t l = 0; l < m.layers.size(); ++l)
+        if (m.layers[l].bottom <= 4.5 && 4.5 < m.layers[l].top)
+            CHECK(m.regions[l].size() == 15);
+    const Settings plain_settings = plain();
+    CHECK(checks(gcode_of(m, plain_settings), gcode_limits(m, plain_settings)));
+
+    // Volumetric flow of the fastest extrusion: 80 mm/s x 0.4 x 0.2 mm.
+    const Settings d;
+    CHECK_THAT(volumetric_flow(d, 100.0), WithinAbs(6.4, 1e-9));
+    CHECK_THAT(volumetric_flow(d, 150.0), WithinAbs(9.6, 1e-9));
+
+    // Extruder steps: asked for 100 mm, 95 came out.
+    CHECK_THAT(extruder_steps_from(GcodeFlavor::Marlin, 93.0, 100.0, 95.0), WithinAbs(93.0 * 100.0 / 95.0, 1e-9));
+    CHECK_THAT(extruder_steps_from(GcodeFlavor::Klipper, 7.7, 100.0, 95.0), WithinAbs(7.7 * 0.95, 1e-9));
+    CHECK(extruder_steps_from(GcodeFlavor::Marlin, 93.0, 100.0, 0.0) == 93.0);
+    CHECK(extruder_steps_text(GcodeFlavor::Marlin, 97.894) == "M92 E97.89\nM500");
+    CHECK(extruder_steps_text(GcodeFlavor::Klipper, 7.315) == "rotation_distance: 7.3150");
+    Settings hot;
+    hot.variables["temperature"] = {"235"};
+    const std::string test = extruder_test_gcode(hot);
+    CHECK_THAT(test, ContainsSubstring("M109 S235"));
+    CHECK_THAT(test, ContainsSubstring("G1 E100.0 F60"));
+    CHECK_THAT(test, ContainsSubstring("120 mm above"));
 }

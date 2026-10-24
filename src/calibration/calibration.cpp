@@ -121,6 +121,68 @@ void tower_changes(CalibrationPrint& out, const std::vector<double>& values, dou
     }
 }
 
+// A block hx by hy each side of (cx, cy), from z0 to z1, with a round hole of
+// radius r through it. The angles of the hole's sides and of the block's
+// corners are merged, so the block keeps its corners: each angle gives a
+// point on the hole and the point on the block's outline along the same ray.
+void add_block_with_hole(TriangleMesh& m, double cx, double cy, double hx, double hy, double r, double z0, double z1) {
+    std::vector<double> angles;
+    for (int i = 0; i < kHoleSegments; ++i)
+        angles.push_back(2.0 * std::numbers::pi * i / kHoleSegments);
+    const double corner = std::atan2(hy, hx);
+    for (double a : {corner, std::numbers::pi - corner, std::numbers::pi + corner, 2.0 * std::numbers::pi - corner})
+        angles.push_back(a);
+    std::sort(angles.begin(), angles.end());
+    angles.erase(std::unique(angles.begin(), angles.end(), [](double a, double b) { return std::abs(a - b) < 1e-9; }),
+                 angles.end());
+    std::vector<std::array<double, 2>> inner, outer;
+    for (double a : angles) {
+        const double c = std::cos(a), s = std::sin(a);
+        inner.push_back({cx + r * c, cy + r * s});
+        const double reach = std::min(std::abs(c) > 1e-12 ? hx / std::abs(c) : 1e300, std::abs(s) > 1e-12 ? hy / std::abs(s) : 1e300);
+        outer.push_back({cx + reach * c, cy + reach * s});
+    }
+    const auto p = [](const std::array<double, 2>& q, double z) { return P{float(q[0]), float(q[1]), float(z)}; };
+    const std::size_t n = angles.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t j = (i + 1) % n;
+        quad(m, p(inner[i], z1), p(outer[i], z1), p(outer[j], z1), p(inner[j], z1)); // top
+        quad(m, p(inner[j], z0), p(outer[j], z0), p(outer[i], z0), p(inner[i], z0)); // bottom
+        quad(m, p(outer[i], z0), p(outer[j], z0), p(outer[j], z1), p(outer[i], z1)); // outside
+        quad(m, p(inner[j], z0), p(inner[i], z0), p(inner[i], z1), p(inner[j], z1)); // the hole
+    }
+}
+
+// An upright cylinder of radius r around (cx, cy), from z0 to z1.
+void add_cylinder(TriangleMesh& m, double cx, double cy, double r, double z0, double z1) {
+    std::vector<std::array<double, 2>> ring;
+    for (int i = 0; i < kHoleSegments; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / kHoleSegments;
+        ring.push_back({r * std::cos(a), r * std::sin(a)});
+    }
+    add_prism(m, V{cx, cy, z0}, V{1, 0, 0}, V{0, 1, 0}, V{0, 0, 1}, ring, z1 - z0);
+}
+
+// The retraction towers' two columns, 30 mm apart, with the values on the
+// left one.
+void retraction_columns(CalibrationPrint& out, const std::vector<double>& values, double segment) {
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const bool last = i + 1 == values.size();
+        add_segment(out.mesh, -19.0, -4.0, -11.0, 4.0, double(i) * segment, segment, last);
+        add_segment(out.mesh, 11.0, -4.0, 19.0, 4.0, double(i) * segment, segment, last);
+        add_label(out.mesh, value_text(values[i]), -18.4, double(i) * segment + 0.6, -4.0, true,
+                  std::min(3.0, segment - kNeck - 1.0), 0.6, 0.5);
+    }
+}
+
+// A square tube from z0 to z1: outer half width h, walls t thick.
+void add_tube(TriangleMesh& m, double h, double t, double z0, double z1) {
+    add_box(m, -h, -h, z0, h, -h + t, z1);
+    add_box(m, -h, h - t, z0, h, h, z1);
+    add_box(m, -h, -h + t, z0, -h + t, h - t, z1);
+    add_box(m, h - t, -h + t, z0, h, h - t, z1);
+}
+
 } // namespace
 
 std::vector<double> tower_values(double start, double end, double step) {
@@ -144,34 +206,7 @@ CalibrationPrint dimension_test(const DimensionTest& t) {
     out.unit = "mm";
     const double hx = t.x / 2.0, hy = t.y / 2.0;
     const double r = std::clamp(t.hole / 2.0, 0.5, std::min(hx, hy) - 1.0);
-    // The angles of the hole's sides and of the block's corners, so the
-    // block keeps its corners: each angle gives a point on the hole and the
-    // point on the block's outline along the same ray.
-    std::vector<double> angles;
-    for (int i = 0; i < kHoleSegments; ++i)
-        angles.push_back(2.0 * std::numbers::pi * i / kHoleSegments);
-    const double corner = std::atan2(hy, hx);
-    for (double a : {corner, std::numbers::pi - corner, std::numbers::pi + corner, 2.0 * std::numbers::pi - corner})
-        angles.push_back(a);
-    std::sort(angles.begin(), angles.end());
-    angles.erase(std::unique(angles.begin(), angles.end(), [](double a, double b) { return std::abs(a - b) < 1e-9; }),
-                 angles.end());
-    std::vector<std::array<double, 2>> inner, outer;
-    for (double a : angles) {
-        const double c = std::cos(a), s = std::sin(a);
-        inner.push_back({r * c, r * s});
-        const double reach = std::min(std::abs(c) > 1e-12 ? hx / std::abs(c) : 1e300, std::abs(s) > 1e-12 ? hy / std::abs(s) : 1e300);
-        outer.push_back({reach * c, reach * s});
-    }
-    const auto p = [](const std::array<double, 2>& q, double z) { return P{float(q[0]), float(q[1]), float(z)}; };
-    const std::size_t n = angles.size();
-    for (std::size_t i = 0; i < n; ++i) {
-        const std::size_t j = (i + 1) % n;
-        quad(out.mesh, p(inner[i], t.z), p(outer[i], t.z), p(outer[j], t.z), p(inner[j], t.z)); // top
-        quad(out.mesh, p(inner[j], 0), p(outer[j], 0), p(outer[i], 0), p(inner[i], 0));         // bottom
-        quad(out.mesh, p(outer[i], 0), p(outer[j], 0), p(outer[j], t.z), p(outer[i], t.z));      // outside
-        quad(out.mesh, p(inner[j], 0), p(inner[i], 0), p(inner[i], t.z), p(inner[j], t.z));      // the hole
-    }
+    add_block_with_hole(out.mesh, 0.0, 0.0, hx, hy, r, 0.0, t.z);
     return out;
 }
 
@@ -240,15 +275,134 @@ CalibrationPrint retraction_tower(double start, double end, double step, double 
     out.kind = "retraction";
     out.unit = "mm";
     const std::vector<double> values = tower_values(start, end, step);
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        const bool last = i + 1 == values.size();
-        add_segment(out.mesh, -19.0, -4.0, -11.0, 4.0, double(i) * segment, segment, last);
-        add_segment(out.mesh, 11.0, -4.0, 19.0, 4.0, double(i) * segment, segment, last);
-        add_label(out.mesh, value_text(values[i]), -18.4, double(i) * segment + 0.6, -4.0, true,
-                  std::min(3.0, segment - kNeck - 1.0), 0.6, 0.5);
-    }
+    retraction_columns(out, values, segment);
     tower_changes(out, values, segment, [](HeightChange& c, double v) { c.retract_length = v; });
     return out;
+}
+
+CalibrationPrint retraction_speed_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "retraction_speed";
+    out.unit = "mm/s";
+    const std::vector<double> values = tower_values(start, end, step);
+    retraction_columns(out, values, segment);
+    tower_changes(out, values, segment, [](HeightChange& c, double v) { c.retract_speed = v; });
+    return out;
+}
+
+CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "pressure_advance";
+    out.unit = "";
+    segment = std::max(segment, 3.0);
+    const std::vector<double> values = tower_values(start, end, step);
+    constexpr double kHalf = 18.0, kWall = 1.6, kGroove = 0.6, kGrooveDepth = 0.4;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const double z0 = double(i) * segment;
+        const bool last = i + 1 == values.size();
+        // The groove at the top of each segment but the last: the outer
+        // faces step in, the inner ones stay.
+        const double top = last ? z0 + segment : z0 + segment - kGroove;
+        add_tube(out.mesh, kHalf, kWall, z0, top);
+        if (!last)
+            add_tube(out.mesh, kHalf - kGrooveDepth, kWall - kGrooveDepth, top, z0 + segment);
+        add_label(out.mesh, value_text(values[i]), -16.5, z0 + 0.6, -kHalf, true, std::min(3.0, segment - kGroove - 1.0),
+                  0.6, 0.5);
+    }
+    tower_changes(out, values, segment, [](HeightChange& c, double v) { c.pressure_advance = v; });
+    return out;
+}
+
+CalibrationPrint first_layer_test(const Settings& settings) {
+    CalibrationPrint out;
+    out.kind = "first_layer";
+    out.unit = "";
+    // Where the squares go: around the middle of the bed's bounding box, the
+    // outer ones 30 mm in from its edges (the skirt fits around them).
+    double w = 200.0, d = 200.0;
+    if (!settings.bed.empty()) {
+        double x0 = 1e300, x1 = -1e300, y0 = 1e300, y1 = -1e300;
+        for (const auto& q : settings.bed)
+            x0 = std::min(x0, q[0]), x1 = std::max(x1, q[0]), y0 = std::min(y0, q[1]), y1 = std::max(y1, q[1]);
+        w = x1 - x0, d = y1 - y0;
+    }
+    constexpr double kSide = 30.0, kInset = 30.0;
+    const double ox = std::max(0.0, w / 2.0 - kInset - kSide / 2.0), oy = std::max(0.0, d / 2.0 - kInset - kSide / 2.0);
+    const double h = settings.first_layer_height;
+    for (const auto& [cx, cy] : std::vector<std::array<double, 2>>{{0, 0}, {-ox, -oy}, {ox, -oy}, {ox, oy}, {-ox, oy}}) {
+        // Squares that would touch the middle one (a small bed) are left out.
+        if ((cx != 0.0 || cy != 0.0) && std::max(std::abs(cx), std::abs(cy)) < kSide + 5.0)
+            continue;
+        add_box(out.mesh, cx - kSide / 2.0, cy - kSide / 2.0, 0.0, cx + kSide / 2.0, cy + kSide / 2.0, h);
+    }
+    return out;
+}
+
+CalibrationPrint fit_test(const std::vector<double>& values) {
+    CalibrationPrint out;
+    out.kind = "fit";
+    out.unit = "mm";
+    constexpr double kCell = 14.0, kDepth = 16.0, kHeight = 5.0, kPin = 4.0, kPinHeight = 8.0;
+    const double x_first = -kCell * double(values.size()) / 2.0;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const double c = std::clamp(values[i], 0.0, 2.0);
+        const double cx = x_first + kCell * (double(i) + 0.5);
+        add_block_with_hole(out.mesh, cx, 0.0, kCell / 2.0, kDepth / 2.0, kPin + c, 0.0, kHeight);
+        add_cylinder(out.mesh, cx, 0.0, kPin, 0.0, kPinHeight);
+        add_label(out.mesh, value_text(values[i]), cx - kCell / 2.0 + 1.0, 1.0, -kDepth / 2.0, true, 3.0, 0.6, 0.5);
+        out.segments.push_back({0.0, kPinHeight, values[i]});
+    }
+    return out;
+}
+
+double volumetric_flow(const Settings& s, double speed_percent) {
+    const double fastest = std::min(
+        std::max({s.wall_speed, s.infill_speed, s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed}),
+        s.max_speed);
+    return fastest * speed_percent / 100.0 * s.wall_width * s.layer_height * s.flow / 100.0;
+}
+
+std::string extruder_test_gcode(const Settings& s, double length) {
+    double t = 210.0;
+    if (const auto it = s.variables.find("temperature"); it != s.variables.end() && !it->second.empty())
+        t = std::clamp(std::atof(it->second.front().c_str()), 150.0, 400.0);
+    char text[1024];
+    std::snprintf(text, sizeof text,
+                  "; generated by Tisma engine %s: extruder steps test (docs/CALIBRATION.md)\n"
+                  "; Mark the filament %.0f mm above the extruder's entry before running this.\n"
+                  "M104 S%.0f ; heat the nozzle\n"
+                  "M109 S%.0f ; and wait\n"
+                  "M83 ; relative extrusion\n"
+                  "G1 E%.1f F60 ; %.0f mm at 1 mm/s\n"
+                  "M400 ; wait for the moves to end\n"
+                  "M104 S0 ; nozzle off\n"
+                  "M82\n",
+                  TISMA_VERSION, length + 20.0, t, t, length, length);
+    return text;
+}
+
+double extruder_steps_from(GcodeFlavor flavor, double current, double asked, double extruded) {
+    if (!(current > 0.0) || !(asked > 0.0) || !(extruded > 0.0))
+        return current;
+    // Steps per mm grow when too little came out; Klipper's rotation distance
+    // (mm per turn) shrinks.
+    return flavor == GcodeFlavor::Klipper ? current * extruded / asked : current * asked / extruded;
+}
+
+std::string extruder_steps_text(GcodeFlavor flavor, double value) {
+    char text[160];
+    switch (flavor) {
+    case GcodeFlavor::Marlin:
+        std::snprintf(text, sizeof text, "M92 E%.2f\nM500", value);
+        break;
+    case GcodeFlavor::RepRap:
+        std::snprintf(text, sizeof text, "M92 E%.2f", value);
+        break;
+    case GcodeFlavor::Klipper:
+        std::snprintf(text, sizeof text, "rotation_distance: %.4f", value);
+        break;
+    }
+    return text;
 }
 
 CalibrationPrint flow_tower(double start, double end, double step, double segment) {
@@ -321,10 +475,58 @@ void add_label(TriangleMesh& mesh, const std::string& text, double x, double z, 
     }
 }
 
+const char* calibration_kind_name(CalibrationKind kind) {
+    switch (kind) {
+    case CalibrationKind::Dimensions: return "dimensions";
+    case CalibrationKind::Temperature: return "temperature";
+    case CalibrationKind::Retraction: return "retraction";
+    case CalibrationKind::Flow: return "flow";
+    case CalibrationKind::Speed: return "speed";
+    case CalibrationKind::RetractionSpeed: return "retraction_speed";
+    case CalibrationKind::PressureAdvance: return "pressure_advance";
+    case CalibrationKind::FirstLayer: return "first_layer";
+    case CalibrationKind::Fit: return "fit";
+    }
+    return "dimensions";
+}
+
+std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name) {
+    for (int i = 0; i < kCalibrationKinds; ++i)
+        if (name == calibration_kind_name(CalibrationKind(i)))
+            return CalibrationKind(i);
+    return std::nullopt;
+}
+
+bool is_tower(CalibrationKind kind) {
+    return kind != CalibrationKind::Dimensions && kind != CalibrationKind::FirstLayer && kind != CalibrationKind::Fit;
+}
+
+CalibrationPrint calibration_tower(CalibrationKind kind, double start, double end, double step, double segment) {
+    switch (kind) {
+    case CalibrationKind::Temperature: return temperature_tower(start, end, step, segment);
+    case CalibrationKind::Retraction: return retraction_tower(start, end, step, segment);
+    case CalibrationKind::Flow: return flow_tower(start, end, step, segment);
+    case CalibrationKind::Speed: return speed_tower(start, end, step, segment);
+    case CalibrationKind::RetractionSpeed: return retraction_speed_tower(start, end, step, segment);
+    case CalibrationKind::PressureAdvance: return pressure_advance_tower(start, end, step, segment);
+    default: return {};
+    }
+}
+
 CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) {
+    // A short retraction means a direct drive extruder; a long one, a Bowden tube.
+    const bool direct = s.retract_length <= 1.5;
     switch (kind) {
     case CalibrationKind::Dimensions:
         return dimension_test();
+    case CalibrationKind::RetractionSpeed:
+        return retraction_speed_tower(20.0, 60.0, 5.0);
+    case CalibrationKind::PressureAdvance:
+        return direct ? pressure_advance_tower(0.0, 0.08, 0.01) : pressure_advance_tower(0.0, 0.8, 0.1);
+    case CalibrationKind::FirstLayer:
+        return first_layer_test(s);
+    case CalibrationKind::Fit:
+        return fit_test();
     case CalibrationKind::Temperature: {
         // Around the temperature in use, 20 C each way.
         double t = 210.0;
@@ -334,8 +536,7 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         return temperature_tower(t + 20.0, t - 20.0, 5.0);
     }
     case CalibrationKind::Retraction:
-        // A short retraction means a direct drive extruder; a long one, a Bowden tube.
-        return s.retract_length <= 1.5 ? retraction_tower(0.2, 2.0, 0.2) : retraction_tower(1.0, 6.0, 0.5);
+        return direct ? retraction_tower(0.2, 2.0, 0.2) : retraction_tower(1.0, 6.0, 0.5);
     case CalibrationKind::Flow:
         return flow_tower(s.flow - 10.0, s.flow + 10.0, 2.5);
     case CalibrationKind::Speed:
@@ -347,7 +548,15 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
 bool apply_calibration(CalibrationKind kind, double value, Settings& s) {
     switch (kind) {
     case CalibrationKind::Dimensions:
+    case CalibrationKind::FirstLayer:
+    case CalibrationKind::Fit:
         return false;
+    case CalibrationKind::RetractionSpeed:
+        s.retract_speed = value;
+        break;
+    case CalibrationKind::PressureAdvance:
+        s.pressure_advance = value;
+        break;
     case CalibrationKind::Temperature:
         s.variables["temperature"] = {std::to_string(std::lround(value))};
         break;

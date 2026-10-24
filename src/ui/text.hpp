@@ -102,6 +102,7 @@
     X(StepChoose, "3 · ¿Qué segmento salió mejor?", "3 · Which segment came out best?")                              \
     X(StepMeasure, "3 · Medila con calibre y cargá las medidas", "3 · Measure it with calipers and enter the measures") \
     X(TowerReady, "Lista: %d segmentos, %s de impresión", "Ready: %d segments, %s to print")                           \
+    X(PartReady, "Lista: %s de impresión", "Ready: %s to print")                                                      \
     X(UseValue, "Usar %s", "Use %s")                                                                                  \
     X(ValueApplied, "%s: guardado en los ajustes", "%s: saved in the settings")                                        \
     X(AdjustRange, "Ajustar el rango (opcional)", "Adjust the range (optional)")                                      \
@@ -132,14 +133,45 @@
     X(CalSpeed, "Velocidad máxima", "Maximum speed")                                                                  \
     X(CalSpeedHint, "Elegí el último segmento con paredes sanas, sin huecos ni capas flojas.",                         \
       "Pick the last segment with sound walls, without gaps or weak layers.")                                         \
+    X(CalFirstLayer, "Primera capa", "First layer")                                                                   \
+    X(CalFirstLayerWhat, "La altura de la boquilla y el nivel de la cama, en toda la cama.", "The nozzle's height and the bed's level, all over the bed.") \
+    X(CalFirstLayerHint, "Cinco cuadrados de una capa: en el medio y cerca de cada esquina. Mirá cada uno de cerca y pasá el dedo.", "Five squares one layer thick: in the middle and near each corner. Look at each one closely and run a finger over it.") \
+    X(StepJudge, "3 · ¿Cómo salió cada cuadrado?", "3 · How did each square come out?")                               \
+    X(FirstLayerJudge, "Líneas redondas y separadas, que se despegan: la boquilla está alta; bajala. Superficie rugosa, transparente o con rebabas: está baja; subila. Líneas planas que se tocan sin huecos y cara lisa: bien. Si un cuadrado sale distinto de los otros, la cama no está nivelada en esa esquina. La altura se ajusta en la impresora (Z offset o babystepping).", "Round, separate lines that peel off: the nozzle is too high; lower it. A rough, see-through surface or ridges: it is too low; raise it. Flat lines that touch with no gaps and a smooth face: right. If one square differs from the others, the bed is not level at that corner. The height is set on the printer (Z offset or babystepping).") \
+    X(CalRetractionSpeed, "Velocidad de retracción", "Retraction speed")                                              \
+    X(CalRetractionSpeedWhat, "Qué tan rápido retraer, con el largo que ya tenés.", "How fast to retract, with the length you already have.") \
+    X(CalRetractionSpeedHint, "Las dos columnas de la torre de retracción, cada segmento a otra velocidad. Elegí el más lento sin hilos: más rápido no ayuda y puede morder el filamento.", "The retraction tower's two columns, each segment at another speed. Pick the slowest one without strings: faster does not help and can grind the filament.") \
+    X(CalPressureAdvance, "Avance de presión", "Pressure advance")                                                    \
+    X(CalPressureAdvanceWhat, "Esquinas vivas y líneas parejas a cualquier velocidad.", "Sharp corners and even lines at any speed.") \
+    X(CalPressureAdvanceHint, "Un tubo cuadrado de esquinas vivas. Con poco avance, las esquinas salen abultadas; con mucho, finas o con huecos al empezar cada línea. Elegí el segmento de esquinas más prolijas. La impresora tiene que tenerlo activado (en Marlin, LIN_ADVANCE).", "A square tube with sharp corners. With too little advance the corners bulge; with too much they come out thin or with gaps where lines start. Pick the segment with the neatest corners. The printer must have it enabled (in Marlin, LIN_ADVANCE).") \
+    X(CalFit, "Tolerancias de encastre", "Fit tolerances")                                                            \
+    X(CalFitWhat, "El juego que necesitan las piezas que encastran.", "The clearance that parts which fit together need.") \
+    X(CalFitHint, "Siete bloques con un perno impreso dentro de cada agujero, con 0,1 a 0,5 mm de juego. Empujá cada perno: elegí el de menos juego que sale o gira.", "Seven blocks with a pin printed inside each hole, with 0.1 to 0.5 mm of clearance. Push each pin: pick the one with the least clearance that comes out or turns.") \
+    X(StepChooseFit, "3 · ¿Cuál es el de menos juego que se suelta?", "3 · Which is the least clearance that comes free?") \
+    X(FitAdvice, "Para piezas que encastran, dejá %s de juego por lado en tus diseños.", "For parts that fit together, leave %s of clearance per side in your designs.") \
+    X(VolumetricFlow, "A %s: hasta %.1f mm³/s en la línea más rápida.", "At %s: up to %.1f mm³/s on the fastest line.") \
+    X(CalExtruder, "Pasos del extrusor", "Extruder steps")                                                            \
+    X(CalExtruderWhat, "Que el extrusor empuje lo que se le pide.", "That the extruder pushes what it is asked to.")  \
+    X(ExtruderStep1, "1 · Marcá el filamento 120 mm arriba de la entrada del extrusor y corré este G-code: calienta y extruye 100 mm despacio.", "1 · Mark the filament 120 mm above the extruder's entry and run this G-code: it heats up and extrudes 100 mm slowly.") \
+    X(ExportTest, "Exportar el G-code de prueba", "Export the test G-code")                                           \
+    X(ExtruderStep2, "2 · Medí cuánto quedó entre la entrada y la marca", "2 · Measure what is left between the entry and the mark") \
+    X(Remaining, "Quedó hasta la marca", "Left to the mark")                                                          \
+    X(CurrentSteps, "Pasos por mm actuales (M503)", "Current steps per mm (M503)")                                    \
+    X(CurrentRotation, "rotation_distance actual", "Current rotation_distance")                                       \
+    X(ExtruderStep3, "3 · Guardalo en la impresora", "3 · Store it in the printer")                                   \
+    X(ExtruderResult, "Extruyó %.1f mm de 100: el valor nuevo es %.3f.", "It extruded %.1f mm of 100: the new value is %.3f.") \
+    X(ExtruderWhere, "En Klipper va en la sección [extruder] de printer.cfg; en RepRapFirmware, en config.g; en Marlin, por la consola.", "In Klipper it goes in printer.cfg's [extruder] section; in RepRapFirmware, in config.g; in Marlin, through the console.") \
+    X(Copy, "Copiar", "Copy")                                                                                         \
+    X(Copied, "Copiado", "Copied")                                                                                    \
+    X(TestExported, "G-code de prueba guardado: %s", "Test G-code saved: %s")                                         \
     X(TowerStart, "Desde", "From")                                                                                    \
     X(TowerEnd, "Hasta", "To")                                                                                        \
     X(TowerStep, "Paso", "Step")                                                                                      \
     X(TowerSegment, "Alto de cada segmento", "Segment height")                                                        \
     X(SegmentAt, "Segmento: %s", "Segment: %s")                                                                       \
     X(MoreCalibrations, "Próximas calibraciones", "Coming calibrations")                                              \
-    X(MoreCalibrationsList, "Avance de presión · resonancias (input shaping) · primera capa · puentes y voladizos · tolerancias de encastre · ancho de línea variable · adherencia entre capas con el análisis · laminado no planar: altura y ángulo (a definir). Ver docs/CALIBRATION.md.", \
-      "Pressure advance · resonances (input shaping) · first layer · bridges and overhangs · fit tolerances · variable line width · layer adhesion with the analysis · non-planar slicing: height and angle (to be defined). See docs/CALIBRATION.md.") \
+    X(MoreCalibrationsList, "Resonancias (input shaping) · puentes y voladizos · compensación por mínimos cuadrados · ancho de línea variable · adherencia entre capas con el análisis · laminado no planar: altura y ángulo (a definir). Ver docs/CALIBRATION.md.", \
+      "Resonances (input shaping) · bridges and overhangs · least-squares compensation · variable line width · layer adhesion with the analysis · non-planar slicing: height and angle (to be defined). See docs/CALIBRATION.md.") \
     X(Render, "Imagen", "Rendering")                                                                                  \
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \

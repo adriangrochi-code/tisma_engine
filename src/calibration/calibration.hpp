@@ -3,7 +3,9 @@
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Printer calibrations (docs/CALIBRATION.md): the test parts, generated here
@@ -19,8 +21,8 @@ struct CalibrationSegment {
 };
 
 struct CalibrationPrint {
-    std::string kind;   // "dimensions", "temperature", "retraction", "flow", "speed"
-    std::string unit;   // of the segments' values: "C", "mm", "%"
+    std::string kind;   // calibration_kind_name of its CalibrationKind
+    std::string unit;   // of the segments' values: "C", "mm", "mm/s", "%" or "" (a plain number)
     TriangleMesh mesh;  // centred on the origin, standing on z = 0
     std::vector<HeightChange> changes;      // for Settings::changes
     std::vector<CalibrationSegment> segments;
@@ -63,16 +65,73 @@ CalibrationPrint flow_tower(double start, double end, double step, double segmen
 // Speed (% of every extrusion's feed): a 30 x 30 mm tower; the segment where
 // walls start to fail is the limit of the hot end.
 CalibrationPrint speed_tower(double start, double end, double step, double segment = 5.0);
+// Retraction speed (mm/s): the retraction tower's two columns, each segment
+// retracting at another speed.
+CalibrationPrint retraction_speed_tower(double start, double end, double step, double segment = 5.0);
+// Pressure advance (the firmware's value, written in the flavor's command):
+// a hollow square tower, 36 mm wide with 1.6 mm walls and sharp corners, a
+// shallow groove between segments. Too little advance bulges the corners;
+// too much leaves them thin or with gaps.
+CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment = 5.0);
+
+// The first layer: five squares of one layer, 30 x 30 mm, in the middle and
+// near the corners of the bed (of a 200 mm one when the bed is not given),
+// to see the nozzle's height and the bed's level all over it.
+CalibrationPrint first_layer_test(const Settings& settings);
+
+// Fit tolerances: a row of blocks with a round hole each, and in each hole a
+// pin printed in place, `values` mm of clearance between them (on the
+// radius). The pins that come free show the clearance that parts which fit
+// together need. Each block carries its clearance on the front.
+CalibrationPrint fit_test(const std::vector<double>& values = {0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5});
+
+// The volumetric flow, mm3/s, of the fastest extrusion when every feed is at
+// `speed_percent` (the speed tower's segments): the fastest speed (capped by
+// speed.max) times the line's width and the layer's height, with the flow.
+double volumetric_flow(const Settings& settings, double speed_percent);
+
+// The extruder's steps (docs/CALIBRATION.md, "Pasos del extrusor"): G-code
+// that heats the nozzle and extrudes `length` mm slowly, for a mark on the
+// filament 20 mm above that; the new value from what was really extruded;
+// and the command or line that stores it (M92 E and M500 in Marlin, M92 E in
+// RepRapFirmware's config.g, rotation_distance in Klipper's printer.cfg, which
+// goes the other way: a longer distance per turn pushes less).
+std::string extruder_test_gcode(const Settings& settings, double length = 100.0);
+double extruder_steps_from(GcodeFlavor flavor, double current, double asked, double extruded);
+std::string extruder_steps_text(GcodeFlavor flavor, double value);
 
 // The calibrations the interface creates with one click, their ranges chosen
 // from the current settings (docs/CALIBRATION.md, "Rangos automáticos").
-enum class CalibrationKind { Dimensions, Temperature, Retraction, Flow, Speed };
+enum class CalibrationKind {
+    Dimensions,
+    Temperature,
+    Retraction,
+    Flow,
+    Speed,
+    RetractionSpeed,
+    PressureAdvance,
+    FirstLayer,
+    Fit,
+};
+inline constexpr int kCalibrationKinds = 9;
+// "dimensions", "temperature", "retraction", "flow", "speed",
+// "retraction_speed", "pressure_advance", "first_layer", "fit".
+const char* calibration_kind_name(CalibrationKind kind);
+std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name);
+// Whether the kind is a tower of segments, each trying a value from a range.
+bool is_tower(CalibrationKind kind);
 CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& settings);
+// A tower of its kind with this range (the ranges an interface lets the user
+// change); empty for kinds that are not towers.
+CalibrationPrint calibration_tower(CalibrationKind kind, double start, double end, double step, double segment);
 
 // Writes the value of the segment that printed best into the settings
-// (the nozzle temperature variable, the retraction length, the flow, or the
-// extrusion speeds scaled by the percentage) and removes the tower's height
-// changes. Returns false for Dimensions (those use compensation_from).
+// (the nozzle temperature variable, the retraction length or speed, the flow,
+// the pressure advance, or the extrusion speeds scaled by the percentage) and
+// removes the tower's height changes. Returns false, changing nothing, for
+// the tests that do not set a value: Dimensions (compensation_from), the first
+// layer (the nozzle's height is set on the printer) and Fit (a clearance for
+// designs).
 bool apply_calibration(CalibrationKind kind, double value, Settings& settings);
 
 // Text in relief: the strokes of a seven-segment style font (digits, '.',

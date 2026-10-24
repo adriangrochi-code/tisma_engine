@@ -15,7 +15,7 @@ struct AppOptions {
     int layer = -1;                 // the top layer shown in the preview (1-based); -1: all
     std::string export_path;        // with screenshot: after slicing, export the G-code here first
     std::string browse;             // with screenshot: show the file browser on this folder
-    std::string calibration;        // load this calibration test at start: dimensions, temperature, retraction, flow, speed
+    std::string calibration;        // create this calibration at start (calibration_kind_name), or "extruder"
     std::vector<std::string> profiles; // "kind=name": profiles chosen at start (docs/PROFILES.md)
     std::string save_project;       // with screenshot: save the project here once everything is ready
     bool light = false;             // light theme

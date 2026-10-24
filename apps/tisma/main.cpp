@@ -2,6 +2,8 @@
 
 #include "app.hpp"
 
+#include "calibration/calibration.hpp"
+
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -12,7 +14,8 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--calibration dimensions|temperature|retraction|flow|speed]\n"
+    "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
+    "                            pressure_advance|speed|fit|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
     "                                   [--layer N]\n"
@@ -109,8 +112,9 @@ int main(int argc, char** argv) {
         } else if (arg == "--calibration") {
             options.calibration = value();
             const std::string& c = options.calibration;
-            if (c != "dimensions" && c != "temperature" && c != "retraction" && c != "flow" && c != "speed") {
-                std::fprintf(stderr, "error: --calibration must be dimensions, temperature, retraction, flow or speed\n");
+            if (c != "extruder" && !tisma::calibration_kind_from_name(c)) {
+                std::fprintf(stderr, "error: --calibration must be dimensions, first_layer, temperature, flow, retraction, "
+                                     "retraction_speed, pressure_advance, speed, fit or extruder\n");
                 return 2;
             }
         } else if (arg == "--light") {

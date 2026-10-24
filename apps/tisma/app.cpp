@@ -198,7 +198,7 @@ std::filesystem::path preferences_path() {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject };
+enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest };
 
 class App {
 public:
@@ -358,10 +358,14 @@ private:
     struct TowerRange {
         double start = 0.0, end = 0.0, step = 1.0, segment = 5.0;
     };
-    TowerRange ranges_[5]; // by CalibrationKind, filled in when a test is created
+    TowerRange ranges_[kCalibrationKinds]; // by CalibrationKind, filled in when a test is created
     std::optional<CalibrationPrint> calibration_;
     CalibrationKind calibration_kind_ = CalibrationKind::Dimensions;
     std::optional<double> chosen_value_;
+    // The extruder steps test: open, the value in the printer now, and what
+    // was left of the 120 mm mark after extruding 100 mm.
+    bool extruder_open_ = false, extruder_scroll_ = false;
+    double extruder_current_ = 93.0, extruder_left_ = 20.0;
 
     // Named profiles: the built-in ones and the user's of each kind (by
     // ProfileKind), the one chosen, and whether the settings still match it
@@ -670,13 +674,11 @@ bool App::init(std::string& error) {
         }
         choose_profile(*kind, *p);
     }
-    if (const std::string& c = options_.calibration; !c.empty()) {
-        const CalibrationKind kind = c == "temperature"  ? CalibrationKind::Temperature
-                                     : c == "retraction" ? CalibrationKind::Retraction
-                                     : c == "flow"       ? CalibrationKind::Flow
-                                     : c == "speed"      ? CalibrationKind::Speed
-                                                         : CalibrationKind::Dimensions;
-        create_calibration(kind, false);
+    if (const std::string& c = options_.calibration; c == "extruder") {
+        set_tab(Tab::Calibration);
+        extruder_open_ = extruder_scroll_ = true;
+    } else if (!c.empty()) {
+        create_calibration(calibration_kind_from_name(c).value_or(CalibrationKind::Dimensions), false);
     }
     if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty()) && mesh_ &&
         !result_)
@@ -924,12 +926,7 @@ void App::open_project(const std::filesystem::path& path) {
             print.unit = p.calibration->unit;
             print.segments = p.calibration->segments;
             print.changes = settings_.changes;
-            const std::string& k = print.kind;
-            calibration_kind_ = k == "temperature"  ? CalibrationKind::Temperature
-                                : k == "retraction" ? CalibrationKind::Retraction
-                                : k == "flow"       ? CalibrationKind::Flow
-                                : k == "speed"      ? CalibrationKind::Speed
-                                                    : CalibrationKind::Dimensions;
+            calibration_kind_ = calibration_kind_from_name(print.kind).value_or(CalibrationKind::Dimensions);
             calibration_ = std::move(print);
             chosen_value_.reset();
             use_mesh(std::move(model.mesh), from_utf8(model.name), Tab::Calibration);
@@ -2024,7 +2021,10 @@ void App::calibration_panel() {
     };
     const auto unit_text = [](const CalibrationPrint& c, double v) {
         char text[32];
-        std::snprintf(text, sizeof text, "%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str());
+        if (c.unit.empty())
+            std::snprintf(text, sizeof text, "%g", v);
+        else
+            std::snprintf(text, sizeof text, "%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str());
         return std::string(text);
     };
 
@@ -2034,28 +2034,53 @@ void App::calibration_panel() {
     };
     const Card cards[] = {
         {CalibrationKind::Dimensions, T::CalDimensions, T::CalDimensionsWhat, T::CalDimensionsHint},
+        {CalibrationKind::FirstLayer, T::CalFirstLayer, T::CalFirstLayerWhat, T::CalFirstLayerHint},
         {CalibrationKind::Temperature, T::CalTemperature, T::CalTemperatureWhat, T::CalTemperatureHint},
-        {CalibrationKind::Retraction, T::CalRetraction, T::CalRetractionWhat, T::CalRetractionHint},
         {CalibrationKind::Flow, T::CalFlow, T::CalFlowWhat, T::CalFlowHint},
+        {CalibrationKind::Retraction, T::CalRetraction, T::CalRetractionWhat, T::CalRetractionHint},
+        {CalibrationKind::RetractionSpeed, T::CalRetractionSpeed, T::CalRetractionSpeedWhat, T::CalRetractionSpeedHint},
+        {CalibrationKind::PressureAdvance, T::CalPressureAdvance, T::CalPressureAdvanceWhat, T::CalPressureAdvanceHint},
         {CalibrationKind::Speed, T::CalSpeed, T::CalSpeedWhat, T::CalSpeedHint},
+        {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
     };
     const float button_h = 30.0f * scale_;
+    // A card's title and what it is for, with its button on the right.
+    const auto card_head = [&](T title, T what, bool active, const char* label, bool enabled) {
+        const float create_w = ImGui::CalcTextSize(label).x + button_h * 1.6f;
+        const float row_right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+        ImGui::BeginGroup();
+        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - create_w - 8.0f * scale_);
+        ImGui::TextColored(rgb(active ? theme_.accent_hover : theme_.text), "%s", tr(title));
+        ImGui::TextDisabled("%s", tr(what));
+        ImGui::PopTextWrapPos();
+        ImGui::EndGroup();
+        ImGui::SameLine(row_right - create_w);
+        return button("##create", "tisma_calibrate", label, !active, false, enabled, nullptr, button_h);
+    };
+    // Segment chips, bottom to top as printed (left to right for the fit test).
+    const auto chips = [&](const CalibrationPrint& c) {
+        const float chip_w = 86.0f * scale_;
+        const int per_row = std::max(1, int(ImGui::GetContentRegionAvail().x / (chip_w + 6.0f * scale_)));
+        for (std::size_t k = 0; k < c.segments.size(); ++k) {
+            const double v = c.segments[k].value;
+            const bool chosen = chosen_value_ && std::abs(*chosen_value_ - v) < 1e-9;
+            if (k % std::size_t(per_row) != 0)
+                ImGui::SameLine(0, 6.0f * scale_);
+            ImGui::PushID(int(k));
+            ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, chosen ? rgb(theme_.accent_hover) : rgb(theme_.frame_hover));
+            ImGui::PushStyleColor(ImGuiCol_Text, chosen ? ImVec4(1, 1, 1, 1) : rgb(theme_.text));
+            if (ImGui::Button(unit_text(c, v).c_str(), ImVec2(chip_w, button_h)))
+                chosen_value_ = v;
+            ImGui::PopStyleColor(3);
+            ImGui::PopID();
+        }
+    };
     for (const Card& card : cards) {
         ImGui::PushID(int(card.kind));
         ImGui::Separator();
         const bool active = calibration_ && calibration_kind_ == card.kind;
-        // Title and what it is for, with Create on the right.
-        const float create_w = ImGui::CalcTextSize(tr(T::Create)).x + button_h * 1.6f;
-        const float row_right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-        ImGui::BeginGroup();
-        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - create_w - 8.0f * scale_);
-        ImGui::TextColored(rgb(active ? theme_.accent_hover : theme_.text), "%s", tr(card.title));
-        ImGui::TextDisabled("%s", tr(card.what));
-        ImGui::PopTextWrapPos();
-        ImGui::EndGroup();
-        ImGui::SameLine(row_right - create_w);
-        if (button("##create", "tisma_calibrate", tr(T::Create), !active, false, !slice_job_.running(), nullptr,
-                   button_h))
+        if (card_head(card.title, card.what, active, tr(T::Create), !slice_job_.running()))
             create_calibration(card.kind, false);
 
         if (active) {
@@ -2065,11 +2090,15 @@ void App::calibration_panel() {
             ImGui::SameLine();
             if (slice_job_.running())
                 ImGui::TextDisabled("%s", tr(T::Slicing));
-            else if (result_ && !stale_ && !viewer_)
-                ImGui::TextDisabled(tr(T::TowerReady), int(std::max<std::size_t>(c.segments.size(), 1)),
-                                    result_->preview.estimated_seconds >= 0.0
-                                        ? format_duration(result_->preview.estimated_seconds).c_str()
-                                        : "-");
+            else if (result_ && !stale_ && !viewer_) {
+                const std::string time = result_->preview.estimated_seconds >= 0.0
+                                             ? format_duration(result_->preview.estimated_seconds)
+                                             : std::string("-");
+                if (is_tower(card.kind))
+                    ImGui::TextDisabled(tr(T::TowerReady), int(c.segments.size()), time.c_str());
+                else
+                    ImGui::TextDisabled(tr(T::PartReady), time.c_str());
+            }
             const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
             if (button("##export_calibration", "tisma_save", tr(T::Export), false, false, can_export, tr(T::ExportTip),
                        button_h))
@@ -2122,27 +2151,25 @@ void App::calibration_panel() {
                     settings_.hole_offset = 0.0;
                     settings_changed();
                 }
+            } else if (card.kind == CalibrationKind::FirstLayer) {
+                // 3: what each look means; the height is set on the printer.
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
+                ImGui::TextUnformatted(tr(T::FirstLayerJudge));
+            } else if (card.kind == CalibrationKind::Fit) {
+                // 3: the least clearance that comes free, for the user's designs.
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChooseFit));
+                chips(c);
+                if (chosen_value_)
+                    ImGui::TextColored(rgb(theme_.accent_hover), tr(T::FitAdvice), unit_text(c, *chosen_value_).c_str());
             } else {
-                // 3: pick the best segment, bottom to top as printed.
+                // 3: pick the best segment and use its value.
                 ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChoose));
-                const float chip_w = 86.0f * scale_;
-                const int per_row = std::max(1, int(ImGui::GetContentRegionAvail().x / (chip_w + 6.0f * scale_)));
-                for (std::size_t k = 0; k < c.segments.size(); ++k) {
-                    const double v = c.segments[k].value;
-                    const bool chosen = chosen_value_ && std::abs(*chosen_value_ - v) < 1e-9;
-                    if (k % std::size_t(per_row) != 0)
-                        ImGui::SameLine(0, 6.0f * scale_);
-                    ImGui::PushID(int(k));
-                    ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, chosen ? rgb(theme_.accent_hover) : rgb(theme_.frame_hover));
-                    ImGui::PushStyleColor(ImGuiCol_Text, chosen ? ImVec4(1, 1, 1, 1) : rgb(theme_.text));
-                    if (ImGui::Button(unit_text(c, v).c_str(), ImVec2(chip_w, button_h)))
-                        chosen_value_ = v;
-                    ImGui::PopStyleColor(3);
-                    ImGui::PopID();
-                }
+                chips(c);
                 if (chosen_value_) {
                     const std::string value = unit_text(c, *chosen_value_);
+                    if (card.kind == CalibrationKind::Speed)
+                        ImGui::TextDisabled(tr(T::VolumetricFlow), value.c_str(),
+                                            volumetric_flow(settings_, *chosen_value_));
                     if (button("##use", nullptr, format(tr(T::UseValue), value.c_str()).c_str(), true, false, true,
                                nullptr, button_h)) {
                         apply_calibration(card.kind, *chosen_value_, settings_);
@@ -2155,12 +2182,21 @@ void App::calibration_panel() {
                 // The range, for whoever wants to change it.
                 if (calibration_ && ImGui::TreeNode(tr(T::AdjustRange))) {
                     TowerRange& r = ranges_[int(card.kind)];
-                    const double lo = card.kind == CalibrationKind::Temperature ? 150.0 : 0.0;
-                    const double hi = card.kind == CalibrationKind::Temperature ? 400.0 : 600.0;
-                    const char* fmt = card.kind == CalibrationKind::Retraction ? "%.2f" : "%.1f";
-                    number(T::TowerStart, r.start, lo, hi, fmt, 0.1f);
-                    number(T::TowerEnd, r.end, lo, hi, fmt, 0.1f);
-                    number(T::TowerStep, r.step, 0.05, hi, fmt, 0.05f);
+                    double lo = 0.0, hi = 600.0, step_lo = 0.05;
+                    float drag = 0.1f;
+                    const char* fmt = "%.1f";
+                    switch (card.kind) {
+                    case CalibrationKind::Temperature: lo = 150.0, hi = 400.0, fmt = "%.0f"; break;
+                    case CalibrationKind::Retraction: hi = 20.0, fmt = "%.2f", drag = 0.01f; break;
+                    case CalibrationKind::RetractionSpeed: lo = 1.0, hi = 200.0, fmt = "%.0f"; break;
+                    case CalibrationKind::Flow: lo = 10.0, hi = 300.0; break;
+                    case CalibrationKind::Speed: lo = 5.0, hi = 1000.0, fmt = "%.0f"; break;
+                    case CalibrationKind::PressureAdvance: hi = 2.0, fmt = "%.3f", step_lo = 0.001, drag = 0.001f; break;
+                    default: break;
+                    }
+                    number(T::TowerStart, r.start, lo, hi, fmt, drag);
+                    number(T::TowerEnd, r.end, lo, hi, fmt, drag);
+                    number(T::TowerStep, r.step, step_lo, hi, fmt, drag);
                     number(T::TowerSegment, r.segment, 2.0, 30.0, "%.1f mm", 0.05f);
                     if (button("##recreate", nullptr, tr(T::Recreate), false, false, !slice_job_.running(), nullptr,
                                button_h))
@@ -2171,6 +2207,43 @@ void App::calibration_panel() {
         }
         ImGui::PopID();
     }
+
+    // The extruder's steps: no part to slice, a G-code to run and a sum.
+    ImGui::PushID("extruder");
+    ImGui::Separator();
+    if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
+        extruder_open_ = !extruder_open_;
+        extruder_scroll_ = extruder_open_;
+    }
+    if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
+        ImGui::SetScrollHereY(0.0f);
+        extruder_scroll_ = false;
+    }
+    if (extruder_open_) {
+        const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
+        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
+        if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
+            purpose_ = Purpose::SaveExtruderTest;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
+                          "tisma_extruder_steps.gcode");
+        }
+        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
+        number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
+        number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
+        const double extruded = 120.0 - extruder_left_;
+        const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
+        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
+        ImGui::Text(tr(T::ExtruderResult), extruded, value);
+        std::string text = extruder_steps_text(settings_.flavor, value);
+        const float two_lines = ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
+        ImGui::InputTextMultiline("##steps_text", &text, ImVec2(-FLT_MIN, two_lines), ImGuiInputTextFlags_ReadOnly);
+        if (button("##copy", nullptr, tr(T::Copy), false, false, true, nullptr, button_h)) {
+            ImGui::SetClipboardText(text.c_str());
+            notify(tr(T::Copied));
+        }
+        ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+    }
+    ImGui::PopID();
     ImGui::Separator();
     if (ImGui::CollapsingHeader(tr(T::MoreCalibrations)))
         ImGui::TextDisabled("%s", tr(T::MoreCalibrationsList));
@@ -2185,21 +2258,11 @@ void App::calibration_panel() {
 // one chosen from the settings), puts it on the bed with its changes and
 // slices it.
 void App::create_calibration(CalibrationKind kind, bool custom) {
-    CalibrationPrint print;
     const TowerRange& r = ranges_[int(kind)];
-    if (!custom || kind == CalibrationKind::Dimensions) {
-        print = automatic_calibration(kind, settings_);
-    } else if (kind == CalibrationKind::Temperature) {
-        print = temperature_tower(r.start, r.end, r.step, r.segment);
-    } else if (kind == CalibrationKind::Retraction) {
-        print = retraction_tower(r.start, r.end, r.step, r.segment);
-    } else if (kind == CalibrationKind::Flow) {
-        print = flow_tower(r.start, r.end, r.step, r.segment);
-    } else {
-        print = speed_tower(r.start, r.end, r.step, r.segment);
-    }
+    CalibrationPrint print = custom && is_tower(kind) ? calibration_tower(kind, r.start, r.end, r.step, r.segment)
+                                                      : automatic_calibration(kind, settings_);
     // The range shown for adjusting is the one used.
-    if (print.segments.size() >= 1) {
+    if (is_tower(kind) && !print.segments.empty()) {
         TowerRange& used = ranges_[int(kind)];
         used.start = print.segments.front().value;
         used.end = print.segments.back().value;
@@ -2248,6 +2311,16 @@ void App::dialogs() {
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
         case Purpose::SaveProject: save_project_to(chosen); break;
+        case Purpose::SaveExtruderTest: {
+            std::ofstream out(chosen, std::ios::binary);
+            out << extruder_test_gcode(settings_);
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::TestExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         }
     }
     if (!browser_.is_open() && !browser_.folder().empty())
@@ -2351,7 +2424,7 @@ void App::layout() {
     settings_panel();
     status_bar();
     view_tools();
-    if (!mesh_ && !result_)
+    if (!mesh_ && !result_ && tab_ != Tab::Calibration) // the calibration panel has its own buttons
         empty_hint();
     if (tab_ == Tab::Preview)
         preview_panels();

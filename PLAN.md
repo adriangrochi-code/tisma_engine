@@ -428,8 +428,11 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Calibraciones automáticas y guiadas (pedido del dueño): crear con un clic con rangos desde los ajustes, pasos
   guiados, usar el valor elegido; torre de temperatura con cresta de ángulo variable, estante plano, perno de
   resistencia y detalle en relieve
-- [ ] Calibraciones estándar siguientes: velocidad de retracción, avance de presión, resonancias, primera capa,
-  puentes y voladizos, tolerancias de encastre, pasos del extrusor, flujo volumétrico máximo
+- [x] Calibraciones estándar, segunda tanda: primera capa, velocidad de retracción, avance de presión (ajuste nuevo
+  `extrusion.pressure_advance`), tolerancias de encastre, pasos del extrusor y el flujo volumétrico en la torre de
+  velocidad
+- [ ] Calibraciones estándar que faltan: resonancias (el motor tiene que escribir la aceleración), puentes y
+  voladizos, tope de flujo volumétrico (ajuste nuevo), pata de elefante
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7
