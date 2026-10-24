@@ -658,4 +658,12 @@ filtro del marcado.
 - un hueco de 0,3 mm se cierra con d = 0,4 mm y uno de 0,6 mm no;
 - solo se camina hacia arriba.
 
-**Sigue:** propagación del reparto desde el centro hacia afuera (sección 3.5).
+**Además:** `half_beading` (el reparto de un lado, desde el borde hasta el medio) e `interpolate_beading` (sección
+3.5): para una cantidad fraccionaria interpola cordón por cordón entre los repartos de n y n + 1. El cordón del medio
+que solo tiene el reparto mayor aparece escalando su ancho por la fracción. Esa última regla es propia, porque el
+artículo solo la muestra en una figura. Dos pruebas más (93/93): extremos de la rampa y el caso n + 2/3 de la
+figura 8.
+
+**Sigue:**
+- trapezoidación: aristas de soporte de cada nodo a su punto más cercano del borde, y dominios por contorno;
+- después, propagación del reparto (sección 3.5) y extracción de trayectorias (sección 3.6).

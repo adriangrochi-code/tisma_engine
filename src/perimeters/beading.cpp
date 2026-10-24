@@ -79,4 +79,32 @@ Beading compute_beading(const BeadingParams& p, int n, double d) {
     return b;
 }
 
+HalfBeading half_beading(const Beading& full) {
+    HalfBeading h;
+    const std::size_t half = (full.widths.size() + 1) / 2;
+    h.widths.assign(full.widths.begin(), full.widths.begin() + std::ptrdiff_t(half));
+    h.distances.assign(full.centres.begin(), full.centres.begin() + std::ptrdiff_t(half));
+    return h;
+}
+
+HalfBeading interpolate_beading(const BeadingParams& params, double count, double thickness) {
+    const int n = static_cast<int>(std::floor(count));
+    const double f = count - n;
+    const HalfBeading low = half_beading(compute_beading(params, n, thickness));
+    if (f <= 0.0)
+        return low;
+    const HalfBeading high = half_beading(compute_beading(params, n + 1, thickness));
+    HalfBeading out;
+    const std::size_t common = std::min(low.widths.size(), high.widths.size());
+    for (std::size_t i = 0; i < common; ++i) {
+        out.widths.push_back(low.widths[i] + f * (high.widths[i] - low.widths[i]));
+        out.distances.push_back(low.distances[i] + f * (high.distances[i] - low.distances[i]));
+    }
+    for (std::size_t i = common; i < high.widths.size(); ++i) {
+        out.widths.push_back(f * high.widths[i]);
+        out.distances.push_back(high.distances[i]);
+    }
+    return out;
+}
+
 } // namespace tisma

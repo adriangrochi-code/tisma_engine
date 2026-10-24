@@ -40,4 +40,23 @@ double transition_thickness(const BeadingParams& params, int n);
 // puts one bead exactly in the middle.
 Beading compute_beading(const BeadingParams& params, int n, double thickness);
 
+// One side of a beading, as Kuipers et al. 2020 use it along the medial axis
+// (Section 3.5): the ceil(n/2) beads from one outline up to the middle, each
+// with its width and its distance from that outline. With an odd count the
+// last bead sits exactly in the middle (distance = thickness / 2).
+struct HalfBeading {
+    std::vector<double> widths;
+    std::vector<double> distances;
+};
+
+HalfBeading half_beading(const Beading& full);
+
+// Beading for a fractional bead count inside a transition ramp (Section 3.5,
+// "beading interpolation"): bead i from the outline is interpolated between
+// the beadings for floor(count) and floor(count) + 1 at the same thickness.
+// A bead that only the larger beading has (its middle bead) fades in: its
+// width is scaled by the fraction and its distance is that of the larger
+// beading. That last rule is our own; the paper only shows it in a figure.
+HalfBeading interpolate_beading(const BeadingParams& params, double count, double thickness);
+
 } // namespace tisma

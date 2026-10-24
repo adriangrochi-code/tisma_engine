@@ -97,3 +97,31 @@ TEST_CASE("distributed widths stay between half and one and a half preferred wid
         }
     }
 }
+
+TEST_CASE("half beadings run from the outline to the middle", "[beading]") {
+    const BeadingParams p = with(BeadingScheme::Distributed);
+    const HalfBeading even = half_beading(compute_beading(p, 2, 0.9));
+    CHECK(even.widths.size() == 1);
+    CHECK_THAT(even.distances[0], WithinAbs(0.225, 1e-12));
+    const HalfBeading odd = half_beading(compute_beading(p, 3, 1.2));
+    REQUIRE(odd.widths.size() == 2);
+    CHECK_THAT(odd.distances[1], WithinAbs(0.6, 1e-12)); // the middle bead sits at thickness / 2
+}
+
+TEST_CASE("beading interpolation inside a ramp", "[beading]") {
+    const BeadingParams p = with(BeadingScheme::Distributed);
+    // At the ends of the ramp the interpolation gives the plain beadings.
+    const HalfBeading at2 = interpolate_beading(p, 2.0, 1.0);
+    const HalfBeading b2 = half_beading(compute_beading(p, 2, 1.0));
+    CHECK(at2.widths == b2.widths);
+    CHECK(at2.distances == b2.distances);
+    // Two thirds of the way from 2 to 3 beads (as in Fig. 8 of the paper).
+    const HalfBeading x = interpolate_beading(p, 2.0 + 2.0 / 3.0, 1.0);
+    const HalfBeading b3 = half_beading(compute_beading(p, 3, 1.0));
+    REQUIRE(x.widths.size() == 2);
+    CHECK_THAT(x.widths[0], WithinAbs(b2.widths[0] + 2.0 / 3.0 * (b3.widths[0] - b2.widths[0]), 1e-12));
+    CHECK_THAT(x.distances[0], WithinAbs(b2.distances[0] + 2.0 / 3.0 * (b3.distances[0] - b2.distances[0]), 1e-12));
+    // The middle bead of the 3-bead beading fades in.
+    CHECK_THAT(x.widths[1], WithinAbs(2.0 / 3.0 * b3.widths[1], 1e-12));
+    CHECK_THAT(x.distances[1], WithinAbs(0.5, 1e-12));
+}
