@@ -30,6 +30,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |
 | [`belt_printer.md`](belt_printer.md): laminado para impresoras de cinta con pórtico inclinado y G-code en los ejes de la máquina | después de la primera versión | Para revisar |
 | [`print_review.md`](print_review.md): avisos de lo que probablemente va a fallar, con sus capas | después de F4 | Para revisar |
+| [`stability.md`](stability.md): diseño propio: parte en el aire, vuelco por el peso, flexión de partes esbeltas y despegue de la cama, con la calibración de la fuerza de la boquilla y de la adherencia | después de F4 | Para revisar |
 | [`calibrations.md`](calibrations.md): pruebas por franjas y por parches, comandos por firmware, bloque de precisión de medidas | después de F4 | Para revisar |
 | [`calibration_models.md`](calibration_models.md): las piezas de cada prueba de calibración, con medidas, rangos por defecto y ajustes | después de F4 | Para revisar |
 | [`printer_connections.md`](printer_connections.md): USB, Bambu Lab en red local, interfaces web, botón de enviar | F9 | Para revisar |
@@ -41,7 +42,6 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
 
 **Pendientes:**
-- Análisis de estabilidad propio para la revisión antes de imprimir.
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
 - Perfiles: los datos de cada impresora y material, desde sus fabricantes (P3).
 - Formatos: proyectos 3MF y lo que guarda Tisma en ellos (P4).
