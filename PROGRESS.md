@@ -1245,3 +1245,36 @@ Lo que domina son las paredes (el Voronoi de Boost), como ya se sabía.
 **Sigue:** cerrar los huecos de las superficies sólidas junto a las paredes. Idea: que las líneas de las superficies
 superiores entren un cuarto de cordón en la pared interna.
 
+## 2026-10-24 — bloque nocturno 34: solape de las superficies superiores con la pared
+
+**Medido primero** (superficie superior monotónica, cuadrado de 7,6 mm y L, a 0°, 30° y 45°; material depositado
+menos área, y lo que entra en la pared interna):
+
+| Cuánto entran las líneas | Material − área, media (peor) | Dentro de la pared, media (peor) |
+|---|---|---|
+| 0 | −4,87 % (−7,27 %) | 0 |
+| 0,05 mm (12,5 %) | −2,16 % (−3,25 %) | 0,92 % (1,24 %) |
+| 0,10 mm (25 %) | +0,61 % (−0,52 %) | 2,56 % (3,38 %) |
+| 0,15 mm (37,5 %) | +3,37 % | 4,62 % (6,23 %) |
+| 0,20 mm (50 %) | +8,37 % | 8,75 % (11,49 %) |
+
+**Hecho:**
+- Las líneas de las superficies superiores monotónicas (que no se unen en zigzag) llegan un 25 % de cordón más allá de
+  la región achicada, dentro de la pared interna. Es el punto de equilibrio: el material depositado queda entre −0,5 % y
+  +1,5 % del área, y entra en la pared entre 1,6 % y 3,4 % del área.
+- Las inferiores siguen en zigzag por el borde interno (ya estaban dentro del 1 %).
+- Ajuste `infill.wall_overlap` en % del cordón (25 por defecto).
+
+**Probado:** 132/132 pruebas con gcc, clang y ASan+UBSan:
+- con el valor por defecto, el material depositado está dentro del 2 % del área y lo que entra en la pared debajo del 4 %;
+- con 0 no entra nada en la pared y se deposita menos;
+- lectura del ajuste;
+- la prueba del relleno de huecos usa ahora solape 0: con el solape ya no quedan huecos de medio cordón a 30°.
+
+**Medido** (esfera, 500 capas, 4 núcleos): `slice` 1,18 s.
+
+**Sigue** (lista de F3):
+- la GPU para superficies o giroide;
+- anclar el giroide;
+- el criterio de F3, que necesita el Benchy (decisión del dueño).
+

@@ -134,7 +134,8 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
-    read_group(root, "infill", {"density", "angle", "pattern"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap"}, [&](const json& g, const std::string& n,
+                                                                                const std::string& k) {
         if (n == "pattern") {
             s.infill_pattern =
                 choice<InfillPattern>(g, n, k,
@@ -144,10 +145,10 @@ Settings parse_settings(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (n == "density") {
+        if (n == "density" || n == "wall_overlap") {
             if (v < 0.0 || v > 100.0)
                 fail(k, "must be from 0 to 100");
-            s.infill_density = v;
+            (n == "density" ? s.infill_density : s.infill_wall_overlap) = v;
         } else {
             s.infill_angle = v;
         }

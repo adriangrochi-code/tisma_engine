@@ -243,11 +243,8 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
 - [x] Anclar las líneas de relleno a los perímetros: zigzag que une los extremos a lo largo del borde, sin entrar en
   las paredes; en las superficies sólidas, líneas ajustadas a la región. En el cuadrado de 7,6 mm, el material depositado
   es el área dentro del 1 % a 0°, 30° y 45°
-- [ ] Cerrar los huecos de las superficies sólidas junto a las paredes: en una L a 0°, el codo deja una franja de 0,2 mm
-  (−2,9 % de material), y las superiores monotónicas, sin zigzag, quedan 4–7 % cortas. Probado: un relleno de huecos con
-  cordones de ancho variable (`FillParams::gap_fill`) gana 1–2 puntos a 30° pero cuesta 0,5 s en la esfera, así que
-  quedó apagado. Próxima idea: que las líneas de las superficies superiores entren hasta un cuarto de cordón en la
-  pared interna
+- [x] Cerrar los huecos de las superficies sólidas junto a las paredes: las superiores monotónicas entran un 25 % de
+  cordón en la pared interna (`infill.wall_overlap`); deposita el área entre −0,5 % y +1,5 % (antes hasta −7 %)
 - [x] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
   anterior), tendidos en la dirección que apoya los dos extremos de las líneas
 - [x] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho (`surfaces.top_pattern`)

@@ -250,6 +250,7 @@ TEST_CASE("gap fill: variable-width beads where the solid lines leave room", "[i
     s.top = square(1.2, 1.2, 7.6);
     FillParams p;
     p.angle = 30.0;
+    p.wall_overlap = 0.0; // lines inside the region, as gap filling expects
     const LayerFill plain = fill_layer(s, 0, p);
     CHECK(plain.gaps.empty()); // off by default
     p.gap_fill = true;
@@ -265,4 +266,29 @@ TEST_CASE("gap fill: variable-width beads where the solid lines leave room", "[i
     for (const Toolpath& t : filled.gaps)
         for (const ToolpathPoint& q : t.points)
             CHECK(q.width > 0.0);
+}
+
+TEST_CASE("monotonic tops reach a quarter bead into the walls: the area is laid", "[infill]") {
+    // Unjoined lines end short of the edge; reaching 0.1 mm into the walls
+    // balances it. Measured: laid minus area -0.5 to +1.5 %, 1.6 to 3.4 % of the
+    // area inside the walls (25 % of a bead, the default).
+    const Polygons sq = square(1.2, 1.2, 7.6);
+    const Polygons l = {{{to_units(0), to_units(0)}, {to_units(10), to_units(0)}, {to_units(10), to_units(3)},
+                         {to_units(3), to_units(3)}, {to_units(3), to_units(10)}, {to_units(0), to_units(10)}}};
+    for (const Polygons* region : {&sq, &l})
+        for (double angle : {0.0, 30.0, 45.0}) {
+            LayerSurfaces s;
+            s.top = *region;
+            FillParams p;
+            p.angle = angle;
+            const Coverage c = measure_coverage(*region, fill_layer(s, 0, p).solid);
+            INFO("angle " << angle);
+            CHECK(std::fabs(c.deposited - c.target) < 0.02 * c.target);
+            CHECK(c.outside < 0.04 * c.target);
+            p.wall_overlap = 0.0;
+            const Coverage inside = measure_coverage(*region, fill_layer(s, 0, p).solid);
+            CHECK(inside.outside < 1e-3);
+            CHECK(inside.deposited < c.deposited);
+        }
+    CHECK(parse_settings(R"({"infill": {"wall_overlap": 10}})").infill_wall_overlap == 10.0);
 }

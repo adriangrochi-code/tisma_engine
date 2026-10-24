@@ -207,13 +207,13 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit, bool monotonic) {
+                                       bool connect, bool fit, bool monotonic, double overlap) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
     // A hair (10 nm) of slack keeps lines that run exactly along the shrunk
     // boundary, as fitted lines do.
-    const Polygons inner = offset(region, -width / 2.0 + 1e-5);
+    const Polygons inner = offset(region, -width / 2.0 + overlap + 1e-5);
     if (inner.empty())
         return out;
     // Work in a frame where the lines are horizontal: rotate by -angle.
@@ -297,7 +297,8 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
     if (params.monotonic_top) {
-        out.solid = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true);
+        out.solid = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true,
+                                     params.wall_overlap * params.width);
         for (Toolpath& t : rectilinear_fill(surfaces.bottom, params.width, angle, params.width, true, true))
             out.solid.push_back(std::move(t));
     } else {

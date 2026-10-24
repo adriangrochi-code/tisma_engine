@@ -34,6 +34,7 @@ struct Settings {
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
+    double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     GpuMode gpu = GpuMode::Auto;
 
     // Groups present in the file that the engine does not use yet.

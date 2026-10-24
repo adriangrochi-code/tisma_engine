@@ -54,8 +54,9 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     out.surfaces =
         classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
-    const FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle,
-                          settings.infill_pattern, settings.monotonic_top};
+    FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
+                    settings.monotonic_top};
+    fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     out.fills.resize(out.layers.size());
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) { out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z()); });

@@ -24,9 +24,12 @@ namespace tisma {
 // With `monotonic` (instead of `connect`), the pieces all run the same way and
 // each comes after every piece of the line below that touches it; among those
 // that may come next, the one starting nearest to the last one's end.
+// With `overlap` (mm, for unjoined lines), the lines reach that far past the
+// region shrunk by half a bead, into the walls around it.
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect = false, bool fit = false, bool monotonic = false);
+                                       bool connect = false, bool fit = false, bool monotonic = false,
+                                       double overlap = 0.0);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -50,11 +53,13 @@ struct FillParams {
     InfillPattern pattern = InfillPattern::Rectilinear;
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
+    double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
 // fitted to the region, at the layer's angle; top surfaces in monotonic order
-// (with monotonic_top), the rest connected into zig-zags; with gap_fill, what
+// (with monotonic_top), reaching wall_overlap of a bead into the walls since
+// their ends are not joined, the rest connected into zig-zags; with gap_fill, what
 // they leave is filled by gap_fill (off by default: on the sphere it costs
 // 0.5 s for 1 to 2 % of the solid area). Sparse
 // infill, by pattern:
