@@ -78,3 +78,52 @@ TEST_CASE("no transitions in a strip of constant width", "[transitions]") {
     BeadingParams p;
     CHECK(transition_anchors(g, central_bead_counts(g, p), p).empty());
 }
+
+TEST_CASE("ramps of length w* around each anchor with fractional counts", "[transitions]") {
+    MedialGraph g = medial_graph({wedge(30.0, 20.0)});
+    mark_central(g);
+    BeadingParams p; // distributed: q^-1(n) = (n + 1/2) w*, so ramps are centred on the anchors
+    const auto anchors = transition_anchors(g, central_bead_counts(g, p), p);
+    const TransitionResult r = apply_transitions(g, p);
+    REQUIRE(r.bead_counts.size() == g.nodes.size());
+    CHECK(r.anchors == anchors.size());
+    CHECK(r.anchors_filtered == 0); // the wedge only thickens
+    // Each kept anchor has nodes at both ramp ends, w*/2 before and after it on the axis,
+    // with the integer counts, and fractional counts in between.
+    std::size_t ramps_checked = 0;
+    for (const TransitionAnchor& a : anchors) {
+        bool start = false, end = false;
+        for (std::size_t i = 0; i < g.nodes.size(); ++i) {
+            if (std::fabs(g.nodes[i].p.y) > 1e-6)
+                continue;
+            if (std::fabs(g.nodes[i].p.x - (a.p.x - 0.2)) < 1e-6 && r.bead_counts[i] == a.from_count)
+                start = true;
+            if (std::fabs(g.nodes[i].p.x - (a.p.x + 0.2)) < 1e-6 && r.bead_counts[i] == a.to_count)
+                end = true;
+        }
+        if (start && end)
+            ++ramps_checked;
+    }
+    CHECK(ramps_checked + r.anchors_dropped == anchors.size());
+    CHECK(ramps_checked > 0);
+    for (std::size_t i = 0; i < g.nodes.size(); ++i)
+        if (g.nodes[i].central)
+            CHECK(r.bead_counts[i] >= 0.0);
+}
+
+TEST_CASE("opposite anchors closer than 1 mm cancel out", "[transitions]") {
+    // A strip 0.98 mm wide with a short bulge to 1.02 mm: with w* = 0.4 the count
+    // goes 2 -> 3 -> 2 across the bulge (the step is at 1.0 mm), over less than 1 mm.
+    const auto u = [](double v) { return to_units(v); };
+    const Polygon strip = {{u(0), u(0)},       {u(10), u(0)},      {u(10.2), u(-0.02)}, {u(10.6), u(-0.02)},
+                           {u(10.8), u(0)},    {u(20), u(0)},      {u(20), u(0.98)},    {u(10.8), u(0.98)},
+                           {u(10.6), u(1.0)},  {u(10.2), u(1.0)},  {u(10), u(0.98)},    {u(0), u(0.98)}};
+    MedialGraph g = medial_graph({strip});
+    mark_central(g);
+    BeadingParams p;
+    const TransitionResult r = apply_transitions(g, p);
+    CHECK(r.anchors_filtered >= 2);
+    for (std::size_t i = 0; i < g.nodes.size(); ++i)
+        if (g.nodes[i].central && r.bead_counts[i] >= 0.0)
+            CHECK(r.bead_counts[i] == 2.0); // the bulge does not get a third bead
+}

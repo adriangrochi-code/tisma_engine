@@ -621,3 +621,27 @@ todas las capas en paralelo.
 
 **Sigue:** filtro de anclas opuestas a menos de 1 mm, rampas de largo w* con cantidad fraccionaria (ecuación 7), y
 filtro del marcado.
+
+## 2026-10-24 — bloque nocturno 12: filtro de anclas y rampas de transición
+
+**Hecho:**
+- `apply_transitions` (Kuipers et al. 2020, sección 3.4), sobre el grafo marcado:
+  - recorre el centro por cadenas de aristas centrales, entre nodos donde se ramifica o termina;
+  - ubica las anclas a lo largo de cada cadena;
+  - filtra pares consecutivos de anclas en sentidos opuestos a menos de 1 mm, y deja la cantidad de alrededor;
+  - arma rampas de largo t(n) = w* que empiezan a t(n)·(q⁻¹(n)/w* − n) del ancla del lado fino, y descarta las que
+    no entran en la cadena;
+  - parte las aristas en los extremos de cada rampa y da a los nodos de adentro n + distancia/t(n) (ecuación 7).
+- El resultado da, por nodo, la cantidad (entera en el centro, fraccionaria en las rampas, −1 fuera del centro) y
+  cuántas anclas se encontraron, filtraron o descartaron.
+
+**Probado:**
+- 89/89 pruebas con gcc, clang y ASan+UBSan:
+  - cuña de 30°: cada rampa tiene nodos a ±w*/2 del ancla con las cantidades enteras, las anclas que no se usaron
+    son justo las descartadas, y todos los nodos centrales tienen cantidad;
+  - tira de 0,98 mm con un abultamiento de 1,02 mm: las anclas 2→3→2 se cancelan y todo queda en 2 cordones.
+
+**Sigue:**
+- filtro del marcado (sección 3.3);
+- propagación del reparto desde el centro hacia afuera (sección 3.5);
+- extracción de las trayectorias (sección 3.6).

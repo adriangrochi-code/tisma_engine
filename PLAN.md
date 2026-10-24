@@ -196,7 +196,8 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Esquemas de reparto de cordones (Kuipers et al. 2020, sección 4): uniforme, distribuido y distribuido hacia adentro
 - [x] Grafo del eje medio y marcado del centro por significancia (sección 3.3, αmax = 135°) y máximos locales
 - [x] Cantidad de cordones en los nodos centrales y anclas de transición (sección 3.4, ecuaciones 4–6)
-- [ ] Filtro de anclas opuestas a menos de 1 mm, rampas de largo w* con cantidad fraccionaria (ecuación 7) y filtro del marcado
+- [x] Filtro de anclas opuestas a menos de 1 mm y rampas de largo w* con cantidad fraccionaria (ecuación 7)
+- [ ] Filtro del marcado (sección 3.3, marcar tramos no centrales de menos de w* entre nodos centrales)
 - [ ] Trapezoidación, propagación del reparto (sección 3.5) y extracción de trayectorias (sección 3.6)
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
