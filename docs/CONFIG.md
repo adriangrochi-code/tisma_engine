@@ -133,7 +133,7 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
 | `min_speed` | número | 10 | > 0 | Primera etapa: las extrusiones bajan todas en la misma proporción, pero no por debajo de esto (en mm/s, valor de banco); si no alcanza, la segunda etapa las pone a todas a una misma velocidad, la más alta que llega al tiempo, nunca por debajo de 1 mm/min; las que ya iban más lento no cambian |
 | `fan_min` | número | 35 | 0–100 | Ventilador en las capas normales, en % |
 | `fan_max` | número | 100 | 0–100 | Ventilador en las capas que tuvieron que ir más lento, en % |
-| `fan_off_layers` | entero | 1 | 0–1000 | Las primeras capas van sin ventilador, aunque se hayan frenado |
+| `fan_off_layers` | entero | 1 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
 
 ### `compute`
 

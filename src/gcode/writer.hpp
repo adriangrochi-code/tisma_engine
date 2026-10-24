@@ -27,8 +27,8 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
 // first). Travels follow TravelPlanner and retract when they leave the part or
 // are longer than retraction.min_travel. A layer faster than
 // cooling.min_layer_time is slowed down (plan_slowdown) and gets the fan at
-// cooling.fan_max; others get cooling.fan_min, and the first
-// cooling.fan_off_layers layers none. Layers that stay shorter than the
+// cooling.fan_max, even among the first layers; others get cooling.fan_min,
+// and the first cooling.fan_off_layers layers none. Layers that stay shorter than the
 // minimum time even at 1 mm/min are added to warnings, when given.
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings,
                  std::vector<Warning>* warnings = nullptr);

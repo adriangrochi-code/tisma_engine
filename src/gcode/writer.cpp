@@ -413,7 +413,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             cursor = cursor_before;
             seams = seams_before;
             g.pace(slowdown);
-            emit_layer(l, fan_off ? 0.0 : s.fan_max);
+            emit_layer(l, s.fan_max); // also on the first layers (owner's decision, 2026-10-24)
             g.pace(Slowdown{});
             const double reached = layer_time(g.extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {

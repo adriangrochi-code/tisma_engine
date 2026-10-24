@@ -123,6 +123,10 @@ antes de usarlas. Revisadas el 2026-10-24:
   fases de producto P1–P5, en el orden que decida el dueño; al final F9 (5 ejes) y F10 (macOS).
 - La máquina de 5 ejes de referencia se elige al empezar F9, la última fase antes de macOS. Hasta entonces la
   cinemática queda como módulo aparte, sin atarse a ninguna máquina.
+- Eje medio: un Voronoi de segmentos propio, a partir de artículos, en vez del híbrido con Clipper2.
+- Enfriamiento: una de las primeras capas (sin ventilador) que tiene que ir más lento por el tiempo mínimo lleva el
+  ventilador al máximo, como cualquier otra capa frenada.
+- Si el motor centra los modelos en la cama, o los recibe ya ubicados, se decide con la sesión de Tisma.
 
 ## Fases
 
@@ -213,10 +217,15 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [ ] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s).
   Medido: el Voronoi de segmentos de Boost cuesta 13–28 µs por segmento con cualquier polígono, y el 54 % es su
   aritmética exacta (`extended_int`), porque cada vértice es extremo de dos segmentos. Es lo que informa el artículo
-  (5·10⁻⁶·n·log n s). Opciones, cada una de varios bloques:
-  - un Voronoi de segmentos propio para polígonos, a partir de artículos, pensado también para la GPU;
-  - híbrido: desplazamientos de Clipper2 donde la cáscara es un desplazamiento simple, y el esqueleto solo donde la
-    pieza es angosta (falta un criterio exacto y barato para separar las dos zonas).
+  (5·10⁻⁶·n·log n s). **Decisión del dueño (2026-10-24): un Voronoi de segmentos propio**, a partir de artículos,
+  pensado también para la GPU. Pasos, cada uno de uno o más bloques:
+  - [ ] elegir el método en los artículos (inserción incremental orientada a la topología, barrido, o uno propio de
+    polígonos) y anotar en `PROVENANCE.md` el artículo y la sección de cada parte;
+  - [ ] módulo propio con la misma salida que hoy (`MedialEdge`), probado contra Boost.Polygon como oráculo (Boost es
+    BSL-1.0, sirve para comparar) en muchos polígonos: círculos, letras, rendijas, piezas del banco;
+  - [ ] medirlo contra Boost en la esfera y reemplazarlo cuando dé lo mismo y sea más rápido;
+  - [ ] después, la parte que convenga en la GPU.
+  Descartado por el dueño: el híbrido con desplazamientos de Clipper2.
   Descartado: tapar el fondo con un contorno desplazado 2·R hacia adentro (no cambia el eje con R menor, pero Boost
   tarda 2,4 veces más con el doble de segmentos).
 - [x] Resolución de conflictos de reparto (figura 9)

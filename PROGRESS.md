@@ -1725,3 +1725,13 @@ se nota. Escritura 0,64–0,73 s.
   - base del soporte menos densa abajo, si el spec lo pide;
   - soporte con el patrón de la ficha cuando llegue;
 - criterio de F4 y F5 en una impresora real (con el dueño).
+
+## 2026-10-24 — respuestas del dueño
+
+- **Eje medio:** un Voronoi de segmentos propio, a partir de artículos. Queda como próximo trabajo en «Estado de F2»
+  de `PLAN.md`, en pasos: elegir el método en los artículos, módulo propio probado contra Boost como oráculo, medirlo y
+  reemplazar.
+- **Ventilador:** una de las primeras capas que tiene que frenar lleva el ventilador al máximo. Hecho: el escritor ya
+  no lo deja apagado en esas capas; la prueba del cubo lo comprueba (`M106 S255` desde la primera capa cuando todas
+  frenan). 167/167 pruebas con gcc, clang y ASan+UBSan.
+- **Centrado en la cama:** se decide con la sesión de Tisma; le mandé la pregunta de comportamiento (sin código).

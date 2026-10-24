@@ -355,8 +355,9 @@ TEST_CASE("cooling: short layers slow down to the minimum layer time with the fa
     REQUIRE(slow.size() == fast.size());
     for (std::size_t l = 0; l < slow.size(); ++l)
         CHECK(slow[l] >= s.min_layer_time * 0.98); // F is written in whole mm/min; the layer change is not counted
-    CHECK(fans[0] == std::vector<std::string>{"M107"});
-    CHECK(fans[1] == std::vector<std::string>{"M106 S255"});
+    // Every layer slowed down: the fan at its maximum from the first one, which is otherwise without fan.
+    CHECK(fans[0] == std::vector<std::string>{"M106 S255"});
+    CHECK(fans[1].empty());
 
     // Slower than the minimum speed allows: stage 2 goes below it.
     s.min_layer_time = 1000.0;
