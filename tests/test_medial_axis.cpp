@@ -149,3 +149,34 @@ TEST_CASE("central marking follows the bisector angle threshold", "[medial]") {
             still_central = still_central || e.central;
     CHECK_FALSE(still_central);
 }
+
+TEST_CASE("marking filter closes short unmarked gaps on the way up", "[medial]") {
+    // Hand-made graph along x: a central edge at radius 1.0, a steep unmarked edge
+    // up to radius 1.3 (slope 1, not significant), then a central edge at 1.3.
+    auto make = [](double gap_length) {
+        MedialGraph g;
+        g.nodes = {{{0.0, 0}, 1.0, true}, {{1.0, 0}, 1.0, true}, {{1.0 + gap_length, 0}, 1.3, true},
+                   {{3.0 + gap_length, 0}, 1.3, true}};
+        g.edges = {{0, 1, false, true}, {1, 2, false, false}, {2, 3, false, true}};
+        return g;
+    };
+    MedialGraph short_gap = make(0.3);
+    filter_marking(short_gap, 0.4); // w* = 0.4
+    CHECK(short_gap.edges[1].central);
+    MedialGraph long_gap = make(0.6);
+    filter_marking(long_gap, 0.4);
+    CHECK_FALSE(long_gap.edges[1].central);
+}
+
+TEST_CASE("marking filter only walks upwards", "[medial]") {
+    // From the central node at radius 1.3 the unmarked edge goes down to 1.0, and
+    // from the central node at 1.0 it goes up: only the upward walk counts, and it
+    // finds the other central node, so the gap is closed either way.
+    MedialGraph g;
+    g.nodes = {{{0.0, 0}, 1.3, true}, {{0.3, 0}, 1.0, true}, {{0.6, 0}, 0.7, false}};
+    g.edges = {{0, 1, false, false}, {1, 2, false, false}};
+    filter_marking(g, 0.4);
+    CHECK(g.edges[0].central);       // 1 -> 0 goes up and reaches a central node
+    CHECK_FALSE(g.edges[1].central); // 1 -> 2 goes down: never walked
+    CHECK_FALSE(g.nodes[2].central);
+}

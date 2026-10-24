@@ -260,4 +260,46 @@ void mark_central(MedialGraph& g, double alpha_max_degrees) {
             g.nodes[e.a].central = g.nodes[e.b].central = true;
 }
 
+void filter_marking(MedialGraph& g, double max_length) {
+    std::vector<std::vector<std::uint32_t>> incident(g.nodes.size());
+    for (std::uint32_t e = 0; e < g.edges.size(); ++e) {
+        incident[g.edges[e].a].push_back(e);
+        incident[g.edges[e].b].push_back(e);
+    }
+    auto other = [&](std::uint32_t e, std::uint32_t n) { return g.edges[e].a == n ? g.edges[e].b : g.edges[e].a; };
+    auto length = [&](std::uint32_t e) {
+        const Point2d& a = g.nodes[g.edges[e].a].p;
+        const Point2d& b = g.nodes[g.edges[e].b].p;
+        return std::hypot(b.x - a.x, b.y - a.y);
+    };
+    // Depth-first walk up along non-central edges, bounded by max_length.
+    std::vector<std::uint32_t> path;
+    std::vector<std::uint32_t> to_mark;
+    auto walk = [&](auto&& self, std::uint32_t node, double travelled) -> void {
+        for (std::uint32_t e : incident[node]) {
+            if (g.edges[e].central)
+                continue;
+            const std::uint32_t next = other(e, node);
+            if (g.nodes[next].radius <= g.nodes[node].radius)
+                continue; // only upward
+            const double total = travelled + length(e);
+            if (total > max_length)
+                continue;
+            path.push_back(e);
+            if (g.nodes[next].central)
+                to_mark.insert(to_mark.end(), path.begin(), path.end());
+            else
+                self(self, next, total);
+            path.pop_back();
+        }
+    };
+    for (std::uint32_t n = 0; n < g.nodes.size(); ++n)
+        if (g.nodes[n].central)
+            walk(walk, n, 0.0);
+    for (std::uint32_t e : to_mark) {
+        g.edges[e].central = true;
+        g.nodes[g.edges[e].a].central = g.nodes[g.edges[e].b].central = true;
+    }
+}
+
 } // namespace tisma

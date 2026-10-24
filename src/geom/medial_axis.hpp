@@ -59,4 +59,10 @@ MedialGraph medial_graph(const Polygons& region);
 // than all its neighbours' (a local maximum).
 void mark_central(MedialGraph& graph, double alpha_max_degrees = 135.0);
 
+// Marking filter (Section 3.3): from every central node, walk up (towards
+// larger radius) along non-central edges; when another central node is
+// reached within max_length, the edges and nodes on the way become central.
+// The paper uses max_length = w*, the preferred bead width.
+void filter_marking(MedialGraph& graph, double max_length);
+
 } // namespace tisma

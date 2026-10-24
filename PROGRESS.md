@@ -645,3 +645,17 @@ filtro del marcado.
 - filtro del marcado (sección 3.3);
 - propagación del reparto desde el centro hacia afuera (sección 3.5);
 - extracción de las trayectorias (sección 3.6).
+
+## 2026-10-24 — bloque nocturno 13: filtro del marcado
+
+**Hecho:**
+- Lo que pedía este bloque (filtro de anclas y rampas) ya había quedado en el bloque 12.
+- `filter_marking` (Kuipers et al. 2020, sección 3.3): desde cada nodo central se recorren hacia arriba (radio
+  creciente) las aristas no centrales; si se llega a otro nodo central dentro de la distancia (w* en el artículo),
+  el tramo se marca como central. Así no quedan oscilaciones del tamaño de la boquilla.
+
+**Probado:** 91/91 pruebas con gcc, clang y ASan+UBSan. Pruebas con grafos armados a mano:
+- un hueco de 0,3 mm se cierra con d = 0,4 mm y uno de 0,6 mm no;
+- solo se camina hacia arriba.
+
+**Sigue:** propagación del reparto desde el centro hacia afuera (sección 3.5).
