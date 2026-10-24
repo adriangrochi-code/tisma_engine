@@ -256,3 +256,24 @@ TEST_CASE("every corner of a regular 64-gon starts a spoke, and the graph is a t
     const MedialGraph g = medial_graph({poly});
     CHECK(g.edges.size() + 1 == g.nodes.size());
 }
+
+TEST_CASE("the bisector of two corners comes in short pieces with exact radii", "[medial]") {
+    // A thin fin on a wide body: below the fin's base the axis runs between the
+    // two reflex corners (8, 6) and (9, 6), where R = sqrt(0.25 + (6 - y)^2).
+    const std::vector<Point2d> corners = {{0, 0}, {20, 0}, {20, 6}, {9, 6}, {9, 14}, {8, 14}, {8, 6}, {0, 6}};
+    Polygon poly;
+    for (const Point2d& c : corners)
+        poly.push_back({to_units(c.x), to_units(c.y)});
+    std::size_t pieces = 0;
+    for (const MedialEdge& e : medial_axis({poly})) {
+        const bool on_bisector = std::fabs(e.a.x - 8.5) < 1e-9 && std::fabs(e.b.x - 8.5) < 1e-9 && e.a.y < 6.0 + 1e-9 &&
+                                 e.b.y < 6.0 + 1e-9 && e.a.y > 3.1 && e.b.y > 3.1;
+        if (!on_bisector)
+            continue;
+        ++pieces;
+        CHECK(std::hypot(e.b.x - e.a.x, e.b.y - e.a.y) <= kMaxCurvedPiece + 1e-9);
+        CHECK_THAT(e.radius_a, WithinAbs(std::sqrt(0.25 + (6 - e.a.y) * (6 - e.a.y)), 1e-9));
+        CHECK_THAT(e.radius_b, WithinAbs(std::sqrt(0.25 + (6 - e.b.y) * (6 - e.b.y)), 1e-9));
+    }
+    CHECK(pieces >= 13); // about 2.9 mm of bisector
+}

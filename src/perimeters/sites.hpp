@@ -13,7 +13,9 @@ namespace tisma {
 // a ramp) and their thickness 2R; any other node takes the beading of the
 // central node at the top of its upward ramp, found by climbing to the
 // neighbour with the largest radius. A node that climbs to a peak with no
-// central node uses the beading of that peak's own thickness.
+// central node uses the beading of that peak's own thickness. Beading
+// conflicts (Fig. 9): on an unmarked bone that rises from a central node, the
+// beading is blended from that node's into the top's over w* of path length.
 std::vector<HalfBeading> node_beadings(const MedialGraph& graph, const std::vector<double>& bead_counts,
                                        const BeadingParams& params);
 

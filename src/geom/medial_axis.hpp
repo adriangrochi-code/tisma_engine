@@ -17,7 +17,9 @@ struct Point2d {
 // distances from its ends to the boundary (the radius of the largest inscribed
 // circle there); in Kuipers et al. 2020 they decide how many beads fit.
 // Parabolic edges (between a corner and a segment) come as chains of straight
-// pieces of at most kMaxCurvedPiece, marked curved (Section 3.2).
+// pieces of at most kMaxCurvedPiece, marked curved (Section 3.2). Edges between
+// two corners are straight, but their radius is not linear along them, so they
+// come in pieces of at most kMaxCurvedPiece too (not marked curved).
 //
 // support_a[k] and support_b[k] are the closest boundary points of each end on
 // side k (Kuipers et al. 2020, Eq. 1, "support"): side 0 and side 1 are the two

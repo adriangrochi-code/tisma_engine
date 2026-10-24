@@ -104,9 +104,15 @@ public:
                 continue;
             const Point2d a{edge.vertex0()->x(), edge.vertex0()->y()};
             const Point2d b{edge.vertex1()->x(), edge.vertex1()->y()};
-            const std::vector<Point2d> chain = edge.is_curved() ? discretize(edge, a, b) : std::vector<Point2d>{a, b};
             const auto& c0 = *edge.cell();
             const auto& c1 = *edge.twin()->cell();
+            std::vector<Point2d> chain;
+            if (edge.is_curved())
+                chain = discretize(edge, a, b);
+            else if (c0.contains_point() && c1.contains_point())
+                chain = subdivide(a, b); // straight, but R grows like a hyperbola along it
+            else
+                chain = {a, b};
             for (std::size_t i = 0; i + 1 < chain.size(); ++i) {
                 MedialEdge m;
                 m.a = chain[i];
@@ -183,6 +189,22 @@ private:
         const double slack = -kOnLine * std::hypot(qx - px, qy - py);
         return cross(px, py, qx, qy, edge.vertex0()->x(), edge.vertex0()->y()) >= slack &&
                cross(px, py, qx, qy, edge.vertex1()->x(), edge.vertex1()->y()) >= slack;
+    }
+
+    // Points along the bisector of two corners, at most kMaxCurvedPiece apart:
+    // the edge is straight but its radius is not linear along it, and later
+    // steps interpolate the radius linearly between nodes.
+    static std::vector<Point2d> subdivide(const Point2d& a, const Point2d& b) {
+        const double max_piece = kMaxCurvedPiece * kUnitsPerMm;
+        const std::size_t pieces =
+            std::max<std::size_t>(1, std::size_t(std::ceil(std::hypot(b.x - a.x, b.y - a.y) / max_piece)));
+        std::vector<Point2d> chain{a};
+        for (std::size_t i = 1; i < pieces; ++i) {
+            const double t = double(i) / double(pieces);
+            chain.push_back({a.x + t * (b.x - a.x), a.y + t * (b.y - a.y)});
+        }
+        chain.push_back(b);
+        return chain;
     }
 
     // Points along a parabolic edge (equidistant from a corner and a segment's

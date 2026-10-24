@@ -342,3 +342,67 @@ TEST_CASE("layer_walls: what the walls leave for infill", "[sites]") {
     CHECK(w.infill.empty());
     CHECK(layer_walls({}, p).toolpaths.empty());
 }
+
+TEST_CASE("beading conflicts: up from a thin fin, the beading turns into the body's over w*", "[sites]") {
+    // A 1 mm fin (3 beads of 1/3 mm) on a 6 mm body (15 beads). The fin's centre
+    // runs down to (8.5, 6) and a little beyond, between the two reflex corners,
+    // while R grows slowly; from the last marked node an unmarked bone rises to
+    // the body's centre.
+    const std::vector<Point2d> corners = {{0, 0}, {20, 0}, {20, 6}, {9, 6}, {9, 14}, {8, 14}, {8, 6}, {0, 6}};
+    Polygon tee;
+    for (const Point2d& c : corners)
+        tee.push_back({to_units(c.x), to_units(c.y)});
+    BeadingParams p;
+    const Prepared r = prepare({tee}, p);
+    std::uint32_t base = 0xFFFFFFFFu, top = 0xFFFFFFFFu;
+    for (std::uint32_t n = 0; n < r.graph.nodes.size(); ++n) {
+        const MedialGraph::Node& node = r.graph.nodes[n];
+        if (std::fabs(node.p.x - 8.5) > 1e-9 || !node.central)
+            continue;
+        if (node.p.y <= 6.0 + 1e-9 && node.p.y > 3.1 && (base == 0xFFFFFFFFu || node.p.y < r.graph.nodes[base].p.y))
+            base = n; // the lowest marked node of the fin
+        if (node.p.y < 3.1 && node.p.y > 2.9)
+            top = n;
+    }
+    REQUIRE(base != 0xFFFFFFFFu);
+    REQUIRE(top != 0xFFFFFFFFu);
+    CHECK(r.transitions.bead_counts[base] == 3.0);
+    const double base_y = r.graph.nodes[base].p.y;
+    const HalfBeading& low = r.beadings[base];
+    const HalfBeading& high = r.beadings[top];
+    REQUIRE(low.distances.size() == 2);
+    // Nodes on the bone below the base: blended within w*, the body's beading beyond.
+    std::size_t blended = 0;
+    for (std::uint32_t n = 0; n < r.graph.nodes.size(); ++n) {
+        const MedialGraph::Node& node = r.graph.nodes[n];
+        if (node.central || std::fabs(node.p.x - 8.5) > 1e-9 || node.p.y >= base_y || node.p.y < 3.1)
+            continue;
+        const double d = base_y - node.p.y; // path length from the base along the straight bone
+        const HalfBeading& b = r.beadings[n];
+        if (d < p.preferred_width - 1e-9) {
+            ++blended;
+            const double f = d / p.preferred_width;
+            CHECK_THAT(b.widths[0], WithinAbs(low.widths[0] + f * (high.widths[0] - low.widths[0]), 1e-9));
+            CHECK_THAT(b.distances[0], WithinAbs(low.distances[0] + f * (high.distances[0] - low.distances[0]), 1e-9));
+            CHECK(b.widths.size() == high.widths.size());
+        } else {
+            CHECK(b.widths == high.widths);
+            CHECK(b.distances == high.distances);
+        }
+    }
+    CHECK(blended >= 1);
+    // The toolpaths stay inside the T with positive widths.
+    auto inside = [&](const Point2d& q) {
+        bool in = false;
+        for (std::size_t i = 0, j = corners.size() - 1; i < corners.size(); j = i++)
+            if ((corners[i].y > q.y) != (corners[j].y > q.y) &&
+                q.x < corners[j].x + (q.y - corners[j].y) * (corners[i].x - corners[j].x) / (corners[i].y - corners[j].y))
+                in = !in;
+        return in;
+    };
+    for (const Toolpath& t : extract_toolpaths(r.graph, r.beadings))
+        for (const ToolpathPoint& q : t.points) {
+            CHECK(q.width > 0.0);
+            CHECK(inside(q.p));
+        }
+}

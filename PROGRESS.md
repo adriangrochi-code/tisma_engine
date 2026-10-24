@@ -864,3 +864,33 @@ de cada trayectoria es exactamente uno de los sitios de `support_sites` o `media
 - mientras tanto, conflictos de reparto (sección 3.5, figura 9): interpolar desde el nodo marcado de abajo hacia el
   reparto de arriba a lo largo de w*.
 
+## 2026-10-24 — bloque nocturno 21: conflictos de reparto
+
+**Hecho:**
+- Error encontrado y arreglado: una arista entre dos esquinas (por ejemplo, bajo una aleta fina, entre sus dos
+  esquinas reflexas) es recta, pero su radio crece como una hipérbola, R = √(a² + s²). Los pasos siguientes interpolan R
+  en línea recta entre nodos, y en la T de prueba los sitios se desviaban hasta ~0,2 mm. Ahora esas aristas se parten
+  en tramos de hasta 0,2 mm, como las parábolas.
+- Conflictos de reparto (Kuipers et al. 2020, sección 3.5, figura 9), en `node_beadings`: subiendo por un hueso no
+  marcado desde un nodo marcado, el reparto pasa del de ese nodo al de la cima a lo largo de w* de camino. Si un nodo se
+  alcanza desde varios nodos marcados, sigue al más cercano.
+- `blend_beadings`: mezcla dos repartos cordón por cordón; un cordón que solo tiene uno de los dos se desvanece escalando
+  su ancho. `interpolate_beading` (rampas) la usa también.
+
+**Probado:** 113/113 pruebas con gcc, clang y ASan+UBSan:
+- en la T (aleta de 1 mm sobre un cuerpo de 6 mm), los tramos de la bisectriz bajo la aleta miden como mucho 0,2 mm y
+  tienen el radio exacto;
+- los nodos del hueso a menos de w* del último nodo marcado de la aleta tienen el reparto interpolado exacto, y los de
+  más arriba el del cuerpo; los recorridos quedan adentro de la T con anchos positivos;
+- la tira, el 64-gono, la L y la cuña siguen igual.
+- Mi primera versión de la prueba tomaba como base el nodo en y = 6, pero con la bisectriz partida, el primer tramo
+  debajo es central (su pendiente de R es 0,19), así que el último nodo marcado está en y = 5,80. El error era de la
+  prueba.
+
+**Medido** (esfera): sin cambios, 125 lazos en la capa del medio; `slice` con 3 paredes 1,00–1,07 s.
+
+**Sigue:**
+- el punto del cordón central impar en un máximo aislado;
+- contrastar con la ficha de perímetros cuando esté en `main`;
+- la decisión del dueño sobre cómo acelerar el eje medio.
+

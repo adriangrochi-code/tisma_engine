@@ -136,16 +136,23 @@ HalfBeading interpolate_beading(const BeadingParams& params, double count, doubl
     const HalfBeading low = half_beading(compute_beading(params, n, thickness));
     if (f <= 0.0)
         return low;
-    const HalfBeading high = half_beading(compute_beading(params, n + 1, thickness));
+    return blend_beadings(low, half_beading(compute_beading(params, n + 1, thickness)), f);
+}
+
+HalfBeading blend_beadings(const HalfBeading& a, const HalfBeading& b, double f) {
     HalfBeading out;
-    const std::size_t common = std::min(low.widths.size(), high.widths.size());
+    const std::size_t common = std::min(a.widths.size(), b.widths.size());
     for (std::size_t i = 0; i < common; ++i) {
-        out.widths.push_back(low.widths[i] + f * (high.widths[i] - low.widths[i]));
-        out.distances.push_back(low.distances[i] + f * (high.distances[i] - low.distances[i]));
+        out.widths.push_back(a.widths[i] + f * (b.widths[i] - a.widths[i]));
+        out.distances.push_back(a.distances[i] + f * (b.distances[i] - a.distances[i]));
     }
-    for (std::size_t i = common; i < high.widths.size(); ++i) {
-        out.widths.push_back(f * high.widths[i]);
-        out.distances.push_back(high.distances[i]);
+    for (std::size_t i = common; i < b.widths.size(); ++i) {
+        out.widths.push_back(f * b.widths[i]);
+        out.distances.push_back(b.distances[i]);
+    }
+    for (std::size_t i = common; i < a.widths.size(); ++i) {
+        out.widths.push_back((1.0 - f) * a.widths[i]);
+        out.distances.push_back(a.distances[i]);
     }
     return out;
 }

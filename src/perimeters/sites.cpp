@@ -46,6 +46,46 @@ std::vector<HalfBeading> node_beadings(const MedialGraph& g, const std::vector<d
             out[n] = half_beading(compute_beading(params, bead_count(params, thickness), thickness));
         }
     }
+
+    // Beading conflicts (Section 3.5, Fig. 9): up an unmarked bone that starts at
+    // a marked node, the beading turns from that node's into the one from the
+    // top of the ramp over t_beading = w* of path length. A node reached from
+    // several marked nodes follows the nearest.
+    const double reach = params.preferred_width;
+    std::vector<std::vector<std::pair<std::uint32_t, double>>> up(g.nodes.size()); // neighbour above, length
+    for (const MedialGraph::Edge& e : g.edges) {
+        if (e.central)
+            continue;
+        const double length = std::hypot(g.nodes[e.b].p.x - g.nodes[e.a].p.x, g.nodes[e.b].p.y - g.nodes[e.a].p.y);
+        if (g.nodes[e.b].radius > g.nodes[e.a].radius)
+            up[e.a].push_back({e.b, length});
+        else if (g.nodes[e.a].radius > g.nodes[e.b].radius)
+            up[e.b].push_back({e.a, length});
+    }
+    constexpr std::uint32_t kNone = 0xFFFFFFFFu;
+    std::vector<double> travelled(g.nodes.size(), reach);
+    std::vector<std::uint32_t> source(g.nodes.size(), kNone);
+    std::vector<std::pair<std::uint32_t, double>> stack;
+    for (std::uint32_t m = 0; m < g.nodes.size(); ++m) {
+        if (counts[m] < 0.0)
+            continue;
+        stack.assign(1, {m, 0.0});
+        while (!stack.empty()) {
+            const auto [n, d] = stack.back();
+            stack.pop_back();
+            for (const auto& [k, length] : up[n]) {
+                const double total = d + length;
+                if (counts[k] >= 0.0 || total >= travelled[k])
+                    continue; // a marked node, or already reached closer to its source
+                travelled[k] = total;
+                source[k] = m;
+                stack.push_back({k, total});
+            }
+        }
+    }
+    for (std::uint32_t n = 0; n < g.nodes.size(); ++n)
+        if (source[n] != kNone)
+            out[n] = blend_beadings(out[source[n]], out[n], travelled[n] / reach);
     return out;
 }
 

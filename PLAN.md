@@ -219,7 +219,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
     pieza es angosta (falta un criterio exacto y barato para separar las dos zonas).
   Descartado: tapar el fondo con un contorno desplazado 2·R hacia adentro (no cambia el eje con R menor, pero Boost
   tarda 2,4 veces más con el doble de segmentos).
-- [ ] Resolución de conflictos de reparto (figura 9) y punto del cordón central impar en un máximo aislado
+- [x] Resolución de conflictos de reparto (figura 9)
+- [x] Aristas entre dos esquinas en tramos de 0,2 mm (su radio no es lineal; antes los sitios se desviaban hasta ~0,2 mm)
+- [ ] Punto del cordón central impar en un máximo aislado (hoy no se emite)
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

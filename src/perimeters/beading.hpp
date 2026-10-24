@@ -76,4 +76,10 @@ HalfBeading half_beading(const Beading& full);
 // beading. That last rule is our own; the paper only shows it in a figure.
 HalfBeading interpolate_beading(const BeadingParams& params, double count, double thickness);
 
+// Linear blend from beading a (f = 0) to beading b (f = 1), bead by bead from
+// the outline. A bead only one of them has fades: its width is scaled by its
+// weight (f for b's, 1 - f for a's) and it keeps its own distance. Used inside
+// ramps and for beading conflicts (Section 3.5).
+HalfBeading blend_beadings(const HalfBeading& a, const HalfBeading& b, double f);
+
 } // namespace tisma
