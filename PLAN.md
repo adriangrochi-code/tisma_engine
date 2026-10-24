@@ -82,7 +82,8 @@ Antes de mover algo a la GPU se mide con el banco de pruebas.
 **Decisiones del dueño (2026-10-24):**
 - Orden de la visión: F7 (no planar en 3 ejes) → F8 (GPU) → F9 (5 ejes).
 - La API de GPU se elige en F8, con las mediciones del banco. Vulkan compute es la candidata.
-- Pendiente: la máquina de 5 ejes de referencia para F9.
+- La máquina de 5 ejes de referencia se elige al empezar F9, la última fase antes de macOS (F10). Hasta entonces la
+  cinemática queda como módulo aparte, sin atarse a ninguna máquina.
 
 ## Fases
 
