@@ -19,7 +19,7 @@ está en `GCODE_OUTPUT.md` y en `gcode_motion.md`.
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `machine.firmware` | — | `marlin2` | `marlin`, `marlin2`, `klipper`, `reprapfirmware` |
+| `machine.flavor` | — | `reprap` | `marlin` (Marlin 2), `klipper`, `reprap` (RepRap genérico) y, propuestos, `marlin_legacy` (Marlin 1) y `reprapfirmware` (RepRapFirmware de Duet). Los tres primeros ya están en `docs/CONFIG.md` |
 | `machine.limits_usage` | — | `time_only` | `emit`: escribir los límites en el G-code; `time_only`: usarlos solo para estimar el tiempo; `ignore` |
 | `gcode.object_labels` | — | `none` | `none`, `octoprint` (comentarios) o `firmware` (comandos del firmware) |
 | `gcode.progress` | — | no | Escribir el avance de la impresión (`M73`) |
@@ -40,9 +40,11 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
 
    | Firmware | Comandos | Unidades |
    |---|---|---|
-   | Marlin y Marlin 2 | `M201 X Y Z E` (aceleraciones máximas); `M203 X Y Z E` (velocidades máximas); `M204 P R T` (impresión, retracción y viaje); `M205 X Y Z E` (tirones); `M205 S T` (velocidades mínimas al extruir y al viajar) | mm/s² y mm/s |
+   | Marlin 2 (`marlin`) | `M201 X Y Z E` (aceleraciones máximas); `M203 X Y Z E` (velocidades máximas); `M204 P R T` (impresión, retracción y viaje); `M205 X Y Z E` (tirones); `M205 S T` (velocidades mínimas al extruir y al viajar) | mm/s² y mm/s |
+   | Marlin 1 (`marlin_legacy`) | Lo mismo, salvo `M204 S T`: S, la aceleración al imprimir, y T, la de retracción. En Marlin 2 la T es la de viaje ([M204](https://marlinfw.org/docs/gcode/M204.html)) | mm/s² y mm/s |
    | RepRapFirmware | `M201 X Y Z E`; `M203 X Y Z E`; `M204 P T`; `M566 X Y Z E` (tirones) | `M203` y `M566` en mm/min; el resto en mm/s² |
    | Klipper | No se escriben: Klipper los toma de su propia configuración. Pedir `emit` con Klipper es un error | — |
+   | RepRap genérico (`reprap`) | No se escriben, sin error | — |
 
 3. **E relativa en Marlin:** el firmware acumula la posición del extrusor y pierde precisión en impresiones largas.
    - Con E relativa (`M83`), cada cambio de capa lleva `G92 E0` después del salto en Z.
@@ -58,12 +60,14 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
        con un polígono que encierra la copia en XY;
      - en cada capa: `EXCLUDE_OBJECT_START NAME='<nombre>'` … `EXCLUDE_OBJECT_END NAME='<nombre>'`;
      - en el nombre, los espacios y los puntos se cambian por `_`;
+   - **`firmware`, RepRap genérico:** no se escribe nada;
    - **`octoprint`:** comentarios `; printing object <nombre> id:<objeto> copy <copia>` y
      `; stop printing object <nombre> id:<objeto> copy <copia>`.
 5. **Avance** (`gcode.progress`):
    - `M73 P<porcentaje> R<minutos restantes>` al empezar, y cada vez que cambia el porcentaje entero o los minutos
      restantes;
-   - en impresoras con modo silencioso, además `M73 Q<porcentaje> S<minutos>` para ese modo.
+   - en impresoras con modo silencioso, además `M73 Q<porcentaje> S<minutos>` para ese modo, salvo con RepRap
+     genérico, que lleva solo `M73 P R`.
 6. **Tiempo estimado al final:** comentario `; estimated printing time (normal mode) = <h>h <m>m <s>s`
    (`GCODE_OUTPUT.md`).
 
@@ -81,3 +85,5 @@ del cubo de 20 mm, con centros en X = 100 y X = 74. Los valores de los límites 
 | FW5 | Marlin 2 con E relativa y sin `G92 E0` en el G-code de capa | Error en Tisma Slicer. El motor escribe `G92 E0` en cada cambio de capa |
 | FW6 | Marlin 2, etiquetas `octoprint` | `; printing object cube20.stl id:0 copy 0` … `; stop printing object cube20.stl id:0 copy 0`, sin `M486` |
 | FW7 | Klipper con avance; impresión de 7 min 38 s | 107 líneas `M73`, de `P0 R7` a `P100`; al final, `; estimated printing time (normal mode) = 7m 38s` |
+| FW8 | RepRap genérico, `emit`, etiquetas `firmware`, avance, modo silencioso | Sin límites, sin `M486` ni comentarios de objetos y sin error. `M73 P R` sin `Q` ni `S`. `M104 S200` antes del inicio y `M109 S200` después |
+| FW9 | Marlin 1 y Marlin 2, `emit`, aceleraciones 1100 al imprimir, 1200 al retraer y 1300 al viajar | Marlin 1: `M204 S1100 T1200`. Marlin 2: `M204 P1100 R1200 T1300` |
