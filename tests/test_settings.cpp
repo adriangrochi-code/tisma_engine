@@ -22,13 +22,14 @@ TEST_CASE("empty settings give the defaults", "[settings]") {
     CHECK(s.gap_closing_radius == 0.049);
     CHECK(s.xy_offset == 0.0);
     CHECK(s.first_layer_shrink == 0.0);
+    CHECK(s.simplify_tolerance == 0.01);
     CHECK(s.gpu == GpuMode::Auto);
 }
 
 TEST_CASE("settings are read by group", "[settings]") {
     const Settings s = parse_settings(R"({
         "layers": {"height": 0.3, "first_height": 0.35},
-        "slicing": {"fill_mode": "even_odd", "gap_closing_radius": 0.1, "xy_offset": -0.05, "first_layer_shrink": 0.2},
+        "slicing": {"fill_mode": "even_odd", "gap_closing_radius": 0.1, "xy_offset": -0.05, "first_layer_shrink": 0.2, "simplify_tolerance": 0},
         "compute": {"gpu": "off"},
         "walls": {"anything": 1}
     })");
@@ -38,6 +39,7 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.gap_closing_radius == 0.1);
     CHECK(s.xy_offset == -0.05);
     CHECK(s.first_layer_shrink == 0.2);
+    CHECK(s.simplify_tolerance == 0.0);
     CHECK(s.gpu == GpuMode::Off);
     CHECK(s.ignored_groups == std::vector<std::string>{"walls"});
 }

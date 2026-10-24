@@ -7,6 +7,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 
 using namespace tisma;
@@ -71,4 +72,21 @@ TEST_CASE("open contours do not become polygons", "[geom]") {
     Contour open;
     open.points = {{0, 0, 0}, {1, 0, 0}, {1, 1, 0}};
     CHECK(to_polygons({open}).empty());
+}
+
+TEST_CASE("simplify removes nearly collinear vertices and keeps the area", "[geom]") {
+    // A circle of radius 50 mm with 708 vertices deviates 0.0005 mm from the true
+    // circle; simplifying at 0.01 mm leaves far fewer vertices and almost the same area.
+    Polygon circle;
+    for (int i = 0; i < 708; ++i) {
+        const double a = 2.0 * 3.14159265358979323846 * i / 708;
+        circle.emplace_back(to_units(50 * std::cos(a)), to_units(50 * std::sin(a)));
+    }
+    const Polygons simple = simplify({circle}, 0.01);
+    REQUIRE(simple.size() == 1);
+    CHECK(simple[0].size() < 300);
+    CHECK_THAT(area_mm2(simple), WithinAbs(area_mm2({circle}), 0.001 * area_mm2({circle})));
+    CHECK(simplify({circle}, 0.0)[0].size() == 708);
+    // A square has nothing to simplify.
+    CHECK(simplify({square(0, 0, 10)}, 0.01)[0].size() == 4);
 }

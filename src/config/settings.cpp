@@ -88,7 +88,7 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be greater than 0");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
     });
-    read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink"},
+    read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink", "simplify_tolerance"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "fill_mode") {
                        s.fill_mode = choice<FillMode>(
@@ -103,7 +103,12 @@ Settings parse_settings(std::string_view text) {
                    }
                    if (v < 0.0)
                        fail(k, "must not be negative");
-                   (n == "gap_closing_radius" ? s.gap_closing_radius : s.first_layer_shrink) = v;
+                   if (n == "gap_closing_radius")
+                       s.gap_closing_radius = v;
+                   else if (n == "first_layer_shrink")
+                       s.first_layer_shrink = v;
+                   else
+                       s.simplify_tolerance = v;
                });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});

@@ -31,7 +31,8 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         for (const Contour& c : contours[l])
             open[l] += c.closed ? 0 : 1;
-        Polygons region = layer_region(to_polygons(contours[l]), settings.fill_mode);
+        Polygons region =
+            layer_region(simplify(to_polygons(contours[l]), settings.simplify_tolerance), settings.fill_mode);
         const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
         out.regions[l] = offset(region, settings.xy_offset - shrink);
     });

@@ -24,6 +24,7 @@ struct Settings {
     double gap_closing_radius = 0.049;
     double xy_offset = 0.0;
     double first_layer_shrink = 0.0;
+    double simplify_tolerance = 0.01;
     GpuMode gpu = GpuMode::Auto;
 
     // Groups present in the file that the engine does not use yet.

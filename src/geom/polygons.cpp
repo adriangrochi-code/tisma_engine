@@ -40,6 +40,12 @@ Polygons layer_region(const Polygons& polygons, FillMode mode) {
     return layer_region(polygons);
 }
 
+Polygons simplify(const Polygons& polygons, double tolerance_mm) {
+    if (!(tolerance_mm > 0.0))
+        return polygons;
+    return Clipper2Lib::SimplifyPaths(polygons, tolerance_mm * kUnitsPerMm, true);
+}
+
 Polygons offset(const Polygons& region, double delta_mm, double miter_limit) {
     if (delta_mm == 0.0)
         return region;

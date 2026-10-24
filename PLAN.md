@@ -192,7 +192,7 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Eje medio de una región: aristas del Voronoi de segmentos que quedan adentro, con el radio del círculo inscrito en cada extremo
 - [x] Discretizar las aristas curvas (parábolas) en tramos de hasta 0,2 mm
 - [x] Clasificar las aristas interiores por el sitio de cada celda, sin recorrer los contornos
-- [ ] Medir y acelerar el eje medio: 39 ms en una capa circular de 708 segmentos es mucho
+- [x] Medir y acelerar el eje medio: la construcción de Boost domina; con la simplificación de 0,01 mm, de 39–40 ms a 6 ms en la capa del medio de la esfera
 - [x] Esquemas de reparto de cordones (Kuipers et al. 2020, sección 4): uniforme, distribuido y distribuido hacia adentro
 - [x] Grafo del eje medio y marcado del centro por significancia (sección 3.3, αmax = 135°) y máximos locales
 - [ ] Filtro del marcado y transiciones (sección 3.4, ecuaciones 5–7)

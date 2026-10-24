@@ -561,3 +561,39 @@ discretización o el `std::map` del grafo) antes de seguir con F2.
 **Sigue:**
 - perfilar y acelerar el eje medio;
 - después, el filtro del marcado y las transiciones (sección 3.4).
+
+## 2026-10-24 — bloque nocturno 10: por qué el eje medio era lento, y simplificación
+
+**Medido y encontrado** (con un programa de perfilado aparte, que no va al repositorio, y callgrind):
+- El eje medio de un círculo de 708 segmentos tarda unos 17 ms. Casi todo es la construcción del Voronoi de Boost:
+  el 55 % de las instrucciones está en su aritmética entera exacta (`extended_int::mul`). Armar el grafo y marcar el
+  centro no llega a 1 ms.
+- No es por degeneración: una elipse con los mismos segmentos tarda lo mismo (15 ms), y una grilla más gruesa no
+  cambia nada. Pasar las coordenadas a micrómetros solo lo baja de 16 a 11 ms.
+- La palanca es la cantidad de segmentos. En la esfera de prueba cada segmento se aparta apenas 0,0005 mm del círculo
+  verdadero.
+
+| Tolerancia | Segmentos | Eje medio | Área |
+|---|---|---|---|
+| 0 | 708 | 19,0 ms | 7853,879 mm² |
+| 0,005 mm | 354 | 9,2 ms | 7853,569 mm² |
+| 0,01 mm | 208 | 5,7 ms | 7852,549 mm² |
+| 0,02 mm | 177 | 4,6 ms | 7852,332 mm² |
+
+**Hecho:**
+- Ajuste `slicing.simplify_tolerance`, por defecto 0,01 mm (`docs/CONFIG.md`). Es un valor de este equipo y se
+  revisa cuando llegue la ficha de corte, que trae su propio caso.
+- `simplify()` (Clipper2 `SimplifyPaths`) se aplica a los contornos antes de unirlos, así la unión limpia cualquier
+  cruce que deje la simplificación.
+- `tisma-engine info` mide el eje medio sobre la región como la arma el corte.
+
+**Probado:** 83/83 pruebas con gcc, clang y ASan+UBSan. Prueba nueva: la simplificación de un círculo deja menos de
+300 vértices y conserva el área al 0,1 %; un cuadrado queda igual.
+
+**Medido** (esfera de 1 001 112 triángulos):
+- eje medio de la capa del medio: de 39–40 ms a 5,9–6,1 ms, con 398 aristas en lugar de 2788;
+- volumen cortado: 523 500 mm³ contra 523 590 sin simplificar (−0,017 %);
+- `slice` completo: 230 ms.
+
+**Sigue:** el filtro del marcado y las transiciones (Kuipers et al. 2020, sección 3.4); después, el eje medio de
+todas las capas en paralelo.

@@ -37,6 +37,11 @@ Polygons layer_region(const Polygons& polygons);
 // FillHoles is Union with the holes filled in.
 Polygons layer_region(const Polygons& polygons, FillMode mode);
 
+// Removes vertices closer than tolerance_mm to the line through their
+// neighbours (Clipper2's SimplifyPaths). The result may touch itself; build the
+// region from it with layer_region.
+Polygons simplify(const Polygons& polygons, double tolerance_mm);
+
 // Grows the region by delta_mm (shrinks it when negative): outer contours move
 // out and holes move in. Corners are mitered up to miter_limit times delta,
 // as in XY size compensation.

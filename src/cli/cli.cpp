@@ -136,10 +136,12 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
             volume += area_mm2(regions[l]) * 0.2;
         out << "region_ms: " << region_ms << "\n";
 
-        // Medial axis of the middle layer (F2), with the centre marked.
-        const std::size_t mid = regions.size() / 2;
+        // Medial axis of the middle layer (F2), with the centre marked, on the
+        // region as the slicing builds it (simplified with the default tolerance).
+        const std::size_t mid = layers.size() / 2;
+        const Polygons mid_region = layer_region(simplify(to_polygons(layers[mid]), Settings{}.simplify_tolerance));
         const auto axis_start = std::chrono::steady_clock::now();
-        MedialGraph axis = medial_graph(regions[mid]);
+        MedialGraph axis = medial_graph(mid_region);
         mark_central(axis);
         const double axis_ms =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - axis_start).count();

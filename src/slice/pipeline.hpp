@@ -20,8 +20,8 @@ struct SlicedModel {
 };
 
 // Slices a welded mesh with the given settings: layer plan, level-set
-// contours with gap closing, regions by fill mode, XY offset, and the extra
-// first-layer shrink. Uses the GPU when gpu is not null.
+// contours with gap closing, simplification, regions by fill mode, XY offset,
+// and the extra first-layer shrink. Uses the GPU when gpu is not null.
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr);
 
 } // namespace tisma
