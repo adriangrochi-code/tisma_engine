@@ -1,7 +1,8 @@
 # Sala limpia
 
-El motor se escribe desde cero para que su licencia la decida el dueño del proyecto (más adelante, una licencia de
-código disponible que solo permita el uso no comercial). Por eso no puede contener código, ni traducciones de código,
+El motor se escribe desde cero para que su licencia la decida el dueño del proyecto. Desde el 2026-10-24 el
+repositorio es público bajo la PolyForm Noncommercial License 1.0.0: código disponible, solo uso no comercial (ver
+`LICENSE` y `README.md`). Por eso no puede contener código, ni traducciones de código,
 de programas con licencias copyleft. Estas reglas valen para cualquier persona o sesión que escriba en este
 repositorio.
 
@@ -48,6 +49,7 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
 
 ## Antes de cambiar la licencia
 
-Lo revisa un abogado. El modelo de lenguaje que escribe este código se entrenó con código público, incluidos esos
+Lo revisa un abogado. La PolyForm Noncommercial se adoptó el 2026-10-24 por decisión del dueño, al hacer público el
+repositorio; la revisión de un abogado sigue pendiente. El modelo de lenguaje que escribe este código se entrenó con código público, incluidos esos
 proyectos. Esto no se puede excluir del todo; por eso el motor se escribe a partir de las fuentes permitidas, con
 estructura propia, y nunca reproduce código de memoria.

@@ -56,3 +56,19 @@ dueño.
 - Banco de pruebas con los modelos reales (pedir al dueño los archivos y confirmar su licencia).
 - Después, F1: corte de la malla en capas. Necesitará una malla indexada (vértices compartidos) para unir
   segmentos en contornos, y Clipper2 (anotarla en `THIRD_PARTY.md` antes de usarla).
+
+## 2026-10-24 — repositorio público, licencia no comercial
+
+**Hecho:**
+- El dueño hizo público el repositorio para que la CI de GitHub pueda correr; en privado los trabajos no arrancaban.
+- `LICENSE` pasa de «todos los derechos reservados, repositorio privado» a la PolyForm Noncommercial License 1.0.0,
+  copiada sin cambios del repositorio oficial (`polyformproject/polyform-licenses`, commit `76a278c`), más una línea
+  `Required Notice` con el copyright y la prohibición del uso comercial sin una licencia aparte.
+- `README.md` nuevo: aclara que el código es de código disponible y no de código abierto, qué se permite y qué no.
+  Incluye también los pasos para compilar.
+- `CLEANROOM.md` anota la licencia adoptada y que la revisión de un abogado sigue pendiente.
+
+**Ojo:** `main` sigue con la `LICENSE` anterior, que dice «repositorio privado», hasta que se mezcle el PR de `dev`.
+
+**Sigue:** confirmar que la CI de Linux pasa ahora que el repositorio es público. Después, lo mismo que en la entrada
+anterior.
