@@ -5,6 +5,10 @@ Slicer as possible in a clean room. Everything Tisma Slicer does reaches this re
 (`docs/spec/`, feature specs in `docs/spec/features/`), never as code. Read `CLEANROOM.md` and `PLAN.md` before any
 work.
 
+Owner's decision (2026-10-24): the engine becomes the new slicer and replaces Tisma Slicer, without losing any of its
+features (inventory in `docs/spec/COVERAGE.md`). The product phases P1–P5 of `PLAN.md`, starting with the engine's own
+interface (`apps/tisma/`), are required before Tisma Slicer is dropped.
+
 ## Clean room (mandatory)
 
 - Never read, copy or translate the source of PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Cura,

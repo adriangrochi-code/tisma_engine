@@ -2738,3 +2738,26 @@ firmware.
 - resonancias (que el motor escriba la aceleración), puentes y voladizos, tope de flujo volumétrico, pata de
   elefante;
 - después, la release 0.7.0-alpha.1.
+
+## 2026-10-24 — el motor reemplaza a Tisma Slicer (plan)
+
+**Decisión del dueño**, que llegó por la sesión de fichas y el dueño confirmó en esta sesión («si, confirmo el plan»):
+el motor pasa a ser el nuevo slicer y reemplaza a Tisma Slicer, sin perder ninguna de sus funciones.
+
+**Hecho:**
+- `PLAN.md`:
+  - la decisión, arriba;
+  - F6 pasa a ser el reemplazo de Tisma Slicer: cobertura de `docs/spec/COVERAGE.md`, comparación como caja negra y la
+    migración que elija el dueño;
+  - las fases P1–P5 pasan a ser obligatorias antes de dejar Tisma Slicer;
+  - la interfaz propia sale de «Fuera de la primera versión»;
+  - «Cómo se usa»: la interfaz es el slicer; `tisma-engine` lo mismo sin ventana;
+  - la ubicación de las piezas queda decidida (la interfaz centra en X e Y; el motor apoya en Z).
+- `CLAUDE.md` y `README.md` dicen lo mismo en una línea.
+
+**Abierto, para el dueño:** la migración de los proyectos 3MF y los perfiles guardados de los usuarios de Tisma
+Slicer (dos opciones en `docs/spec/COVERAGE.md`, «Migración»).
+
+**Pendiente de las fichas:** `COVERAGE.md` y las fichas nuevas (interfaz, paredes extra, piel difusa, rellenos,
+falda/borde/balsa, más soportes, velocidades y aceleraciones, enfriamiento, retracción y viajes, modo jarrón) están en
+las PRs #2 a #8, todavía sin fusionar en `main`. Se leen cuando estén en `main` y pasen `tools/check_spec.py`.

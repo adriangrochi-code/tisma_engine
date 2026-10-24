@@ -1,6 +1,7 @@
 # Tisma engine
 
-Motor de laminado (slicer) para impresión 3D FDM, escrito desde cero para Tisma. Está en desarrollo: ver `PLAN.md`
+Laminador (slicer) para impresión 3D FDM, escrito desde cero para Tisma: el motor y su interfaz `tisma`. Va a
+reemplazar a Tisma Slicer sin perder ninguna de sus funciones (decisión del dueño). Está en desarrollo: ver `PLAN.md`
 y `PROGRESS.md`.
 
 ## Licencia: solo uso no comercial

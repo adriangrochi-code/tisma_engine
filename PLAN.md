@@ -7,6 +7,14 @@ quiera (hoy código disponible sin uso comercial de terceros; tiene que poder ce
 
 **Primer paso:** el motor de laminado, más rápido que el de Tisma Slicer actual.
 
+**El motor pasa a ser el nuevo slicer (decisión del dueño, 2026-10-24, confirmada en esta sesión):** «tisma engine it
+gonna become the new slicer», «tisma slicer its gonna be discard», «i need to not lose features». Ya no es un motor que
+Tisma Slicer llama: lo reemplaza, con su propia interfaz (`tisma`). Ninguna función de Tisma Slicer se pierde: cada una
+es una fila del inventario `docs/spec/COVERAGE.md` (que manda el equipo de fichas), con su ficha y su estado. Por eso:
+- F6 pasa a ser el reemplazo de Tisma Slicer;
+- las fases de producto P1–P5 son obligatorias antes de dejar Tisma Slicer;
+- la interfaz propia ya no queda fuera de la primera versión.
+
 **Visión (decisión del dueño, 2026-10-24):** laminado **no planar** y **de 5 ejes**, con **aceleración por GPU**. La
 primera versión plana es la base: la malla, el corte, los perímetros, los rellenos y el G-code se reutilizan. Por eso
 las reglas de «Diseño para la visión» valen desde F1.
@@ -28,13 +36,16 @@ con lo medido.
 - multimaterial y torre de purga;
 - soportes en árbol;
 - capas no planares y 5 ejes (son la visión: fases F7 y F9);
-- resina;
-- interfaz propia.
+- resina.
+
+(La interfaz propia estaba en esta lista; salió el 2026-10-24, cuando el dueño decidió que el motor reemplaza a Tisma
+Slicer.)
 
 ## Cómo se usa
 
-- Es un programa aparte: `tisma-engine slice modelo.stl --config ajustes.json -o salida.gcode`.
-- Tisma Slicer lo llama como programa externo, igual que Tisma Cloud llama al slicer.
+- La interfaz `tisma` (`docs/UI.md`) es el slicer para el usuario; `tisma-engine slice modelo.stl --config
+  ajustes.json -o salida.gcode` hace lo mismo sin ventana, y es lo que llaman Tisma Cloud y las pruebas.
+- Mientras Tisma Slicer siga en uso, puede llamar a `tisma-engine` como programa externo.
 - El motor no enlaza con Tisma Slicer ni comparte código con él.
 - Los ajustes van en un JSON propio, documentado en `docs/CONFIG.md`.
 
@@ -136,7 +147,11 @@ antes de usarlas. Revisadas el 2026-10-24:
 - Eje medio: un Voronoi de segmentos propio, a partir de artículos, en vez del híbrido con Clipper2.
 - Enfriamiento: una de las primeras capas (sin ventilador) que tiene que ir más lento por el tiempo mínimo lleva el
   ventilador al máximo, como cualquier otra capa frenada.
-- Si el motor centra los modelos en la cama, o los recibe ya ubicados, se decide con la sesión de Tisma.
+- El motor reemplaza a Tisma Slicer (ver arriba). Queda abierta la **migración** de los usuarios: sus proyectos 3MF y
+  sus perfiles guardados. El equipo de fichas escribió dos opciones en `docs/spec/COVERAGE.md` («Migración»); decide
+  el dueño.
+- Ubicación de las piezas: la interfaz las centra en la cama (X e Y); el motor siempre las imprime apoyadas en ella
+  (en Z las alturas cuentan desde la base de la pieza) y no las mueve en X ni Y.
 
 ## Fases
 
@@ -151,7 +166,7 @@ antes de usarlas. Revisadas el 2026-10-24:
 | A2 | — | Optimización topológica y diseño generativo iterativo: densidades (SIMP), filtro, volumen objetivo, regiones fijas, restricción de voladizo para imprimir sin soportes; isosuperficie, malla nueva y laminado; laminado guiado por tensiones (relleno y paredes donde hacen falta) | Casos clásicos (viga MBB, ménsula) dan la forma conocida; la pieza optimizada se lamina |
 | A3 | — | Fluidos (CFD), en vóxeles con Lattice Boltzmann y en GPU: aerodinámica de la pieza, y como opción la simulación del enfriamiento al imprimir (el aire del ventilador sobre la pieza, el calor que entra con cada capa y cómo se va; con eso se ajustan por zona el ventilador, la velocidad y el tiempo de capa, y se anticipa la deformación) | Casos de referencia (cilindro, escalón) dentro del error esperado; el enfriamiento de un bloque contra la solución conocida de la conducción con convección |
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde. En GPU: voladizos y proyección | Una pieza con voladizos se imprime y el soporte sale |
-| F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer, con y sin GPU | Medido y documentado |
+| F6 | 16 | Reemplazo de Tisma Slicer (decisión del dueño, 2026-10-24): Tisma Cloud llama al motor; comparación de calidad y velocidad con Tisma Slicer como caja negra, con y sin GPU; cada fila de `docs/spec/COVERAGE.md` hecha o con una decisión del dueño; la migración de proyectos y perfiles que elija el dueño | Medido y documentado; ninguna función de Tisma Slicer se pierde; junto con P1–P5, Tisma Slicer se puede dejar |
 | F7 | después de F6 | No planar en 3 ejes: capas apenas curvas cerca de la superficie superior (CurviSlicer, Ahlers et al.), con control de choques del cabezal | Una pieza con techo curvo se imprime sin escalones visibles en una impresora común; medido |
 | F8 | después de F7 | Lo propio de Tisma, desde sus fichas (los análisis pasaron a A1–A3): Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas de cada ficha pasan |
 
@@ -172,7 +187,8 @@ optimización topológica, no se transcribe):
 - Aage et al., *Giga-voxel computational morphogenesis for structural design*, Nature 550:84–86, 2017.
 - Krüger et al., *The Lattice Boltzmann Method: Principles and Practice*, Springer, 2017.
 
-**Después del motor** (el orden lo decide el dueño):
+**Fases de producto** (decisión del dueño, 2026-10-24: son obligatorias antes de dejar Tisma Slicer; el orden lo decide
+el dueño; P1 ya empezó, ver «Estado de P1»):
 
 | Fase | Contenido | Base |
 |---|---|---|
