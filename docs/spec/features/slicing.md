@@ -51,6 +51,19 @@ agujeros. Es la entrada de los perímetros, los rellenos y los soportes.
     - en los dos casos el motor sale con un código distinto de 0. Tisma Slicer sale con 0 en el primero: eso no se
       copia.
 
+## Altura de capa variable
+
+- **En Tisma Slicer:**
+  - no es un ajuste del perfil de impresión;
+  - cada objeto puede llevar, en el proyecto, una lista de alturas por tramo de Z, hecha a mano o con un botón que la
+    calcula según la inclinación de la superficie;
+  - sin esa lista, todas las capas miden `layer_height` (después de la primera).
+- **En el motor, primera versión:** opcional. Si se agrega:
+  - la entrada es una lista de pares (Z, altura) por objeto;
+  - cada altura queda entre un mínimo y un máximo de la impresora y nunca supera `nozzle_diameter`;
+  - el plano de corte sigue a mitad de cada capa (regla 2).
+- **Pruebas:** sin pruebas medidas todavía; se agregan cuando el motor lo implemente.
+
 ## Pruebas
 
 Medidas en Tisma Slicer (24-10-2026) como caja negra, desde la línea de comandos.
