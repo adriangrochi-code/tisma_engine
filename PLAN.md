@@ -200,7 +200,7 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Filtro del marcado (sección 3.3, marcar tramos no centrales de menos de w* entre nodos centrales)
 - [x] Interpolación entre repartos para las cantidades fraccionarias de las rampas (sección 3.5)
 - [x] Trapezoidación: apoyos de cada extremo de arista en los dos lados (punto más cercano del borde, ecuación 1)
-- [ ] Dominios por contorno (qué trapecios bordean cada contorno, para encadenar los segmentos)
+- [x] ~~Dominios por contorno~~: no hace falta, los segmentos se encadenan por la identidad de sus sitios
 - [x] Reparto por nodo (sección 3.5) y sitios sobre los lados de apoyo de los trapecios (sección 3.6)
 - [x] Sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ)
 - [x] Unir los sitios del mismo índice en segmentos por trapecio y encadenarlos en polilíneas de ancho variable
@@ -221,7 +221,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   tarda 2,4 veces más con el doble de segmentos).
 - [x] Resolución de conflictos de reparto (figura 9)
 - [x] Aristas entre dos esquinas en tramos de 0,2 mm (su radio no es lineal; antes los sitios se desviaban hasta ~0,2 mm)
-- [ ] Punto del cordón central impar en un máximo aislado (hoy no se emite)
+- [x] Punto del cordón central impar en un máximo aislado: un recorrido de un solo punto con su ancho
+- [ ] Criterio de F2: medir el área cubierta en paredes de 0,3 a 1,2 mm (huecos y excesos), uniendo los cordones como
+  franjas de ancho variable con Clipper2, y en piezas comunes con 2–3 perímetros
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

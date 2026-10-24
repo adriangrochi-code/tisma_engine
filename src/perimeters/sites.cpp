@@ -363,6 +363,19 @@ std::vector<Toolpath> extract_toolpaths(const MedialGraph& g, const std::vector<
     for (std::uint32_t s = 0; s < segments.size(); ++s)
         if (!used[s])
             emit(2 * s);
+
+    // A bead that reaches only one node, exactly (the middle bead of an odd
+    // count at an isolated maximum, such as the centre of a regular polygon),
+    // is in no segment: it becomes a toolpath of one point, a dot.
+    for (std::uint32_t n = 0; n < g.nodes.size(); ++n) {
+        if (nodes[n].on_node < 0 || holders[node_base + n] != 0)
+            continue;
+        const std::size_t i = std::size_t(nodes[n].on_node);
+        Toolpath dot;
+        dot.index = nodes[n].on_node;
+        dot.points.push_back({g.nodes[n].p, beadings[n].widths[i]});
+        out.push_back(std::move(dot));
+    }
     return out;
 }
 

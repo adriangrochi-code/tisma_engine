@@ -894,3 +894,22 @@ de cada trayectoria es exactamente uno de los sitios de `support_sites` o `media
 - contrastar con la ficha de perímetros cuando esté en `main`;
 - la decisión del dueño sobre cómo acelerar el eje medio.
 
+## 2026-10-24 — bloque nocturno 22: el punto del cordón central
+
+**Hecho:**
+- `extract_toolpaths`: un cordón que está justo sobre un nodo y no forma ningún segmento se emite como un recorrido de
+  un solo punto con su ancho, para que el G-code pueda imprimir ese punto. Pasa en el centro de un polígono regular
+  con cantidad impar, y en el extremo grueso de una cuña donde el último cordón aparece en un solo nodo.
+- Revisé el estado de F2:
+  - «dominios por contorno» ya no hace falta, porque el encadenado por identidad lo reemplazó;
+  - falta el criterio de terminación de F2: medir el área cubierta (huecos y excesos) en paredes de 0,3 a 1,2 mm y en
+    piezas comunes con 2–3 perímetros. Queda como próximo ítem.
+
+**Probado:** 113/113 pruebas con gcc, clang y ASan+UBSan. El 64-gono de radio 5 da 12 lazos y un punto en el centro,
+de ancho 2r/25, índice 12. La tira, la L y la T no cambian (sin puntos). En cuñas de 15° y 30° aparece un punto en el
+nodo más grueso, donde el último cordón existe solo ahí; lo revisé y es correcto.
+
+**Sigue:**
+- medir el área cubierta para el criterio de F2;
+- la decisión del dueño sobre el eje medio.
+

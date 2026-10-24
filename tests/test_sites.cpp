@@ -175,9 +175,17 @@ TEST_CASE("a regular 64-gon gets closed concentric loops", "[sites]") {
     // The inscribed radius is 5 cos(pi / 64): 25 beads, so 12 loops and a dot at the centre.
     const double inradius = radius * std::cos(std::numbers::pi / 64);
     const double width = 2.0 * inradius / 25.0;
-    REQUIRE(paths.size() == 12);
+    REQUIRE(paths.size() == 13);
     std::set<int> indices;
     for (const Toolpath& t : paths) {
+        if (t.points.size() == 1) {
+            // The middle bead reaches only the centre: a dot of the bead width.
+            CHECK(t.index == 12);
+            CHECK_FALSE(t.closed);
+            CHECK(std::hypot(t.points[0].p.x, t.points[0].p.y) < 1e-3);
+            CHECK_THAT(t.points[0].width, WithinAbs(width, 1e-6));
+            continue;
+        }
         CHECK(t.closed);
         indices.insert(t.index);
         // Bead i follows the outline (i + 1/2) widths in: a 64-gon of that inradius.

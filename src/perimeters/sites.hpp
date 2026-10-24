@@ -66,7 +66,9 @@ struct Toolpath {
 // medial edge, so of the two trapezoids of that edge only side 0 emits it.
 // Segments are chained through the sites they share (the same rib, node or
 // medial edge, and the same bead index), never by comparing positions; a site
-// where more than two segments meet ends the polylines there.
+// where more than two segments meet ends the polylines there. A bead that sits
+// on a node and reaches no other node (the middle bead of an odd count at an
+// isolated maximum) becomes a toolpath of one point.
 std::vector<Toolpath> extract_toolpaths(const MedialGraph& graph, const std::vector<HalfBeading>& beadings);
 
 } // namespace tisma
