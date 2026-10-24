@@ -11,6 +11,15 @@ quiera (hoy código disponible sin uso comercial de terceros; tiene que poder ce
 primera versión plana es la base: la malla, el corte, los perímetros, los rellenos y el G-code se reutilizan. Por eso
 las reglas de «Diseño para la visión» valen desde F1.
 
+**Enfoque (decisión del dueño, 2026-10-24):** un laminador **profesional e industrial**, sin uso comercial de
+terceros (la licencia de hoy), que sigue pudiendo cerrarse:
+- **calidad y control antes que velocidad de laminado:** puede ser más pesado si imprime mejor;
+- **motor propio en todo lo posible:** algoritmos escritos acá, para controlarlos y optimizarlos (por eso el Voronoi
+  propio);
+- **lo que Tisma Slicer ya hace**, integrado desde sus fichas;
+- **análisis para imprimir mejor:** análisis estructural (elementos finitos) y de fluidos (CFD) que alimentan el
+  laminado. Es la parte «análisis estructural y aerodinámico» de F8; su orden frente a F5–F7 se decide con el dueño.
+
 **Primera versión:** FDM, una boquilla, capas planas, **con aceleración por GPU desde F1**. Se estimó en unas 16
 semanas dedicando un cuarto del tiempo, pero esa estimación es anterior a la GPU. Se vuelve a estimar al terminar F1,
 con lo medido.
