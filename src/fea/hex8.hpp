@@ -24,6 +24,11 @@ struct Hex8 {
 
 Hex8 hex8(double poisson, double hx = 1.0, double hy = 1.0, double hz = 1.0);
 
+// The same element for any elasticity matrix D (6 x 6, row-major, in the
+// order above), for example an orthotropic material at some angle; the
+// stiffness comes out with D's own modulus.
+Hex8 hex8(const std::array<double, 36>& d, double hx, double hy, double hz);
+
 // The von Mises stress of a stress vector (xx, yy, zz, xy, yz, zx).
 double von_mises(const double stress[6]);
 

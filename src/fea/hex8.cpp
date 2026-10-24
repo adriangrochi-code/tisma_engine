@@ -4,6 +4,8 @@
 
 #include "fea/hex8.hpp"
 
+#include "fea/material.hpp"
+
 #include <cmath>
 
 namespace tisma {
@@ -33,16 +35,10 @@ void strain_matrix(double xi, double eta, double zeta, double hx, double hy, dou
 
 } // namespace
 
-Hex8 hex8(double poisson, double hx, double hy, double hz) {
+Hex8 hex8(const std::array<double, 36>& elasticity, double hx, double hy, double hz) {
     Hex8 e{};
-    const double nu = poisson;
-    const double lambda = nu / ((1.0 + nu) * (1.0 - 2.0 * nu)), mu = 1.0 / (2.0 * (1.0 + nu));
-    double* d = e.elasticity.data();
-    for (int r = 0; r < 3; ++r)
-        for (int c = 0; c < 3; ++c)
-            d[r * 6 + c] = lambda + (r == c ? 2.0 * mu : 0.0);
-    for (int r = 3; r < 6; ++r)
-        d[r * 6 + r] = mu;
+    e.elasticity = elasticity;
+    const double* d = e.elasticity.data();
     const double g = 1.0 / std::sqrt(3.0);
     const double det = hx * hy * hz / 8.0; // Jacobian of [-1, 1]^3 -> the box; Gauss weights are 1
     double b[6 * 24], db[6 * 24];
@@ -65,6 +61,10 @@ Hex8 hex8(double poisson, double hx, double hy, double hz) {
     }
     strain_matrix(0.0, 0.0, 0.0, hx, hy, hz, e.b_centre.data());
     return e;
+}
+
+Hex8 hex8(double poisson, double hx, double hy, double hz) {
+    return hex8(isotropic_stiffness(1.0, poisson), hx, hy, hz);
 }
 
 double von_mises(const double s[6]) {

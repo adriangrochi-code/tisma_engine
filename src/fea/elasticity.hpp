@@ -1,7 +1,10 @@
 #pragma once
 
+#include "fea/material.hpp"
 #include "fea/voxels.hpp"
 
+#include <cstdint>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -55,5 +58,27 @@ struct ElasticityResult {
 ElasticityResult solve_elasticity(const VoxelGrid& grid, const Material& material, std::span<const Fixture> fixtures,
                                   std::span<const SurfaceLoad> loads, double tolerance = 1e-8,
                                   int max_iterations = 20000, std::span<const double> element_scale = {});
+
+// The part as printed: every voxel is the orthotropic material turned to the
+// direction of the line that fills it (PLAN.md, A1: adhesion between layers
+// and between lines). The safety factor is Tsai-Wu's in the line's axes.
+struct AsPrintedResult {
+    ElasticityResult elasticity;   // von Mises of the stresses in global axes
+    std::vector<double> safety;    // per voxel; +infinity for empty or unstressed voxels
+    std::vector<FailureMode> mode; // per voxel: what gives way first at the safety factor
+    double min_safety = std::numeric_limits<double>::infinity();
+    std::size_t weakest = 0; // the voxel with min_safety
+};
+
+// angle: per voxel, the line's direction in the layer (radians from x, any
+// turn); NaN, or an empty span, where it is unknown: those voxels take the
+// stiffness averaged over every direction and the weakest direction for the
+// safety factor. Directions are rounded to kDirections steps over half a
+// turn, so the solver needs only a few element matrices.
+inline constexpr int kDirections = 36; // over half a turn: steps of 5 degrees
+AsPrintedResult solve_as_printed(const VoxelGrid& grid, const OrthotropicMaterial& material,
+                                 std::span<const float> angle, std::span<const Fixture> fixtures,
+                                 std::span<const SurfaceLoad> loads, double tolerance = 1e-8,
+                                 int max_iterations = 20000, std::span<const double> element_scale = {});
 
 } // namespace tisma

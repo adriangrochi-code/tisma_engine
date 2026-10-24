@@ -1951,3 +1951,71 @@ capa, así que no cubos, para simular la adherencia entre capas y entre paredes 
 - material ortótropo «como se imprimió»: dirección del cordón por elemento desde el laminado;
 - elementos de interfaz entre capas (en sus caras) y entre cordones, con adherencia propia;
 - criterio de falla anisótropo y factor de seguridad.
+
+## 2026-10-24 — A1, paso 3: adherencia entre capas y entre líneas, y la base de materiales
+
+**Pedidos del dueño:**
+- tener en cuenta la adherencia entre capas y entre líneas, para la máxima fiabilidad;
+- empezar con valores de la literatura y usar además los de fabricantes (Bambu Lab, eSUN) y de CNC Kitchen.
+
+**Hecho:**
+- Material ortótropo «como se imprimió» (`src/fea/material.*`):
+  - ejes 1 a lo largo del cordón, 2 entre cordones en la capa, 3 entre capas;
+  - rigidez como inversa de la compliancia ortótropa, girada al ángulo del cordón (Tᵀ D T);
+  - promedio exacto en la capa con 8 ángulos, para las direcciones desconocidas;
+  - criterio de Tsai–Wu con su factor de seguridad, y el modo de falla: el cordón, la unión entre cordones o la unión
+    entre capas.
+- El solucionador acepta varias clases de material, una matriz por clase, elegida por vóxel. `solve_as_printed` usa 36
+  direcciones del cordón (pasos de 5°) más el promedio en la capa. Devuelve:
+  - el factor de seguridad por vóxel, en los ejes de su cordón (el mínimo sobre las direcciones si no se conoce);
+  - el modo de falla, el mínimo y el vóxel más débil.
+- La pieza como se imprimió (`src/fea/as_printed.*`):
+  - la dirección de cada vóxel sale de los recorridos reales de su capa (paredes, relleno sólido, superior, ralo,
+    puentes, relleno de huecos);
+  - `printed_voxels` deja solo los vóxeles que cubre un cordón, así que con 4 vóxeles por ancho de línea aparecen los
+    huecos del relleno ralo.
+- Base de materiales (`src/fea/materials.*`, `docs/MATERIALS.md`), 23 registros. Cada registro guarda solo lo que su
+  fuente publica:
+  - literatura: Song 2017 (PLA, con compresión), Casavola 2016 (PLA y ABS), Cantrell 2017 (ABS, con Z y corte);
+  - hojas técnicas: Bambu Lab (11 materiales, X-Y y Z) y eSUN (PLA+ y PETG Basic);
+  - CNC Kitchen: 6 condiciones de impresión (temperatura, cámara, ajustes «transparentes»).
+- Lo que una fuente no da lo completan reglas escritas, cada una con la fuente de su cociente (Song, CNC Kitchen, Ahn,
+  Cantrell). Ninguna regla agrega resistencia: sin dato de compresión se usa la tracción.
+- Antes de usarlos, se compararon con los PDF de las fuentes todos los valores de Bambu Lab, el PLA+ de eSUN y las
+  tablas de Song y Cantrell.
+
+**Probado:** 185/185 pruebas (180 de Catch2 y 5 del programa) con gcc, clang y ASan+UBSan; clang compila sin
+advertencias. Pruebas nuevas:
+- material: el caso isótropo, un cuarto de vuelta, las dos formas de llevar las tensiones a los ejes del cordón, el
+  promedio en la capa transversalmente isótropo;
+- Tsai–Wu: factor 1 en cada resistencia, 2 y 4 en proporción, y el modo de falla;
+- barras de 20 × 4 × 4 mm exactas (10⁻⁸) a lo largo del cordón (E1), a través (E2, también con el ángulo media vuelta
+  después) y a través de las capas (E3), con su contracción y su factor de seguridad; con direcciones desconocidas, la
+  rigidez queda entre E1 y E2 y el factor no supera el de 90°;
+- el cubo de 10 mm laminado con vóxeles de 0,1 mm (4 por línea, 2 filas por capa): paredes con el cordón a 90° y 0°,
+  la capa sólida a ±45° en el 100 % del interior, la capa rala cubierta en un 18 % (relleno al 20 %);
+- cada registro de la base da un material válido (definido positivo, Zt ≤ Yt, Zc ≥ Zt) y conserva lo medido.
+
+**Medido** (4 núcleos; cubo de 10 mm de PLA Basic de Bambu Lab, base fija, 100 N de corte en la cara de arriba,
+tolerancia 10⁻⁶):
+
+| Vóxel | Pieza | Vóxeles | Iteraciones | Tiempo | Desplazamiento máx. | Factor de seguridad mín. | Dónde y cómo |
+|---|---|---|---|---|---|---|---|
+| 0,2 mm, 1 fila por capa | maciza | 125 000 | 441 | 4,7 s | 0,0386 mm | 3,65 | primera capa, unión entre capas |
+| 0,1 mm, 1 fila por capa | maciza | 500 000 | 840 | 36,8 s | 0,0386 mm | 3,21 | primera capa, unión entre capas |
+| 0,1 mm, 1 fila por capa | como se imprimió (relleno al 20 %) | 309 014 | 2488 | 71,5 s | 0,1017 mm | 1,55 | capa 46, bajo la piel superior, en el cordón del relleno |
+
+Con los huecos reales del relleno la pieza se deforma 2,6 veces más y la falla se muda de la base a los cordones del
+relleno que sostienen la tapa. El caso isótropo no cambió con el refactor: el voladizo da las mismas iteraciones
+(360 y 718 con 0,5 y 0,25 mm) y el mismo tiempo dentro del ruido que el commit anterior.
+
+**No probado:** que la falla prevista coincida con una pieza real rota (hace falta un ensayo de caja negra). El
+relleno ralo con vóxeles más gruesos que las líneas no se puede representar «como se imprimió»: con esos vóxeles
+habrá que homogeneizarlo.
+
+**Sigue:**
+- multigrilla: con los huecos del relleno las iteraciones se triplican;
+- ajustes del análisis y la línea de comandos: material de la base por su nombre, cargas y apoyos en JSON, mapa del
+  factor de seguridad;
+- más adelante, la unión entre capas según la temperatura (A3) y elementos de interfaz si el promedio en el vóxel no
+  alcanza.

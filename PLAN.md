@@ -347,11 +347,16 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   de línea en los modelos de alta calidad, y en altura cada capa partida en filas enteras (la primera capa también),
   así que los límites entre capas caen en caras de elementos
 - [ ] Ajustes del análisis: tamaño del vóxel desde el ancho de línea y la altura de capa (calidad normal y alta)
-- [ ] **Adherencia entre capas y entre líneas (pedido del dueño, para la máxima fiabilidad):** material ortótropo «como
-  se imprimió», con una dirección por elemento tomada del laminado (la del cordón, la transversal en la capa y la de
-  construcción); rigidez y resistencia propias en cada dirección: a lo largo del cordón, entre líneas (adherencia de
-  cordón a cordón) y entre capas (adherencia entre capas, la más débil); criterio de falla anisótropo (Tsai–Wu o Hill)
-  y mapa del factor de seguridad
+- [x] **Adherencia entre capas y entre líneas (pedido del dueño, para la máxima fiabilidad):** material ortótropo «como
+  se imprimió» (`src/fea/material.*`): ejes del cordón, entre cordones y entre capas, con rigidez y resistencia propias
+  en cada uno; la dirección de cada vóxel tomada del laminado real (`src/fea/as_printed.*`); el solver con una matriz
+  por dirección (pasos de 5°); criterio de Tsai–Wu, mapa del factor de seguridad y modo de falla (cordón, unión entre
+  cordones, unión entre capas); la pieza con los huecos del relleno ralo cuando hay 4 vóxeles por ancho de línea
+- [x] Base de materiales (pedido del dueño): literatura (Song 2017, Casavola 2016, Cantrell 2017, Ahn 2002), hojas
+  técnicas de Bambu Lab (11 materiales) y eSUN (2), y ensayos de CNC Kitchen (6); cada número con su fuente y reglas
+  escritas para lo que falta (`src/fea/materials.*`, `docs/MATERIALS.md`)
+- [ ] La unión entre capas según la temperatura de la capa de abajo al imprimir la de arriba (con la simulación del
+  enfriamiento de A3 y los datos de CNC Kitchen)
 - [ ] Multigrilla: hoy las iteraciones se duplican cada vez que el vóxel se achica a la mitad
 - [ ] Núcleo de la GPU, probado contra la CPU
 - [ ] Cargas y apoyos desde la línea de comandos (JSON) y resultado legible (desplazamientos, tensiones, factor de
@@ -365,6 +370,9 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
 - Hill, *A theory of the yielding and plastic flow of anisotropic metals*, Proc. R. Soc. A 193:281–297, 1948.
 - Tsai y Pagano, *Invariant properties of composite materials*, 1968 (rigidez de un material ortótropo girado como suma
   de cinco términos en cos 2θ, sin 2θ, cos 4θ y sin 4θ).
+- Jones, *Mechanics of Composite Materials*, 2.ª ed., 1999, cap. 2 (compliancia ortótropa y rotación de ejes).
+- Los datos de cada material y sus fuentes (Song 2017, Casavola 2016, Cantrell 2017, Bambu Lab, eSUN, CNC Kitchen):
+  `docs/MATERIALS.md`.
 
 ## Estado de F5
 
