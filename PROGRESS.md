@@ -101,8 +101,11 @@ anterior.
   artículos.
 - `CLAUDE.md` resume la visión para los próximos bloques.
 
-**Pendiente de decidir con el dueño:** el orden F7 → F8 → F9, la máquina de 5 ejes de referencia y la API de GPU (se
-decide en F8, después de medir).
+**Decidido por el dueño:**
+- El orden es F7 → F8 → F9.
+- La API de GPU se elige en F8, después de medir.
+
+**Pendiente:** la máquina de 5 ejes de referencia.
 
 **CI:** la corrida lanzada a mano sobre `c8e0565` (run 4) pasó entera, incluidos Windows 2022 (MSVC) y macOS 14. Ese
 fue el último paso por macOS antes de sacarlo de la CI.
