@@ -2,6 +2,8 @@
 
 #include "slice/pipeline.hpp"
 
+#include "surfaces/bridges.hpp"
+
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
@@ -51,6 +53,7 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
         infill[l] = out.walls[l].infill;
     out.surfaces =
         classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers, settings.wall_width);
+    find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
     const FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle,
                           settings.infill_pattern};
     out.fills.resize(out.layers.size());

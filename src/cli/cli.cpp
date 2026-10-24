@@ -205,7 +205,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 
     double volume = 0.0;
-    std::size_t polygons = 0, walls = 0, solid_lines = 0, sparse_lines = 0;
+    std::size_t polygons = 0, walls = 0, solid_lines = 0, sparse_lines = 0, bridge_lines = 0;
     double top = 0.0, bottom = 0.0, sparse = 0.0;
     for (std::size_t l = 0; l < sliced.layers.size(); ++l) {
         volume += area_mm2(sliced.regions[l]) * (sliced.layers[l].top - sliced.layers[l].bottom);
@@ -216,6 +216,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         sparse += area_mm2(sliced.surfaces[l].sparse);
         solid_lines += sliced.fills[l].solid.size();
         sparse_lines += sliced.fills[l].sparse.size();
+        bridge_lines += sliced.fills[l].bridge.size();
     }
     out << "layers: " << sliced.layers.size() << "\n";
     out << "polygons: " << polygons << "\n";
@@ -225,6 +226,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "sparse_area: " << sparse << "\n";
     out << "solid_infill_lines: " << solid_lines << "\n";
     out << "sparse_infill_lines: " << sparse_lines << "\n";
+    out << "bridge_lines: " << bridge_lines << "\n";
     out << "sliced_volume: " << volume << "\n";
     out << "slice_ms: " << slice_ms << "\n";
     if (sliced.open_contours > 0)

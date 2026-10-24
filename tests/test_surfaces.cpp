@@ -112,3 +112,42 @@ TEST_CASE("solid parts narrower than a bead grow by a bead into the infill", "[s
     for (int i = 7; i < 10; ++i)
         CHECK_THAT(area_mm2(wide[std::size_t(i)].top), WithinAbs(area_mm2(thin[std::size_t(i)].top), 1e-9));
 }
+
+TEST_CASE("bridges: a plate on two pillars bridges the gap, with lines from pillar to pillar", "[surfaces]") {
+    // Pillars 5 x 10 mm at x = 0..5 and x = 15..20, 5 mm high (layers 0-24),
+    // and a 20 x 10 mm plate on top from z = 5 to 7 (layers 25-34).
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 5, 10, 5);
+    add_box(mesh, 15, 0, 0, 20, 10, 5);
+    add_box(mesh, 0, 0, 5, 20, 10, 7);
+    const SlicedModel sliced = slice_model(weld_exact(mesh), Settings{});
+    REQUIRE(sliced.surfaces.size() == 35);
+    // The plate's first layer: its infill (1.2 mm in) between the pillars is a bridge.
+    const LayerSurfaces& first = sliced.surfaces[25];
+    CHECK_THAT(area_mm2(first.bridge), WithinAbs(10.0 * 7.6, 1e-6));
+    CHECK(first.bottom.empty());
+    CHECK(first.bridge_angle == 0.0); // across the gap, from pillar to pillar
+    REQUIRE_FALSE(sliced.fills[25].bridge.empty());
+    for (const Toolpath& t : sliced.fills[25].bridge) {
+        CHECK_FALSE(t.closed);
+        CHECK_THAT(t.points.front().p.y, WithinAbs(t.points.back().p.y, 1e-6));
+        CHECK(t.points.front().p.x < 5.3);
+        CHECK(t.points.back().p.x > 14.7);
+    }
+    // The next layer rests on the bridge: still a bottom surface, no longer a bridge.
+    CHECK(sliced.surfaces[26].bridge.empty());
+    CHECK_THAT(area_mm2(sliced.surfaces[26].bottom), WithinAbs(10.0 * 7.6, 1e-6));
+    // Nothing else in the model is a bridge: not the first layer on the bed, not the pillars.
+    for (std::size_t i = 0; i < sliced.surfaces.size(); ++i)
+        if (i != 25)
+            CHECK(sliced.surfaces[i].bridge.empty());
+}
+
+TEST_CASE("bridges: none in the cube", "[surfaces]") {
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel sliced = slice_model(m, Settings{});
+    for (const LayerSurfaces& s : sliced.surfaces)
+        CHECK(s.bridge.empty());
+    for (const LayerFill& f : sliced.fills)
+        CHECK(f.bridge.empty());
+}

@@ -28,6 +28,7 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
 struct LayerFill {
     std::vector<Toolpath> solid;  // top and bottom surfaces, at 100%
     std::vector<Toolpath> sparse; // the rest, at the infill density
+    std::vector<Toolpath> bridge; // bridges: straight lines at the bridge's angle, at 100%
 };
 
 struct FillParams {

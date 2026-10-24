@@ -9,8 +9,10 @@ namespace tisma {
 // What each layer's infill region becomes (F3).
 struct LayerSurfaces {
     Polygons top;    // solid, under an exposed top surface
-    Polygons bottom; // solid, over an exposed bottom surface (not already top)
+    Polygons bottom; // solid, over an exposed bottom surface (not already top), resting on what is printed below
     Polygons sparse; // the rest: sparse infill
+    Polygons bridge; // solid over nothing printed (see find_bridges)
+    double bridge_angle = 0.0; // degrees: the direction of the bridge's lines
 };
 
 // Splits the infill region of every layer into top, bottom and sparse parts.

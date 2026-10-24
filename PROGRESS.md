@@ -1114,3 +1114,32 @@ muestreando x, sin una grilla 2D. El período se calibra para que deposite densi
 - puentes;
 - superficies monotónicas.
 
+## 2026-10-24 — bloque nocturno 30: puentes
+
+**Hecho:**
+- `find_bridges` (`src/surfaces/bridges.*`, diseño propio desde `docs/spec/BEHAVIOR.md`, «Puentes»):
+  - lo impreso en la capa de abajo se mide con lo que realmente se deposita: el área de los cordones de sus paredes,
+    sus superficies sólidas y su región dispersa si hay relleno. Así, apoyar sobre el relleno de abajo no es puente,
+    como pide la lección medida en Tisma;
+  - el puente es la parte de la superficie inferior fuera de eso, sin partes más finas que un cordón, agrandado dos
+    cordones sobre lo apoyado para anclarse;
+  - ángulo: se prueban pasos de 5° y gana el de más largo de líneas con los dos extremos apoyados; entre iguales, el de
+    líneas más cortas. El criterio «línea más corta» solo no alcanza: en una placa sobre dos pilares separados 10 mm,
+    las líneas paralelas al hueco (7,6 mm) son más cortas pero cuelgan en el aire;
+  - las líneas del puente van rectas, sin zigzag (una unión por el borde quedaría en el aire).
+- `LayerSurfaces::bridge` y `bridge_angle`; `LayerFill::bridge`; `slice` informa `bridge_lines`.
+- Atajo: con relleno disperso, lo impreso abajo cubre su región salvo rendijas finas, así que una superficie inferior
+  dentro de la región de abajo no es puente y no hace falta calcular el área de los cordones. Sin el atajo el corte de
+  la esfera pasaba de 1,14 a 1,48–1,64 s; con él, 1,10–1,19 s.
+
+**Probado:** 128/128 pruebas con gcc, clang y ASan+UBSan:
+- mesa (dos pilares de 5 × 10 mm y una placa de 20 × 10 mm encima): la primera capa de la placa tiene un puente de
+  10 × 7,6 mm entre los pilares, a 0°, con líneas de pilar a pilar; la capa siguiente apoya en el puente y es superficie
+  inferior común; ninguna otra capa tiene puente (tampoco la primera, sobre la cama);
+- el cubo no tiene puentes.
+
+**Medido** (esfera, 500 capas, 4 núcleos): 35 líneas de puente, cerca del polo de abajo, donde cada capa sobresale de la
+anterior más que el ancho de las paredes; `slice` 1,10–1,19 s.
+
+**Sigue:** superficies superiores monotónicas.
+

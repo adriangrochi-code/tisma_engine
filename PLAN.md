@@ -244,8 +244,8 @@ Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS
   es el área dentro del 1 % a 0°, 30° y 45°
 - [ ] Ajustar las líneas sólidas por tramo y no por región: en una L a 0°, el codo interior deja una franja de 0,2 mm
   (−2,9 % de material)
-- [ ] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
-  anterior), tendidos en la dirección del vano más corto
+- [x] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
+  anterior), tendidos en la dirección que apoya los dos extremos de las líneas
 - [ ] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho
 - [ ] GPU: detección de superficies y giroide, probados contra la CPU
 - [ ] Criterio de F3: un cubo y el Benchy con capas sólidas correctas; tiempos de CPU y GPU medidos

@@ -235,6 +235,8 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
     const Polygons solid = Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero);
     out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
+    // Bridge lines stay straight: a join along the edge would hang in the air.
+    out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
     if (params.density <= 0.0)
         return out;
     switch (params.pattern) {

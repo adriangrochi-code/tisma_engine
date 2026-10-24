@@ -127,6 +127,7 @@ add_library(tisma_core
   src/perimeters/walls.cpp
   src/perimeters/coverage.cpp
   src/surfaces/surfaces.cpp
+  src/surfaces/bridges.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
   src/io/stl.cpp
