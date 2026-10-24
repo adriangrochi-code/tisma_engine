@@ -15,7 +15,11 @@ El código fuente de:
 - Cura y CuraEngine (de ahí vienen Arachne, Lightning y los soportes en árbol de Thomas Rahm);
 - **Tisma Slicer** (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`), incluido lo que escribimos dentro de ese fork:
   es AGPL;
-- ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL.
+- ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL;
+- el slicer no planar de Ahlers et al. (una rama GPLv3 de Slic3r);
+- el código publicado junto con los artículos de laminado no planar y de varios ejes (por ejemplo S3_DeformFDM o
+  CurviSlicer). Se trabaja solo con el artículo. Si alguno tuviera licencia permisiva y conviniera usarlo como
+  biblioteca, primero lo decide el dueño y se anota en `THIRD_PARTY.md`.
 
 Una sesión o persona que haya leído ese código para este trabajo no escribe código acá.
 

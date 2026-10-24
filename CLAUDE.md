@@ -15,6 +15,14 @@ A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.m
 - Other slicers may only be compared as black boxes: run their program, compare outputs.
 - Never rewrite or squash history: it is the record of provenance.
 
+## Vision
+
+The goal is non-planar and 5-axis slicing with GPU acceleration. The first, planar version is the base. From F1 on,
+follow the rules in "Diseño para la visión" in `PLAN.md`:
+- layers as level sets of a scalar field;
+- 3D toolpaths with a nozzle orientation;
+- GPU-ready data, with the CPU path as the reference.
+
 ## Working rules (from the project owner)
 
 - Answer the owner in Spanish. Code, comments, commit messages and PR titles are in English.
@@ -45,4 +53,4 @@ one stopped.
 ## CI
 
 - Every push runs the build and the tests on Linux and Windows.
-- macOS comes at the end of the project, after F6 (owner's decision, 2026-10-24).
+- macOS comes at the very end of the project, as the last phase of `PLAN.md` (owner's decision, 2026-10-24).

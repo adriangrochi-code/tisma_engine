@@ -85,3 +85,26 @@ anterior.
 - `CLAUDE.md` y `PLAN.md` actualizados con la regla nueva.
 
 **Sigue:** confirmar que la CI pasa en Linux y Windows. Después, el banco de pruebas y F1.
+
+## 2026-10-24 — visión: no planar, 5 ejes y GPU
+
+**Hecho:**
+- El dueño fijó la visión del motor: laminado no planar y de 5 ejes, con aceleración por GPU.
+- `PLAN.md`:
+  - nueva sección «Diseño para la visión», con las reglas que valen desde F1 (capas como conjuntos de nivel de un
+    campo, trayectorias 3D con orientación, datos listos para la GPU con la CPU como referencia, GPU opcional) y las
+    fuentes;
+  - fases nuevas F7 (no planar en 3 ejes), F8 (GPU) y F9 (5 ejes); macOS pasa a F10, al final.
+- Las referencias de los artículos se verificaron en DBLP, arXiv y las páginas de los autores; solo se leyeron los
+  resúmenes y los datos bibliográficos.
+- `CLEANROOM.md` prohíbe además la rama no planar de Slic3r de Ahlers et al. (GPLv3) y el código publicado con los
+  artículos.
+- `CLAUDE.md` resume la visión para los próximos bloques.
+
+**Pendiente de decidir con el dueño:** el orden F7 → F8 → F9, la máquina de 5 ejes de referencia y la API de GPU (se
+decide en F8, después de medir).
+
+**CI:** la corrida lanzada a mano sobre `c8e0565` (run 4) pasó entera, incluidos Windows 2022 (MSVC) y macOS 14. Ese
+fue el último paso por macOS antes de sacarlo de la CI.
+
+**Sigue:** el banco de pruebas y F1, ya con la regla del campo escalar.
