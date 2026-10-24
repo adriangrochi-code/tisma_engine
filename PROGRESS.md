@@ -755,3 +755,28 @@ figura 8.
 - perímetros de todas las capas en paralelo dentro de `slice_model`;
 - resolución de conflictos de reparto (figura 9) y el punto del cordón central impar en un máximo aislado (hoy no se
   emite: en el 64-gono falta un punto de 0,4 mm en el centro).
+
+## 2026-10-24 — bloque nocturno 17: extracción más rápida
+
+**Hecho:**
+- `extract_toolpaths` sin mapas ni ordenamientos: cada sitio tiene un casillero en un arreglo contiguo, calculado
+  directamente (radio × cordón, nodo, arista × cordón). Cada trapecio recorre sus índices de cordón y arma los
+  segmentos sin agrupar sitios; los casilleros con exactamente dos extremos de segmento los enlazan.
+- Los radios se identifican igual que antes (nodo y punto de apoyo exacto), ordenando solo los 4 extremos por arista.
+- `support_sites`, `medial_sites` y la extracción usan las mismas funciones para ubicar los sitios.
+- Leí la sección 5.1 del artículo (meta-esquema de cáscara, ecuación 8): queda como próximo ítem del PLAN, antes de
+  llevar los perímetros a todas las capas, porque hoy se llena toda la región de cordones (125 lazos en la esfera).
+
+**Probado:** 104/104 pruebas con gcc, clang y ASan+UBSan. Prueba nueva: en la tira, el 64-gono y la cuña, cada punto
+de cada trayectoria es exactamente uno de los sitios de `support_sites` o `medial_sites`, con su ancho y su índice.
+
+**Medido** (esfera, capa del medio, 4 núcleos):
+- `extract_toolpaths`: de 50–54 ms a 3,3–3,9 ms (125 lazos);
+- `info`, filtro + transiciones + reparto + extracción: de 58–65 ms a 5,8–6,2 ms. El eje medio sigue en 5,5–5,9 ms,
+  así que una capa entera cuesta unos 12 ms.
+
+**Sigue:**
+- meta-esquema de cáscara (ecuación 8): M paredes, con nodos extra donde el reparto cambia de forma;
+- perímetros de todas las capas en paralelo dentro de `slice_model`, con la cantidad de paredes como ajuste propio en
+  `docs/CONFIG.md`.
+

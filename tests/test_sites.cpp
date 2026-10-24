@@ -8,6 +8,7 @@
 #include <cmath>
 #include <numbers>
 #include <set>
+#include <tuple>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -229,4 +230,27 @@ TEST_CASE("an L-shaped strip: two loops around the reflex corner and a middle li
         }
     }
     CHECK(indices == std::set<int>{0, 1, 2});
+}
+
+TEST_CASE("every toolpath point is one of the sites, at its width", "[sites]") {
+    BeadingParams p;
+    const double h = std::tan(15.0 * std::numbers::pi / 180.0) * 20.0;
+    const Polygons shapes[] = {
+        {rect(0, 0, 30, 2)},
+        {regular_polygon(64, 5.0)},
+        {{{to_units(0), to_units(0)}, {to_units(20), to_units(-h)}, {to_units(20), to_units(h)}}},
+    };
+    for (const Polygons& shape : shapes) {
+        const Prepared r = prepare(shape, p);
+        std::set<std::tuple<double, double, double, int>> sites;
+        for (const Site& s : r.sites)
+            sites.insert({s.p.x, s.p.y, s.width, s.index});
+        for (const Site& s : medial_sites(r.graph, r.beadings))
+            sites.insert({s.p.x, s.p.y, s.width, s.index});
+        const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+        REQUIRE_FALSE(paths.empty());
+        for (const Toolpath& t : paths)
+            for (const ToolpathPoint& q : t.points)
+                CHECK(sites.count({q.p.x, q.p.y, q.width, t.index}) == 1);
+    }
 }
