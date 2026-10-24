@@ -2,7 +2,7 @@
 
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
-#include "slice/contours.hpp"
+#include "slice/layers.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -103,19 +103,22 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     out << "vertices: " << indexed.vertices.size() << "\n";
     out << "weld_ms: " << weld_ms << "\n";
 
-    // One planar slice at mid height: level-set segments, then contours.
+    // Planar slicing with 0.2 mm layers: level-set segments and contours.
     const BoundingBox box = stl.mesh.bounding_box();
     if (!box.empty) {
         const auto slice_start = std::chrono::steady_clock::now();
-        const std::vector<float> z = height_field(indexed);
-        std::vector<LevelSegment> segments;
-        level_set_segments(indexed, z, 0.5f * (box.min.z + box.max.z), segments);
-        const std::vector<Contour> contours = join_segments(segments);
+        std::vector<float> heights;
+        for (const Layer& layer : plan_layers(box.min.z, box.max.z, {0.2, 0.2}))
+            heights.push_back(float(layer.slice_z()));
+        const auto layers = slice_levels(indexed, height_field(indexed), heights);
         const double slice_ms =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slice_start).count();
-        out << "mid_slice_segments: " << segments.size() << "\n";
-        out << "mid_slice_contours: " << contours.size() << "\n";
-        out << "mid_slice_ms: " << slice_ms << "\n";
+        std::size_t contours = 0;
+        for (const auto& layer : layers)
+            contours += layer.size();
+        out << "layers: " << layers.size() << "\n";
+        out << "contours: " << contours << "\n";
+        out << "slice_ms: " << slice_ms << "\n";
     }
     return kExitOk;
 }

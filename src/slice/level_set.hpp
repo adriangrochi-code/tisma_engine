@@ -41,6 +41,11 @@ struct LevelSegment {
 void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, float iso,
                         std::vector<LevelSegment>& out);
 
+// Same, for the listed triangles only (for example those whose value range
+// contains iso).
+void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, float iso,
+                        std::span<const std::uint32_t> triangles, std::vector<LevelSegment>& out);
+
 // The planar field: the z coordinate of each vertex.
 std::vector<float> height_field(const IndexedMesh& mesh);
 

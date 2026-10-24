@@ -1,0 +1,69 @@
+// Layer planning and multi-level slicing with triangles bucketed by level.
+// Own design; see PROVENANCE.md.
+
+#include "slice/layers.hpp"
+
+#include <algorithm>
+#include <stdexcept>
+
+namespace tisma {
+
+std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& settings) {
+    if (!(settings.first_layer_height > 0.0) || !(settings.layer_height > 0.0))
+        throw std::invalid_argument("layer heights must be positive");
+    std::vector<Layer> layers;
+    // Heights come from the layer index, not from a running sum, so rounding
+    // errors do not grow with the number of layers.
+    for (std::size_t i = 0;; ++i) {
+        const double bottom =
+            i == 0 ? min_z : min_z + settings.first_layer_height + double(i - 1) * settings.layer_height;
+        const double top = min_z + settings.first_layer_height + double(i) * settings.layer_height;
+        const Layer layer{bottom, top};
+        if (layer.slice_z() >= max_z)
+            break;
+        layers.push_back(layer);
+    }
+    return layers;
+}
+
+std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
+                                               std::span<const float> isos) {
+    const std::size_t level_count = isos.size();
+    // A triangle is crossed by level iso when min < iso <= max (see the
+    // value >= iso rule in level_set_segments). Bucket the triangles in
+    // compressed rows: first count per level, then fill.
+    std::vector<std::uint32_t> first_level(mesh.triangles.size());
+    std::vector<std::uint32_t> end_level(mesh.triangles.size());
+    std::vector<std::uint32_t> row_start(level_count + 1, 0);
+    for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
+        const auto& tri = mesh.triangles[t];
+        const float a = values[tri[0]], b = values[tri[1]], c = values[tri[2]];
+        const float lo = std::min({a, b, c});
+        const float hi = std::max({a, b, c});
+        const auto first = std::upper_bound(isos.begin(), isos.end(), lo) - isos.begin();
+        const auto end = std::upper_bound(isos.begin(), isos.end(), hi) - isos.begin();
+        first_level[t] = static_cast<std::uint32_t>(first);
+        end_level[t] = static_cast<std::uint32_t>(std::max(first, end));
+        for (std::uint32_t l = first_level[t]; l < end_level[t]; ++l)
+            ++row_start[l + 1];
+    }
+    for (std::size_t l = 0; l < level_count; ++l)
+        row_start[l + 1] += row_start[l];
+    std::vector<std::uint32_t> bucket(row_start[level_count]);
+    std::vector<std::uint32_t> fill(row_start.begin(), row_start.end() - 1);
+    for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
+        for (std::uint32_t l = first_level[t]; l < end_level[t]; ++l)
+            bucket[fill[l]++] = static_cast<std::uint32_t>(t);
+
+    std::vector<std::vector<Contour>> out(level_count);
+    std::vector<LevelSegment> segments;
+    for (std::size_t l = 0; l < level_count; ++l) {
+        segments.clear();
+        const std::span<const std::uint32_t> tris(bucket.data() + row_start[l], row_start[l + 1] - row_start[l]);
+        level_set_segments(mesh, values, isos[l], tris, segments);
+        out[l] = join_segments(segments);
+    }
+    return out;
+}
+
+} // namespace tisma

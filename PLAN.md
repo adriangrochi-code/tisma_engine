@@ -147,7 +147,7 @@ antes de usarlas.
 - [x] Contornos de nivel de un campo por vértice (`level_set_segments`), con la altura z como campo plano
 - [x] Unir los segmentos en contornos cerrados (por la clave de arista, sin comparar coordenadas)
 - [ ] Cierre de huecos chicos en mallas abiertas
-- [ ] Alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa
+- [x] Alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa
 - [ ] Paralelo por capas (oneTBB)
 - [ ] Offsets con Clipper2
 - [ ] Infraestructura GPU (Vulkan, lavapipe en la CI) y corte en GPU

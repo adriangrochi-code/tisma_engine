@@ -25,6 +25,7 @@ add_library(tisma_core
   src/mesh/indexed_mesh.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
+  src/slice/layers.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

@@ -173,5 +173,24 @@ fue el último paso por macOS antes de sacarlo de la CI.
 tarda 6,0–6,6 ms. Hoy cada capa recorre todos los triángulos: con 500 capas serían unos 3 s. Hace falta repartir los
 triángulos por capas antes de cortar.
 
-**Sigue:** alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa;
-después oneTBB.
+**Tercera parte del bloque:**
+- `src/slice/layers.*`:
+  - `plan_layers` arma las capas (primera capa y resto) desde la z mínima. Las alturas salen del índice de la capa,
+    así el error de redondeo no crece con la cantidad de capas. No se crea una capa cuyo medio quede en el techo del
+    modelo o por encima: la altura impresa se redondea a la capa más cercana.
+  - `slice_levels` corta todos los niveles de un campo. Cada triángulo se reparte en los niveles que cruza su rango
+    de valores, y cada nivel corta solo sus triángulos. Sirve igual para un campo curvo (regla 1 del diseño).
+- Pruebas:
+  - plan de capas, y alturas no válidas;
+  - cubo: 50 capas de 100 mm²;
+  - pirámide: el área de cada capa coincide con el área exacta de la sección (10 − z)², con error menor a 0,001 mm²;
+  - el corte repartido da los mismos tramos que recorrer todos los triángulos.
+
+  44/44 pruebas con gcc, clang y ASan+UBSan.
+- `tisma-engine info` corta el modelo entero con capas de 0,2 mm.
+
+**Medido** (esfera de 1 001 112 triángulos, 500 capas, un hilo, 5 corridas): el corte completo tarda 181–235 ms
+(antes 6 ms por capa, unos 3 s en total).
+
+**Sigue:** paralelo por capas con oneTBB (anotarla en `THIRD_PARTY.md` antes). Después: soldadura más rápida, cierre
+de huecos, Clipper2 y la infraestructura de Vulkan.
