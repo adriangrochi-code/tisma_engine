@@ -242,6 +242,26 @@ TransitionResult apply_transitions(MedialGraph& g, const BeadingParams& params, 
                     result.bead_counts[chain.nodes[i]] = r.n + std::fabs(s[i] - r.start) / ramp;
             }
         }
+
+        // The shell's beading bends where its ramp starts and ends (Section 5.1:
+        // extra nodes at the locations of the non-linearities). Nodes there keep
+        // beadings interpolated between nodes on it; their counts are
+        // interpolated along the edge.
+        if (const std::optional<ShellRamp> shell = shell_ramp(params)) {
+            for (const double thickness : {shell->start, shell->end}) {
+                const double r = thickness / 2.0;
+                for (std::size_t i = 0; i + 1 < chain.nodes.size(); ++i) {
+                    const double r0 = g.nodes[chain.nodes[i]].radius, r1 = g.nodes[chain.nodes[i + 1]].radius;
+                    if (!((r0 < r && r < r1) || (r1 < r && r < r0)))
+                        continue;
+                    const double t = (r - r0) / (r1 - r0);
+                    const double c0 = result.bead_counts[chain.nodes[i]], c1 = result.bead_counts[chain.nodes[i + 1]];
+                    const std::uint32_t id = split_at(s[i] + t * (s[i + 1] - s[i]));
+                    result.bead_counts[id] = c0 + t * (c1 - c0);
+                    ++i; // the rest of the split edge lies on one side of r
+                }
+            }
+        }
     }
     return result;
 }

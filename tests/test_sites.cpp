@@ -254,3 +254,71 @@ TEST_CASE("every toolpath point is one of the sites, at its width", "[sites]") {
                 CHECK(sites.count({q.p.x, q.p.y, q.width, t.index}) == 1);
     }
 }
+
+TEST_CASE("wall limit: a strip narrow enough keeps its beads, a wider limit drops the middle", "[sites]") {
+    BeadingParams p;
+    p.wall_count = 3; // 5 beads fit in 2 mm: under the limit of 6, nothing changes
+    {
+        const Prepared r = prepare({rect(0, 0, 30, 2)}, p);
+        std::size_t loops = 0, lines = 0;
+        for (const Toolpath& t : extract_toolpaths(r.graph, r.beadings))
+            (t.closed ? loops : lines) += 1;
+        CHECK(loops == 2);
+        CHECK(lines == 1);
+    }
+    p.wall_count = 2; // 2 mm is the end of the shell ramp for 2 walls: two loops at w*, a 0.4 mm gap
+    const Prepared r = prepare({rect(0, 0, 30, 2)}, p);
+    const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+    REQUIRE(paths.size() == 2);
+    for (const Toolpath& t : paths) {
+        CHECK(t.closed);
+        const double inset = t.index == 0 ? 0.2 : 0.6;
+        CHECK_THAT(loop_area(t), WithinAbs((30 - 2 * inset) * (2 - 2 * inset), 1e-6));
+        for (const ToolpathPoint& q : t.points)
+            CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
+    }
+}
+
+TEST_CASE("wall limit: a 20 mm square gets exactly M loops of w* and an empty middle", "[sites]") {
+    for (int m : {1, 3}) {
+        BeadingParams p;
+        p.wall_count = m;
+        const Prepared r = prepare({rect(0, 0, 20, 20)}, p);
+        const std::vector<Toolpath> paths = extract_toolpaths(r.graph, r.beadings);
+        REQUIRE(paths.size() == std::size_t(m));
+        std::set<int> indices;
+        for (const Toolpath& t : paths) {
+            CHECK(t.closed);
+            indices.insert(t.index);
+            const double inset = 0.2 + 0.4 * t.index;
+            CHECK_THAT(loop_area(t), WithinAbs((20 - 2 * inset) * (20 - 2 * inset), 1e-6));
+            for (const ToolpathPoint& q : t.points)
+                CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
+        }
+        CHECK(int(indices.size()) == m);
+    }
+}
+
+TEST_CASE("wall limit: the shell ramp gets its own nodes on the centre", "[sites]") {
+    // A wedge thickens steadily, so its centre crosses both ends of the ramp.
+    BeadingParams p;
+    p.wall_count = 2;
+    const double h = std::tan(15.0 * std::numbers::pi / 180.0) * 20.0;
+    const Prepared r = prepare({{{to_units(0), to_units(0)}, {to_units(20), to_units(-h)}, {to_units(20), to_units(h)}}}, p);
+    const auto ramp = shell_ramp(p);
+    REQUIRE(ramp);
+    bool at_start = false, at_end = false;
+    for (const MedialGraph::Node& n : r.graph.nodes) {
+        if (!n.central)
+            continue;
+        at_start = at_start || std::fabs(2 * n.radius - ramp->start) < 1e-9;
+        at_end = at_end || std::fabs(2 * n.radius - ramp->end) < 1e-9;
+    }
+    CHECK(at_start);
+    CHECK(at_end);
+    for (const Toolpath& t : extract_toolpaths(r.graph, r.beadings)) {
+        CHECK(t.index < 2);
+        for (const ToolpathPoint& q : t.points)
+            CHECK(q.width > 0.0);
+    }
+}

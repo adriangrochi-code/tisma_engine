@@ -206,8 +206,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Unir los sitios del mismo índice en segmentos por trapecio y encadenarlos en polilíneas de ancho variable
   (por identidad del sitio, sin tolerancias): tira, L, polígonos regulares y la capa del medio de la esfera dan lazos cerrados
 - [x] Acelerar la extracción: casilleros contiguos en vez de mapas; de 50 a 3,3–3,9 ms en la capa del medio de la esfera
-- [ ] Meta-esquema de cáscara (sección 5.1, ecuación 8): M paredes al ancho preferido donde la región es ancha y ancho
+- [x] Meta-esquema de cáscara (sección 5.1, ecuación 8): M paredes al ancho preferido donde la región es ancha y ancho
   adaptativo solo en las partes angostas, con nodos extra donde el reparto cambia de forma; el resto queda para el relleno
+- [ ] Región que queda para el relleno: lo que no cubren las paredes, como polígonos (para F3)
 - [ ] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`, con la cantidad de paredes como ajuste
 - [ ] Resolución de conflictos de reparto (figura 9) y punto del cordón central impar en un máximo aislado
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`

@@ -780,3 +780,32 @@ de cada trayectoria es exactamente uno de los sitios de `support_sites` o `media
 - perímetros de todas las capas en paralelo dentro de `slice_model`, con la cantidad de paredes como ajuste propio en
   `docs/CONFIG.md`.
 
+## 2026-10-24 — bloque nocturno 18: límite de paredes (cáscara)
+
+**Hecho:**
+- `BeadingParams::wall_count` (M): como mucho M paredes desde cada borde; 0 llena toda la región como antes.
+- Kuipers et al. 2020, sección 5.1 (meta-esquema de cáscara, ecuación 8): la cantidad de cordones se satura en 2M.
+  El texto extraído de la ecuación no se lee con claridad, así que la forma es propia y continua: desde el grosor
+  donde aparecería el cordón 2M + 1 (`shell_ramp().start`), los 2M cordones se angostan linealmente hasta w* en w*/2
+  de grosor extra; el hueco del medio se abre de 0 a w* y después crece con el grosor. Con el esquema uniforme no
+  hace falta rampa.
+- `apply_transitions` agrega nodos en el centro donde el grosor cruza el inicio y el fin de esa rampa (la sección 5.1
+  pide nodos en las no linealidades), con la cantidad interpolada.
+
+**Probado:** 109/109 pruebas con gcc, clang y ASan+UBSan:
+- reparto: saturación en 2M, sin cambios bajo la rampa, continuidad al empezar, mitad de camino a la mitad, dos
+  paredes de 0,4 mm desde cada borde al terminar (2, 3 y 25 mm), uniforme sin rampa;
+- tira de 2 mm: con M = 3 sigue con 2 lazos y la línea del medio; con M = 2, dos lazos exactos de 0,4 mm y nada en el
+  medio;
+- cuadrado de 20 mm: M = 1 y M = 3 dan exactamente M lazos de 0,4 mm con el área exacta;
+- cuña: aparecen nodos centrales exactamente en el inicio y el fin de la rampa, y ningún cordón pasa del índice M − 1.
+- Un error mío en una prueba: esperaba 2 cordones en 1 mm y son 3 (⌊1/0,4 + ½⌋).
+
+**Medido** (esfera, capa del medio, 4 núcleos): con M = 3, 3 lazos cerrados; reparto + extracción 0,3 ms. El eje medio
+(5,2–5,6 ms) es ahora casi todo el costo de la capa.
+
+**Sigue:**
+- la región que queda para el relleno (lo que no cubren las paredes), como polígonos;
+- perímetros de todas las capas en paralelo dentro de `slice_model`, con la cantidad de paredes como ajuste propio en
+  `docs/CONFIG.md`.
+

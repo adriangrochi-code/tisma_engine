@@ -9,7 +9,9 @@
 
 namespace tisma {
 
-int bead_count(const BeadingParams& p, double d) {
+namespace {
+
+int unlimited_count(const BeadingParams& p, double d) {
     if (!(d > 0.0))
         return 0;
     const double w = p.preferred_width;
@@ -22,6 +24,23 @@ int bead_count(const BeadingParams& p, double d) {
         return static_cast<int>(std::floor(d / w + 0.5));
     }
     return 0;
+}
+
+// The beading without the shell: n beads filling thickness d.
+Beading fill(const BeadingParams& p, int n, double d);
+
+} // namespace
+
+int bead_count(const BeadingParams& p, double d) {
+    const int n = unlimited_count(p, d);
+    return p.wall_count > 0 ? std::min(n, 2 * p.wall_count) : n;
+}
+
+std::optional<ShellRamp> shell_ramp(const BeadingParams& p) {
+    if (p.wall_count <= 0 || p.scheme == BeadingScheme::Uniform)
+        return std::nullopt;
+    const double start = transition_thickness(p, 2 * p.wall_count);
+    return ShellRamp{start, start + p.preferred_width / 2.0};
 }
 
 double transition_thickness(const BeadingParams& p, int n) {
@@ -38,6 +57,28 @@ double transition_thickness(const BeadingParams& p, int n) {
 }
 
 Beading compute_beading(const BeadingParams& p, int n, double d) {
+    const std::optional<ShellRamp> shell = shell_ramp(p);
+    if (!shell || n < 2 * p.wall_count || d <= shell->start)
+        return fill(p, n, d);
+    // The shell: the 2M beads of the ramp's start, narrowed towards w*.
+    const int m = 2 * p.wall_count;
+    Beading b = fill(p, m, shell->start);
+    const double s = std::min(1.0, (d - shell->start) / (shell->end - shell->start));
+    for (double& w : b.widths)
+        w += s * (p.preferred_width - w);
+    double edge = 0.0;
+    for (int i = 0; i < p.wall_count; ++i) {
+        const std::size_t k = std::size_t(i);
+        b.centres[k] = edge + b.widths[k] / 2.0;
+        edge += b.widths[k];
+        b.centres[std::size_t(m - 1 - i)] = d - b.centres[k];
+    }
+    return b;
+}
+
+namespace {
+
+Beading fill(const BeadingParams& p, int n, double d) {
     Beading b;
     if (n <= 0)
         return b;
@@ -78,6 +119,8 @@ Beading compute_beading(const BeadingParams& p, int n, double d) {
     }
     return b;
 }
+
+} // namespace
 
 HalfBeading half_beading(const Beading& full) {
     HalfBeading h;

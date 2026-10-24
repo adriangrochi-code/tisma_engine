@@ -125,3 +125,61 @@ TEST_CASE("beading interpolation inside a ramp", "[beading]") {
     CHECK_THAT(x.widths[1], WithinAbs(2.0 / 3.0 * b3.widths[1], 1e-12));
     CHECK_THAT(x.distances[1], WithinAbs(0.5, 1e-12));
 }
+
+TEST_CASE("wall limit: the count stops at 2M and the shell keeps M walls at w*", "[beading]") {
+    for (BeadingScheme scheme : {BeadingScheme::Distributed, BeadingScheme::InwardDistributed}) {
+        BeadingParams p;
+        p.scheme = scheme;
+        p.wall_count = 2;
+        CHECK(bead_count(p, 1.0) == 3);
+        CHECK(bead_count(p, 1.6) == 4);
+        CHECK(bead_count(p, 1.85) == 4);
+        CHECK(bead_count(p, 10.0) == 4);
+        const auto ramp = shell_ramp(p);
+        REQUIRE(ramp);
+        CHECK_THAT(ramp->start, WithinAbs(1.8, 1e-12)); // where a fifth bead would start
+        CHECK_THAT(ramp->end, WithinAbs(2.0, 1e-12));
+        // Below the ramp nothing changes: the four beads fill the thickness.
+        BeadingParams unlimited = p;
+        unlimited.wall_count = 0;
+        const Beading below = compute_beading(p, 4, 1.7);
+        const Beading same = compute_beading(unlimited, 4, 1.7);
+        CHECK(below.widths == same.widths);
+        CHECK(below.centres == same.centres);
+        // At the start of the ramp it is continuous with the filled beading.
+        const Beading at_start = compute_beading(p, 4, 1.8);
+        const Beading filled = compute_beading(unlimited, 4, 1.8);
+        for (std::size_t i = 0; i < 4; ++i) {
+            CHECK_THAT(at_start.widths[i], WithinAbs(filled.widths[i], 1e-12));
+            CHECK_THAT(at_start.centres[i], WithinAbs(filled.centres[i], 1e-12));
+        }
+        // From the end of the ramp on: two walls of w* from each outline, the gap in the middle.
+        for (double d : {2.0, 3.0, 25.0}) {
+            const Beading shell = compute_beading(p, 4, d);
+            REQUIRE(shell.widths.size() == 4);
+            for (double w : shell.widths)
+                CHECK_THAT(w, WithinAbs(0.4, 1e-12));
+            CHECK_THAT(shell.centres[0], WithinAbs(0.2, 1e-12));
+            CHECK_THAT(shell.centres[1], WithinAbs(0.6, 1e-12));
+            CHECK_THAT(shell.centres[2], WithinAbs(d - 0.6, 1e-12));
+            CHECK_THAT(shell.centres[3], WithinAbs(d - 0.2, 1e-12));
+        }
+        // Halfway along the ramp the widths are halfway too, and the gap is w*/2.
+        const Beading mid = compute_beading(p, 4, 1.9);
+        for (std::size_t i = 0; i < 4; ++i)
+            CHECK_THAT(mid.widths[i], WithinAbs(0.5 * (filled.widths[i] + 0.4), 1e-12));
+        CHECK_THAT(mid.centres[2] - mid.widths[2] / 2 - (mid.centres[1] + mid.widths[1] / 2),
+                   WithinAbs(1.9 - 2 * (mid.widths[0] + mid.widths[1]), 1e-12));
+    }
+}
+
+TEST_CASE("wall limit with the uniform scheme needs no ramp", "[beading]") {
+    BeadingParams p;
+    p.scheme = BeadingScheme::Uniform;
+    p.wall_count = 1;
+    CHECK_FALSE(shell_ramp(p));
+    CHECK(bead_count(p, 10.0) == 2);
+    const Beading b = compute_beading(p, 2, 10.0);
+    CHECK_THAT(b.centres[0], WithinAbs(0.2, 1e-12));
+    CHECK_THAT(b.centres[1], WithinAbs(9.8, 1e-12));
+}

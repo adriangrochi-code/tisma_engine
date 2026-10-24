@@ -51,6 +51,8 @@ struct TransitionResult {
 // before the anchor on the thinner side. Ramp ends become new nodes (edges are
 // split there) and nodes inside a ramp get n + distance / t(n). Works along
 // chains of central edges between nodes where the centre branches or ends.
+// With a wall limit, central edges are also split where the thickness crosses
+// the ends of the shell ramp (see shell_ramp).
 TransitionResult apply_transitions(MedialGraph& graph, const BeadingParams& params,
                                    const TransitionSettings& settings = {});
 
