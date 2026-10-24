@@ -16,17 +16,17 @@ mismos para comparar.
 | Clave | Unidad | Significado | Banco |
 |---|---|---|---|
 | `machine.bed` | mm | Polígono de la cama | 250 × 210 |
-| `machine.nozzle` | mm | Diámetro de la boquilla | 0,4 |
-| `machine.firmware` | — | `marlin`, `klipper` o `reprap`; cambia los comandos de ventilador, temperatura y aceleración | reprap |
-| `gcode.relative_e` | — | Extrusión relativa o absoluta | false |
+| `machine.nozzle_diameter` | mm | Diámetro de la boquilla | 0,4 |
+| `machine.flavor` | — | `marlin` (Marlin 2), `klipper` o `reprap` (RepRap genérico); cambia los comandos de ventilador, temperatura y aceleración. `features/gcode_firmware.md` propone además `marlin_legacy` y `reprapfirmware` | reprap |
+| `machine.relative_extrusion` | — | Extrusión relativa o absoluta | false |
 | `machine.max_speed`, `machine.max_acceleration` | mm/s, mm/s² | Límites de la máquina, para estimar el tiempo | — |
-| `gcode.start`, `gcode.end` | — | G-code de inicio y fin con variables (`GCODE_OUTPUT.md`) | — |
+| `machine.start_gcode`, `machine.end_gcode` | — | G-code de inicio y fin con variables (`GCODE_OUTPUT.md`) | — |
 
 ## Filamento
 
 | Clave | Unidad | Significado | Banco |
 |---|---|---|---|
-| `material.diameter` | mm | Diámetro del filamento | 1,75 |
+| `machine.filament_diameter` | mm | Diámetro del filamento | 1,75 |
 | `material.flow_factor` | — | Multiplica el caudal | 1 |
 | `material.nozzle_temp`, `material.first_nozzle_temp` | °C | Boquilla | — |
 | `material.bed_temp`, `material.first_bed_temp` | °C | Cama | — |
@@ -61,7 +61,7 @@ mismos para comparar.
 | `speed.walls` | mm/s | 60 |
 | `speed.outer_wall` | mm/s o % del perímetro | 50 % |
 | `speed.infill` | mm/s | 80 |
-| `speed.solid`, `speed.top` | mm/s | — |
+| `speed.solid_infill`, `speed.top_solid_infill` | mm/s | — |
 | `speed.travel` | mm/s | 130 |
 | `speed.first_layer` | mm/s | — |
 | `speed.max` | mm/s | 80 |
