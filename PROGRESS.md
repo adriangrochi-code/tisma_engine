@@ -841,3 +841,26 @@ de cada trayectoria es exactamente uno de los sitios de `support_sites` o `media
 - resolución de conflictos de reparto (figura 9);
 - contrastar con la ficha de perímetros cuando esté en `main`.
 
+## 2026-10-24 — bloque nocturno 20: perfil del eje medio
+
+**Hecho:** solo mediciones; no cambió el código del motor.
+
+**Medido** (esfera, 500 capas, un hilo; arneses en el scratchpad):
+- de los 2713 ms de `medial_graph` en todas las capas, 2645 ms son la construcción del Voronoi de Boost; nuestro
+  recorrido de aristas cuesta 2–3 %;
+- Boost cuesta lo mismo con otras formas de 212 segmentos: círculo 5,3 ms, elipse 6,8, engranaje 3,4, círculo con
+  ruido de 20 µm 6,5, y una tira en zigzag de 214 puntos 2,8 ms (13–28 µs por segmento);
+- con callgrind, el 54 % de las instrucciones está en `extended_int<64>::mul` (aritmética exacta) y otro 13 % en
+  `frexp`, `robust_sqrt_expr` y restas exactas. En un polígono cada vértice es extremo común de dos segmentos, y Boost
+  resuelve esos casos en precisión exacta;
+- el artículo informa 5·10⁻⁶·n·log n s para su Voronoi (unos 8 ms para 212 vértices): estamos en ese nivel;
+- probé tapar el fondo de las piezas anchas con un contorno desplazado 2·R hacia adentro como agujero. Por la
+  desigualdad triangular no cambia el eje donde el radio es menor que R, pero duplica los segmentos y Boost tardó
+  2,4 veces más. Descartado.
+
+**Sigue:**
+- el eje medio queda en el PLAN con dos opciones (Voronoi propio a partir de artículos, pensado para la GPU, o
+  híbrido con desplazamientos de Clipper2 en las partes anchas); son varios bloques y conviene decidirlo con el dueño;
+- mientras tanto, conflictos de reparto (sección 3.5, figura 9): interpolar desde el nodo marcado de abajo hacia el
+  reparto de arriba a lo largo de w*.
+

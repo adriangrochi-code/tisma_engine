@@ -210,7 +210,15 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   adaptativo solo en las partes angostas, con nodos extra donde el reparto cambia de forma; el resto queda para el relleno
 - [x] Región que queda para el relleno: lo que no cubren las paredes, como polígonos (para F3)
 - [x] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`, con el grupo de ajustes `walls`
-- [ ] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s)
+- [ ] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s).
+  Medido: el Voronoi de segmentos de Boost cuesta 13–28 µs por segmento con cualquier polígono, y el 54 % es su
+  aritmética exacta (`extended_int`), porque cada vértice es extremo de dos segmentos. Es lo que informa el artículo
+  (5·10⁻⁶·n·log n s). Opciones, cada una de varios bloques:
+  - un Voronoi de segmentos propio para polígonos, a partir de artículos, pensado también para la GPU;
+  - híbrido: desplazamientos de Clipper2 donde la cáscara es un desplazamiento simple, y el esqueleto solo donde la
+    pieza es angosta (falta un criterio exacto y barato para separar las dos zonas).
+  Descartado: tapar el fondo con un contorno desplazado 2·R hacia adentro (no cambia el eje con R menor, pero Boost
+  tarda 2,4 veces más con el doble de segmentos).
 - [ ] Resolución de conflictos de reparto (figura 9) y punto del cordón central impar en un máximo aislado
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
