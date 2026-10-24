@@ -2,6 +2,7 @@
 
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "slice/contours.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -101,6 +102,21 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     const double weld_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     out << "vertices: " << indexed.vertices.size() << "\n";
     out << "weld_ms: " << weld_ms << "\n";
+
+    // One planar slice at mid height: level-set segments, then contours.
+    const BoundingBox box = stl.mesh.bounding_box();
+    if (!box.empty) {
+        const auto slice_start = std::chrono::steady_clock::now();
+        const std::vector<float> z = height_field(indexed);
+        std::vector<LevelSegment> segments;
+        level_set_segments(indexed, z, 0.5f * (box.min.z + box.max.z), segments);
+        const std::vector<Contour> contours = join_segments(segments);
+        const double slice_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - slice_start).count();
+        out << "mid_slice_segments: " << segments.size() << "\n";
+        out << "mid_slice_contours: " << contours.size() << "\n";
+        out << "mid_slice_ms: " << slice_ms << "\n";
+    }
     return kExitOk;
 }
 

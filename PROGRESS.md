@@ -161,4 +161,17 @@ fue el último paso por macOS antes de sacarlo de la CI.
   con oneTBB;
 - unir los segmentos en contornos.
 
-**Sigue:** unir segmentos en contornos cerrados; después, alturas de capa y corte por capas.
+**Segunda parte del bloque:**
+- `src/slice/contours.*`: `join_segments` une los tramos en contornos encadenándolos por la clave de arista. Las
+  cadenas abiertas (mallas con huecos) salen enteras, desde su primer punto hasta el último. Los puntos alineados se
+  conservan; simplificarlos es un paso posterior.
+- Pruebas: el cubo da 1 contorno cerrado y antihorario; dos cubos separados dan 2 contornos; un cubo sin una cara da
+  un contorno abierto que empieza y termina en el borde del hueco. 38/38 pruebas con gcc, clang y ASan+UBSan.
+- `tisma-engine info` corta además una capa a media altura.
+
+**Medido** (esfera de 1 001 112 triángulos, 5 corridas): una capa a media altura, con 1416 tramos y 1 contorno,
+tarda 6,0–6,6 ms. Hoy cada capa recorre todos los triángulos: con 500 capas serían unos 3 s. Hace falta repartir los
+triángulos por capas antes de cortar.
+
+**Sigue:** alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa;
+después oneTBB.

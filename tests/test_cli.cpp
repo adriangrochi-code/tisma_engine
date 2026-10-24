@@ -80,4 +80,5 @@ TEST_CASE("info prints the mesh summary", "[cli]") {
     CHECK_THAT(r.out, ContainsSubstring("size: 10 x 10 x 10"));
     CHECK_THAT(r.out, ContainsSubstring("volume: 1000"));
     CHECK_THAT(r.out, ContainsSubstring("vertices: 8"));
+    CHECK_THAT(r.out, ContainsSubstring("mid_slice_contours: 1"));
 }

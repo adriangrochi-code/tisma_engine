@@ -8,6 +8,7 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/mesh/mesh.*` — malla de triángulos, caja y volumen | Diseño propio. El volumen con signo es el teorema de la divergencia (suma de tetraedros desde el origen), matemática de libro de texto. |
 | `src/mesh/indexed_mesh.*` — soldadura exacta de vértices | Diseño propio: ordenar las esquinas por su patrón de bits y unir las iguales. |
 | `src/slice/level_set.*` — contornos de nivel de un campo en la malla | Interpolación lineal en las aristas cruzadas («marching triangles»), técnica de libro de texto. La regla `valor >= iso` para los vértices sobre el nivel, el punto calculado en el orden de los índices de la arista (para que los dos triángulos den el mismo punto) y la orientación por el orden de recorrido son diseño propio. |
+| `src/slice/contours.*` — unión de segmentos en contornos | Diseño propio: los tramos se encadenan por la identidad de la arista (índices de vértices), sin comparar coordenadas; primero las cadenas abiertas desde su cabeza, después los lazos cerrados. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
 | `.github/workflows/ci.yml`, `CMakeLists.txt` | Diseño propio; documentación pública de GitHub Actions y CMake. |
