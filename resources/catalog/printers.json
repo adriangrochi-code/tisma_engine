@@ -1,1 +1,1650 @@
-[]
+[
+ {
+  "vendor": "AnkerMake",
+  "model": "M5",
+  "build_volume": [
+   235,
+   235,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 500,
+  "max_acceleration": 5000,
+  "auto_leveling": true,
+  "sources": [
+   "https://www.eufymake.com/products/m5-with-pla-filament-black"
+  ]
+ },
+ {
+  "vendor": "AnkerMake",
+  "model": "M5C",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "auto_leveling": true,
+  "sources": [
+   "https://www.eufymake.com/blogs/buying-guides/ankermake-m5c-3d-printer-review",
+   "https://www.eufymake.com/products/m5c-heated-bed-cable"
+  ]
+ },
+ {
+  "vendor": "BIQU",
+  "model": "B1",
+  "build_volume": [
+   235,
+   235,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "max_speed": 100,
+  "auto_leveling": false,
+  "multi_material": "Optional two-in-one-out dual-color printing upgrade kit",
+  "sources": [
+   "https://biqu.equipment/products/biqu-b1-3d-printer-skr-v1-4-32bit-motherboard-tft35-b1-v3-0-dual-operation-system-fdm-impressora-3d-printer-beginner"
+  ]
+ },
+ {
+  "vendor": "BIQU",
+  "model": "Hurakan",
+  "build_volume": [
+   220,
+   220,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 180,
+  "auto_leveling": true,
+  "sources": [
+   "https://biqu.equipment/products/biqu-hurakan-diy-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "CR-10 Smart Pro",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 100,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/creality-cr-10-smart-pro-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-cr-10-smart-pro-3d-printer/7ca32a4c2c513c0640cfa7a195d3a420.jpg",
+   "https://cdn.creality.com/product-detial/us/creality-cr-10-smart-pro-3d-printer/1d0b0305d6731e571ca9cb839191253e.jpg",
+   "https://store.creality.com/blogs/all/cr-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "CR-10 V3",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 250,
+  "max_speed": 100,
+  "auto_leveling": false,
+  "sources": [
+   "https://store.creality.com/blogs/all/cr-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "CR-5 Pro H",
+  "build_volume": [
+   300,
+   225,
+   380
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/products/creality-cr-5-pro-h-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-cr-5-pro-h-3d-printer/b24b7bf59307b35101833aa21eaea9da.jpg",
+   "https://cdn.creality.com/product-detial/us/creality-cr-5-pro-h-3d-printer/95904f4ac83955a44d25a1b83ad4f013.jpg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "CR-6 SE",
+  "build_volume": [
+   235,
+   235,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 260,
+  "max_speed": 100,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/cr-6-se-3d-printer",
+   "https://cdn.creality.com/product-detial/us/cr-6-se-3d-printer/9a71746e04d62af6f15c56593cc81ea5.jpg",
+   "https://store.creality.com/blogs/all/cr-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "CR-M4",
+  "build_volume": [
+   450,
+   450,
+   470
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 120,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/cr-m4-3d-printer",
+   "https://cdn.creality.com/product-detial/us/cr-m4-3d-printer/f5018ebf7b96148e83851214af4993cf.jpg",
+   "https://store.creality.com/blogs/all/cr-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Creality Hi",
+  "build_volume": [
+   260,
+   260,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 12000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-hi-combo",
+   "https://www.creality.com/products/creality-hi-combo"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 Max Neo",
+  "build_volume": [
+   300,
+   300,
+   320
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 120,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-3-max-neo-3d-printer",
+   "https://cdn.creality.com/product-detial/us/ender-3-max-neo-3d-printer/0072c479a16e93f7951c1f9384ea01eb.jpg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 S1",
+  "build_volume": [
+   220,
+   220,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 160,
+  "max_acceleration": 1500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/creality-ender-3-s1-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-ender-3-s1-3d-printer/71518c7533147de984d92e360f6b3b88.jpg",
+   "https://www.creality.com/download/creality-ender-3-s1-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 S1 Plus",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 160,
+  "max_acceleration": 1500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/creality-ender-3-s1-plus-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-ender-3-s1-plus-3d-printer/739710592b4c5cc2266ffa533869cfbb.jpg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 S1 Pro",
+  "build_volume": [
+   220,
+   220,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 150,
+  "max_acceleration": 1500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/creality-ender-3-s1-pro-fdm-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-ender-3-s1-pro-fdm-3d-printer/7dd6909da1925f6db58e07f63ab0831a.jpg",
+   "https://cdn.creality.com/ow/official/ce0e530c-8a40-46bf-8e38-fd33756203c8.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V2",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 250,
+  "max_speed": 180,
+  "auto_leveling": false,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-3-v2-3d-printer-csco",
+   "https://www.creality.com/download/ender-3-v2-3d-printer-csco",
+   "https://cdn.creality.com/ow/official/103db63d-3358-4ca4-8da0-4520e74066c8.pdf",
+   "https://store.creality.com/blogs/all/ender-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V2 Neo",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 120,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-3-v2-neo-3d-printer",
+   "https://cdn.creality.com/product-detial/us/ender-3-v2-neo-3d-printer/b46e3e66242ef217935134f8a4fdc688.jpg",
+   "https://www.creality.com/download/ender-3-v2-neo-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-ender-3-v3",
+   "https://www.creality.com/products/creality-ender-3-v3",
+   "https://www.creality.com/compare/compare-ender-3-v3-series",
+   "https://cdn.creality.com/ow/official/29d15768-fe03-4389-87e0-01729cc15015.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3 KE",
+  "build_volume": [
+   220,
+   220,
+   240
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 8000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-ender-3-v3-ke",
+   "https://www.creality.com/products/creality-ender-3-v3-ke",
+   "https://www.creality.com/compare/compare-ender-3-v3-series",
+   "https://cdn.creality.com/ow/official/8b3ce46c-754d-4a8c-b5c2-8003b9f5e374.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3 Mega",
+  "build_volume": [
+   420,
+   420,
+   420
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 8000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-3-v3-mega",
+   "https://store.creality.com/products/ender-3-v3-mega-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3 Neo",
+  "build_volume": [
+   220,
+   220,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 8000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-3-v3-neo",
+   "https://wiki.creality.com/en/ender-series/ender-3-v3-neo/user-manual",
+   "https://wiki.creality.com/products/diy/ender%E7%B3%BB%E5%88%97/ender-3v3-neo/ender-3_v3_neo-sm-001_user_manual%EF%BC%88en%EF%BC%89.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3 Plus",
+  "build_volume": [
+   300,
+   300,
+   330
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-ender-3-v3-plus",
+   "https://www.creality.com/compare/compare-ender-3-v3-series",
+   "https://cdn.creality.com/ow/official/5dd3dccc-7e5c-41bb-9b73-d6a2ffb2b124.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V3 SE",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "firmware": "marlin",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 250,
+  "max_acceleration": 2500,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-ender-3-v3-se",
+   "https://www.creality.com/products/creality-ender-3-v3-se",
+   "https://www.creality.com/compare/compare-ender-3-v3-series",
+   "https://cdn.creality.com/ow/official/283c1cdf-77de-4b47-84ec-125f394bf543.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-3 V4",
+  "build_volume": [
+   220,
+   220,
+   235
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 12000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/ender-3-v4-3d-printer",
+   "https://www.creality.com/products/ender-3-v4-3d-printer",
+   "https://store.creality.com/products/ender-3-v4-combo-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-5 Max",
+  "build_volume": [
+   400,
+   400,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 700,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-ender-5-max",
+   "https://www.creality.com/products/creality-ender-5-max",
+   "https://cdn.creality.com/ow/official/d8c549b3-b310-4d05-a459-10aa0bc983ed.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-5 Pro",
+  "build_volume": [
+   220,
+   220,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.3
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "auto_leveling": false,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-5-pro-3d-printer",
+   "https://cdn.creality.com/product-detial/us/ender-5-pro-3d-printer/1027810584d83c7332a780f0b4ddccc3.jpg",
+   "https://www.creality.com/download/ender-5-pro-3d-printer",
+   "https://store.creality.com/blogs/all/ender-series-3d-printers-parameter-comparison"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-5 S1",
+  "build_volume": [
+   220,
+   220,
+   280
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 250,
+  "max_acceleration": 2000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-5-s1-3d-printer",
+   "https://cdn.creality.com/product-detial/us/ender-5-s1-3d-printer/a51d352e88a0ba6246191ecc849cb46b.jpg",
+   "https://wiki.creality.com/en/ender-series/ender-5-s1/user-manual"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Ender-7",
+  "build_volume": [
+   250,
+   250,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 260,
+  "max_speed": 250,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/ender-7-3d-printer",
+   "https://cdn.creality.com/product-detial/us/ender-7-3d-printer/7a66fd897a55b8842f596b4f7291bc62.jpg",
+   "https://cdn.creality.com/product-detial/us/ender-7-3d-printer/b7a7c93b0c25f134967fc02a4142ecdf.jpg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K1",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/creality-k1-3d-printer",
+   "https://www.creality.com/products/creality-k1-3d-printer",
+   "https://www.creality.com/compare/compare-k1-flagship-series",
+   "https://cdn.creality.com/ow/official/5b7203dc-cbd6-4b8b-a1dd-36afe4f3d66b.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K1 Max",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/creality-k1-max-3d-printer",
+   "https://www.creality.com/products/creality-k1-max-3d-printer",
+   "https://www.creality.com/compare/compare-k1-flagship-series",
+   "https://cdn.creality.com/ow/official/be5e9f07-13b0-409c-b172-356bd6e4de8d.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K1 SE",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/creality-k1-se-3d-printer",
+   "https://www.creality.com/products/creality-k1-se-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K1C",
+  "build_volume": [
+   220,
+   220,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/k1c-carbon-3d-printer",
+   "https://www.creality.com/products/k1c-carbon-3d-printer",
+   "https://www.creality.com/compare/compare-k1-flagship-series",
+   "https://cdn.creality.com/ow/official/8d7f37c1-06b3-481a-a051-c0369ffdacb8.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K2",
+  "build_volume": [
+   260,
+   260,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/k2-series-3d-printer",
+   "https://www.creality.com/products/k2-series-3d-printer",
+   "https://cdn.creality.com/ow/official/6bbb36e0-25b7-42b9-bb91-0451320ba2b0.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K2 Plus",
+  "build_volume": [
+   350,
+   350,
+   350
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_speed": 600,
+  "max_acceleration": 30000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/creality-k2-plus-cfs-combo",
+   "https://www.creality.com/products/k2-series",
+   "https://cdn.creality.com/ow/official/565fb627-8f77-48bd-ac46-1734a4e16a13.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K2 Pro",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 600,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/support/k2-series",
+   "https://www.creality.com/products/k2-series",
+   "https://cdn.creality.com/ow/official/d5e60536-b346-4f71-b7a1-e6dc23e854f4.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K2 SE",
+  "build_volume": [
+   220,
+   215,
+   245
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/k2-se",
+   "https://www.creality.com/support/k2-se",
+   "https://store.creality.com/products/k2-se-combo-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "K3",
+  "build_volume": [
+   260,
+   260,
+   260
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/products/k3",
+   "https://store.creality.com/products/k3-multi-material-multicolor-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "Sermoon V1 Pro",
+  "build_volume": [
+   175,
+   175,
+   165
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 80,
+  "max_nozzle_temp": 250,
+  "enclosed": true,
+  "sources": [
+   "https://www.creality.com/products/creality-sermoon-v1-v1-pro-3d-printer",
+   "https://cdn.creality.com/product-detial/us/creality-sermoon-v1-v1-pro-3d-printer/d908891a4d162f43ef084709cbbc57d3.jpg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "SPARKX i7",
+  "build_volume": [
+   260,
+   260,
+   255
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://www.creality.com/support/sparkx-i7",
+   "https://www.creality.com/products/sparkx-i7",
+   "https://store.creality.com/products/sparkx-i7-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "model": "SPARKX i8",
+  "build_volume": [
+   260,
+   260,
+   255
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "sources": [
+   "https://wiki.creality.com/en/sparkx/i8/user-manual",
+   "https://wiki.creality.com/products/sparkx/i8/sparkx_i8_%E5%BF%AB%E9%80%9F%E5%85%A5%E9%97%A8%E6%8C%87%E5%8D%97_en.pdf"
+  ]
+ },
+ {
+  "vendor": "Kingroon",
+  "model": "KLP1",
+  "build_volume": [
+   210,
+   210,
+   210
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://kingroon.com/products/kingroon-klp1-corexy-3d-printer-with-klipper-firmware"
+  ]
+ },
+ {
+  "vendor": "Kingroon",
+  "model": "KP3S Pro V2",
+  "build_volume": [
+   200,
+   200,
+   200
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "max_nozzle_temp": 260,
+  "max_speed": 500,
+  "max_acceleration": 10000,
+  "auto_leveling": true,
+  "sources": [
+   "https://kingroon.com/products/kingroon-kp3s-pro-v2-with-klipper-firmware"
+  ]
+ },
+ {
+  "vendor": "Longer",
+  "model": "LK5 Pro",
+  "build_volume": [
+   300,
+   300,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 250,
+  "max_speed": 120,
+  "auto_leveling": false,
+  "sources": [
+   "https://www.longer.net/products/lk5-pro-fdm-3d-printer",
+   "https://www.longer.net/pages/download-lk5-pro"
+  ]
+ },
+ {
+  "vendor": "LulzBot",
+  "model": "TAZ 6",
+  "build_volume": [
+   280,
+   280,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.5
+  ],
+  "filament_diameter": 2.85,
+  "firmware": "marlin",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 290,
+  "max_speed": 300,
+  "auto_leveling": true,
+  "multi_material": "Optional Dual Extruder v3 and FlexyDually tool heads (two-color or multi-material)",
+  "sources": [
+   "https://lulzbot.com/store/taz-6-product-page",
+   "https://assets.lulzbot.com/TAZ6_SpecSheet_FINAL.pdf"
+  ]
+ },
+ {
+  "vendor": "LulzBot",
+  "model": "TAZ Pro",
+  "build_volume": [
+   280,
+   280,
+   285
+  ],
+  "bed_shape": "rectangular",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "multi_material": "Two active-lifting hot ends (dual extrusion, soluble supports)",
+  "sources": [
+   "https://lulzbot.com/store/taz-pro",
+   "https://shop.lulzbot.com/products/lulzbot-3d-printer-taz-pro-boxed-for-retail-na"
+  ]
+ },
+ {
+  "vendor": "Peopoly",
+  "model": "Magneto X",
+  "build_volume": [
+   400,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 130,
+  "max_nozzle_temp": 300,
+  "max_speed": 800,
+  "max_acceleration": 22000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "sources": [
+   "https://peopoly.net/products/magneto-x"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "E2",
+  "build_volume": [
+   330,
+   240,
+   240
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 150,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "IDEX independent dual extruders; dual-extruder area 295×240×240 mm",
+  "sources": [
+   "https://www.raise3d.com/e2/"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "Pro3",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 300,
+  "max_speed": 150,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual extrusion (dual-head with electronic lifting system); dual-extruder area 255×300×300 mm",
+  "sources": [
+   "https://www.raise3d.com/pro3-series/"
+  ]
+ },
+ {
+  "vendor": "Raise3D",
+  "model": "Pro3 Plus",
+  "build_volume": [
+   300,
+   300,
+   605
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8,
+   1.0
+  ],
+  "filament_diameter": 1.75,
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 300,
+  "max_speed": 150,
+  "auto_leveling": true,
+  "enclosed": true,
+  "multi_material": "Dual extrusion (dual-head with electronic lifting system); dual-extruder area 255×300×605 mm",
+  "sources": [
+   "https://www.raise3d.com/pro3-series/"
+  ]
+ },
+ {
+  "vendor": "RatRig",
+  "model": "V-Core 4.1 300",
+  "build_volume": [
+   300,
+   300,
+   300
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_acceleration": 15000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "sources": [
+   "https://ratrig.com/products/rat-rig-v-core-4-1",
+   "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
+   "https://wiki.ratrig.com/en/products/v-minion/project-details"
+  ]
+ },
+ {
+  "vendor": "RatRig",
+  "model": "V-Core 4.1 400",
+  "build_volume": [
+   400,
+   400,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_acceleration": 12000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "sources": [
+   "https://ratrig.com/products/rat-rig-v-core-4-1",
+   "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
+   "https://wiki.ratrig.com/en/products/v-minion/project-details"
+  ]
+ },
+ {
+  "vendor": "RatRig",
+  "model": "V-Core 4.1 500",
+  "build_volume": [
+   500,
+   500,
+   500
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.6
+  ],
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 120,
+  "max_nozzle_temp": 350,
+  "max_acceleration": 8000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Optional Hybrid and IDEX upgrades (IDEX: two materials, copy/mirror modes)",
+  "sources": [
+   "https://ratrig.com/products/rat-rig-v-core-4-1",
+   "https://wiki.ratrig.com/en/products/v-core-4-1/build-guide/toolhead-corexy-or-hybrid",
+   "https://wiki.ratrig.com/en/products/v-minion/project-details"
+  ]
+ },
+ {
+  "vendor": "RatRig",
+  "model": "V-Minion",
+  "build_volume": [
+   180,
+   180,
+   180
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "enclosed": false,
+  "sources": [
+   "https://wiki.ratrig.com/en/products/v-minion/project-details",
+   "https://wiki.ratrig.com/en/build-guides/v-minion-eva-assembly",
+   "https://wiki.ratrig.com/en/build-guides/v-hive-enclosure-v-minion"
+  ]
+ },
+ {
+  "vendor": "Snapmaker",
+  "model": "Artisan",
+  "build_volume": [
+   400,
+   400,
+   400
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "heated_bed": true,
+  "max_bed_temp": 110,
+  "max_nozzle_temp": 300,
+  "max_speed": 180,
+  "enclosed": true,
+  "multi_material": "Dual-extrusion module (dual-color/dual-material); dual-nozzle area 350×400×400 mm",
+  "sources": [
+   "https://snapmaker.com/en-US/snapmaker-artisan/specs",
+   "https://snapmaker.com/en-US/snapmaker-artisan"
+  ]
+ },
+ {
+  "vendor": "Snapmaker",
+  "model": "J1s",
+  "build_volume": [
+   300,
+   200,
+   200
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4,
+   0.2,
+   0.6,
+   0.8
+  ],
+  "filament_diameter": 1.75,
+  "extruder": "direct",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 350,
+  "max_acceleration": 10000,
+  "auto_leveling": false,
+  "enclosed": true,
+  "multi_material": "IDEX: Default, Backup, Copy (160 mm wide) and Mirror (150 mm wide) modes; dual-material/dual-color",
+  "sources": [
+   "https://snapmaker.com/en-US/j1s-idex-3d-printer/specs",
+   "https://snapmaker.com/en-US/j1s-idex-3d-printer"
+  ]
+ },
+ {
+  "vendor": "Snapmaker",
+  "model": "Snapmaker 2.0 A350T",
+  "build_volume": [
+   320,
+   335,
+   310
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "heated_bed": true,
+  "max_bed_temp": 80,
+  "max_nozzle_temp": 275,
+  "multi_material": "Optional Dual-extrusion 3D Printing Module (320×315×270 mm)",
+  "sources": [
+   "https://snapmaker.com/en-US/snapmaker-2/specs-at"
+  ]
+ },
+ {
+  "vendor": "Snapmaker",
+  "model": "U1",
+  "build_volume": [
+   270,
+   270,
+   270
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "klipper",
+  "heated_bed": true,
+  "max_bed_temp": 100,
+  "max_nozzle_temp": 300,
+  "max_speed": 500,
+  "max_acceleration": 20000,
+  "auto_leveling": true,
+  "enclosed": false,
+  "multi_material": "Toolchanger with 4 toolheads (SnapSwap), multi-color/multi-material",
+  "sources": [
+   "https://snapmaker.com/en-US/snapmaker-u1/specs",
+   "https://snapmaker.com/en-US/snapmaker-u1"
+  ]
+ },
+ {
+  "vendor": "Tronxy",
+  "model": "X5SA-500 2E",
+  "build_volume": [
+   500,
+   500,
+   600
+  ],
+  "bed_shape": "rectangular",
+  "nozzle_diameters": [
+   0.4
+  ],
+  "filament_diameter": 1.75,
+  "firmware": "marlin",
+  "extruder": "bowden",
+  "heated_bed": true,
+  "max_bed_temp": 90,
+  "max_nozzle_temp": 275,
+  "max_speed": 150,
+  "auto_leveling": true,
+  "multi_material": "2-in-1-out (two extruders, one nozzle) dual-color printing",
+  "sources": [
+   "https://www.tronxy.com/product/x5sa-500-2e-fdm-3d-printer/"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron 0.2",
+  "build_volume": [
+   120,
+   120,
+   120
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://docs.vorondesign.com/build/electrical/v0_miniE3_v30_wiring.html"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron 2.4 250",
+  "build_volume": [
+   250,
+   250,
+   220
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://vorondesign.com/voron2.4"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron 2.4 300",
+  "build_volume": [
+   300,
+   300,
+   280
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://vorondesign.com/voron2.4"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron 2.4 350",
+  "build_volume": [
+   350,
+   350,
+   330
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://vorondesign.com/voron2.4"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron Trident 250",
+  "build_volume": [
+   250,
+   250,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
+   "https://vorondesign.com/voron_trident"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron Trident 300",
+  "build_volume": [
+   300,
+   300,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
+   "https://vorondesign.com/voron_trident"
+  ]
+ },
+ {
+  "vendor": "Voron",
+  "model": "Voron Trident 350",
+  "build_volume": [
+   350,
+   350,
+   250
+  ],
+  "bed_shape": "rectangular",
+  "firmware": "klipper",
+  "extruder": "direct",
+  "heated_bed": true,
+  "auto_leveling": true,
+  "enclosed": true,
+  "sources": [
+   "https://docs.vorondesign.com/hardware.html",
+   "https://docs.vorondesign.com/build/software/configuration.html",
+   "https://docs.vorondesign.com/build/electrical/",
+   "https://docs.vorondesign.com/build/electrical/trident_gantry_wires.html",
+   "https://vorondesign.com/voron_trident"
+  ]
+ }
+]
