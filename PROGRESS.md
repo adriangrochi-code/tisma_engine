@@ -2347,3 +2347,44 @@ paredes finas): cero G-code inválidos, 7 piezas rechazadas como no imprimibles.
 verificar 72 ms.
 
 **Sigue:** versiones y CHANGELOG, documentación para colaboradores, después la interfaz.
+
+## 2026-10-24 — versiones, releases y documentación para colaboradores
+
+**Pedidos del dueño:**
+- categorizar las versiones correctamente;
+- documentación detallada de cómo funciona el código, para futuros aportes, «lo más prolijo posible»;
+- releases cada cierto número de mejoras grandes o relevantes.
+
+**Hecho:**
+- **Versionado semántico** con una sola fuente, el archivo `VERSION` (`0.6.0-alpha.1`):
+  - CMake toma los números;
+  - `--version` y la cabecera del G-code muestran la versión completa;
+  - CMake se vuelve a configurar solo cuando cambia.
+- **`CHANGELOG.md`** en formato Keep a Changelog, por categorías (Agregado, Cambiado, Corregido…):
+  - las fases F0 a F4 quedan como hitos internos 0.1.0 a 0.5.0;
+  - 0.6.0-alpha.1 es la primera publicada.
+- **`docs/VERSIONING.md`**:
+  - qué sube MENOR y qué sube PARCHE antes de 1.0.0;
+  - las etiquetas `-alpha`, `-beta` y `-rc`;
+  - cuándo hay release y los pasos para publicarla;
+  - los formatos con versión propia.
+- **`.github/workflows/release.yml`**: con una etiqueta `v<versión>` compila y prueba en Windows y Linux, empaqueta el
+  programa con la licencia y la documentación de uso, y publica la release con las notas de su sección del CHANGELOG
+  (pre-release si el número tiene etiqueta). Antes de compilar, `tools/release_notes.py` comprueba que la etiqueta
+  coincida con `VERSION` y que el CHANGELOG tenga la sección. CTest corre la misma comprobación
+  (`release_notes_check`).
+- **`docs/ARCHITECTURE.md`**: cómo funciona el código:
+  - las carpetas;
+  - el camino del STL al G-code, con cada función y su módulo;
+  - los tipos de datos y sus unidades;
+  - las reglas comunes (determinismo, CPU como referencia, datos contiguos, topología antes que geometría, mensajes
+    claros);
+  - cada módulo, incluido el análisis.
+- **`docs/DEVELOPMENT.md`**: compilar, opciones, probar, convenciones del código, recetas (agregar un ajuste, un
+  módulo, una biblioteca, un material, publicar) y la sala limpia.
+- `CONTRIBUTING.md` y `README.md` enlazan las guías. La regla de no aceptar aportes de terceros hasta que exista una
+  cesión de derechos sigue igual.
+
+**Probado:** `tools/ci_linux.sh` pasa (207/207 en las tres compilaciones, con la comprobación nueva del CHANGELOG).
+`tools/release_notes.py` da las notas de `v0.6.0-alpha.1` y rechaza una etiqueta que no coincide. Los dos flujos de
+GitHub son YAML válido. El flujo de releases solo se prueba de verdad al subir la etiqueta.

@@ -202,6 +202,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Linux pasa a compilarse y probarse dentro de la sesión antes de cada envío (`tools/ci_linux.sh`, decisión del
   dueño, 2026-10-24); en GitHub, Windows en cada envío y Linux solo a mano
 - [x] `THIRD_PARTY.md`, `PROVENANCE.md`
+- [x] Versiones y releases (pedido del dueño, 2026-10-24): versionado semántico con el número en `VERSION`,
+  `CHANGELOG.md` por categorías, releases automáticas desde las etiquetas (`docs/VERSIONING.md`); documentación para
+  colaboradores (`docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`)
 - [x] Comprobar que la CI pasa en Linux y Windows (run 4: también pasó macOS)
 - [ ] Banco de pruebas: modelos reales (Benchy, conejo, tornillo), con licencia que permita guardarlos
 

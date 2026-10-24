@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(tisma_engine VERSION 0.0.1 LANGUAGES C CXX)
+# The version lives in the VERSION file (docs/VERSIONING.md): MAJOR.MINOR.PATCH
+# with an optional pre-release label, such as 0.6.0-alpha.1. CMake takes the
+# numbers; the whole text goes into the program (--version, the G-code header).
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" TISMA_VERSION_TEXT LIMIT_COUNT 1)
+if(NOT TISMA_VERSION_TEXT MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9A-Za-z.-]+)?$")
+  message(FATAL_ERROR "VERSION must read MAJOR.MINOR.PATCH[-label], not '${TISMA_VERSION_TEXT}'")
+endif()
+project(tisma_engine VERSION ${CMAKE_MATCH_1} LANGUAGES C CXX)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -171,7 +179,7 @@ if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)
 endif()
 target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE nlohmann_json::nlohmann_json tisma_boost_polygon tisma_warnings)
-target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${TISMA_VERSION_TEXT}")
 
 add_executable(tisma-engine apps/main.cpp)
 target_link_libraries(tisma-engine PRIVATE tisma_core tisma_warnings)

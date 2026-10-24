@@ -33,7 +33,15 @@ ctest --test-dir build --output-on-failure
 build/tisma-engine --help
 ```
 
-Hace falta CMake 3.25 o más nuevo y un compilador de C++20. La configuración descarga oneTBB y, para las pruebas, Catch2.
+Hace falta CMake 3.25 o más nuevo y un compilador de C++20. La configuración descarga las dependencias de
+`THIRD_PARTY.md`. Más detalles, las pruebas y las convenciones están en `docs/DEVELOPMENT.md`; cómo funciona el código, en
+`docs/ARCHITECTURE.md`.
+
+## Versiones
+
+La versión actual está en `VERSION` y lo que trae cada una en `CHANGELOG.md`. Se sigue el versionado semántico, con
+pre-releases (`-alpha`, `-beta`, `-rc`) mientras una fase está en curso; las releases se publican en GitHub con los
+binarios de Windows y Linux (`docs/VERSIONING.md`).
 
 ## Usar
 

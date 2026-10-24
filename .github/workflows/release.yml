@@ -1,0 +1,87 @@
+name: Release
+
+# A version tag (v<VERSION>, see docs/VERSIONING.md) builds, tests and packages
+# the engine on Windows and Linux, and publishes a GitHub release with the
+# tag's section of CHANGELOG.md as its notes. A version with a pre-release
+# label (such as 0.6.0-alpha.1) is published as a pre-release.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-2022
+            name: windows-x64
+            program: Release/tisma-engine.exe
+          - os: ubuntu-24.04
+            name: linux-x64
+            program: tisma-engine
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag, VERSION and CHANGELOG.md
+        run: |
+          python="$(command -v python3 || command -v python)"
+          "$python" tools/release_notes.py "${{ github.ref_name }}" > /dev/null
+      - name: Install Ninja
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        run: |
+          package="tisma-engine-$(cat VERSION)-${{ matrix.name }}"
+          mkdir -p "$package/docs"
+          cp "build/${{ matrix.program }}" "$package/"
+          cp LICENSE README.md CHANGELOG.md THIRD_PARTY.md VERSION "$package/"
+          cp docs/CONFIG.md docs/ANALYSIS.md docs/MATERIALS.md docs/GCODE_CHECK.md docs/VERSIONING.md "$package/docs/"
+          cmake -E tar cf "$package.zip" --format=zip "$package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: tisma-engine-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 tools/release_notes.py "$TAG" > notes.md
+          version="$(cat VERSION)"
+          prerelease=""
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" packages/*.zip --title "Tisma engine $version" --notes-file notes.md --verify-tag $prerelease
