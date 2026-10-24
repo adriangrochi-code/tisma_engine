@@ -10,6 +10,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.7.0-alpha.1] - 2026-10-24
+
+Segunda versión publicada. Trae la interfaz propia del motor, `tisma` (el comienzo de P1: el dueño decidió que el
+motor reemplace a Tisma Slicer), con calibraciones guiadas, perfiles con nombre y proyectos, y corrige la altura del
+G-code para piezas que no empiezan en Z = 0. Sigue siendo una alfa: los formatos de ajustes, perfiles, proyectos e
+informes todavía pueden cambiar entre versiones 0.x, y cada cambio se anota acá.
+
 ### Agregado
 
 - **La interfaz `tisma`** (`docs/UI.md`), con los íconos y la paleta de Tisma, en español e inglés y con tema oscuro
@@ -206,5 +213,6 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...HEAD
+[0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
 [0.6.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.6.0-alpha.1

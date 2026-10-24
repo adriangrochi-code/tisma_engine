@@ -25,6 +25,7 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.4.0 | F3, superficies y relleno |
 | 0.5.0 | F4, G-code |
 | 0.6.0 | F5 (empezada), A1 y exportación verificada; primera publicada como 0.6.0-alpha.1 |
+| 0.7.0 | P1 (empezada): la interfaz `tisma`, calibraciones guiadas, perfiles y proyectos; publicada como 0.7.0-alpha.1 |
 
 ## Las etiquetas de pre-release
 
@@ -68,6 +69,8 @@ El motor cambia más seguido que sus formatos. Los formatos que leen otros progr
 solo cuando el formato cambia de manera incompatible:
 - el informe de análisis (`"version": 1`);
 - la estimación (`"version": 1`);
-- los avisos del laminado (`"version": 1`).
+- los avisos del laminado (`"version": 1`);
+- los perfiles (`"version": 1`, `docs/PROFILES.md`);
+- los proyectos `.tisma` (versión 1 del archivo, `docs/PROJECT.md`).
 
 Los nombres de los ajustes (`docs/CONFIG.md`) son estables. Si alguno cambia, se anuncia en el CHANGELOG.
