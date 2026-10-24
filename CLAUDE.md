@@ -44,5 +44,5 @@ one stopped.
 
 ## CI
 
-- Every push runs the build and the tests on Linux.
-- Windows and macOS run only when started by hand and once a week: in a private repository their minutes cost more.
+- Every push runs the build and the tests on Linux and Windows.
+- macOS comes at the end of the project, after F6 (owner's decision, 2026-10-24).

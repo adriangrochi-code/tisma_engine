@@ -72,3 +72,16 @@ dueño.
 
 **Sigue:** confirmar que la CI de Linux pasa ahora que el repositorio es público. Después, lo mismo que en la entrada
 anterior.
+
+## 2026-10-24 — CI: Linux y Windows en cada envío
+
+**Hecho:**
+- Por decisión del dueño, Windows (MSVC, windows-2022) corre ahora en cada envío junto con Linux. Al ser público el
+  repositorio, esos minutos ya no cuestan.
+- macOS sale de la CI y pasa a una fase F7 al final del plan.
+- Se quitó la corrida semanal: ya no hace falta, porque todo corre en cada envío.
+- Arreglado el grupo de concurrencia de `ci.yml`: era uno solo por rama, así que la corrida lanzada a mano canceló la
+  del envío (run 3). Ahora el grupo incluye el tipo de evento.
+- `CLAUDE.md` y `PLAN.md` actualizados con la regla nueva.
+
+**Sigue:** confirmar que la CI pasa en Linux y Windows. Después, el banco de pruebas y F1.

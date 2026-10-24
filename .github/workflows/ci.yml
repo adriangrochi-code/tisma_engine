@@ -1,18 +1,18 @@
 name: CI
 
-# Linux builds and tests every push. Windows and macOS minutes cost more in a
-# private repository, so they run only when started by hand and once a week.
+# Linux and Windows build and test every push. macOS is added at the end of
+# the project (see PLAN.md).
 on:
   push:
   workflow_dispatch:
-  schedule:
-    - cron: "17 6 * * 1" # Mondays 06:17 UTC
 
 permissions:
   contents: read
 
+# A new push cancels the older run of the same branch; a run started by hand
+# never cancels a push run, nor the other way round.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -54,14 +54,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  other-os:
-    name: ${{ matrix.os }}
-    if: github.event_name != 'push'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-2022, macos-14]
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - name: Configure
