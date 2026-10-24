@@ -228,6 +228,23 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   huecos 0,3 %, superposición 1,3 %, en las transiciones
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
+## Estado de F3
+
+Desde `docs/spec/BEHAVIOR.md` («Superficies y rellenos») y `docs/spec/SETTINGS_V1.md` («Relleno»), con nombres propios.
+
+- [x] Superficies superiores e inferiores por capa: N capas contadas desde cada superficie expuesta (grupo `surfaces`)
+- [ ] Ancho mínimo de las superficies sólidas: quitar o ensanchar franjas más angostas que un cordón
+- [ ] Relleno rectilíneo: líneas paralelas que giran 90° cada capa, ángulo base y densidad
+- [ ] Relleno sólido de las superficies (rectilíneo y monotónico al 100 %)
+- [ ] Relleno en grilla (dos direcciones por capa)
+- [ ] Giroide: la superficie de `docs/spec/SOURCES.md` cortada en cada Z
+- [ ] Anclar las líneas de relleno a los perímetros sin dejar huecos
+- [ ] Puentes: superficie inferior sin nada impreso debajo (medido contra lo impreso, no contra el borde de la capa
+  anterior), tendidos en la dirección del vano más corto
+- [ ] Superficies superiores monotónicas: siempre en el mismo sentido, sin volver sobre lo hecho
+- [ ] GPU: detección de superficies y giroide, probados contra la CPU
+- [ ] Criterio de F3: un cubo y el Benchy con capas sólidas correctas; tiempos de CPU y GPU medidos
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

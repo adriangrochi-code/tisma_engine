@@ -206,14 +206,21 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 
     double volume = 0.0;
     std::size_t polygons = 0, walls = 0;
+    double top = 0.0, bottom = 0.0, sparse = 0.0;
     for (std::size_t l = 0; l < sliced.layers.size(); ++l) {
         volume += area_mm2(sliced.regions[l]) * (sliced.layers[l].top - sliced.layers[l].bottom);
         polygons += sliced.regions[l].size();
         walls += sliced.walls[l].toolpaths.size();
+        top += area_mm2(sliced.surfaces[l].top);
+        bottom += area_mm2(sliced.surfaces[l].bottom);
+        sparse += area_mm2(sliced.surfaces[l].sparse);
     }
     out << "layers: " << sliced.layers.size() << "\n";
     out << "polygons: " << polygons << "\n";
     out << "wall_toolpaths: " << walls << "\n";
+    out << "top_area: " << top << "\n";
+    out << "bottom_area: " << bottom << "\n";
+    out << "sparse_area: " << sparse << "\n";
     out << "sliced_volume: " << volume << "\n";
     out << "slice_ms: " << slice_ms << "\n";
     if (sliced.open_contours > 0)

@@ -27,6 +27,8 @@ struct Settings {
     double simplify_tolerance = 0.01;
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
+    int top_layers = 3;      // solid layers under each top surface
+    int bottom_layers = 3;   // solid layers over each bottom surface
     GpuMode gpu = GpuMode::Auto;
 
     // Groups present in the file that the engine does not use yet.

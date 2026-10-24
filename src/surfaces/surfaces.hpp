@@ -1,0 +1,24 @@
+#pragma once
+
+#include "geom/polygons.hpp"
+
+#include <vector>
+
+namespace tisma {
+
+// What each layer's infill region becomes (F3).
+struct LayerSurfaces {
+    Polygons top;    // solid, under an exposed top surface
+    Polygons bottom; // solid, over an exposed bottom surface (not already top)
+    Polygons sparse; // the rest: sparse infill
+};
+
+// Splits the infill region of every layer into top, bottom and sparse parts.
+// Part of layer i is top when one of the top_layers layers above it does not
+// cover it (the layers above the last one cover nothing), and bottom likewise
+// with the bottom_layers layers below. A layer covers what its region covers,
+// walls included. Layers run in parallel (oneTBB).
+std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
+                                             int top_layers, int bottom_layers);
+
+} // namespace tisma

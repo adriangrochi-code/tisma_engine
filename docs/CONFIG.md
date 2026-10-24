@@ -36,6 +36,13 @@ Reglas:
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
 | `width` | número | 0.4 | > 0 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine` |
 
+### `surfaces`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `top_layers` | entero | 3 | 0 a 1000 | Capas sólidas debajo de cada superficie superior expuesta |
+| `bottom_layers` | entero | 3 | 0 a 1000 | Capas sólidas encima de cada superficie inferior expuesta |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -44,7 +51,7 @@ Reglas:
 
 ## Grupos previstos (todavía no implementados)
 
-`machine`, `material`, `surfaces`, `infill`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
+`machine`, `material`, `infill`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
 cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo

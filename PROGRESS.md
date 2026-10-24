@@ -951,3 +951,32 @@ perímetros») se cumple y está medido. Quedan:
 **Sigue:** F3 (superficies y rellenos), a partir de `docs/spec/BEHAVIOR.md` («Superficies y rellenos»), si pasa
 `tools/check_spec.py`.
 
+## 2026-10-24 — bloque nocturno 24: F3, superficies superiores e inferiores
+
+**Hecho:**
+- `classify_surfaces` (`src/surfaces/surfaces.*`, diseño propio con Clipper2) divide la región de relleno de cada capa
+  en superior, inferior y dispersa:
+  - una parte es superior si alguna de las N capas de arriba no la cubre, o sea, fuera de la intersección de sus
+    regiones; pasada la última capa no se cubre nada;
+  - inferior, igual con las capas de abajo; lo superior gana sobre lo inferior;
+  - las capas corren en paralelo (oneTBB).
+- `slice_model` la aplica después de las paredes (`SlicedModel::surfaces`); `slice` informa `top_area`,
+  `bottom_area` y `sparse_area`.
+- Ajustes: grupo `surfaces` con `top_layers` y `bottom_layers` (3 y 3, valores de banco de la especificación, con
+  nombres propios), en `docs/CONFIG.md`.
+- `PLAN.md`: lista «Estado de F3» desde la especificación de superficies y rellenos.
+
+**Probado:** 120/120 pruebas con gcc, clang y ASan+UBSan:
+- columna de 10 capas iguales: con 3 arriba y 2 abajo, las capas 7–9 son superiores, 0–1 inferiores y el resto
+  disperso; con 0/0 todo es disperso;
+- cubo de 10 mm por `slice_model`: capas 0–2 inferiores, 47–49 superiores, el resto disperso, cada una con el relleno
+  de 7,6 × 7,6 mm;
+- escalón (caja de 20 mm con otra de 10 mm encima): las capas 22–24 tienen superior el relleno menos el cuadrado de
+  10 mm (209,76 mm²) y la capa 21 nada; la caja de arriba, apoyada, no tiene superficie inferior;
+- lectura del grupo `surfaces` y sus errores.
+
+**Medido** (esfera, 500 capas, 4 núcleos): `slice` 1,02–1,11 s (antes 1,00–1,07 s); superior e inferior simétricas,
+1580 mm² cada una sumando capas.
+
+**Sigue:** el ancho mínimo de las superficies sólidas, y después el relleno rectilíneo.
+

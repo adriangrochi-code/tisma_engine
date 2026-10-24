@@ -32,6 +32,7 @@ TEST_CASE("settings are read by group", "[settings]") {
         "slicing": {"fill_mode": "even_odd", "gap_closing_radius": 0.1, "xy_offset": -0.05, "first_layer_shrink": 0.2, "simplify_tolerance": 0},
         "compute": {"gpu": "off"},
         "walls": {"count": 2, "width": 0.45},
+        "surfaces": {"top_layers": 4, "bottom_layers": 0},
         "infill": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
@@ -44,6 +45,8 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.gpu == GpuMode::Off);
     CHECK(s.wall_count == 2);
     CHECK(s.wall_width == 0.45);
+    CHECK(s.top_layers == 4);
+    CHECK(s.bottom_layers == 0);
     CHECK(s.ignored_groups == std::vector<std::string>{"infill"});
 }
 
@@ -60,6 +63,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
+    CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {

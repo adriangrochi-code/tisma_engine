@@ -1,0 +1,89 @@
+#include "config/settings.hpp"
+#include "io/stl.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/pipeline.hpp"
+#include "surfaces/surfaces.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+#include <filesystem>
+
+using namespace tisma;
+using Catch::Matchers::WithinAbs;
+
+namespace {
+
+// A closed box from (x0, y0, z0) to (x1, y1, z1), faces wound outwards.
+void add_box(TriangleMesh& m, float x0, float y0, float z0, float x1, float y1, float z1) {
+    const Vec3f v[8] = {{x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0},
+                        {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}};
+    const int faces[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {1, 2, 6, 5}, {2, 3, 7, 6}, {3, 0, 4, 7}};
+    for (const auto& f : faces) {
+        m.add_triangle(v[f[0]], v[f[1]], v[f[2]]);
+        m.add_triangle(v[f[0]], v[f[2]], v[f[3]]);
+    }
+}
+
+Polygons square(double x0, double y0, double side) {
+    return {{{to_units(x0), to_units(y0)},
+             {to_units(x0 + side), to_units(y0)},
+             {to_units(x0 + side), to_units(y0 + side)},
+             {to_units(x0), to_units(y0 + side)}}};
+}
+
+} // namespace
+
+TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
+    // Ten layers of a 10 mm square; the infill is the whole square.
+    const std::vector<Polygons> regions(10, square(0, 0, 10));
+    const std::vector<LayerSurfaces> s = classify_surfaces(regions, regions, 3, 2);
+    REQUIRE(s.size() == 10);
+    for (std::size_t i = 0; i < 10; ++i) {
+        INFO("layer " << i);
+        const bool top = i >= 7, bottom = i < 2;
+        CHECK_THAT(area_mm2(s[i].top), WithinAbs(top ? 100.0 : 0.0, 1e-9));
+        CHECK_THAT(area_mm2(s[i].bottom), WithinAbs(bottom ? 100.0 : 0.0, 1e-9));
+        CHECK_THAT(area_mm2(s[i].sparse), WithinAbs(top || bottom ? 0.0 : 100.0, 1e-9));
+    }
+    // No solid layers asked: everything is sparse.
+    for (const LayerSurfaces& l : classify_surfaces(regions, regions, 0, 0))
+        CHECK_THAT(area_mm2(l.sparse), WithinAbs(100.0, 1e-9));
+}
+
+TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfaces]") {
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel sliced = slice_model(m, Settings{}); // 3 walls, 3 top and 3 bottom layers
+    REQUIRE(sliced.surfaces.size() == 50);
+    const double infill = 7.6 * 7.6;
+    for (std::size_t i = 0; i < 50; ++i) {
+        INFO("layer " << i);
+        const LayerSurfaces& s = sliced.surfaces[i];
+        CHECK_THAT(area_mm2(s.top), WithinAbs(i >= 47 ? infill : 0.0, 1e-6));
+        CHECK_THAT(area_mm2(s.bottom), WithinAbs(i < 3 ? infill : 0.0, 1e-6));
+        CHECK_THAT(area_mm2(s.sparse), WithinAbs(i >= 3 && i < 47 ? infill : 0.0, 1e-6));
+    }
+}
+
+TEST_CASE("a step: the lower box's top around the upper box is solid, the upper box's bottom is not", "[surfaces]") {
+    // A 20 mm box 5 mm high with a 10 mm box on top, centred: layers 0-24 and 25-49.
+    TriangleMesh mesh;
+    add_box(mesh, 0, 0, 0, 20, 20, 5);
+    add_box(mesh, 5, 5, 5, 15, 15, 10);
+    const SlicedModel sliced = slice_model(weld_exact(mesh), Settings{});
+    REQUIRE(sliced.surfaces.size() == 50);
+    const double lower_infill = 17.6 * 17.6, upper_infill = 7.6 * 7.6;
+    for (std::size_t i : {22u, 23u, 24u}) {
+        INFO("layer " << i);
+        // Solid where the upper box does not cover it: the infill minus the 10 mm square.
+        CHECK_THAT(area_mm2(sliced.surfaces[i].top), WithinAbs(lower_infill - 100.0, 1e-6));
+        CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(100.0, 1e-6));
+    }
+    CHECK_THAT(area_mm2(sliced.surfaces[21].top), WithinAbs(0.0, 1e-6));
+    for (std::size_t i : {25u, 26u, 27u}) {
+        INFO("layer " << i);
+        // The upper box stands on the lower one: no bottom surface.
+        CHECK_THAT(area_mm2(sliced.surfaces[i].bottom), WithinAbs(0.0, 1e-6));
+        CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(upper_infill, 1e-6));
+    }
+}
