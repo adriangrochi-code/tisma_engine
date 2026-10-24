@@ -121,9 +121,9 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Tiempo mínimo de capa en dos etapas, ventilador mínimo y máximo, en puentes, primeras capas sin ventilador, siempre encendido | `cooling.md` | ✔ |
-| Capa desde la que el ventilador llega al máximo (subida gradual) | — | ✘ → `cooling_more.md` |
-| Ventilador según el grado de voladizo (cuatro grados) | — | ✘ → `cooling_more.md` |
-| Lógica del frenado y distancia de transición en los perímetros | — | ✘ → `cooling_more.md` |
+| Capa desde la que el ventilador llega al máximo (subida gradual) | `cooling_more.md` | ✔ |
+| Ventilador según el grado de voladizo (cuatro grados) | `cooling_more.md` | ✔ |
+| Lógica del frenado y distancia de transición en los perímetros | `cooling_more.md` | ✔ |
 
 ### Retracción y viajes
 
