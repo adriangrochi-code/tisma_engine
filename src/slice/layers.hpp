@@ -29,7 +29,9 @@ std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& 
 // crosses, so the cost grows with the segments produced rather than with
 // triangles x levels. Planar slicing passes height_field(mesh) and the layers'
 // slice heights; a curved-layer field can be passed the same way.
+// With max_gap > 0, gaps up to that length are closed in every level (see
+// close_gaps).
 std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
-                                               std::span<const float> isos);
+                                               std::span<const float> isos, double max_gap = 0.0);
 
 } // namespace tisma

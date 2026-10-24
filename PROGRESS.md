@@ -259,3 +259,14 @@ CI. Si da problemas, la alternativa es enlazarla dinámica y distribuir su DLL j
 Ahora la soldadura tarda menos que el corte de las 500 capas (76–87 ms).
 
 **Sigue:** cierre de huecos chicos en mallas abiertas; después Clipper2.
+
+**Cierre de huecos (mismo bloque):**
+- `close_gaps` une el final de una cadena abierta con el comienzo de otra (o de sí misma) cuando están a menos de
+  `max_gap`, empezando por los pares más cercanos. Si una cadena vuelve a su comienzo, queda cerrada. No toca los
+  contornos cerrados y no repite un punto cuando el hueco mide cero.
+- `slice_levels` acepta un `max_gap` y cierra los huecos en cada capa.
+- Pruebas: dos mitades de un cuadrado; un hueco más grande que el límite; el cubo sin una cara (no se cierra con
+  0,5 mm, sí con 10 mm, y da 100 mm²); prioridad del par más cercano; hueco de largo cero; una pirámide sin una cara
+  cortada con `max_gap`. 51/51 pruebas con gcc, clang y ASan+UBSan.
+
+**Sigue:** Clipper2 (leer su licencia en la versión exacta y anotarla antes de usarla).

@@ -30,7 +30,7 @@ std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& 
 }
 
 std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::span<const float> values,
-                                               std::span<const float> isos) {
+                                               std::span<const float> isos, double max_gap) {
     const std::size_t level_count = isos.size();
     // A triangle is crossed by level iso when min < iso <= max (see the
     // value >= iso rule in level_set_segments). Bucket the triangles in
@@ -67,6 +67,8 @@ std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::spa
             const std::span<const std::uint32_t> tris(bucket.data() + row_start[l], row_start[l + 1] - row_start[l]);
             level_set_segments(mesh, values, isos[l], tris, segments);
             out[l] = join_segments(segments);
+            if (max_gap > 0.0)
+                close_gaps(out[l], max_gap);
         }
     });
     return out;

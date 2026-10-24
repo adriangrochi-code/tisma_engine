@@ -20,4 +20,11 @@ struct Contour {
 // Collinear points are kept; simplification is a later step.
 std::vector<Contour> join_segments(std::span<const LevelSegment> segments);
 
+// Closes small gaps left by holes in the mesh: joins the end of an open contour
+// to the start of an open contour (itself included) when they are at most
+// max_gap apart, nearest pairs first. Joined chains that come back to their
+// start become closed. Closed contours are not touched; open contours that
+// cannot be joined stay open.
+void close_gaps(std::vector<Contour>& contours, double max_gap);
+
 } // namespace tisma

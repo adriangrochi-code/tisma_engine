@@ -109,3 +109,25 @@ TEST_CASE("bucketed slicing finds the same segments as visiting every triangle",
         CHECK(points == all.size()); // closed contours have one point per segment
     }
 }
+
+TEST_CASE("slice_levels closes gaps when asked", "[layers]") {
+    // Pyramid without its y = 0 side: each level has a gap as wide as that side.
+    const Vec3f p[5] = {{0, 0, 0}, {10, 0, 0}, {10, 10, 0}, {0, 10, 0}, {5, 5, 10}};
+    TriangleMesh soup;
+    soup.add_triangle(p[0], p[2], p[1]);
+    soup.add_triangle(p[0], p[3], p[2]);
+    soup.add_triangle(p[1], p[2], p[4]);
+    soup.add_triangle(p[2], p[3], p[4]);
+    soup.add_triangle(p[3], p[0], p[4]); // the y = 0 side is missing
+    const IndexedMesh m = weld_exact(soup);
+    const std::vector<float> z = {2.0f, 5.0f};
+    const auto raw = slice_levels(m, height_field(m), z);
+    CHECK_FALSE(raw[0][0].closed);
+    const auto closed = slice_levels(m, height_field(m), z, 10.0);
+    for (std::size_t l = 0; l < z.size(); ++l) {
+        REQUIRE(closed[l].size() == 1);
+        CHECK(closed[l][0].closed);
+        const double side = 10.0 - double(z[l]);
+        CHECK_THAT(area_xy(closed[l][0]), WithinAbs(side * side, 1e-3));
+    }
+}

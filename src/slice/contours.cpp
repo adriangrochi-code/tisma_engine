@@ -3,6 +3,7 @@
 #include "slice/contours.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <utility>
 
@@ -69,6 +70,83 @@ std::vector<Contour> join_segments(std::span<const LevelSegment> segments) {
         if (!used[i])
             walk(i);
     return out;
+}
+
+void close_gaps(std::vector<Contour>& contours, double max_gap) {
+    std::vector<std::size_t> open;
+    for (std::size_t i = 0; i < contours.size(); ++i)
+        if (!contours[i].closed && !contours[i].points.empty())
+            open.push_back(i);
+    if (open.empty())
+        return;
+
+    // Candidate joins: end of open[a] to start of open[b], at most max_gap apart.
+    struct Join {
+        double distance;
+        std::size_t from, to; // positions in open
+    };
+    std::vector<Join> joins;
+    for (std::size_t a = 0; a < open.size(); ++a) {
+        const Vec3f& end = contours[open[a]].points.back();
+        for (std::size_t b = 0; b < open.size(); ++b) {
+            const Vec3f& start = contours[open[b]].points.front();
+            const double d = std::hypot(double(end.x) - start.x, double(end.y) - start.y, double(end.z) - start.z);
+            if (d <= max_gap)
+                joins.push_back({d, a, b});
+        }
+    }
+    std::sort(joins.begin(), joins.end(), [](const Join& l, const Join& r) {
+        return l.distance < r.distance || (l.distance == r.distance && (l.from < r.from || (l.from == r.from && l.to < r.to)));
+    });
+
+    // Greedy: take the nearest joins whose end and start are both still free.
+    constexpr std::size_t kNoLink = static_cast<std::size_t>(-1);
+    std::vector<std::size_t> next(open.size(), kNoLink), prev(open.size(), kNoLink);
+    for (const Join& j : joins)
+        if (next[j.from] == kNoLink && prev[j.to] == kNoLink) {
+            next[j.from] = j.to;
+            prev[j.to] = j.from;
+        }
+
+    // Rebuild the open contours by following the links.
+    std::vector<Contour> merged;
+    std::vector<bool> done(open.size(), false);
+    auto follow = [&](std::size_t first) {
+        Contour c;
+        std::size_t k = first;
+        while (true) {
+            done[k] = true;
+            const std::vector<Vec3f>& pts = contours[open[k]].points;
+            // A gap of zero length would repeat the point.
+            const bool repeat = !c.points.empty() && c.points.back() == pts.front();
+            c.points.insert(c.points.end(), pts.begin() + (repeat ? 1 : 0), pts.end());
+            if (next[k] == first) {
+                c.closed = true;
+                if (c.points.size() > 1 && c.points.back() == c.points.front())
+                    c.points.pop_back();
+                break;
+            }
+            if (next[k] == kNoLink)
+                break;
+            k = next[k];
+        }
+        merged.push_back(std::move(c));
+    };
+    for (std::size_t k = 0; k < open.size(); ++k)
+        if (!done[k] && prev[k] == kNoLink)
+            follow(k); // chains with a free start
+    for (std::size_t k = 0; k < open.size(); ++k)
+        if (!done[k])
+            follow(k); // what is left forms cycles
+
+    std::vector<Contour> result;
+    result.reserve(contours.size() - open.size() + merged.size());
+    for (Contour& c : contours)
+        if (c.closed || c.points.empty())
+            result.push_back(std::move(c));
+    for (Contour& c : merged)
+        result.push_back(std::move(c));
+    contours = std::move(result);
 }
 
 } // namespace tisma
