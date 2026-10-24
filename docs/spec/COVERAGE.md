@@ -45,17 +45,17 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Cantidad, ancho variable, paredes finas, orden, costura (alineada, cercana, aleatoria, atrás), hueco de la costura | `perimeters.md` | ✔ |
-| Costuras internas escalonadas | — | ✘ → `walls_extra.md` |
-| Costura en bufanda (inicio en rampa): dónde, solo en lazos lisos, altura inicial, largo, lazo entero, tramo máximo, también en los internos | — | ✘ → `walls_extra.md` |
-| Perímetros extra donde hacen falta y en voladizos | — | ✘ → `walls_extra.md` |
-| Asegurar el espesor de la cáscara vertical (no, parcial, sí) | — | ✘ → `walls_extra.md` |
-| Detección de perímetros en voladizo y su velocidad por grado de voladizo | — | ✘ → `walls_extra.md` y `speeds_accels.md` |
-| Evitar cruzar voladizos que se curvan | — | ✘ → `walls_extra.md` |
+| Costuras internas escalonadas | `walls_extra.md` | ✔ |
+| Costura en bufanda (inicio en rampa): dónde, solo en lazos lisos, altura inicial, largo, lazo entero, tramo máximo, también en los internos | `walls_extra.md` | ✔ |
+| Perímetros extra donde hacen falta y en voladizos | `walls_extra.md` | ✔ («donde hacen falta» no cambió nada en las piezas de prueba) |
+| Asegurar el espesor de la cáscara vertical (no, parcial, sí) | `walls_extra.md` | ✔ |
+| Detección de perímetros en voladizo y su velocidad por grado de voladizo | `walls_extra.md` | ◐ falta la velocidad por grado → `speeds_accels.md` |
+| Evitar cruzar voladizos que se curvan | `walls_extra.md` | ✔ (regla de la documentación, sin medir) |
 | Puentes gruesos (cordón redondo) | `gcode_motion.md` | ✔ |
-| Relleno de huecos (activar o no) | `perimeters.md` | ◐ falta el ajuste para apagarlo → `walls_extra.md` |
-| Un solo perímetro en la capa de arriba (en todas o solo en la de más arriba) y en la primera capa | — | ✘ → `walls_extra.md` |
+| Relleno de huecos (activar o no) | `perimeters.md`, `walls_extra.md` | ✔ |
+| Un solo perímetro en la capa de arriba (en todas o solo en la de más arriba) y en la primera capa | `walls_extra.md` | ✔ |
 | Perímetros escalonados (Tisma) | `staggered_perimeters.md` | ✔ |
-| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | — | ✘ → `fuzzy_skin.md` |
+| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | `fuzzy_skin.md` | ◐ falta la herramienta para pintarla → `model_tools.md` |
 | Z anti-aliasing (Tisma) | `z_antialiasing.md` | ✔ |
 | Arcos en voladizos (Tisma) | `arc_overhangs.md` | ✔ |
 
@@ -63,14 +63,14 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Capas sólidas arriba y abajo, espesor mínimo de la cáscara arriba y abajo | `surfaces_infill.md` | ◐ falta el espesor mínimo → `infill_patterns.md` |
+| Capas sólidas arriba y abajo, espesor mínimo de la cáscara arriba y abajo | `surfaces_infill.md`, `infill_patterns.md` | ✔ |
 | Relleno rectilíneo, grilla y giroide | `surfaces_infill.md` | ✔ |
-| Los otros patrones de relleno: línea, triángulos, estrellas (el de Tisma por defecto), cúbico, cúbico adaptativo, cúbico de soporte, rayo, panal, panal 3D, Hilbert, cuerdas de Arquímedes, espiral octagrama, concéntrico, rectilíneo alineado, zigzag | — | ✘ → `infill_patterns.md` |
-| Patrones de las superficies de arriba y abajo: monotónico, líneas monotónicas, concéntrico, Hilbert, cuerdas de Arquímedes, espiral octagrama | `surfaces_infill.md` | ◐ solo rectilíneo y monotónico → `infill_patterns.md` |
+| Los otros patrones de relleno: línea, triángulos, estrellas (el de Tisma por defecto), cúbico, cúbico adaptativo, cúbico de soporte, rayo, panal, panal 3D, Hilbert, cuerdas de Arquímedes, espiral octagrama, concéntrico, rectilíneo alineado, zigzag | `infill_patterns.md` | ✔ |
+| Patrones de las superficies de arriba y abajo: monotónico, líneas monotónicas, concéntrico, Hilbert, cuerdas de Arquímedes, espiral octagrama | `surfaces_infill.md`, `infill_patterns.md` | ✔ |
 | Anclaje del relleno a las paredes (largo y máximo) | `surfaces_infill.md` | ✔ |
 | Relleno sólido bajo un área, ángulo del relleno, ángulo de los puentes | `surfaces_infill.md` | ✔ |
-| Combinar el relleno cada N capas (y automático hasta una altura máxima) | — | ✘ → `infill_patterns.md` |
-| Relleno sólido cada N capas | — | ✘ → `infill_patterns.md` |
+| Combinar el relleno cada N capas (y automático hasta una altura máxima) | `infill_patterns.md` | ✔ |
+| Relleno sólido cada N capas | `infill_patterns.md` | ✔ |
 | Relleno antes que las paredes | `gcode_motion.md` | ✔ |
 | Solape del relleno con las paredes | `surfaces_infill.md` | ✔ |
 | Relleno denso bajo las superficies de arriba (Tisma) | `dense_infill.md` | ✔ |
@@ -83,11 +83,11 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Falda: vueltas, distancia, capas | `supports_skirt.md` | ✔ |
-| Largo mínimo de la falda | — | ✘ → `skirt_brim_raft.md` |
-| Escudo contra corrientes (falda tan alta como la pieza, o solo en algunas capas) | — | ✘ → `skirt_brim_raft.md` |
+| Largo mínimo de la falda | `skirt_brim_raft.md` | ✔ |
+| Escudo contra corrientes (falda tan alta como la pieza, o solo en algunas capas) | `skirt_brim_raft.md` | ✔ |
 | Borde: ancho | `supports_skirt.md` | ✔ |
-| Tipo de borde (afuera, adentro, los dos, ninguno) y separación del borde | — | ✘ → `skirt_brim_raft.md` |
-| Balsa: capas, distancia de contacto, expansión, densidad y expansión de su primera capa, velocidad de la primera capa sobre la balsa | — | ✘ → `skirt_brim_raft.md` |
+| Tipo de borde (afuera, adentro, los dos, ninguno) y separación del borde | `skirt_brim_raft.md` | ✔ |
+| Balsa: capas, distancia de contacto, expansión, densidad y expansión de su primera capa, velocidad de la primera capa sobre la balsa | `skirt_brim_raft.md` | ✔ |
 
 ### Soportes
 
