@@ -33,6 +33,12 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 | Zhang et al., *Support Generation for Robot-Assisted 3D Printing with Curved Layers*, ICRA 2023. [arXiv](https://arxiv.org/pdf/2302.05510) | Soportes para capas curvas |
 | Estudio de acabado con capas curvas (ScienceDirect, 2025). [Artículo](https://www.sciencedirect.com/science/article/pii/S2590123025043178) | Las capas curvas mejoran el acabado hasta unos 55° de inclinación |
 
+## Estabilidad durante la impresión
+
+| Fuente | Para qué |
+|---|---|
+| J. M. Gere y B. J. Goodno, *Mechanics of Materials* (Cengage), tabla de flechas de vigas en voladizo | Flecha de una parte esbelta empujada por la boquilla, `F L³ / (3 E I)` (`features/stability.md`) |
+
 ## Formatos
 
 | Fuente | Para qué |

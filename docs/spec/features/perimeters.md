@@ -13,7 +13,7 @@ que los cordones pedidos se cubren con menos cordones, de ancho variable, sin hu
 
 ## Ajustes
 
-`d` es `machine.nozzle` y `h` la altura de la capa.
+`d` es `machine.nozzle_diameter` y `h` la altura de la capa.
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|

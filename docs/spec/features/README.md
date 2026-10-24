@@ -8,9 +8,10 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | Ficha | Fase | Estado |
 |---|---|---|
 | [`slicing.md`](slicing.md): corte en capas, cierre de grietas, compensaciones en XY, modos de relleno de la malla | F1 | Para revisar |
+| [`placement.md`](placement.md): ubicación en la cama: centrado, copias ordenadas, base en Z = 0, objetos fuera del volumen | F1 | Para revisar |
 | [`perimeters.md`](perimeters.md): cantidad, ancho y separación de los cordones, paredes finas (tabla de 0,1 a 3 mm), orden, costura | F2 | Para revisar |
 | [`surfaces_infill.md`](surfaces_infill.md): capas sólidas, capa de arriba, `monotonic`, puentes sobre el aire y sobre el relleno, relleno poco denso (`rectilinear`, `grid`, `gyroid`), borde del relleno, zonas chicas | F3 | Para revisar |
-| [`gcode_motion.md`](gcode_motion.md): filamento por tramo, velocidades por tipo, perímetros chicos, viajes, retracción, cambio de capa | F4 | Para revisar |
+| [`gcode_motion.md`](gcode_motion.md): filamento por tramo, velocidades por tipo, perímetros chicos, viajes, retracción, cambio de capa, orden dentro de la capa | F4 | Para revisar |
 | [`cooling.md`](cooling.md): tiempo mínimo de capa con frenado debajo de la velocidad mínima, qué no se frena, ventilador | F4 | Para revisar |
 | [`gcode_firmware.md`](gcode_firmware.md): comandos según el firmware: temperaturas, límites de la máquina, etiquetas de objetos para cancelarlos, avance de la impresión | F4 | Para revisar |
 | [`supports_skirt.md`](supports_skirt.md): qué lleva soporte (umbral automático y fijo), zona, separaciones, interfaz, base, falda y borde | F5 | Para revisar |
@@ -30,6 +31,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |
 | [`belt_printer.md`](belt_printer.md): laminado para impresoras de cinta con pórtico inclinado y G-code en los ejes de la máquina | después de la primera versión | Para revisar |
 | [`print_review.md`](print_review.md): avisos de lo que probablemente va a fallar, con sus capas | después de F4 | Para revisar |
+| [`stability.md`](stability.md): diseño propio: parte en el aire, vuelco por el peso, flexión de partes esbeltas y despegue de la cama, con la calibración de la fuerza de la boquilla y de la adherencia | después de F4 | Para revisar |
 | [`calibrations.md`](calibrations.md): pruebas por franjas y por parches, comandos por firmware, bloque de precisión de medidas | después de F4 | Para revisar |
 | [`calibration_models.md`](calibration_models.md): las piezas de cada prueba de calibración, con medidas, rangos por defecto y ajustes | después de F4 | Para revisar |
 | [`printer_connections.md`](printer_connections.md): USB, Bambu Lab en red local, interfaces web, botón de enviar | F9 | Para revisar |
@@ -41,7 +43,6 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
 
 **Pendientes:**
-- Análisis de estabilidad propio para la revisión antes de imprimir.
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
 - Perfiles: los datos de cada impresora y material, desde sus fabricantes (P3).
 - Formatos: proyectos 3MF y lo que guarda Tisma en ellos (P4).

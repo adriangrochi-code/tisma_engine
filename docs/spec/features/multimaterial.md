@@ -25,7 +25,7 @@
 
 | Clave | Unidad | Por defecto | Qué hace |
 |---|---|---|---|
-| `machine.nozzle` | mm, uno por extrusor | 0,4 | Diámetro de la boquilla de cada extrusor |
+| `machine.nozzle_diameter` | mm, uno por extrusor | 0,4 | Diámetro de la boquilla de cada extrusor |
 | `multi.fine_walls_coarse_infill` | — | no | Paredes con la boquilla más fina y relleno con la más gruesa |
 | `multi.color_mixing` | — | no en impresoras de una sola boquilla; sí en las de una boquilla por filamento | Ofrecer colores mezclados |
 

@@ -20,7 +20,7 @@
 | `infill.pattern` | — | ver `SETTINGS_V1.md` | `rectilinear`, `grid` o `gyroid` en la primera versión |
 | `surfaces.top_pattern`, `surfaces.bottom_pattern` | — | `monotonic` | `monotonic` o `rectilinear` |
 | `infill.angle` | ° | 45 | Dirección base de las líneas |
-| `infill.overlap` | % de la separación de los perímetros | 25 % | Cuánto se mete el relleno en el último perímetro |
+| `infill.wall_overlap` | % de la separación de los perímetros | 25 % | Cuánto se mete el relleno en el último perímetro |
 | `infill.solid_below_area` | mm² | 70 | Una zona de relleno más chica que esto se llena sólida |
 | `infill.max_link` | mm | 50 | Largo máximo del tramo que une dos líneas de relleno siguiendo el perímetro |
 | `surfaces.bridge_angle` | ° | 0 = automático | Dirección de los puentes |
@@ -60,7 +60,7 @@
    - `gyroid`: la superficie giroide cortada en la Z de cada capa, con la escala que da la densidad pedida;
    - las líneas se unen de a dos siguiendo el último perímetro (tramos de hasta `infill.max_link`).
 8. **Borde del relleno:**
-   - el relleno se acerca al último perímetro como si fuera un cordón más, y se mete además `infill.overlap` (25 % de
+   - el relleno se acerca al último perímetro como si fuera un cordón más, y se mete además `infill.wall_overlap` (25 % de
      0,407 = 0,10 mm);
    - en la prueba I1, el eje del relleno queda a 0,305 mm del eje del último perímetro.
 9. **Zonas chicas:** una zona de relleno de menos de `infill.solid_below_area` se llena sólida (prueba I6: las patas de
