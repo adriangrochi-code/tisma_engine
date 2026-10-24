@@ -35,6 +35,7 @@ add_executable(tisma_tests
   test_adhesion.cpp
   test_support.cpp
   test_voronoi.cpp
+  test_fea.cpp
 )
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon Catch2::Catch2WithMain)

@@ -333,6 +333,35 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   alto), sin G-code a medias (`src/slice/printable.*`)
 - [ ] Criterio de F4: el Benchy se imprime en una impresora real (necesita al dueño)
 
+## Estado de A1
+
+Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de A1–A3»).
+
+- [x] La pieza en vóxeles con el corte del motor (`src/fea/voxels.*`)
+- [x] Hexaedro trilineal de elasticidad lineal isótropa (`src/fea/hex8.*`)
+- [x] Gradiente conjugado sin matriz con Jacobi, en paralelo y determinista; apoyos por eje y cargas como tracción
+  sobre caras (`src/fea/elasticity.*`)
+- [x] Validación: barra a tracción exacta; voladizo a −5,1 %, −2,1 % y −1,3 % de la teoría de vigas con vóxeles de 1,
+  0,5 y 0,25 mm
+- [ ] **Adherencia entre capas y entre líneas (pedido del dueño, para la máxima fiabilidad):** material ortótropo «como
+  se imprimió», con una dirección por elemento tomada del laminado (la del cordón, la transversal en la capa y la de
+  construcción); rigidez y resistencia propias en cada dirección: a lo largo del cordón, entre líneas (adherencia de
+  cordón a cordón) y entre capas (adherencia entre capas, la más débil); criterio de falla anisótropo (Tsai–Wu o Hill)
+  y mapa del factor de seguridad
+- [ ] Multigrilla: hoy las iteraciones se duplican cada vez que el vóxel se achica a la mitad
+- [ ] Núcleo de la GPU, probado contra la CPU
+- [ ] Cargas y apoyos desde la línea de comandos (JSON) y resultado legible (desplazamientos, tensiones, factor de
+  seguridad)
+- [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
+
+**Fuentes de la anisotropía:**
+- Ahn, Montero, Odell, Roundy y Wright, *Anisotropic material properties of fused deposition modeling ABS*, Rapid
+  Prototyping Journal 8(4):248–257, 2002.
+- Tsai y Wu, *A general theory of strength for anisotropic materials*, J. Composite Materials 5(1):58–80, 1971.
+- Hill, *A theory of the yielding and plastic flow of anisotropic metals*, Proc. R. Soc. A 193:281–297, 1948.
+- Tsai y Pagano, *Invariant properties of composite materials*, 1968 (rigidez de un material ortótropo girado como suma
+  de cinco términos en cos 2θ, sin 2θ, cos 4θ y sin 4θ).
+
 ## Estado de F5
 
 Desde `PLAN.md` (fase F5), `docs/spec/BEHAVIOR.md` («Soportes») y el tipo `Skirt/Brim` de `docs/spec/GCODE_OUTPUT.md`,

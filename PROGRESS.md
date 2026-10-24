@@ -1888,3 +1888,43 @@ Quedan en `PLAN.md` como fases nuevas:
 - limpiar los quiebres de menos de 0,01 mm de las paredes, que vienen de la extracción;
 - acelerar la estrella;
 - después, A1 (elementos finitos).
+
+## 2026-10-24 — A1, paso 1: elementos finitos lineales en vóxeles
+
+**Hecho:**
+- `src/fea/voxels.*`: la pieza en vóxeles con el corte del propio motor (cada capa de vóxeles es un corte a media
+  altura, rellenado por filas).
+- `src/fea/hex8.*`: hexaedro trilineal de elasticidad lineal isótropa, con la formulación de libro (Gauss 2 × 2 × 2).
+- `src/fea/elasticity.*`:
+  - gradiente conjugado con Jacobi y sin armar la matriz: el producto junta por nodo los bloques de los ocho elementos
+    de alrededor, en paralelo, sin conflictos y apto para la GPU;
+  - productos escalares deterministas;
+  - apoyos por eje y cargas como tracción uniforme sobre caras del borde;
+  - escala de rigidez por elemento, pensada para la optimización topológica (A2);
+  - von Mises en el centro de cada elemento.
+
+**Probado:** 179/179 pruebas con gcc, clang y ASan+UBSan.
+- El elemento es simétrico, de diagonal positiva, y sus seis movimientos rígidos no cuestan energía.
+- El cubo de 10 mm da 1000 vóxeles con h = 1 y 8000 con h = 0,5.
+- Barra de 20 × 4 × 4 mm sobre rodillos a 100 N: alargamiento, contracción lateral y tensión exactos (10⁻⁸).
+- Voladizo de 40 × 4 × 4 mm a 10 N: flecha a 2 % de la teoría de vigas (Euler–Bernoulli con el término de corte de
+  Timoshenko).
+
+**Medido** (voladizo; teoría 2,880 mm):
+
+| Vóxel | Elementos | Flecha | Error | Iteraciones | Tiempo |
+|---|---|---|---|---|---|
+| 1 mm | 640 | 2,733 mm | −5,1 % | 180 | 31 ms |
+| 0,5 mm | 5120 | 2,820 mm | −2,1 % | 360 | 208 ms |
+| 0,25 mm | 40 960 | 2,844 mm | −1,3 % | 718 | 2,6 s |
+
+La von Mises máxima tiende a M·c/I = 37,5 MPa (25,8, 30,9 y 35,6 MPa). Es el valor en el centro de los elementos, que
+queda por debajo del de la superficie.
+
+**Pedido del dueño:** tener en cuenta la adherencia entre capas y entre líneas, para la máxima fiabilidad. Queda en
+«Estado de A1» como el paso siguiente:
+- material ortótropo «como se imprimió», con la dirección del cordón de cada elemento tomada del laminado;
+- resistencias propias a lo largo del cordón, entre líneas y entre capas;
+- criterio de falla anisótropo y mapa del factor de seguridad.
+
+**Sigue:** el material ortótropo con direcciones del laminado y la falla anisótropa; después, la multigrilla.

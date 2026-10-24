@@ -141,6 +141,9 @@ add_library(tisma_core
   src/slice/printable.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
+  src/fea/voxels.cpp
+  src/fea/hex8.cpp
+  src/fea/elasticity.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
