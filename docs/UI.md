@@ -198,7 +198,7 @@ tisma --screenshot explorador.png --browse /una/carpeta
 tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
 
-`--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit` crea una
+`--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
 `--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin

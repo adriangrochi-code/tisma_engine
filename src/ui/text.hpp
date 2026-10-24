@@ -147,6 +147,20 @@
     X(CalFit, "Tolerancias de encastre", "Fit tolerances")                                                            \
     X(CalFitWhat, "El juego que necesitan las piezas que encastran.", "The clearance that parts which fit together need.") \
     X(CalFitHint, "Siete bloques con un perno impreso dentro de cada agujero, con 0,1 a 0,5 mm de juego. Empujá cada perno: elegí el de menos juego que sale o gira.", "Seven blocks with a pin printed inside each hole, with 0.1 to 0.5 mm of clearance. Push each pin: pick the one with the least clearance that comes out or turns.") \
+    X(CalMaxFlow, "Tope de flujo volumétrico", "Volumetric flow limit")                                                \
+    X(CalMaxFlowWhat, "Cuántos mm³/s funde el fusor; el motor no pasa de ahí.", "How many mm³/s the hot end melts; the engine never goes past it.") \
+    X(CalMaxFlowHint, "El tubo cuadrado, cada segmento con todas sus líneas a ese flujo (sin tope ni enfriamiento). Elegí el último segmento con paredes llenas y parejas: desde el siguiente, el fusor no da abasto.", "The square tube, each segment with every line at that flow (no cap, no slowdown). Pick the last segment with full, even walls: from the next one on, the hot end cannot keep up.") \
+    X(CalAcceleration, "Resonancias (aceleración)", "Resonance (acceleration)")                                       \
+    X(CalAccelerationWhat, "La aceleración que no deja ondas después de las esquinas.", "The acceleration that leaves no ripples after the corners.") \
+    X(CalAccelerationHint, "El tubo cuadrado, cada segmento a otra aceleración (M204, o SET_VELOCITY_LIMIT en Klipper). Mirá las paredes justo después de cada esquina: elegí el último segmento sin ondas. Con input shaping en Klipper, calibralo primero.", "The square tube, each segment at another acceleration (M204, or SET_VELOCITY_LIMIT on Klipper). Look at the walls right after each corner: pick the last segment without ripples. With input shaping on Klipper, calibrate that first.") \
+    X(CalElephantFoot, "Pata de elefante", "Elephant's foot")                                                          \
+    X(CalElephantFootWhat, "Cuánto se ensancha la primera capa, para achicarla.", "How much the first layer widens, to shrink it.") \
+    X(CalElephantFootHint, "Un bloque de 20 × 20 × 6 mm. Medí con calibre el ancho del borde de abajo (la primera capa) y el del cuerpo, en el mismo lado.", "A 20 × 20 × 6 mm block. Measure with calipers the width of the bottom edge (the first layer) and the body's, on the same side.") \
+    X(MeasuredBottom, "Ancho abajo", "Width at the bottom")                                                             \
+    X(MeasuredBody, "Ancho del cuerpo", "Body width")                                                                   \
+    X(FirstLayerShrink, "Achique de la primera capa", "First layer shrink")                                             \
+    X(ApplyShrink, "Aplicar el achique", "Apply the shrink")                                                            \
+    X(ShrinkApplied, "Primera capa achicada %.3f mm", "First layer shrunk by %.3f mm")                                  \
     X(StepChooseFit, "3 · ¿Cuál es el de menos juego que se suelta?", "3 · Which is the least clearance that comes free?") \
     X(FitAdvice, "Para piezas que encastran, dejá %s de juego por lado en tus diseños.", "For parts that fit together, leave %s of clearance per side in your designs.") \
     X(VolumetricFlow, "A %s: hasta %.1f mm³/s en la línea más rápida.", "At %s: up to %.1f mm³/s on the fastest line.") \
@@ -170,8 +184,8 @@
     X(TowerSegment, "Alto de cada segmento", "Segment height")                                                        \
     X(SegmentAt, "Segmento: %s", "Segment: %s")                                                                       \
     X(MoreCalibrations, "Próximas calibraciones", "Coming calibrations")                                              \
-    X(MoreCalibrationsList, "Resonancias (input shaping) · puentes y voladizos · compensación por mínimos cuadrados · ancho de línea variable · adherencia entre capas con el análisis · laminado no planar: altura y ángulo (a definir). Ver docs/CALIBRATION.md.", \
-      "Resonances (input shaping) · bridges and overhangs · least-squares compensation · variable line width · layer adhesion with the analysis · non-planar slicing: height and angle (to be defined). See docs/CALIBRATION.md.") \
+    X(MoreCalibrationsList, "Puentes y voladizos · compensación por mínimos cuadrados · ancho de línea variable · adherencia entre capas con el análisis · laminado no planar: altura y ángulo (a definir). Ver docs/CALIBRATION.md.", \
+      "bridges and overhangs · least-squares compensation · variable line width · layer adhesion with the analysis · non-planar slicing: height and angle (to be defined). See docs/CALIBRATION.md.") \
     X(Render, "Imagen", "Rendering")                                                                                  \
     X(RenderTip, "Cómo se dibuja la vista: luz, oclusión ambiental, ray tracing y suavizado de bordes",                \
       "How the view is drawn: light, ambient occlusion, ray tracing and anti-aliasing")                               \

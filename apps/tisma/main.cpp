@@ -16,7 +16,7 @@ constexpr const char* kUsage =
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--moire on|off]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
-    "                            pressure_advance|speed|fit|extruder]\n"
+    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"

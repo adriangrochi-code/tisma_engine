@@ -2875,3 +2875,33 @@ su perfil).
 **Sigue:** los otros cuatro grupos (Creality; Bambu Lab, Prusa, QIDI, Flashforge y UltiMaker; Elegoo, Anycubic,
 Artillery y Sovol; filamentos de Bambu Lab, Elegoo, eSUN, Polymaker, Prusament y SUNLU), cuando terminen.
 
+## 2026-10-24 — calibraciones estándar, tercera tanda
+
+**Hecho** (`docs/CALIBRATION.md`), siguiendo la lista de pendientes de `PLAN.md` («sigue con la lista de
+pendientes»):
+- **Tope de flujo volumétrico** (`max_flow`): el tubo cuadrado, cada segmento con un cambio por altura nuevo,
+  `volumetric_flow` (mm³/s): el escritor fuerza la velocidad de toda extrusión a la que da ese flujo en su cordón,
+  por encima de `speed.max` y del tope de flujo, sin el frenado del tiempo mínimo de capa, hasta lo que la máquina
+  se mueve (`max_feed_x`, `_y`); el verificador admite esas velocidades (`gcode_limits`). **Usar** pasa el valor a
+  `machine.max_flow`. Rango automático alrededor del tope conocido, o de 4 a 30 mm³/s.
+- **Resonancias (aceleración)**: cambio por altura `acceleration`, escrito con el comando del dialecto; el motor
+  además escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…` /
+  `SET_VELOCITY_LIMIT ACCEL=…`), lo que faltaba según el plan. **Usar** pasa el valor a `machine.acceleration` (y sube
+  `travel_acceleration` si quedaba más baja). Rango de 500 al doble de la aceleración en uso.
+- **Pata de elefante**: un bloque de 20 × 20 × 6 mm; se miden el ancho de abajo y el del cuerpo;
+  `elephant_foot_from` da `slicing.first_layer_shrink` = el actual + la mitad del exceso (0 a 2 mm). Tarjeta con las
+  dos medidas, el valor actual y el nuevo, y **Aplicar el achique**.
+- El tubo del avance de presión pasó a un ayudante (`tube_tower`) que comparten las tres torres de tubo.
+- Textos, tarjetas, rangos ajustables y `--calibration max_flow|acceleration|elephant_foot`.
+
+**Medido:** `tisma_tests "[calibration],[settings]"`: 2048 comprobaciones en 19 casos. En la torre de flujo, a
+16 mm³/s las líneas de 0,4 × 0,2 mm corren a F12000 (200 mm/s) aunque `speed.max` sea 20 mm/s y el tiempo mínimo
+de capa 60 s; con la máquina limitada a 150 mm/s, no pasa de F9000. La torre de aceleración escribe su comando por
+segmento en los tres dialectos y el G-code pasa el verificador.
+
+**No probado:** impreso en una impresora real (necesita al dueño). El tiempo estimado no sigue la aceleración por
+segmento (usa `machine.acceleration`).
+
+**Sigue:** puentes y voladizos (la última estándar); la tanda de detalles del catálogo cuando terminen los agentes;
+la app móvil de Android (pedido nuevo del dueño: a definir qué sigue, ver `PLAN.md`).
+

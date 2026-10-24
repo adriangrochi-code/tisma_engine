@@ -361,6 +361,7 @@ private:
     // ranges, and the test loaded last (its segments, without the mesh).
     DimensionTest dimension_test_;
     Measurements measured_{30.0, 20.0, 15.0, 10.0};
+    double elephant_bottom_ = 20.0, elephant_body_ = 20.0; // the elephant's foot block, measured
     struct TowerRange {
         double start = 0.0, end = 0.0, step = 1.0, segment = 5.0;
     };
@@ -2319,6 +2320,7 @@ void App::calibration_panel() {
     };
     const Card cards[] = {
         {CalibrationKind::Dimensions, T::CalDimensions, T::CalDimensionsWhat, T::CalDimensionsHint},
+        {CalibrationKind::ElephantFoot, T::CalElephantFoot, T::CalElephantFootWhat, T::CalElephantFootHint},
         {CalibrationKind::FirstLayer, T::CalFirstLayer, T::CalFirstLayerWhat, T::CalFirstLayerHint},
         {CalibrationKind::Temperature, T::CalTemperature, T::CalTemperatureWhat, T::CalTemperatureHint},
         {CalibrationKind::Flow, T::CalFlow, T::CalFlowWhat, T::CalFlowHint},
@@ -2326,6 +2328,8 @@ void App::calibration_panel() {
         {CalibrationKind::RetractionSpeed, T::CalRetractionSpeed, T::CalRetractionSpeedWhat, T::CalRetractionSpeedHint},
         {CalibrationKind::PressureAdvance, T::CalPressureAdvance, T::CalPressureAdvanceWhat, T::CalPressureAdvanceHint},
         {CalibrationKind::Speed, T::CalSpeed, T::CalSpeedWhat, T::CalSpeedHint},
+        {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
+        {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
     };
     const float button_h = 30.0f * scale_;
@@ -2436,6 +2440,20 @@ void App::calibration_panel() {
                     settings_.hole_offset = 0.0;
                     settings_changed();
                 }
+            } else if (card.kind == CalibrationKind::ElephantFoot) {
+                // 3: measure the bottom against the body.
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                number(T::MeasuredBottom, elephant_bottom_, 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredBody, elephant_body_, 1.0, 1000.0, "%.3f mm", 0.005f);
+                const double next = elephant_foot_from(elephant_bottom_, elephant_body_, settings_);
+                ImGui::Text("%s: %.3f mm (%s) · %.3f mm (%s)", tr(T::FirstLayerShrink), settings_.first_layer_shrink,
+                            tr(T::Current), next, tr(T::New));
+                if (button("##apply_shrink", nullptr, tr(T::ApplyShrink), true, false, true, nullptr, button_h)) {
+                    settings_.first_layer_shrink = next;
+                    elephant_bottom_ = elephant_body_; // printed with this shrink, the bottom would match the body
+                    settings_changed();
+                    notify(format(tr(T::ShrinkApplied), next));
+                }
             } else if (card.kind == CalibrationKind::FirstLayer) {
                 // 3: what each look means; the height is set on the printer.
                 ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
@@ -2477,6 +2495,8 @@ void App::calibration_panel() {
                     case CalibrationKind::Flow: lo = 10.0, hi = 300.0; break;
                     case CalibrationKind::Speed: lo = 5.0, hi = 1000.0, fmt = "%.0f"; break;
                     case CalibrationKind::PressureAdvance: hi = 2.0, fmt = "%.3f", step_lo = 0.001, drag = 0.001f; break;
+                    case CalibrationKind::MaxFlow: lo = 0.5, hi = 1000.0, step_lo = 0.5; break;
+                    case CalibrationKind::Acceleration: lo = 100.0, hi = 100000.0, fmt = "%.0f", step_lo = 100.0, drag = 10.0f; break;
                     default: break;
                     }
                     number(T::TowerStart, r.start, lo, hi, fmt, drag);
@@ -2558,6 +2578,8 @@ void App::create_calibration(CalibrationKind kind, bool custom) {
     chosen_value_.reset();
     if (kind == CalibrationKind::Dimensions)
         measured_ = {dimension_test_.x, dimension_test_.y, dimension_test_.z, dimension_test_.hole};
+    if (kind == CalibrationKind::ElephantFoot)
+        elephant_bottom_ = elephant_body_ = 20.0;
     load_calibration(std::move(print));
     start_slice();
 }

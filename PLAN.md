@@ -458,8 +458,13 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Calibraciones estándar, segunda tanda: primera capa, velocidad de retracción, avance de presión (ajuste nuevo
   `extrusion.pressure_advance`), tolerancias de encastre, pasos del extrusor y el flujo volumétrico en la torre de
   velocidad
-- [ ] Calibraciones estándar que faltan: resonancias (el motor tiene que escribir la aceleración), puentes y
-  voladizos, tope de flujo volumétrico (ajuste nuevo), pata de elefante
+- [x] Calibraciones estándar, tercera tanda: tope de flujo volumétrico (`machine.max_flow`), resonancias (el motor
+  escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
+- [ ] Calibraciones estándar que faltan: puentes y voladizos
+- [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24: «hay que ver cómo hacer con la
+  app móvil de Android para también seguirla»). A definir con el dueño qué sigue y cómo: el avance, la cámara y el
+  estado de la impresora conectada por P2 (una app aparte que habla con el motor o con la impresora), o la interfaz
+  entera en Android. Sala limpia y licencia cerrable como en todo lo demás
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7

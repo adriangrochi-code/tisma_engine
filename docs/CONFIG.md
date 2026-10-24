@@ -72,7 +72,7 @@ Reglas:
 | `max_feed_x`, `max_feed_y` | número | 200 | > 0 | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo |
 | `max_feed_z` | número | 12 | > 0 | Ídem para Z |
 | `max_feed_e` | número | 120 | > 0 | Ídem para el extrusor |
-| `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s² |
+| `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s². Se escribe después del G-code de inicio, con `travel_acceleration`, para que la impresora use lo que supone el tiempo estimado: `M204 P… T…` (Marlin y RepRapFirmware) o `SET_VELOCITY_LIMIT ACCEL=…` (Klipper, un solo valor) |
 | `travel_acceleration` | número | 1250 | > 0 | Aceleración de los viajes y las retracciones, en mm/s² |
 | `corner_speed` | número | 10 | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
@@ -201,6 +201,8 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 | `flow` | número | 10 a 300 | Flujo en %, en lugar de `extrusion.flow` |
 | `speed` | número | 5 a 1000 | Porcentaje de la velocidad de cada extrusión (puede pasar `speed.max`: es para la torre de velocidad) |
 | `pressure_advance` | número | 0 a 2 | Avance de presión, con el comando del dialecto (como `extrusion.pressure_advance`; acá 0 sí se escribe) |
+| `volumetric_flow` | número | 0,5 a 1000 | Flujo volumétrico forzado, en mm³/s: desde esa altura, toda extrusión corre a la velocidad que da ese flujo en su cordón, por encima de `speed.max` y de `machine.max_flow` y sin el frenado del tiempo mínimo de capa, hasta `machine.max_feed_x` o `_y`. Es para la torre de tope de flujo (`docs/CALIBRATION.md`); el verificador admite esas velocidades |
+| `acceleration` | número | 100 a 100 000 | Aceleración, con el comando del dialecto (`M204 P… T…` con `machine.travel_acceleration`, o `SET_VELOCITY_LIMIT ACCEL=…`). El tiempo estimado sigue con `machine.acceleration` |
 | `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).

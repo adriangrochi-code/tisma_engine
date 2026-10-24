@@ -68,6 +68,7 @@ public:
         for (const double limit : {s.machine_max_flow, s.filament_max_flow})
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
+        feed_limit_ = std::max(s.max_feed_x, s.max_feed_y);
     }
 
     // Plans the time of the moves since the last call (they end at rest).
@@ -112,6 +113,7 @@ public:
         retract_feed_ = speed;
     }
     void set_flow(double factor) { flow_ = factor; }
+    void set_forced_flow(double flow) { forced_flow_ = flow; }
 
     // Lines written as they are (a temperature, the user's G-code of a change),
     // as user G-code; then the type before comes back, so the engine's own
@@ -197,9 +199,13 @@ public:
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         const double e = width * height_ * length / filament_area_ * flow_;
-        // No faster than the hot end and the filament can melt: the feed is
-        // capped at the volumetric limit, rounded down to whole mm/min.
-        if (max_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+        if (forced_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+            // A flow tower: exactly this flow, past every cap (it looks for the
+            // limit), as far as the machine moves.
+            feed = std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height_ * flow_) * 60.0)) / 60.0);
+        } else if (max_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+            // No faster than the hot end and the filament can melt: the feed is
+            // capped at the volumetric limit, rounded down to whole mm/min.
             const double cap = max_flow_ / (width * height_ * flow_);
             if (feed > cap)
                 feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
@@ -273,6 +279,8 @@ private:
     Slowdown pace_;
     std::map<double, double> extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
+    double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
+    double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;
     long fan_ = -1; // not set yet
     double filament_area_ = 1.0;
@@ -369,6 +377,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
     return out;
 }
 
+std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel) {
+    const std::string p = std::to_string(std::lround(print)), t = std::to_string(std::lround(travel));
+    if (flavor == GcodeFlavor::Klipper)
+        return "SET_VELOCITY_LIMIT ACCEL=" + p;
+    return "M204 P" + p + " T" + t + " ; acceleration";
+}
+
 std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     const std::string v = fixed(value, 4);
     switch (flavor) {
@@ -392,6 +407,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     if (s.pressure_advance > 0.0)
         out << pressure_advance_gcode(s.flavor, s.pressure_advance) << "\n";
+    if (s.acceleration > 0.0)
+        out << acceleration_gcode(s.flavor, s.acceleration, s.travel_acceleration) << "\n";
     // The chamber the filament wants, when the machine heats one.
     const double chamber = std::min(s.chamber_temperature, s.max_chamber_temp);
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
@@ -407,6 +424,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // The values the height changes set, layer by layer (docs/CONFIG.md, "changes").
     struct Active {
         double retract_length = 0.0, retract_speed = 1.0, flow = 1.0, speed = 1.0;
+        double volumetric_flow = 0.0; // mm3/s forced on every extrusion; 0: none
         std::optional<double> fan;
         std::string lines; // what this layer writes first: temperatures and the changes' own G-code
     };
@@ -425,6 +443,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.custom(a.lines);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
+        g.set_forced_flow(a.volumetric_flow);
         g.fan(fan);
         seams.next_layer();
         const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
@@ -540,6 +559,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 active.lines += "M140 S" + std::to_string(std::lround(*c.bed_temperature)) + "\n";
             if (c.pressure_advance)
                 active.lines += pressure_advance_gcode(s.flavor, *c.pressure_advance) + "\n";
+            if (c.acceleration)
+                active.lines += acceleration_gcode(s.flavor, *c.acceleration, s.travel_acceleration) + "\n";
+            if (c.volumetric_flow)
+                active.volumetric_flow = *c.volumetric_flow;
             if (!c.gcode.empty())
                 active.lines += substitute_variables(c.gcode, s.variables) + "\n";
             if (c.retract_length)
@@ -555,7 +578,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         }
         const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0));
         emit_layer(l, active.fan ? *active.fan : fan_off ? 0.0 : s.fan_min, active);
-        const Slowdown slowdown = plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
+        // A forced flow is never slowed down: the tower looks for the limit at that flow.
+        const Slowdown slowdown = active.volumetric_flow > 0.0
+                                      ? Slowdown{}
+                                      : plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
         if (slowdown.stage != 0) {
             g = emitter_before;
             cursor = cursor_before;

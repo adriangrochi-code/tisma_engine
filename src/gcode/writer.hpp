@@ -25,6 +25,13 @@ std::string chamber_gcode(GcodeFlavor flavor, double celsius);
 // warnings.
 std::vector<Warning> capability_warnings(const Settings& settings);
 
+// The command that sets the accelerations: M204 P (printing) T (travel) in
+// Marlin and RepRapFirmware, SET_VELOCITY_LIMIT ACCEL= in Klipper (one value
+// for both), from each firmware's public documentation. Written after the
+// start G-code, so the printer runs at the acceleration the time estimate
+// assumes, and by a height change (an acceleration tower).
+std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel);
+
 // The command that sets the firmware's pressure advance: M900 K (Marlin's
 // linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S
 // (RepRapFirmware), from each firmware's public documentation.

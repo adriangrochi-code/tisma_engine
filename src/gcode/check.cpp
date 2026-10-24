@@ -322,6 +322,21 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         retract_speed = std::max(retract_speed, c.retract_speed.value_or(0.0));
     }
     limits.max_feed = std::max({s.travel_speed, s.max_speed * speed_factor, retract_speed});
+    // A forced flow (a flow tower) runs its lines as fast as that flow needs
+    // on the narrowest bead and thinnest layer, up to what the machine moves.
+    double forced = 0.0, min_flow = s.flow / 100.0;
+    for (const HeightChange& c : s.changes) {
+        forced = std::max(forced, c.volumetric_flow.value_or(0.0));
+        min_flow = std::min(min_flow, c.flow.value_or(s.flow) / 100.0);
+    }
+    if (forced > 0.0) {
+        double height = s.layer_height;
+        for (const Layer& layer : model.layers)
+            height = std::min(height, layer.top - layer.bottom);
+        const double narrow = 0.25 * s.wall_width;
+        limits.max_feed = std::max(limits.max_feed, std::min(std::max(s.max_feed_x, s.max_feed_y),
+                                                             forced / std::max(narrow * height * min_flow, 1e-9)));
+    }
     const double r = s.filament_diameter / 2.0;
     limits.filament_area = std::numbers::pi * r * r;
     limits.retract_length = s.retract_length;

@@ -432,6 +432,10 @@ Settings parse_settings(std::string_view text) {
                     c.speed = ranged(n, 5.0, 1000.0, "must be a percentage from 5 to 1000");
                 else if (n == "pressure_advance")
                     c.pressure_advance = ranged(n, 0.0, 2.0, "must be from 0 to 2");
+                else if (n == "volumetric_flow")
+                    c.volumetric_flow = ranged(n, 0.5, 1000.0, "must be from 0.5 to 1000 mm3/s");
+                else if (n == "acceleration")
+                    c.acceleration = ranged(n, 100.0, 100000.0, "must be from 100 to 100000 mm/s2");
                 else if (n == "gcode") {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
@@ -459,7 +463,8 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
             {"temperature", &c.temperature},         {"bed_temperature", &c.bed_temperature},
             {"fan", &c.fan},                         {"retraction_length", &c.retract_length},
             {"retraction_speed", &c.retract_speed}, {"flow", &c.flow},
-            {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance}};
+            {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance},
+            {"volumetric_flow", &c.volumetric_flow}, {"acceleration", &c.acceleration}};
         for (const auto& [name, v] : values)
             if (*v)
                 j[name] = **v;

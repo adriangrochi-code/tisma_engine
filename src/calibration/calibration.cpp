@@ -290,12 +290,10 @@ CalibrationPrint retraction_speed_tower(double start, double end, double step, d
     return out;
 }
 
-CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment) {
-    CalibrationPrint out;
-    out.kind = "pressure_advance";
-    out.unit = "";
-    segment = std::max(segment, 3.0);
-    const std::vector<double> values = tower_values(start, end, step);
+// The hollow square tower of the pressure advance, flow limit and
+// acceleration tests: 36 mm wide, 1.6 mm walls, sharp corners, a shallow
+// groove between segments, each segment's value on the front.
+void tube_tower(CalibrationPrint& out, const std::vector<double>& values, double segment) {
     constexpr double kHalf = 18.0, kWall = 1.6, kGroove = 0.6, kGrooveDepth = 0.4;
     for (std::size_t i = 0; i < values.size(); ++i) {
         const double z0 = double(i) * segment;
@@ -309,8 +307,53 @@ CalibrationPrint pressure_advance_tower(double start, double end, double step, d
         add_label(out.mesh, value_text(values[i]), -16.5, z0 + 0.6, -kHalf, true, std::min(3.0, segment - kGroove - 1.0),
                   0.6, 0.5);
     }
+}
+
+CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "pressure_advance";
+    out.unit = "";
+    segment = std::max(segment, 3.0);
+    const std::vector<double> values = tower_values(start, end, step);
+    tube_tower(out, values, segment);
     tower_changes(out, values, segment, [](HeightChange& c, double v) { c.pressure_advance = v; });
     return out;
+}
+
+CalibrationPrint max_flow_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "max_flow";
+    out.unit = "mm³/s";
+    segment = std::max(segment, 3.0);
+    const std::vector<double> values = tower_values(start, end, step);
+    tube_tower(out, values, segment);
+    tower_changes(out, values, segment, [](HeightChange& c, double v) { c.volumetric_flow = v; });
+    return out;
+}
+
+CalibrationPrint acceleration_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "acceleration";
+    out.unit = "mm/s²";
+    segment = std::max(segment, 3.0);
+    const std::vector<double> values = tower_values(start, end, step);
+    tube_tower(out, values, segment);
+    tower_changes(out, values, segment, [](HeightChange& c, double v) { c.acceleration = v; });
+    return out;
+}
+
+CalibrationPrint elephant_foot_test() {
+    CalibrationPrint out;
+    out.kind = "elephant_foot";
+    out.unit = "mm";
+    add_box(out.mesh, -10.0, -10.0, 0.0, 10.0, 10.0, 6.0);
+    return out;
+}
+
+double elephant_foot_from(double bottom, double body, const Settings& current) {
+    if (bottom <= 0.0 || body <= 0.0)
+        return current.first_layer_shrink;
+    return std::clamp(current.first_layer_shrink + (bottom - body) / 2.0, 0.0, 2.0);
 }
 
 CalibrationPrint first_layer_test(const Settings& settings) {
@@ -486,6 +529,9 @@ const char* calibration_kind_name(CalibrationKind kind) {
     case CalibrationKind::PressureAdvance: return "pressure_advance";
     case CalibrationKind::FirstLayer: return "first_layer";
     case CalibrationKind::Fit: return "fit";
+    case CalibrationKind::MaxFlow: return "max_flow";
+    case CalibrationKind::Acceleration: return "acceleration";
+    case CalibrationKind::ElephantFoot: return "elephant_foot";
     }
     return "dimensions";
 }
@@ -498,7 +544,8 @@ std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name)
 }
 
 bool is_tower(CalibrationKind kind) {
-    return kind != CalibrationKind::Dimensions && kind != CalibrationKind::FirstLayer && kind != CalibrationKind::Fit;
+    return kind != CalibrationKind::Dimensions && kind != CalibrationKind::FirstLayer && kind != CalibrationKind::Fit &&
+           kind != CalibrationKind::ElephantFoot;
 }
 
 CalibrationPrint calibration_tower(CalibrationKind kind, double start, double end, double step, double segment) {
@@ -509,6 +556,8 @@ CalibrationPrint calibration_tower(CalibrationKind kind, double start, double en
     case CalibrationKind::Speed: return speed_tower(start, end, step, segment);
     case CalibrationKind::RetractionSpeed: return retraction_speed_tower(start, end, step, segment);
     case CalibrationKind::PressureAdvance: return pressure_advance_tower(start, end, step, segment);
+    case CalibrationKind::MaxFlow: return max_flow_tower(start, end, step, segment);
+    case CalibrationKind::Acceleration: return acceleration_tower(start, end, step, segment);
     default: return {};
     }
 }
@@ -527,6 +576,22 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         return first_layer_test(s);
     case CalibrationKind::Fit:
         return fit_test();
+    case CalibrationKind::ElephantFoot:
+        return elephant_foot_test();
+    case CalibrationKind::MaxFlow: {
+        // Around the known limit, half to one and a half times; else the
+        // range of common hot ends.
+        if (s.machine_max_flow <= 0.0)
+            return max_flow_tower(4.0, 30.0, 2.0);
+        const double step = std::max(0.5, std::round(s.machine_max_flow / 10.0 * 2.0) / 2.0);
+        return max_flow_tower(std::max(0.5, std::round(s.machine_max_flow / 2.0)), std::round(s.machine_max_flow * 1.5), step);
+    }
+    case CalibrationKind::Acceleration: {
+        // From 500 up to twice the acceleration in use (at least 5000), in about ten steps.
+        const double end = std::max(5000.0, 2.0 * s.acceleration);
+        const double step = std::max(500.0, std::round(end / 10.0 / 500.0) * 500.0);
+        return acceleration_tower(500.0, end, step);
+    }
     case CalibrationKind::Temperature: {
         // Around the temperature in use, 20 C each way.
         double t = 210.0;
@@ -550,7 +615,15 @@ bool apply_calibration(CalibrationKind kind, double value, Settings& s) {
     case CalibrationKind::Dimensions:
     case CalibrationKind::FirstLayer:
     case CalibrationKind::Fit:
+    case CalibrationKind::ElephantFoot:
         return false;
+    case CalibrationKind::MaxFlow:
+        s.machine_max_flow = value;
+        break;
+    case CalibrationKind::Acceleration:
+        s.acceleration = value;
+        s.travel_acceleration = std::max(s.travel_acceleration, value);
+        break;
     case CalibrationKind::RetractionSpeed:
         s.retract_speed = value;
         break;

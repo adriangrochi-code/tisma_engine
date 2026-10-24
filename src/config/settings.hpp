@@ -36,6 +36,8 @@ struct HeightChange {
     std::optional<double> flow;            // %, replaces extrusion.flow
     std::optional<double> speed;           // %, of every extrusion's feed
     std::optional<double> pressure_advance; // the firmware's pressure advance (0 included)
+    std::optional<double> volumetric_flow; // mm3/s: every extrusion runs at this flow, past every cap (a flow tower)
+    std::optional<double> acceleration;    // mm/s2, written in the flavor's command (M204, SET_VELOCITY_LIMIT)
     std::string gcode;                     // G-code put at that layer's start, with variables
 };
 

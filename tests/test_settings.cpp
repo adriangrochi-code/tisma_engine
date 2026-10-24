@@ -240,7 +240,8 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
                       "needs_enclosure": true},
         "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
-                     "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65}]
+                     "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65, "volumetric_flow": 12,
+                     "acceleration": 3000}]
     })");
     REQUIRE(s.changes.size() == 2);
     CHECK(s.changes[0].z == 5.0); // sorted by height
@@ -286,4 +287,8 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("changes[0].temprature: unknown setting"));
     CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1}, {"z": 2, "flow": 1}]})"),
                       ContainsSubstring("changes[1].flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1, "acceleration": 10}]})"),
+                      ContainsSubstring("changes[0].acceleration"));
+    CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1, "volumetric_flow": 0}]})"),
+                      ContainsSubstring("changes[0].volumetric_flow"));
 }
