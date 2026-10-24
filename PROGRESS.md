@@ -2905,3 +2905,21 @@ segmento (usa `machine.acceleration`).
 **Sigue:** puentes y voladizos (la última estándar); la tanda de detalles del catálogo cuando terminen los agentes;
 la app móvil de Android (pedido nuevo del dueño: a definir qué sigue, ver `PLAN.md`).
 
+## 2026-10-24 — la app de Android (plan)
+
+**Decisiones del dueño:** «ve por la opción 1 y luego por devices, así podemos conectar impresoras; tiene que tener
+soporte USB» y «algo similar a Prusa EasyPrint en estética, con nuestras funciones».
+
+**Hecho:** `docs/MOBILE.md`, la fase P6 de `PLAN.md`:
+- qué hace la app (impresoras, impresión, cámara, controles, archivos, avisos) y la estética como caja negra;
+- una sola capa de dispositivos en C++ (`src/device/`) compartida con la página Device: la interfaz `Printer`, los
+  transportes y un host de G-code por puerto serie propio (números de línea, suma de verificación, `ok`,
+  `Resend:`, `M105`/`M155`, `M114`, `M27`), con un simulador de impresora serie para las pruebas de CI;
+- la app en Kotlin + Jetpack Compose con el núcleo por NDK y el USB por la API USB Host de Android;
+- el orden: USB en el escritorio → la app con USB OTG → las conexiones de red de la ficha de Device → cámara,
+  archivos y avisos → laminar simple desde el teléfono (a confirmar);
+- tres preguntas al dueño: teléfono e impresora de prueba, cámara, instalación.
+
+**Sigue:** empezar `src/device/` con el host serie y el simulador cuando la ficha de Device esté en `main` (PR #11)
+o antes, con la documentación pública de Marlin y RepRapFirmware; mientras, los grupos del catálogo que faltan.
+
