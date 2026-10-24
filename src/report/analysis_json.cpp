@@ -54,6 +54,17 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
                           {"min_safety", safety(s.min_safety)},
                           {"mode", failure_mode_name(s.mode)}});
     }
+    const ResolutionCheck& rc = r.resolution;
+    json resolution = {{"checked", rc.done}};
+    if (rc.done)
+        resolution.update({{"coarse_voxel", rc.voxel},
+                           {"coarse_rows_per_layer", rc.rows_per_layer},
+                           {"coarse_min_safety", safety(rc.min_safety)},
+                           {"coarse_max_displacement_mm", rc.max_displacement},
+                           {"change", rc.change},
+                           {"extrapolated_min_safety", safety(rc.extrapolated_min_safety)}});
+    else
+        resolution["reason"] = rc.reason;
     json warnings = json::array();
     for (const AnalysisWarning& w : r.warnings)
         warnings.push_back({{"code", w.code}, {"message", w.message}});
@@ -80,6 +91,7 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
           {"prepare_seconds", r.prepare_seconds},
           {"solve_seconds", r.solve_seconds}}},
         {"result", result},
+        {"resolution", resolution},
         {"layers", layers},
         {"warnings", warnings}};
     return root.dump(2) + "\n";

@@ -21,8 +21,14 @@ namespace {
 
 constexpr double kOnFace = 1e-6; // mm: how far from a face's plane its box reaches
 
-// Shares of the progress bar: slicing, then the voxels, then the solve.
+// Shares of the progress bar: slicing, then the voxels, then the solve; the
+// resolution check takes the end.
 constexpr double kSlicingShare = 0.10, kPrepareShare = 0.15, kSolveEnd = 0.97;
+constexpr double kMainShare = 0.88;
+
+// Above this relative change of the safety factor with voxels twice as large,
+// the result depends on the voxel size enough to say so.
+constexpr double kResolutionChange = 0.05;
 
 // For estimates, fitted to the peak memory of the 10 mm cube at both
 // qualities and both models (docs/ANALYSIS.md, "Recursos"): nearly all of it
@@ -189,12 +195,17 @@ AnalysisEstimate estimate_analysis(const IndexedMesh& mesh, const Settings& sett
                     (printed ? kBytesPerGridVoxelAsPrinted : kBytesPerGridVoxelSolid) * double(p.grid.solid.size()) / 1e6;
     out.seconds = kSecondsPerVoxelIteration * double(p.printed) *
                   (printed ? kTypicalIterationsAsPrinted : kTypicalIterationsSolid);
+    if (c.resolution_check) // voxels twice as large: a quarter as many, or an eighth with half the rows
+        out.seconds *= 1.0 + (p.rows >= 2 ? 0.125 : 0.25);
     out.grid = std::move(p.grid);
     return out;
 }
 
-AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu, const AnalysisProgress& progress) {
+namespace {
+
+// One analysis at the case's resolution, without the resolution check.
+AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
+                       const AnalysisProgress& progress) {
     AnalysisReport out;
     const auto start = std::chrono::steady_clock::now();
     Prepared p = prepare(mesh, settings, c, gpu, progress);
@@ -305,6 +316,64 @@ AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, c
         out.warnings.push_back({"nothing_held", "no fixture holds any part of the model"});
     if (c.loads.empty())
         out.warnings.push_back({"no_loads", "the case has no loads"});
+    return out;
+}
+
+} // namespace
+
+AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
+                            gpu::Context* gpu, const AnalysisProgress& progress) {
+    const auto [voxel, rows] = analysis_resolution(c, settings);
+    AnalysisCase coarse = c;
+    coarse.voxel = 2.0 * voxel;
+    coarse.rows_per_layer = rows >= 2 ? rows / 2 : rows;
+    coarse.resolution_check = false;
+    std::string reason;
+    if (!c.resolution_check)
+        reason = "not asked for";
+    else if (c.model == AnalysisModel::AsPrinted && voxel <= 0.5 * settings.wall_width + 1e-9 &&
+             coarse.voxel > 0.5 * settings.wall_width + 1e-9)
+        reason = "voxels of " + format(coarse.voxel) +
+                 " mm could not model the gaps of sparse infill; use high quality or smaller voxels";
+    const bool check = reason.empty();
+
+    // The main analysis takes most of the progress bar; the check, about an
+    // eighth of the work, the rest.
+    const double share = check ? kMainShare : 1.0;
+    AnalysisProgress main;
+    if (progress)
+        main = [&](std::string_view stage, double done) { progress(stage, share * done); };
+    AnalysisReport out = analyze(mesh, settings, c, gpu, main);
+    out.resolution.reason = reason;
+    if (check && out.valid) {
+        AnalysisProgress second;
+        if (progress)
+            second = [&](std::string_view, double done) { progress("resolution", share + (1.0 - share) * done); };
+        const AnalysisReport r = analyze(mesh, settings, coarse, gpu, second);
+        ResolutionCheck& check_result = out.resolution;
+        check_result.voxel = coarse.voxel;
+        check_result.rows_per_layer = coarse.rows_per_layer;
+        if (!r.valid) {
+            check_result.reason = "the analysis with the coarser voxels gave no valid result";
+        } else {
+            check_result.done = true;
+            check_result.min_safety = r.result.min_safety;
+            check_result.max_displacement = r.result.elasticity.max_displacement;
+            const double fine = out.result.min_safety, rough = r.result.min_safety;
+            if (std::isfinite(fine) && std::isfinite(rough)) {
+                check_result.change = (rough - fine) / fine;
+                check_result.extrapolated_min_safety = fine < rough ? std::max(0.0, 2.0 * fine - rough) : fine;
+                if (std::abs(check_result.change) > kResolutionChange)
+                    out.warnings.push_back(
+                        {"resolution_sensitive",
+                         "the safety factor changes " + format(100.0 * std::abs(check_result.change)) +
+                             " % with voxels twice as large: the result depends on the voxel size; the "
+                             "extrapolated minimum is " + format(check_result.extrapolated_min_safety)});
+            }
+        }
+    } else if (check) {
+        out.resolution.reason = "the analysis gave no valid result";
+    }
     if (progress)
         progress("done", 1.0);
     return out;

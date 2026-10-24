@@ -397,6 +397,12 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
             << report.result.min_peak_safety << "\n";
     else
         out << "min_safety: none (nothing is stressed)\n";
+    if (report.resolution.done)
+        out << "resolution: with " << report.resolution.voxel << " mm voxels min_safety " << report.resolution.min_safety
+            << ", a change of " << 100.0 * report.resolution.change << " %; extrapolated "
+            << report.resolution.extrapolated_min_safety << "\n";
+    else
+        out << "resolution: not checked (" << report.resolution.reason << ")\n";
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 

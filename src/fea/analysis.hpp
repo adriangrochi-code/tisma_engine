@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -64,6 +65,10 @@ struct AnalysisCase {
     double voxel = 0.0;      // mm across x and y; 0: from the quality and the line width
     int rows_per_layer = 0;  // 0: from the quality
     std::size_t max_voxels = 8'000'000; // above this the analysis does not run (memory)
+    // Solve again with voxels twice as large (and half the rows per layer
+    // when there are two or more) to see how much the result depends on the
+    // voxel size; about an eighth more time.
+    bool resolution_check = true;
     std::vector<CaseFixture> fixtures;
     std::vector<CaseLoad> loads;
     SolverOptions solver;
@@ -73,6 +78,21 @@ struct LayerSafety {
     double bottom = 0.0, top = 0.0;
     double min_safety = 0.0; // +infinity for a layer without stress
     FailureMode mode = FailureMode::None;
+};
+
+// How much the result depends on the voxel size: the same case with voxels
+// twice as large. If the safety factor falls as the voxels shrink, the
+// extrapolation assumes the error halves with the voxel size (first order:
+// 2 S_fine - S_coarse), the estimate of the value with very small voxels.
+struct ResolutionCheck {
+    bool done = false;
+    std::string reason; // why not, when not done
+    double voxel = 0.0; // the coarser voxels
+    int rows_per_layer = 0;
+    double min_safety = std::numeric_limits<double>::infinity(); // with the coarser voxels
+    double max_displacement = 0.0;
+    double change = 0.0; // (coarse - fine) / fine, of the minimum safety factor
+    double extrapolated_min_safety = std::numeric_limits<double>::infinity();
 };
 
 struct AnalysisWarning {
@@ -94,6 +114,7 @@ struct AnalysisReport {
     std::array<std::size_t, 3> below{};    // voxels with safety below 1, 1.5 and 2
     double prepare_seconds = 0.0, solve_seconds = 0.0;
     std::vector<AnalysisWarning> warnings;
+    ResolutionCheck resolution;
     // The result means something: the solver converged, a fixture holds the
     // part and at least one load acts on it.
     bool valid = false;
@@ -113,7 +134,8 @@ std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings
 Box resolve_region(const Region& region, const VoxelGrid& grid);
 
 // Progress for a user interface: the stage ("slicing", "voxels", "solving",
-// "summary") and how much of the whole analysis is done, from 0 to 1.
+// "summary", "resolution" for the resolution check, "done") and how much of
+// the whole analysis is done, from 0 to 1.
 using AnalysisProgress = std::function<void(std::string_view stage, double done)>;
 
 // Slices (as printed) and voxelizes the part, solves, and summarizes.

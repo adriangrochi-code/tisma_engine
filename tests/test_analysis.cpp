@@ -73,6 +73,7 @@ TEST_CASE("analysis case: defaults and every key", "[analysis]") {
         "fixtures": [{"name": "bed", "face": "bottom", "axes": "z"},
                      {"box": {"min": [null, -1, 0], "max": [5, null, null]}}],
         "loads": [{"name": "hook", "face": "x_max", "force": [0, 1.5, -20]}],
+        "resolution_check": false,
         "solver": {"tolerance": 1e-6, "max_iterations": 300, "preconditioner": "jacobi"}})");
     CHECK(c.material_id == "esun-pla-plus");
     CHECK(c.material.xt == 70.37);
@@ -98,6 +99,8 @@ TEST_CASE("analysis case: defaults and every key", "[analysis]") {
     CHECK(c.solver.tolerance == 1e-6);
     CHECK(c.solver.max_iterations == 300);
     CHECK(c.solver.preconditioner == Preconditioner::Jacobi);
+    CHECK(!c.resolution_check);
+    CHECK(d.resolution_check);
 }
 
 TEST_CASE("analysis case: errors name the key", "[analysis]") {
@@ -117,6 +120,7 @@ TEST_CASE("analysis case: errors name the key", "[analysis]") {
     CHECK_THAT(error_of("{\"loads\": [{\"name\": 3, \"face\": \"top\", \"force\": [0, 0, 1]}]}"), ContainsSubstring("loads[0].name: must be a string"));
     CHECK_THAT(error_of("{\"solver\": {\"preconditioner\": \"lu\"}}"), ContainsSubstring("solver.preconditioner"));
     CHECK_THAT(error_of("{oops"), ContainsSubstring("not valid JSON"));
+    CHECK_THAT(error_of("{\"resolution_check\": 1}"), ContainsSubstring("resolution_check: must be true or false"));
 }
 
 TEST_CASE("analysis: voxels from the quality and the line width", "[analysis]") {
@@ -158,6 +162,12 @@ TEST_CASE("analysis: a solid column pulled up, exact stress and safety", "[analy
         CHECK(l.mode == FailureMode::BetweenLayers);
     }
     CHECK(r.below == std::array<std::size_t, 3>{0, 0, 0});
+    // A uniform stress does not depend on the voxel size.
+    REQUIRE(r.resolution.done);
+    CHECK(r.resolution.voxel == 0.4);
+    CHECK(r.resolution.rows_per_layer == 1);
+    CHECK_THAT(r.resolution.change, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(r.resolution.extrapolated_min_safety, WithinRel(r.result.min_safety, 1e-6));
 
     // The report as JSON.
     const auto json = nlohmann::ordered_json::parse(analysis_json(r, c));
@@ -170,6 +180,8 @@ TEST_CASE("analysis: a solid column pulled up, exact stress and safety", "[analy
     CHECK(json["result"]["weakest"]["mode"] == "between_layers");
     CHECK(json["layers"].size() == 50);
     CHECK(json["warnings"].empty());
+    CHECK(json["resolution"]["checked"] == true);
+    CHECK(json["resolution"]["coarse_voxel"] == 0.4);
 
     // The map as VTK: the header, then the blocks of the right sizes.
     std::ostringstream vtk;
@@ -251,8 +263,10 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
         CHECK(r.valid);
         CHECK(r.result.min_safety < 1.0);
         CHECK(r.below[0] > 0);
-        REQUIRE(!r.warnings.empty());
-        CHECK(r.warnings.back().code == "unsafe");
+        bool unsafe = false;
+        for (const AnalysisWarning& w : r.warnings)
+            unsafe = unsafe || w.code == "unsafe";
+        CHECK(unsafe);
     }
     SECTION("too many voxels") {
         const AnalysisCase c = parse_analysis_case(R"({"max_voxels": 1000, "fixtures": [{"face": "bottom"}],
@@ -286,7 +300,7 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
     for (const auto& [stage, done] : steps)
         if (stages.empty() || stages.back() != stage)
             stages.push_back(stage);
-    CHECK(stages == std::vector<std::string>{"slicing", "voxels", "solving", "summary", "done"});
+    CHECK(stages == std::vector<std::string>{"slicing", "voxels", "solving", "summary", "resolution", "done"});
 
     // The surface of a 20 x 20 x 50 block of voxels: 2 x 400 + 4 x 1000 faces.
     std::ostringstream ply;
@@ -304,4 +318,40 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
     CHECK(safety_colour(1.7) == std::array<std::uint8_t, 3>{240, 210, 40});
     CHECK(safety_colour(3.0) == std::array<std::uint8_t, 3>{60, 170, 75});
     CHECK(safety_colour(std::numeric_limits<double>::infinity()) == std::array<std::uint8_t, 3>{190, 190, 190});
+}
+
+TEST_CASE("analysis: how much the result depends on the voxel size", "[analysis]") {
+    const IndexedMesh plate = box_mesh(12.0f, 4.0f, 2.0f);
+    SECTION("a bent plate with coarse voxels: a warning and the extrapolated value") {
+        const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "voxel": 0.5, "rows_per_layer": 2,
+            "fixtures": [{"face": "x_min"}], "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
+        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        REQUIRE(r.valid);
+        REQUIRE(r.resolution.done);
+        CHECK(r.resolution.voxel == 1.0);
+        CHECK(r.resolution.rows_per_layer == 1);
+        INFO("fine " << r.result.min_safety << ", coarse " << r.resolution.min_safety);
+        CHECK(r.resolution.min_safety > r.result.min_safety);
+        CHECK_THAT(r.resolution.change, WithinRel((r.resolution.min_safety - r.result.min_safety) / r.result.min_safety, 1e-12));
+        CHECK_THAT(r.resolution.extrapolated_min_safety, WithinRel(2.0 * r.result.min_safety - r.resolution.min_safety, 1e-12));
+        bool warned = false;
+        for (const AnalysisWarning& w : r.warnings)
+            warned = warned || w.code == "resolution_sensitive";
+        CHECK(warned == (r.resolution.change > 0.05));
+    }
+    SECTION("as printed at normal quality the coarser voxels cannot hold the gaps") {
+        const AnalysisCase c = parse_analysis_case(R"({"fixtures": [{"face": "x_min"}],
+            "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
+        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        CHECK(r.valid);
+        CHECK(!r.resolution.done);
+        CHECK_THAT(r.resolution.reason, ContainsSubstring("gaps of sparse infill"));
+    }
+    SECTION("not asked for") {
+        const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "resolution_check": false,
+            "fixtures": [{"face": "x_min"}], "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
+        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        CHECK(!r.resolution.done);
+        CHECK(r.resolution.reason == "not asked for");
+    }
 }

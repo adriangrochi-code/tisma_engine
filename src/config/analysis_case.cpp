@@ -155,8 +155,8 @@ AnalysisCase parse_analysis_case(std::string_view text) {
     }
     if (!root.is_object())
         throw SettingsError("case: the top level must be an object");
-    check_members(root, "case", {"material", "model", "quality", "voxel", "rows_per_layer", "max_voxels", "fixtures",
-                                 "loads", "solver"});
+    check_members(root, "case", {"material", "model", "quality", "voxel", "rows_per_layer", "max_voxels",
+                                 "resolution_check", "fixtures", "loads", "solver"});
     AnalysisCase c;
     c.material = as_printed(*find_material(c.material_id));
     if (root.contains("material"))
@@ -182,6 +182,11 @@ AnalysisCase parse_analysis_case(std::string_view text) {
         if (!v.is_number_integer() || v.get<long long>() < 1)
             fail("max_voxels", "must be a whole number greater than 0");
         c.max_voxels = std::size_t(v.get<long long>());
+    }
+    if (root.contains("resolution_check")) {
+        if (!root.at("resolution_check").is_boolean())
+            fail("resolution_check", "must be true or false");
+        c.resolution_check = root.at("resolution_check").get<bool>();
     }
     if (root.contains("fixtures")) {
         const json& list = root.at("fixtures");

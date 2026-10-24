@@ -2208,3 +2208,48 @@ máquina de referencia.
 - responder a la sesión principal lo que necesite para la interfaz;
 - estimar el error de resolución con dos calidades;
 - el núcleo de la GPU.
+
+## 2026-10-24 — A1, paso 7: estimación del error de resolución
+
+**Pedido del dueño:** seguir con la estimación del error de resolución.
+
+**Hecho:**
+- `resolution_check` (activado por defecto): el caso se repite con vóxeles del doble de ancho, y la mitad de filas
+  por capa si hay dos o más. El informe trae, en `resolution`:
+  - la resolución gruesa y sus resultados;
+  - el cambio relativo del factor mínimo;
+  - `extrapolated_min_safety`, la extrapolación de Richardson de primer orden (2 S_fino − S_grueso) cuando el factor
+    baja al afinar.
+- Aviso `resolution_sensitive` si el factor cambia más de un 5 %.
+- No se hace en `as_printed` con calidad `normal`, porque los vóxeles de 0,4 mm no representan los huecos del
+  relleno; el informe dice por qué.
+- El avance tiene una etapa `resolution` al final. La estimación de tiempo suma el chequeo.
+- Corregido: en el paso anterior se había perdido el título de la sección «Qué tan confiable es el número» de
+  `docs/ANALYSIS.md`.
+
+**Validación** (placa de 12 × 4 × 2 mm empotrada, 5 N en la punta; se agregó la corrida con vóxeles de 0,025 mm, más
+de 5,5 millones de vóxeles):
+
+| Placa | 0,2 mm | 0,1 mm | 0,05 mm | 0,025 mm | Extrapolado desde `high` (0,1 contra 0,2) |
+|---|---|---|---|---|---|
+| Maciza | 1,664 | 1,573 | 1,527 | 1,504 | 1,482 (límite de la serie: 1,481) |
+| Como se imprime | 1,615 | 1,499 | 1,380 | 1,381 | 1,383 |
+
+- **Pieza maciza:** converge en primer orden; la diferencia se reduce a la mitad en cada paso.
+- **Pieza como se imprime:** se estabiliza con 8 vóxeles por ancho de línea.
+- **Extrapolación:** la de calidad `high` acierta dentro de un 0,2 % en los dos casos.
+
+**Medido:** el cubo de 10 mm en calidad `high` tarda 33,4 s en total, unos 4 s más que sin el chequeo. Factor
+mínimo 1,983, con vóxeles gruesos 2,104, extrapolado 1,863; aparece el aviso (6,1 %). Las corridas con vóxeles de
+0,025 mm tardaron 119 s (maciza, 6,1 millones de vóxeles) y 183 s (como se imprime, 5,5 millones).
+
+**Probado:** 199/199 pruebas (193 de Catch2 y 6 del programa) con gcc, clang y ASan+UBSan. Pruebas nuevas:
+- tensión uniforme: cambio nulo y extrapolado igual al calculado;
+- placa maciza con vóxeles gruesos: el cambio, la fórmula extrapolada y el aviso según el umbral;
+- calidad `normal` como se imprime: no se hace y dice por qué;
+- desactivado;
+- la clave del caso y su error.
+
+**Sigue:**
+- el criterio de A1, la placa con agujero contra la solución de Kirsch, que amplía la evidencia de la extrapolación;
+- el núcleo de la GPU.

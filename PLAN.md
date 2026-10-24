@@ -367,10 +367,11 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   (`docs/ANALYSIS.md`)
 - [x] Factor de seguridad sobre la tensión promediada en un ancho de línea y una capa (el pico de un vóxel no converge
   en las aristas de los apoyos); estudio de convergencia en `docs/ANALYSIS.md`
-- [ ] Estimar el error de resolución: correr también la calidad inferior (cuesta un octavo) y avisar si el factor
-  cambia más que un umbral
+- [x] Estimar el error de resolución: el caso se repite con vóxeles del doble de ancho, se avisa si el factor cambia
+  más de un 5 % y se extrapola en primer orden; en la placa de prueba la extrapolación de `high` acierta dentro de un
+  0,2 % (maciza y como se imprime)
 - [ ] Representar mejor el contacto entre cordones en «como se imprime» (vóxeles parcialmente llenos en vez de
-  todo o nada): hoy el factor cambia un 8 % por refinamiento en la placa de prueba
+  todo o nada), para llegar al valor convergido con vóxeles más gruesos: hoy hacen falta 8 vóxeles por ancho de línea
 - [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
 - [x] Lo que la interfaz necesita del motor: `--estimate` (vóxeles, memoria y tiempo antes de correr), `--progress`
   y `--mesh` (la superficie de los vóxeles coloreada); lo que debe mostrar está en `docs/ANALYSIS.md`, «Para la

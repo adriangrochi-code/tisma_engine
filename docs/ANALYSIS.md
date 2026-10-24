@@ -38,6 +38,7 @@ fuerzas en N.
 | `quality` | texto | `"normal"` | `normal`: 2 vóxeles por ancho de línea (`walls.width`) y una fila por capa. `high`: 4 vóxeles por ancho de línea y filas tan altas como anchas (2 por capa de 0,2 mm con líneas de 0,4 mm). Para decidir si una pieza aguanta, usar `high` y leer «Qué tan confiable es el número» |
 | `voxel` | número | según `quality` | Ancho del vóxel en X e Y. Con `as_printed`, los huecos del relleno solo aparecen si es como mucho medio ancho de línea; si es mayor, la pieza se analiza maciza y el informe lo avisa |
 | `rows_per_layer` | entero | según `quality` | En cuántas filas se parte cada capa (de 1 a 64) |
+| `resolution_check` | sí/no | `true` | Repite el caso con vóxeles del doble de ancho (y la mitad de filas por capa si hay dos o más) para ver cuánto depende el resultado del tamaño del vóxel; agrega alrededor de un octavo del tiempo (un cuarto con una fila por capa). En `as_printed` con calidad `normal` no se puede: los vóxeles de 0,4 mm ya no representan los huecos del relleno, y el informe lo dice |
 | `max_voxels` | entero | 8 000 000 | Si el análisis pide más vóxeles, no corre. La memoria ronda 0,5 kB por vóxel |
 | `fixtures` | lista | vacía | Apoyos: los nodos de la pieza en la región no se mueven en los ejes elegidos |
 | `loads` | lista | vacía | Cargas: la fuerza total se reparte sobre las caras del borde de la pieza cuyo centro cae en la región, en proporción al área |
@@ -58,7 +59,7 @@ cálculo: su desplazamiento no está determinado. El informe dice cuántos vóxe
 ## El informe (`-o informe.json`)
 
 El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija y 100 N de corte en la cara de arriba
-(recortado):
+(recortado; el análisis tardó 29,2 s y el chequeo de resolución unos 4 s más):
 
 ```json
 {
@@ -75,8 +76,11 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
   "result": {"max_displacement_mm": 0.1024, "max_von_mises_mpa": 27.12, "min_safety": 1.983,
              "weakest": {"x": 9.95, "y": 9.85, "z": 0.05, "layer": 0, "mode": "between_layers"},
              "min_peak_safety": 1.283, "voxels_below_1": 0, "voxels_below_1_5": 0, "voxels_below_2": 4},
+  "resolution": {"checked": true, "coarse_voxel": 0.2, "coarse_rows_per_layer": 1, "coarse_min_safety": 2.104,
+                 "coarse_max_displacement_mm": 0.1001, "change": 0.0606, "extrapolated_min_safety": 1.863},
   "layers": [{"index": 0, "bottom": 0.0, "top": 0.2, "min_safety": 1.983, "mode": "between_layers"}],
-  "warnings": []
+  "warnings": [{"code": "resolution_sensitive",
+                "message": "the safety factor changes 6.064 % with voxels twice as large: ..."}]
 }
 ```
 
@@ -93,6 +97,13 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
   ahí una tensión finita), así que no sirve para decidir.
 - `mode`: `line` (se rompe el cordón), `between_lines` (se despegan cordones vecinos de la misma capa),
   `between_layers` (se despegan las capas) o `none`.
+- `resolution`: el chequeo de resolución. Con `checked` verdadero trae:
+  - `coarse_voxel` y `coarse_rows_per_layer`, la resolución gruesa;
+  - `coarse_min_safety` y `coarse_max_displacement_mm`, los resultados con vóxeles gruesos;
+  - `change`, cuánto cambió el factor mínimo, relativo al fino;
+  - `extrapolated_min_safety`, la estimación del factor con vóxeles muy chicos.
+
+  Con `checked` falso trae `reason`, por qué no se hizo. Para decidir, ver «Qué tan confiable es el número».
 - `layers`: el vóxel más débil de cada capa, para ver qué capas mandan.
 - `warnings`, por su código:
   - `fixture_unused`: un apoyo que no toca la pieza;
@@ -100,6 +111,7 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
   - `load_not_applied`: cargas cuya región no toca la parte sostenida;
   - `not_converged`: el solucionador no llegó a la tolerancia;
   - `coarse_voxels`: vóxeles demasiado anchos para los huecos del relleno;
+  - `resolution_sensitive`: con vóxeles del doble de ancho el factor mínimo cambia más de un 5 %;
   - `unsafe`: hay vóxeles con factor de seguridad menor que 1;
   - `nothing_held`: ningún apoyo sostiene nada;
   - `no_loads`: el caso no tiene cargas.
@@ -158,17 +170,18 @@ JSON en lugar del informe:
 
 Es lo que una interfaz muestra al elegir la calidad, antes de correr. La memoria sale de un ajuste a corridas medidas
 (ver «Recursos»). El tiempo es aproximado: supone las iteraciones típicas (60 como se imprime, 15 maciza) en la
-máquina de referencia de 4 núcleos.
+máquina de referencia de 4 núcleos, más el chequeo de resolución si está pedido.
 
 ## Avance (`--progress`)
 
 Mientras corre, el comando escribe líneas `progress: <etapa> <fracción>`, con la fracción de 0 a 1 del análisis
 entero. Las etapas son `slicing`, `voxels`, `solving` (avanza con el residuo en escala logarítmica, de 1 a la
-tolerancia), `summary` y `done`. La fracción nunca retrocede. Para cancelar, alcanza con terminar el proceso.
+tolerancia), `summary`, `resolution` (el chequeo de resolución, al final) y `done`. La fracción nunca retrocede. Para cancelar, alcanza con terminar el proceso.
 
 ## Recursos
 
-Medido en el cubo de 10 mm de PLA Basic, 4 núcleos, comando completo:
+Medido en el cubo de 10 mm de PLA Basic, 4 núcleos, comando completo, sin el chequeo de resolución (que agrega
+alrededor de un octavo del tiempo; unos 4 s en `as_printed` `high`):
 
 | Caso | Grilla | Vóxeles analizados | Memoria pico | Estimada | Tiempo | Estimado |
 |---|---|---|---|---|---|---|
@@ -191,40 +204,55 @@ Lo que una interfaz necesita mostrar, con lo que el comando ya da:
 3. **Al correr:** una barra con `--progress`; cancelar es terminar el proceso.
 4. **Al terminar:**
    - dibujar la malla de `--mesh` con sus colores y la leyenda de las cuatro bandas;
-   - mostrar la cantidad de vóxeles analizados, el factor mínimo, dónde está (`result.weakest`: punto, capa y modo de
+   - mostrar la cantidad de vóxeles analizados, el factor mínimo extrapolado (`resolution.extrapolated_min_safety`,
+     ver «Qué tan confiable es el número») junto al calculado, dónde está (`result.weakest`: punto, capa y modo de
      falla) y la capa más débil (`layers`);
    - mostrar los avisos (`warnings`) tal como vienen;
    - si `valid` es falso, decirlo antes que cualquier número;
    - un corte por capas ayuda a ver adentro (la altura de cada capa está en `layers`).
 5. **Para ver todo en detalle:** el mapa VTK en ParaView.
 
+## Qué tan confiable es el número
 
 Cuánto cambian los resultados al achicar el vóxel. Medido en una placa de 12 × 4 × 2 mm de PLA Basic de Bambu Lab,
 empotrada en `x_min` y con 5 N hacia abajo en `x_max`, ajustes por defecto (relleno al 20 %); el vóxel se achica a la
-mitad en cada columna y las filas por capa se duplican:
+mitad en cada fila y las filas por capa se duplican:
 
-| Placa | Vóxel | Desplazamiento máx. | `min_safety` | Lejos del empotramiento (x > 1 mm) | `min_peak_safety` |
-|---|---|---|---|---|---|
-| Maciza (`solid`) | 0,2 mm | 0,4199 mm | 1,664 | 1,734 | 1,565 |
-| | 0,1 mm | 0,4220 mm | 1,573 | 1,721 | 1,249 |
-| | 0,05 mm | 0,4226 mm | 1,527 | 1,716 | 0,990 |
-| Como se imprime | 0,2 mm | 0,4416 mm | 1,615 | 1,615 | 1,476 |
-| | 0,1 mm | 0,4546 mm | 1,499 | 1,520 | 0,920 |
-| | 0,05 mm | 0,4620 mm | 1,380 | 1,380 | 0,649 |
+| Placa | Vóxel | Vóxeles | Desplazamiento máx. | `min_safety` | Lejos del empotramiento (x > 1 mm) | `min_peak_safety` |
+|---|---|---|---|---|---|---|
+| Maciza (`solid`) | 0,2 mm | 12 000 | 0,4199 mm | 1,664 | 1,734 | 1,565 |
+| | 0,1 mm | 96 000 | 0,4220 mm | 1,573 | 1,721 | 1,249 |
+| | 0,05 mm | 768 000 | 0,4226 mm | 1,527 | 1,716 | 0,990 |
+| | 0,025 mm | 6 144 000 | 0,4228 mm | 1,504 | | 0,773 |
+| Como se imprime | 0,2 mm | 10 843 | 0,4416 mm | 1,615 | 1,615 | 1,476 |
+| | 0,1 mm | 86 520 | 0,4546 mm | 1,499 | 1,520 | 0,920 |
+| | 0,05 mm | 692 508 | 0,4620 mm | 1,380 | 1,380 | 0,649 |
+| | 0,025 mm | 5 541 432 | 0,4684 mm | 1,381 | | 0,424 |
 
-- **Pieza maciza:** el desplazamiento y el factor promediado convergen. Cada mitad de vóxel cambia la mitad o menos
-  que la anterior.
-- **Pieza como se imprime:** cada refinamiento todavía cambia el factor alrededor de un 8 %. La forma de los cordones
-  cambia con la resolución: las líneas a 45° se vuelven escalones de vóxeles y el contacto entre cordones cruzados
-  queda distinto.
-- **Pico de un vóxel:** no converge. Es la singularidad de la arista empotrada.
+- **Pieza maciza:** el factor promediado converge en primer orden: cada mitad de vóxel lo cambia la mitad que la
+  anterior (−0,091, −0,046, −0,023), hacia 1,481.
+- **Pieza como se imprime:** baja hasta 0,05 mm (8 vóxeles por ancho de línea) y ahí se queda (1,380 y 1,381). Hasta
+  entonces, la forma de los cordones en vóxeles cambia con la resolución: escalones en las líneas a 45° y el contacto
+  entre cordones cruzados.
+- **Pico de un vóxel:** no converge nunca. Es la singularidad de la arista empotrada.
+
+El chequeo de resolución (`resolution_check`) en calidad `high` compara 0,1 mm con 0,2 mm y extrapola en primer
+orden:
+
+| Placa | `min_safety` (`high`) | Con vóxeles gruesos | `extrapolated_min_safety` | Valor con los vóxeles más finos |
+|---|---|---|---|---|
+| Maciza | 1,573 | 1,664 | 1,482 | 1,481 (límite de la serie) |
+| Como se imprime | 1,499 | 1,615 | 1,383 | 1,381 (0,025 mm) |
+
+En los dos casos, la extrapolación de la calidad `high` acierta dentro de un 0,2 %. El factor de `high` solo quedaba
+un 6 a 9 % por encima.
 
 Para decidir, entonces:
-- usar `high`;
-- leer `min_safety`, no `min_peak_safety`;
-- dejar margen: la calidad `normal` dio un factor alrededor de un 8 % más alto que `high` en la placa y un 6 % en el
-  cubo de prueba (2,10 contra 1,98);
+- usar `high` con el chequeo de resolución, que viene activado;
+- decidir con `resolution.extrapolated_min_safety`, no con `min_safety` ni con `min_peak_safety`;
+- si aparece `resolution_sensitive`, el resultado depende del vóxel más de un 5 %: la extrapolación lo corrige, pero
+  conviene dejar margen o probar vóxeles más chicos (`voxel`, `rows_per_layer`);
 - un empotramiento perfecto no existe: el valor junto a un apoyo `xyz` es pesimista; un apoyo real cede algo.
 
-Pendiente en `PLAN.md`: estimar el error de resolución corriendo dos calidades, y representar mejor el contacto entre
-cordones.
+La evidencia son dos casos. Más adelante, el criterio de A1 (placa con agujero, con la solución exacta de Kirsch) la
+amplía.
