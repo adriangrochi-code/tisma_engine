@@ -1928,3 +1928,26 @@ queda por debajo del de la superficie.
 - criterio de falla anisótropo y mapa del factor de seguridad.
 
 **Sigue:** el material ortótropo con direcciones del laminado y la falla anisótropa; después, la multigrilla.
+
+## 2026-10-24 — A1, paso 2: vóxeles en forma de caja que siguen las capas
+
+**Pedido del dueño:** en los modelos de alta calidad, 4 vóxeles por ancho de línea y la altura según la altura de
+capa, así que no cubos, para simular la adherencia entre capas y entre paredes de la forma más fiable.
+
+**Hecho:**
+- Los vóxeles son cajas: hx × hy en el plano y, en altura, filas entre planos z que pueden seguir las capas.
+  `layer_planes` parte cada capa (la primera también) en filas enteras, así que los límites entre capas caen en caras
+  de elementos.
+- El hexaedro se calcula para una caja hx × hy × hz. El solucionador arma un elemento por cada altura de fila distinta
+  (dos con una primera capa más gruesa).
+- Las cargas se reparten en proporción al área de cada cara.
+
+**Probado:** 180/180 pruebas con gcc, clang y ASan+UBSan.
+- Prueba nueva: barra de 2 × 0,4 × 0,7 mm con vóxeles de 0,1 × 0,1 mm, dos filas por capa de 0,2 mm y una primera
+  capa de 0,3 mm. A tracción sigue exacta (10⁻⁸) en alargamiento, contracción en Y y en Z, y tensión.
+- El voladizo de antes da lo mismo (−2,1 % con 0,5 mm, 181 ms).
+
+**Sigue:**
+- material ortótropo «como se imprimió»: dirección del cordón por elemento desde el laminado;
+- elementos de interfaz entre capas (en sus caras) y entre cordones, con adherencia propia;
+- criterio de falla anisótropo y factor de seguridad.

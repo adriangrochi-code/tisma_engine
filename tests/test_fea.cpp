@@ -17,7 +17,9 @@ namespace {
 
 VoxelGrid block(int nx, int ny, int nz, double h) {
     VoxelGrid g;
-    g.h = h, g.nx = nx, g.ny = ny, g.nz = nz;
+    g.hx = g.hy = h, g.nx = nx, g.ny = ny, g.nz = nz;
+    for (int k = 0; k <= nz; ++k)
+        g.z.push_back(k * h);
     g.solid.assign(std::size_t(nx) * std::size_t(ny) * std::size_t(nz), 1);
     return g;
 }
@@ -108,4 +110,33 @@ TEST_CASE("a cantilever beam bends as beam theory says", "[fea]") {
     CHECK_THAT(deflection, WithinRel(expected, 0.05));
     // The largest bending stress, at the clamp's top and bottom: M c / I.
     CHECK(r.max_von_mises > 0.8 * force * length * (side / 2.0) / inertia);
+}
+
+TEST_CASE("box voxels that follow the layers: still exact in tension", "[fea]") {
+    // 4 voxels per 0.4 mm line across, 2 per 0.2 mm layer up, a first layer of
+    // 0.3 mm: a 2 x 0.4 x 0.7 mm bar on rollers, pulled along x.
+    const std::vector<Layer> layers{{0.0, 0.3}, {0.3, 0.5}, {0.5, 0.7}};
+    VoxelGrid g;
+    g.hx = g.hy = 0.1;
+    g.z = layer_planes(layers, 2);
+    REQUIRE(g.z.size() == 7);
+    CHECK_THAT(g.z[1], WithinAbs(0.15, 1e-12));
+    CHECK_THAT(g.z[3], WithinAbs(0.4, 1e-12));
+    g.nx = 20, g.ny = 4, g.nz = 6;
+    g.solid.assign(std::size_t(20 * 4 * 6), 1);
+    const Material m{3500.0, 0.35};
+    const Fixture fixtures[] = {{face(0, 0.0), true, false, false}, {face(1, 0.0), false, true, false},
+                                {face(2, 0.0), false, false, true}};
+    SurfaceLoad load;
+    load.box = face(0, 2.0);
+    load.force[0] = 2.8;
+    const ElasticityResult r = solve_elasticity(g, m, fixtures, std::span(&load, 1), 1e-12);
+    REQUIRE(r.converged);
+    const double stress = 2.8 / (0.4 * 0.7);
+    auto u = [&](int i, int j, int k, int axis) { return r.displacement[3 * ((std::size_t(k) * 5 + std::size_t(j)) * 21 + std::size_t(i)) + std::size_t(axis)]; };
+    CHECK_THAT(u(20, 2, 3, 0), WithinRel(stress / m.young * 2.0, 1e-8));
+    CHECK_THAT(u(20, 2, 6, 2), WithinRel(-m.poisson * stress / m.young * 0.7, 1e-8));
+    CHECK_THAT(u(20, 4, 6, 1), WithinRel(-m.poisson * stress / m.young * 0.4, 1e-8));
+    for (double vm : r.von_mises)
+        CHECK_THAT(vm, WithinRel(stress, 1e-8));
 }

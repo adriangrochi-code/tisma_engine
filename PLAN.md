@@ -343,6 +343,10 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   sobre caras (`src/fea/elasticity.*`)
 - [x] Validación: barra a tracción exacta; voladizo a −5,1 %, −2,1 % y −1,3 % de la teoría de vigas con vóxeles de 1,
   0,5 y 0,25 mm
+- [x] Vóxeles en forma de caja que siguen el laminado (pedido del dueño): hx × hy en el plano, por ejemplo 4 por ancho
+  de línea en los modelos de alta calidad, y en altura cada capa partida en filas enteras (la primera capa también),
+  así que los límites entre capas caen en caras de elementos
+- [ ] Ajustes del análisis: tamaño del vóxel desde el ancho de línea y la altura de capa (calidad normal y alta)
 - [ ] **Adherencia entre capas y entre líneas (pedido del dueño, para la máxima fiabilidad):** material ortótropo «como
   se imprimió», con una dirección por elemento tomada del laminado (la del cordón, la transversal en la capa y la de
   construcción); rigidez y resistencia propias en cada dirección: a lo largo del cordón, entre líneas (adherencia de

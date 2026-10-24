@@ -35,13 +35,27 @@ class Operator {
 public:
     Operator(const VoxelGrid& g, const Material& m, std::span<const double> scale)
         : g_(g), nx_(g.nx + 1), ny_(g.ny + 1), nz_(g.nz + 1) {
-        const Hex8 e = hex8(m.poisson);
-        const double factor = m.young * g.h;
-        for (int a = 0; a < 8; ++a)
-            for (int b = 0; b < 8; ++b)
-                for (int r = 0; r < 3; ++r)
-                    for (int c = 0; c < 3; ++c)
-                        block_[a][b][r][c] = factor * e.stiffness[std::size_t(3 * a + r) * 24 + std::size_t(3 * b + c)];
+        // One element per distinct row height (layers are 0.2 mm, the first
+        // one maybe thicker): its 8 x 8 blocks of 3 x 3.
+        layer_class_.resize(std::size_t(g.nz));
+        std::vector<long long> heights;
+        for (int k = 0; k < g.nz; ++k) {
+            const long long key = std::llround(g.hz(k) * 1e9); // to the picometre
+            const auto it = std::find(heights.begin(), heights.end(), key);
+            layer_class_[std::size_t(k)] = int(it - heights.begin());
+            if (it == heights.end()) {
+                heights.push_back(key);
+                const Hex8 e = hex8(m.poisson, g.hx, g.hy, g.hz(k));
+                elements_.push_back(e);
+                Blocks b;
+                for (int a = 0; a < 8; ++a)
+                    for (int c = 0; c < 8; ++c)
+                        for (int r = 0; r < 3; ++r)
+                            for (int q = 0; q < 3; ++q)
+                                b.k[a][c][r][q] = m.young * e.stiffness[std::size_t(3 * a + r) * 24 + std::size_t(3 * c + q)];
+                blocks_.push_back(b);
+            }
+        }
         scale_.resize(g.solid.size());
         for (std::size_t v = 0; v < g.solid.size(); ++v)
             scale_[v] = g.solid[v] ? (scale.empty() ? 1.0 : scale[v]) : 0.0;
@@ -68,6 +82,7 @@ public:
                     const double s = scale(ei, ej, ek);
                     if (s == 0.0)
                         continue;
+                    const auto& block_ = blocks_[std::size_t(layer_class_[std::size_t(ek)])].k;
                     for (int b = 0; b < 8; ++b) {
                         const std::size_t m = node(ei + kHexCorner[b][0], ej + kHexCorner[b][1], ek + kHexCorner[b][2]);
                         const double* xm = &x[3 * m];
@@ -88,7 +103,11 @@ public:
             const int i = int(n % std::size_t(nx_)), j = int(n / std::size_t(nx_) % std::size_t(ny_)),
                       k = int(n / (std::size_t(nx_) * std::size_t(ny_)));
             for (int a = 0; a < 8; ++a) {
-                const double s = scale(i - kHexCorner[a][0], j - kHexCorner[a][1], k - kHexCorner[a][2]);
+                const int ek = k - kHexCorner[a][2];
+                const double s = scale(i - kHexCorner[a][0], j - kHexCorner[a][1], ek);
+                if (s == 0.0)
+                    continue;
+                const auto& block_ = blocks_[std::size_t(layer_class_[std::size_t(ek)])].k;
                 for (int r = 0; r < 3; ++r)
                     d[3 * n + std::size_t(r)] += s * block_[a][a][r][r];
             }
@@ -99,11 +118,17 @@ public:
     int nx() const { return nx_; }
     int ny() const { return ny_; }
     int nz() const { return nz_; }
+    const Hex8& element(int k) const { return elements_[std::size_t(layer_class_[std::size_t(k)])]; }
 
 private:
+    struct Blocks {
+        double k[8][8][3][3];
+    };
     const VoxelGrid& g_;
     int nx_, ny_, nz_;
-    double block_[8][8][3][3];
+    std::vector<Blocks> blocks_;
+    std::vector<Hex8> elements_;
+    std::vector<int> layer_class_; // per row of voxels: which element
     std::vector<double> scale_;
 };
 
@@ -126,7 +151,7 @@ ElasticityResult solve_elasticity(const VoxelGrid& g, const Material& material, 
     for (int k = 0; k < op.nz(); ++k)
         for (int j = 0; j < op.ny(); ++j)
             for (int i = 0; i < op.nx(); ++i) {
-                const double x = g.x0 + i * g.h, y = g.y0 + j * g.h, z = g.z0 + k * g.h;
+                const double x = g.x0 + i * g.hx, y = g.y0 + j * g.hy, z = g.z[std::size_t(k)];
                 const std::size_t n = op.node(i, j, k);
                 for (const Fixture& f : fixtures)
                     if (f.box.contains(x, y, z)) {
@@ -140,7 +165,7 @@ ElasticityResult solve_elasticity(const VoxelGrid& g, const Material& material, 
             }
 
     // Forces: each load's total over the boundary faces whose centre is in its
-    // box, a quarter of each face's area to each of its corners.
+    // box, in proportion to area, a quarter of each face to each corner.
     std::vector<double> f(dofs, 0.0);
     static constexpr int kFace[6][4][3] = {
         {{0, 0, 0}, {0, 1, 0}, {0, 1, 1}, {0, 0, 1}}, {{1, 0, 0}, {1, 1, 0}, {1, 1, 1}, {1, 0, 1}},
@@ -162,11 +187,13 @@ ElasticityResult solve_elasticity(const VoxelGrid& g, const Material& material, 
                         for (const auto& corner : kFace[s])
                             for (int a = 0; a < 3; ++a)
                                 c[a] += corner[a] / 4.0;
-                        if (!load.box.contains(g.x0 + (i + c[0]) * g.h, g.y0 + (j + c[1]) * g.h, g.z0 + (k + c[2]) * g.h))
+                        if (!load.box.contains(g.x0 + (i + c[0]) * g.hx, g.y0 + (j + c[1]) * g.hy,
+                                               g.z[std::size_t(k)] + c[2] * g.hz(k)))
                             continue;
+                        const double area = s < 2 ? g.hy * g.hz(k) : s < 4 ? g.hx * g.hz(k) : g.hx * g.hy;
                         for (const auto& corner : kFace[s])
-                            weight[op.node(i + corner[0], j + corner[1], k + corner[2])] += 0.25;
-                        total += 1.0;
+                            weight[op.node(i + corner[0], j + corner[1], k + corner[2])] += area / 4.0;
+                        total += area;
                     }
                 }
         if (total == 0.0)
@@ -219,8 +246,8 @@ ElasticityResult solve_elasticity(const VoxelGrid& g, const Material& material, 
     }
 
     // Von Mises stress at the centre of every element.
-    const Hex8 e = hex8(material.poisson);
     tbb::parallel_for(0, g.nz, [&](int k) {
+        const Hex8& e = op.element(k);
         for (int j = 0; j < g.ny; ++j)
             for (int i = 0; i < g.nx; ++i) {
                 if (!g.at(i, j, k))
@@ -232,7 +259,7 @@ ElasticityResult solve_elasticity(const VoxelGrid& g, const Material& material, 
                 double strain[6] = {}, stress[6] = {};
                 for (int s = 0; s < 6; ++s)
                     for (int c = 0; c < 24; ++c)
-                        strain[s] += e.b_centre[std::size_t(s) * 24 + std::size_t(c)] * ue[c] / g.h;
+                        strain[s] += e.b_centre[std::size_t(s) * 24 + std::size_t(c)] * ue[c];
                 const double scale = element_scale.empty() ? 1.0 : element_scale[g.index(i, j, k)];
                 for (int s = 0; s < 6; ++s)
                     for (int c = 0; c < 6; ++c)
