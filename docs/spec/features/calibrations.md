@@ -39,7 +39,7 @@ documentación de cada firmware: [Marlin](https://marlinfw.org/meta/gcode/),
    | Pressure advance | `SET_PRESSURE_ADVANCE ADVANCE=<v>` | `M900 K<v>` | `M572 D0 S<v>` |
    | Esquinas | `SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=<v>` | `M205 X<v> Y<v>` | `M566 X<v·60> Y<v·60>` (mm/min) |
    | Vibraciones (input shaping) | `SET_INPUT_SHAPER SHAPER_FREQ_X=<Hz> SHAPER_FREQ_Y=<Hz>` | `M593 F<Hz>` | `M593 F<Hz>` |
-   | Aceleración | `M204` con el valor | `M204` con el valor | `M204` con el valor |
+   | Aceleración | `M204 S<v>` | `M204 P<v>` | `M204 P<v>` (sin prueba) |
 
    La retracción, la velocidad volumétrica máxima y la velocidad de los perímetros no son comandos: el motor usa el
    valor de la franja al generar esas capas.
@@ -79,3 +79,4 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra: un prisma de 20 × 20 × 2
 | CA4 | Retracción de 0,5 a 2,5, paso 0,5 | Las retracciones de cada franja miden 0,5, 1,0, 1,5, 2,0 y 2,5 mm |
 | CA5 | Esquinas de 2 a 10, paso 2 | Klipper `SQUARE_CORNER_VELOCITY=2.00`, Marlin 2 `M205 X2.00 Y2.00`, RepRapFirmware `M566 X120 Y120`; en Z 5,2 los dobles |
 | CA6 | Vibraciones de 20 a 60 Hz, paso 10 | Klipper `SET_INPUT_SHAPER SHAPER_FREQ_X=20.0 SHAPER_FREQ_Y=20.0`; Marlin 2 y RepRapFirmware `M593 F20.0`; en Z 5,2, 30 Hz |
+| CA7 | Aceleración de 1000 a 5000, paso 1000 | Klipper `M204 S1000` … `S5000`; Marlin 2 `M204 P1000` … `P5000`, en Z 0,4, 5,2, 10,2, 15,2 y 20,2 |
