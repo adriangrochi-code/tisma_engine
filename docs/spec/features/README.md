@@ -19,6 +19,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`staggered_perimeters.md`](staggered_perimeters.md): perímetros internos alternados media capa más arriba, con la nota de la patente | después de F2 | Para revisar |
 | [`interlock_infill.md`](interlock_infill.md): relleno sobre ondas en Z que se encajan entre capas | después de F3 | Para revisar |
 | [`dense_infill.md`](dense_infill.md): relleno más denso solo bajo las superficies de arriba | después de F3 | Para revisar |
+| [`pressure_advance_gcode.md`](pressure_advance_gcode.md): estudio: el adelanto del extrusor escrito en el G-code para firmwares sin pressure advance, con los límites en las uniones y la simulación | después de F4, opcional | Para revisar |
 | [`structural_analysis.md`](structural_analysis.md): análisis estructural por vóxeles, material con capas más débiles, criterio de rotura, temperatura, paredes y relleno, tabla de materiales, validación con teoría y CalculiX | F7 | Para revisar |
 | [`structural_optimization.md`](structural_optimization.md): relleno mínimo uniforme y por zonas, nervios a lo largo de las tensiones, refuerzos, lattice, orientación recomendada | F7 | Para revisar |
 | [`aerodynamics.md`](aerodynamics.md): arrastre por presión (lattice Boltzmann) y rozamiento con la rugosidad de las capas | F7 | Para revisar |
