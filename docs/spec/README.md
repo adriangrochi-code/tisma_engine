@@ -14,6 +14,7 @@ Los escribió el equipo del dueño, que conoce Tisma Slicer por dentro. Así fun
 | `SETTINGS_V1.md` | Los ajustes de la primera versión, con su significado y unidades |
 | `BEHAVIOR.md` | Cómo tiene que comportarse el laminado: requisitos y lecciones medidas en Tisma |
 | `BENCHMARKS.md` | Números de referencia de Tisma Slicer, medidos como caja negra, para comparar |
+| `COVERAGE.md` | Todo lo que hace Tisma Slicer, función por función, con la ficha que lo cubre: el motor va a reemplazar a Tisma Slicer y no se puede perder nada |
 
 Lo que Tisma Slicer ya hace llega como fichas en `features/`, una por función, con las reglas de «Fichas» de
 `CLEANROOM.md`.
