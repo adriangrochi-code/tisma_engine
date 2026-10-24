@@ -201,7 +201,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Interpolación entre repartos para las cantidades fraccionarias de las rampas (sección 3.5)
 - [x] Trapezoidación: apoyos de cada extremo de arista en los dos lados (punto más cercano del borde, ecuación 1)
 - [ ] Dominios por contorno (qué trapecios bordean cada contorno, para encadenar los segmentos)
-- [ ] Propagación del reparto desde el centro hacia afuera (sección 3.5) y extracción de trayectorias (sección 3.6)
+- [x] Reparto por nodo (sección 3.5) y sitios sobre los lados de apoyo de los trapecios (sección 3.6)
+- [ ] Sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ) y resolución de conflictos de reparto (figura 9)
+- [ ] Unir los sitios del mismo índice en segmentos por trapecio y encadenarlos en polilíneas de ancho variable
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

@@ -689,3 +689,27 @@ figura 8.
 - propagación del reparto (sección 3.5);
 - sitios sobre los lados de los trapecios (sección 3.6: el cordón i va donde el radio vale l_i);
 - unión por contorno.
+
+## 2026-10-24 — bloque nocturno 15: reparto por nodo y sitios
+
+**Hecho:**
+- `node_beadings` (Kuipers et al. 2020, sección 3.5): los nodos centrales toman el reparto de su cantidad (entera o
+  fraccionaria, interpolada) y su espesor 2R. Los demás suben hacia el vecino de mayor radio hasta un nodo central y
+  usan su reparto; si llegan a un pico sin centro, usan el espesor de ese pico.
+- `support_sites` (sección 3.6): en cada lado de trapecio que va de un nodo a su apoyo, el cordón i se ubica en la
+  fracción lᵢ/R, porque la distancia al borde crece en línea recta de 0 a R. Cada sitio guarda su ancho, su índice
+  y a qué trapecio pertenece.
+
+**Probado:**
+- 98/98 pruebas con gcc, clang y ASan+UBSan:
+  - tira de 2 mm: 5 cordones de 0,4 mm, exactamente 12 sitios en la arista del medio (2 extremos, 2 lados,
+    3 cordones), en las filas 0,2 / 0,6 / 1,0 / 1,4 / 1,8;
+  - todos los nodos de la tira, esquinas incluidas, usan ese reparto, y ningún sitio sale de la región;
+  - cuña: sitios adentro, anchos hasta 3/2·w*, varios cordones por lado.
+- La primera versión de la prueba de la tira esperaba sitios a lo largo de la arista; los sitios van en sus
+  extremos, y el segmento entre ellos es el paso siguiente. El error era de la prueba.
+
+**Sigue:**
+- sitios sobre las aristas no centrales del eje (donde el radio cruza lᵢ);
+- unir los sitios del mismo índice en segmentos por trapecio;
+- encadenarlos en polilíneas de ancho variable.
