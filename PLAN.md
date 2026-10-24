@@ -40,6 +40,12 @@ actual, que el dueño pueda licenciar como quiera.
 | F4 | 10–12 | G-code: orden de islas, viajes que no cruzan perímetros, retracción, salto en Z, costura (alineada, más cercana, aleatoria), enfriamiento con tiempo mínimo de capa, velocidades, aceleraciones, límites de la máquina, Marlin y Klipper, estimación de tiempo | El Benchy se imprime en una impresora real |
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer | Medido y documentado |
+| F7 | después | Lo propio de Tisma, desde `imported/tisma/` sobre los tipos del motor: análisis estructural y aerodinámico (`libtisma_fea`), capas no planares, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas traídas pasan con los tipos del motor |
+
+**Código propio que adelanta fases** (`imported/README.md`):
+- F4: `GCodeMoveLine.hpp` (líneas G0/G1) y `tools/research/pressure_advance_sim.py`.
+- F3: `InterlockInfill.*`, como relleno opcional después de los básicos.
+- Las pruebas de `imported/tisma/tests/` son especificaciones de las funciones de Tisma.
 
 ## Avance
 

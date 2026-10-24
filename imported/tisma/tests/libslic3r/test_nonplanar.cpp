@@ -1,0 +1,438 @@
+// Copyright (c) 2026 the owner of the Tisma project. All rights reserved (see LICENSE and imported/README.md).
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
+
+#include <map>
+#include <set>
+
+#include "libslic3r/NonPlanar.hpp"
+#include "libslic3r/TriangleMesh.hpp"
+
+using namespace Slic3r;
+using namespace Slic3r::NonPlanar;
+using Catch::Approx;
+
+static Deformation make(Mode mode, Pattern pattern = Pattern::Egg, bool flat_top = false)
+{
+    FieldParams f;
+    f.mode = mode;
+    f.pattern = pattern;
+    f.amplitude = 0.6;
+    f.wavelength = 16.;
+    f.cone_angle_deg = 10.;
+    Ramp r;
+    r.z_ramp = mode == Mode::Conical ? 15. : 5.;
+    if (flat_top)
+        r.z_top = 40.;
+    return Deformation(f, r);
+}
+
+TEST_CASE("Non-planar deformation round trip", "[NonPlanar]")
+{
+    for (const Deformation &d : { make(Mode::Wave), make(Mode::Wave, Pattern::Ridges), make(Mode::Wave, Pattern::Twisted),
+                                  make(Mode::Conical), make(Mode::Wave, Pattern::Egg, true) }) {
+        for (double x = -20.; x <= 20.; x += 3.7)
+            for (double y = -20.; y <= 20.; y += 4.1)
+                for (double z = 0.; z <= 40.; z += 1.3) {
+                    const double zs = d.to_slice_z(x, y, z);
+                    REQUIRE(d.to_real_z(x, y, zs) == Approx(z).margin(1e-7));
+                }
+    }
+}
+
+TEST_CASE("Non-planar first layers stay flat", "[NonPlanar]")
+{
+    const Deformation d = make(Mode::Wave);
+    for (double z : { 0., 0.2, 0.35, 0.6 })
+        for (double x = -10.; x <= 10.; x += 1.)
+            REQUIRE(d.to_real_z(x, 0.5 * x, z) == Approx(z).margin(1e-9));
+}
+
+TEST_CASE("Non-planar jacobian matches the numeric derivative", "[NonPlanar]")
+{
+    for (const Deformation &d : { make(Mode::Wave), make(Mode::Wave, Pattern::Twisted), make(Mode::Conical) }) {
+        const double x = 3.1, y = -7.4, h = 1e-5;
+        for (double z = 0.5; z < 30.; z += 1.1) {
+            const double numeric = h / (d.to_slice_z(x, y, z + h) - d.to_slice_z(x, y, z));
+            REQUIRE(d.jacobian(x, y, z) == Approx(numeric).epsilon(1e-4));
+        }
+    }
+}
+
+TEST_CASE("Non-planar validation check", "[NonPlanar]")
+{
+    BoundingBoxf3 bbox(Vec3d(-10., -10., 0.), Vec3d(10., 10., 20.));
+    const Deformation::Check ok = make(Mode::Wave).check(bbox);
+    REQUIRE(ok.j_min >= J_MIN);
+    REQUIRE(ok.j_max <= J_MAX);
+    REQUIRE(ok.max_slope_deg == Approx(std::atan(0.6 * 2. * M_PI / 16.) * 180. / M_PI).margin(1.));
+
+    FieldParams f;
+    f.mode = Mode::Wave;
+    f.amplitude = 1.;
+    Ramp short_ramp;
+    short_ramp.z_ramp = 1.;
+    REQUIRE(Deformation(f, short_ramp).check(bbox).j_max > J_MAX);
+}
+
+TEST_CASE("Non-planar mesh subdivision is watertight and bounded", "[NonPlanar]")
+{
+    indexed_triangle_set its = its_make_cube(20., 20., 20.);
+    const double volume_before = its_volume(its);
+    subdivide_mesh(its, 1.5);
+    std::map<std::pair<int, int>, int> edges;
+    double max_len = 0.;
+    for (const stl_triangle_vertex_indices &f : its.indices)
+        for (int e = 0; e < 3; ++ e) {
+            int a = f[e], b = f[(e + 1) % 3];
+            max_len = std::max(max_len, double((its.vertices[a] - its.vertices[b]).norm()));
+            ++ edges[{ std::min(a, b), std::max(a, b) }];
+        }
+    for (const auto &[edge, count] : edges)
+        REQUIRE(count == 2);
+    REQUIRE(max_len <= 1.5 + 1e-5);
+    // Single precision vertices: the splitting points are rounded.
+    REQUIRE(its_volume(its) == Approx(volume_before).epsilon(1e-4));
+}
+
+static std::vector<Vec3d> extrusion_points(const std::string &gcode, double *e_total = nullptr)
+{
+    std::vector<Vec3d> out;
+    double x = 0., y = 0., z = 0., e = 0.;
+    std::istringstream in(gcode);
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.rfind("G1", 0) != 0)
+            continue;
+        double de = 0.;
+        for (const char axis : { 'X', 'Y', 'Z', 'E' }) {
+            const size_t p = line.find(std::string(" ") + axis);
+            if (p == std::string::npos || line.find(';') < p)
+                continue;
+            const double v = std::stod(line.substr(p + 2));
+            if (axis == 'X') x = v;
+            if (axis == 'Y') y = v;
+            if (axis == 'Z') z = v;
+            if (axis == 'E') de = v;
+        }
+        e += de;
+        if (de > 0.)
+            out.emplace_back(x, y, z);
+    }
+    if (e_total)
+        *e_total = e;
+    return out;
+}
+
+TEST_CASE("Non-planar G-code filter", "[NonPlanar]")
+{
+    const std::string planar =
+        "G90\nM83\nG1 Z10 F600\nG1 X0 Y4 F3000\n;TYPE:Perimeter\nG1 X40 Y4 E2 F1800\nG1 E-0.8 F2400\n";
+
+    SECTION("disabled field keeps the geometry and does not split moves") {
+        const Deformation d(FieldParams{}, Ramp{});
+        GCodeFilter filter(d, GCodeFilterParams{});
+        double e = 0.;
+        const std::vector<Vec3d> pts = extrusion_points(filter.process_layer(planar), &e);
+        REQUIRE(pts.size() == 1);
+        REQUIRE(pts.front().z() == Approx(10.));
+        REQUIRE(e == Approx(2. - 0.8));
+    }
+    SECTION("wave layers follow the surface and scale the extrusion") {
+        const Deformation d = make(Mode::Wave, Pattern::Ridges);
+        GCodeFilterParams params;
+        params.seg_len = 0.25;
+        GCodeFilter filter(d, params);
+        double e = 0.;
+        const std::string out = filter.process_layer(planar);
+        const std::vector<Vec3d> pts = extrusion_points(out, &e);
+        REQUIRE(pts.size() > 10);
+        double zmin = 1e10, zmax = -1e10;
+        for (const Vec3d &p : pts) {
+            zmin = std::min(zmin, p.z());
+            zmax = std::max(zmax, p.z());
+            REQUIRE(p.z() == Approx(d.to_real_z(p.x(), p.y(), 10.)).margin(0.002));
+        }
+        REQUIRE(zmax - zmin > 1.);
+        // The retraction is not scaled.
+        REQUIRE(out.find("G1 E-0.8") != std::string::npos);
+    }
+    SECTION("the Z axis limit is respected") {
+        const Deformation d = make(Mode::Wave, Pattern::Ridges);
+        GCodeFilterParams params;
+        params.z_max_speed = 5.;
+        GCodeFilter filter(d, params);
+        const std::string out = filter.process_layer(planar);
+        REQUIRE(filter.stats().z_limited > 0);
+        double x = 0, y = 4, z = 10, f = 0;
+        std::istringstream in(out);
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.rfind("G1 X", 0) != 0)
+                continue;
+            double nx = x, ny = y, nz = z;
+            std::sscanf(line.c_str(), "G1 X%lf Y%lf Z%lf", &nx, &ny, &nz);
+            if (const size_t p = line.find(" F"); p != std::string::npos)
+                f = std::stod(line.substr(p + 2));
+            const double l3 = std::sqrt((nx - x) * (nx - x) + (ny - y) * (ny - y) + (nz - z) * (nz - z));
+            if (l3 > 0.)
+                REQUIRE(std::abs(nz - z) / l3 * f / 60. <= 5. * 1.01);
+            x = nx; y = ny; z = nz;
+        }
+    }
+}
+
+// Tisma: collisions of the print head (heater block, cooling duct) with the part already printed.
+static indexed_triangle_set centered_box(float size_xy, float height)
+{
+    indexed_triangle_set its = its_make_cube(size_xy, size_xy, height);
+    its_translate(its, Vec3f(-0.5f * size_xy, -0.5f * size_xy, 0.f));
+    return its;
+}
+
+TEST_CASE("Non-planar print head collisions", "[NonPlanar]")
+{
+    const HeadClearance head{ 3., 15. };
+
+    SECTION("Low waves leave room for the head") {
+        const HeadCollision c = check_head_collision(make(Mode::Wave), centered_box(20.f, 20.f), head);
+        REQUIRE(! c.collides);
+        // Peak to peak of the waves: 2 x 0.6 mm.
+        REQUIRE(c.rise <= 1.2 + 1e-6);
+    }
+    SECTION("High waves within the head radius collide") {
+        FieldParams f;
+        f.mode = Mode::Wave;
+        f.amplitude = 2.;
+        f.wavelength = 16.;
+        Ramp r;
+        const HeadCollision c = check_head_collision(Deformation(f, r), centered_box(40.f, 20.f), head);
+        REQUIRE(c.collides);
+        REQUIRE(c.rise > head.height);
+        REQUIRE(c.distance <= head.radius + 1e-9);
+    }
+    SECTION("A cone rising outwards hits the head while printing its center") {
+        FieldParams f;
+        f.mode = Mode::Conical;
+        f.cone_angle_deg = 15.;
+        Ramp r;
+        // Over the 15 mm radius the cone rises (15 - 2) * tan(15°) = 3.5 mm > 3 mm.
+        const HeadCollision big = check_head_collision(Deformation(f, r), centered_box(60.f, 30.f), head);
+        REQUIRE(big.collides);
+        // A narrow part: nothing printed far enough from the nozzle to rise that much.
+        const HeadCollision narrow = check_head_collision(Deformation(f, r), centered_box(8.f, 30.f), head);
+        REQUIRE(! narrow.collides);
+    }
+    SECTION("No head geometry, no check") {
+        FieldParams f;
+        f.mode = Mode::Conical;
+        f.cone_angle_deg = 15.;
+        REQUIRE(! check_head_collision(Deformation(f, Ramp{}), centered_box(60.f, 30.f), HeadClearance{ 0., 15. }).collides);
+    }
+}
+
+TEST_CASE("Non-planar measured print head profile", "[NonPlanar]")
+{
+    // Free 45° up to 2 mm, 30° up to 5 mm, 20° up to 10 mm (heights unsorted and a broken pair on purpose).
+    HeadClearance head;
+    head.radius  = 40.;
+    head.profile = parse_head_profile("5:30; 2:45;oops;10:20");
+    REQUIRE(head.profile.size() == 3);
+    CHECK(head.profile.front().first == Approx(2.));
+
+    // Close to the tip the steepest ramp limits: 45° up to 2 mm.
+    CHECK(head.allowed_rise(1.) == Approx(1.));
+    // Farther away the low ramps end in their plateaus; the gentle tall ramp keeps rising.
+    CHECK(head.allowed_rise(4.) == Approx(std::max({ 2., 4. * std::tan(30. * M_PI / 180.), 4. * std::tan(20. * M_PI / 180.) })));
+    CHECK(head.allowed_rise(40.) == Approx(10.));
+
+    SECTION("The profile replaces the clearance height") {
+        FieldParams f;
+        f.mode = Mode::Conical;
+        f.cone_angle_deg = 15.;
+        // The cone rises 3.5 mm over 15 mm: too much for a 3 mm clearance height, fine with a head free up to 10 mm
+        // at 20° (tan 15° < tan 20°).
+        HeadClearance cylinder{ 3., 15. };
+        REQUIRE(check_head_collision(Deformation(f, Ramp{}), centered_box(60.f, 30.f), cylinder).collides);
+        HeadClearance measured{ 3., 15. };
+        measured.profile = parse_head_profile("2:45;5:30;10:20");
+        CHECK(! check_head_collision(Deformation(f, Ramp{}), centered_box(60.f, 30.f), measured).collides);
+    }
+}
+
+TEST_CASE("Non-planar layers fitted to the print head", "[NonPlanar]")
+{
+    const double tan30 = std::tan(30. * M_PI / 180.), tan10 = std::tan(10. * M_PI / 180.);
+    const HeadLimits head{ tan30, tan10, 0. };
+    // Tall object and long transition: only the slope limits the amplitude.
+    const BoundingBoxf3 bbox(Vec3d(-30., -30., 0.), Vec3d(30., 30., 60.));
+    Ramp ramp;
+    ramp.z_ramp = 40.;
+    FieldParams f;
+    f.mode       = Mode::Wave;
+    f.wavelength = 20.;
+    const double k = 2. * M_PI / f.wavelength;
+
+    SECTION("ridges rising along X use the free angle along X") {
+        f.pattern = Pattern::Ridges;
+        f.angle_deg = 0.;
+        const FieldParams fit = fit_to_head(f, ramp, bbox, head);
+        REQUIRE(fit.amplitude == Approx(tan30 / k));
+        REQUIRE(Deformation(fit, ramp).head_slope_ratio(bbox, head.tan_x, head.tan_y) == Approx(1.).margin(0.01));
+    }
+    SECTION("ridges rising along Y use the free angle along Y") {
+        f.pattern = Pattern::Ridges;
+        f.angle_deg = 90.;
+        REQUIRE(fit_to_head(f, ramp, bbox, head).amplitude == Approx(tan10 / k));
+    }
+    SECTION("egg crate and twisted ridges use the smaller free angle") {
+        // A slow twist, so that the layer thickness does not limit the amplitude.
+        f.twist_deg_per_mm = 0.1;
+        for (Pattern p : { Pattern::Egg, Pattern::Twisted }) {
+            f.pattern = p;
+            const FieldParams fit = fit_to_head(f, ramp, bbox, head);
+            REQUIRE(fit.amplitude == Approx(tan10 / k));
+            REQUIRE(Deformation(fit, ramp).head_slope_ratio(bbox, head.tan_x, head.tan_y) <= 1. + 1e-6);
+        }
+    }
+    SECTION("the waves rise at most the clearance height") {
+        f.pattern = Pattern::Ridges;
+        REQUIRE(fit_to_head(f, ramp, bbox, HeadLimits{ tan30, tan30, 0.4 }).amplitude == Approx(0.2));
+    }
+    SECTION("conical layers keep their direction") {
+        f.mode = Mode::Conical;
+        f.cone_angle_deg = -15.;
+        const FieldParams fit = fit_to_head(f, ramp, bbox, head);
+        REQUIRE(fit.cone_angle_deg == Approx(-10.));
+    }
+    SECTION("a short transition reduces the amplitude to keep the layer thickness") {
+        f.pattern = Pattern::Ridges;
+        ramp.z_ramp = 2.;
+        const FieldParams fit = fit_to_head(f, ramp, bbox, HeadLimits{ tan30, tan30, 0. });
+        REQUIRE(fit.amplitude < tan30 / k);
+        const Deformation::Check c = Deformation(fit, ramp).check(bbox);
+        REQUIRE(c.j_min >= J_MIN);
+        REQUIRE(c.j_max <= J_MAX);
+        REQUIRE((c.j_min < J_MIN + 0.02 || c.j_max > J_MAX - 0.02));   // as large as allowed
+    }
+}
+
+// Solid of revolution around Z: the profile goes from the bottom to the top as (radius, z), radius > 0.
+static indexed_triangle_set lathe(const std::vector<Vec2d> &profile, int segments = 72)
+{
+    indexed_triangle_set its;
+    const int n = int(profile.size());
+    for (int s = 0; s < segments; ++ s) {
+        const double a = 2. * M_PI * s / segments;
+        for (const Vec2d &p : profile)
+            its.vertices.emplace_back(float(p.x() * std::cos(a)), float(p.x() * std::sin(a)), float(p.y()));
+    }
+    const int bottom = int(its.vertices.size());
+    its.vertices.emplace_back(0.f, 0.f, float(profile.front().y()));
+    const int top = int(its.vertices.size());
+    its.vertices.emplace_back(0.f, 0.f, float(profile.back().y()));
+    for (int s = 0; s < segments; ++ s) {
+        const int a = s * n, b = ((s + 1) % segments) * n;
+        for (int i = 0; i + 1 < n; ++ i) {
+            its.indices.emplace_back(a + i, b + i, b + i + 1);
+            its.indices.emplace_back(a + i, b + i + 1, a + i + 1);
+        }
+        its.indices.emplace_back(bottom, b, a);
+        its.indices.emplace_back(top, a + n - 1, b + n - 1);
+    }
+    return its;
+}
+
+// Stem of radius 5 up to z = 20 (room for the transition), flaring out at 60° from the vertical up to z = 25, then a
+// cap 3 mm thick.
+static indexed_triangle_set mushroom()
+{
+    const double r_cap = 5. + 5. * std::tan(60. * M_PI / 180.);
+    return lathe({ { 5., 0. }, { 5., 20. }, { r_cap, 25. }, { r_cap, 28. } });
+}
+
+TEST_CASE("Non-planar layers tilted under the overhangs", "[NonPlanar]")
+{
+    // 35° of free angle: enough to bring the 60° flare below 45°.
+    const double tan35 = std::tan(35. * M_PI / 180.);
+    OverhangParams params;
+    params.threshold_deg = 45.;
+    params.tan_x = params.tan_y = tan35;
+    params.z_flat = 0.6;
+    const indexed_triangle_set its = mushroom();
+
+    SECTION("no overhang, no deformation") {
+        REQUIRE(build_overhang_field(its_make_cube(20., 20., 20.), params) == nullptr);
+        REQUIRE(build_overhang_field(lathe({ { 5., 0. }, { 5., 20. } }), params) == nullptr);
+    }
+    SECTION("one zone at the flare, flat inside the stem") {
+        const auto field = build_overhang_field(its, params);
+        REQUIRE(field != nullptr);
+        REQUIRE(field->zones.size() == 1);
+        const OverhangField::Zone &zone = field->zones.front();
+        REQUIRE(zone.z_min == Approx(20.).margin(0.01));
+        REQUIRE(zone.z_max == Approx(25.).margin(0.01));
+        REQUIRE(zone.steepest_deg == Approx(60.).margin(1.));
+        // Brought in below the flare, above the flat first layers, and taken out above it.
+        REQUIRE(zone.z_in0 >= params.z_flat);
+        REQUIRE(zone.z_in1 == Approx(20.).margin(0.01));
+        REQUIRE(zone.z_out1 > zone.z_out0);
+        // Flat inside the stem, sinking towards the rim of the cap.
+        REQUIRE(field->sink(0., 0., 22.) == Approx(0.).margin(1e-3));
+        REQUIRE(field->sink(2., 1., 22.) == Approx(0.).margin(1e-3));
+        REQUIRE(field->sink(10., 0., 22.) > field->sink(7., 0., 22.));
+        REQUIRE(field->sink(7., 0., 22.) > 0.);
+        // Nothing below the transition nor far above the overhang.
+        REQUIRE(field->sink(10., 0., zone.z_in0 - 0.1) == 0.);
+        REQUIRE(field->sink(10., 0., zone.z_out1 + 0.1) == 0.);
+    }
+    SECTION("the layers lean towards the overhang within the free angles of the print head") {
+        // Along Y the head allows too little for the flare: the overhangs facing Y are left out, the field still
+        // respects the free angle along Y.
+        params.tan_y = std::tan(10. * M_PI / 180.);
+        const auto field = build_overhang_field(its, params);
+        REQUIRE(field != nullptr);
+        FieldParams f;
+        f.mode = Mode::Overhangs;
+        f.overhangs = field;
+        Ramp ramp;
+        ramp.z_flat = -1e6;
+        ramp.z_ramp = 1.;
+        const Deformation d(f, ramp);
+        const BoundingBoxf3 bbox(Vec3d(-14., -14., 0.), Vec3d(14., 14., 28.));
+        REQUIRE(d.head_slope_ratio(bbox, params.tan_x, params.tan_y) <= 1. + 1e-6);
+        // At the flare the layer normal leans outwards, as the overhang.
+        REQUIRE(d.layer_normal(9., 0., 22.).x() > 0.05);
+        REQUIRE(d.layer_normal(0., 9., 22.).y() > 0.02);
+        REQUIRE(d.layer_normal(-9., 0., 22.).x() < -0.05);
+        // The slope along Y is limited to its own free angle.
+        REQUIRE(d.layer_slope(0., 9., 22.) <= params.tan_y + 1e-6);
+        REQUIRE(d.layer_slope(9., 0., 22.) > params.tan_y);
+    }
+    SECTION("the print head clearance limits the slope") {
+        // The heater block 2 mm above the nozzle tip, 10 mm around it: at most 2 mm of rise over 10 mm.
+        params.head.height = 2.;
+        params.head.radius = 10.;
+        // Not enough for the 60° flare: left flat, with its supports.
+        REQUIRE(build_overhang_field(its, params) == nullptr);
+        // Enough for a 48° flare.
+        const double r = 5. + 5. * std::tan(48. * M_PI / 180.);
+        const auto field = build_overhang_field(lathe({ { 5., 0. }, { 5., 10. }, { r, 15. }, { r, 18. } }), params);
+        REQUIRE(field != nullptr);
+        const OverhangField::Zone &zone = field->zones.front();
+        for (double x = 5.; x < 14.; x += 0.5)
+            REQUIRE(field->sample(zone, x, 0.).second.norm() <= 0.2 + 1e-6);
+    }
+    SECTION("a gentle overhang needs only a little tilt") {
+        // 47° from the vertical: sheared to 40° (5° below the printable angle), cot(40°) - cot(47°) = tan(14.5°), less
+        // than the head allows.
+        const double r = 5. + 5. * std::tan(47. * M_PI / 180.);
+        const auto field = build_overhang_field(lathe({ { 5., 0. }, { 5., 10. }, { r, 15. }, { r, 18. } }), params);
+        REQUIRE(field != nullptr);
+        const OverhangField::Zone &zone = field->zones.front();
+        const double slope = field->sample(zone, 8., 0.).second.norm();
+        REQUIRE(slope > std::tan(14. * M_PI / 180.));
+        REQUIRE(slope < std::tan(15. * M_PI / 180.));
+    }
+}
+
