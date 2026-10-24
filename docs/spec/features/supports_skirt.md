@@ -20,7 +20,7 @@
 | `support.line_angle` | ° | 0 | Dirección de las líneas de la base |
 | `support.under_bridges` | — | no | Si es no, los puentes no llevan soporte |
 | `adhesion.skirt_loops` | — | 1 | Vueltas de la falda; 0 = sin falda |
-| `adhesion.skirt_gap` | mm | 6 | Separación entre la pieza y la falda |
+| `adhesion.skirt_distance` | mm | 6 | Separación entre la pieza y la falda |
 | `adhesion.skirt_layers` | capas | 1 | Capas de falda |
 | `adhesion.brim_width` | mm | 0 | Ancho del borde; 0 = sin borde |
 
@@ -50,7 +50,7 @@
    intercaladas con las de la pieza. En la primera versión del motor puede usar las mismas capas que la pieza.
 8. **Falda:**
    - `adhesion.skirt_loops` vueltas en las primeras `adhesion.skirt_layers` capas;
-   - la más interna queda a `adhesion.skirt_gap` de la pieza;
+   - la más interna queda a `adhesion.skirt_distance` de la pieza;
    - las esquinas son redondeadas (la falda es la pieza agrandada);
    - se marca `;TYPE:Skirt/Brim`.
 9. **Borde:** vueltas pegadas a la pieza en la primera capa hasta `adhesion.brim_width`, a la separación de los cordones. También
@@ -75,5 +75,5 @@ inclinación indicada, medida desde la horizontal.
 | S5 | Cuñas de 40°, 50° y 60° | `support.angle_limit` 55 | 40° y 50° llevan soporte; 60°, no |
 | S6 | «Mesa» de `surfaces_infill.md` (puente de 10 mm) | — | Sin soporte: el puente se imprime en el aire |
 | S7 | Cubo de 20 × 20 × 10 mm, sin soportes | falda por defecto | Una vuelta solo en la primera capa, con el eje a 6,18 mm de la pieza (borde interno a 5,98 mm), ancho 0,4 mm, largo 118,5 mm: el cuadrado más esquinas redondeadas |
-| S8 | Cubo de S7 | `adhesion.skirt_loops` 3, `adhesion.skirt_gap` 2, `adhesion.skirt_layers` 2 | Tres vueltas en las capas 1 y 2; la externa con el eje a 2,89 mm de la pieza; 287,0 mm por capa |
+| S8 | Cubo de S7 | `adhesion.skirt_loops` 3, `adhesion.skirt_distance` 2, `adhesion.skirt_layers` 2 | Tres vueltas en las capas 1 y 2; la externa con el eje a 2,89 mm de la pieza; 287,0 mm por capa |
 | S9 | Cubo de S7 | sin falda, `adhesion.brim_width` 5 | Borde de 14 vueltas en la primera capa: la externa con el eje a 4,82 mm de la pieza (borde a 5,02 mm); 1340,4 mm |
