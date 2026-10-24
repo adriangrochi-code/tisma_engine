@@ -14,9 +14,9 @@ Tisma Slicer usa código de PrusaSlicer: se escriben desde la documentación pú
 - Bambu Lab en red local: [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI), documentación de la comunidad
   (MQTT, FTPS, video).
 - [OctoPrint REST API](https://docs.octoprint.org/en/master/api/index.html),
-  [Moonraker API](https://moonraker.readthedocs.io/en/latest/web_api/),
+  [Moonraker API](https://moonraker.readthedocs.io/en/latest/external_api/introduction/),
   [PrusaLink](https://github.com/prusa3d/Prusa-Link-Web/blob/master/spec/openapi.yaml) (su especificación OpenAPI
-  pública) y [RepRapFirmware HTTP](https://docs.duet3d.com/User_manual/Reference/Http_requests).
+  pública) y [RepRapFirmware HTTP](https://github.com/Duet3D/RepRapFirmware/wiki/HTTP-requests).
 
 ## USB (puerto serie)
 
