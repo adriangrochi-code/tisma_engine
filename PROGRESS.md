@@ -1855,3 +1855,36 @@ Quedan en `PLAN.md` como fases nuevas:
 - el calor de cada capa;
 - el ajuste por zona del ventilador, la velocidad y el tiempo de capa;
 - la deformación anticipada.
+
+## 2026-10-24 — Voronoi propio, parte 3: reemplaza a Boost en el eje medio
+
+**Hecho:**
+- `medial_axis` usa el Voronoi propio. Boost queda como `medial_axis_reference`, solo para comparar en las pruebas.
+  - Toda la parte común (aristas interiores, partición de parábolas, radios y apoyos) es una sola clase para los dos.
+  - Esquinas y segmentos se insertan en orden aleatorio con una mezcla determinista, igual en todas las plataformas.
+- Los nodos unidos por una arista de menos de 1 nm se toman como uno solo, como el vértice exacto de Boost. Un vértice
+  de más de tres aristas sale como varios nodos casi juntos.
+- Defecto encontrado: el sentido de los lazos de pared dependía del orden de recorrido del grafo. Con Boost salían
+  horarios y con el propio antihorarios. En sentido antihorario, unos quiebres de menos de 0,01 mm que ya existían
+  contaban como esquinas cóncavas, y la costura alineada se iba a ellos: en la esfera, el viaje subía de 61 a 87 m.
+  Arreglos:
+  - todo lazo cerrado gira en sentido antihorario;
+  - el giro de una esquina para la costura se mide hasta los puntos a 0,1 mm de cada lado.
+
+**Probado:** 175/175 pruebas con gcc, clang y ASan+UBSan.
+- Las 174 anteriores (eje medio, perímetros, cobertura, superficies, G-code) pasan con el diagrama propio.
+- Prueba nueva: el eje medio propio contra el de Boost en cuadrado, tira, anillo, 64-gono, estrella, curva ondulada de
+  400 lados, L y cuña de 0,3 a 1,2 mm. Cada extremo tiene un par a menos de 10⁻⁶ mm, y el largo y el radio integrado
+  son iguales. No se exige la misma cantidad de piezas: Boost, exacto, guarda aristas de menos de 1 nm que el propio une.
+
+**Medido** (esfera, 500 capas):
+- `slice` de 1,23–1,29 s a 0,94–1,05 s;
+- 61,33 m de viaje y 2057 retracciones, igual que con Boost;
+- 7 h 28 min estimados;
+- tubo: viaje 7,14 m y 545 retracciones; 9 cubos: viaje 11,73 m y 1003 retracciones (cambian por el sentido de los
+  lazos y las costuras).
+
+**Sigue:**
+- limpiar los quiebres de menos de 0,01 mm de las paredes, que vienen de la extracción;
+- acelerar la estrella;
+- después, A1 (elementos finitos).

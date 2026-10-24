@@ -243,7 +243,7 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
   adaptativo solo en las partes angostas, con nodos extra donde el reparto cambia de forma; el resto queda para el relleno
 - [x] Región que queda para el relleno: lo que no cubren las paredes, como polígonos (para F3)
 - [x] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`, con el grupo de ajustes `walls`
-- [ ] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s).
+- [x] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s).
   Medido: el Voronoi de segmentos de Boost cuesta 13–28 µs por segmento con cualquier polígono, y el 54 % es su
   aritmética exacta (`extended_int`), porque cada vértice es extremo de dos segmentos. Es lo que informa el artículo
   (5·10⁻⁶·n·log n s). **Decisión del dueño (2026-10-24): un Voronoi de segmentos propio**, a partir de artículos,
@@ -257,9 +257,10 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
     estrella, cuadrado con agujero y peine;
   - [ ] nodos por fórmula cerrada (punto–punto–segmento, punto–segmento–segmento, segmento–segmento–segmento) en vez de
     bisección: hoy la bisección es dos tercios del tiempo de un segmento;
-  - [ ] módulo propio con la misma salida que hoy (`MedialEdge`), probado contra Boost.Polygon como oráculo (Boost es
-    BSL-1.0, sirve para comparar) en muchos polígonos: círculos, letras, rendijas, piezas del banco;
-  - [ ] medirlo contra Boost en la esfera y reemplazarlo cuando dé lo mismo y sea más rápido;
+  - [x] la misma salida que hoy (`MedialEdge`), probada contra Boost.Polygon como oráculo en cuadrado, tira, anillo,
+    64-gono, estrella, curva ondulada, L y cuña;
+  - [x] medido en la esfera y reemplazado: `slice` de 1,23–1,29 s a 0,94–1,05 s, con el mismo viaje y las mismas
+    retracciones; Boost queda solo como referencia en las pruebas;
   - [ ] después, la parte que convenga en la GPU.
   Descartado por el dueño: el híbrido con desplazamientos de Clipper2.
   Descartado: tapar el fondo con un contorno desplazado 2·R hacia adentro (no cambia el eje con R menor, pero Boost

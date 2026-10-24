@@ -38,9 +38,13 @@ struct MedialEdge {
 inline constexpr double kMaxCurvedPiece = 0.2; // mm, Kuipers et al. 2020, Section 3.2
 
 // Medial axis of a region (outer contours counter-clockwise, holes clockwise),
-// from Boost.Polygon's segment Voronoi diagram. Each edge appears once.
-// Coordinates must fit in 32 bits of the 1 nm unit (about +-2 m).
+// from the own segment Voronoi diagram (src/geom/voronoi.*). Each edge appears
+// once. Coordinates must fit in 32 bits of the 1 nm unit (about +-2 m).
 std::vector<MedialEdge> medial_axis(const Polygons& region);
+
+// The same from Boost.Polygon's segment Voronoi diagram: the reference the own
+// diagram is tested against.
+std::vector<MedialEdge> medial_axis_reference(const Polygons& region);
 
 // The medial axis as a graph with shared nodes, and the central part marked
 // (Kuipers et al. 2020, Section 3.3).

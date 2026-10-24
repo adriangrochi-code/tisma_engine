@@ -25,10 +25,12 @@ struct SeamMemory {
 //  - rear: the point of largest Y (then smallest X);
 //  - random: a point picked from `seed` (the same input gives the same G-code);
 //  - aligned: among the concave corners (turns against the loop's direction
-//    sharper than kSeamCorner), or all points if there are none, the one nearest
+//    sharper than kSeamCorner, measured to the points kSeamSpan away on each
+//    side), or all points if there are none, the one nearest
 //    to a seam of the same wall index in the layer below; the rear one if there
 //    was none.
 inline constexpr double kSeamCorner = 30.0; // degrees
+inline constexpr double kSeamSpan = 0.1;    // mm: a corner's turn is measured to points this far away
 std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
                        const SeamMemory& memory);
 

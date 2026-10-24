@@ -69,10 +69,22 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
         }
         const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
         std::vector<std::size_t> corners;
-        for (std::size_t i = 0; i < n; ++i) {
-            const Point2d& a = loop.points[(i + n - 1) % n].p;
+        // The turn at a point, measured to the points at least kSeamSpan away
+        // on each side: zig-zags much smaller than a bead are not corners.
+        auto away = [&](std::size_t i, bool forward) {
             const Point2d& b = loop.points[i].p;
-            const Point2d& c = loop.points[(i + 1) % n].p;
+            std::size_t j = i;
+            for (std::size_t k = 0; k + 1 < n; ++k) {
+                j = forward ? (j + 1) % n : (j + n - 1) % n;
+                if (distance(loop.points[j].p, b) >= kSeamSpan)
+                    break;
+            }
+            return j;
+        };
+        for (std::size_t i = 0; i < n; ++i) {
+            const Point2d& a = loop.points[away(i, false)].p;
+            const Point2d& b = loop.points[i].p;
+            const Point2d& c = loop.points[away(i, true)].p;
             const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
             const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
             if (lu == 0.0 || lv == 0.0)

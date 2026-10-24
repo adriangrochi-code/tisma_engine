@@ -5,6 +5,8 @@
 
 #include "perimeters/transitions.hpp"
 
+#include <algorithm>
+
 namespace tisma {
 
 LayerWalls layer_walls(const Polygons& region, const BeadingParams& params) {
@@ -16,6 +18,21 @@ LayerWalls layer_walls(const Polygons& region, const BeadingParams& params) {
     filter_marking(graph, params.preferred_width);
     const TransitionResult transitions = apply_transitions(graph, params);
     out.toolpaths = extract_toolpaths(graph, node_beadings(graph, transitions.bead_counts, params));
+    // Every closed loop runs counter-clockwise (own choice), whatever way the
+    // chaining of sites happened to walk it: the G-code does not depend on
+    // the order of the Voronoi diagram's edges.
+    for (Toolpath& t : out.toolpaths) {
+        if (!t.closed || t.points.size() < 3)
+            continue;
+        double area = 0.0;
+        for (std::size_t i = 0; i < t.points.size(); ++i) {
+            const Point2d& a = t.points[i].p;
+            const Point2d& b = t.points[(i + 1) % t.points.size()].p;
+            area += a.x * b.y - b.x * a.y;
+        }
+        if (area < 0.0)
+            std::reverse(t.points.begin(), t.points.end());
+    }
     if (params.wall_count > 0) {
         const double w = params.preferred_width;
         const Polygons inner = offset(region, -params.wall_count * w);

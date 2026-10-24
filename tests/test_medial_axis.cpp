@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 #include <utility>
 
@@ -305,4 +306,68 @@ TEST_CASE("degenerate input: a hair-thin channel between two blobs", "[medial]")
     const auto edges = medial_axis({blobs});
     CHECK_FALSE(edges.empty());
     CHECK(edges.size() < 100000);
+}
+
+namespace {
+
+// The own diagram's medial axis and Boost's: every end of one has an end of
+// the other within 1e-6 mm (both ways), and the same total length and radius
+// integrated along the axis. (Not the same count of pieces: Boost's exact
+// arithmetic keeps edges shorter than a nanometre that the own diagram,
+// in floating point, merges into one node.)
+void compare_with_reference(const Polygons& region) {
+    const auto own = medial_axis(region);
+    const auto ref = medial_axis_reference(region);
+    REQUIRE_FALSE(ref.empty());
+    auto total = [](const std::vector<MedialEdge>& edges) {
+        double length = 0.0, radii = 0.0;
+        for (const MedialEdge& e : edges) {
+            const double l = std::hypot(e.b.x - e.a.x, e.b.y - e.a.y);
+            length += l;
+            radii += l * (e.radius_a + e.radius_b) / 2.0;
+        }
+        return std::make_pair(length, radii);
+    };
+    const auto [own_length, own_radii] = total(own);
+    const auto [ref_length, ref_radii] = total(ref);
+    CHECK_THAT(own_length, WithinAbs(ref_length, 1e-6 * ref_length));
+    CHECK_THAT(own_radii, WithinAbs(ref_radii, 1e-6 * ref_radii));
+    auto covered = [](const std::vector<MedialEdge>& a, const std::vector<MedialEdge>& b) {
+        for (const MedialEdge& e : a)
+            for (const Point2d& p : {e.a, e.b})
+                if (!has_point(b, p.x, p.y))
+                    return false;
+        return true;
+    };
+    CHECK(covered(own, ref));
+    CHECK(covered(ref, own));
+}
+
+} // namespace
+
+TEST_CASE("the own Voronoi diagram gives Boost's medial axis", "[medial]") {
+    compare_with_reference({rect(0, 0, 10, 10)});
+    compare_with_reference({rect(0, 0, 30, 2)});
+    compare_with_reference({rect(-10, -10, 20, 20), rect(-3, -3, 6, 6, true)});
+    Polygon circle, star, wavy;
+    for (int i = 0; i < 64; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / 64;
+        circle.push_back({to_units(5.0 * std::cos(a)), to_units(5.0 * std::sin(a))});
+        const double r = i % 2 == 0 ? 5.0 : 2.0;
+        star.push_back({to_units(r * std::cos(a)), to_units(r * std::sin(a))});
+    }
+    for (int i = 0; i < 400; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / 400, r = 20.0 * (1.0 + 0.2 * std::sin(7.0 * a));
+        wavy.push_back({to_units(r * std::cos(a)), to_units(r * std::sin(a))});
+    }
+    compare_with_reference({circle});
+    compare_with_reference({star});
+    compare_with_reference({wavy});
+    // An L and a wedge 0.3 to 1.2 mm thick.
+    const std::int64_t o = 0;
+    const Polygon l = {{o, o}, {to_units(10), o}, {to_units(10), to_units(4)}, {to_units(4), to_units(4)},
+                       {to_units(4), to_units(10)}, {o, to_units(10)}};
+    const Polygon wedge = {{o, o}, {to_units(30), o}, {to_units(30), to_units(1.2)}, {o, to_units(0.3)}};
+    compare_with_reference({l});
+    compare_with_reference({wedge});
 }
