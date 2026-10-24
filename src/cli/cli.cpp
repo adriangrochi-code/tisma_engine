@@ -1,6 +1,7 @@
 #include "cli/cli.hpp"
 
 #include "io/stl.hpp"
+#include "geom/polygons.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/layers.hpp"
 
@@ -119,6 +120,17 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         out << "layers: " << layers.size() << "\n";
         out << "contours: " << contours << "\n";
         out << "slice_ms: " << slice_ms << "\n";
+
+        // Regions: closed contours merged into polygons with holes (Clipper2).
+        const auto region_start = std::chrono::steady_clock::now();
+        const std::vector<Polygons> regions = layer_regions(layers);
+        const double region_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - region_start).count();
+        double volume = 0.0;
+        for (std::size_t l = 0; l < regions.size(); ++l)
+            volume += area_mm2(regions[l]) * 0.2;
+        out << "region_ms: " << region_ms << "\n";
+        out << "sliced_volume: " << volume << "\n";
     }
     return kExitOk;
 }

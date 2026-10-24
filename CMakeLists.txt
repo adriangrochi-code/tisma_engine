@@ -31,6 +31,20 @@ FetchContent_Declare(
   SYSTEM # its headers do not get our warning flags
 )
 FetchContent_MakeAvailable(TBB)
+
+# Clipper2 1.5.4, BSL-1.0 (see THIRD_PARTY.md): polygon booleans and offsets.
+set(CLIPPER2_UTILS OFF CACHE BOOL "" FORCE)
+set(CLIPPER2_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(CLIPPER2_TESTS OFF CACHE BOOL "" FORCE)
+set(CLIPPER2_USINGZ "OFF" CACHE STRING "" FORCE)
+FetchContent_Declare(
+  Clipper2
+  GIT_REPOSITORY https://github.com/AngusJohnson/Clipper2.git
+  GIT_TAG ef88ee97c0e759792e43a2b2d8072def6c9244e8 # Clipper2_1.5.4
+  SOURCE_SUBDIR CPP
+  SYSTEM
+)
+FetchContent_MakeAvailable(Clipper2)
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
 # Warnings for our own targets only.
@@ -47,11 +61,12 @@ add_library(tisma_core
   src/slice/level_set.cpp
   src/slice/contours.cpp
   src/slice/layers.cpp
+  src/geom/polygons.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )
 target_include_directories(tisma_core PUBLIC src)
-target_link_libraries(tisma_core PUBLIC TBB::tbb PRIVATE tisma_warnings)
+target_link_libraries(tisma_core PUBLIC TBB::tbb Clipper2 PRIVATE tisma_warnings)
 target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${PROJECT_VERSION}")
 
 add_executable(tisma-engine apps/main.cpp)

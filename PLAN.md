@@ -173,9 +173,10 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Cierre de huecos chicos en mallas abiertas
 - [x] Alturas de capa (primera capa y resto) y corte por capas sin recorrer todos los triángulos en cada capa
 - [x] Paralelo por capas (oneTBB)
-- [ ] Offsets con Clipper2
+- [x] Offsets con Clipper2 (regiones por capa con la regla no nula, offsets en inglete)
 - [ ] Infraestructura GPU (Vulkan, lavapipe en la CI) y corte en GPU
-- [ ] Prueba de áreas por capa con piezas de área conocida; tiempos medidos
+- [x] Prueba de áreas por capa con piezas de área conocida (pirámide, cubo; esfera: el volumen cortado coincide con el de la malla al 0,0002 %); tiempos medidos
+- [ ] Compensación XY y de primera capa con los nombres de `docs/spec/SETTINGS_V1.md` (esperando las fichas de corte)
 
 ## Avance
 

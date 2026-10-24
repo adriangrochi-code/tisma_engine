@@ -323,3 +323,34 @@ El dueño agregó a `main`:
 - `docs/spec/` ya está en el árbol, así que la prueba `spec_check` corre en la CI.
 
 **Sigue:** Clipper2; leer `docs/spec/README.md` y las fichas que pide F1.
+
+## 2026-10-24 — bloque nocturno 3: Clipper2 y regiones por capa
+
+**Hecho:**
+- Clipper2 1.5.4 (BSL-1.0), anotada en `THIRD_PARTY.md` después de leer `LICENSE` en el tag. Solo la biblioteca de
+  C++, sin Z, utilidades, ejemplos ni pruebas.
+- `src/geom/polygons.*`:
+  - polígonos enteros en nanómetros;
+  - `to_polygons` proyecta los contornos cerrados en XY;
+  - `layer_region` une con la regla no nula. Los agujeros horarios se restan, los volúmenes superpuestos suman, y
+    una malla con el sentido invertido igual da su región;
+  - `offset` agranda o achica con esquinas en inglete, como la compensación XY;
+  - `layer_regions` procesa todas las capas en paralelo;
+  - `area_mm2`.
+- `tisma-engine info` arma también las regiones y el volumen cortado (suma de las áreas por el alto de capa).
+- Se le respondió a la sesión principal qué fichas necesita F1, en qué orden y cómo usar `tools/check_spec.py`.
+
+**Probado:**
+- 57/57 pruebas con gcc, clang y ASan+UBSan. Incluyen:
+  - unión con superposición (175 mm²), agujero (84 mm²), sentido invertido y cáscaras anidadas;
+  - offsets que agrandan y achican, incluso hasta desaparecer;
+  - capas del cubo como regiones de 100 mm², y con −0,1 mm, cuadrados de 9,8 mm.
+- Una configuración desde cero descarga Clipper2 por git y pasa.
+
+**Medido** (esfera de 1 001 112 triángulos, 500 capas, 4 núcleos, 5 corridas):
+- regiones de todas las capas: 19–21 ms;
+- volumen cortado 523 590 mm³ contra 523 589 mm³ de la malla (0,0002 %).
+
+**Sigue:**
+- compensación XY y de primera capa, cuando lleguen las fichas de corte;
+- mientras tanto, infraestructura de Vulkan (revisar antes la licencia de glslang).
