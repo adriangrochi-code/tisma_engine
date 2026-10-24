@@ -192,7 +192,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Eje medio de una región: aristas del Voronoi de segmentos que quedan adentro, con el radio del círculo inscrito en cada extremo
 - [ ] Discretizar las aristas curvas (parábolas)
 - [ ] Clasificar las aristas interiores sin recorrer todos los contornos por vértice (hoy es O(n) por vértice)
-- [ ] Método de Kuipers et al. 2020: cantidad y ancho de cordones según el radio, trapezoidación, extracción de trayectorias
+- [x] Esquemas de reparto de cordones (Kuipers et al. 2020, sección 4): uniforme, distribuido y distribuido hacia adentro
+- [ ] Marcado del centro por significancia (sección 3.3, ecuación 3, αmax = 135°) y transiciones (sección 3.4, ecuaciones 5–7)
+- [ ] Trapezoidación, propagación del reparto (sección 3.5) y extracción de trayectorias (sección 3.6)
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
 ## Avance

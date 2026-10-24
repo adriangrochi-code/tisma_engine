@@ -18,6 +18,7 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/config/settings.*`, `docs/CONFIG.md` — ajustes del motor | Diseño propio: formato y nombres propios, agrupados. Sobre nlohmann/json (MIT). |
 | `src/slice/pipeline.*` — corte plano completo | Diseño propio: plan de capas, contornos con cierre de huecos, regiones según el modo de relleno, compensación XY y de primera capa. |
 | `src/geom/medial_axis.*` — eje medio de una región | Diagrama de Voronoi de segmentos de Boost.Polygon (BSL-1.0). La selección de las aristas interiores (regla no nula), el radio desde el sitio de cada celda y la interfaz son diseño propio. Base para Kuipers et al. 2020, *A framework for adaptive width control of dense contour-parallel toolpaths in fused deposition modeling*, Computer-Aided Design 128:102907 (arXiv 2004.13497). |
+| `src/perimeters/beading.*` — esquemas de reparto de cordones | Kuipers et al. 2020 (arXiv 2004.13497): sección 3.4 (ecuaciones 4 y 5, cuantización y su inversa), sección 4 (definición 4.1 y tabla 1 a, d y f: uniforme, uniformemente distribuido y distribuido hacia adentro con la función de pesos ω). La estructura del código es propia. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
 | `tools/check_licenses.py` — control de licencias | Diseño propio. |

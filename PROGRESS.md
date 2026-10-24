@@ -502,3 +502,31 @@ puede empezar el esqueleto de Voronoi con Boost.Polygon (anotarla antes).
 
 **Sigue:** leer el método de Kuipers et al. 2020 (arXiv 2004.13497): cantidad y ancho de los cordones según el radio
 del eje medio, y trapezoidación. Después, la ficha de perímetros cuando esté en `main`.
+
+## 2026-10-24 — bloque nocturno 8: esquemas de reparto de cordones
+
+**Hecho:**
+- Se leyó el método de Kuipers et al. 2020 (arXiv 2004.13497), solo el artículo. Partes que se van a usar:
+  - 3.2 y 3.3: trapezoidación del esqueleto; marcado del centro por la significancia de la ecuación 3 con
+    αmax = 135°; filtro del marcado;
+  - 3.4: cuantización (ecuación 4) y transiciones de n a n + 1 cordones (ecuaciones 5 a 7), con largo de transición
+    w* y filtro de anclas a menos de 1 mm;
+  - 3.5: propagación del reparto desde el centro hacia afuera, e interpolación entre dos repartos;
+  - 3.6: extracción de los sitios por arista y unión en polilíneas;
+  - sección 4 y tabla 1: esquemas de reparto.
+  Las aristas parabólicas se discretizan en tramos de hasta 0,2 mm (sección 3.2).
+- `src/perimeters/beading.*`:
+  - `bead_count` (la cuantización q);
+  - `transition_thickness` (su inversa, donde se anclan las transiciones);
+  - `compute_beading` (anchos y centros de los cordones);
+  - esquemas uniforme, uniformemente distribuido y distribuido hacia adentro.
+
+**Probado:**
+- 78/78 pruebas con gcc, clang y ASan+UBSan.
+- Pruebas nuevas con valores exactos por esquema:
+  - cantidades y saltos de la cuantización;
+  - en un barrido de espesores entre 0,2 y 6 mm: los anchos suman exactamente el espesor, son simétricos, y en el
+    esquema distribuido quedan entre w*/2 y 3w*/2.
+- La CI de `445a441` (eje medio, primera descarga de Boost por git) seguía en curso al empezar el bloque.
+
+**Sigue:** marcado del centro y transiciones (secciones 3.3 y 3.4); antes, discretizar las aristas parabólicas.
