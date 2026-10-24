@@ -30,6 +30,8 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`calibrations.md`](calibrations.md): pruebas por franjas y por parches, comandos por firmware, bloque de precisión de medidas | después de F4 | Para revisar |
 | [`printer_connections.md`](printer_connections.md): USB, Bambu Lab en red local, interfaces web, botón de enviar | F9 | Para revisar |
 | [`resin.md`](resin.md): imágenes de capa, exposición y movimientos, formato GOO de Elegoo, detector de ventosas, torre de exposición y bloque de medidas | después de la primera versión | Para revisar |
+| [`orientation.md`](orientation.md): orientación automática, menos soporte en FDM y menor fuerza de despegue en resina | después de la primera versión | Para revisar |
+| [`fragment.md`](fragment.md): dividir un objeto que no entra, con cortes en las secciones chicas y encastres (pernos o espigas) | después de la primera versión | Para revisar |
 
 **Pendientes:**
 - Resina: soportes, pad y vaciado (desde la documentación de usuario de Prusa); orientación automática.
