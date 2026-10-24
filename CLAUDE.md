@@ -1,6 +1,8 @@
 # Tisma engine — notes for Claude
 
-A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.md` before any work.
+A slicing engine written from scratch for Tisma, the first step of the owner's final goal: rebuild as much of Tisma
+Slicer as possible in a clean room. What is already the owner's own code is brought in (`imported/tisma/`); the rest
+is written from scratch. Read `CLEANROOM.md` and `PLAN.md` before any work.
 
 ## Clean room (mandatory)
 

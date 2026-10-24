@@ -1,0 +1,52 @@
+///|/ Tisma Slicer: colors of the interface (PrusaSlicer 3.0 style with the Tisma palette).
+///|/
+///|/ Copyright (c) 2026 the owner of the Tisma project. All rights reserved (see LICENSE and imported/README.md).
+///|/
+#ifndef slic3r_TismaTheme_hpp_
+#define slic3r_TismaTheme_hpp_
+
+#include <string>
+
+#include <wx/colour.h>
+
+namespace Slic3r {
+namespace GUI {
+namespace TismaTheme {
+
+// Appearance of the program (Preferences > GUI > Appearance, app_config "appearance"): the mode of the operating system,
+// or always light or dark.
+enum class Appearance { System, Light, Dark };
+Appearance  appearance();
+std::string appearance_key(Appearance appearance);
+// Whether the operating system uses a dark mode (Windows: the mode of the apps; macOS: the system appearance; Linux: the
+// GTK theme).
+bool        system_dark();
+// Whether the program is drawn dark: the appearance chosen, or the one of the system.
+bool        dark();
+// Before the first window: the native controls follow the appearance chosen (Windows: dark_color_mode of the dark mode
+// of PrusaSlicer; Linux: the dark variant of the GTK theme; macOS: the appearance of the application).
+void        apply_to_toolkit();
+// Linux: GTK reads its theme when it starts. Before that, a forced appearance of the configuration file (ini_path) sets
+// GTK_THEME to the light or dark Adwaita, unless the user set GTK_THEME.
+void        set_gtk_theme_env(const std::string &ini_path);
+
+// Brand
+inline wxColour accent()            { return wxColour(0x7A, 0x24, 0xC9); }
+inline wxColour accent_hover()      { return wxColour(0x8E, 0x34, 0xDF); }
+inline wxColour accent_pressed()    { return wxColour(0x5B, 0x0F, 0xA7); }
+inline wxColour accent_text(bool dark) { return dark ? wxColour(0xC9, 0xA2, 0xF5) : wxColour(0x7A, 0x24, 0xC9); }
+
+// Panels
+inline wxColour panel_bg(bool dark)     { return dark ? wxColour(0x1F, 0x1F, 0x24) : wxColour(0xF7, 0xF7, 0xF9); }
+inline wxColour card_bg(bool dark)      { return dark ? wxColour(0x27, 0x27, 0x2D) : wxColour(0xFF, 0xFF, 0xFF); }
+inline wxColour separator(bool dark)    { return dark ? wxColour(0x34, 0x34, 0x3C) : wxColour(0xE2, 0xE2, 0xE8); }
+inline wxColour text(bool dark)         { return dark ? wxColour(0xEC, 0xEC, 0xF0) : wxColour(0x1A, 0x1A, 0x1F); }
+inline wxColour text_muted(bool dark)   { return dark ? wxColour(0x9A, 0x9A, 0xA6) : wxColour(0x6B, 0x6B, 0x76); }
+inline wxColour disabled_bg(bool dark)  { return dark ? wxColour(0x3A, 0x3A, 0x42) : wxColour(0xD9, 0xD9, 0xDF); }
+inline wxColour disabled_text(bool dark){ return dark ? wxColour(0x7A, 0x7A, 0x84) : wxColour(0x9A, 0x9A, 0xA4); }
+
+} // namespace TismaTheme
+} // namespace GUI
+} // namespace Slic3r
+
+#endif // slic3r_TismaTheme_hpp_

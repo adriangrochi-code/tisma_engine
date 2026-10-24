@@ -1,7 +1,11 @@
 # Plan del motor de laminado de Tisma
 
-**Objetivo:** un motor de laminado propio, escrito desde cero (ver `CLEANROOM.md`), más rápido que el de Tisma Slicer
-actual, que el dueño pueda licenciar como quiera.
+**Objetivo final:** rehacer en sala limpia todo lo que se pueda de Tisma Slicer, para que el dueño lo licencie como
+quiera (código disponible, sin uso comercial de terceros):
+- lo que ya es propio se trae desde `imported/tisma/`;
+- lo demás se escribe desde cero (ver `CLEANROOM.md`).
+
+**Primer paso:** el motor de laminado, más rápido que el de Tisma Slicer actual.
 
 **Primera versión:** FDM, una boquilla, capas planas, en unas 16 semanas dedicando un cuarto del tiempo.
 
@@ -41,6 +45,16 @@ actual, que el dueño pueda licenciar como quiera.
 | F5 | 13–15 | Soportes en grilla (voladizos por ángulo, proyección, interfaz y distancia), falda y borde | Una pieza con voladizos se imprime y el soporte sale |
 | F6 | 16 | Integración: Tisma Slicer y Tisma Cloud llaman al motor; comparación de calidad y velocidad con Tisma Slicer | Medido y documentado |
 | F7 | después | Lo propio de Tisma, desde `imported/tisma/` sobre los tipos del motor: análisis estructural y aerodinámico (`libtisma_fea`), capas no planares, Z anti-aliasing, relleno entrelazado, impresoras de cinta, resina | Las pruebas traídas pasan con los tipos del motor |
+
+**Después del motor** (el orden lo decide el dueño):
+
+| Fase | Contenido | Base |
+|---|---|---|
+| F8 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | `imported/tisma/src/slic3r/GUI/` (lo nuevo de Tisma) y `docs/tisma/NEW_UI.md`; el resto, nuevo |
+| F9 | Conexión con impresoras: USB, Bambu Lab, OctoPrint, Moonraker, PrusaLink y las demás, desde la documentación pública de sus API | `imported/tisma/src/slic3r/Utils/` y sus simuladores |
+| F10 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura |
+| F11 | Formatos: 3MF (especificación pública), STEP (OCCT), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
+| F12 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | `imported/tisma/.github/`, `packaging/`, `resources-src/branding/` |
 
 **Código propio que adelanta fases** (`imported/README.md`):
 - F4: `GCodeMoveLine.hpp` (líneas G0/G1) y `tools/research/pressure_advance_sim.py`.

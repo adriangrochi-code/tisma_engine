@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) 2026 the owner of the Tisma project. All rights reserved (see LICENSE and imported/README.md). -->
+<!-- More: three dots (as the Android app's "More" section). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <circle fill="#808080" cx="12" cy="5" r="2"/>
+  <circle fill="#808080" cx="12" cy="12" r="2"/>
+  <circle fill="#808080" cx="12" cy="19" r="2"/>
+</svg>
