@@ -25,6 +25,8 @@ struct Settings {
     double xy_offset = 0.0;
     double first_layer_shrink = 0.0;
     double simplify_tolerance = 0.01;
+    int wall_count = 3;      // walls from each outline; 0: no walls, all infill
+    double wall_width = 0.4; // preferred bead width w*
     GpuMode gpu = GpuMode::Auto;
 
     // Groups present in the file that the engine does not use yet.

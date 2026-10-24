@@ -31,7 +31,8 @@ TEST_CASE("settings are read by group", "[settings]") {
         "layers": {"height": 0.3, "first_height": 0.35},
         "slicing": {"fill_mode": "even_odd", "gap_closing_radius": 0.1, "xy_offset": -0.05, "first_layer_shrink": 0.2, "simplify_tolerance": 0},
         "compute": {"gpu": "off"},
-        "walls": {"anything": 1}
+        "walls": {"count": 2, "width": 0.45},
+        "infill": {"anything": 1}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -41,7 +42,9 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.first_layer_shrink == 0.2);
     CHECK(s.simplify_tolerance == 0.0);
     CHECK(s.gpu == GpuMode::Off);
-    CHECK(s.ignored_groups == std::vector<std::string>{"walls"});
+    CHECK(s.wall_count == 2);
+    CHECK(s.wall_width == 0.45);
+    CHECK(s.ignored_groups == std::vector<std::string>{"infill"});
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -54,6 +57,9 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"first_layer_shrink": -1}})"), ContainsSubstring("not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"fill_mode": "xor"}})"), ContainsSubstring("must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": 3})"), ContainsSubstring("must be an object"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be greater than 0"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {
@@ -84,4 +90,26 @@ TEST_CASE("slice_model applies XY offset and the first-layer shrink", "[settings
     for (std::size_t l = 1; l < sliced.regions.size(); ++l)
         CHECK_THAT(area_mm2(sliced.regions[l]), WithinAbs(9.8 * 9.8, 1e-6));
     CHECK(sliced.open_contours == 0);
+}
+
+TEST_CASE("slice_model builds the walls of every layer and leaves the middle for infill", "[settings]") {
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    Settings s; // 3 walls of 0.4 mm
+    const SlicedModel sliced = slice_model(m, s);
+    REQUIRE(sliced.walls.size() == sliced.layers.size());
+    for (const LayerWalls& w : sliced.walls) {
+        REQUIRE(w.toolpaths.size() == 3);
+        for (const Toolpath& t : w.toolpaths) {
+            CHECK(t.closed);
+            for (const ToolpathPoint& q : t.points)
+                CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
+        }
+        CHECK_THAT(area_mm2(w.infill), WithinAbs(7.6 * 7.6, 1e-6)); // 10 mm less 3 walls on each side
+    }
+    s.wall_count = 0;
+    const SlicedModel bare = slice_model(m, s);
+    for (std::size_t l = 0; l < bare.layers.size(); ++l) {
+        CHECK(bare.walls[l].toolpaths.empty());
+        CHECK_THAT(area_mm2(bare.walls[l].infill), WithinAbs(area_mm2(bare.regions[l]), 1e-9));
+    }
 }

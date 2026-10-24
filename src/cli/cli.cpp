@@ -205,13 +205,15 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 
     double volume = 0.0;
-    std::size_t polygons = 0;
+    std::size_t polygons = 0, walls = 0;
     for (std::size_t l = 0; l < sliced.layers.size(); ++l) {
         volume += area_mm2(sliced.regions[l]) * (sliced.layers[l].top - sliced.layers[l].bottom);
         polygons += sliced.regions[l].size();
+        walls += sliced.walls[l].toolpaths.size();
     }
     out << "layers: " << sliced.layers.size() << "\n";
     out << "polygons: " << polygons << "\n";
+    out << "wall_toolpaths: " << walls << "\n";
     out << "sliced_volume: " << volume << "\n";
     out << "slice_ms: " << slice_ms << "\n";
     if (sliced.open_contours > 0)

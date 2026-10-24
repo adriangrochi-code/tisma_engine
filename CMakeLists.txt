@@ -124,6 +124,7 @@ add_library(tisma_core
   src/perimeters/beading.cpp
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
+  src/perimeters/walls.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

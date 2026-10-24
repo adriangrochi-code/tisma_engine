@@ -29,6 +29,13 @@ Reglas:
 | `first_layer_shrink` | número | 0 | ≥ 0 | Cuánto se achica además la primera capa, contra la pata de elefante |
 | `simplify_tolerance` | número | 0.01 | ≥ 0 | Se quitan los vértices de los contornos que se apartan menos que esto de la recta entre sus vecinos; 0 no simplifica. Menos segmentos aceleran los pasos siguientes (en una capa circular de 708 segmentos, 0,01 mm deja 208 y el eje medio tarda 3,4 veces menos) |
 
+### `walls`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
+| `width` | número | 0.4 | > 0 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine` |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -37,7 +44,7 @@ Reglas:
 
 ## Grupos previstos (todavía no implementados)
 
-`machine`, `material`, `walls`, `surfaces`, `infill`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
+`machine`, `material`, `surfaces`, `infill`, `speed`, `retraction`, `cooling`, `support`. Se definen acá
 cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo
@@ -46,6 +53,7 @@ cuando se implementan, a partir de las fichas de `docs/spec/features/`.
 {
   "layers": { "height": 0.3, "first_height": 0.35 },
   "slicing": { "xy_offset": -0.05, "first_layer_shrink": 0.1 },
+  "walls": { "count": 2 },
   "compute": { "gpu": "auto" }
 }
 ```

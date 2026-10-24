@@ -1,5 +1,6 @@
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
+#include "perimeters/walls.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -321,4 +322,23 @@ TEST_CASE("wall limit: the shell ramp gets its own nodes on the centre", "[sites
         for (const ToolpathPoint& q : t.points)
             CHECK(q.width > 0.0);
     }
+}
+
+TEST_CASE("layer_walls: what the walls leave for infill", "[sites]") {
+    BeadingParams p;
+    p.wall_count = 2; // the 2 mm strip: two walls of 0.4 mm and a 0.4 mm middle
+    LayerWalls w = layer_walls({rect(0, 0, 30, 2)}, p);
+    CHECK(w.toolpaths.size() == 2);
+    CHECK_THAT(area_mm2(w.infill), WithinAbs(28.4 * 0.4, 1e-6));
+    p.wall_count = 3; // five beads fill it: nothing left
+    w = layer_walls({rect(0, 0, 30, 2)}, p);
+    CHECK(w.toolpaths.size() == 3);
+    CHECK(w.infill.empty());
+    p.wall_count = 3; // the 20 mm square keeps an inner square of 20 - 2 * 1.2
+    w = layer_walls({rect(0, 0, 20, 20)}, p);
+    CHECK_THAT(area_mm2(w.infill), WithinAbs(17.6 * 17.6, 1e-6));
+    p.wall_count = 0; // no limit: the beads fill everything
+    w = layer_walls({rect(0, 0, 20, 20)}, p);
+    CHECK(w.infill.empty());
+    CHECK(layer_walls({}, p).toolpaths.empty());
 }

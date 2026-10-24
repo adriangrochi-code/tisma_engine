@@ -15,7 +15,7 @@ namespace {
 
 using nlohmann::json;
 
-const std::vector<std::string> kPlannedGroups = {"machine", "material", "walls",   "surfaces", "infill",
+const std::vector<std::string> kPlannedGroups = {"machine", "material", "surfaces", "infill",
                                                  "speed",   "retraction", "cooling", "support"};
 
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
@@ -74,7 +74,7 @@ Settings parse_settings(std::string_view text) {
 
     Settings s;
     for (const auto& [group, value] : root.items()) {
-        if (group == "layers" || group == "slicing" || group == "compute")
+        if (group == "layers" || group == "slicing" || group == "walls" || group == "compute")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -110,6 +110,19 @@ Settings parse_settings(std::string_view text) {
                    else
                        s.simplify_tolerance = v;
                });
+    read_group(root, "walls", {"count", "width"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "count") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
+                fail(k, "must be a whole number from 0 to 1000");
+            s.wall_count = static_cast<int>(v.get<long long>());
+            return;
+        }
+        const double v = number(g, n, k);
+        if (!(v > 0.0))
+            fail(k, "must be greater than 0");
+        s.wall_width = v;
+    });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });

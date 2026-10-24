@@ -809,3 +809,35 @@ de cada trayectoria es exactamente uno de los sitios de `support_sites` o `media
 - perímetros de todas las capas en paralelo dentro de `slice_model`, con la cantidad de paredes como ajuste propio en
   `docs/CONFIG.md`.
 
+## 2026-10-24 — bloque nocturno 19: paredes en todas las capas y región para el relleno
+
+**Hecho:**
+- `layer_walls` (`src/perimeters/walls.*`): la cadena completa de paredes sobre una región y la región que dejan para
+  el relleno. Con M paredes, esa región es la región achicada M·w* sin las partes de menos de w*/2 (diseño propio):
+  - en lo ancho, la cáscara tiene sus M paredes exactamente a w*;
+  - en lo angosto, los cordones llenan todo y no queda nada;
+  - en la rampa de la cáscara, la región se superpone con las paredes ensanchadas hasta w*/4 de cada lado.
+- `slice_model` calcula las paredes de todas las capas dentro del mismo `parallel_for` (oneTBB). `SlicedModel::walls`
+  guarda los recorridos y la región para el relleno de cada capa.
+- Ajustes: grupo `walls` con `count` (3; el valor de banco de `docs/spec/SETTINGS_V1.md`, con nombre propio) y
+  `width` (0,4), en `docs/CONFIG.md`. `count` 0 no hace paredes y deja toda la región para el relleno.
+- `tisma-engine slice` informa `wall_toolpaths`.
+
+**Probado:** 111/111 pruebas con gcc, clang y ASan+UBSan:
+- tira de 2 mm con 2 paredes: el relleno es la tira del medio de 28,4 × 0,4 mm; con 3, los 5 cordones la llenan y no
+  queda relleno;
+- cuadrado de 20 mm con 3 paredes: relleno de 17,6 × 17,6 mm;
+- cubo de 10 mm por `slice_model`: 3 lazos cerrados de 0,4 mm en cada una de las 50 capas y relleno de 7,6 × 7,6 mm;
+  con `count` 0, ningún recorrido y el relleno igual a la región;
+- lectura del grupo `walls` y sus errores (no entero, negativo, ancho 0).
+
+**Medido** (esfera de 1 001 112 triángulos, 500 capas, 4 núcleos):
+- `slice` con 3 paredes: 1500 recorridos (3 por capa), 0,99–1,03 s. Sin paredes: 0,20–0,22 s;
+- casi todo el costo nuevo es el eje medio de Boost (5,2–5,6 ms en la capa del medio).
+
+**Sigue:**
+- acelerar el eje medio. Idea: con M paredes solo hace falta el eje cerca del borde (hasta unos M·w* + w*), y en las
+  partes anchas la cáscara es un desplazamiento exacto que Clipper2 hace mucho más rápido;
+- resolución de conflictos de reparto (figura 9);
+- contrastar con la ficha de perímetros cuando esté en `main`.
+

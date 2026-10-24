@@ -27,6 +27,10 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
         slice_levels(mesh, height_field(mesh), heights, settings.gap_closing_radius, gpu);
 
     out.regions.resize(out.layers.size());
+    out.walls.resize(out.layers.size());
+    BeadingParams beading;
+    beading.preferred_width = settings.wall_width;
+    beading.wall_count = settings.wall_count;
     std::vector<std::size_t> open(out.layers.size(), 0);
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         for (const Contour& c : contours[l])
@@ -35,6 +39,10 @@ SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::
             layer_region(simplify(to_polygons(contours[l]), settings.simplify_tolerance), settings.fill_mode);
         const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
         out.regions[l] = offset(region, settings.xy_offset - shrink);
+        if (settings.wall_count > 0)
+            out.walls[l] = layer_walls(out.regions[l], beading);
+        else
+            out.walls[l].infill = out.regions[l];
     });
     for (std::size_t n : open)
         out.open_contours += n;

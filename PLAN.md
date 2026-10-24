@@ -208,8 +208,9 @@ superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de i
 - [x] Acelerar la extracción: casilleros contiguos en vez de mapas; de 50 a 3,3–3,9 ms en la capa del medio de la esfera
 - [x] Meta-esquema de cáscara (sección 5.1, ecuación 8): M paredes al ancho preferido donde la región es ancha y ancho
   adaptativo solo en las partes angostas, con nodos extra donde el reparto cambia de forma; el resto queda para el relleno
-- [ ] Región que queda para el relleno: lo que no cubren las paredes, como polígonos (para F3)
-- [ ] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`, con la cantidad de paredes como ajuste
+- [x] Región que queda para el relleno: lo que no cubren las paredes, como polígonos (para F3)
+- [x] Perímetros de todas las capas en paralelo (oneTBB) dentro de `slice_model`, con el grupo de ajustes `walls`
+- [ ] Acelerar el eje medio, que ahora domina el corte (con paredes, `slice` de la esfera pasa de 0,2 s a 1,0 s)
 - [ ] Resolución de conflictos de reparto (figura 9) y punto del cordón central impar en un máximo aislado
 - [ ] Contrastar con la ficha `docs/spec/features/perimeters.md` cuando esté en `main`
 
