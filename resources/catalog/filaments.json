@@ -1,5 +1,135 @@
 [
  {
+  "vendor": "Anycubic",
+  "name": "ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "density": 1.05,
+  "nozzle_temp": [
+   240,
+   280
+  ],
+  "bed_temp": [
+   80,
+   100
+  ],
+  "fan": [
+   80,
+   80
+  ],
+  "print_speed": [
+   50,
+   150
+  ],
+  "sources": [
+   "https://store.anycubic.com/products/abs-filament"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "name": "PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "density": 1.23,
+  "nozzle_temp": [
+   230,
+   250
+  ],
+  "bed_temp": [
+   60,
+   70
+  ],
+  "fan": [
+   90,
+   90
+  ],
+  "print_speed": [
+   50,
+   250
+  ],
+  "sources": [
+   "https://store.anycubic.com/products/petg-filament"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "name": "PLA Basic",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.24,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "bed_temp": [
+   55,
+   65
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "print_speed": [
+   50,
+   200
+  ],
+  "sources": [
+   "https://store.anycubic.com/products/pla-filament"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "name": "PLA+",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.21,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "bed_temp": [
+   55,
+   65
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "print_speed": [
+   50,
+   200
+  ],
+  "sources": [
+   "https://store.anycubic.com/products/pla-plus-filament"
+  ]
+ },
+ {
+  "vendor": "Anycubic",
+  "name": "TPU 95A",
+  "material": "TPU",
+  "diameter": 1.75,
+  "density": 1.23,
+  "nozzle_temp": [
+   195,
+   230
+  ],
+  "bed_temp": [
+   50,
+   60
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "print_speed": [
+   50,
+   150
+  ],
+  "sources": [
+   "https://store.anycubic.com/products/tpu-filament"
+  ]
+ },
+ {
   "vendor": "Bambu Lab",
   "name": "ABS",
   "material": "ABS",
@@ -235,7 +365,282 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "colorFabb",
+  "name": "colorFabb_HT",
+  "material": "CPE",
+  "diameter": 1.75,
+  "density": 1.2,
+  "nozzle_temp": [
+   250,
+   280
+  ],
+  "bed_temp": [
+   100,
+   120
+  ],
+  "fan": [
+   50,
+   50
+  ],
+  "print_speed": [
+   30,
+   50
+  ],
+  "sources": [
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb_HT/TDS_E_ColorFabb_HT.pdf"
+  ]
+ },
+ {
+  "vendor": "colorFabb",
+  "name": "colorFabb_XT",
+  "material": "CPE",
+  "diameter": 1.75,
+  "density": 1.27,
+  "nozzle_temp": [
+   240,
+   260
+  ],
+  "bed_temp": [
+   60,
+   70
+  ],
+  "fan": [
+   0,
+   50
+  ],
+  "print_speed": [
+   40,
+   70
+  ],
+  "sources": [
+   "https://colorfabb.com/xt-clear",
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb_XT/TDS_E_ColorFabb_XT_2.pdf"
+  ]
+ },
+ {
+  "vendor": "colorFabb",
+  "name": "nGen",
+  "material": "CPE",
+  "diameter": 1.75,
+  "density": 1.2,
+  "nozzle_temp": [
+   220,
+   240
+  ],
+  "bed_temp": [
+   75,
+   85
+  ],
+  "fan": [
+   0,
+   80
+  ],
+  "print_speed": [
+   40,
+   70
+  ],
+  "sources": [
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/Co-Polyester/colorFabb%20nGen/TDS_E_ColorFabb_nGen.pdf"
+  ]
+ },
+ {
+  "vendor": "colorFabb",
+  "name": "PA Neat",
+  "material": "PA",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   265,
+   290
+  ],
+  "bed_temp": [
+   0,
+   50
+  ],
+  "fan": [
+   0,
+   50
+  ],
+  "print_speed": [
+   30,
+   40
+  ],
+  "sources": [
+   "https://colorfabb.com/pa-neat",
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PA/colorFabb%20PA%20Neat/TDS_E%20colorFabb%20PA-NEAT.pdf"
+  ]
+ },
+ {
+  "vendor": "colorFabb",
+  "name": "PLA/PHA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.2,
+  "nozzle_temp": [
+   195,
+   220
+  ],
+  "bed_temp": [
+   50,
+   60
+  ],
+  "fan": [
+   0,
+   100
+  ],
+  "print_speed": [
+   40,
+   100
+  ],
+  "sources": [
+   "https://colorfabb.com/standard-white",
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/PLA/colorFabb%20PLA-PHA/TDS_PLA-PHA.pdf"
+  ]
+ },
+ {
+  "vendor": "colorFabb",
+  "name": "varioShore TPU",
+  "material": "TPU",
+  "diameter": 1.75,
+  "density": 1.2,
+  "nozzle_temp": [
+   210,
+   250
+  ],
+  "bed_temp": [
+   40,
+   60
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "print_speed": [
+   50,
+   60
+  ],
+  "sources": [
+   "https://colorfabb.com/varioshore-tpu-natural",
+   "https://downloads.colorfabb.com/public.php/dav/files/rtfDDRCa723Xdor/Technical%20Data%20Sheets/TPU/colorFabb%20varioShore%20TPU%2095A/TDS__varioShore%20TPU%2095A.pdf"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "name": "CR-ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   220,
+   260
+  ],
+  "nozzle_temp_recommended": 240,
+  "bed_temp": [
+   90,
+   110
+  ],
+  "bed_temp_recommended": 100,
+  "print_speed": [
+   40,
+   80
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "name": "CR-PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "nozzle_temp_recommended": 200,
+  "bed_temp": [
+   0,
+   60
+  ],
+  "bed_temp_recommended": 50,
+  "print_speed": [
+   40,
+   100
+  ],
+  "sources": [
+   "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "name": "CR-TPU",
+  "material": "TPU",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   210,
+   240
+  ],
+  "nozzle_temp_recommended": 225,
+  "bed_temp": [
+   50,
+   50
+  ],
+  "bed_temp_recommended": 50,
+  "print_speed": [
+   10,
+   50
+  ],
+  "sources": [
+   "https://store.creality.com/blogs/all/creality-3d-printer-filaments-type-parameter"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "name": "Hyper PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   220,
+   260
+  ],
+  "bed_temp": [
+   60,
+   80
+  ],
+  "fan": [
+   50,
+   50
+  ],
+  "print_speed": [
+   30,
+   600
+  ],
+  "sources": [
+   "https://store.creality.com/products/hyper-series-petg-3d-printing-filament-1kg"
+  ]
+ },
+ {
+  "vendor": "Creality",
+  "name": "Hyper PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "bed_temp": [
+   25,
+   60
+  ],
+  "print_speed": [
+   30,
+   600
+  ],
+  "sources": [
+   "https://store.creality.com/products/hyper-series-pla-3d-printing-filament-1kg"
+  ]
+ },
+ {
+  "vendor": "Elegoo",
   "name": "ABS",
   "material": "ABS",
   "diameter": 1.75,
@@ -254,7 +659,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "PETG PRO",
   "material": "PETG",
   "diameter": 1.75,
@@ -273,7 +678,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "PLA",
   "material": "PLA",
   "diameter": 1.75,
@@ -292,7 +697,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "PLA Plus (PLA+)",
   "material": "PLA",
   "diameter": 1.75,
@@ -311,7 +716,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "Rapid PETG",
   "material": "PETG",
   "diameter": 1.75,
@@ -330,7 +735,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "RAPID PLA Plus",
   "material": "PLA",
   "diameter": 1.75,
@@ -349,7 +754,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "Rapid TPU 95A",
   "material": "TPU",
   "diameter": 1.75,
@@ -368,7 +773,7 @@
   ]
  },
  {
-  "vendor": "ELEGOO",
+  "vendor": "Elegoo",
   "name": "TPU 95A",
   "material": "TPU",
   "diameter": 1.75,
@@ -565,6 +970,648 @@
   ],
   "sources": [
    "https://esun3dstore.com/products/epla-silk"
+  ]
+ },
+ {
+  "vendor": "Extrudr",
+  "name": "DuraPro ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "density": 1.06,
+  "nozzle_temp": [
+   220,
+   250
+  ],
+  "bed_temp": [
+   100,
+   110
+  ],
+  "fan": [
+   0,
+   50
+  ],
+  "print_speed": [
+   20,
+   200
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://extrudr.com/en/de/products/durapro-abs/",
+   "https://s3.extrudr.com/extrudr-media/datasheets/tds/tds-en/durapro-abs-TDS-en.pdf"
+  ]
+ },
+ {
+  "vendor": "Extrudr",
+  "name": "DuraPro ASA",
+  "material": "ASA",
+  "diameter": 1.75,
+  "density": 1.05,
+  "nozzle_temp": [
+   220,
+   270
+  ],
+  "bed_temp": [
+   100,
+   110
+  ],
+  "fan": [
+   0,
+   30
+  ],
+  "print_speed": [
+   20,
+   200
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://extrudr.com/en/de/products/durapro-asa/",
+   "https://s3.extrudr.com/extrudr-media/datasheets/tds/tds-en/durapro-asa-TDS-en.pdf"
+  ]
+ },
+ {
+  "vendor": "Extrudr",
+  "name": "Flex Medium",
+  "material": "TPU",
+  "diameter": 1.75,
+  "density": 1.19,
+  "nozzle_temp": [
+   230,
+   250
+  ],
+  "bed_temp": [
+   50,
+   90
+  ],
+  "fan": [
+   0,
+   30
+  ],
+  "print_speed": [
+   20,
+   100
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://extrudr.com/en/de/products/flex-medium/",
+   "https://s3.extrudr.com/extrudr-media/datasheets/tds/tds-en/flex-medium-TDS-en.pdf"
+  ]
+ },
+ {
+  "vendor": "Extrudr",
+  "name": "PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "density": 1.29,
+  "nozzle_temp": [
+   210,
+   230
+  ],
+  "bed_temp": [
+   60,
+   90
+  ],
+  "fan": [
+   20,
+   50
+  ],
+  "print_speed": [
+   20,
+   200
+  ],
+  "sources": [
+   "https://extrudr.com/en/de/products/petg/",
+   "https://s3.extrudr.com/extrudr-media/datasheets/tds/tds-en/petg-TDS-en.pdf"
+  ]
+ },
+ {
+  "vendor": "Extrudr",
+  "name": "PLA NX2 MATT",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.3,
+  "nozzle_temp": [
+   200,
+   230
+  ],
+  "bed_temp": [
+   20,
+   60
+  ],
+  "fan": [
+   30,
+   100
+  ],
+  "print_speed": [
+   20,
+   200
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://extrudr.com/en/de/products/pla-nx2-matt/",
+   "https://s3.extrudr.com/extrudr-media/datasheets/tds/tds-en/pla-nx2-matt-TDS-en.pdf"
+  ]
+ },
+ {
+  "vendor": "Fiberlogy",
+  "name": "ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "density": 1.05,
+  "nozzle_temp": [
+   250,
+   265
+  ],
+  "bed_temp": [
+   100,
+   100
+  ],
+  "bed_temp_recommended": 100,
+  "fan": [
+   0,
+   10
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://fiberlogy.com/en/product/abs-filament/"
+  ]
+ },
+ {
+  "vendor": "Fiberlogy",
+  "name": "ASA",
+  "material": "ASA",
+  "diameter": 1.75,
+  "density": 1.07,
+  "nozzle_temp": [
+   255,
+   270
+  ],
+  "bed_temp": [
+   110,
+   110
+  ],
+  "bed_temp_recommended": 110,
+  "fan": [
+   0,
+   25
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://fiberlogy.com/en/product/asa-filament/"
+  ]
+ },
+ {
+  "vendor": "Fiberlogy",
+  "name": "Easy PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "density": 1.29,
+  "nozzle_temp": [
+   220,
+   250
+  ],
+  "bed_temp": [
+   90,
+   90
+  ],
+  "bed_temp_recommended": 90,
+  "fan": [
+   0,
+   25
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fiberlogy.com/en/product/easy-petg-filament/"
+  ]
+ },
+ {
+  "vendor": "Fiberlogy",
+  "name": "Easy PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.24,
+  "nozzle_temp": [
+   200,
+   230
+  ],
+  "bed_temp": [
+   60,
+   60
+  ],
+  "bed_temp_recommended": 60,
+  "fan": [
+   75,
+   100
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fiberlogy.com/en/product/easy-pla-filament/"
+  ]
+ },
+ {
+  "vendor": "Fiberlogy",
+  "name": "FiberFlex 40D",
+  "material": "TPU",
+  "diameter": 1.75,
+  "density": 1.16,
+  "nozzle_temp": [
+   200,
+   220
+  ],
+  "bed_temp": [
+   70,
+   70
+  ],
+  "bed_temp_recommended": 70,
+  "enclosure": false,
+  "sources": [
+   "https://fiberlogy.com/en/product/fiberflex-40d-filament-outlet-1-75-mm-0-85-kg/"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "ABS Extrafill",
+  "material": "ABS",
+  "diameter": 1.75,
+  "density": 1.04,
+  "nozzle_temp": [
+   220,
+   240
+  ],
+  "bed_temp": [
+   80,
+   105
+  ],
+  "fan": [
+   0,
+   20
+  ],
+  "print_speed": [
+   30,
+   50
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://fillamentum.com/collections/abs-extrafill-filament/",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_ABS-Extrafill_03012019-1.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/01/3D-printing-guide_Fillamentum-ABS-Extrafill_EN_13052020.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "ASA Extrafill",
+  "material": "ASA",
+  "diameter": 1.75,
+  "density": 1.07,
+  "nozzle_temp": [
+   240,
+   255
+  ],
+  "bed_temp": [
+   80,
+   105
+  ],
+  "fan": [
+   0,
+   20
+  ],
+  "print_speed": [
+   30,
+   50
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://fillamentum.com/collections/asa-filament/",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_ASA-Extrafill_03012019.pdf",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Fillamentum_Printing_Guide_ASA_Extrafill.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "CPE HG100",
+  "material": "CPE",
+  "diameter": 1.75,
+  "density": 1.25,
+  "nozzle_temp": [
+   255,
+   275
+  ],
+  "bed_temp": [
+   70,
+   85
+  ],
+  "fan": [
+   0,
+   15
+  ],
+  "print_speed": [
+   40,
+   60
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fillamentum.com/collections/cpe-filament/",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_CPE-HG100_03012019.pdf",
+   "https://fillamentum.com/wp-content/uploads/2021/02/Fillamentum_Printing_Guide_CPE-HG100.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "Flexfill TPU 98A",
+  "material": "TPU",
+  "diameter": 1.75,
+  "density": 1.23,
+  "nozzle_temp": [
+   220,
+   240
+  ],
+  "bed_temp": [
+   50,
+   60
+  ],
+  "fan": [
+   70,
+   100
+  ],
+  "print_speed": [
+   20,
+   30
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fillamentum.com/collections/flexfill-tpu-flexible-filament/flexfill-tpu-98a/",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_Flexfill-TPU-98A_26082019.pdf",
+   "https://fillamentum.com/wp-content/uploads/2020/10/FI_Printing_Guide_Flexfill-TPU.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "density": 1.27,
+  "nozzle_temp": [
+   235,
+   255
+  ],
+  "bed_temp": [
+   65,
+   75
+  ],
+  "fan": [
+   0,
+   30
+  ],
+  "print_speed": [
+   40,
+   60
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fillamentum.com/collections/petg-filament/",
+   "https://fillamentum.com/wp-content/uploads/2023/02/TDS_PETG_EN_30012023.pdf",
+   "https://fillamentum.com/wp-content/uploads/2025/08/3D_PRINTING_GUIDE_PETG_8_2024.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Fillamentum",
+  "name": "PLA Extrafill",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.24,
+  "nozzle_temp": [
+   190,
+   210
+  ],
+  "bed_temp": [
+   50,
+   60
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "print_speed": [
+   30,
+   70
+  ],
+  "enclosure": false,
+  "sources": [
+   "https://fillamentum.com/collections/pla-extrafill-filament/",
+   "https://fillamentum.com/wp-content/uploads/2020/10/Technical-Data-Sheet_PLA-Extrafill_03012019.pdf",
+   "https://fillamentum.com/wp-content/uploads/2024/10/PRINT_GUIDE_PLA_EXTRAFILL_8_2024.pdf",
+   "https://fillamentum.com/wp-content/uploads/2023/10/Recommendation-for-filament-processing_drying_EN_12102023.pdf"
+  ]
+ },
+ {
+  "vendor": "Hatchbox",
+  "name": "ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   210,
+   240
+  ],
+  "sources": [
+   "https://www.hatchbox3d.com/products/3d-abs-1kg1-75-wht",
+   "https://www.hatchbox3d.com/products/3d-abs-1kg3-00-wht"
+  ]
+ },
+ {
+  "vendor": "Hatchbox",
+  "name": "PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   230,
+   260
+  ],
+  "sources": [
+   "https://www.hatchbox3d.com/products/3d-petg-1kg1-75-blk"
+  ]
+ },
+ {
+  "vendor": "Hatchbox",
+  "name": "PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   180,
+   220
+  ],
+  "sources": [
+   "https://www.hatchbox3d.com/products/3d-pla-1kg1-75-cg6c"
+  ]
+ },
+ {
+  "vendor": "Hatchbox",
+  "name": "TPU (Shore 95A)",
+  "material": "TPU",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   190,
+   235
+  ],
+  "sources": [
+   "https://www.hatchbox3d.com/products/3d-tpu-1kg1-75-blk"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "ABS",
+  "material": "ABS",
+  "diameter": 1.75,
+  "density": 1.15,
+  "nozzle_temp": [
+   245,
+   265
+  ],
+  "bed_temp": [
+   80,
+   100
+  ],
+  "print_speed": [
+   30,
+   70
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://overture3d.com/products/overture-abs-filament-1-75mm",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_ABS_TDS_EN_V5.1_9d827267-f215-4734-9c0b-c04232b8df92.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "ASA",
+  "material": "ASA",
+  "diameter": 1.75,
+  "density": 1.14,
+  "nozzle_temp": [
+   240,
+   270
+  ],
+  "bed_temp": [
+   70,
+   95
+  ],
+  "print_speed": [
+   30,
+   50
+  ],
+  "enclosure": true,
+  "sources": [
+   "https://overture3d.com/products/overture-asa-filament-1-75mm",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_ASA_TDS_EN_V5.1_60023de4-0977-4f96-9c55-0d94bacc7d0f.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "High Speed PETG",
+  "material": "PETG",
+  "diameter": 1.75,
+  "density": 1.3,
+  "nozzle_temp": [
+   230,
+   260
+  ],
+  "bed_temp": [
+   65,
+   70
+  ],
+  "sources": [
+   "https://overture3d.com/products/overture-high-speed-petg",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_PETG_TDS_EN_V5.2_2.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "Matte PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.3,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "bed_temp": [
+   50,
+   70
+  ],
+  "print_speed": [
+   60,
+   300
+  ],
+  "sources": [
+   "https://overture3d.com/products/overture-matte-pla",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_MATTE_PLA_TDS_EN_V5.1_0ae7a33c-dd34-49b9-a202-c6ba0fddfdcb.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "PLA",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.21,
+  "nozzle_temp": [
+   190,
+   220
+  ],
+  "bed_temp": [
+   25,
+   60
+  ],
+  "print_speed": [
+   40,
+   70
+  ],
+  "sources": [
+   "https://overture3d.com/products/overture-pla",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_PLA_TDS_EN_V5.1_a4102671-a3b0-416f-9191-7e6feb681e3e.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "PLA PLUS (PLA+)",
+  "material": "PLA",
+  "diameter": 1.75,
+  "density": 1.23,
+  "nozzle_temp": [
+   190,
+   230
+  ],
+  "bed_temp": [
+   25,
+   60
+  ],
+  "fan": [
+   100,
+   100
+  ],
+  "sources": [
+   "https://overture3d.com/products/overture-pla-plus-3d-printer-filament-1-75mm",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_PLA___TDS_EN_5.2.1.pdf"
+  ]
+ },
+ {
+  "vendor": "Overture",
+  "name": "TPU 95A",
+  "material": "TPU",
+  "diameter": 1.75,
+  "nozzle_temp": [
+   210,
+   240
+  ],
+  "bed_temp": [
+   35,
+   50
+  ],
+  "sources": [
+   "https://overture3d.com/products/overture-tpu",
+   "https://overture3d.com/cdn/shop/files/OVERTURE_TPU_95A_2.0_TDS_EN.pdf"
   ]
  },
  {

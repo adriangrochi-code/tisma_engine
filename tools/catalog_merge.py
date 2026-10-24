@@ -61,6 +61,18 @@ OFFICIAL = {
     "voron design": ["vorondesign.com"],
 }
 
+# How each maker writes its own name.
+CANONICAL = {
+    "anycubic": "Anycubic", "bambu lab": "Bambu Lab", "colorfabb": "colorFabb", "creality": "Creality",
+    "elegoo": "Elegoo", "esun": "eSUN", "extrudr": "Extrudr", "fiberlogy": "Fiberlogy", "fillamentum": "Fillamentum",
+    "hatchbox": "Hatchbox", "overture": "Overture", "polymaker": "Polymaker", "prusament": "Prusament",
+    "prusa research": "Prusa Research", "sunlu": "SUNLU", "qidi": "QIDI", "qidi tech": "QIDI", "flashforge": "Flashforge",
+    "ultimaker": "UltiMaker", "anker": "AnkerMake", "ankermake": "AnkerMake", "ratrig": "RatRig", "rat rig": "RatRig",
+    "voron design": "Voron", "voron": "Voron", "two trees": "Two Trees", "twotrees": "Two Trees", "biqu": "BIQU",
+    "lulzbot": "LulzBot", "raise3d": "Raise3D", "artillery": "Artillery", "sovol": "Sovol", "snapmaker": "Snapmaker",
+    "kingroon": "Kingroon", "peopoly": "Peopoly", "tronxy": "Tronxy", "geeetech": "Geeetech", "longer": "Longer",
+}
+
 BANNED = ["github.com", "githubusercontent.com", "gitlab.com", "bitbucket.org", "orcaslicer", "prusaslicer",
           "superslicer", "slic3r", "bambustudio", "bambu-studio", "curaengine", "/cura/", "cura.", "creality-print",
           "crealityprint", "elegooslicer", "anycubicslicer", "flashprint"]
@@ -104,10 +116,13 @@ def main(argv):
     name_key = "model" if kind == "printers" else "name"
 
     existing = json.loads(into.read_text(encoding="utf-8")) if into.exists() else []
+    for e in existing:
+        e["vendor"] = CANONICAL.get(e["vendor"].lower().strip(), e["vendor"])
     merged = {(e["vendor"].lower(), e[name_key].lower(), e.get("diameter", 1.75)): e for e in existing}
     kept, dropped = 0, []
     for path in args:
         for entry in json.loads(pathlib.Path(path).read_text(encoding="utf-8")):
+            entry["vendor"] = CANONICAL.get(str(entry.get("vendor", "")).lower().strip(), entry.get("vendor"))
             label = f'{entry.get("vendor")} {entry.get(name_key)}'
             sources = [s for s in entry.get("sources") or [] if isinstance(s, str) and not banned(s)]
             if not any(official(entry.get("vendor", ""), s) for s in sources):
