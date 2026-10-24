@@ -87,7 +87,7 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 | `length` | número | 2 | ≥ 0 | Cuánto filamento se retrae, en mm; 0 no retrae |
 | `speed` | número | 40 | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
 | `lift` | número | 0 | ≥ 0 | Cuánto sube Z durante un viaje que retrae, en mm |
-| `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto no retraen, en mm |
+| `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
 
 ### `compute`
 

@@ -3,6 +3,7 @@
 #include "gcode/writer.hpp"
 
 #include "gcode/order.hpp"
+#include "gcode/travel.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -62,21 +63,29 @@ public:
         }
     }
 
-    // A travel; longer than min_travel it retracts first (and lifts Z by lift).
-    void travel(const Point2d& p, double feed) {
-        const bool far = known_ && std::hypot(p.x - x_value_, p.y - y_value_) > min_travel_;
-        if (far && retract_ > 0.0 && !retracted_) {
+    // A travel along the planner's route. It retracts first (and lifts Z by
+    // lift) when it leaves the part or is longer than min_travel.
+    void travel(const Point2d& p, double feed, const TravelPlanner& planner) {
+        if (!known_) {
+            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+            x_value_ = p.x, y_value_ = p.y, known_ = true;
+            return;
+        }
+        const TravelPlan plan = planner.plan({x_value_, y_value_}, p);
+        const bool retract = plan.leaves_part || plan.length > min_travel_;
+        if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
             retracted_ = true;
         }
-        const bool lift = far && lift_ > 0.0;
+        const bool lift = retract && lift_ > 0.0;
         if (lift)
             move("G1", std::nullopt, std::nullopt, z_value_ + lift_, std::nullopt, feed);
-        move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+        for (const Point2d& q : plan.points)
+            move("G1", q.x, q.y, std::nullopt, std::nullopt, feed);
         if (lift)
             move("G1", std::nullopt, std::nullopt, z_value_, std::nullopt, feed);
-        x_value_ = p.x, y_value_ = p.y, known_ = true;
+        x_value_ = p.x, y_value_ = p.y;
     }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
@@ -199,12 +208,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s)
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
         const Layer& layer = model.layers[l];
         g.new_layer(layer.top, layer.top - layer.bottom, s.travel_speed);
+        const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
         const bool first = l == 0;
         auto speed = [&](double v) { return std::min(first ? std::min(v, s.first_layer_speed) : v, s.max_speed); };
         auto lay = [&](const Toolpath& t, const char* type, double feed) {
             if (t.points.empty())
                 return;
-            g.travel(t.points.front().p, s.travel_speed);
+            g.travel(t.points.front().p, s.travel_speed, planner);
             g.type(type);
             for (std::size_t i = 1; i < t.points.size(); ++i)
                 g.extrude(t.points[i - 1], t.points[i], feed);

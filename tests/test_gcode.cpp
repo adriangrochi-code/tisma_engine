@@ -8,7 +8,9 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <filesystem>
 #include <numbers>
 #include <regex>
@@ -34,6 +36,31 @@ std::string cube_gcode(const Settings& s) {
     std::ostringstream out;
     write_gcode(out, slice_model(m, s), s);
     return out.str();
+}
+
+// A square tube 40 x 40 x 4 mm with a 20 x 20 hole in the middle.
+IndexedMesh tube_mesh() {
+    IndexedMesh m;
+    const float outer[4][2] = {{0, 0}, {40, 0}, {40, 40}, {0, 40}};
+    const float hole[4][2] = {{10, 10}, {30, 10}, {30, 30}, {10, 30}};
+    for (float z : {0.0f, 4.0f}) {
+        for (const auto& p : outer)
+            m.vertices.push_back({p[0], p[1], z});
+        for (const auto& p : hole)
+            m.vertices.push_back({p[0], p[1], z});
+    }
+    auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+        m.triangles.push_back({a, b, c});
+        m.triangles.push_back({a, c, d});
+    };
+    for (std::uint32_t i = 0; i < 4; ++i) {
+        const std::uint32_t j = (i + 1) % 4;
+        quad(i, j, 8 + j, 8 + i);             // outer side, facing out
+        quad(4 + j, 4 + i, 12 + i, 12 + j);   // hole side, facing into the hole
+        quad(8 + i, 8 + j, 12 + j, 12 + i);   // top ring
+        quad(i, 4 + i, 4 + j, j);             // bottom ring
+    }
+    return m;
 }
 
 } // namespace
@@ -174,4 +201,54 @@ TEST_CASE("retraction: around long travels only, and E comes back to where it wa
     }
     CHECK(retractions > 0);
     CHECK_FALSE(retracted);
+}
+
+TEST_CASE("travels go round the hole of a tube instead of across it", "[gcode]") {
+    Settings s;
+    std::ostringstream out;
+    write_gcode(out, slice_model(tube_mesh(), s), s);
+    // No travel crosses the hole (x and y in (10, 30)), clipped as a segment against the square.
+    auto crosses_hole = [](double x0, double y0, double x1, double y1) {
+        double t0 = 0.0, t1 = 1.0;
+        const double dx = x1 - x0, dy = y1 - y0;
+        const double p[4] = {-dx, dx, -dy, dy}, q[4] = {x0 - 10.01, 29.99 - x0, y0 - 10.01, 29.99 - y0};
+        for (int k = 0; k < 4; ++k) {
+            if (p[k] == 0.0) {
+                if (q[k] < 0.0)
+                    return false;
+            } else if (p[k] < 0.0) {
+                t0 = std::max(t0, q[k] / p[k]);
+            } else {
+                t1 = std::min(t1, q[k] / p[k]);
+            }
+        }
+        return t0 < t1;
+    };
+    double x = 0.0, y = 0.0;
+    int travels = 0, across = 0;
+    const std::regex axis("([XYE])(-?[0-9.]+)");
+    for (const std::string& line : lines_of(out.str())) {
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y;
+        bool e = false;
+        for (std::sregex_iterator it(line.begin(), line.end(), axis), end; it != end; ++it) {
+            const char name = (*it)[1].str()[0];
+            const double v = std::stod((*it)[2].str());
+            if (name == 'X')
+                nx = v;
+            else if (name == 'Y')
+                ny = v;
+            else
+                e = true;
+        }
+        if (!e && (nx != x || ny != y)) {
+            ++travels;
+            if (crosses_hole(x, y, nx, ny))
+                ++across;
+        }
+        x = nx, y = ny;
+    }
+    CHECK(travels > 20);
+    CHECK(across == 0);
 }

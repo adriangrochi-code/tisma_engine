@@ -273,7 +273,8 @@ retracción», «Enfriamiento», «Errores y avisos»), con nombres propios en `
   paralelo
 - [x] Orden de recorridos (el más cercano) y costura de los lazos (`walls.seam`: `aligned`, `nearest`, `random`, `rear`)
 - [x] Retracción en viajes largos y salto en Z (grupo `retraction`)
-- [ ] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza
+- [x] Viajes por dentro de la pieza sin cruzar perímetros, y retracción cuando el viaje sale de la pieza
+  (`src/gcode/travel.*`)
 - [ ] Orden por islas (terminar una isla antes de pasar a la otra)
 - [ ] Enfriamiento: tiempo mínimo de capa con las dos etapas de `BEHAVIOR.md` y ventilador al máximo en esas capas
 - [ ] Aceleraciones y límites de la máquina; estimación de tiempo (opcional, como comentario)

@@ -1392,3 +1392,39 @@ la vista previa de Tisma.
 - orden por islas;
 - enfriamiento.
 
+
+## 2026-10-24 — bloque nocturno 38: viajes por dentro de la pieza
+
+**Hecho:**
+- Planificador de viajes (`src/gcode/travel.*`, diseño propio), según `docs/spec/BEHAVIOR.md` («Viajes y retracción»):
+  - si el segmento recto queda dentro de la región de la capa, el viaje va recto;
+  - si no, va por la región de viaje (la región achicada un cordón, por dentro de la pared externa);
+  - un extremo fuera de ella (por ejemplo en la pared externa) salta al punto más cercano de su borde;
+  - cada tramo del segmento que sale de la región de viaje se reemplaza por el contorno que cruzó, por el lado más
+    corto, y el camino se acorta con atajos rectos que quedan dentro;
+  - si los extremos están en piezas distintas (dos objetos, una isla dentro de un agujero) el viaje sale de la pieza.
+- El escritor sigue ese camino; retrae cuando el viaje sale de la pieza (aunque sea corto) o cuando el camino planeado
+  es más largo que `retraction.min_travel`.
+
+**Probado:** 146/146 pruebas con gcc, clang y ASan+UBSan:
+- dentro de un cuadrado, recto;
+- entre los brazos de una U, por abajo, a un cordón de las paredes y con el largo del camino más corto;
+- desde la pared externa: salta adentro, rodea y vuelve a salir;
+- un agujero descentrado se rodea por el lado corto;
+- entre dos cuadrados separados 0,5 mm, sale de la pieza aunque mida 1,5 mm;
+- hacia una isla dentro de un agujero, sale de la pieza;
+- de punta a punta, un tubo cuadrado: ningún viaje cruza el agujero (sin el planificador, 13 lo cruzan).
+
+**Medido:**
+- tubo 40 × 40 × 10 mm con agujero de 20 × 20:
+  - viajes que cruzan el agujero, de 28 a 0;
+  - viaje total de 7,04 a 7,09 m (+0,7 %);
+  - 581 retracciones antes y después;
+- esfera (500 capas): igual que antes (61,3 m de viaje, 2056 retracciones), porque sus capas son discos y todo viaje ya
+  quedaba dentro;
+- `slice` con escritura 2,70–2,82 s, corte 1,14 s: el planificador no se nota.
+
+**Sigue:**
+- orden por islas;
+- enfriamiento;
+- escribir el G-code más rápido.
