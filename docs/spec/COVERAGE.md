@@ -130,13 +130,13 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Largo, velocidad, viaje mínimo, salto en Z | `gcode_motion.md` | ✔ |
-| Viajes por dentro sin cruzar paredes, desvío máximo | `gcode_motion.md` | ◐ falta el desvío máximo → `retraction_travel.md` |
-| Velocidad de la vuelta (deretracción), extra al volver, retraer en el cambio de capa | — | ✘ → `retraction_travel.md` |
-| Barrido al retraer y cuánto se retrae antes del barrido | — | ✘ → `retraction_travel.md` |
-| Salto en Z: en rampa, pendiente, máximo, solo antes de un obstáculo, solo por encima o por debajo de una altura | — | ✘ → `retraction_travel.md` |
-| Retracción del firmware (`G10`/`G11`) | `gcode_firmware.md` | ◐ falta la regla → `retraction_travel.md` |
+| Viajes por dentro sin cruzar paredes, desvío máximo | `retraction_travel.md` | ✔ |
+| Velocidad de la vuelta (deretracción), extra al volver, retraer en el cambio de capa | `retraction_travel.md` | ✔ |
+| Barrido al retraer y cuánto se retrae antes del barrido | `retraction_travel.md` | ✔ |
+| Salto en Z: en rampa, pendiente, máximo, solo antes de un obstáculo, solo por encima o por debajo de una altura | `retraction_travel.md` | ✔ (el del obstáculo, sin medir) |
+| Retracción del firmware (`G10`/`G11`) | `retraction_travel.md` | ✔ |
 | Retracción al cambiar de herramienta | — | ✘ → `multi_extruder.md` |
-| Preferir el sentido horario | — | ✘ → `retraction_travel.md` |
+| Preferir el sentido horario | `retraction_travel.md` | ✔ |
 | Coasting (Tisma) | `coasting.md` | ✔ |
 | Pressure advance escrito en el G-code (Tisma, estudio) | `pressure_advance_gcode.md` | ✔ |
 
