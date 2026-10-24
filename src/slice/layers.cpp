@@ -3,6 +3,9 @@
 
 #include "slice/layers.hpp"
 
+#include <oneapi/tbb/blocked_range.h>
+#include <oneapi/tbb/parallel_for.h>
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -55,14 +58,17 @@ std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::spa
         for (std::uint32_t l = first_level[t]; l < end_level[t]; ++l)
             bucket[fill[l]++] = static_cast<std::uint32_t>(t);
 
+    // Levels are independent: slice them in parallel, one segment buffer per chunk.
     std::vector<std::vector<Contour>> out(level_count);
-    std::vector<LevelSegment> segments;
-    for (std::size_t l = 0; l < level_count; ++l) {
-        segments.clear();
-        const std::span<const std::uint32_t> tris(bucket.data() + row_start[l], row_start[l + 1] - row_start[l]);
-        level_set_segments(mesh, values, isos[l], tris, segments);
-        out[l] = join_segments(segments);
-    }
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, level_count), [&](const tbb::blocked_range<std::size_t>& r) {
+        std::vector<LevelSegment> segments;
+        for (std::size_t l = r.begin(); l != r.end(); ++l) {
+            segments.clear();
+            const std::span<const std::uint32_t> tris(bucket.data() + row_start[l], row_start[l + 1] - row_start[l]);
+            level_set_segments(mesh, values, isos[l], tris, segments);
+            out[l] = join_segments(segments);
+        }
+    });
     return out;
 }
 

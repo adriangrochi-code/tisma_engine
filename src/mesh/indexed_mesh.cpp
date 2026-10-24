@@ -1,5 +1,7 @@
 #include "mesh/indexed_mesh.hpp"
 
+#include <oneapi/tbb/parallel_sort.h>
+
 #include <algorithm>
 #include <bit>
 #include <tuple>
@@ -29,7 +31,7 @@ IndexedMesh weld_exact(const TriangleMesh& mesh) {
     std::vector<CornerKey> keys(n);
     for (std::size_t i = 0; i < n; ++i)
         keys[i] = {bits(corners[i].x), bits(corners[i].y), bits(corners[i].z), static_cast<std::uint32_t>(i)};
-    std::sort(keys.begin(), keys.end(), [](const CornerKey& a, const CornerKey& b) {
+    tbb::parallel_sort(keys.begin(), keys.end(), [](const CornerKey& a, const CornerKey& b) {
         return std::tie(a.x, a.y, a.z, a.corner) < std::tie(b.x, b.y, b.z, b.corner);
     });
 

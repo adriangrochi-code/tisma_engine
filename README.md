@@ -33,4 +33,4 @@ ctest --test-dir build --output-on-failure
 build/tisma-engine --help
 ```
 
-Hace falta CMake 3.21 o más nuevo y un compilador de C++20. La configuración descarga Catch2 para las pruebas.
+Hace falta CMake 3.25 o más nuevo y un compilador de C++20. La configuración descarga oneTBB y, para las pruebas, Catch2.

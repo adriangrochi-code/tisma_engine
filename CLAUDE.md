@@ -15,6 +15,16 @@ A slicing engine written from scratch for Tisma. Read `CLEANROOM.md` and `PLAN.m
 - Other slicers may only be compared as black boxes: run their program, compare outputs.
 - Never rewrite or squash history: it is the record of provenance.
 
+## The license must stay closable (owner's decision)
+
+The owner must always be able to move the engine to a closed, proprietary license. Never add anything that would
+prevent it:
+- no copied code from anywhere, not even small snippets (Stack Overflow is CC BY-SA);
+- only permissive libraries (MIT, BSD, BSL-1.0, Apache-2.0, Zlib; MPL-2.0 only unmodified), checked at the exact
+  version including what they bundle. `tools/check_licenses.py` enforces `THIRD_PARTY.md` in CI;
+- no test data, fonts or images whose license forbids it;
+- no contributions from third parties until a copyright assignment exists (`CONTRIBUTING.md`).
+
 ## Vision
 
 The goal is non-planar and 5-axis slicing with GPU acceleration. The first, planar version is the base. From F1 on,

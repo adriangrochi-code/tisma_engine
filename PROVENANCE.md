@@ -12,4 +12,5 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | `src/slice/layers.*` — plan de capas y corte por niveles | Diseño propio: alturas calculadas desde el índice de la capa; cada triángulo se reparte en los niveles que cruza su rango de valores (filas comprimidas: contar y después llenar), y cada nivel corta solo sus triángulos. |
 | `src/cli/*`, `apps/main.cpp` — línea de comandos | Diseño propio, a partir de la interfaz definida en `PLAN.md`. |
 | `bench/gen_sphere.py` — esfera de prueba | Diseño propio (esfera UV). |
+| `tools/check_licenses.py` — control de licencias | Diseño propio. |
 | `.github/workflows/ci.yml`, `CMakeLists.txt` | Diseño propio; documentación pública de GitHub Actions y CMake. |

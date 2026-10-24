@@ -194,3 +194,44 @@ triángulos por capas antes de cortar.
 
 **Sigue:** paralelo por capas con oneTBB (anotarla en `THIRD_PARTY.md` antes). Después: soldadura más rápida, cierre
 de huecos, Clipper2 y la infraestructura de Vulkan.
+
+## 2026-10-24 — oneTBB y licencia cerrable
+
+**Hecho:**
+- oneTBB 2022.3.0 (Apache-2.0; incluye ITT y hwloc, BSD-3-Clause), anotada en `THIRD_PARTY.md` después de leer su
+  licencia y `third-party-programs.txt` en el tag. Se enlaza estática, así `tisma-engine` es un solo programa.
+  - `slice_levels` corta los niveles en paralelo (`tbb::parallel_for`);
+  - `weld_exact` ordena en paralelo (`tbb::parallel_sort`).
+- CMake 3.25 como mínimo, para declarar las dependencias como `SYSTEM`: sus cabeceras no reciben nuestras banderas de
+  advertencia.
+- **Licencia cerrable** (decisión del dueño): el motor tiene que poder pasar a licencia cerrada en cualquier momento.
+  - `CLEANROOM.md`: nueva sección con las reglas (no copiar código de ningún lado, solo bibliotecas permisivas, datos
+    con licencia compatible, sin aportes de terceros sin cesión de derechos). Aclara también que cerrar la licencia
+    vale para las versiones nuevas: lo ya publicado bajo PolyForm sigue con esa licencia para quien lo recibió.
+  - `CONTRIBUTING.md`: por ahora no se aceptan aportes de terceros.
+  - `tools/check_licenses.py`, que corre como prueba de CTest y por lo tanto en la CI, falla si una dependencia de
+    CMake no está en `THIRD_PARTY.md` con licencia permitida, o si un archivo propio trae texto de licencia copyleft.
+    Se probó que detecta los tres casos.
+  - `THIRD_PARTY.md` suma una columna con el nombre en CMake y deja anotado revisar glslang antes de usarlo.
+  - `CLAUDE.md` resume la regla para las próximas sesiones.
+
+**Probado:**
+- 45/45 pruebas (44 más la de licencias) con gcc 13.3, clang 18 y gcc con ASan+UBSan, sin advertencias.
+- Una configuración desde cero, descargando oneTBB y Catch2 por git como hará la CI, compila y pasa las pruebas en
+  52 s.
+
+**Ojo:** oneTBB avisa que compilarla estática «no está soportado» por ellos. Funciona en Linux. Windows lo dirá la
+CI. Si da problemas, la alternativa es enlazarla dinámica y distribuir su DLL junto al programa.
+
+**Medido** (esfera de 1 001 112 triángulos, 4 núcleos, 5 corridas):
+
+| Fase | Un hilo | oneTBB |
+|---|---|---|
+| Soldadura | 445–461 ms | 168–193 ms |
+| Corte de 500 capas | 181–235 ms | 66–81 ms |
+
+**Sigue:**
+- soldadura más rápida (ordenamiento radix o tabla hash);
+- cierre de huecos chicos;
+- Clipper2 (anotarla antes);
+- infraestructura de Vulkan (revisar la licencia de glslang).

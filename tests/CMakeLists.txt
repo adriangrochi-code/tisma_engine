@@ -1,5 +1,3 @@
-include(FetchContent)
-
 # Catch2 v3.7.1, BSL-1.0 (see THIRD_PARTY.md). Set FETCHCONTENT_SOURCE_DIR_CATCH2
 # to a local checkout of the same tag to build offline.
 FetchContent_Declare(
@@ -7,6 +5,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
   GIT_TAG fa43b77429ba76c462b1898d6cd2f2d7a9416b14 # v3.7.1
   GIT_SHALLOW FALSE
+  SYSTEM
 )
 FetchContent_MakeAvailable(Catch2)
 
@@ -34,3 +33,10 @@ add_test(NAME cli_slice_not_implemented
   COMMAND tisma-engine slice ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
           --config ${CMAKE_CURRENT_SOURCE_DIR}/data/settings.json -o out.gcode)
 set_tests_properties(cli_slice_not_implemented PROPERTIES PASS_REGULAR_EXPRESSION "not implemented")
+
+# The engine's license must stay closable: every dependency listed in
+# THIRD_PARTY.md with a permissive license, no copyleft text in our files.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME license_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_licenses.py ${PROJECT_SOURCE_DIR})
+endif()

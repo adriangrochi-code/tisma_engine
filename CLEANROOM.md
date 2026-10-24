@@ -39,7 +39,7 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
   | Clipper2 | BSL-1.0 |
   | Boost, incluido Boost.Polygon Voronoi | BSL-1.0 |
   | oneTBB | Apache-2.0 |
-  | Eigen | MPL-2.0 |
+  | Eigen | MPL-2.0 (sin modificar sus archivos) |
   | Catch2 | BSL-1.0 |
   | nlohmann/json | MIT |
   | miniz | MIT |
@@ -51,9 +51,28 @@ Una sesión o persona que haya leído ese código para este trabajo no escribe c
 - Cada módulo anota en `PROVENANCE.md` de dónde sale: el artículo y la sección, la especificación, o «diseño propio».
 - La historia de commits es la prueba de procedencia: no se reescribe ni se aplasta.
 
+## La licencia tiene que poder cerrarse
+
+Decisión del dueño (2026-10-24): el motor tiene que poder pasar a una licencia cerrada (propietaria) en cualquier
+momento. Nada de lo que entre al repositorio puede impedirlo:
+
+- **Código copiado:** no se copia código de ningún lado, ni fragmentos chicos. Eso incluye Stack Overflow (CC BY-SA),
+  blogs, ejemplos de otros proyectos y código de artículos. Todo se escribe acá, desde las fuentes permitidas.
+- **Bibliotecas:** solo licencias permisivas, anotadas en `THIRD_PARTY.md` antes de usarlas. MPL-2.0 solo sin
+  modificar sus archivos. Nada GPL, LGPL, AGPL, SSPL, CC-BY-SA ni «no comercial» de terceros, tampoco como
+  dependencia opcional ni dentro de una biblioteca permitida. `tools/check_licenses.py` lo comprueba en la CI.
+- **Datos:** modelos de prueba, fuentes tipográficas, imágenes y perfiles también tienen licencia. No se guardan en el
+  repositorio si su licencia lo impediría (por ejemplo «sin obras derivadas» o «no comercial»).
+- **Aportes de otras personas:** el dueño solo puede cambiar la licencia de código que es suyo. Hasta tener un acuerdo
+  de cesión de derechos revisado por un abogado, no se aceptan aportes de terceros (ver `CONTRIBUTING.md`).
+- **Lo ya publicado:** cerrar la licencia vale para las versiones nuevas. Quien ya recibió una versión bajo la
+  PolyForm Noncommercial conserva esos permisos para esa versión, y solo para uso no comercial.
+
 ## Antes de cambiar la licencia
 
 Lo revisa un abogado. La PolyForm Noncommercial se adoptó el 2026-10-24 por decisión del dueño, al hacer público el
-repositorio; la revisión de un abogado sigue pendiente. El modelo de lenguaje que escribe este código se entrenó con código público, incluidos esos
+repositorio; la revisión de un abogado sigue pendiente.
+
+El modelo de lenguaje que escribe este código se entrenó con código público, incluidos esos
 proyectos. Esto no se puede excluir del todo; por eso el motor se escribe a partir de las fuentes permitidas, con
 estructura propia, y nunca reproduce código de memoria.
