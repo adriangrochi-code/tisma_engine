@@ -244,6 +244,7 @@ private:
     void show_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
+    void check_moire(int fb_w, int fb_h);
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
     void bed_changed();
@@ -325,6 +326,7 @@ private:
     RenderMode render_mode_ = RenderMode::Ambient;
     int msaa_ = 4;
     bool fxaa_ = true;
+    bool moire_ = true; // the moiré filter of the preview's lines and the grid
     float ao_strength_ = 1.0f;
     struct RayBuild {
         std::uint64_t version = 0;
@@ -337,6 +339,7 @@ private:
     bool ray_preview_ = false, ray_failed_ = false;
     std::shared_ptr<RayScene> ray_scene_;
     bool ray_checked_ = false;
+    bool moire_checked_ = false;
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -657,6 +660,8 @@ bool App::init(std::string& error) {
         msaa_ = std::max(options_.msaa, 1);
     if (options_.fxaa >= 0)
         fxaa_ = options_.fxaa != 0;
+    if (options_.moire >= 0)
+        moire_ = options_.moire != 0;
     // The profiles; with none chosen yet, the ones the settings match.
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
@@ -751,6 +756,7 @@ void App::load_preferences() {
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
+        moire_ = j.value("moire_filter", true);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (j.contains("settings"))
             settings_ = parse_settings(j.at("settings").dump());
@@ -775,6 +781,7 @@ void App::save_preferences() {
         j["render"] = int(render_mode_);
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
+        j["moire_filter"] = moire_;
         j["ao_strength"] = ao_strength_;
         j["settings"] = nlohmann::json::parse(settings_json(settings_));
         for (const ProfileKind kind : kProfileKinds)
@@ -2006,6 +2013,9 @@ void App::view_tools() {
             ImGui::EndCombo();
         }
         ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
+        ImGui::Checkbox(tr(T::MoireFilter), &moire_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::MoireFilterTip));
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
@@ -2781,6 +2791,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.mode = render_mode_;
     f.samples = msaa_;
     f.fxaa = fxaa_;
+    f.moire_filter = moire_;
     f.ao_strength = ao_strength_;
     static const bool debug = [] {
         const char* v = std::getenv("TISMA_DEBUG_VISIBILITY");
@@ -2890,6 +2901,73 @@ void App::check_rays(const ViewFrame& f) {
     }
 }
 
+// The moiré filter against the plain picture: the preview from far enough
+// that its layers are finer than a pixel, drawn both ways without
+// multisampling. Where the filter changes pixels, the picture must get
+// smoother: neighbouring pixels differ less in luma, because the fine lines
+// blend instead of aliasing into bands.
+void App::check_moire(int fb_w, int fb_h) {
+    moire_checked_ = true;
+    const float distance = camera_.distance;
+    camera_.distance *= 2.0f;
+    std::vector<std::uint8_t> picture[2];
+    int w = 0, h = 0;
+    for (int pass = 0; pass < 2; ++pass) {
+        ViewFrame f = view_frame(fb_w, fb_h);
+        f.samples = 1;
+        f.moire_filter = pass == 1;
+        renderer_.draw(f);
+        picture[pass] = renderer_.read_colour();
+        w = f.width, h = f.height;
+    }
+    camera_.distance = distance;
+    // Both pictures next to the screenshot, as evidence.
+    for (int pass = 0; pass < 2; ++pass) {
+        std::vector<std::uint8_t> flipped(picture[pass].size());
+        const std::size_t row = std::size_t(w) * 4;
+        for (int yy = 0; yy < h; ++yy)
+            std::copy_n(picture[pass].begin() + std::ptrdiff_t(std::size_t(h - 1 - yy) * row), row,
+                        flipped.begin() + std::ptrdiff_t(std::size_t(yy) * row));
+        for (std::size_t i = 3; i < flipped.size(); i += 4)
+            flipped[i] = 255;
+        std::filesystem::path out = from_utf8(options_.screenshot);
+        out.replace_extension();
+        write_png(out.string() + (pass == 0 ? "_moire_off.png" : "_moire_on.png"), w, h, flipped.data());
+    }
+    const auto luma = [&](int pass, int x, int y) {
+        const std::uint8_t* p = &picture[pass][(std::size_t(y) * std::size_t(w) + std::size_t(x)) * 4];
+        return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+    };
+    // The pixels the filter changed, and their neighbours.
+    std::vector<std::uint8_t> changed(std::size_t(w) * std::size_t(h), 0);
+    std::size_t region = 0;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            if (std::abs(luma(0, x, y) - luma(1, x, y)) > 4.0)
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h)
+                            changed[std::size_t(y + dy) * std::size_t(w) + std::size_t(x + dx)] = 1;
+    double energy[2] = {0.0, 0.0};
+    for (int y = 0; y + 1 < h; ++y)
+        for (int x = 0; x + 1 < w; ++x) {
+            if (!changed[std::size_t(y) * std::size_t(w) + std::size_t(x)])
+                continue;
+            ++region;
+            for (int pass = 0; pass < 2; ++pass)
+                energy[pass] += std::abs(luma(pass, x + 1, y) - luma(pass, x, y)) +
+                                std::abs(luma(pass, x, y + 1) - luma(pass, x, y));
+        }
+    for (double& e : energy)
+        e /= double(std::max<std::size_t>(region, 1));
+    std::printf("moire check: %zu pixels; neighbours differ by %.2f without the filter, %.2f with it\n", region,
+                energy[0], energy[1]);
+    if (region < 200 || energy[1] > energy[0] * 0.85) {
+        std::fprintf(stderr, "error: the moire filter does not smooth the fine lines\n");
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
@@ -2944,7 +3022,11 @@ void App::frame() {
                                   (ray_job_.running() || !renderer_.has_ray_scene() ||
                                    renderer_.ray_samples() < std::min(options_.ray_samples, 256) ||
                                    (options_.ray_check && !ray_checked_));
-        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending;
+        if (options_.moire_check && !moire_checked_ && frames_ > 3 && f.show_preview && !slice_job_.running() &&
+            !rays_pending)
+            check_moire(fb_w, fb_h);
+        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
+                             (options_.moire_check && !moire_checked_);
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);

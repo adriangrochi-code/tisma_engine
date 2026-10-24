@@ -157,6 +157,13 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
 
 - **Suavizado de bordes:** multimuestreo (MSAA 2×, 4× u 8×, según la GPU; 4× por defecto) y además FXAA, que suaviza
   bordes finos y brillos que el multimuestreo no alcanza.
+- **Filtro de moiré** (pedido del dueño, 2026-10-24; activado por defecto): de lejos, o en una pieza grande, las
+  líneas de capa de la vista previa quedan más finas que un píxel; sus luces y sombras ya no se pueden muestrear y
+  hacen bandas de moiré. El filtro mide en cada píxel cuánto abarca de la sección de la línea (las derivadas de
+  pantalla) y, a medida que la línea se achica por debajo de dos píxeles, reemplaza su normal por el promedio de las
+  normales de todo el perfil de la línea, cada una pesada por cuánto mira al ojo (lo que ese píxel vería de verdad),
+  y ensancha el brillo lo que se abren esas normales (Toksvig 2005). De cerca no cambia nada. En la grilla de la cama, cada línea se desvanece cuando la siguiente de su clase queda a
+  menos de unos píxeles (las mayores aguantan más, porque están más separadas); el contorno de la cama no cambia.
 - **Intensidad de la oclusión:** se elige entre 0 y 1,5.
 - **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
   jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
@@ -193,8 +200,10 @@ tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot 
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
-`--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
-los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
+`--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
+los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin
+multimuestreo, con y sin el filtro de moiré, y termina con 1 si donde el filtro actúa los píxeles vecinos no se
+parecen más entre sí (al menos un 15 % menos de diferencia). Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
 sombras en lugar de la luz, para revisarlas.
 
 - `--screenshot` espera a que esté listo lo pedido: el laminado para `--view preview`, la estimación para
@@ -206,6 +215,7 @@ sombras en lugar de la luz, para revisarlas.
 - CTest corre así estas pruebas, que se registran solo si hay `xvfb-run`:
   - `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la vista previa;
   - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU;
+  - `ui_moire_filter_smooths_fine_lines`: la vista previa de lejos, con y sin el filtro de moiré;
   - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
     exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
 

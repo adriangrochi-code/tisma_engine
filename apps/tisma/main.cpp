@@ -14,6 +14,7 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
+    "             [--moire on|off]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
@@ -22,7 +23,7 @@ constexpr const char* kUsage =
     "                                   [--layer N]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check]]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -114,10 +115,19 @@ int main(int argc, char** argv) {
                 return 2;
             }
             options.fxaa = on == "on" ? 1 : 0;
+        } else if (arg == "--moire") {
+            const std::string_view on = value();
+            if (on != "on" && on != "off") {
+                std::fprintf(stderr, "error: --moire must be on or off\n");
+                return 2;
+            }
+            options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
         } else if (arg == "--ray-check") {
             options.ray_check = true;
+        } else if (arg == "--moire-check") {
+            options.moire_check = true;
         } else if (arg == "--calibration") {
             options.calibration = value();
             const std::string& c = options.calibration;
@@ -143,9 +153,10 @@ int main(int argc, char** argv) {
             options.files.emplace_back(arg);
         }
     }
-    if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check) &&
+    if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check ||
+         options.moire_check) &&
         options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export, --save-project, --browse and --ray-check go with --screenshot\n");
+        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check and --moire-check go with --screenshot\n");
         return 2;
     }
     if (options.ray_check)

@@ -2808,3 +2808,39 @@ detalles del catálogo todavía no están cargados (la tanda de detalles, abajo)
 - el filtro de moiré de la vista 3D (pedido del dueño, 2026-10-24);
 - un perfil de impresión «rápido» armado desde las capacidades (velocidad y aceleración máximas, flujo).
 
+## 2026-10-24 — filtro de moiré en la vista 3D
+
+**Pedido del dueño:** «hay que añadir al apartado visual un filtro de moire».
+
+**Hecho** (`docs/UI.md`, «Imagen»):
+- **Las líneas de la vista previa** (`apps/tisma/renderer.cpp`, `kPreviewFragment`): el shader de vértices pasa las
+  coordenadas de la sección de cada línea, sus ejes y su tamaño; el de fragmentos mide con `fwidth` cuánto abarca el
+  píxel de la sección y, por debajo de dos píxeles por línea, reemplaza la normal por el promedio de las normales de
+  todo el perfil (16 puntos del rombo, las normales de la elipse), cada una pesada por cuánto mira al ojo: lo que el
+  píxel vería de verdad. El brillo se ensancha con la fórmula de Toksvig 2005 según el largo de esa normal media. De
+  cerca no cambia nada; también en el G-buffer, así la oclusión ambiental ve las mismas normales.
+  - El primer intento (fundir la normal con el eje «más fino» de la sección) apenas bajaba el moiré (45,8 → 42,0
+    a 2×): sobre una cara del rombo las dos coordenadas cambian igual de rápido y el eje elegido era arbitrario.
+- **La grilla de la cama** (`kGridFragment`, un programa nuevo; el contorno sigue con el de líneas): cada línea se
+  desvanece cuando la siguiente de su clase queda a menos de 6 px en pantalla (medido proyectando el punto vecino);
+  las mayores aguantan más.
+- **La interfaz:** casilla **Filtro de moiré** debajo de FXAA, con ayuda al pasar el puntero; activado por defecto;
+  se guarda en `interface.json` (`moire_filter`); `--moire on|off`.
+- **`--moire-check`** (con `--screenshot`): dibuja la vista previa desde el doble de lejos, sin multimuestreo, con y
+  sin el filtro, guarda las dos imágenes al lado de la captura (`…_moire_off.png`, `…_moire_on.png`) y exige que,
+  donde el filtro cambió píxeles, los vecinos difieran al menos un 15 % menos. Prueba
+  `ui_moire_filter_smooths_fine_lines` en CTest.
+
+**Medido:** con el cubo de prueba a 2× de distancia (unos 0,8 px por capa), 2356 píxeles cambiados; diferencia
+media entre vecinos 45,4 sin el filtro y 23,2 con él (−49 %). A ojo, en los recortes ampliados: sin el filtro el
+cubo lejano es un tablero de moiré y en la vista normal (1,6 px por capa) las paredes y la tapa tienen bandas
+onduladas; con el filtro, caras lisas con la luz de cada cara. A 8× el cubo mide 10 px y la medida la domina la
+grilla (38,2 → 32,1): por eso la prueba va a 2×.
+
+**No probado:** el aspecto en una pantalla real y en piezas grandes; el ray tracing y la oclusión ambiental reciben
+las normales filtradas, pero la profundidad sigue con las líneas (no se midió si la oclusión conserva ruido de
+lejos).
+
+**Sigue:** cargar la tanda de detalles del catálogo cuando terminen los agentes (ya terminaron otras marcas, 29
+entradas con detalles y 6 modelos nuevos, y filamentos del grupo 2, 36 con detalles y 10 nuevos); un perfil de
+impresión rápido desde las capacidades.

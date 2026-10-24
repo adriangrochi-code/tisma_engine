@@ -39,6 +39,7 @@ struct ViewFrame {
     RenderMode mode = RenderMode::Ambient;
     int samples = 4;          // multisampling; 1: none
     bool fxaa = true;         // the edge smoothing pass after it
+    bool moire_filter = true; // fades detail finer than a pixel: the preview's lines and the bed's grid
     float ao_radius = 2.0f;   // mm: how far ambient occlusion looks
     float ao_strength = 1.0f; // 0: none
     float sun_radius = 0.05f; // radians: the key light's size, for soft ray traced shadows
@@ -83,13 +84,16 @@ public:
     // After a ray traced frame: its G-buffer and visibility.
     RayReadback read_back();
 
+    // After a frame: the lit scene before FXAA, RGBA rows from the bottom.
+    std::vector<std::uint8_t> read_colour();
+
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;
         int count = 0;
     };
     struct Programs {
-        unsigned background = 0, line = 0, plate = 0, mesh = 0, preview = 0;
+        unsigned background = 0, line = 0, grid = 0, plate = 0, mesh = 0, preview = 0;
         unsigned ao = 0, blur = 0, ray = 0, composite = 0;
     };
     void resize(int width, int height, int samples);
@@ -103,6 +107,9 @@ private:
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
     Buffer plate_, grid_, model_, extrusions_, travels_;
+    int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
+    float grid_step_ = 10.0f;                 // mm between grid lines
+    int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;

@@ -187,6 +187,9 @@
     X(Antialiasing, "Suavizado de bordes", "Anti-aliasing")                                                           \
     X(MsaaOff, "Sin multimuestreo", "No multisampling")                                                               \
     X(Fxaa, "FXAA (bordes finos y brillos)", "FXAA (thin edges and highlights)")                                      \
+    X(MoireFilter, "Filtro de moiré (líneas más finas que un píxel)", "Moiré filter (lines finer than a pixel)")      \
+    X(MoireFilterTip, "De lejos, las líneas de capa y la grilla se funden en vez de hacer bandas",                    \
+      "From far away, the layer lines and the grid blend instead of banding")                                         \
     X(RaySamples, "Muestras: %d de %d", "Samples: %d of %d")                                                          \
     X(RayPreparing, "Preparando la escena para los rayos…", "Preparing the scene for the rays…")                     \
     X(RayTooBig, "La escena es demasiado grande para el ray tracing en esta GPU", "The scene is too large for ray tracing on this GPU") \

@@ -25,6 +25,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
     final;
   - avisa cuando el filamento pide más de lo que la impresora da: temperatura de boquilla o cama, cámara, impresora
     cerrada, boquilla endurecida.
+- **Filtro de moiré** en el menú de imagen de la vista 3D (pedido del dueño): de lejos, las líneas de capa de la
+  vista previa más finas que un píxel se dibujan con la luz promedio de su perfil en vez de hacer bandas, y las líneas de
+  la grilla se desvanecen cuando quedan a menos de unos píxeles de la siguiente. Activado por defecto; `--moire
+  on|off` en las capturas.
 - El plan de Device y conexiones (P2) y el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
   en el relleno (`docs/MULTIMATERIAL.md`).
 

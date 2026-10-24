@@ -59,6 +59,57 @@ out vec4 colour;
 void main() { colour = v_colour; }
 )";
 
+// The bed's grid. With the moiré filter, a line fades as its neighbours come
+// closer than a few pixels on the screen (towards the horizon, or from far
+// away), before they are too close for the pixels to tell apart and alias
+// into bands. The major lines, further apart, stay longer.
+const std::string kGridVertex = kVersion + R"(
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec4 a_colour;
+uniform mat4 u_view_projection;
+out vec4 v_colour;
+out vec3 v_position;
+void main() {
+    v_colour = a_colour.zyxw;
+    v_position = a_position;
+    gl_Position = u_view_projection * vec4(a_position, 1.0);
+}
+)";
+const std::string kGridFragment = kVersion + R"(
+in vec4 v_colour;
+in vec3 v_position;
+uniform mat4 u_view_projection;
+uniform vec2 u_target;
+uniform float u_step;
+uniform int u_major_every;
+uniform int u_moire;
+out vec4 colour;
+vec2 screen(vec3 p) {
+    vec4 c = u_view_projection * vec4(p, 1.0);
+    return c.xy / max(c.w, 1e-6) * 0.5 * u_target;
+}
+void main() {
+    float alpha = v_colour.a;
+    if (u_moire != 0) {
+        // Along a line one coordinate stays: x on the lines across X, y on the others.
+        float ax = abs(dFdx(v_position.x)) + abs(dFdy(v_position.x));
+        float ay = abs(dFdx(v_position.y)) + abs(dFdy(v_position.y));
+        bool x_stays = ax < ay;
+        vec3 across = x_stays ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+        vec3 along = x_stays ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        int index = int(abs(round((x_stays ? v_position.x : v_position.y) / u_step)));
+        float spacing = u_step * (index % u_major_every == 0 ? float(u_major_every) : 1.0);
+        // How far the next line of its kind is on the screen, square to this one.
+        vec2 s = screen(v_position);
+        vec2 d = screen(v_position + along * spacing) - s;
+        d /= max(length(d), 1e-6);
+        vec2 n = screen(v_position + across * spacing) - s;
+        alpha *= smoothstep(2.0, 6.0, abs(d.x * n.y - d.y * n.x));
+    }
+    colour = vec4(v_colour.rgb, alpha);
+}
+)";
+
 // The light every lit surface shares, in linear colour: a sky and a ground
 // (hemisphere light), a key light that ray tracing can shadow, a weak fill
 // light from the other side, Blinn-Phong highlights with Schlick's Fresnel
@@ -179,6 +230,10 @@ uniform vec2 u_range;
 out vec3 v_base;
 out vec3 v_normal;
 out vec3 v_position;
+out vec2 v_section;    // where in the cross-section: -1 to 1 across (side), -1 to 1 up
+flat out vec3 v_side;
+flat out vec3 v_up;
+flat out vec2 v_size;  // the line's width and height
 
 const vec2 kCorner[4] = vec2[4](vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0), vec2(0.0, -1.0));
 const ivec2 kQuad[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));
@@ -201,6 +256,10 @@ void main() {
     v_base = vec3(0.0);
     v_normal = vec3(0.0, 0.0, 1.0);
     v_position = a_p0;
+    v_section = vec2(0.0);
+    v_side = vec3(1.0, 0.0, 0.0);
+    v_up = vec3(0.0, 0.0, 1.0);
+    v_size = a_size;
     if ((u_kind_mask & (1u << kind)) == 0u || len <= 0.0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
@@ -214,18 +273,23 @@ void main() {
     vec3 b = a_p1 + dir * (0.5 * w) - up * (0.5 * h);
 
     vec3 position, normal;
+    vec2 c;
     int id = gl_VertexID;
     if (id < 24) {
         ivec2 q = kQuad[id % 6];
-        vec2 c = kCorner[(id / 6 + q.y) % 4];
+        c = kCorner[(id / 6 + q.y) % 4];
         position = (q.x == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
         int end = (id - 24) / 6;
-        vec2 c = kCorner[kCap[(id - 24) % 6]];
+        c = kCorner[kCap[(id - 24) % 6]];
         position = (end == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
         normal = end == 0 ? -dir : dir;
     }
+    v_section = c;
+    v_side = side;
+    v_up = up;
+    v_size = vec2(w, h);
     vec3 base;
     if (u_colour_mode == 1)
         base = ramp((a_feed - u_range.x) / max(u_range.y - u_range.x, 1e-6));
@@ -239,15 +303,55 @@ void main() {
     gl_Position = u_view_projection * vec4(position, 1.0);
 }
 )";
+// The moiré filter. The cross-section's coordinates run 2 units across a
+// line, so where they change by more than about 1 from one pixel to the next
+// a line covers less than two pixels and its facets can no longer be told
+// apart (Nyquist): the lines of a wall or a surface alias into bands. What a
+// pixel then shows is the average of the line's profile as seen from the eye:
+// the normals around the rhombus (the ellipse's), each weighted by how much
+// of it faces the eye, summed. The normal fades to that mean, and the
+// highlight widens as the normals it stands for spread (Toksvig 2005: the
+// exponent from the mean normal's length).
 const std::string kPreviewFragment = kVersion + kLighting + R"(
 in vec3 v_base;
 in vec3 v_normal;
 in vec3 v_position;
+in vec2 v_section;
+flat in vec3 v_side;
+flat in vec3 v_up;
+flat in vec2 v_size;
+uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
+    float shininess = 40.0, specular = 0.35;
+    if (u_moire != 0) {
+        vec2 footprint = fwidth(v_section);
+        float k = smoothstep(0.3, 0.8, max(footprint.x, footprint.y));
+        if (k > 0.0) {
+            vec3 v = normalize(u_eye - v_position);
+            vec3 sum = vec3(0.0);
+            float weight = 0.0;
+            for (int i = 0; i < 16; ++i) {
+                float a = (float(i) + 0.5) / 16.0 * 6.2831853;
+                vec2 c = vec2(cos(a), sin(a));
+                c /= abs(c.x) + abs(c.y); // on the rhombus
+                vec3 m = normalize(v_side * (c.x * v_size.y) + v_up * (c.y * v_size.x));
+                float facing = max(dot(m, v), 0.0);
+                sum += m * facing;
+                weight += facing;
+            }
+            if (weight > 0.0 && dot(sum, sum) > 1e-8) {
+                float mean_length = mix(1.0, length(sum) / weight, k);
+                n = normalize(mix(n, sum / length(sum), k));
+                float ft = mean_length / (mean_length + shininess * (1.0 - mean_length));
+                specular *= (1.0 + ft * shininess) / (1.0 + shininess);
+                shininess *= ft;
+            }
+        }
+    }
     if (gbuffer(n))
         return;
-    colour = vec4(shade(v_base, n, v_position, 40.0, 0.35), 1.0);
+    colour = vec4(shade(v_base, n, v_position, shininess, specular), 1.0);
 }
 )";
 
@@ -700,6 +804,7 @@ bool Renderer::init(std::string& error) {
     const Source sources[] = {
         {&p_.background, &kScreenVertex, &kBackgroundFragment},
         {&p_.line, &kLineVertex, &kLineFragment},
+        {&p_.grid, &kGridVertex, &kGridFragment},
         {&p_.plate, &kPlateVertex, &kPlateFragment},
         {&p_.mesh, &kMeshVertex, &kMeshFragment},
         {&p_.preview, &kPreviewVertex, &kPreviewFragment},
@@ -784,8 +889,8 @@ void Renderer::resize(int width, int height, int samples) {
 void Renderer::shutdown() {
     release_targets();
     clear_ray_scene();
-    for (unsigned* p : {&p_.background, &p_.line, &p_.plate, &p_.mesh, &p_.preview, &p_.ao, &p_.blur, &p_.ray,
-                        &p_.composite})
+    for (unsigned* p : {&p_.background, &p_.line, &p_.grid, &p_.plate, &p_.mesh, &p_.preview, &p_.ao, &p_.blur,
+                        &p_.ray, &p_.composite})
         if (*p) {
             glDeleteProgram(*p);
             *p = 0;
@@ -818,6 +923,9 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(LineVertex), offset(offsetof(LineVertex, argb)));
     grid_.count = static_cast<int>(lines.size());
+    grid_outline_ = lines.empty() ? 0 : static_cast<int>(2 * bed.size()); // bed_lines puts it last
+    grid_step_ = float(look.step);
+    grid_major_every_ = std::max(look.major_every, 1);
     ray_signature_.clear();
 }
 
@@ -913,10 +1021,20 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
+        glBindVertexArray(grid_.vao);
+        const int lines = grid_.count - grid_outline_;
+        if (lines > 0) {
+            glUseProgram(p_.grid);
+            uniform(p_.grid, "u_view_projection", vp);
+            uniform(p_.grid, "u_target", float(width_), float(height_));
+            uniform(p_.grid, "u_step", grid_step_);
+            uniform(p_.grid, "u_major_every", grid_major_every_);
+            uniform(p_.grid, "u_moire", f.moire_filter ? 1 : 0);
+            glDrawArrays(GL_LINES, 0, lines);
+        }
         glUseProgram(p_.line);
         uniform(p_.line, "u_view_projection", vp);
-        glBindVertexArray(grid_.vao);
-        glDrawArrays(GL_LINES, 0, grid_.count);
+        glDrawArrays(GL_LINES, lines, grid_outline_);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
     }
@@ -942,6 +1060,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glUniform3fv(at(p, "u_colours"), static_cast<GLsizei>(kLineKinds), &f.kind_colours[0].x);
         glUniform1ui(at(p, "u_kind_mask"), f.kind_mask);
         uniform(p, "u_colour_mode", static_cast<int>(f.color_mode));
+        uniform(p, "u_moire", f.moire_filter ? 1 : 0);
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
         else
@@ -1056,7 +1175,7 @@ void Renderer::draw(const ViewFrame& f) {
     signature.insert(signature.end(),
                      {float(f.mode), float(f.first_layer), float(f.last_layer), float(f.kind_mask & 0xFFFF),
                       float(f.kind_mask >> 16), f.ao_radius, f.sun_radius, float(f.show_model), float(f.show_preview),
-                      float(width_), float(height_), float(has_ray_scene())});
+                      float(width_), float(height_), float(has_ray_scene()), float(f.moire_filter)});
     const bool changed = signature != ray_signature_;
     if (changed) {
         ray_signature_ = signature;
@@ -1115,6 +1234,15 @@ void Renderer::draw(const ViewFrame& f) {
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+std::vector<std::uint8_t> Renderer::read_colour() {
+    std::vector<std::uint8_t> out(std::size_t(width_) * std::size_t(height_) * 4);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glBindFramebuffer(GL_FRAMEBUFFER, colour_fbo_);
+    glReadPixels(0, 0, width_, height_, GL_RGBA, GL_UNSIGNED_BYTE, out.data());
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    return out;
 }
 
 RayReadback Renderer::read_back() {
