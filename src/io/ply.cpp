@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <bit>
+#include <charconv>
+#include <string>
 #include <cmath>
 #include <ostream>
 #include <vector>
@@ -28,6 +30,13 @@ constexpr int kCorners[6][4][3] = {
     {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}, {0, 1, 0}}, {{1, 0, 0}, {1, 1, 0}, {1, 1, 1}, {1, 0, 1}},
     {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1}}, {{0, 1, 0}, {0, 1, 1}, {1, 1, 1}, {1, 1, 0}},
     {{0, 0, 0}, {0, 1, 0}, {1, 1, 0}, {1, 0, 0}}, {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}, {0, 1, 1}}};
+
+// The shortest text that reads back as the same double.
+std::string number(double v) {
+    char text[32];
+    const auto end = std::to_chars(text, text + sizeof text, v).ptr;
+    return std::string(text, end);
+}
 
 } // namespace
 
@@ -52,11 +61,22 @@ void write_voxel_mesh_ply(std::ostream& out, const AnalysisReport& r) {
                 if (g.at(i, j, k))
                     for (const auto& n : kNeighbour)
                         faces += !g.at(i + n[0], j + n[1], k + n[2]);
+    // Machine-readable comments: "comment <key> <values>", lengths in mm in the
+    // input model's coordinates (the engine does not move models).
     out << "ply\n"
         << "format binary_little_endian 1.0\n"
         << "comment tisma-engine voxel surface\n"
-        << "comment voxels analysed " << g.count() << " of a grid of " << g.nx << " x " << g.ny << " x " << g.nz
-        << ", " << g.hx << " mm, " << r.rows_per_layer << " rows per layer\n"
+        << "comment units mm\n"
+        << "comment voxels_analysed " << g.count() << "\n"
+        << "comment grid_voxels " << g.nx << " " << g.ny << " " << g.nz << "\n"
+        << "comment voxel_size_mm " << number(g.hx) << " " << number(g.hy) << "\n"
+        << "comment grid_origin_mm " << number(g.x0) << " " << number(g.y0) << " " << number(g.z.empty() ? 0.0 : g.z.front())
+        << "\n"
+        << "comment rows_per_layer " << r.rows_per_layer << "\n"
+        << "comment z_planes_mm";
+    for (double z : g.z)
+        out << " " << number(z);
+    out << "\n"
         << "comment colour by safety: red below 1, orange to 1.5, yellow to 2, green from 2, grey unstressed\n"
         << "element vertex " << 4 * faces << "\n"
         << "property float x\nproperty float y\nproperty float z\n"

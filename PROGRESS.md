@@ -2253,3 +2253,34 @@ mínimo 1,983, con vóxeles gruesos 2,104, extrapolado 1,863; aparece el aviso (
 **Sigue:**
 - el criterio de A1, la placa con agujero contra la solución de Kirsch, que amplía la evidencia de la extrapolación;
 - el núcleo de la GPU.
+
+## 2026-10-24 — pedidos de la sesión principal para la interfaz del análisis
+
+La sesión principal de Tisma, que construye la interfaz dentro de Tisma Slicer, respondió:
+- el PLY le sirve tal cual;
+- el progreso con `--progress` alcanza;
+- el adaptador de ajustes lo escribe ella.
+
+Además pidió:
+
+**Hecho:**
+- Malla PLY: comentarios legibles por máquina en la cabecera (`units`, `voxels_analysed`, `grid_voxels`,
+  `voxel_size_mm`, `grid_origin_mm`, `rows_per_layer`, `z_planes_mm`), y una tabla en `docs/ANALYSIS.md` con cada
+  propiedad, su tipo y su unidad.
+- Coordenadas: ya estaban en el sistema del STL, porque el motor no mueve las piezas. Ahora hay una prueba con una
+  pieza fuera del origen y queda escrito en `docs/ANALYSIS.md`.
+- Cada archivo de salida (G-code, avisos, informe, estimación, VTK y PLY) se escribe como `<archivo>.part` y se
+  renombra al terminar: si la interfaz corta el proceso, no queda un archivo a medias con el nombre pedido.
+- Los códigos de aviso del informe son estables; el texto puede cambiar.
+- `docs/CONFIG.md`:
+  - una clave o un grupo desconocido es un error con código de salida 2 (ya lo era);
+  - los nombres son estables y un cambio se anuncia.
+
+**Probado:** 201/201 pruebas (195 de Catch2 y 6 del programa) con gcc, clang y ASan+UBSan. Pruebas nuevas:
+- la cabecera del PLY con sus valores;
+- una pieza desplazada a (10, −5, 3) cuya grilla y cuya malla quedan exactamente en sus coordenadas;
+- ningún `.part` queda después de escribir;
+- una salida imposible de escribir no deja nada.
+
+**Además:** la sesión principal subió los logos e íconos de Tisma en el PR #6 (rama `assets/brand`), solo imágenes.
+El motor todavía no los necesita: no tiene interfaz propia.

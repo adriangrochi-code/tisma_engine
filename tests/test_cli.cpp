@@ -261,4 +261,17 @@ TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli
     std::string first;
     std::getline(ply, first);
     CHECK(first == "ply");
+    // Written in one piece: no temporary left beside the outputs.
+    CHECK(!std::filesystem::exists(report.string() + ".part"));
+    CHECK(!std::filesystem::exists(mesh.string() + ".part"));
+}
+
+TEST_CASE("an output that cannot be written leaves nothing behind", "[cli]") {
+    const auto missing = std::filesystem::temp_directory_path() / "tisma_no_such_dir" / "report.json";
+    const Run r = run({"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "--case",
+                       kData + "/analysis_case.json", "-o", missing.string()});
+    CHECK(r.code == kExitInput);
+    CHECK_THAT(r.err, ContainsSubstring("cannot write"));
+    CHECK(!std::filesystem::exists(missing));
+    CHECK(!std::filesystem::exists(missing.string() + ".part"));
 }

@@ -5,6 +5,7 @@
 #include "io/ply.hpp"
 #include "io/vtk.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "mesh/mesh.hpp"
 #include "report/analysis_json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -307,7 +308,9 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
     write_voxel_mesh_ply(ply, r);
     const std::string text = ply.str();
     CHECK(text.starts_with("ply\nformat binary_little_endian 1.0\n"));
-    CHECK_THAT(text, ContainsSubstring("comment voxels analysed 20000 of a grid of 20 x 20 x 50"));
+    CHECK_THAT(text, ContainsSubstring("comment units mm\ncomment voxels_analysed 20000\ncomment grid_voxels 20 20 50\n"
+                                       "comment voxel_size_mm 0.2 0.2\ncomment grid_origin_mm 0 0 0\n"
+                                       "comment rows_per_layer 1\ncomment z_planes_mm 0 0.2 0.4 "));
     CHECK_THAT(text, ContainsSubstring("element vertex 19200\n"));
     CHECK_THAT(text, ContainsSubstring("element face 4800\n"));
     const std::size_t body = text.find("end_header\n") + 11;
@@ -354,4 +357,43 @@ TEST_CASE("analysis: how much the result depends on the voxel size", "[analysis]
         CHECK(!r.resolution.done);
         CHECK(r.resolution.reason == "not asked for");
     }
+}
+
+TEST_CASE("analysis: the voxels stay in the model's coordinates", "[analysis]") {
+    // A block away from the origin: the voxel grid and its mesh start where
+    // the model does, with no move.
+    IndexedMesh block = box_mesh(2.0f, 2.0f, 1.0f);
+    for (Vec3f& v : block.vertices)
+        v.x += 10.0f, v.y -= 5.0f, v.z += 3.0f;
+    const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "resolution_check": false,
+        "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -1]}]})");
+    const AnalysisReport r = run_analysis(block, Settings{}, c);
+    REQUIRE(r.valid);
+    CHECK(r.grid.x0 == 10.0);
+    CHECK(r.grid.y0 == -5.0);
+    CHECK(r.grid.z.front() == 3.0);
+    CHECK_THAT(r.grid.z.back(), WithinAbs(4.0, 1e-9));
+    std::ostringstream ply;
+    write_voxel_mesh_ply(ply, r);
+    const std::string text = ply.str();
+    CHECK_THAT(text, ContainsSubstring("comment grid_origin_mm 10 -5 3\n"));
+    // Every vertex inside the model's box.
+    const std::size_t body = text.find("end_header\n") + 11;
+    const std::size_t vertices = std::size_t(std::stoul(text.substr(text.find("element vertex ") + 15)));
+    float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+    for (std::size_t i = 0; i < vertices; ++i)
+        for (int a = 0; a < 3; ++a) {
+            std::array<char, 4> bytes{};
+            std::copy_n(text.begin() + std::ptrdiff_t(body + i * 15 + std::size_t(a) * 4), 4, bytes.begin());
+            if constexpr (std::endian::native == std::endian::big)
+                std::reverse(bytes.begin(), bytes.end());
+            const float v = std::bit_cast<float>(bytes);
+            lo[a] = std::min(lo[a], v), hi[a] = std::max(hi[a], v);
+        }
+    CHECK(lo[0] == 10.0f);
+    CHECK(hi[0] == 12.0f);
+    CHECK(lo[1] == -5.0f);
+    CHECK(hi[1] == -3.0f);
+    CHECK(lo[2] == 3.0f);
+    CHECK_THAT(hi[2], WithinAbs(4.0, 1e-5));
 }

@@ -7,6 +7,9 @@ Reglas:
 - Todas las claves son opcionales; las que faltan toman el valor por defecto.
 - Una clave desconocida dentro de un grupo implementado es un error, para que los errores de tipeo no pasen en
   silencio.
+- Un grupo desconocido (ni implementado ni planeado) también es un error. En los dos casos, el comando termina con el
+  código de salida 2 y el mensaje nombra la clave.
+- Los nombres de los grupos y las claves son estables. Si alguno cambia, se anuncia y se documenta acá.
 - Los grupos todavía no implementados se aceptan, pero el motor avisa que no los usa.
 - Las longitudes van en milímetros.
 

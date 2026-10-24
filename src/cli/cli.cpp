@@ -22,6 +22,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -37,6 +38,32 @@ constexpr std::string_view kUsage =
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model.stl>\n"
     "  tisma-engine --help | --version\n";
+
+// Writes a file in one piece: into "<path>.part" first, renamed over the
+// path once complete, so a process stopped half way never leaves a partial
+// file under the real name. False (and no temporary left) on failure.
+bool write_file(const std::string& path, const std::function<void(std::ostream&)>& write) {
+    const std::filesystem::path target(path), part(path + ".part");
+    std::error_code ignored;
+    {
+        std::ofstream f(part, std::ios::binary);
+        if (!f)
+            return false;
+        write(f);
+        f.close();
+        if (!f) {
+            std::filesystem::remove(part, ignored);
+            return false;
+        }
+    }
+    std::error_code ec;
+    std::filesystem::rename(part, target, ec);
+    if (ec) {
+        std::filesystem::remove(part, ignored);
+        return false;
+    }
+    return true;
+}
 
 struct SliceArgs {
     std::string model;
@@ -283,18 +310,11 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (sliced.open_contours > 0)
         err << "warning: " << sliced.open_contours
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
-    std::ofstream gcode(std::string(parsed->output), std::ios::binary);
-    if (!gcode) {
-        err << "error: cannot write '" << parsed->output << "'\n";
-        return kExitInput;
-    }
     const auto write_start = std::chrono::steady_clock::now();
     std::vector<Warning> model = model_warnings(sliced);
     warnings.insert(warnings.end(), model.begin(), model.end());
-    write_gcode(gcode, sliced, settings, &warnings);
-    gcode.close();
-    if (!gcode) {
-        err << "error: writing '" << parsed->output << "' failed\n";
+    if (!write_file(parsed->output, [&](std::ostream& gcode) { write_gcode(gcode, sliced, settings, &warnings); })) {
+        err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }
     const double write_ms =
@@ -303,10 +323,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "wrote " << parsed->output << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {
-        std::ofstream report(parsed->warnings, std::ios::binary);
-        report << warnings_json(warnings);
-        report.close();
-        if (!report) {
+        if (!write_file(parsed->warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {
             err << "error: cannot write '" << parsed->warnings << "'\n";
             return kExitInput;
         }
@@ -360,10 +377,7 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
             << estimate.grid.hx << " mm, " << estimate.rows_per_layer << " rows per layer)\n";
         out << "estimated_memory_mb: " << estimate.memory_mb << "\n";
         out << "estimated_seconds: " << estimate.seconds << "\n";
-        std::ofstream json(parsed->output, std::ios::binary);
-        json << analysis_estimate_json(estimate, analysis);
-        json.close();
-        if (!json) {
+        if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_estimate_json(estimate, analysis); })) {
             err << "error: cannot write '" << parsed->output << "'\n";
             return kExitInput;
         }
@@ -406,29 +420,20 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 
-    std::ofstream json(parsed->output, std::ios::binary);
-    json << analysis_json(report, analysis);
-    json.close();
-    if (!json) {
+    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis); })) {
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }
     out << "wrote " << parsed->output << "\n";
     if (!parsed->vtk.empty()) {
-        std::ofstream vtk(parsed->vtk, std::ios::binary);
-        write_analysis_vtk(vtk, report);
-        vtk.close();
-        if (!vtk) {
+        if (!write_file(parsed->vtk, [&](std::ostream& vtk) { write_analysis_vtk(vtk, report); })) {
             err << "error: cannot write '" << parsed->vtk << "'\n";
             return kExitInput;
         }
         out << "wrote " << parsed->vtk << "\n";
     }
     if (!parsed->mesh.empty()) {
-        std::ofstream ply(parsed->mesh, std::ios::binary);
-        write_voxel_mesh_ply(ply, report);
-        ply.close();
-        if (!ply) {
+        if (!write_file(parsed->mesh, [&](std::ostream& ply) { write_voxel_mesh_ply(ply, report); })) {
             err << "error: cannot write '" << parsed->mesh << "'\n";
             return kExitInput;
         }

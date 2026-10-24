@@ -16,6 +16,9 @@ Códigos de salida: 0 bien; 1 línea de comandos mal; 2 un archivo de entrada fa
 imprimir; 5 el análisis no dio un resultado válido. Con 5 el informe se escribe igual cuando se puede, y dice por qué
 (nada sostiene la pieza, ninguna carga la toca, el solucionador no convergió o hacen falta demasiados vóxeles).
 
+Cada archivo de salida se escribe primero como `<archivo>.part` y se renombra al terminar. Si el proceso se corta (por
+ejemplo, porque la interfaz lo cancela), nunca queda un archivo a medias con el nombre pedido.
+
 ## El caso (`--case caso.json`)
 
 Un objeto JSON. Todas las claves son opcionales y una clave desconocida es un error. Las longitudes van en mm y las
@@ -105,7 +108,7 @@ El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija 
 
   Con `checked` falso trae `reason`, por qué no se hizo. Para decidir, ver «Qué tan confiable es el número».
 - `layers`: el vóxel más débil de cada capa, para ver qué capas mandan.
-- `warnings`, por su código:
+- `warnings`, por su código. Los códigos son estables y la interfaz puede traducirlos; el texto puede cambiar:
   - `fixture_unused`: un apoyo que no toca la pieza;
   - `loose_voxels`: partes que ningún apoyo sostiene;
   - `load_not_applied`: cargas cuya región no toca la parte sostenida;
@@ -134,24 +137,42 @@ por `safety`.
 
 ## La malla de vóxeles (`--mesh voxeles.ply`)
 
-La superficie de los vóxeles analizados, como malla PLY binaria (formato público de Turk, Stanford). La leen MeshLab,
-Blender, ParaView y cualquier vista 3D que dibuje triángulos.
-- **Caras:** cada cara entre un vóxel analizado y uno vacío es un cuadrilátero con la normal hacia afuera y sus cuatro
-  vértices propios.
-- **Color por vértice**, según el factor de seguridad del vóxel:
+La superficie de los vóxeles analizados, como malla PLY binaria little-endian (formato público de Turk, Stanford).
+La leen MeshLab, Blender, ParaView y cualquier vista 3D que dibuje polígonos. Las coordenadas están en mm, en el
+mismo sistema que el STL de entrada: el motor no mueve las piezas, así que la malla se alinea con la pieza sin
+transformarla.
 
-  | Color | Factor de seguridad | Significado |
-  |---|---|---|
-  | Rojo (220, 40, 40) | menos de 1 | falla |
-  | Naranja (245, 140, 30) | de 1 a 1,5 | |
-  | Amarillo (240, 210, 40) | de 1,5 a 2 | |
-  | Verde (60, 170, 75) | 2 o más | |
-  | Gris (190, 190, 190) | — | nada lo carga |
+Cada cara entre un vóxel analizado y uno vacío es un cuadrilátero con la normal hacia afuera (sus vértices en sentido
+antihorario vistos desde afuera) y sus cuatro vértices propios.
 
-- **Datos por cara:** `safety` (el factor del vóxel) y `mode` (0 nada, 1 cordón, 2 entre cordones, 3 entre capas),
-  por si la vista quiere colorear de otra manera.
-- **Cabecera:** un comentario dice cuántos vóxeles se analizaron y con qué grilla. Ejemplo:
-  `comment voxels analysed 618028 of a grid of 100 x 100 x 100, 0.1 mm, 2 rows per layer`.
+| Elemento | Propiedad | Tipo | Unidad y significado |
+|---|---|---|---|
+| `vertex` | `x`, `y`, `z` | `float` | mm, en el sistema del STL |
+| `vertex` | `red`, `green`, `blue` | `uchar` | 0 a 255: el color del vóxel según su factor de seguridad (tabla de abajo) |
+| `face` | `vertex_indices` | lista `uchar`, `int` | siempre 4 índices |
+| `face` | `safety` | `float` | factor de seguridad del vóxel, sin unidad; 10⁹ donde nada lo carga |
+| `face` | `mode` | `uchar` | qué cede: 0 nada, 1 cordón, 2 entre cordones, 3 entre capas |
+
+| Color | Factor de seguridad | Significado |
+|---|---|---|
+| Rojo (220, 40, 40) | menos de 1 | falla |
+| Naranja (245, 140, 30) | de 1 a 1,5 | |
+| Amarillo (240, 210, 40) | de 1,5 a 2 | |
+| Verde (60, 170, 75) | 2 o más | |
+| Gris (190, 190, 190) | — | nada lo carga |
+
+La cabecera trae comentarios legibles por máquina, `comment <clave> <valores>`, con los números en el formato más
+corto que se lee igual:
+
+| Clave | Valores |
+|---|---|
+| `units` | `mm` |
+| `voxels_analysed` | cuántos vóxeles se analizaron |
+| `grid_voxels` | vóxeles de la grilla en x, y, z |
+| `voxel_size_mm` | ancho del vóxel en x e y |
+| `grid_origin_mm` | la esquina más baja de la grilla (x, y, z) |
+| `rows_per_layer` | filas por capa |
+| `z_planes_mm` | los planos z de la grilla, de abajo hacia arriba (las filas pueden tener alturas distintas, por ejemplo la primera capa) |
 
 Con los huecos del relleno, la malla también tiene las caras de adentro, por ejemplo las de los cordones del relleno
 ralo. Con un corte por capas se ven.
