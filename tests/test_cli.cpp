@@ -236,3 +236,29 @@ TEST_CASE("analyze errors", "[cli]") {
         CHECK_THAT(text.str(), ContainsSubstring("\"valid\": false"));
     }
 }
+
+TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path();
+    const std::string model = kData + "/cube_ascii.stl", config = kData + "/settings.json",
+                      analysis = kData + "/analysis_case.json";
+    const auto estimate = dir / "tisma_test_estimate.json";
+    const Run e = run({"analyze", model, "--config", config, "--case", analysis, "-o", estimate.string(), "--estimate"});
+    CHECK(e.code == kExitOk);
+    CHECK_THAT(e.out, ContainsSubstring("voxels: 5000 of 5000"));
+    CHECK_THAT(e.out, ContainsSubstring("estimated_memory_mb: "));
+    std::ifstream json(estimate);
+    std::stringstream text;
+    text << json.rdbuf();
+    CHECK_THAT(text.str(), ContainsSubstring("\"estimate\": true"));
+
+    const auto report = dir / "tisma_test_progress.json", mesh = dir / "tisma_test_voxels.ply";
+    const Run r = run({"analyze", model, "--config", config, "--case", analysis, "-o", report.string(), "--progress",
+                       "--mesh", mesh.string()});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("progress: slicing 0\n"));
+    CHECK_THAT(r.out, ContainsSubstring("progress: done 1\n"));
+    std::ifstream ply(mesh, std::ios::binary);
+    std::string first;
+    std::getline(ply, first);
+    CHECK(first == "ply");
+}

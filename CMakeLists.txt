@@ -153,6 +153,7 @@ add_library(tisma_core
   src/config/analysis_case.cpp
   src/report/analysis_json.cpp
   src/io/vtk.cpp
+  src/io/ply.cpp
   src/io/stl.cpp
   src/cli/cli.cpp
 )

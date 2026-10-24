@@ -372,6 +372,11 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
 - [ ] Representar mejor el contacto entre cordones en «como se imprime» (vóxeles parcialmente llenos en vez de
   todo o nada): hoy el factor cambia un 8 % por refinamiento en la placa de prueba
 - [ ] Criterio de A1: placa con agujero (concentración de tensiones de Kirsch, K = 3) dentro del error esperado
+- [x] Lo que la interfaz necesita del motor: `--estimate` (vóxeles, memoria y tiempo antes de correr), `--progress`
+  y `--mesh` (la superficie de los vóxeles coloreada); lo que debe mostrar está en `docs/ANALYSIS.md`, «Para la
+  interfaz»
+- [ ] Interfaz del análisis dentro de Tisma Slicer (decisión del dueño, 2026-10-24): la construye la sesión principal
+  de Tisma con el comando como caja negra; el motor responde lo que haga falta
 
 **Fuentes de la anisotropía:**
 - Ahn, Montero, Odell, Roundy y Wright, *Anisotropic material properties of fused deposition modeling ABS*, Rapid

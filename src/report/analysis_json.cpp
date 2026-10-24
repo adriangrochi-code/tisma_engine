@@ -85,4 +85,19 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
     return root.dump(2) + "\n";
 }
 
+std::string analysis_estimate_json(const AnalysisEstimate& e, const AnalysisCase& c) {
+    const json root = {{"version", 1},
+                       {"estimate", true},
+                       {"model", c.model == AnalysisModel::AsPrinted ? "as_printed" : "solid"},
+                       {"voxels",
+                        {{"size", e.grid.hx},
+                         {"rows_per_layer", e.rows_per_layer},
+                         {"grid", {e.grid.nx, e.grid.ny, e.grid.nz}},
+                         {"part", e.part_voxels},
+                         {"printed", e.printed_voxels}}},
+                       {"estimated_memory_mb", e.memory_mb},
+                       {"estimated_seconds", e.seconds}};
+    return root.dump(2) + "\n";
+}
+
 } // namespace tisma

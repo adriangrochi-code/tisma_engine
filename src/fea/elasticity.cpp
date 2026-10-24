@@ -142,6 +142,8 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
             r[i] -= alpha * q[i];
         });
         out.residual = std::sqrt(deterministic_dot(r, r)) / norm_f;
+        if (options.on_iteration)
+            options.on_iteration(out.iterations + 1, out.residual);
         if (out.residual < options.tolerance) {
             out.converged = true;
             ++out.iterations;

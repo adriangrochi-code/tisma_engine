@@ -1,6 +1,7 @@
 #include "cli/cli.hpp"
 
 #include "io/stl.hpp"
+#include "io/ply.hpp"
 #include "io/vtk.hpp"
 #include "config/analysis_case.hpp"
 #include "config/settings.hpp"
@@ -33,7 +34,7 @@ constexpr std::string_view kUsage =
     "usage:\n"
     "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
     "  tisma-engine analyze <model.stl> --config <settings.json> --case <case.json> -o <report.json>\n"
-    "                       [--vtk <map.vtk>]\n"
+    "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model.stl>\n"
     "  tisma-engine --help | --version\n";
 
@@ -44,6 +45,9 @@ struct SliceArgs {
     std::string warnings; // empty: not written
     std::string analysis_case; // analyze only
     std::string vtk;           // analyze only; empty: not written
+    std::string mesh;          // analyze only; empty: not written
+    bool progress = false;     // analyze only: progress lines on the output
+    bool estimate = false;     // analyze only: the voxels, memory and time, without solving
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -75,6 +79,13 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         } else if (a == "--vtk" && analyze) {
             if (!value(out.vtk))
                 return std::nullopt;
+        } else if (a == "--mesh" && analyze) {
+            if (!value(out.mesh))
+                return std::nullopt;
+        } else if (a == "--progress" && analyze) {
+            out.progress = true;
+        } else if (a == "--estimate" && analyze) {
+            out.estimate = true;
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -337,9 +348,36 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     std::unique_ptr<gpu::Context> gpu;
     if (settings.gpu == GpuMode::Auto && analysis.model == AnalysisModel::AsPrinted)
         gpu = gpu::Context::create();
+    if (parsed->estimate) {
+        AnalysisEstimate estimate;
+        try {
+            estimate = estimate_analysis(mesh, settings, analysis, gpu.get());
+        } catch (const AnalysisError& e) {
+            err << "error: " << e.what() << "\n";
+            return kExitAnalysis;
+        }
+        out << "voxels: " << estimate.printed_voxels << " of " << estimate.grid.solid.size() << " ("
+            << estimate.grid.hx << " mm, " << estimate.rows_per_layer << " rows per layer)\n";
+        out << "estimated_memory_mb: " << estimate.memory_mb << "\n";
+        out << "estimated_seconds: " << estimate.seconds << "\n";
+        std::ofstream json(parsed->output, std::ios::binary);
+        json << analysis_estimate_json(estimate, analysis);
+        json.close();
+        if (!json) {
+            err << "error: cannot write '" << parsed->output << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->output << "\n";
+        return kExitOk;
+    }
+    AnalysisProgress progress;
+    if (parsed->progress)
+        progress = [&out](std::string_view stage, double done) {
+            out << "progress: " << stage << " " << done << std::endl;
+        };
     AnalysisReport report;
     try {
-        report = run_analysis(mesh, settings, analysis, gpu.get());
+        report = run_analysis(mesh, settings, analysis, gpu.get(), progress);
     } catch (const AnalysisError& e) {
         err << "error: " << e.what() << "\n";
         return kExitAnalysis;
@@ -379,6 +417,16 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
             return kExitInput;
         }
         out << "wrote " << parsed->vtk << "\n";
+    }
+    if (!parsed->mesh.empty()) {
+        std::ofstream ply(parsed->mesh, std::ios::binary);
+        write_voxel_mesh_ply(ply, report);
+        ply.close();
+        if (!ply) {
+            err << "error: cannot write '" << parsed->mesh << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->mesh << "\n";
     }
     return report.valid ? kExitOk : kExitAnalysis;
 }

@@ -14,11 +14,24 @@
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <tuple>
 
 namespace tisma {
 namespace {
 
 constexpr double kOnFace = 1e-6; // mm: how far from a face's plane its box reaches
+
+// Shares of the progress bar: slicing, then the voxels, then the solve.
+constexpr double kSlicingShare = 0.10, kPrepareShare = 0.15, kSolveEnd = 0.97;
+
+// For estimates, fitted to the peak memory of the 10 mm cube at both
+// qualities and both models (docs/ANALYSIS.md, "Recursos"): nearly all of it
+// follows the whole grid, empty voxels too (the solver's vectors span every
+// node); slicing as printed adds its own.
+constexpr double kBytesPerGridVoxelSolid = 540.0, kBytesPerGridVoxelAsPrinted = 590.0;
+constexpr double kBaseMemoryMbSolid = 10.0, kBaseMemoryMbAsPrinted = 50.0;
+constexpr double kSecondsPerVoxelIteration = 0.95e-6; // per analysed voxel and iteration: 4 cores, multigrid
+constexpr double kTypicalIterationsAsPrinted = 60.0, kTypicalIterationsSolid = 15.0;
 
 double seconds_since(std::chrono::steady_clock::time_point start) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
@@ -97,55 +110,101 @@ Box resolve_region(const Region& region, const VoxelGrid& g) {
     return box;
 }
 
-AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu) {
-    AnalysisReport out;
-    const auto start = std::chrono::steady_clock::now();
+namespace {
+
+// The voxels an analysis works on, and what it needs to know about them.
+struct Prepared {
+    VoxelGrid grid;
+    std::vector<float> direction;
+    std::vector<Layer> layers;
+    int rows = 1;
+    double voxel = 0.0;
+    std::size_t part = 0, printed = 0;
+    std::vector<AnalysisWarning> warnings;
+};
+
+Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
+                 const AnalysisProgress& progress) {
+    Prepared p;
     if (mesh.vertices.empty())
         throw AnalysisError("the model is empty");
-    const auto [voxel, rows] = analysis_resolution(c, settings);
-    out.rows_per_layer = rows;
+    std::tie(p.voxel, p.rows) = analysis_resolution(c, settings);
 
     // Layers: the slicing's own plan, through the whole slicing when the
     // toolpaths give the directions.
+    if (progress)
+        progress("slicing", 0.0);
     SlicedModel sliced;
     if (c.model == AnalysisModel::AsPrinted) {
         sliced = slice_model(mesh, settings, gpu);
-        out.layers = sliced.layers;
+        p.layers = sliced.layers;
     } else {
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
         for (const Vec3f& v : mesh.vertices)
             min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
-        out.layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+        p.layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
     }
-    if (out.layers.empty())
+    if (p.layers.empty())
         throw AnalysisError("the model has no layers to analyse");
 
     // Check the size before allocating the voxels.
-    {
-        double min_x = std::numeric_limits<double>::infinity(), min_y = min_x, max_x = -min_x, max_y = -min_x;
-        for (const Vec3f& v : mesh.vertices) {
-            min_x = std::min(min_x, double(v.x)), max_x = std::max(max_x, double(v.x));
-            min_y = std::min(min_y, double(v.y)), max_y = std::max(max_y, double(v.y));
-        }
-        const double count = std::max(1.0, std::ceil((max_x - min_x) / voxel)) *
-                             std::max(1.0, std::ceil((max_y - min_y) / voxel)) * double(out.layers.size()) * rows;
-        if (count > double(c.max_voxels))
-            throw AnalysisError("the analysis would need " + format(count) + " voxels, more than max_voxels (" +
-                                std::to_string(c.max_voxels) + "); use normal quality or larger voxels");
+    if (progress)
+        progress("voxels", kSlicingShare);
+    double min_x = std::numeric_limits<double>::infinity(), min_y = min_x, max_x = -min_x, max_y = -min_x;
+    for (const Vec3f& v : mesh.vertices) {
+        min_x = std::min(min_x, double(v.x)), max_x = std::max(max_x, double(v.x));
+        min_y = std::min(min_y, double(v.y)), max_y = std::max(max_y, double(v.y));
     }
-    VoxelGrid grid = voxelize(mesh, voxel, voxel, layer_planes(out.layers, rows));
-    out.part_voxels = grid.count();
+    const double count = std::max(1.0, std::ceil((max_x - min_x) / p.voxel)) *
+                         std::max(1.0, std::ceil((max_y - min_y) / p.voxel)) * double(p.layers.size()) * p.rows;
+    if (count > double(c.max_voxels))
+        throw AnalysisError("the analysis would need " + format(count) + " voxels, more than max_voxels (" +
+                            std::to_string(c.max_voxels) + "); use normal quality or larger voxels");
+    p.grid = voxelize(mesh, p.voxel, p.voxel, layer_planes(p.layers, p.rows));
+    p.part = p.grid.count();
     if (c.model == AnalysisModel::AsPrinted) {
-        out.direction = line_directions(grid, sliced);
-        if (voxel <= 0.5 * settings.wall_width + 1e-9)
-            grid = printed_voxels(std::move(grid), out.direction);
+        p.direction = line_directions(p.grid, sliced);
+        if (p.voxel <= 0.5 * settings.wall_width + 1e-9)
+            p.grid = printed_voxels(std::move(p.grid), p.direction);
         else
-            out.warnings.push_back({"coarse_voxels", "voxels of " + format(voxel) +
-                                                         " mm are wider than half a line: the gaps of sparse infill "
-                                                         "are not modelled, the part is analysed solid"});
+            p.warnings.push_back({"coarse_voxels", "voxels of " + format(p.voxel) +
+                                                       " mm are wider than half a line: the gaps of sparse infill "
+                                                       "are not modelled, the part is analysed solid"});
     }
-    out.grid = std::move(grid);
+    p.printed = p.grid.count();
+    return p;
+}
+
+} // namespace
+
+AnalysisEstimate estimate_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
+                                   gpu::Context* gpu) {
+    Prepared p = prepare(mesh, settings, c, gpu, {});
+    AnalysisEstimate out;
+    out.rows_per_layer = p.rows;
+    out.part_voxels = p.part;
+    out.printed_voxels = p.printed;
+    const bool printed = c.model == AnalysisModel::AsPrinted;
+    out.memory_mb = (printed ? kBaseMemoryMbAsPrinted : kBaseMemoryMbSolid) +
+                    (printed ? kBytesPerGridVoxelAsPrinted : kBytesPerGridVoxelSolid) * double(p.grid.solid.size()) / 1e6;
+    out.seconds = kSecondsPerVoxelIteration * double(p.printed) *
+                  (printed ? kTypicalIterationsAsPrinted : kTypicalIterationsSolid);
+    out.grid = std::move(p.grid);
+    return out;
+}
+
+AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
+                            gpu::Context* gpu, const AnalysisProgress& progress) {
+    AnalysisReport out;
+    const auto start = std::chrono::steady_clock::now();
+    Prepared p = prepare(mesh, settings, c, gpu, progress);
+    const int rows = p.rows;
+    out.rows_per_layer = rows;
+    out.layers = std::move(p.layers);
+    out.part_voxels = p.part;
+    out.direction = std::move(p.direction);
+    out.warnings = std::move(p.warnings);
+    out.grid = std::move(p.grid);
     const VoxelGrid& g = out.grid;
 
     std::vector<Fixture> fixtures;
@@ -176,8 +235,25 @@ AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, c
     out.prepare_seconds = seconds_since(start);
 
     const auto solve_start = std::chrono::steady_clock::now();
-    out.result = solve_as_printed(g, c.material, out.direction, fixtures, loads, c.solver, {},
+    SolverOptions solver = c.solver;
+    if (progress) {
+        // Progress from the residual on a log scale between 1 and the
+        // tolerance, never going back.
+        progress("solving", kPrepareShare);
+        solver.on_iteration = [&, done = 0.0](int iteration, double residual) mutable {
+            if (c.solver.on_iteration)
+                c.solver.on_iteration(iteration, residual);
+            const double f = std::clamp(std::log(residual) / std::log(c.solver.tolerance), 0.0, 1.0);
+            if (f > done + 0.01) {
+                done = f;
+                progress("solving", kPrepareShare + (kSolveEnd - kPrepareShare) * done);
+            }
+        };
+    }
+    out.result = solve_as_printed(g, c.material, out.direction, fixtures, loads, solver, {},
                                   StressWindow{settings.wall_width, settings.wall_width, rows});
+    if (progress)
+        progress("summary", kSolveEnd);
     out.solve_seconds = seconds_since(solve_start);
     const ElasticityResult& e = out.result.elasticity;
     out.printed_voxels = g.count();
@@ -229,6 +305,8 @@ AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, c
         out.warnings.push_back({"nothing_held", "no fixture holds any part of the model"});
     if (c.loads.empty())
         out.warnings.push_back({"no_loads", "the case has no loads"});
+    if (progress)
+        progress("done", 1.0);
     return out;
 }
 

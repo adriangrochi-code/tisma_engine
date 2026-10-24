@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "fea/materials.hpp"
+#include "io/ply.hpp"
 #include "io/vtk.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "report/analysis_json.hpp"
@@ -15,6 +16,9 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <limits>
+#include <utility>
+#include <vector>
 #include <sstream>
 #include <string>
 
@@ -255,4 +259,49 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
             "loads": [{"face": "top", "force": [0, 0, -1]}]})");
         CHECK_THROWS_AS(run_analysis(column, Settings{}, c), AnalysisError);
     }
+}
+
+TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
+    const IndexedMesh column = box_mesh(4.0f, 4.0f, 10.0f);
+    const AnalysisCase c = parse_analysis_case(R"({"model": "solid",
+        "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -10]}]})");
+
+    const AnalysisEstimate e = estimate_analysis(column, Settings{}, c);
+    CHECK(e.part_voxels == 20000);
+    CHECK(e.printed_voxels == 20000);
+    CHECK(e.rows_per_layer == 1);
+    CHECK_THAT(e.memory_mb, WithinRel(10.0 + 540.0 * 20000 / 1e6, 1e-12));
+    CHECK(e.seconds > 0.0);
+
+    std::vector<std::pair<std::string, double>> steps;
+    const AnalysisReport r = run_analysis(column, Settings{}, c, nullptr,
+                                          [&](std::string_view stage, double done) { steps.emplace_back(stage, done); });
+    REQUIRE(r.valid);
+    REQUIRE(steps.size() >= 5);
+    CHECK(steps.front() == std::pair<std::string, double>{"slicing", 0.0});
+    CHECK(steps.back() == std::pair<std::string, double>{"done", 1.0});
+    for (std::size_t i = 1; i < steps.size(); ++i)
+        CHECK(steps[i].second >= steps[i - 1].second);
+    std::vector<std::string> stages;
+    for (const auto& [stage, done] : steps)
+        if (stages.empty() || stages.back() != stage)
+            stages.push_back(stage);
+    CHECK(stages == std::vector<std::string>{"slicing", "voxels", "solving", "summary", "done"});
+
+    // The surface of a 20 x 20 x 50 block of voxels: 2 x 400 + 4 x 1000 faces.
+    std::ostringstream ply;
+    write_voxel_mesh_ply(ply, r);
+    const std::string text = ply.str();
+    CHECK(text.starts_with("ply\nformat binary_little_endian 1.0\n"));
+    CHECK_THAT(text, ContainsSubstring("comment voxels analysed 20000 of a grid of 20 x 20 x 50"));
+    CHECK_THAT(text, ContainsSubstring("element vertex 19200\n"));
+    CHECK_THAT(text, ContainsSubstring("element face 4800\n"));
+    const std::size_t body = text.find("end_header\n") + 11;
+    CHECK(text.size() - body == 19200 * 15 + 4800 * (1 + 16 + 4 + 1));
+
+    CHECK(safety_colour(0.5) == std::array<std::uint8_t, 3>{220, 40, 40});
+    CHECK(safety_colour(1.2) == std::array<std::uint8_t, 3>{245, 140, 30});
+    CHECK(safety_colour(1.7) == std::array<std::uint8_t, 3>{240, 210, 40});
+    CHECK(safety_colour(3.0) == std::array<std::uint8_t, 3>{60, 170, 75});
+    CHECK(safety_colour(std::numeric_limits<double>::infinity()) == std::array<std::uint8_t, 3>{190, 190, 190});
 }

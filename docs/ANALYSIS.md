@@ -1,7 +1,8 @@
 # Análisis estructural (`tisma-engine analyze`)
 
 ```
-tisma-engine analyze pieza.stl --config ajustes.json --case caso.json -o informe.json [--vtk mapa.vtk]
+tisma-engine analyze pieza.stl --config ajustes.json --case caso.json -o informe.json
+                     [--vtk mapa.vtk] [--mesh voxeles.ply] [--progress] [--estimate]
 ```
 
 El motor corta la pieza con los ajustes (`docs/CONFIG.md`), la pasa a vóxeles que siguen las capas y resuelve la
@@ -119,7 +120,84 @@ Datos por celda:
 Datos por nodo: `displacement`, en mm. Para ver la pieza, filtrar con `Threshold` sobre `solid` igual a 1 y colorear
 por `safety`.
 
-## Qué tan confiable es el número
+## La malla de vóxeles (`--mesh voxeles.ply`)
+
+La superficie de los vóxeles analizados, como malla PLY binaria (formato público de Turk, Stanford). La leen MeshLab,
+Blender, ParaView y cualquier vista 3D que dibuje triángulos.
+- **Caras:** cada cara entre un vóxel analizado y uno vacío es un cuadrilátero con la normal hacia afuera y sus cuatro
+  vértices propios.
+- **Color por vértice**, según el factor de seguridad del vóxel:
+
+  | Color | Factor de seguridad | Significado |
+  |---|---|---|
+  | Rojo (220, 40, 40) | menos de 1 | falla |
+  | Naranja (245, 140, 30) | de 1 a 1,5 | |
+  | Amarillo (240, 210, 40) | de 1,5 a 2 | |
+  | Verde (60, 170, 75) | 2 o más | |
+  | Gris (190, 190, 190) | — | nada lo carga |
+
+- **Datos por cara:** `safety` (el factor del vóxel) y `mode` (0 nada, 1 cordón, 2 entre cordones, 3 entre capas),
+  por si la vista quiere colorear de otra manera.
+- **Cabecera:** un comentario dice cuántos vóxeles se analizaron y con qué grilla. Ejemplo:
+  `comment voxels analysed 618028 of a grid of 100 x 100 x 100, 0.1 mm, 2 rows per layer`.
+
+Con los huecos del relleno, la malla también tiene las caras de adentro, por ejemplo las de los cordones del relleno
+ralo. Con un corte por capas se ven.
+
+## Estimación (`--estimate`)
+
+No resuelve nada. Corta la pieza (en `as_printed`, para saber dónde quedan los huecos) y arma los vóxeles. Después
+informa cuántos vóxeles tendría el análisis, cuánta memoria pico pediría y cuánto tardaría más o menos. Escribe un
+JSON en lugar del informe:
+
+```json
+{"version": 1, "estimate": true, "model": "as_printed",
+ "voxels": {"size": 0.1, "rows_per_layer": 2, "grid": [100, 100, 100], "part": 1000000, "printed": 618028},
+ "estimated_memory_mb": 640, "estimated_seconds": 35.2}
+```
+
+Es lo que una interfaz muestra al elegir la calidad, antes de correr. La memoria sale de un ajuste a corridas medidas
+(ver «Recursos»). El tiempo es aproximado: supone las iteraciones típicas (60 como se imprime, 15 maciza) en la
+máquina de referencia de 4 núcleos.
+
+## Avance (`--progress`)
+
+Mientras corre, el comando escribe líneas `progress: <etapa> <fracción>`, con la fracción de 0 a 1 del análisis
+entero. Las etapas son `slicing`, `voxels`, `solving` (avanza con el residuo en escala logarítmica, de 1 a la
+tolerancia), `summary` y `done`. La fracción nunca retrocede. Para cancelar, alcanza con terminar el proceso.
+
+## Recursos
+
+Medido en el cubo de 10 mm de PLA Basic, 4 núcleos, comando completo:
+
+| Caso | Grilla | Vóxeles analizados | Memoria pico | Estimada | Tiempo | Estimado |
+|---|---|---|---|---|---|---|
+| `as_printed`, `normal` | 125 000 | 77 258 | 123 MB | 124 MB | 4,7 s | 4,4 s |
+| `as_printed`, `high` | 1 000 000 | 618 028 | 591 MB | 640 MB | 31,2 s | 35,2 s |
+| `solid`, `normal` | 125 000 | 125 000 | 75 MB | 78 MB | 1,9 s | 1,8 s |
+| `solid`, `high` | 1 000 000 | 1 000 000 | 539 MB | 550 MB | 15,8 s | 14,3 s |
+
+Casi toda la memoria sigue a la grilla entera, vacíos incluidos: unos 540 bytes por vóxel de la grilla (590 como se
+imprime), más una base de 10 MB (50 MB como se imprime).
+
+## Para la interfaz
+
+Lo que una interfaz necesita mostrar, con lo que el comando ya da:
+1. **Al elegir el material, el modelo y la calidad:** correr `--estimate` y mostrar la cantidad de vóxeles de la pieza
+   (`voxels.printed`), la grilla, la memoria y el tiempo estimados. Más vóxeles es más calidad. Si la estimación pasa
+   `max_voxels` (código de salida 5), avisar y proponer otra calidad.
+2. **Apoyos y cargas:** elegir caras de la pieza (`bottom`, `top`, `x_min`…) o cajas, los ejes fijos de cada apoyo y
+   la fuerza de cada carga en N.
+3. **Al correr:** una barra con `--progress`; cancelar es terminar el proceso.
+4. **Al terminar:**
+   - dibujar la malla de `--mesh` con sus colores y la leyenda de las cuatro bandas;
+   - mostrar la cantidad de vóxeles analizados, el factor mínimo, dónde está (`result.weakest`: punto, capa y modo de
+     falla) y la capa más débil (`layers`);
+   - mostrar los avisos (`warnings`) tal como vienen;
+   - si `valid` es falso, decirlo antes que cualquier número;
+   - un corte por capas ayuda a ver adentro (la altura de cada capa está en `layers`).
+5. **Para ver todo en detalle:** el mapa VTK en ParaView.
+
 
 Cuánto cambian los resultados al achicar el vóxel. Medido en una placa de 12 × 4 × 2 mm de PLA Basic de Bambu Lab,
 empotrada en `x_min` y con 5 N hacia abajo en `x_max`, ajustes por defecto (relleno al 20 %); el vóxel se achica a la

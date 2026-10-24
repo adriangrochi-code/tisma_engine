@@ -7,8 +7,10 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -110,9 +112,25 @@ std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings
 // the solid voxels' extent along that axis.
 Box resolve_region(const Region& region, const VoxelGrid& grid);
 
+// Progress for a user interface: the stage ("slicing", "voxels", "solving",
+// "summary") and how much of the whole analysis is done, from 0 to 1.
+using AnalysisProgress = std::function<void(std::string_view stage, double done)>;
+
 // Slices (as printed) and voxelizes the part, solves, and summarizes.
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu = nullptr);
+                            gpu::Context* gpu = nullptr, const AnalysisProgress& progress = {});
+
+// What an analysis would take, without solving: the voxels (slicing as
+// printed to find the gaps), and the memory and time they need.
+struct AnalysisEstimate {
+    VoxelGrid grid; // the voxels that would be analysed (before leaving out loose pieces)
+    int rows_per_layer = 1;
+    std::size_t part_voxels = 0, printed_voxels = 0;
+    double memory_mb = 0.0; // peak, from a fit to measured runs (docs/ANALYSIS.md, "Recursos")
+    double seconds = 0.0;   // rough: typical iterations on the 4-core reference machine
+};
+AnalysisEstimate estimate_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
+                                   gpu::Context* gpu = nullptr);
 
 const char* failure_mode_name(FailureMode mode);
 

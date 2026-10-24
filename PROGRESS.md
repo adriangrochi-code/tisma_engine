@@ -2164,3 +2164,47 @@ contacto entre cordones.
 - estimar el error de resolución con dos calidades;
 - el núcleo de la GPU;
 - el criterio de A1, la placa con agujero.
+
+## 2026-10-24 — A1, paso 6: lo que la interfaz necesita del motor
+
+**Decisión del dueño:** la interfaz del análisis va dentro de Tisma Slicer, reusando lo que ya tiene, y tiene que
+mostrar la cantidad de vóxeles que componen la pieza (más vóxeles, más calidad). La construye la sesión principal de
+Tisma, que llama al motor como caja negra: por la sala limpia, este equipo no lee ese código.
+
+**Hecho:**
+- `--estimate`: corta y arma los vóxeles sin resolver. Informa cuántos vóxeles tendría el análisis, la grilla, la
+  memoria pico y el tiempo aproximado, y escribe un JSON con eso.
+- `--progress`: líneas `progress: <etapa> <fracción>` (`slicing`, `voxels`, `solving`, `summary`, `done`). La
+  fracción no retrocede; en la etapa `solving` avanza con el residuo en escala logarítmica.
+- `--mesh voxeles.ply`: la superficie de los vóxeles analizados como malla PLY binaria (`src/io/ply.*`):
+  - colores por bandas del factor de seguridad (rojo, naranja, amarillo, verde y gris sin carga);
+  - el factor y el modo de falla por cara;
+  - la cantidad de vóxeles en la cabecera.
+  Se verificó con el lector de PLY de VTK: cantidad de puntos y caras, límites, colores y las 14 948 caras exteriores
+  del cubo, todas mirando hacia afuera.
+- `docs/ANALYSIS.md`: las tres opciones, los recursos medidos y una sección «Para la interfaz» con lo que hay que
+  mostrar y de dónde sale cada dato.
+
+**Medido** (cubo de 10 mm, 4 núcleos): la estimación contra la corrida real.
+
+| Caso | Memoria real / estimada | Tiempo real / estimado |
+|---|---|---|
+| `as_printed`, `normal` | 123 / 124 MB | 4,7 / 4,4 s |
+| `as_printed`, `high` | 591 / 640 MB | 31,2 / 35,2 s |
+| `solid`, `normal` | 75 / 78 MB | 1,9 / 1,8 s |
+| `solid`, `high` | 539 / 550 MB | 15,8 / 14,3 s |
+
+**Probado:** 198/198 pruebas (192 de Catch2 y 6 del programa) con gcc, clang y ASan+UBSan. Pruebas nuevas:
+- la estimación (vóxeles y memoria);
+- el avance: etapas en orden, fracción que no retrocede, de 0 a 1;
+- la malla del bloque de 20 × 20 × 50: 4800 caras, 19 200 vértices y el tamaño exacto del cuerpo binario;
+- las bandas de color;
+- la CLI con `--estimate`, `--progress` y `--mesh`.
+
+**No probado:** la interfaz misma, que es de Tisma Slicer. El tiempo estimado supone las iteraciones típicas y la
+máquina de referencia.
+
+**Sigue:**
+- responder a la sesión principal lo que necesite para la interfaz;
+- estimar el error de resolución con dos calidades;
+- el núcleo de la GPU.

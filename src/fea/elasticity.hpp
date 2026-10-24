@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <span>
 #include <vector>
@@ -46,6 +47,9 @@ struct SolverOptions {
     double tolerance = 1e-8;
     int max_iterations = 20000;
     Preconditioner preconditioner = Preconditioner::Multigrid;
+    // Called after every iteration with its number and |r| / |f| (for a
+    // progress bar); may be empty.
+    std::function<void(int iteration, double residual)> on_iteration = {};
 };
 
 struct ElasticityResult {
