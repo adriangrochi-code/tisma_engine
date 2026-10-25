@@ -444,7 +444,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
 
 - [x] Las zonas, el recorte de caminos y la escritura, con `layers.detail_height`, `detail_tolerance` y
   `detail_margin`; G-code verificado
-- [ ] La interfaz: los ajustes en Impresión y la vista previa con el color por alto de capa
+- [x] La interfaz: los ajustes en Impresión y la vista previa con el color por alto de capa
 - [ ] Medir en el banco contra todo fino y todo grueso; recortar en la GPU si conviene
 - [ ] La altura variable por Z de la ficha (`slicing.md`), que esta generaliza: una lista de (Z, alto) por objeto
 

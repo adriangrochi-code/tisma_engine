@@ -68,6 +68,7 @@ struct PreviewBuffers {
     std::vector<std::size_t> layer_travels;    // the same, in vertices
     float min_feed = 0, max_feed = 0;          // of the extrusions, mm/s
     float min_width = 0, max_width = 0;        // of the extrusions, mm
+    float min_height = 0, max_height = 0;      // of the extrusions, mm (layer heights by zone vary them)
 };
 
 PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF);

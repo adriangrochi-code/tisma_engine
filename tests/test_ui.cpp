@@ -197,6 +197,14 @@ TEST_CASE("ui: preview buffers keep the layers and kinds", "[ui]") {
     CHECK(b.max_feed == 50.0f);
     CHECK(b.min_width == 0.45f);
     CHECK(b.max_width == 0.5f);
+    CHECK(b.min_height == 0.2f);
+    CHECK(b.max_height == 0.2f);
+    // A thick zone within a layer (docs/LOCAL_LAYERS.md): its own height.
+    const PreviewBuffers zones = preview_buffers(read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.3\n;HEIGHT:0.1\nG1 Z0.3 F600\n;TYPE:Perimeter\n;WIDTH:0.45\nG1 X10 E1 F1200\n"
+        ";HEIGHT:0.3\n;TYPE:Internal infill\nG1 X20 E2\n;HEIGHT:0.1\n"));
+    CHECK(zones.min_height == 0.1f);
+    CHECK(zones.max_height == 0.3f);
     for (std::size_t k = 0; k < kLineKinds; ++k)
         CHECK(kind_colour(LineKind(k)) <= 0xFFFFFF);
 }

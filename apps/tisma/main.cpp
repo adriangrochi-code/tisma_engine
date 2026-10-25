@@ -14,7 +14,7 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--moire on|off] [--device PORT|sim [--device-print]]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
@@ -128,6 +128,13 @@ int main(int argc, char** argv) {
             options.ray_check = true;
         } else if (arg == "--moire-check") {
             options.moire_check = true;
+        } else if (arg == "--color") {
+            const std::string_view c = value();
+            options.color = c == "kind" ? 0 : c == "speed" ? 1 : c == "width" ? 2 : c == "height" ? 3 : -2;
+            if (options.color == -2) {
+                std::fprintf(stderr, "error: --color must be kind, speed, width or height\n");
+                return 2;
+            }
         } else if (arg == "--device") {
             options.device = value();
         } else if (arg == "--device-print") {

@@ -152,6 +152,8 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
             out.max_feed = first ? m.feed : std::max(out.max_feed, m.feed);
             out.min_width = first ? m.width : std::min(out.min_width, m.width);
             out.max_width = first ? m.width : std::max(out.max_width, m.width);
+            out.min_height = first ? m.height : std::min(out.min_height, m.height);
+            out.max_height = first ? m.height : std::max(out.max_height, m.height);
             first = false;
         }
     }

@@ -11,7 +11,7 @@
 
 namespace tisma::ui {
 
-enum class ColorMode : int { Kind = 0, Speed = 1, Width = 2 };
+enum class ColorMode : int { Kind = 0, Speed = 1, Width = 2, Height = 3 };
 
 // How the 3D view is lit: light only; light with screen-space ambient
 // occlusion; light with shadows and ambient occlusion traced as rays against
@@ -111,7 +111,7 @@ private:
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
-    float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0;
+    float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;
 
     // Offscreen targets, the size of the view.

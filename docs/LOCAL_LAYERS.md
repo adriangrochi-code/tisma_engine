@@ -82,5 +82,8 @@ pared en capas de `H`, la cúpula en capas de `h`.
 ## Por etapas
 
 1. ~~**Las zonas**~~ y 2. ~~**el recorte de caminos y la escritura**~~: hechas (2026-10-25).
-3. **La interfaz**: los tres ajustes en Impresión; la vista previa con el color por alto de capa.
+3. ~~**La interfaz**~~: hecha (2026-10-25). En Impresión, debajo de la altura de la primera capa, **Alto del
+   detalle** (y, cuando no es 0, **Escalón aceptado** y **Margen del detalle**), con su ayuda al pasar el puntero. En
+   la vista previa, **Color por → Alto de capa** pinta cada cordón por su alto (azul lo fino, rojo lo grueso), y
+   `--color kind|speed|width|height` lo elige en las capturas.
 4. **Medir**: tiempo y escalón en el banco, contra todo fino y todo grueso; si conviene, recortar en la GPU.

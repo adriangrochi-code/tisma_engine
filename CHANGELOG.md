@@ -29,6 +29,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   parten en subcapas finas solo donde la pieza cambia (pendientes, detalles, topes y fondos) y el resto se imprime en
   una capa gruesa, así dos partes a la misma altura salen con capas de alto distinto. Una caja recta y una pirámide
   lado a lado, con capas de 0,3 y detalle de 0,1 mm: 32 % menos de tiempo que todo a 0,1 mm, con el mismo material.
+  En Impresión, **Alto del detalle**, **Escalón aceptado** y **Margen del detalle**; en la vista previa, **Color por →
+  Alto de capa**.
 - **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
   (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
   trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.

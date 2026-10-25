@@ -329,7 +329,7 @@ private:
     bool show_travels_ = false;
     ColorMode color_mode_ = ColorMode::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
-    float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0};
+    float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0}, height_range_[2] = {0, 0};
     PreviewBuffers preview_buffers_;
 
     // How the view is drawn, and the scene its rays are traced against.
@@ -684,6 +684,8 @@ bool App::init(std::string& error) {
         fxaa_ = options_.fxaa != 0;
     if (options_.moire >= 0)
         moire_ = options_.moire != 0;
+    if (options_.color >= 0)
+        color_mode_ = static_cast<ColorMode>(options_.color);
     device_ports_ = device::list_serial_ports();
     if (!options_.device.empty()) {
         device_port_ = options_.device;
@@ -1533,6 +1535,7 @@ void App::show_preview() {
     ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
+    height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     top_layer_ = int(result_->preview.layers.size()) - 1;
     bottom_layer_ = 0;
@@ -1755,6 +1758,11 @@ void App::settings_panel() {
     if (print_open && begin_rows("##print")) {
         changed |= row(T::LayerHeight, s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
         changed |= row(T::FirstLayerHeight, s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
+        changed |= row(T::DetailHeight, s.detail_height, 0.0, 1.0, "%.2f mm", 0.002f, tr(T::DetailHeightTip));
+        if (s.detail_height > 0.0) {
+            changed |= row(T::DetailTolerance, s.detail_tolerance, 0.001, 1.0, "%.3f mm", 0.001f, tr(T::DetailToleranceTip));
+            changed |= row(T::DetailMargin, s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
+        }
         changed |= row(T::Walls, s.wall_count, 0, 50);
         changed |= row(T::LineWidth, s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
         changed |= row(T::Seam, s.seam,
@@ -2164,8 +2172,8 @@ void App::preview_panels() {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByKind)).x + ImGui::GetFrameHeight() * 2.0f);
     int mode = int(color_mode_);
-    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth)};
-    if (ImGui::Combo("##colour_mode", &mode, modes, 3))
+    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth), tr(T::ByHeight)};
+    if (ImGui::Combo("##colour_mode", &mode, modes, 4))
         color_mode_ = static_cast<ColorMode>(mode);
     const float swatch = ImGui::GetTextLineHeight();
     if (color_mode_ == ColorMode::Kind) {
@@ -2199,9 +2207,10 @@ void App::preview_panels() {
                 stops[i], stops[i + 1], stops[i + 1], stops[i]);
         ImGui::Dummy(ImVec2(w, swatch));
         const bool speed = color_mode_ == ColorMode::Speed;
+        const float* range = speed ? feed_range_ : color_mode_ == ColorMode::Height ? height_range_ : width_range_;
         const char* unit = speed ? "%.0f mm/s" : "%.2f mm";
-        const std::string low = format(unit, double(speed ? feed_range_[0] : width_range_[0]));
-        const std::string high = format(unit, double(speed ? feed_range_[1] : width_range_[1]));
+        const std::string low = format(unit, double(range[0]));
+        const std::string high = format(unit, double(range[1]));
         const float left = ImGui::GetCursorPosX();
         ImGui::TextUnformatted(low.c_str());
         ImGui::SameLine(left + w - ImGui::CalcTextSize(high.c_str()).x);

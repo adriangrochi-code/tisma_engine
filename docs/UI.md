@@ -200,7 +200,8 @@ tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot 
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
-`--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
+`--view calibration` muestra su pestaña. `--color kind|speed|width|height` elige el color de la vista previa (por alto
+de capa: la altura por zona, `docs/LOCAL_LAYERS.md`). `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin
 multimuestreo, con y sin el filtro de moiré, y termina con 1 si donde el filtro actúa los píxeles vecinos no se
 parecen más entre sí (al menos un 15 % menos de diferencia). Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las

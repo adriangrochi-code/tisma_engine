@@ -295,6 +295,8 @@ void main() {
         base = ramp((a_feed - u_range.x) / max(u_range.y - u_range.x, 1e-6));
     else if (u_colour_mode == 2)
         base = ramp((w - u_range.x) / max(u_range.y - u_range.x, 1e-6));
+    else if (u_colour_mode == 3)
+        base = ramp((h - u_range.x) / max(u_range.y - u_range.x, 1e-6));
     else
         base = u_colours[kind];
     v_base = pow(base, vec3(2.2));
@@ -952,6 +954,7 @@ void Renderer::set_preview(const PreviewBuffers& p) {
     layer_travels_ = p.layer_travels;
     min_feed_ = p.min_feed, max_feed_ = p.max_feed;
     min_width_ = p.min_width, max_width_ = p.max_width;
+    min_height_ = p.min_height, max_height_ = p.max_height;
     ray_signature_.clear();
 }
 
@@ -1063,6 +1066,8 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         uniform(p, "u_moire", f.moire_filter ? 1 : 0);
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
+        else if (f.color_mode == ColorMode::Height)
+            uniform(p, "u_range", min_height_, max_height_);
         else
             uniform(p, "u_range", min_width_, max_width_);
         // The instances of the first layer drawn start the attribute arrays.

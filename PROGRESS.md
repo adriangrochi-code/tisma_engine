@@ -3066,3 +3066,21 @@ pirámides).
 
 **Sigue:** la etapa 3 (los ajustes en la interfaz y la vista previa con el color por alto de capa).
 
+## 2026-10-25 — altura de capa por zona: la interfaz (etapa 3)
+
+**Hecho:**
+- En la sección Impresión, debajo de la altura de la primera capa: **Alto del detalle**; cuando no es 0, **Escalón
+  aceptado** y **Margen del detalle**, cada uno con su ayuda.
+- En la vista previa, **Color por → Alto de capa**: la rampa de color va del alto más fino al más grueso de los
+  cordones (el mínimo y el máximo vienen de `;HEIGHT:`, que ahora cambia dentro de una capa). `--color` para las
+  capturas.
+- `PreviewBuffers` guarda el rango de altos; la prueba de la interfaz lo comprueba con una zona gruesa dentro de una
+  capa.
+
+**Visto:** la caja y la pirámide del ejemplo, con capas de 0,3 mm y detalle de 0,1 mm, pintadas por alto: las
+paredes rectas de la caja en rojo (0,3 mm), el tope de la caja y la pirámide en azul (0,1 mm), a la misma altura.
+
+**No probado:** los campos a mano, con el ratón (las capturas cargan los ajustes desde un JSON).
+
+**Sigue:** la etapa 4 (medir en el banco contra todo fino y todo grueso); la altura variable por Z de la ficha.
+

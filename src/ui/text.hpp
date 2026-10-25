@@ -42,6 +42,12 @@
     X(MinLayerTime, "Tiempo mínimo de capa", "Minimum layer time")                                                    \
     X(LayerHeight, "Altura de capa", "Layer height")                                                                  \
     X(FirstLayerHeight, "Altura de la primera capa", "First layer height")                                            \
+    X(DetailHeight, "Alto del detalle", "Detail height")                                                              \
+    X(DetailHeightTip, "Capas finas solo donde la pieza cambia (pendientes, detalles, topes): el resto va en capas de la altura de capa. 0: apagado. Ver docs/LOCAL_LAYERS.md.", "Fine layers only where the part changes (slopes, details, tops): the rest goes in layers of the layer height. 0: off. See docs/LOCAL_LAYERS.md.") \
+    X(DetailTolerance, "Escalón aceptado", "Accepted step")                                                           \
+    X(DetailToleranceTip, "Donde las capas finas difieren menos que esto, va grueso.", "Where the fine layers differ by less than this, it goes thick.") \
+    X(DetailMargin, "Margen del detalle", "Detail margin")                                                            \
+    X(DetailMarginTip, "Cuánto se agranda la zona fina alrededor del detalle. 0: tres anchos de línea.", "How far the fine zone grows around the detail. 0: three line widths.") \
     X(Walls, "Paredes", "Walls")                                                                                      \
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \
@@ -271,6 +277,7 @@
     X(ByKind, "Tipo de línea", "Line type")                                                                           \
     X(BySpeed, "Velocidad", "Speed")                                                                                  \
     X(ByWidth, "Ancho", "Width")                                                                                      \
+    X(ByHeight, "Alto de capa", "Layer height")                                                                       \
     X(Layer, "Capa", "Layer")                                                                                         \
     X(LayerOf, "Capa %d de %d  ·  Z %.2f mm", "Layer %d of %d  ·  Z %.2f mm")                                         \
     X(OnlyThisLayer, "Solo esta capa", "This layer only")                                                             \
