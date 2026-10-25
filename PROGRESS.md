@@ -3623,3 +3623,19 @@ en Z según un campo fijo en el espacio, igual en todas las capas (capas anidada
 **Sigue:** N3 (medir con el análisis), después N2 (paredes tejidas). El dueño pidió también buscar artículos sobre la
 mejor manera de laminar no planar.
 
+## 2026-10-25 — laminado no planar: los artículos
+
+**Pedido del dueño:** buscar artículos sobre la manera más óptima de laminar no planar.
+
+**Hecho:** `docs/NONPLANAR_SLICING.md`, con:
+- **en 3 ejes:** CurviSlicer (con las mismas capas, error de superficie de 57 mm³ contra 149 de la altura adaptativa),
+  techos curvos (Ahlers 2019), capas isotérmicas y no planar con ángulos optimizados;
+- **en 5 ejes:** Reinforced FDM (hasta 6,35 veces la carga), S³-Slicer y Neural Slicer;
+- **la propuesta para F7 y F9:** el motor ya corta capas como superficies de nivel de un campo, y todos estos métodos
+  dan ese campo. Se suma la idea propia de un término de resistencia con el análisis A1 en 3 ejes.
+
+**Sala limpia:** CurviSlicer y S³-Slicer publicaron código; se usan solo los artículos.
+
+**Pedido nuevo del dueño:** artículos sobre soportes no planares, Arc Overhang, y soportes más fáciles de sacar con
+mejor superficie debajo. Sigue con eso.
+
