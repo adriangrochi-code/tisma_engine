@@ -145,7 +145,7 @@ Settings parse_checked(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -576,6 +576,12 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be true or false");
         (n == "enabled" ? s.zaa : s.zaa_raise) = g.at(n).get<bool>();
     });
+    read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const double v = number(g, n, k);
+        if (v < 0.0 || v > 1.0)
+            fail(k, "must be from 0 to 1 mm");
+        s.gcode_resolution = v;
+    });
     read_group(root, "compensation", {"scale_x", "scale_y", "scale_z", "hole_offset"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
@@ -797,6 +803,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.chamber_temperature", num(s.chamber_temperature)},
         {"extrusion.abrasive", flag(s.abrasive)},
         {"extrusion.needs_enclosure", flag(s.needs_enclosure)},
+        {"gcode.resolution", num(s.gcode_resolution)},
         {"machine.max_flow", num(s.machine_max_flow)},
         {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
         {"machine.max_bed_temp", num(s.max_bed_temp)},
@@ -945,6 +952,7 @@ std::string settings_json(const Settings& s) {
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
+        {"gcode", {{"resolution", s.gcode_resolution}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

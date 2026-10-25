@@ -16,9 +16,9 @@ Cada ajuste de `docs/CONFIG.md` pertenece a un solo tipo de perfil (`setting_kin
 
 | Perfil | Grupos y ajustes | Por qué |
 |---|---|---|
-| **Impresora** | `machine` (menos `filament_diameter` y las variables de temperatura), `retraction` | Lo que es de la máquina: la cama, la boquilla, el dialecto, el G-code de inicio y fin, los límites de movimiento. La retracción depende sobre todo del extrusor (directo o Bowden) |
+| **Impresora** | `machine` (menos `filament_diameter` y las variables de temperatura), `retraction`, `gcode` | Lo que es de la máquina: la cama, la boquilla, el dialecto, el G-code de inicio y fin, los límites de movimiento. La retracción depende sobre todo del extrusor (directo o Bowden). La resolución del G-code, de cuántas líneas por segundo digiere el firmware |
 | **Filamento** | `machine.filament_diameter`, las variables con `temperature` en el nombre (`temperature`, `bed_temperature`, `first_layer_temperature`…), `cooling`, `extrusion`, `compensation` | Lo que es del material. La compensación va acá porque cada material se contrae distinto (`docs/CALIBRATION.md`, «Contracción por material») |
-| **Impresión** | `layers`, `slicing`, `walls`, `surfaces`, `infill`, `speed`, `adhesion`, `support`, `compute` | Cómo se lamina la pieza |
+| **Impresión** | `layers`, `slicing`, `walls`, `surfaces`, `infill`, `speed`, `adhesion`, `support`, `compute`, `zaa` | Cómo se lamina la pieza |
 | (ninguno) | `changes` | Los cambios por altura son de una torre de calibración: se guardan en el proyecto, no en un perfil |
 
 **Elegir un perfil** cambia solo sus ajustes (`with_profile`) y deja los demás como estaban. Las variables del G-code

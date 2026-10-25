@@ -134,7 +134,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
             return ProfileKind::Filament;
         return ProfileKind::Printer;
     }
-    if (group == "retraction")
+    if (group == "retraction" || group == "gcode")
         return ProfileKind::Printer;
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;

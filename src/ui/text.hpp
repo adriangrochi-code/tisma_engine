@@ -57,6 +57,8 @@
     X(Retraction, "Retracción", "Retraction")                                                                         \
     X(RetractSpeed, "Velocidad de retracción", "Retraction speed")                                                    \
     X(RetractLift, "Salto en Z", "Z hop")                                                                             \
+    X(GcodeResolution, "Resolución del G-code", "G-code resolution")                                                  \
+    X(GcodeResolutionTip, "Los puntos que mueven el camino menos que esto no se escriben: menos líneas para el firmware, la misma pieza. 0: se escriben todos.", "Points that move the path less than this are not written: fewer lines for the firmware, the same part. 0: every point is written.") \
     X(FanMin, "Ventilador normal", "Fan, normal layers")                                                              \
     X(FanMax, "Ventilador en capas lentas", "Fan, slowed layers")                                                     \
     X(MinLayerTime, "Tiempo mínimo de capa", "Minimum layer time")                                                    \

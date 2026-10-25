@@ -115,6 +115,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - El plan de Device y conexiones (P2), el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
   en el relleno (`docs/MULTIMATERIAL.md`), y el plan de la app de Android que sigue la impresión, con USB
   (`docs/MOBILE.md`).
+- **Resolución del G-code** (`gcode.resolution`, 0,0125 mm, de la ficha `gcode_extras.md`; en la interfaz, sección
+  Impresora): los puntos que mueven el camino menos que eso no se escriben, sin cambiar el ancho, la Z ni el material.
+  Las paredes repetían puntos casi iguales, el giroide escribía el triple de tramos y quedaban tramos de un micrón que
+  extruían. Un cilindro de 128 lados pasa de 41 859 a 6 140 extrusiones y de 1,25 MB a 0,19 MB; la esfera del banco
+  con giroide, de 269 mil a 73 mil (2,1 MB en vez de 7,7): menos líneas que el firmware tiene que leer y planear.
 
 ### Cambiado
 
@@ -157,6 +162,11 @@ negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_
 - **Paredes:** el diagrama de Voronoi propio podía dejar un nodo fuera de su bisectriz o fallar donde dos contornos se
   tocan en una esquina; las paredes se colgaban, se caían o salían en tramos de un micrón. Ahora el motor lo detecta y
   usa el diagrama de referencia para esa región.
+- **Paredes partidas en las esquinas cóncavas y rectas:** cada pared se cortaba en pedazos abiertos en cada esquina
+  cóncava (un agujero, una muesca, el ruido de una malla) y en cada punto en medio de un lado recto (los que deja el
+  corte de la malla con `slicing.simplify_tolerance` 0). Un lazo abierto no tiene costura: la costura alineada o
+  atrás no se aplicaba y cada pedazo empezaba donde caía. Un cilindro de 128 lados salía con 38 pedazos por capa;
+  ahora cada pared es un lazo cerrado.
 - **Rellenos de Arquímedes y octagrama:** ya no trazan una línea recta desde el centro del espiral hasta la pared.
 - **Análisis estructural:** una pieza sujeta solo en algunos ejes (apoyada en la cama y empujada de costado) se avisa
   al instante, en vez de horas de cálculo o un resultado sin sentido; una carga que cae sobre la sujeción también se

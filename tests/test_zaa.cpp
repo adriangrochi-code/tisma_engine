@@ -17,6 +17,7 @@
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace {
 
@@ -166,6 +167,7 @@ TEST_CASE("Z anti-aliasing: the spec's roofs, sliced to checked G-code", "[zaa]"
         const IndexedMesh m = roof(degrees);
         Settings on = base();
         on.zaa = true;
+        on.gcode_resolution = 0.0; // every sample of the surface, one move each
         const SlicedModel sliced = slice_model(m, on);
         CHECK(sliced.zaa_points > 0);
         std::ostringstream gcode;
@@ -346,4 +348,42 @@ TEST_CASE("Z anti-aliasing: a raise never reaches a thinner next layer's plane",
     for (const Extrusion& x : extrusions(gcode.str(), s.filament_diameter))
         if (std::abs(x.layer_z - 0.3) < 1e-9)
             CHECK(x.z <= 0.35 + 6e-4); // half of the next layer's 0.1 mm, not of its own 0.3
+}
+
+TEST_CASE("Z anti-aliasing with the G-code resolution: fewer moves, the same surface and material", "[zaa]") {
+    // Along a slope the nozzle's Z changes evenly, so most samples of the
+    // surface lie on the move between their neighbours and go; the ones that
+    // stay are where they were.
+    const IndexedMesh m = roof(10.0);
+    Settings fine = base();
+    fine.zaa = true;
+    fine.gcode_resolution = 0.0;
+    Settings coarse = fine;
+    coarse.gcode_resolution = 0.0125;
+    std::ostringstream a, b;
+    const SlicedModel sliced = slice_model(m, coarse);
+    write_gcode(a, slice_model(m, fine), fine);
+    write_gcode(b, sliced, coarse);
+    const GcodeCheck check = check_gcode(b.str(), gcode_limits(sliced, coarse));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    const std::vector<Extrusion> all = extrusions(a.str(), fine.filament_diameter);
+    const std::vector<Extrusion> few = extrusions(b.str(), coarse.filament_diameter);
+    CHECK(few.size() < all.size() * 2 / 3);
+    const auto volume = [](const std::vector<Extrusion>& xs) {
+        double v = 0.0;
+        for (const Extrusion& x : xs)
+            v += x.share * std::hypot(x.x - x.x0, x.y - x.y0) * x.height;
+        return v;
+    };
+    CHECK_THAT(volume(few), WithinRel(volume(all), 2e-3));
+    std::size_t lowered = 0;
+    for (const Extrusion& x : few) {
+        const double bottom = x.layer_z - x.height, s = surface_at(x.x, 10.0);
+        if (x.type != "External perimeter" || x.x < 90.0 || x.x > 110.0 || s <= bottom || s >= x.layer_z)
+            continue;
+        ++lowered;
+        CHECK_THAT(x.z, WithinAbs(std::max(s, x.layer_z - 0.75 * x.height), 6e-4));
+    }
+    CHECK(lowered > 10);
 }

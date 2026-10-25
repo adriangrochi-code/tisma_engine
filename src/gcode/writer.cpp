@@ -5,6 +5,7 @@
 #include "gcode/cooling.hpp"
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
+#include "gcode/resolution.hpp"
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
 
@@ -778,9 +779,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         auto speed = [&](double v) {
             return std::min(first ? std::min(v, s.first_layer_speed) : v, s.max_speed) * a.speed;
         };
-        auto lay = [&](const Toolpath& t, const char* type, double feed) {
-            if (t.points.empty())
+        auto lay = [&](const Toolpath& path, const char* type, double feed) {
+            if (path.points.empty())
                 return;
+            const Toolpath t = simplify_toolpath(path, s.gcode_resolution);
             g.travel(t.points.front().p, s.travel_speed, planner);
             g.type(type);
             g.nonplanar(t.wavy);

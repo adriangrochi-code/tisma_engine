@@ -186,6 +186,10 @@ struct Settings {
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
 
+    // gcode
+    // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
+    double gcode_resolution = 0.0125;
+
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;
 

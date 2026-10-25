@@ -196,6 +196,7 @@ add_library(tisma_core
   src/infill/connect.cpp
   src/infill/stress_density.cpp
   src/gcode/writer.cpp
+  src/gcode/resolution.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp
   src/gcode/preview.cpp

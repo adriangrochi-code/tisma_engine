@@ -216,6 +216,14 @@ de la pieza de prueba.
 Los avisos de capacidades (`nozzle_temperature`, `bed_temperature`, `chamber`, `enclosure`, `abrasive`) van con los
 demás avisos del G-code (`src/report/warnings.hpp`; en la interfaz, en la barra de estado); no frenan la exportación.
 
+### `gcode`
+
+De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (`docs/PROFILES.md`).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
+
 ### `changes` (lista)
 
 Cambios desde una altura, para las torres de calibración. A diferencia de los grupos, es una lista de objetos:

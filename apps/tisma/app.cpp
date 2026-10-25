@@ -2012,6 +2012,7 @@ void App::settings_panel() {
         changed |= row(T::Retraction, s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
         changed |= row(T::RetractSpeed, s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
+        changed |= row(T::GcodeResolution, s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f, tr(T::GcodeResolutionTip));
         ImGui::EndTable();
         ImGui::TextUnformatted(tr(T::StartGcode));
         changed |= ImGui::InputTextMultiline("##start", &s.start_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 7));

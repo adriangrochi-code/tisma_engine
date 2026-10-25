@@ -3847,3 +3847,41 @@ con el código anterior.
 El G-code sale idéntico byte a byte. La elección de islas con cajas también da el mismo resultado; no era lo lento.
 
 **Sigue:** lo que quedó en `PLAN.md`, con la resolución del G-code primero. Después, la release 0.8.0-alpha.1.
+
+## 2026-10-25 — resolución del G-code y paredes partidas
+
+**Hecho:**
+- **Resolución del G-code** (`gcode.resolution`, 0,0125 mm, de la ficha `gcode_extras.md`; `src/gcode/resolution.*`,
+  fila nueva en la sección Impresora): cada movimiento llega tan lejos por el camino como lo permite la tolerancia,
+  sin cambiar el ancho, la Z ni el cordón de abajo más de 0,0005 mm. La costura queda. Va en el perfil de impresora.
+- **Paredes partidas** (encontrado al medir lo anterior): en cada esquina cóncava y en cada punto en medio de un lado
+  recto, la pared se cortaba en pedazos abiertos, porque los dos radios de esa esquina en un nodo leían puntos de
+  apoyo que difieren en fracciones de nanómetro. Un lazo abierto no tiene costura, así que la costura alineada no se
+  aplicaba. `extract_toolpaths` junta ahora de a pares los radios de un nodo con un solo trapecio cada uno y apoyos a
+  menos de 1e-4 mm. Un polígono de 128 lados con muescas de 1 µm salía en 205 pedazos por pared, y un rombo con cuatro muescas de
+  0,5 mm en 8; ahora, en uno.
+- Pruebas nuevas: `tests/test_resolution.cpp` (4) y una de paredes con esquinas cóncavas y rectas, que falla con el
+  código anterior; la de Z anti-aliasing con la resolución puesta.
+- El test de dispositivo que falló en la CI de Windows (una pausa al final de un trabajo): la impresora simulada
+  tarda 2 ms por movimiento, como en la otra prueba de pausa.
+
+**Medido** (Release, 4 núcleos; slice entero con escritura):
+
+| Modelo | Extrusiones antes | Ahora | Archivo antes | Ahora | Tiempo antes | Ahora |
+|---|---|---|---|---|---|---|
+| Cilindro de 128 lados (C17, `simplify_tolerance` 0) | 41 859 | 6 140 | 1,25 MB | 0,19 MB | 0,15–0,19 s | 0,12–0,13 s |
+| Esfera de 50 mm, giroide | 269 112 | 73 153 | 7,7 MB | 2,1 MB | 0,70–0,77 s | 0,60–0,62 s |
+| Esfera de 50 mm, por defecto | 292 907 | 88 907 | 8,4 MB | 2,6 MB | 0,72–0,76 s | 0,63–0,66 s |
+| 12 islas | 18 701 | 13 301 | 0,52 MB | 0,41 MB | 0,07–0,09 s | 0,07–0,08 s |
+
+- El perímetro externo del cilindro: 64 movimientos por vuelta (la ficha da 65 para Tisma Slicer), en un solo lazo;
+  antes 556 en 38 pedazos. Tramos de menos de 0,01 mm: de 3229 a ninguno.
+- El largo extruido cambia menos de 0,02 % (la cuerda en vez del arco).
+- Partir en el punto más alejado (Douglas y Peucker) por tramos de 256 o 1024 puntos dejaba 12 a 27 % más
+  movimientos que el alcance más lejano; quedó este.
+- El tiempo estimado del cilindro sube de 4 min 8 s a 4 min 14 s: con lazos cerrados, cada pared empieza en su
+  costura y hay más viajes con retracción.
+
+**No medido:** una impresión real con la resolución; el efecto en placas con poca memoria de planificación.
+
+**Sigue:** la release 0.8.0-alpha.1 con estos arreglos, después lo que queda de la revisión en `PLAN.md`.

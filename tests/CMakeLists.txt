@@ -36,6 +36,7 @@ add_executable(tisma_tests
   test_surfaces.cpp
   test_infill.cpp
   test_gcode.cpp
+  test_resolution.cpp
   test_order.cpp
   test_travel.cpp
   test_cooling.cpp

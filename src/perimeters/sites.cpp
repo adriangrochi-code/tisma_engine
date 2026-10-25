@@ -223,15 +223,59 @@ std::vector<Toolpath> extract_toolpaths(const MedialGraph& g, const std::vector<
     std::sort(rib_ends.begin(), rib_ends.end(), [](const RibEnd& l, const RibEnd& r) {
         return std::tie(l.node, l.sx, l.sy, l.slot) < std::tie(r.node, r.sx, r.sy, r.slot);
     });
+    // rib_of[i]: the first rib end of the rib that rib end i belongs to.
+    std::vector<std::size_t> rib_of(rib_ends.size());
+    for (std::size_t i = 0; i < rib_ends.size(); ++i) {
+        const RibEnd& r = rib_ends[i];
+        const bool same = i > 0 && rib_ends[i - 1].node == r.node && rib_ends[i - 1].sx == r.sx && rib_ends[i - 1].sy == r.sy;
+        rib_of[i] = same ? rib_of[i - 1] : i;
+    }
+    // A rib with one end has no trapezoid on its other side. Where two such
+    // ribs at one node reach almost the same point, they are one rib whose
+    // supports were computed from different sites: a corner's own cell and
+    // the segment that ends there, with the node off by a fraction of a
+    // nanometre. Kept apart, every wall broke into open pieces at concave and
+    // straight corners (the review of 2026-10-25). Closest pairs first.
+    constexpr double kSameRib = 1e-4; // mm
+    for (std::size_t first = 0; first < rib_ends.size();) {
+        std::size_t last = first;
+        while (last < rib_ends.size() && rib_ends[last].node == rib_ends[first].node)
+            ++last;
+        std::vector<std::size_t> alone;
+        for (std::size_t i = first; i < last; ++i)
+            if (rib_of[i] == i && (i + 1 == last || rib_of[i + 1] != i))
+                alone.push_back(i);
+        struct Pair {
+            double d;
+            std::size_t a, b; // into alone, a < b
+        };
+        std::vector<Pair> pairs;
+        for (std::size_t a = 0; a < alone.size(); ++a)
+            for (std::size_t b = a + 1; b < alone.size(); ++b) {
+                const RibEnd& ra = rib_ends[alone[a]];
+                const RibEnd& rb = rib_ends[alone[b]];
+                const double d = std::hypot(ra.sx - rb.sx, ra.sy - rb.sy);
+                if (d <= kSameRib)
+                    pairs.push_back({d, a, b});
+            }
+        std::sort(pairs.begin(), pairs.end(),
+                  [](const Pair& l, const Pair& r) { return std::tie(l.d, l.a, l.b) < std::tie(r.d, r.a, r.b); });
+        std::vector<bool> taken(alone.size(), false);
+        for (const Pair& p : pairs)
+            if (!taken[p.a] && !taken[p.b]) {
+                taken[p.a] = taken[p.b] = true;
+                rib_of[alone[p.b]] = alone[p.a];
+            }
+        first = last;
+    }
     std::vector<std::uint32_t> rib_base(4 * edge_count); // by 4 * edge + 2 * end + side
     std::uint32_t slots = 0;
     for (std::size_t i = 0; i < rib_ends.size(); ++i) {
         const RibEnd& r = rib_ends[i];
-        const bool same = i > 0 && rib_ends[i - 1].node == r.node && rib_ends[i - 1].sx == r.sx && rib_ends[i - 1].sy == r.sy;
-        if (!same)
+        if (rib_of[i] == i)
             rib_base[r.slot] = slots, slots += nodes[r.node].reach;
         else
-            rib_base[r.slot] = rib_base[rib_ends[i - 1].slot];
+            rib_base[r.slot] = rib_base[rib_ends[rib_of[i]].slot];
     }
     const std::uint32_t node_base = slots;
     slots += static_cast<std::uint32_t>(g.nodes.size());

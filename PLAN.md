@@ -545,7 +545,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
   - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
-    - [ ] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
+    - [x] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
       duplican vértices, el gyroid escribe el triple de tramos y quedan tramos de un micrón que extruyen
     - [ ] el gyroid por franjas, sin la grilla entera en memoria; el orden monótono sin costo cuadrático
     - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
