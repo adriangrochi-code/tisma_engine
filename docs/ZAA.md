@@ -78,8 +78,16 @@ fábrica **Máxima calidad** lo trae prendido con subida, junto con la altura po
 
    **Costo:** en la cúpula con subida, un 10 % más de arranques de extrusión y 0,3 min. Solo bajando, nada.
 
+   **Probado y descartado** (2026-10-25): partir los pedazos donde su orden de altura con un vecino se da vuelta, como
+   los subcaminos del artículo.
+   - En el techo, la interferencia baja apenas del 1,34 al 1,27 % y los arranques de extrusión suben un 65 %.
+   - En la cúpula con subida, un 4,6 % más de arranques sin mejora.
+   - Más costuras no compensan lo poco que se gana.
+
    **Queda:**
-   - partir los pedazos donde su orden con un vecino se da vuelta (el resto del techo);
+   - **el 1 % del techo:** son líneas de la superficie de arriba cruzadas a la pendiente. Su altura cambia a lo largo
+     de la línea, así que con cada vecina hay un tramo más alto y otro más bajo. Lo más prometedor parece orientar
+     esas líneas según las curvas de nivel, para que cada una quede a una altura casi constante;
    - buscar el orden con menos costuras (Sección 4.2).
 
 ## El chequeo y la vista previa

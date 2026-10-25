@@ -3390,3 +3390,17 @@ guiado y el orden por grafo):
 
 **Después del arreglo:** la semilla, 700 corridas, 0 fallas.
 
+## 2026-10-25 — bloque nocturno: partir donde el orden se da vuelta (descartado)
+
+**Probado:** partir cada pedazo de ZAA donde su orden de altura con un vecino se da vuelta (los subcaminos de Song
+et al. 2017, Sección 4.1) antes del grafo de alturas.
+
+**Medido:**
+- techo a 8° con subida: interferencia del 1,34 al 1,27 %, con un 65 % más de arranques de extrusión;
+- cúpula con subida: un 4,6 % más de arranques, y la interferencia de 0,8 a 5,3 mm.
+
+**Decidido:** no se adopta; el código vuelve al orden de c21e3a9. Lo que queda en el techo son líneas de arriba
+cruzadas a la pendiente. Lo más prometedor parece orientarlas según las curvas de nivel (`docs/ZAA.md`).
+
+**Sigue:** lo que no espera las fichas del PR #15.
+
