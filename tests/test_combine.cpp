@@ -1,5 +1,6 @@
 #include "infill/combine.hpp"
 #include "infill/rectilinear.hpp"
+#include "infill/stress_density.hpp"
 
 #include "config/analysis_case.hpp"
 #include "fea/analysis.hpp"
@@ -286,4 +287,55 @@ TEST_CASE("the as-printed analysis sees the infill printed in thick layers", "[c
     zones.detail_height = 0.1;
     const AnalysisEstimate z = estimate_analysis(m, zones, c);
     CHECK_THAT(double(z.printed_voxels) / double(z.part_voxels), WithinAbs(double(a.printed_voxels) / double(a.part_voxels), 0.08));
+}
+
+TEST_CASE("stress-guided infill: denser where the part works hardest", "[combine]") {
+    // A bar held at one end and pushed down at the other: the bending
+    // moment, and the stress, are highest at the held end.
+    IndexedMesh bar = cube(10.0f);
+    for (Vec3f& v : bar.vertices)
+        v.x *= 6.0f;
+    Settings s = base();
+    s.infill_density = 10.0;
+    s.infill_stress_density = 50.0;
+    const AnalysisCase c = parse_analysis_case(
+        R"({"model": "solid", "quality": "normal", "resolution_check": false,
+            "fixtures": [{"face": "x_min"}], "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
+    const StressField field = stress_field(run_analysis(bar, s, c));
+    REQUIRE_FALSE(field.empty());
+    // At the held end's top and bottom (the most stretched and squeezed), loaded; at the free end, not.
+    const Polygons near = loaded_region(field, 9.5, 0.6);
+    REQUIRE_FALSE(near.empty());
+    double x_min = 1e9, x_max = -1e9;
+    for (const Polygon& p : near)
+        for (const auto& q : p)
+            x_min = std::min(x_min, to_mm(q.x)), x_max = std::max(x_max, to_mm(q.x));
+    CHECK(x_min < 5.0);
+    CHECK(x_max < 30.0);
+    CHECK(loaded_region(field, 50.0, 0.1).empty()); // above the part
+
+    const std::vector<DensityBand> bands = density_bands(0.1, 0.5);
+    REQUIRE(bands.size() == 3);
+    CHECK_THAT(bands.back().density, WithinAbs(0.5, 1e-12));
+    CHECK(density_bands(0.3, 0.2).empty()); // not above the plain density: off
+
+    // Sliced: more infill per area in the held third than in the free third.
+    const SlicedModel guided = slice_model(bar, s, nullptr, &field);
+    const SlicedModel even = slice_model(bar, s);
+    auto sparse_length = [](const SlicedModel& m, double from, double to) {
+        double sum = 0.0;
+        for (const LayerFill& f : m.fills)
+            for (const Toolpath& t : f.sparse)
+                for (std::size_t i = 1; i < t.points.size(); ++i) {
+                    const double mx = 0.5 * (t.points[i].p.x + t.points[i - 1].p.x);
+                    if (mx >= from && mx < to)
+                        sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+                }
+        return sum;
+    };
+    CHECK(sparse_length(guided, 0, 20) > 1.5 * sparse_length(guided, 40, 60));
+    CHECK_THAT(sparse_length(even, 0, 20) / sparse_length(even, 40, 60), WithinAbs(1.0, 0.15));
+    std::ostringstream g;
+    write_gcode(g, guided, s);
+    CHECK(check_gcode(g.str(), gcode_limits(guided, s)).ok());
 }

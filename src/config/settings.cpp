@@ -180,7 +180,7 @@ Settings parse_settings(std::string_view text) {
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
-                                "combine_max_height", "dense_under_top", "dense_density"},
+                                "combine_max_height", "dense_under_top", "dense_density", "stress_density"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "combine_auto" || n == "dense_under_top") {
             if (!g.at(n).is_boolean())
@@ -193,6 +193,13 @@ Settings parse_settings(std::string_view text) {
             if (!(v > 0.0) || v > 100.0)
                 fail(k, "must be from 0 to 100");
             s.infill_dense_density = v;
+            return;
+        }
+        if (n == "stress_density") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 100.0)
+                fail(k, "must be from 0 to 100");
+            s.infill_stress_density = v;
             return;
         }
         if (n == "combine_max_height") {
@@ -610,6 +617,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
         {"infill.dense_density", num(s.infill_dense_density)},
+        {"infill.stress_density", num(s.infill_stress_density)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
@@ -744,6 +752,7 @@ std::string settings_json(const Settings& s) {
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},
           {"dense_density", s.infill_dense_density},
+          {"stress_density", s.infill_stress_density},
           {"combine_max_height", s.infill_combine_max_height.percent
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},

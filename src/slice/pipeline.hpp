@@ -9,6 +9,7 @@
 #include "slice/local_layers.hpp"
 #include "slice/variable_layers.hpp"
 #include "slice/zaa.hpp"
+#include "infill/stress_density.hpp"
 
 #include <vector>
 
@@ -50,6 +51,9 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
 // and sparse parts of what the walls leave, and their infill toolpaths (all
 // layers in parallel). The mesh is compensated first, and the holes of every
 // region offset by compensation.hole_offset. Uses the GPU when gpu is not null.
-SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr);
+// With a stress field (infill.stress_density, docs/INFILL.md), the sparse
+// infill goes denser where the part works hardest.
+SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
+                        const StressField* stress = nullptr);
 
 } // namespace tisma

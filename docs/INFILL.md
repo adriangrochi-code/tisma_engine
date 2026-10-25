@@ -158,3 +158,64 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
 
 **No medido:** probetas impresas. El análisis es lineal y elástico, y no ve la adhesión real entre capas ni entre
 cordones.
+
+## Relleno guiado por tensiones (etapa 4)
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `infill.stress_density` | 0 (apagado) | La densidad máxima, en %, donde la pieza trabaja más bajo el caso de carga |
+
+Necesita el caso de carga, el mismo de `tisma-engine analyze` (`docs/ANALYSIS.md`):
+
+```sh
+tisma-engine slice pieza.stl --config ajustes.json --case caso.json -o pieza.gcode
+```
+
+**Cómo:**
+1. Se analiza la pieza maciza bajo el caso (modelo `solid`, a la resolución del caso, sin la comprobación de
+   resolución). La pieza maciza sirve porque el relleno no cambia por dónde va la carga.
+2. Cada vóxel recibe su carga: 1 / coeficiente de seguridad, sobre la del vóxel más cargado (de 0 a 1).
+3. En cada capa, a la altura de su plano de corte, el relleno disperso se parte en tres bandas, de la más cargada a
+   la menos:
+   - carga ≥ 0,6: la densidad máxima;
+   - carga ≥ 0,35: dos tercios del camino entre la densidad común y la máxima;
+   - carga ≥ 0,15: un tercio del camino.
+
+   Cada banda es la unión de los cuadrados de sus vóxeles, cerrada medio vóxel, menos las piezas más angostas que un
+   cordón. Se rellena con el mismo patrón y la misma dirección. El resto queda a `infill.density`.
+4. `tisma-engine analyze` con `infill.stress_density` usa el mismo relleno guiado en el modelo «como impresa».
+
+**Por qué:** el material va donde trabaja. Se puede bajar la densidad general y reforzar solo los caminos de la
+carga: más rigidez por gramo y por minuto.
+
+**Medido** (2026-10-25): el mismo banco de arriba, con el caso de cada pieza como caso de carga.
+
+| Pieza | Relleno | Tiempo | Material | Desplazamiento | Rigidez/cm³ | Seguridad |
+|---|---|---|---|---|---|---|
+| cubo | cúbico 20 % | 18,0 min | 3,29 cm³ | 0,148 mm | 2,05 | 2,28 |
+| cubo | cúbico 10 → 50 % guiado | 21,1 min | 4,19 cm³ | 0,073 mm | 3,28 | 3,69 |
+| cubo | cúbico 6 → 40 % guiado | 19,7 min | 3,75 cm³ | 0,094 mm | 2,84 | 3,41 |
+| cubo | grilla 10 → 50 % guiada | 21,5 min | 4,19 cm³ | **0,036 mm** | **6,65** | 3,12 |
+| barra | cúbico 20 % | 16,2 min | 2,87 cm³ | 1,344 mm | 0,259 | 1,84 |
+| barra | cúbico 10 → 50 % guiado | 15,8 min | 2,79 cm³ | **1,303 mm** | 0,275 | **1,92** |
+| barra | cúbico 6 → 40 % guiado | **14,7 min** | **2,56 cm³** | 1,353 mm | **0,289** | 1,80 |
+| barra | grilla 10 → 50 % guiada | 16,4 min | 2,78 cm³ | 1,382 mm | 0,261 | 1,84 |
+
+- **En el cubo comprimido** casi todo trabaja, así que el relleno sube en casi todas partes: más material, pero mucha
+  más rigidez por material. La grilla guiada da la más alta del banco, 1,26 veces la grilla uniforme y 4,2 veces el
+  rectilíneo.
+- **En la barra** la carga se concentra junto al empotramiento.
+  - El cúbico guiado del 6 al 40 % da la misma rigidez que el uniforme al 20 % con un 11 % menos de material y un 9 %
+    menos de tiempo.
+  - El del 10 al 50 % es más rígido y más seguro, y además más rápido.
+
+**Lo que falta:**
+- en la interfaz, pasar el caso de la pestaña Análisis al laminado;
+- iterar: volver a analizar con el relleno guiado y ajustar.
+
+**Prueba** (`tests/test_combine.cpp`): una barra de 60 × 10 × 10 empotrada en un extremo y cargada en el otro.
+- La banda más cargada está junto al empotramiento: arriba, a menos de 5 mm de él y nunca más allá de 30 mm.
+- Sobre la pieza no hay banda.
+- Lo laminado lleva más de 1,5 veces el relleno por área en el tercio empotrado que en el libre. Sin tensiones, 1
+  ± 0,15.
+- El G-code pasa el chequeo.

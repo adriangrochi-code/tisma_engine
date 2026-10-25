@@ -190,6 +190,7 @@ add_library(tisma_core
   src/infill/gyroid.cpp
   src/infill/combine.cpp
   src/infill/connect.cpp
+  src/infill/stress_density.cpp
   src/gcode/writer.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp

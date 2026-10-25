@@ -85,6 +85,9 @@ struct Settings {
     // Denser sparse infill right under the top surfaces (docs/INFILL.md).
     bool infill_dense_under_top = false;
     double infill_dense_density = 40.0; // percent
+    // Stress-guided infill (docs/INFILL.md): up to this density where the
+    // part works hardest under the load case given to slice; 0: off.
+    double infill_stress_density = 0.0; // percent
     GpuMode gpu = GpuMode::Auto;
     // Z anti-aliasing (docs/ZAA.md, docs/spec/features/z_antialiasing.md).
     bool zaa = false;

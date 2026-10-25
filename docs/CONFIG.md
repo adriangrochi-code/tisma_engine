@@ -78,6 +78,7 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `combine_max_height` | número o texto | `"100%"` | mm (0 a 10), o `"N%"` de la boquilla | Alto máximo de la capa de relleno combinada; nunca pasa `machine.nozzle_diameter` |
 | `dense_under_top` | booleano | false | | La capa de relleno disperso justo debajo de una superficie de arriba va a `dense_density`, solo bajo esa superficie (`docs/INFILL.md`): permite un relleno general más liviano sin que el techo se hunda |
 | `dense_density` | número | 40 | 0 a 100 | Densidad de esa capa, en %, con el mismo patrón y la misma dirección |
+| `stress_density` | número | 0 | 0 a 100 | Relleno guiado por tensiones (`docs/INFILL.md`): con un caso de carga (`slice --case caso.json`), el relleno sube por bandas hasta esta densidad donde la pieza trabaja más. 0: apagado |
 
 ### `machine`
 

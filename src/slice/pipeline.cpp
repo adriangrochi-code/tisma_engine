@@ -34,7 +34,8 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
     return out;
 }
 
-SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu) {
+SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
+                        const StressField* stress) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
@@ -97,6 +98,28 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
                                            settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // Stress-guided infill (docs/INFILL.md): bands of each layer's sparse
+    // infill where the part works hardest, each at its density.
+    const std::vector<DensityBand> bands =
+        stress && !stress->empty() && settings.infill_density > 0.0
+            ? density_bands(settings.infill_density / 100.0, settings.infill_stress_density / 100.0)
+            : std::vector<DensityBand>{};
+    std::vector<std::vector<Polygons>> banded(bands.empty() ? 0 : out.layers.size());
+    if (!bands.empty())
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            Polygons left = out.surfaces[l].sparse;
+            banded[l].resize(bands.size());
+            for (std::size_t b = bands.size(); b-- > 0 && !left.empty();) {
+                Polygons r = Clipper2Lib::Intersect(loaded_region(*stress, out.layers[l].slice_z(), bands[b].level), left,
+                                                    Clipper2Lib::FillRule::NonZero);
+                r = offset(offset(r, -settings.wall_width), settings.wall_width);
+                if (r.empty())
+                    continue;
+                left = Clipper2Lib::Difference(left, r, Clipper2Lib::FillRule::NonZero);
+                banded[l][b] = std::move(r);
+            }
+            out.surfaces[l].sparse = std::move(left);
+        });
     // Dense infill under the top surfaces (docs/INFILL.md, dense_infill.md):
     // the sparse infill right under a top skin, denser, so the skin does not
     // sag on a light infill.
@@ -157,6 +180,16 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {
+                              if (banded[l][b].empty())
+                                  continue;
+                              FillParams denser = fill;
+                              denser.density = bands[b].density;
+                              LayerSurfaces only;
+                              only.sparse = banded[l][b];
+                              for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
+                                  out.fills[l].sparse.push_back(std::move(t));
+                          }
                           if (!dense_region[l].empty()) {
                               // Same pattern and direction, closer lines.
                               FillParams dense = fill;

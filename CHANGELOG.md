@@ -44,6 +44,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
   En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
   máxima**.
+- **Relleno guiado por tensiones** (`docs/INFILL.md`, etapa 4): con `infill.stress_density` y un caso de carga
+  (`tisma-engine slice … --case caso.json`), el motor analiza la pieza bajo esa carga y sube el relleno por bandas
+  donde trabaja más, hasta esa densidad. El resto queda liviano. `analyze` usa el mismo relleno.
 - **Relleno denso bajo el techo y patrones de triángulos y cúbico** (`docs/INFILL.md`, fichas `dense_infill.md` e
   `infill_patterns.md`):
   - con `infill.dense_under_top`, la capa de relleno justo debajo de una superficie de arriba va a

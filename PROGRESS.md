@@ -3307,3 +3307,25 @@ cubo comprimido con 500 N y una barra en voladizo con 20 N.
 3. el tiempo de impresión más preciso (ficha `print_time.md`, en el mismo PR);
 4. el panel por niveles (ficha `settings_levels.md`).
 
+## 2026-10-25 — relleno guiado por tensiones (etapa 4)
+
+**Hecho** (`docs/INFILL.md`):
+- `infill.stress_density` y `tisma-engine slice … --case caso.json`:
+  - el motor analiza la pieza maciza bajo el caso;
+  - la carga de cada vóxel es 1 / coeficiente de seguridad, normalizada;
+  - el relleno de cada capa sube por tres bandas (cargas de 0,15, 0,35 y 0,6) hasta esa densidad;
+  - `src/infill/stress_density.*`: el campo, las regiones por corridas de vóxeles y las bandas.
+- `slice_model` y `run_analysis` aceptan el campo. `analyze` usa el mismo relleno guiado en «como impresa».
+- **Prueba:** en una barra en voladizo, la banda más cargada está junto al empotramiento, y hay más de 1,5 veces el
+  relleno por área en el tercio empotrado que en el libre. Sin tensiones, igual.
+
+**Medido** (análisis «como impresa», `docs/INFILL.md`):
+- **Cubo comprimido:** el cúbico guiado del 10 al 50 % es un 60 % más rígido por material que el uniforme al 20 %; la
+  grilla guiada da 6,65, la más alta del banco.
+- **Barra en voladizo:** el cúbico guiado del 6 al 40 % iguala la rigidez del uniforme al 20 % con un 11 % menos de
+  material y un 9 % menos de tiempo; el del 10 al 50 % es más rígido, más seguro y más rápido.
+
+**Falta:**
+- la interfaz: pasar el caso de la pestaña Análisis al laminado;
+- iterar analizar-reforzar.
+
