@@ -208,8 +208,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Pantalla, exposición, capas iniciales, movimientos, GOO | `resin.md` | ✔ |
-| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar) |
-| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` | ◐ faltan absoluta, gamma y Z → `resin.md` (actualizar) |
+| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar): solo para impresoras con tanque que se inclina; el formato GOO no lo guarda |
+| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` (reglas 20 a 22) | ◐ la absoluta no cambió nada desde la línea de comandos; falta medirla desde la interfaz |
 | Formatos de salida además de GOO, y su precisión | `resin.md` | ◐ → `formats.md` |
 | Soportes, base y vaciado | `resin_supports.md` | ◐ faltan tipo de árbol, solo forzados, y las opciones finas de cabeza, pilar, uniones y base → `resin_supports.md` (actualizar) |
 | Costo del frasco, volumen, peso, densidad: costo de la impresión | `gcode_extras.md` | ✔ |
