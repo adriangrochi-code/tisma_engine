@@ -10,6 +10,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.8.0-alpha.1] - 2026-10-25
+
+Tercera versión publicada. Trae el catálogo de 144 impresoras y 108 filamentos con sus capacidades, la altura de
+capa variable por Z y por zona, el Z anti-aliasing, catorce patrones de relleno nuevos (entre ellos el cúbico
+adaptativo y el rayo), el relleno guiado por tensiones y el ondulado, la pestaña Impresora para imprimir por USB (el
+comienzo de P2), la tercera tanda de calibraciones y la resolución del G-code. Corrige lo que encontró la revisión profunda de
+errores a pedido del dueño: la conexión con la impresora, G-code peligroso, ajustes imposibles, archivos dañinos,
+paredes partidas o colgadas, y el rendimiento con muchas islas. Sigue siendo una alfa: los formatos de ajustes,
+perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y cada cambio se anota acá.
+
 ### Agregado
 
 - **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): 144 impresoras de 21 fabricantes y 108 filamentos de
@@ -435,6 +445,7 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...HEAD
+[0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
 [0.6.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.6.0-alpha.1
