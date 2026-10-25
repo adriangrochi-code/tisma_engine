@@ -3496,3 +3496,33 @@ sólidas con una capa y mínimos de 0,6 y 1 mm).
 
 **Sigue:** línea, panal, curvas y concéntrico; los patrones de las superficies.
 
+## 2026-10-25 — mantenimiento
+
+**Revisado:**
+- fuzz de release: 2000 corridas con cuatro semillas nuevas (1792909701–704), sin fallas;
+- fuzz con ASan y UBSan: 150 corridas (semilla 1792909801);
+- lo nuevo de la noche (cúbico adaptativo, de soporte, rayo, estrellas, capa sólida cada N) con entradas grandes:
+  densidades altas en un cubo de 100 mm.
+
+**Encontrado:** el rayo al 100 % en un cubo de 100 mm tardaba 63 s (al 50 %, 7,8 s).
+- El rayo mismo, 1,6 s: cada punto miraba todas las ramas y las paredes.
+- El escritor, 19,6 s: el orden por el comienzo más cercano miraba todos los recorridos de la capa para elegir cada
+  uno, y bajo el techo hay miles de tramos cortos.
+
+**Arreglado:**
+- `order_paths` busca el comienzo más cercano en una grilla de extremos (más de 64 recorridos y costuras que no
+  siguen al cursor), con el mismo resultado: entre iguales, el primer recorrido y su frente. El G-code de la esfera, la
+  cúpula y los cubos del banco sale idéntico byte a byte (sin los comentarios).
+- El rayo busca ramas y paredes en grillas. Con la grilla, las ramas igual de cerca se elegían en otro orden y salían
+  cadenas largas a lo largo de las paredes que no se retiraban (la prueba de la caja lo detectó: 202 mm en la capa 0);
+  ahora gana la rama más vieja, como antes, y el G-code del cubo al 20 % sale idéntico.
+
+**Prueba nueva** (`tests/test_order.cpp`): 420 recorridos con los extremos en una grilla de 1 mm (muchos empates) se
+ordenan igual por la grilla que mirando todos; con el desempate al revés, la prueba falla.
+
+**Medido** (cubo de 100 mm, rayo): al 100 %, 63 s → 2,1 s (laminado 1,4 s, escritura 0,7 s); al 20 %, 0,53 → 0,39 s.
+La esfera de 200 mm sigue igual (escritura 0,5 s): ahí el orden no pesaba.
+
+**Recibido del equipo de fichas** (resultados de caja negra, sin código): el cúbico de soporte de Tisma Slicer se
+mide en P6c y P6d de la ficha, en el PR #15. Se ajusta cuando esté en `main`.
+

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <optional>
 
 namespace tisma {
 namespace {
@@ -31,6 +32,90 @@ std::uint64_t mix(std::uint64_t z) {
     z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
     return z ^ (z >> 31);
 }
+
+
+// Below this many paths, looking at every one is as quick.
+constexpr std::size_t kFiledPaths = 64;
+
+// Where each path may start (a loop at its seam, an open path at either end),
+// filed in a grid of square cells with about one end each, so that the
+// nearest start is found without looking at every path: a 100 mm cube with
+// lightning infill at 100 % has layers of thousands of short paths, and
+// looking at every one took 20 of the 23 s to write it.
+class EndGrid {
+public:
+    EndGrid(const std::vector<Toolpath>& paths, const std::vector<std::size_t>& seams) {
+        double xmin = std::numeric_limits<double>::max(), ymin = xmin;
+        double xmax = std::numeric_limits<double>::lowest(), ymax = xmax;
+        for (std::size_t i = 0; i < paths.size(); ++i) {
+            const Toolpath& t = paths[i];
+            if (t.points.empty())
+                continue;
+            if (t.closed) {
+                ends_.push_back({t.points[seams[i]].p, i, false});
+            } else {
+                ends_.push_back({t.points.front().p, i, false});
+                ends_.push_back({t.points.back().p, i, true});
+            }
+        }
+        for (const End& e : ends_) {
+            xmin = std::min(xmin, e.p.x), xmax = std::max(xmax, e.p.x);
+            ymin = std::min(ymin, e.p.y), ymax = std::max(ymax, e.p.y);
+        }
+        if (ends_.empty())
+            return;
+        const double w = xmax - xmin, h = ymax - ymin;
+        cell_ = std::max({std::sqrt(w * h / double(ends_.size())), std::max(w, h) / 1024.0, 1e-3});
+        x0_ = xmin;
+        y0_ = ymin;
+        nx_ = int(w / cell_) + 1;
+        ny_ = int(h / cell_) + 1;
+        cells_.resize(std::size_t(nx_) * std::size_t(ny_));
+        for (std::size_t e = 0; e < ends_.size(); ++e)
+            cells_[std::size_t(row(ends_[e].p.y)) * std::size_t(nx_) + std::size_t(column(ends_[e].p.x))].push_back(e);
+    }
+
+    // Offers every end not yet done, ring by ring from the cursor's cell, to
+    // consider(path, back, distance), until the nearest one so far is nearer
+    // than the next ring can be: an end filed in ring r + 1 lies at least r
+    // cells away (ties at exactly that are still offered).
+    template <class Consider>
+    void nearest(const Point2d& cursor, const std::vector<bool>& done, Consider consider, const double& found) {
+        if (cells_.empty())
+            return;
+        const int ci = column(cursor.x), cj = row(cursor.y);
+        for (int r = 0; r <= std::max(nx_, ny_); ++r) {
+            for (int j = std::max(0, cj - r); j <= std::min(ny_ - 1, cj + r); ++j) {
+                const int step = r == 0 || j == cj - r || j == cj + r ? 1 : 2 * r;
+                for (int i = ci - r; i <= ci + r; i += step) {
+                    if (i < 0 || i >= nx_)
+                        continue;
+                    std::vector<std::size_t>& cell = cells_[std::size_t(j) * std::size_t(nx_) + std::size_t(i)];
+                    // Ends of paths already laid leave as they are met.
+                    std::erase_if(cell, [&](std::size_t e) { return done[ends_[e].path]; });
+                    for (std::size_t e : cell)
+                        consider(ends_[e].path, ends_[e].back, distance(cursor, ends_[e].p));
+                }
+            }
+            if (found < r * cell_)
+                break;
+        }
+    }
+
+private:
+    struct End {
+        Point2d p;
+        std::size_t path;
+        bool back;
+    };
+    int column(double x) const { return std::clamp(int(std::floor((x - x0_) / cell_)), 0, nx_ - 1); }
+    int row(double y) const { return std::clamp(int(std::floor((y - y0_) / cell_)), 0, ny_ - 1); }
+
+    std::vector<End> ends_;
+    double x0_ = 0.0, y0_ = 0.0, cell_ = 1.0;
+    int nx_ = 0, ny_ = 0;
+    std::vector<std::vector<std::size_t>> cells_;
+};
 
 } // namespace
 
@@ -119,27 +204,38 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
     for (std::size_t i = 0; i < paths.size(); ++i)
         if (paths[i].closed && mode != SeamMode::Nearest)
             seams[i] = seam_point(paths[i], mode, cursor, seed + i, memory);
+    // The ends a path may start at stay put unless a loop's seam follows the
+    // cursor; then every path is looked at each time, else the ends are
+    // filed in a grid. Both pick the same: the nearest start, and between
+    // equally near ones the first path, its front before its back.
+    const bool seams_move = mode == SeamMode::Nearest &&
+                            std::any_of(paths.begin(), paths.end(), [](const Toolpath& t) { return t.closed; });
+    std::optional<EndGrid> grid;
+    if (!seams_move && paths.size() > kFiledPaths)
+        grid.emplace(paths, seams);
     for (std::size_t k = 0; k < paths.size(); ++k) {
         std::size_t best = paths.size();
         bool reverse = false;
         double nearest = std::numeric_limits<double>::max();
-        for (std::size_t i = 0; i < paths.size(); ++i) {
-            if (done[i] || paths[i].points.empty())
-                continue;
-            const Toolpath& t = paths[i];
-            if (t.closed) {
-                if (mode == SeamMode::Nearest)
-                    seams[i] = seam_point(t, mode, cursor, seed + i, memory);
-                const double d = distance(cursor, t.points[seams[i]].p);
-                if (d < nearest)
-                    nearest = d, best = i, reverse = false;
-            } else {
-                const double front = distance(cursor, t.points.front().p);
-                const double back = distance(cursor, t.points.back().p);
-                if (front < nearest)
-                    nearest = front, best = i, reverse = false;
-                if (back < nearest)
-                    nearest = back, best = i, reverse = true;
+        const auto consider = [&](std::size_t i, bool back, double d) {
+            if (d < nearest || (d == nearest && (i < best || (i == best && reverse && !back))))
+                nearest = d, best = i, reverse = back;
+        };
+        if (grid) {
+            grid->nearest(cursor, done, consider, nearest);
+        } else {
+            for (std::size_t i = 0; i < paths.size(); ++i) {
+                if (done[i] || paths[i].points.empty())
+                    continue;
+                const Toolpath& t = paths[i];
+                if (t.closed) {
+                    if (mode == SeamMode::Nearest)
+                        seams[i] = seam_point(t, mode, cursor, seed + i, memory);
+                    consider(i, false, distance(cursor, t.points[seams[i]].p));
+                } else {
+                    consider(i, false, distance(cursor, t.points.front().p));
+                    consider(i, true, distance(cursor, t.points.back().p));
+                }
             }
         }
         if (best == paths.size())

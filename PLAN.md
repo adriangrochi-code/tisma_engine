@@ -467,7 +467,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       por nivel; −26 % de material y −13 % de tiempo en un cubo de 100 mm al 20 %
     - [x] cúbico de soporte (regla 8): el adaptativo medido desde lo que el relleno sostiene y las paredes
     - [x] rayo (regla 9): ramas de arriba hacia abajo, según Tricard, Claux y Lefebvre 2020
-    - [ ] rayo: enderezar y juntar ramas, índice espacial para techos grandes
+    - [ ] rayo: enderezar y juntar ramas (el índice espacial ya está: 63 s → 2,1 s al 100 % en el cubo de 100 mm)
+    - [ ] cúbico de soporte: ajustarlo a las pruebas P6c y P6d de la ficha cuando el PR #15 esté en `main`
   - el resto de la ficha `infill_patterns.md` (pieza de la cobertura de Tisma Slicer):
     - [x] estrellas, rectilíneo alineado y zigzag (reglas 1, 2 y 5)
     - [ ] línea (regla 3), panal y panal 3D (10 y 11), Hilbert, cuerdas de Arquímedes, octagrama y concéntrico (12 y 13)

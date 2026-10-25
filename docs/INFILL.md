@@ -220,7 +220,10 @@ un voladizo imprimible.
    punto queda a `alcance / √2` de uno. Un punto recibe rama si ninguna pasa a menos del resto del alcance, así todo
    lo que hay que sostener queda a menos del `alcance` de una rama.
 4. **Cada punto nuevo se une** a lo más cercano: una rama ya anclada o la pared. Si el tramo hasta la rama sale del
-   relleno, va a la pared. Los puntos más cerca de las paredes van primero, así las ramas crecen desde ellas.
+   relleno, va a la pared. Los puntos más cerca de las paredes van primero, así las ramas crecen desde ellas. Entre
+   ramas igual de cerca (en una grilla pasa seguido) gana la más vieja, que nació más cerca de la pared: así las ramas
+   entran derecho desde las paredes en vez de correr a lo largo, y se retiran antes. Las ramas y las paredes están en
+   grillas de celdas cuadradas para buscar la más cercana sin mirar todas.
 5. **Se imprimen** las ramas como líneas desde cada punta o bifurcación hasta la siguiente o la pared, dentro del
    relleno achicado medio cordón, sin tramos de menos de un cordón.
 
@@ -252,7 +255,8 @@ cerca del fondo (18,9 mm en la capa 5).
 - enderezar y juntar ramas (el artículo las endereza y las funde con las paredes), e imprimir cada árbol en menos
   tramos (P7 tiene hasta 18 donde el nuestro tiene 32);
 - lo que Tisma Slicer imprime cerca del fondo en P7, que la regla no explica;
-- un índice espacial para los puntos de techos grandes (hoy cada punto mira todas las ramas).
+- más velocidad en densidades altas: al 100 %, el cubo de 100 mm lamina en 1,4 s y escribe en 0,7 s (antes del índice
+  de ramas y del orden con grilla, 63 s en total).
 
 ## Resistencia y rapidez, medidas (2026-10-25)
 

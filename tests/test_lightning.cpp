@@ -60,7 +60,7 @@ IndexedMesh cube(float side) {
 
 } // namespace
 
-TEST_CASE("lightning: holds up the ceiling, grows in from the walls, draws back below", "[lightning]") {
+TEST_CASE("lightning: holds up the ceiling and grows in from the walls, drawing back below", "[lightning]") {
     // A 30 mm box: walls all round, sparse infill from layer 0 to 99 (z 0 to
     // 20), a solid ceiling from layer 100 up.
     std::vector<Layer> layers;
@@ -101,7 +101,7 @@ TEST_CASE("lightning: holds up the ceiling, grows in from the walls, draws back 
         CHECK(lines[l].empty());
 }
 
-TEST_CASE("lightning: the spec's 20 mm cube, growing upwards (P7), sliced to checked G-code", "[lightning]") {
+TEST_CASE("lightning: the spec's 20 mm cube grows upwards (P7) and slices to checked G-code", "[lightning]") {
     const IndexedMesh m = cube(20.0f);
     Settings s;
     s.gpu = GpuMode::Off;

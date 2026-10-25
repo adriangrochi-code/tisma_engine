@@ -130,6 +130,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   verificador y en la siguiente en el escritor, y el G-code se rechazaba. Ahora los dos usan el tope tal como se
   escribe.
 
+### Arreglado
+
+- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
+  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
+  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
+
 ## [0.7.0-alpha.1] - 2026-10-24
 
 Segunda versión publicada. Trae la interfaz propia del motor, `tisma` (el comienzo de P1: el dueño decidió que el

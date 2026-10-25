@@ -4,6 +4,7 @@
 #include "infill/lightning.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -42,23 +43,102 @@ bool inside(const Polygons& region, Point2d p) {
     return count % 2 == 1;
 }
 
-// The point of the region's boundary nearest to p.
-Point2d nearest_boundary(const Polygons& region, Point2d p, double& best) {
-    best = std::numeric_limits<double>::infinity();
-    Point2d out = p;
-    for (const Polygon& path : region)
-        for (std::size_t i = 0; i < path.size(); ++i) {
-            const Point64& a = path[i];
-            const Point64& b = path[(i + 1) % path.size()];
+// Segments filed in a grid of square cells, for nearest queries: without it
+// every point to hold up looked at every branch, and a 100 mm cube at 100 %
+// took a minute.
+class SegmentGrid {
+public:
+    SegmentGrid(const Clipper2Lib::Rect64& box, double size) {
+        const double w = to_mm(box.right - box.left), h = to_mm(box.bottom - box.top);
+        cell_ = std::max({size, w / 512.0, h / 512.0, 1e-3});
+        x0_ = to_mm(box.left) - cell_;
+        y0_ = to_mm(box.top) - cell_;
+        nx_ = int(std::ceil(w / cell_)) + 3;
+        ny_ = int(std::ceil(h / cell_)) + 3;
+        cells_.resize(std::size_t(nx_) * std::size_t(ny_));
+    }
+
+    // Files segment `id`, from a to b, under the cells it crosses (sampled a
+    // quarter of a cell apart).
+    void add(std::size_t id, Point2d a, Point2d b) {
+        const int steps = std::max(1, int(std::ceil(4.0 * distance(a, b) / cell_)));
+        std::size_t last = cells_.size();
+        for (int s = 0; s <= steps; ++s) {
+            const double f = double(s) / double(steps);
+            const std::size_t c = at(a.x + f * (b.x - a.x), a.y + f * (b.y - a.y));
+            if (c != last)
+                cells_[c].push_back(id);
+            last = c;
+        }
+    }
+
+    // The least `measure(id)` (infinity to leave one out) over the filed
+    // segments, searched ring by ring from p's cell: a segment filed only in
+    // ring r + 1 lies at least r cells away, so the search stops there once
+    // something nearer is found (ties at exactly r cells still looked at),
+    // or past `limit`.
+    template <class Measure>
+    double nearest(Point2d p, double limit, Measure measure) const {
+        double best = std::numeric_limits<double>::infinity();
+        const int ci = column(p.x), cj = row(p.y);
+        for (int r = 0; r <= std::max(nx_, ny_); ++r) {
+            for (int j = std::max(0, cj - r); j <= std::min(ny_ - 1, cj + r); ++j) {
+                const int step = r == 0 || j == cj - r || j == cj + r ? 1 : 2 * r;
+                for (int i = ci - r; i <= ci + r; i += step)
+                    if (i >= 0 && i < nx_)
+                        for (std::size_t id : cells_[std::size_t(j) * std::size_t(nx_) + std::size_t(i)])
+                            best = std::min(best, measure(id));
+            }
+            if (best < r * cell_ || r * cell_ > limit)
+                break;
+        }
+        return best;
+    }
+
+private:
+    int column(double x) const { return std::clamp(int(std::floor((x - x0_) / cell_)), 0, nx_ - 1); }
+    int row(double y) const { return std::clamp(int(std::floor((y - y0_) / cell_)), 0, ny_ - 1); }
+    std::size_t at(double x, double y) const {
+        return std::size_t(row(y)) * std::size_t(nx_) + std::size_t(column(x));
+    }
+
+    double x0_ = 0.0, y0_ = 0.0, cell_ = 1.0;
+    int nx_ = 0, ny_ = 0;
+    std::vector<std::vector<std::size_t>> cells_;
+};
+
+// A layer's walls: the edges of its sparse infill, filed in a grid.
+struct Walls {
+    std::vector<std::array<Point2d, 2>> edges;
+    SegmentGrid grid;
+
+    Walls(const Polygons& region, const Clipper2Lib::Rect64& box, double cell) : grid(box, cell) {
+        for (const Polygon& path : region)
+            for (std::size_t i = 0; i < path.size(); ++i) {
+                const Point64& a = path[i];
+                const Point64& b = path[(i + 1) % path.size()];
+                edges.push_back({Point2d{to_mm(a.x), to_mm(a.y)}, Point2d{to_mm(b.x), to_mm(b.y)}});
+                grid.add(edges.size() - 1, edges.back()[0], edges.back()[1]);
+            }
+    }
+
+    // The point of the walls nearest to p, and how far it is.
+    Point2d nearest(Point2d p, double& best) const {
+        Point2d out = p;
+        double found = std::numeric_limits<double>::infinity();
+        best = grid.nearest(p, std::numeric_limits<double>::infinity(), [&](std::size_t e) {
             double t = 0.0;
-            const Point2d q = nearest_on(p, {to_mm(a.x), to_mm(a.y)}, {to_mm(b.x), to_mm(b.y)}, t);
-            if (const double d = distance(p, q); d < best) {
-                best = d;
+            const Point2d q = nearest_on(p, edges[e][0], edges[e][1], t);
+            const double d = distance(p, q);
+            if (d < found) {
+                found = d;
                 out = q;
             }
-        }
-    return out;
-}
+            return d;
+        });
+        return out;
+    }
+};
 
 // Whether segment ab stays inside the region all along.
 bool stays_inside(const Polygons& region, Point2d a, Point2d b) {
@@ -159,26 +239,33 @@ std::vector<char> anchored(const std::vector<Node>& nodes) {
 }
 
 // Joins node i to the nearest anchored branch, or to the wall if that is
-// nearer or the way to the branch leaves the region.
-void join(std::vector<Node>& nodes, std::vector<char>& held, std::size_t i, const Polygons& region) {
+// nearer or the way to the branch leaves the region. Between branches
+// equally near (points on a grid often are), the older one: it grew from
+// nearer the wall, so the branches go straight in from the walls instead of
+// along them, and draw back sooner. `branches` has every branch filed by its
+// child node, and gets the new ones.
+void join(std::vector<Node>& nodes, std::vector<char>& held, std::size_t i, const Polygons& region,
+          const Walls& walls, SegmentGrid& branches) {
     double wall = 0.0;
     const Point2d p = nodes[i].p;
-    const Point2d on_wall = nearest_boundary(region, p, wall);
+    const Point2d on_wall = walls.nearest(p, wall);
     double best = wall, best_t = 0.0;
     std::size_t edge = nodes.size();
     Point2d on_branch{};
-    for (std::size_t c = 0; c < nodes.size(); ++c) {
+    branches.nearest(p, wall, [&](std::size_t c) {
         if (c == i || held[c] == 0 || nodes[c].parent < 0)
-            continue;
+            return std::numeric_limits<double>::infinity();
         double t = 0.0;
         const Point2d q = nearest_on(p, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p, t);
-        if (const double d = distance(p, q); d < best) {
+        const double d = distance(p, q);
+        if (d < best || (d == best && edge < nodes.size() && c < edge)) {
             best = d;
             best_t = t;
             edge = c;
             on_branch = q;
         }
-    }
+        return d;
+    });
     if (edge < nodes.size() && stays_inside(region, p, on_branch)) {
         const auto up = std::size_t(nodes[edge].parent);
         std::size_t to = 0;
@@ -187,11 +274,13 @@ void join(std::vector<Node>& nodes, std::vector<char>& held, std::size_t i, cons
         } else if (best_t > 1.0 - 1e-9) {
             to = up;
         } else {
-            // A fork on the branch.
+            // A fork on the branch: the branch's lower part is still filed
+            // under its child, the upper part under the fork.
             nodes.push_back({on_branch, int(up)});
             held.push_back(1);
             to = nodes.size() - 1;
             nodes[edge].parent = int(to);
+            branches.add(to, on_branch, nodes[up].p);
         }
         nodes[i].parent = int(to);
     } else {
@@ -199,17 +288,18 @@ void join(std::vector<Node>& nodes, std::vector<char>& held, std::size_t i, cons
         held.push_back(1);
         nodes[i].parent = int(nodes.size() - 1);
     }
+    branches.add(i, p, nodes[std::size_t(nodes[i].parent)].p);
 }
 
-// How far p is from the anchored branches.
-double from_branches(const std::vector<Node>& nodes, const std::vector<char>& held, Point2d p) {
-    double best = std::numeric_limits<double>::infinity();
-    for (std::size_t c = 0; c < nodes.size(); ++c)
-        if (held[c] != 0 && nodes[c].parent >= 0) {
-            double t = 0.0;
-            best = std::min(best, distance(p, nearest_on(p, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p, t)));
-        }
-    return best;
+// How far p is from the anchored branches, looking out to `limit`.
+double from_branches(const std::vector<Node>& nodes, const std::vector<char>& held, const SegmentGrid& branches,
+                     Point2d p, double limit) {
+    return branches.nearest(p, limit, [&](std::size_t c) {
+        if (held[c] == 0 || nodes[c].parent < 0)
+            return std::numeric_limits<double>::infinity();
+        double t = 0.0;
+        return distance(p, nearest_on(p, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p, t));
+    });
 }
 
 // The branches as polylines from tips and forks up to the next fork or the
@@ -280,6 +370,8 @@ std::vector<std::vector<Toolpath>> lightning_layers(const std::vector<Polygons>&
         }
         if (l + 1 < count)
             pull_back(nodes, (layers[l + 1].top - layers[l + 1].bottom) * lean);
+        const Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(region);
+        const Walls walls(region, box, 2.0 * params.reach);
         // What lies outside this layer's sparse infill goes; branches cut off
         // from their wall, and roots no longer at a wall, join again.
         {
@@ -287,7 +379,7 @@ std::vector<std::vector<Toolpath>> lightning_layers(const std::vector<Polygons>&
             for (std::size_t i = 0; i < nodes.size(); ++i) {
                 if (nodes[i].parent == Node::kRoot) {
                     double d = 0.0;
-                    nearest_boundary(region, nodes[i].p, d);
+                    walls.nearest(nodes[i].p, d);
                     if (d <= params.width / 2.0)
                         continue;
                     // The wall moved out (the root joins again) or in past it.
@@ -304,45 +396,56 @@ std::vector<std::vector<Toolpath>> lightning_layers(const std::vector<Polygons>&
                     n.parent = Node::kLoose;
             compact(nodes, alive);
         }
-        std::vector<char> held = anchored(nodes);
-        for (std::size_t i = 0, n = nodes.size(); i < n; ++i)
-            if (nodes[i].parent == Node::kLoose) {
-                join(nodes, held, i, region);
-                held = anchored(nodes);
-            }
         // What the layer above has over this layer's sparse infill.
+        Polygons above;
         if (l + 1 < count) {
-            Polygons above = Clipper2Lib::Difference(regions[l + 1], sparse[l + 1], Clipper2Lib::FillRule::NonZero);
+            above = Clipper2Lib::Difference(regions[l + 1], sparse[l + 1], Clipper2Lib::FillRule::NonZero);
             above = Clipper2Lib::Intersect(above, region, Clipper2Lib::FillRule::NonZero);
             above = offset(offset(above, -params.width / 2.0), params.width / 2.0);
+        }
+        // Most layers only draw their branches back: the branches are filed
+        // only when something joins them.
+        const bool loose =
+            std::any_of(nodes.begin(), nodes.end(), [](const Node& n) { return n.parent == Node::kLoose; });
+        if (loose || !above.empty()) {
+            SegmentGrid filed(box, params.reach);
+            for (std::size_t c = 0; c < nodes.size(); ++c)
+                if (nodes[c].parent >= 0)
+                    filed.add(c, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p);
+            std::vector<char> held = anchored(nodes);
+            for (std::size_t i = 0, n = nodes.size(); i < n; ++i)
+                if (nodes[i].parent == Node::kLoose) {
+                    join(nodes, held, i, region, walls, filed);
+                    held = anchored(nodes);
+                }
             if (!above.empty()) {
-                const Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(above);
+                const Clipper2Lib::Rect64 needed = Clipper2Lib::GetBounds(above);
                 struct Need {
                     Point2d p;
                     double wall;
                 };
                 std::vector<Need> points;
-                const auto first_row = std::int64_t(std::ceil(to_mm(box.top) / grid));
-                const auto first_column = std::int64_t(std::ceil(to_mm(box.left) / grid));
-                for (auto j = first_row; double(j) * grid <= to_mm(box.bottom); ++j)
-                    for (auto i = first_column; double(i) * grid <= to_mm(box.right); ++i) {
+                const auto first_row = std::int64_t(std::ceil(to_mm(needed.top) / grid));
+                const auto first_column = std::int64_t(std::ceil(to_mm(needed.left) / grid));
+                for (auto j = first_row; double(j) * grid <= to_mm(needed.bottom); ++j)
+                    for (auto i = first_column; double(i) * grid <= to_mm(needed.right); ++i) {
                         const Point2d p{double(i) * grid, double(j) * grid};
                         if (!inside(above, p))
                             continue;
                         double wall = 0.0;
-                        nearest_boundary(region, p, wall);
+                        walls.nearest(p, wall);
                         points.push_back({p, wall});
                     }
                 // The points nearest the walls first: the branches grow in from them.
                 std::stable_sort(points.begin(), points.end(),
                                  [](const Need& a, const Need& b) { return a.wall < b.wall; });
                 for (const Need& q : points) {
-                    if (from_branches(nodes, held, q.p) <= near)
+                    if (from_branches(nodes, held, filed, q.p, near) <= near)
                         continue;
                     nodes.push_back({q.p, Node::kLoose});
                     held.push_back(0);
                     const std::size_t at = nodes.size() - 1;
-                    join(nodes, held, at, region);
+                    join(nodes, held, at, region, walls, filed);
                     held[at] = 1;
                 }
             }
