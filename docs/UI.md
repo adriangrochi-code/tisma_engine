@@ -34,7 +34,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Lugar | Qué tiene |
 |---|---|
 | Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (guardar el proyecto, idioma, tema claro u oscuro, acerca de, salir). |
-| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
+| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas —con la altura por zona, la altura variable por Z (escalón en pendientes y alturas por Z, `docs/VARIABLE_LAYERS.md`) y Z anti-aliasing (espesor mínimo y subida, `docs/ZAA.md`)—, paredes, superficies, relleno (con combinar capas, denso bajo el techo y guiado por tensiones con su caso de carga, `docs/INFILL.md`), soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, capa mínima y máxima, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
 
@@ -71,7 +71,7 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
 (`src/gcode/preview.hpp`). Cada extrusión se dibuja como un cordón de su ancho y su alto.
 - **Barra de capas:** a la derecha; muestra hasta la capa elegida. «Solo esta capa» deja una sola.
 - **Leyenda:** abajo a la izquierda.
-  - **Color por:** tipo de línea, velocidad o ancho.
+  - **Color por:** tipo de línea, velocidad, ancho o alto de capa.
   - Cada tipo de línea se puede ocultar, y los viajes se pueden mostrar.
   - Los números: tiempo estimado, filamento (metros y cm³), capas y líneas del G-code.
 
@@ -157,6 +157,13 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
 
 - **Suavizado de bordes:** multimuestreo (MSAA 2×, 4× u 8×, según la GPU; 4× por defecto) y además FXAA, que suaviza
   bordes finos y brillos que el multimuestreo no alcanza.
+- **Filtro de moiré** (pedido del dueño, 2026-10-24; activado por defecto): de lejos, o en una pieza grande, las
+  líneas de capa de la vista previa quedan más finas que un píxel; sus luces y sombras ya no se pueden muestrear y
+  hacen bandas de moiré. El filtro mide en cada píxel cuánto abarca de la sección de la línea (las derivadas de
+  pantalla) y, a medida que la línea se achica por debajo de dos píxeles, reemplaza su normal por el promedio de las
+  normales de todo el perfil de la línea, cada una pesada por cuánto mira al ojo (lo que ese píxel vería de verdad),
+  y ensancha el brillo lo que se abren esas normales (Toksvig 2005). De cerca no cambia nada. En la grilla de la cama, cada línea se desvanece cuando la siguiente de su clase queda a
+  menos de unos píxeles (las mayores aguantan más, porque están más separadas); el contorno de la cama no cambia.
 - **Intensidad de la oclusión:** se elige entre 0 y 1,5.
 - **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
   jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
@@ -191,10 +198,13 @@ tisma --screenshot explorador.png --browse /una/carpeta
 tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
 
-`--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit` crea una
+`--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
-`--view calibration` muestra su pestaña. `--render fast|ao|rt`, `--msaa N` y `--fxaa on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
-los de la CPU y termina con 1 si no coinciden. Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
+`--view calibration` muestra su pestaña. `--color kind|speed|width|height` elige el color de la vista previa (por alto
+de capa: la altura por zona, `docs/LOCAL_LAYERS.md`). `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
+los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin
+multimuestreo, con y sin el filtro de moiré, y termina con 1 si donde el filtro actúa los píxeles vecinos no se
+parecen más entre sí (al menos un 15 % menos de diferencia). Con `TISMA_DEBUG_VISIBILITY=1` la vista pinta la oclusión y las
 sombras en lugar de la luz, para revisarlas.
 
 - `--screenshot` espera a que esté listo lo pedido: el laminado para `--view preview`, la estimación para
@@ -206,6 +216,9 @@ sombras en lugar de la luz, para revisarlas.
 - CTest corre así estas pruebas, que se registran solo si hay `xvfb-run`:
   - `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la vista previa;
   - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU;
+  - `ui_moire_filter_smooths_fine_lines`: la vista previa de lejos, con y sin el filtro de moiré;
+  - `ui_device_prints_to_simulator`: el cubo laminado e impreso en la impresora simulada desde la pestaña Impresora
+    (`docs/DEVICE.md`);
   - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
     exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
 

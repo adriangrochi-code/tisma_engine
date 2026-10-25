@@ -45,6 +45,24 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
             return text;
         }
     }
+    // The engine's coordinates: within 2 m of the origin (the medial axis
+    // works in 32-bit nanometres, about 2147 mm), and no taller. Past that,
+    // integer overflows or runaway layer counts (the review of 2026-10-25).
+    constexpr double kReach = 2000.0;
+    for (const Vec3f& v : mesh.vertices)
+        if (!(std::fabs(double(v.x)) <= kReach && std::fabs(double(v.y)) <= kReach)) {
+            char text[200];
+            std::snprintf(text, sizeof text,
+                          "the model reaches x %.6g, y %.6g: the engine works within %.0f mm of the origin", double(v.x),
+                          double(v.y), kReach);
+            return text;
+        }
+    if (!(double(top) - double(bottom) <= kReach)) {
+        char text[160];
+        std::snprintf(text, sizeof text, "the model is %.6g mm tall: the engine prints up to %.0f mm",
+                      double(top) - double(bottom), kReach);
+        return text;
+    }
     if (s.max_height > 0.0 && double(top) - double(bottom) > s.max_height) {
         char text[160];
         std::snprintf(text, sizeof text, "the model is %.3f mm tall, more than machine.max_height (%.3f mm)",
@@ -56,8 +74,21 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
 
 std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     const bool any = std::any_of(model.regions.begin(), model.regions.end(), [](const Polygons& r) { return !r.empty(); });
-    if (!any)
-        return "no layer of the model encloses any area (is the mesh flat or open?)";
+    if (!any) {
+        // Say what emptied it: a shrinking setting, or holes in the mesh.
+        std::string reason = "no layer of the model encloses any area";
+        if (s.xy_offset < 0.0) {
+            char text[120];
+            std::snprintf(text, sizeof text, ": slicing.xy_offset (%.3g mm) may have shrunk it away", s.xy_offset);
+            reason += text;
+        }
+        else if (model.open_contours > 0)
+            reason += ": " + std::to_string(model.open_contours) +
+                      " open contours were dropped, so the mesh has holes; repair it";
+        else
+            reason += " (is the mesh flat or open?)";
+        return reason;
+    }
     // The skirt and the brim go around the model: they must fit on the bed too.
     if (!s.bed.empty())
         for (const auto* paths : {&model.skirt, &model.brim})

@@ -51,7 +51,9 @@ class Slicer {
 public:
     Slicer();
     ~Slicer();
-    SliceResult run(const TriangleMesh& mesh, const Settings& settings);
+    // With a load case and infill.stress_density, the infill guided by the
+    // stresses under it (docs/INFILL.md).
+    SliceResult run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load = nullptr);
 
 private:
     std::unique_ptr<gpu::Context> gpu_;

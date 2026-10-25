@@ -44,6 +44,29 @@ Enum choice(const json& group, const std::string& name, const std::string& key, 
     return it->second;
 }
 
+// The infill patterns by name, for reading and writing.
+const std::map<std::string, InfillPattern>& infill_patterns() {
+    static const std::map<std::string, InfillPattern> names = {
+        {"rectilinear", InfillPattern::Rectilinear},
+        {"aligned_rectilinear", InfillPattern::AlignedRectilinear},
+        {"zigzag", InfillPattern::Zigzag},
+        {"grid", InfillPattern::Grid},
+        {"gyroid", InfillPattern::Gyroid},
+        {"triangles", InfillPattern::Triangles},
+        {"stars", InfillPattern::Stars},
+        {"cubic", InfillPattern::Cubic},
+        {"adaptive_cubic", InfillPattern::AdaptiveCubic},
+        {"support_cubic", InfillPattern::SupportCubic},
+        {"lightning", InfillPattern::Lightning},
+        {"line", InfillPattern::Line},
+        {"honeycomb", InfillPattern::Honeycomb},
+        {"concentric", InfillPattern::Concentric},
+        {"hilbert", InfillPattern::Hilbert},
+        {"archimedean", InfillPattern::Archimedean},
+        {"octagram", InfillPattern::Octagram}};
+    return names;
+}
+
 // Calls read(name, key) for every member of the group; rejects unknown names.
 template <typename Read>
 void read_group(const json& root, const std::string& group_name, const std::vector<std::string>& known, Read read) {
@@ -60,9 +83,55 @@ void read_group(const json& root, const std::string& group_name, const std::vect
     }
 }
 
+Settings parse_checked(std::string_view text);
+
 } // namespace
 
+const char* infill_pattern_name(InfillPattern pattern) {
+    for (const auto& [name, value] : infill_patterns())
+        if (value == pattern)
+            return name.c_str();
+    return "rectilinear";
+}
+
+bool json_depth_ok(std::string_view text, int max_depth) {
+    int depth = 0;
+    bool in_string = false, escaped = false;
+    for (const char c : text) {
+        if (in_string) {
+            if (escaped)
+                escaped = false;
+            else if (c == '\\')
+                escaped = true;
+            else if (c == '"')
+                in_string = false;
+        } else if (c == '"') {
+            in_string = true;
+        } else if (c == '[' || c == '{') {
+            if (++depth > max_depth)
+                return false;
+        } else if (c == ']' || c == '}') {
+            --depth;
+        }
+    }
+    return true;
+}
+
 Settings parse_settings(std::string_view text) {
+    if (!json_depth_ok(text))
+        throw SettingsError("settings: nested more than 64 levels deep");
+    try {
+        return parse_checked(text);
+    } catch (const json::exception& e) {
+        // A number out of range, a value of the wrong type deep inside: still
+        // a bad settings file, not an internal error.
+        throw SettingsError(std::string("settings: ") + e.what());
+    }
+}
+
+namespace {
+
+Settings parse_checked(std::string_view text) {
     json root;
     try {
         root = json::parse(text.begin(), text.end());
@@ -76,7 +145,7 @@ Settings parse_settings(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -84,10 +153,49 @@ Settings parse_settings(std::string_view text) {
             fail(group, "unknown group (see docs/CONFIG.md)");
     }
 
-    read_group(root, "layers", {"height", "first_height"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "layers",
+               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "heights") {
+            const json& v = g.at(n);
+            const char* what = "must be a list of [z, height] pairs in mm, sorted by z, heights from 0.01 to 10";
+            if (!v.is_array())
+                fail(k, what);
+            std::vector<std::array<double, 2>> steps;
+            for (const json& p : v) {
+                if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                    fail(k, what);
+                const double z = p[0].get<double>(), h = p[1].get<double>();
+                if (!(z >= 0.0 && z <= 10000.0) || !(h >= 0.01 && h <= 10.0) || (!steps.empty() && z <= steps.back()[0]))
+                    fail(k, what);
+                steps.push_back({z, h});
+            }
+            s.layer_heights = std::move(steps);
+            return;
+        }
         const double v = number(g, n, k);
-        if (!(v > 0.0))
-            fail(k, "must be greater than 0");
+        if (n == "cusp_height") {
+            if (v < 0.0 || v > 1.0)
+                fail(k, "must be from 0 to 1 mm");
+            s.cusp_height = v;
+            return;
+        }
+        if (n == "detail_height" || n == "detail_margin") {
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 to 10 mm");
+            (n == "detail_height" ? s.detail_height : s.detail_margin) = v;
+            return;
+        }
+        if (n == "detail_tolerance") {
+            if (v < 0.001 || v > 1.0)
+                fail(k, "must be from 0.001 to 1 mm");
+            s.detail_tolerance = v;
+            return;
+        }
+        // Below 0.01 mm the layers run to the hundreds of thousands; the
+        // nozzle limits them from above (check_settings).
+        if (!(v >= 0.01 && v <= 2.0))
+            fail(k, "must be from 0.01 to 2 mm");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
     });
     read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink", "simplify_tolerance"},
@@ -99,7 +207,11 @@ Settings parse_settings(std::string_view text) {
                        return;
                    }
                    const double v = number(g, n, k);
+                   // Offsets beyond these overflow the polygon library or
+                   // empty the part.
                    if (n == "xy_offset") {
+                       if (!(v >= -10.0 && v <= 10.0))
+                           fail(k, "must be from -10 to 10 mm");
                        s.xy_offset = v;
                        return;
                    }
@@ -107,8 +219,11 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must not be negative");
                    if (n == "gap_closing_radius")
                        s.gap_closing_radius = v;
-                   else if (n == "first_layer_shrink")
+                   else if (n == "first_layer_shrink") {
+                       if (v > 2.0)
+                           fail(k, "must be from 0 to 2 mm");
                        s.first_layer_shrink = v;
+                   }
                    else
                        s.simplify_tolerance = v;
                });
@@ -127,12 +242,20 @@ Settings parse_settings(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (!(v > 0.0))
-            fail(k, "must be greater than 0");
+        if (!(v >= 0.05 && v <= 10.0))
+            fail(k, "must be from 0.05 to 10 mm");
         s.wall_width = v;
     });
-    read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern"}, [&](const json& g, const std::string& n,
-                                                                                  const std::string& k) {
+    read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
+                                  "bottom_min_thickness"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "top_min_thickness" || n == "bottom_min_thickness") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 100.0)
+                fail(k, "must be from 0 to 100 mm");
+            (n == "top_min_thickness" ? s.top_min_thickness : s.bottom_min_thickness) = v;
+            return;
+        }
         if (n == "top_pattern") {
             s.monotonic_top = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
             return;
@@ -142,14 +265,79 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
-    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap"}, [&](const json& g, const std::string& n,
-                                                                                const std::string& k) {
+    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
+                                "combine_max_height", "dense_under_top", "dense_density", "stress_density",
+                                "solid_every", "nonplanar", "nonplanar_amplitude", "nonplanar_wavelength"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "combine_auto"      ? s.infill_combine_auto
+             : n == "dense_under_top" ? s.infill_dense_under_top
+                                      : s.infill_nonplanar) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "nonplanar_amplitude") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 500.0)
+                fail(k, "must be from 0 to 500 (percent of the layer height)");
+            s.infill_nonplanar_amplitude = v;
+            return;
+        }
+        if (n == "nonplanar_wavelength") {
+            const double v = number(g, n, k);
+            if (v < 0.5 || v > 20.0)
+                fail(k, "must be from 0.5 to 20 mm");
+            s.infill_nonplanar_wavelength = v;
+            return;
+        }
+        if (n == "dense_density") {
+            const double v = number(g, n, k);
+            if (!(v > 0.0) || v > 100.0)
+                fail(k, "must be from 0 to 100");
+            s.infill_dense_density = v;
+            return;
+        }
+        if (n == "solid_every") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
+                fail(k, "must be a whole number from 0 to 1000");
+            s.infill_solid_every = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "stress_density") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 100.0)
+                fail(k, "must be from 0 to 100");
+            s.infill_stress_density = v;
+            return;
+        }
+        if (n == "combine_max_height") {
+            const json& v = g.at(n);
+            if (v.is_string()) {
+                const std::string t = v.get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) || p > 1000.0)
+                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\"");
+                s.infill_combine_max_height = {p, true};
+                return;
+            }
+            const double d = number(g, n, k);
+            if (!(d > 0.0) || d > 10.0)
+                fail(k, "must be from 0 to 10 mm, or a percentage of the nozzle");
+            s.infill_combine_max_height = {d, false};
+            return;
+        }
+        if (n == "combine_layers") {
+            const double v = number(g, n, k);
+            if (v != std::floor(v) || v < 1.0 || v > 20.0)
+                fail(k, "must be a whole number from 1 to 20");
+            s.infill_combine_layers = int(v);
+            return;
+        }
         if (n == "pattern") {
-            s.infill_pattern =
-                choice<InfillPattern>(g, n, k,
-                                      {{"rectilinear", InfillPattern::Rectilinear},
-                                       {"grid", InfillPattern::Grid},
-                                       {"gyroid", InfillPattern::Gyroid}});
+            s.infill_pattern = choice<InfillPattern>(g, n, k, infill_patterns());
             return;
         }
         const double v = number(g, n, k);
@@ -164,13 +352,23 @@ Settings parse_settings(std::string_view text) {
     read_group(root, "machine",
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
-                "bed", "max_height"},
+                "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
+                "hardened_nozzle", "min_layer_height", "max_layer_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
-                   if (n == "relative_extrusion") {
+                   if (n == "relative_extrusion" || n == "enclosed" || n == "hardened_nozzle") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
-                       s.relative_extrusion = v.get<bool>();
+                       (n == "relative_extrusion" ? s.relative_extrusion : n == "enclosed" ? s.enclosed : s.hardened_nozzle) =
+                           v.get<bool>();
+                   } else if (n == "max_flow" || n == "max_nozzle_temp" || n == "max_bed_temp" || n == "max_chamber_temp") {
+                       const double d = number(g, n, k);
+                       if (d < 0.0 || d > (n == "max_flow" ? 1000.0 : 600.0))
+                           fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 600 C");
+                       (n == "max_flow"          ? s.machine_max_flow
+                        : n == "max_nozzle_temp" ? s.max_nozzle_temp
+                        : n == "max_bed_temp"    ? s.max_bed_temp
+                                                 : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(
                            g, n, k, {{"marlin", GcodeFlavor::Marlin}, {"klipper", GcodeFlavor::Klipper}, {"reprap", GcodeFlavor::RepRap}});
@@ -189,6 +387,12 @@ Settings parse_settings(std::string_view text) {
                            fail(key, "values must be strings, numbers or booleans");
                        };
                        for (const auto& [name, value] : v.items()) {
+                           // Names go into [brackets] of the start G-code and
+                           // into comments: no line breaks or brackets.
+                           if (name.empty() || std::any_of(name.begin(), name.end(), [](char c) {
+                                   return static_cast<unsigned char>(c) < 0x20 || c == '[' || c == ']';
+                               }))
+                               fail(k + "." + name, "names must be text without line breaks or brackets");
                            std::vector<std::string> list;
                            if (value.is_array())
                                for (const json& item : value)
@@ -209,6 +413,11 @@ Settings parse_settings(std::string_view text) {
                            bed.push_back({p[0].get<double>(), p[1].get<double>()});
                        }
                        s.bed = std::move(bed);
+                   } else if (n == "min_layer_height" || n == "max_layer_height") {
+                       const double d = number(g, n, k);
+                       if (d != 0.0 && !(d >= 0.01 && d <= 10.0))
+                           fail(k, "must be 0 (unknown) or from 0.01 to 10 mm");
+                       (n == "min_layer_height" ? s.min_layer_height : s.max_layer_height) = d;
                    } else if (n == "corner_speed" || n == "max_height") {
                        const double d = number(g, n, k);
                        if (d < 0.0)
@@ -234,8 +443,10 @@ Settings parse_settings(std::string_view text) {
                        const std::string t = v.get<std::string>();
                        char* end = nullptr;
                        const double p = std::strtod(t.c_str(), &end);
-                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0))
-                           fail(k, "must be a number of mm/s or a percentage like \"50%\"");
+                       // strtod reads "inf%" too: a finite share, up to 1000 %.
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) ||
+                           !(p <= 1000.0))
+                           fail(k, "must be a number of mm/s or a percentage from 0 to 1000 like \"50%\"");
                        s.outer_wall_speed = {p, true};
                        return;
                    }
@@ -272,6 +483,12 @@ Settings parse_settings(std::string_view text) {
                    }
                    if (d < 0.0)
                        fail(k, "must not be negative");
+                   // As the changes by height: more would pull the filament
+                   // out of the hot end, or lift the head off the machine.
+                   if (n == "length" && d > 50.0)
+                       fail(k, "must be from 0 to 50 mm");
+                   if (n == "lift" && d > 10.0)
+                       fail(k, "must be from 0 to 10 mm");
                    (n == "length" ? s.retract_length : n == "lift" ? s.retract_lift : s.retract_min_travel) = d;
                });
     read_group(root, "adhesion", {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width"},
@@ -347,6 +564,24 @@ Settings parse_settings(std::string_view text) {
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
+    read_group(root, "zaa", {"enabled", "min_thickness", "raise"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "min_thickness") {
+            const double v = number(g, n, k);
+            if (v < 1.0 || v > 100.0)
+                fail(k, "must be from 1 to 100 percent");
+            s.zaa_min_thickness = v;
+            return;
+        }
+        if (!g.at(n).is_boolean())
+            fail(k, "must be true or false");
+        (n == "enabled" ? s.zaa : s.zaa_raise) = g.at(n).get<bool>();
+    });
+    read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const double v = number(g, n, k);
+        if (v < 0.0 || v > 1.0)
+            fail(k, "must be from 0 to 1 mm");
+        s.gcode_resolution = v;
+    });
     read_group(root, "compensation", {"scale_x", "scale_y", "scale_z", "hole_offset"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
@@ -360,8 +595,21 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must be a percentage from 50 to 200");
                    (n == "scale_x" ? s.scale_x : n == "scale_y" ? s.scale_y : s.scale_z) = v;
                });
-    read_group(root, "extrusion", {"flow", "pressure_advance"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "extrusion", {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "abrasive" || n == "needs_enclosure") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "abrasive" ? s.abrasive : s.needs_enclosure) = g.at(n).get<bool>();
+            return;
+        }
         const double v = number(g, n, k);
+        if (n == "max_flow" || n == "chamber_temperature") {
+            if (v < 0.0 || v > (n == "max_flow" ? 1000.0 : 200.0))
+                fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 200 C");
+            (n == "max_flow" ? s.filament_max_flow : s.chamber_temperature) = v;
+            return;
+        }
         if (n == "pressure_advance") {
             if (v < 0.0 || v > 2.0)
                 fail(k, "must be from 0 to 2");
@@ -409,6 +657,10 @@ Settings parse_settings(std::string_view text) {
                     c.speed = ranged(n, 5.0, 1000.0, "must be a percentage from 5 to 1000");
                 else if (n == "pressure_advance")
                     c.pressure_advance = ranged(n, 0.0, 2.0, "must be from 0 to 2");
+                else if (n == "volumetric_flow")
+                    c.volumetric_flow = ranged(n, 0.5, 1000.0, "must be from 0.5 to 1000 mm3/s");
+                else if (n == "acceleration")
+                    c.acceleration = ranged(n, 100.0, 100000.0, "must be from 100 to 100000 mm/s2");
                 else if (n == "gcode") {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
@@ -425,8 +677,6 @@ Settings parse_settings(std::string_view text) {
     return s;
 }
 
-namespace {
-
 nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
     nlohmann::ordered_json list = nlohmann::ordered_json::array();
     for (const HeightChange& c : changes) {
@@ -436,7 +686,8 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
             {"temperature", &c.temperature},         {"bed_temperature", &c.bed_temperature},
             {"fan", &c.fan},                         {"retraction_length", &c.retract_length},
             {"retraction_speed", &c.retract_speed}, {"flow", &c.flow},
-            {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance}};
+            {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance},
+            {"volumetric_flow", &c.volumetric_flow}, {"acceleration", &c.acceleration}};
         for (const auto& [name, v] : values)
             if (*v)
                 j[name] = **v;
@@ -454,13 +705,16 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
-    const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
-                          : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                                                                         : "gyroid";
+    const char* pattern = infill_pattern_name(s.infill_pattern);
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
         {"layers.first_height", num(s.first_layer_height)},
+        {"layers.detail_height", num(s.detail_height)},
+        {"layers.detail_tolerance", num(s.detail_tolerance)},
+        {"layers.detail_margin", num(s.detail_margin)},
+        {"layers.heights", json(s.layer_heights).dump()},
+        {"layers.cusp_height", num(s.cusp_height)},
         {"slicing.fill_mode", fill_mode},
         {"slicing.gap_closing_radius", num(s.gap_closing_radius)},
         {"slicing.xy_offset", num(s.xy_offset)},
@@ -473,10 +727,23 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+        {"surfaces.top_min_thickness", num(s.top_min_thickness)},
+        {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
+        {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
+        {"infill.combine_auto", flag(s.infill_combine_auto)},
+        {"infill.dense_under_top", flag(s.infill_dense_under_top)},
+        {"infill.dense_density", num(s.infill_dense_density)},
+        {"infill.stress_density", num(s.infill_stress_density)},
+        {"infill.solid_every", std::to_string(s.infill_solid_every)},
+        {"infill.nonplanar", flag(s.infill_nonplanar)},
+        {"infill.nonplanar_amplitude", num(s.infill_nonplanar_amplitude)},
+        {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
+        {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
+                                                                          : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
         {"machine.filament_diameter", num(s.filament_diameter)},
         {"machine.relative_extrusion", flag(s.relative_extrusion)},
@@ -492,6 +759,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.corner_speed", num(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
+        {"machine.min_layer_height", num(s.min_layer_height)},
+        {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", num(s.wall_speed)},
         {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
         {"speed.infill", num(s.infill_speed)},
@@ -521,12 +790,26 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_max", num(s.fan_max)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
+        {"zaa.enabled", s.zaa ? "true" : "false"},
+        {"zaa.min_thickness", num(s.zaa_min_thickness)},
+        {"zaa.raise", s.zaa_raise ? "true" : "false"},
         {"compensation.scale_x", num(s.scale_x)},
         {"compensation.scale_y", num(s.scale_y)},
         {"compensation.scale_z", num(s.scale_z)},
         {"compensation.hole_offset", num(s.hole_offset)},
         {"extrusion.flow", num(s.flow)},
         {"extrusion.pressure_advance", num(s.pressure_advance)},
+        {"extrusion.max_flow", num(s.filament_max_flow)},
+        {"extrusion.chamber_temperature", num(s.chamber_temperature)},
+        {"extrusion.abrasive", flag(s.abrasive)},
+        {"extrusion.needs_enclosure", flag(s.needs_enclosure)},
+        {"gcode.resolution", num(s.gcode_resolution)},
+        {"machine.max_flow", num(s.machine_max_flow)},
+        {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
+        {"machine.max_bed_temp", num(s.max_bed_temp)},
+        {"machine.max_chamber_temp", num(s.max_chamber_temp)},
+        {"machine.enclosed", flag(s.enclosed)},
+        {"machine.hardened_nozzle", flag(s.hardened_nozzle)},
     };
     if (!s.changes.empty())
         out.push_back({"changes", changes_json(s.changes).dump()});
@@ -542,9 +825,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
 std::string settings_json(const Settings& s) {
     using nlohmann::ordered_json;
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
-    const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
-                          : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                                                                         : "gyroid";
+    const char* pattern = infill_pattern_name(s.infill_pattern);
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"
@@ -558,10 +839,20 @@ std::string settings_json(const Settings& s) {
     ordered_json bed = ordered_json::array();
     for (const auto& p : s.bed)
         bed.push_back({p[0], p[1]});
+    ordered_json layer_heights = ordered_json::array();
+    for (const auto& p : s.layer_heights)
+        layer_heights.push_back({p[0], p[1]});
     const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
                                                                : ordered_json(s.outer_wall_speed.value);
     const ordered_json root = {
-        {"layers", {{"height", s.layer_height}, {"first_height", s.first_layer_height}}},
+        {"layers",
+         {{"height", s.layer_height},
+          {"first_height", s.first_layer_height},
+          {"detail_height", s.detail_height},
+          {"detail_tolerance", s.detail_tolerance},
+          {"detail_margin", s.detail_margin},
+          {"heights", layer_heights},
+          {"cusp_height", s.cusp_height}}},
         {"slicing",
          {{"fill_mode", fill_mode},
           {"gap_closing_radius", s.gap_closing_radius},
@@ -572,12 +863,26 @@ std::string settings_json(const Settings& s) {
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
-          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"}}},
+          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+          {"top_min_thickness", s.top_min_thickness},
+          {"bottom_min_thickness", s.bottom_min_thickness}}},
         {"infill",
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
           {"pattern", pattern},
-          {"wall_overlap", s.infill_wall_overlap}}},
+          {"wall_overlap", s.infill_wall_overlap},
+          {"combine_layers", s.infill_combine_layers},
+          {"combine_auto", s.infill_combine_auto},
+          {"dense_under_top", s.infill_dense_under_top},
+          {"dense_density", s.infill_dense_density},
+          {"stress_density", s.infill_stress_density},
+          {"solid_every", s.infill_solid_every},
+          {"nonplanar", s.infill_nonplanar},
+          {"nonplanar_amplitude", s.infill_nonplanar_amplitude},
+          {"nonplanar_wavelength", s.infill_nonplanar_wavelength},
+          {"combine_max_height", s.infill_combine_max_height.percent
+                                     ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
+                                     : ordered_json(s.infill_combine_max_height.value)}}},
         {"machine",
          {{"nozzle_diameter", s.nozzle_diameter},
           {"filament_diameter", s.filament_diameter},
@@ -594,7 +899,15 @@ std::string settings_json(const Settings& s) {
           {"travel_acceleration", s.travel_acceleration},
           {"corner_speed", s.corner_speed},
           {"bed", bed},
-          {"max_height", s.max_height}}},
+          {"max_height", s.max_height},
+          {"min_layer_height", s.min_layer_height},
+          {"max_layer_height", s.max_layer_height},
+          {"max_flow", s.machine_max_flow},
+          {"max_nozzle_temp", s.max_nozzle_temp},
+          {"max_bed_temp", s.max_bed_temp},
+          {"max_chamber_temp", s.max_chamber_temp},
+          {"enclosed", s.enclosed},
+          {"hardened_nozzle", s.hardened_nozzle}}},
         {"speed",
          {{"walls", s.wall_speed},
           {"outer_wall", outer_wall},
@@ -629,9 +942,17 @@ std::string settings_json(const Settings& s) {
           {"fan_max", s.fan_max},
           {"fan_off_layers", s.fan_off_layers}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+        {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
-        {"extrusion", {{"flow", s.flow}, {"pressure_advance", s.pressure_advance}}},
+        {"extrusion",
+         {{"flow", s.flow},
+          {"pressure_advance", s.pressure_advance},
+          {"max_flow", s.filament_max_flow},
+          {"chamber_temperature", s.chamber_temperature},
+          {"abrasive", s.abrasive},
+          {"needs_enclosure", s.needs_enclosure}}},
+        {"gcode", {{"resolution", s.gcode_resolution}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";
@@ -643,7 +964,34 @@ Settings load_settings(const std::filesystem::path& path) {
         throw SettingsError("settings: cannot open '" + path.string() + "'");
     std::ostringstream text;
     text << in.rdbuf();
-    return parse_settings(text.str());
+    Settings s = parse_settings(text.str());
+    check_settings(s);
+    return s;
+}
+
+void check_settings(const Settings& s) {
+    char text[200];
+    const double nozzle = s.nozzle_diameter;
+    const double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
+    for (const auto& [key, h] : {std::pair{"layers.height", s.layer_height}, {"layers.first_height", s.first_layer_height}}) {
+        if (h > top + 1e-9) {
+            std::snprintf(text, sizeof text,
+                          "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, or "
+                          "machine.max_layer_height)",
+                          key, h, top);
+            throw SettingsError(text);
+        }
+        if (s.min_layer_height > 0.0 && h < s.min_layer_height - 1e-9) {
+            std::snprintf(text, sizeof text, "%s: %.3g mm is thinner than machine.min_layer_height (%.3g mm)", key, h,
+                          s.min_layer_height);
+            throw SettingsError(text);
+        }
+    }
+    if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
+        std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
+                      s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
 }
 
 } // namespace tisma

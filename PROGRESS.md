@@ -2761,3 +2761,1127 @@ Slicer (dos opciones en `docs/spec/COVERAGE.md`, «Migración»).
 **Pendiente de las fichas:** `COVERAGE.md` y las fichas nuevas (interfaz, paredes extra, piel difusa, rellenos,
 falda/borde/balsa, más soportes, velocidades y aceleraciones, enfriamiento, retracción y viajes, modo jarrón) están en
 las PRs #2 a #8, todavía sin fusionar en `main`. Se leen cuando estén en `main` y pasen `tools/check_spec.py`.
+
+## 2026-10-24 — capacidades de impresoras y filamentos
+
+**Pedido del dueño:** integrar las capacidades de cada impresora «a lo mayor cantidad de detalles posible» y lo mismo
+para los filamentos, para que el laminador use lo importante (más capacidad de la máquina); no le interesa que los
+perfiles sean comerciales. Los perfiles de otros programas siguen afuera por la regla de sala limpia.
+
+**Hecho:**
+- **El catálogo** (`docs/CATALOG.md`, «Capacidades en detalle») acepta por impresora la cinemática, el flujo máximo,
+  la cámara calefaccionada, la boquilla endurecida, el hot end, el sensor, las camas, la conectividad, las funciones,
+  las ranuras multimaterial y los cabezales; por filamento el flujo máximo, la cámara, el secado, abrasivo, soluble,
+  la dureza, Tg, HDT, la contracción y las camas. Todo opcional y validado con rangos (`parse_catalog`).
+- **Los ajustes** (`docs/CONFIG.md`): `machine.max_flow`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp`,
+  `enclosed`, `hardened_nozzle`; `extrusion.max_flow`, `chamber_temperature`, `abrasive`, `needs_enclosure`. Van al
+  perfil de impresora y de filamento respectivamente, y los llenan `printer_profile` y `filament_profile`.
+- **El motor los usa** (`src/gcode/writer.cpp`):
+  - tope de flujo volumétrico: la velocidad de cada tramo no pasa de flujo / (ancho × alto × flujo %), con el menor
+    de los dos límites, redondeada a mm/min enteros;
+  - la cámara: `M141 S` (o `SET_HEATER_TEMPERATURE HEATER=chamber` en Klipper) después del G-code de inicio, sin
+    pasar del máximo de la impresora, y apagada al final;
+  - `capability_warnings`: boquilla o cama más calientes que el máximo, cámara que no calienta o no alcanza,
+    impresora cerrada, boquilla endurecida (tipos `nozzle_temperature`, `bed_temperature`, `chamber`, `enclosure`,
+    `abrasive`), sumados a los avisos del G-code.
+- **La interfaz:** la ficha del catálogo muestra todos los detalles; los avisos van en la barra de estado con su
+  texto al pasar el puntero.
+- **`tools/catalog_merge.py`:** valida los valores contra los rangos del catálogo y tiene `--update`, que suma a una
+  entrada existente solo las claves que no tenía y las fuentes nuevas.
+- **Pruebas:** `tests/test_gcode.cpp` «capabilities» (el flujo medido del G-code del cubo baja al tope, 4 y 3 mm³/s;
+  la cámara al principio y al final; los cinco avisos y ninguno cuando todo cabe o nada se sabe);
+  `tests/test_catalog.cpp` «capabilities in detail» (los campos, los perfiles, los dos perfiles juntos con y sin
+  avisos, `is_abrasive`, los errores de formato); `tests/test_settings.cpp` (ida y vuelta de las claves nuevas y
+  sus rangos).
+
+**Medido:** `tools/ci_linux.sh` pasa entero (264 pruebas por compilador, gcc, clang y ASan + UBSan, 215 s la
+última). El cubo de prueba sin límite pasa de 4 mm³/s; con tope de 3 mm³/s, el flujo más alto medido en su G-code
+queda entre 2,4 y 3,06 mm³/s (el redondeo a mm/min enteros).
+
+**No probado:** una impresora real con cámara (`M141` sale de la documentación de Marlin y RepRapFirmware; la
+calefacción de cámara de Klipper depende del nombre del calentador en la configuración de cada máquina); los
+detalles del catálogo todavía no están cargados (la tanda de detalles, abajo).
+
+**Sigue:**
+- la tanda de detalles del catálogo (seis agentes de investigación, solo páginas oficiales; cayeron por el límite
+  de la sesión y se retoman);
+- el filtro de moiré de la vista 3D (pedido del dueño, 2026-10-24);
+- un perfil de impresión «rápido» armado desde las capacidades (velocidad y aceleración máximas, flujo).
+
+## 2026-10-24 — filtro de moiré en la vista 3D
+
+**Pedido del dueño:** «hay que añadir al apartado visual un filtro de moire».
+
+**Hecho** (`docs/UI.md`, «Imagen»):
+- **Las líneas de la vista previa** (`apps/tisma/renderer.cpp`, `kPreviewFragment`): el shader de vértices pasa las
+  coordenadas de la sección de cada línea, sus ejes y su tamaño; el de fragmentos mide con `fwidth` cuánto abarca el
+  píxel de la sección y, por debajo de dos píxeles por línea, reemplaza la normal por el promedio de las normales de
+  todo el perfil (16 puntos del rombo, las normales de la elipse), cada una pesada por cuánto mira al ojo: lo que el
+  píxel vería de verdad. El brillo se ensancha con la fórmula de Toksvig 2005 según el largo de esa normal media. De
+  cerca no cambia nada; también en el G-buffer, así la oclusión ambiental ve las mismas normales.
+  - El primer intento (fundir la normal con el eje «más fino» de la sección) apenas bajaba el moiré (45,8 → 42,0
+    a 2×): sobre una cara del rombo las dos coordenadas cambian igual de rápido y el eje elegido era arbitrario.
+- **La grilla de la cama** (`kGridFragment`, un programa nuevo; el contorno sigue con el de líneas): cada línea se
+  desvanece cuando la siguiente de su clase queda a menos de 6 px en pantalla (medido proyectando el punto vecino);
+  las mayores aguantan más.
+- **La interfaz:** casilla **Filtro de moiré** debajo de FXAA, con ayuda al pasar el puntero; activado por defecto;
+  se guarda en `interface.json` (`moire_filter`); `--moire on|off`.
+- **`--moire-check`** (con `--screenshot`): dibuja la vista previa desde el doble de lejos, sin multimuestreo, con y
+  sin el filtro, guarda las dos imágenes al lado de la captura (`…_moire_off.png`, `…_moire_on.png`) y exige que,
+  donde el filtro cambió píxeles, los vecinos difieran al menos un 15 % menos. Prueba
+  `ui_moire_filter_smooths_fine_lines` en CTest.
+
+**Medido:** con el cubo de prueba a 2× de distancia (unos 0,8 px por capa), 2356 píxeles cambiados; diferencia
+media entre vecinos 45,4 sin el filtro y 23,2 con él (−49 %). A ojo, en los recortes ampliados: sin el filtro el
+cubo lejano es un tablero de moiré y en la vista normal (1,6 px por capa) las paredes y la tapa tienen bandas
+onduladas; con el filtro, caras lisas con la luz de cada cara. A 8× el cubo mide 10 px y la medida la domina la
+grilla (38,2 → 32,1): por eso la prueba va a 2×.
+
+**No probado:** el aspecto en una pantalla real y en piezas grandes; el ray tracing y la oclusión ambiental reciben
+las normales filtradas, pero la profundidad sigue con las líneas (no se midió si la oclusión conserva ruido de
+lejos).
+
+**Sigue:** cargar la tanda de detalles del catálogo cuando terminen los agentes (ya terminaron otras marcas, 29
+entradas con detalles y 6 modelos nuevos, y filamentos del grupo 2, 36 con detalles y 10 nuevos); un perfil de
+impresión rápido desde las capacidades.
+
+## 2026-10-24 — catálogo: tanda de detalles, grupos 1 de 3
+
+**Hecho:** se cargaron con `tools/catalog_merge.py --update` los dos grupos de investigación que terminaron (solo
+páginas oficiales; `BRIEF2.md` en el cuaderno de la sesión):
+- **Impresoras de otras marcas** (AnkerMake, BIQU, Kingroon, Longer, LulzBot, Peopoly, Raise3D, RatRig, Snapmaker,
+  Tronxy, Voron): 29 entradas con detalles y 6 modelos nuevos (Raise3D Pro3 HS, E3, E2CF; Kingroon KP5L Pro; LulzBot
+  TAZ 8, Mini 3).
+- **Filamentos del grupo 2** (Anycubic, colorFabb, Creality, Extrudr, Fiberlogy, Fillamentum, Hatchbox, Overture):
+  36 entradas con detalles y 10 filamentos nuevos (colorFabb PA-CF Low Warp; Fiberlogy Nylon PA12+CF, BVOH, HIPS;
+  Creality Hyper PETG-CF; Fillamentum HIPS Extrafill; Overture PC Professional, Easy Nylon; Anycubic ASA; Extrudr
+  DuraPro PA12 CF).
+
+El catálogo queda en **144 impresoras de 21 fabricantes y 108 filamentos de 14**. Campos de detalle cargados hasta
+ahora: en impresoras, funciones 26, sensor 24, conectividad 23, hot end 22, camas 21, cinemática 18, boquilla
+endurecida 11, flujo máximo 7, cabezales 5; en filamentos, secado 42, HDT 29, camas 29, Tg 16, flujo máximo 12,
+abrasivo 11, dureza 8, contracción 6, soluble 3, cámara 1. La carga no descartó ninguna entrada ni cambió ningún
+valor que ya estaba.
+
+**Lo que los agentes dejaron vacío, y por qué** (una muestra): AnkerMake M5C sin página de producto (datos del blog
+oficial de eufymake); Voron sin hot end ni cama (los documentos oficiales no los fijan); Tronxy X5SA-500 2E sin
+cinemática (la página no la dice); LulzBot TAZ 8 sin diámetro de filamento («según el cabezal»); colorFabb sin flujo
+máximo (dos tablas oficiales con valores distintos); Hatchbox sin hoja técnica publicada. Los rangos de secado se
+guardan por el valor bajo; el HDT, el de 0,45 MPa cuando hay dos.
+
+**Medido:** `tisma_tests "[catalog]"` pasa (1041 comprobaciones, cada entrada del catálogo incluido validada y con
+su perfil).
+
+**Sigue:** los otros cuatro grupos (Creality; Bambu Lab, Prusa, QIDI, Flashforge y UltiMaker; Elegoo, Anycubic,
+Artillery y Sovol; filamentos de Bambu Lab, Elegoo, eSUN, Polymaker, Prusament y SUNLU), cuando terminen.
+
+## 2026-10-24 — calibraciones estándar, tercera tanda
+
+**Hecho** (`docs/CALIBRATION.md`), siguiendo la lista de pendientes de `PLAN.md` («sigue con la lista de
+pendientes»):
+- **Tope de flujo volumétrico** (`max_flow`): el tubo cuadrado, cada segmento con un cambio por altura nuevo,
+  `volumetric_flow` (mm³/s): el escritor fuerza la velocidad de toda extrusión a la que da ese flujo en su cordón,
+  por encima de `speed.max` y del tope de flujo, sin el frenado del tiempo mínimo de capa, hasta lo que la máquina
+  se mueve (`max_feed_x`, `_y`); el verificador admite esas velocidades (`gcode_limits`). **Usar** pasa el valor a
+  `machine.max_flow`. Rango automático alrededor del tope conocido, o de 4 a 30 mm³/s.
+- **Resonancias (aceleración)**: cambio por altura `acceleration`, escrito con el comando del dialecto; el motor
+  además escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…` /
+  `SET_VELOCITY_LIMIT ACCEL=…`), lo que faltaba según el plan. **Usar** pasa el valor a `machine.acceleration` (y sube
+  `travel_acceleration` si quedaba más baja). Rango de 500 al doble de la aceleración en uso.
+- **Pata de elefante**: un bloque de 20 × 20 × 6 mm; se miden el ancho de abajo y el del cuerpo;
+  `elephant_foot_from` da `slicing.first_layer_shrink` = el actual + la mitad del exceso (0 a 2 mm). Tarjeta con las
+  dos medidas, el valor actual y el nuevo, y **Aplicar el achique**.
+- El tubo del avance de presión pasó a un ayudante (`tube_tower`) que comparten las tres torres de tubo.
+- Textos, tarjetas, rangos ajustables y `--calibration max_flow|acceleration|elephant_foot`.
+
+**Medido:** `tisma_tests "[calibration],[settings]"`: 2048 comprobaciones en 19 casos. En la torre de flujo, a
+16 mm³/s las líneas de 0,4 × 0,2 mm corren a F12000 (200 mm/s) aunque `speed.max` sea 20 mm/s y el tiempo mínimo
+de capa 60 s; con la máquina limitada a 150 mm/s, no pasa de F9000. La torre de aceleración escribe su comando por
+segmento en los tres dialectos y el G-code pasa el verificador.
+
+**No probado:** impreso en una impresora real (necesita al dueño). El tiempo estimado no sigue la aceleración por
+segmento (usa `machine.acceleration`).
+
+**Sigue:** puentes y voladizos (la última estándar); la tanda de detalles del catálogo cuando terminen los agentes;
+la app móvil de Android (pedido nuevo del dueño: a definir qué sigue, ver `PLAN.md`).
+
+## 2026-10-24 — la app de Android (plan)
+
+**Decisiones del dueño:** «ve por la opción 1 y luego por devices, así podemos conectar impresoras; tiene que tener
+soporte USB» y «algo similar a Prusa EasyPrint en estética, con nuestras funciones».
+
+**Hecho:** `docs/MOBILE.md`, la fase P6 de `PLAN.md`:
+- qué hace la app (impresoras, impresión, cámara, controles, archivos, avisos) y la estética como caja negra;
+- una sola capa de dispositivos en C++ (`src/device/`) compartida con la página Device: la interfaz `Printer`, los
+  transportes y un host de G-code por puerto serie propio (números de línea, suma de verificación, `ok`,
+  `Resend:`, `M105`/`M155`, `M114`, `M27`), con un simulador de impresora serie para las pruebas de CI;
+- la app en Kotlin + Jetpack Compose con el núcleo por NDK y el USB por la API USB Host de Android;
+- el orden: USB en el escritorio → la app con USB OTG → las conexiones de red de la ficha de Device → cámara,
+  archivos y avisos → laminar simple desde el teléfono (a confirmar);
+- tres preguntas al dueño: teléfono e impresora de prueba, cámara, instalación.
+
+**Aclaración del dueño, después:** «el slicer de PC puede imprimir por USB; el celular, solo por WiFi». El plan
+quedó así: sin USB en el teléfono; las impresoras por USB de la PC se siguen por la red a través de un servicio
+local de `tisma` (estado, avance, controles, cámara, con vinculación), y las que tienen API de red, directo.
+
+**Sigue:** empezar `src/device/` con el host serie y el simulador cuando la ficha de Device esté en `main` (PR #11)
+o antes, con la documentación pública de Marlin y RepRapFirmware; mientras, los grupos del catálogo que faltan.
+
+## 2026-10-24 — Device: la capa de dispositivos y el host serie
+
+**Pedido del dueño:** «arrancá con `src/device` y el host serie». Diseño en `docs/DEVICE.md`.
+
+**Hecho:**
+- `src/device/printer.hpp`: `Printer`, `PrinterStatus`, `PrinterEvent` y los controles de siempre como comandos.
+- `src/device/stream.*`: `ByteStream` y el tubo en memoria (`make_pipe`).
+- `src/device/serial_port.*`: el puerto serie, 8N1, cualquier velocidad en Linux (`termios2`, `BOTHER`: 250 000
+  incluido) y el puerto COM en Windows; la lista de puertos.
+- `src/device/gcode_host.*`: el host de G-code en su hilo: conexión con `M110 N0` hasta el primer `ok`, `M115`,
+  `M155 S2` con `M105` de respaldo; líneas numeradas con suma de verificación; un `ok` por línea; reenvíos (traga
+  el `ok` del pedido, renumera si la placa se reinició, 5 intentos); `echo:busy` reinicia la espera; temperaturas,
+  posición y firmware desde los informes; trabajos con avance, pausa y cancelación (apaga calefactores y
+  ventilador, suelta motores); comandos sueltos en el primer hueco; errores de conexión claros.
+- `src/device/simulator.*`: la impresora simulada tipo Marlin, con reenvío provocado (`fail_line`), temperaturas
+  que se mueven, `M109`/`M190` que esperan con `echo:busy`, y el registro de comandos.
+- `tests/test_device.cpp`: seis casos (ver `docs/DEVICE.md`, «Pruebas»).
+
+**Medido:** `tisma_tests "[device]"`: 108 comprobaciones en 6 casos; el trabajo de prueba (1265 líneas con una
+rota) se imprime al simulador en menos de un segundo, con un solo reenvío y cada `G1` recibido una vez.
+
+**No probado:** una impresora real por USB (necesita al dueño: qué impresora y en qué sistema); el puerto COM de
+Windows se compila en el CI de Windows pero no se ejecutó contra un puerto real.
+
+**Sigue:** la página Device en `tisma` (puertos, conectar, estado, imprimir lo exportado, pausar, cancelar; el
+simulador como impresora de prueba); después el servicio local para la app y las conexiones de red de la ficha.
+
+## 2026-10-25 — mantenimiento
+
+Bloque de la tarea programada cada 8 horas (decisión del dueño). Antes, un arreglo del CI de Windows: a
+`tests/test_device.cpp` le faltaba `#include <algorithm>` (MSVC no lo trae por otros encabezados; gcc y clang sí);
+`8bf65d1`.
+
+**Revisado:**
+- `origin/main` en `dev`: nada nuevo.
+- `tools/ci_linux.sh` (272 pruebas en gcc, clang y ASan + UBSan).
+- La búsqueda aleatoria de G-code: 2000 corridas con la semilla 1792896531; después de ampliarla (abajo), 2000 más
+  con 1792896647. 0 fallas (0 y 4 piezas rechazadas como no imprimibles, lo esperado).
+- Los cambios recientes: el tope de flujo, la cámara, los avisos, el flujo forzado y la aceleración por altura, la
+  capa de dispositivos. Una sospecha: que el verificador rechazara cordones más finos que un cuarto del ancho con
+  flujo forzado. No se reproduce: en una cuña que se afina hasta un filo, las líneas forzadas corren a la velocidad del
+  cordón de ancho completo; queda una prueba de guarda (`calibration: a forced flow on a wedge that thins to an edge
+  checks`).
+- Los avisos del compilador en los tres compiladores y en el CI de Windows.
+
+**Encontrado y corregido:**
+- **La búsqueda aleatoria no probaba nada de lo nuevo.** Ahora sortea también el dialecto, los topes de flujo de la
+  máquina y del filamento, el avance de presión, las aceleraciones, la cámara y hasta tres cambios por altura de los
+  de las torres (temperatura, flujo, velocidad, retracción, flujo forzado, aceleración, avance de presión,
+  ventilador), y los muestra cuando una corrida falla.
+- **Avisos del compilador:** clang (`-Wsign-conversion` en la suma de verificación del host serie); MSVC (C4996 en
+  `std::getenv`, que acá solo se lee: `_CRT_SECURE_NO_WARNINGS` en las opciones de aviso; C4702 dentro de nanosvg,
+  apagado alrededor de su `#include`); una sombra de variable en la búsqueda aleatoria.
+
+**Optimizado:** la escritura del G-code se iba casi la mitad en `std::to_chars` con decimales fijos (callgrind: 2,84
+de 5,84 mil millones de instrucciones del escritor, la esfera de 200 segmentos). Un camino rápido propio escala por
+10^d, redondea a entero y pone el punto; los valores a menos de 0,001 de un medio, los enormes (desde 2^40) y los de
+más de 9 decimales siguen yendo a `to_chars`. Da el mismo texto: lo prueba `numbers in the G-code: the fast
+formatter writes what std::to_chars writes` (casos de borde y 2 millones de valores al azar) y el G-code de la esfera
+sale igual byte a byte.
+
+**Medido** (4 núcleos, Release, CPU):
+- Esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`, 319 200 triángulos, 500 capas, 884 549 líneas):
+  laminado 0,84–0,89 s; escritura del G-code de 0,81–0,88 s a **0,60–0,62 s**; verificación 0,22–0,24 s.
+- Análisis del cubo de prueba: solución 173–210 ms (22 iteraciones, 3 niveles); el bloque anterior midió 141–151 ms.
+  El código del análisis no cambió desde entonces (`git log src/fea`) y el laminado mide lo mismo: lo tomo como
+  variación de la máquina; no se investigó más.
+
+**No probado:** la búsqueda aleatoria ampliada con ASan (solo en Release).
+
+## 2026-10-25 — la pestaña Impresora (Device)
+
+**Pedido del dueño:** «seguí con la página Device». Diseño en `docs/DEVICE.md`, «La página Impresora».
+
+**Hecho:**
+- La pestaña **Impresora** en `tisma` (`apps/tisma/app.cpp`, `device_panel`): puerto y velocidad (recordados),
+  conectar y desconectar, estado con su color, firmware y error, temperaturas con objetivo, imprimir lo laminado o
+  el G-code abierto, avance con líneas, tiempo pasado y restante (el estimado del G-code), reenvíos, pausar, seguir,
+  cancelar, mover los ejes, extruir, retraer, ventilador, y el registro de eventos; los eventos importantes también
+  como avisos. La pieza se corre a la derecha, como en Calibración.
+- `--device PUERTO|sim`, `--view device` y `--device-print` (lamina, imprime y espera el final); la prueba
+  `ui_device_prints_to_simulator`.
+- El host pide `M105` al conectar: las temperaturas aparecen enseguida, no al primer informe de `M155`.
+
+**Encontrado y corregido en el camino:**
+- **Una carrera en el host** (la encontró UBSan en el CI de Linux): el estado nuevo (error, lista, terminado, en
+  pausa) se publicaba y su evento se agregaba después, en otro bloqueo; quien veía el estado y retiraba los eventos
+  en ese instante los encontraba vacíos (y la prueba leía `.back()` de una lista vacía). Ahora `change()` publica
+  los dos juntos; las pruebas nunca leen `.back()` sin comprobar que haya algo. 15 corridas seguidas con ASan +
+  UBSan sin fallas.
+- **La prueba de pausa en Windows:** el trabajo de 2000 líneas contra el simulador en memoria terminaba antes de que
+  la prueba alcanzara a pausar (allá un `sleep_for(5ms)` dura ~15 ms). El simulador ahora puede tardar por movimiento
+  (`move_time`, 2 ms en esa prueba): el trabajo dura segundos y la pausa siempre cae en medio.
+
+**Medido:** el cubo, laminado e impreso a la impresora simulada desde la interfaz, en 1,4 s de punta a punta (2552
+líneas, con las esperas de `M190` y `M109` del simulador).
+
+**No probado:** con una impresora real por USB (necesita al dueño); la pestaña a mano, con el ratón (las pruebas
+usan la línea de comandos).
+
+**Sigue:** la altura de capa variable por zona (pedido del dueño): el plan, con *local adaptive slicing* (Tyberg y
+Bøhn 1998); después, el servicio local para la app de Android.
+
+## 2026-10-25 — altura de capa por zona (etapas 1 y 2)
+
+**Pedido del dueño:** «altura de capa variable que dependa del detalle y no de la pieza entera, así podemos
+conseguir que aunque dos partes estén a la misma altura tengan capas de alturas distintas para mejorar calidades».
+Diseño en `docs/LOCAL_LAYERS.md`.
+
+**Hecho:**
+- La ficha `docs/spec/features/slicing.md` (pasa `tools/check_spec.py`) solo pide alturas por Z para el objeto
+  entero; esto va más allá, con la idea de *local adaptive slicing* (Tyberg y Bøhn 1998) y *region-based adaptive
+  slicing* (Mani, Kulkarni y Dutta 1999), y un método propio.
+- `src/slice/local_layers.*`: los grupos de `k` subcapas (después de la primera capa), la zona gruesa de cada uno
+  (donde sus secciones coinciden, sin fondos ni topes expuestos, lejos del detalle por un margen, sin pedazos de
+  menos de dos anchos), el recorte de los caminos por zona con el ancho interpolado, y el reparto: lo fino en cada
+  subcapa y lo grueso una vez, en la última, con alto `H`.
+- La tubería lamina la pila fina; las pieles se cuentan en capas gruesas y el espacio de los soportes en subcapas.
+- El escritor pone lo grueso al final de su capa entre `;HEIGHT:H` y `;HEIGHT:h`; el verificador y la vista previa ya
+  leen el alto por tramo.
+- Ajustes `layers.detail_height`, `detail_tolerance` y `detail_margin` (`docs/CONFIG.md`); la subcapa no baja de
+  0,04 mm.
+- La búsqueda aleatoria de G-code sortea la altura por zona.
+
+**Encontrado en el camino:** la búsqueda aleatoria dio dos fallas con subcapas de 0,0215 mm (una capa de 0,086 mm
+partida en 4): `;HEIGHT:` va con 3 decimales y a ese alto el redondeo ya es un 2,4 %, más que lo que tolera el
+verificador. Con el piso de 0,04 mm, 0 fallas en 3000 casos (semillas 1792898697 y 1792898943).
+
+**Medido** (Release, CPU): una caja de 20 × 20 × 9 mm y una pirámide de 20 mm de base y 9 de alto lado a lado, capas
+de 0,3 mm con detalle de 0,1 mm (88 subcapas, 28 capas gruesas con zona gruesa): el tiempo estimado baja de 1425 s
+(todo a 0,1 mm, con las mismas pieles en mm) a **968 s (−32 %)**, con el 97,8 % del material. En la interfaz,
+cargando los ajustes desde un JSON: 16 min 4 s, G-code verificado.
+
+**No probado:** impreso en una máquina real (necesita al dueño): en especial el pegado entre la zona gruesa y la fina
+y si 0,3 mm de golpe llena bien el hueco de las subcapas; el aspecto en piezas con curvas suaves (solo cajas y
+pirámides).
+
+**Sigue:** la etapa 3 (los ajustes en la interfaz y la vista previa con el color por alto de capa).
+
+## 2026-10-25 — altura de capa por zona: la interfaz (etapa 3)
+
+**Hecho:**
+- En la sección Impresión, debajo de la altura de la primera capa: **Alto del detalle**; cuando no es 0, **Escalón
+  aceptado** y **Margen del detalle**, cada uno con su ayuda.
+- En la vista previa, **Color por → Alto de capa**: la rampa de color va del alto más fino al más grueso de los
+  cordones (el mínimo y el máximo vienen de `;HEIGHT:`, que ahora cambia dentro de una capa). `--color` para las
+  capturas.
+- `PreviewBuffers` guarda el rango de altos; la prueba de la interfaz lo comprueba con una zona gruesa dentro de una
+  capa.
+
+**Visto:** la caja y la pirámide del ejemplo, con capas de 0,3 mm y detalle de 0,1 mm, pintadas por alto: las
+paredes rectas de la caja en rojo (0,3 mm), el tope de la caja y la pirámide en azul (0,1 mm), a la misma altura.
+
+**No probado:** los campos a mano, con el ratón (las capturas cargan los ajustes desde un JSON).
+
+**Sigue:** la etapa 4 (medir en el banco contra todo fino y todo grueso); la altura variable por Z de la ficha.
+
+## 2026-10-25 — altura de capa por zona: medida en el banco (etapa 4)
+
+**Hecho:** tres piezas en tres modos (todo a 0,1 mm, todo a 0,3 mm, por zona 0,3/0,1), con el tiempo estimado, el
+material, la parte gruesa y la pared exterior por alto (`docs/LOCAL_LAYERS.md`, «Medido»). Y una optimización del
+recorte que el banco mostró: las aristas de la zona indexadas por franjas de Y.
+
+**Medido** (Release, CPU):
+- Tiempo de impresión por zona contra todo fino: caja y pirámide −39 % (26,4 → 16,1 min), cilindro con cúpula
+  −52 % (113,0 → 54,4 min), esfera de 100 mm −45 % (918,9 → 507,4 min); el material igual (±1 %).
+- La pared exterior va fina en el 60, 62 y 93 % de su largo: las pendientes; gruesa donde es recta.
+- El recorte: 4,1 veces menos instrucciones (callgrind, la cúpula: 2,56 → 0,62 mil millones); el laminado por zona
+  entero, −30 % (10,5 → 7,4 mil millones); el mismo G-code byte a byte. Con el reloj, en esta máquina compartida, la
+  esfera lamina en 2,1–2,5 s por zona contra 1,8–1,9 s todo fino.
+
+**Decidido:** el recorte no va a la GPU (las zonas y el recorte son el 15 % del laminado).
+
+**No probado:** la calidad impresa (el escalón real), que necesita al dueño y una impresora.
+
+**Sigue:** la altura variable por Z de la ficha (`slicing.md`), una lista de (Z, alto) por objeto, que la altura
+por zona generaliza; o lo que el dueño elija.
+
+## 2026-10-25 — altura de capa variable por Z
+
+**Pedido del dueño:** «seguí con la altura variable por Z y por Z anti-aliasing así las combinamos para máxima calidad»,
+y que no dependa de dos objetos: que sirva en una pieza compleja.
+
+**Hecho** (`docs/VARIABLE_LAYERS.md`):
+- `layers.heights`: la lista de tramos (Z, altura) de la ficha (`slicing.md`).
+- `layers.cusp_height`: la altura por pendiente, por el escalón máximo (Dolenc y Mäkelä 1994). Las caras de la malla
+  limitan bandas de Z de 0,005 mm, y las caras planas cierran una capa.
+- `machine.min_layer_height` y `max_layer_height`, nunca por encima de la boquilla.
+- **Con la altura por zona**, la pendiente decide cuántas subcapas lleva cada capa gruesa (1 donde no hace falta). Si
+  ni las más finas alcanzan, la capa gruesa se achica. Las pieles cuentan capas gruesas.
+- **Sin lista ni pendiente,** la pila es la de siempre: el mismo G-code byte a byte (comprobado en la cúpula y la
+  esfera, en cuatro modos).
+- **La interfaz:** «Escalón en pendientes» y «Alturas por Z» (con agregar y quitar tramos) en Impresión; «Capa mínima»
+  y «Capa máxima» en Impresora.
+- **Pruebas:** 4 casos nuevos.
+  - Un prisma de techo a 10° y una cúpula sobre una columna, cada uno en una sola malla.
+  - La columna va gruesa y la cúpula fina.
+  - Con lista, con pendiente y con zona + pendiente, el G-code pasa el chequeo y el material queda en ±6 %.
+- **El fuzz** sortea pendiente, tramos y límites de máquina: 2000 corridas en 5 semillas, 0 fallas.
+
+**Corregido, por el fuzz** (fallas que ya estaban y que las combinaciones nuevas del sorteo destaparon):
+- **Un desplazamiento XY de −0,00013 mm sobre la esfera:** dejaba zigzags de aristas de 1 nm en las esquinas, y el
+  diagrama de Voronoi propio lanzaba «no seed node». El de referencia, como respaldo, armaba grafos de 260 000 nodos
+  y colgaba el laminado: ese respaldo se descartó.
+  - Ahora las esquinas a menos de 10 nm de la anterior se quitan antes de armar el diagrama (de un cuelgue a 0,16 s).
+  - El G-code de los modelos comunes no cambia.
+  - Prueba con el contorno real de esa capa: falla sin el arreglo.
+- **Un cambio por altura a 0,0002 mm del tope de una capa:** el escritor lo aplicaba en la capa siguiente y el
+  verificador, que lee el Z redondeado a 3 decimales, en esa. Ahora el escritor usa el tope tal como se escribe.
+- **`tisma-engine`:** un error interno no atrapado cortaba el programa («terminate called»). Ahora sale con el código
+  7 y un mensaje.
+- **El fuzz** deja el modelo, los ajustes y el G-code de una corrida que falla en la carpeta de `TISMA_FUZZ_DUMP`.
+
+**Medido** (cúpula sobre columna de 40 mm y esfera de 100 mm, CPU; el escalón es `h · |n_z|` del perímetro externo):
+- **Escalón máximo 0,1 mm:**
+  - zona + pendiente: cúpula 48,6 min y esfera 425,8 min, con p95 de 0,094 y 0,096;
+  - todo a 0,1 mm: 113,0 y 918,6 min, con p95 de 0,079 y 0,088;
+  - por zona sola: 54,4 y 495,7 min.
+- **Escalón máximo 0,05 mm, cúpula:**
+  - zona + pendiente: 56,1 min, p95 0,050;
+  - por pendiente sola: 61,4 min;
+  - todo a 0,05 mm: 224,6 min, p95 0,039.
+- **Material:** ±1,5 % en todos los modos.
+
+**No probado:**
+- la calidad impresa (necesita una impresora);
+- la lista por objeto: el motor lamina toda la cama en una pila, así que la lista vale para toda la cama.
+
+**Sigue:**
+1. Z anti-aliasing (`docs/spec/features/z_antialiasing.md` y Song et al. 2017), para bajar el escalón que queda en
+   las superficies de arriba de poca pendiente.
+2. Después, en la cola del dueño:
+   - el relleno por resistencia y rapidez;
+   - el tiempo de impresión más preciso;
+   - el panel izquierdo por niveles con Impresora, Filamento y Objetos.
+
+## 2026-10-25 — Z anti-aliasing, y el perfil Máxima calidad
+
+**Pedido del dueño:** «altura variable por Z y Z anti-aliasing, así las combinamos para máxima calidad», en una pieza
+compleja.
+
+**Hecho** (`docs/ZAA.md`):
+- `src/slice/zaa.*`:
+  - las caras que miran hacia arriba en una grilla de XY;
+  - cada punto visible (paredes, relleno de arriba, relleno de huecos, también de las capas gruesas por zona) va a
+    la superficie si esta corta su capa, con el piso de `zaa.min_thickness`;
+  - con `zaa.raise` (Song et al. 2017), también sube hasta media capa;
+  - los tramos se parten cada 0,2 mm donde salen del tope.
+- **El punto del camino** lleva su `dz`, el primer paso hacia los caminos 3D de la visión.
+- **El escritor:**
+  - Z por punto, redondeada como se escribe;
+  - el material del espesor que queda;
+  - los viajes vuelven al tope, o pasan por encima de lo subido;
+  - los caminos más bajos primero, y la pared externa antes que las internas cuando salen del tope.
+- **El chequeo y la vista previa** entienden el espesor que queda.
+- **Ajustes:** `zaa.enabled`, `zaa.min_thickness` y `zaa.raise`, en el perfil de impresión y en el panel.
+- **Perfil de fábrica Máxima calidad:** 0,3 mm, detalle de 0,1 mm, escalón de 0,05 mm y ZAA con subida.
+- **Pruebas:** 4 casos nuevos.
+  - La regla Z1 de la ficha en techos de 5°, 10° y 15°: la Z con error de 0,0006 mm y el material con error de
+    0,03.
+  - Z2.
+  - Con subida, altura por zona y por pendiente.
+  - La vista previa.
+- **El fuzz** sortea ZAA: 1200 corridas en 4 semillas, 0 fallas.
+- **Con ZAA apagado,** el G-code no cambia: comparado en la cúpula y la esfera, en 4 modos. Solo cambian las 3
+  líneas de los ajustes al final.
+
+**Medido** (error entre el tope de cada cordón visible y la superficie exacta, en los cordones de arriba):
+
+| Pieza | Modo | Error medio | p95 | Tiempo |
+|---|---|---|---|---|
+| esfera | plano 0,2 mm | 0,048 | 0,094 | 447 min |
+| esfera | ZAA solo hacia abajo | 0,043 | 0,094 | 447 min |
+| esfera | ZAA con subida | 0,0026 | 0,005 | 448 min |
+| esfera | zona + pendiente + ZAA | 0,0011 | 0,002 | 526 min |
+| esfera | plano 0,05 mm | 0,014 | 0,024 | 1788 min |
+| cúpula | Máxima calidad | 0,004 | 0,006 | 56 min |
+| cúpula | plano 0,05 mm | 0,013 | 0,024 | 218 min |
+
+Laminar cuesta un 8–9 % más.
+
+**No probado:**
+- una impresión real;
+- el daño de la boquilla a cordones vecinos más altos: el orden simplificado lo reduce, pero el del artículo
+  (subcaminos y grafo de alturas) queda pendiente.
+
+**Sigue,** en la cola del dueño:
+1. el relleno por resistencia y rapidez;
+2. el tiempo de impresión más preciso;
+3. el panel izquierdo por niveles, con Impresora, Filamento y Objetos.
+
+## 2026-10-25 — relleno por resistencia y rapidez: combinar capas (etapa 1)
+
+**Pedido del dueño:** «el relleno debe optimizarse para fuerza y rapidez de impresión». El plan va por etapas en
+`docs/INFILL.md`, cada una medida en tiempo, material y rigidez:
+1. combinar capas;
+2. relleno denso bajo las superficies de arriba;
+3. cúbico y cúbico adaptativo;
+4. relleno guiado por tensiones.
+
+**Hecho:**
+- `infill.combine_layers`, `combine_auto` y `combine_max_height` (ficha `infill_patterns.md`, reglas 18 a 20).
+- Las corridas de capas empiezan en la capa 1. Lo que todas tienen como relleno disperso se imprime una vez, en la de
+  arriba, con el alto de la corrida (la misma capa gruesa de la altura por zona), alternando la dirección por corrida.
+- Nunca más alto que la boquilla, y no se combina con la altura por zona.
+- En Impresión, **Combinar relleno** y **Combinar lo más posible**.
+- **Pruebas:** 2 casos.
+  - Las corridas.
+  - P11 de la ficha en el cubo de 20 mm:
+    - el relleno solo en las capas pares desde la 4, a 0,4 mm;
+    - la capa 3 sin relleno;
+    - el doble de filamento por mm;
+    - menos tiempo;
+    - el chequeo.
+- **Fuzz:** 900 corridas en 3 semillas, 0 fallas.
+
+**Medido:** el mismo material (±0,15 %).
+- Esfera de 100 mm: 447 → 297 min (−34 %) con capas de 0,2; 736 → 402 min (−45 %) con capas de 0,12 en automático.
+- Cúpula: 55,5 → 42,3 min (−24 %).
+
+**No medido:**
+- la resistencia del relleno combinado: el análisis «como impresa» corta sus propias capas uniformes, así que primero
+  tiene que leer el laminado real;
+- una impresión real.
+
+**Sigue:** el relleno denso bajo las superficies de arriba (`dense_infill.md`), y después cúbico y cúbico adaptativo.
+
+## 2026-10-25 — relleno: denso bajo el techo, triángulos y cúbico (etapas 2 y 3)
+
+**Hecho** (`docs/INFILL.md`):
+- `infill.dense_under_top` y `dense_density` (ficha `dense_infill.md`): la parte del relleno que tiene encima la piel
+  de arriba de la capa siguiente va más densa, con el mismo patrón y dirección.
+- Patrones `triangles` y `cubic` (ficha `infill_patterns.md`, reglas 4 y 6): tres familias a 60°. En el cúbico,
+  corridas `z / √2` con la altura, con un `shift` nuevo en `rectilinear_fill`.
+- En el panel: las dos filas del denso y los dos patrones.
+- **Pruebas:** 2 casos.
+  - Los patrones: direcciones, tercios, igualdad entre capas, el corrimiento y su período.
+  - D1 de la ficha: cuatro veces las líneas bajo el techo, el resto igual, chequeo.
+- **El fuzz** sortea los patrones y el denso: 600 corridas en 2 semillas, 0 fallas.
+
+**Midiendo:** la rigidez de cada patrón con el análisis «como impresa» del motor:
+- un cubo de 20 mm comprimido;
+- una barra de 60 × 10 × 10 en voladizo;
+- con tiempo y material.
+
+Va en un commit aparte, con los números en `docs/INFILL.md`.
+
+**Sigue:** cúbico adaptativo (más chico cerca de las superficies), con la respuesta de la sesión de fichas sobre el
+tamaño de los cubos; después, el relleno guiado por tensiones.
+
+## 2026-10-25 — el análisis «como impresa» lee las capas gruesas
+
+**Encontrado** midiendo la rigidez del relleno: el análisis pintaba los vóxeles con las paredes y los rellenos de
+cada capa, pero no con las capas gruesas (`SlicedModel::thick`): la zona gruesa de la altura por zona y el relleno
+combinado.
+- En un cubo de 10 mm, con altura por zona el análisis veía el 3 % de los vóxeles impresos, en vez del 53 %.
+- Con relleno combinado veía el 71 % de los de la misma pieza sin combinar.
+- La pieza parecía hasta 26 veces más blanda.
+
+**Arreglado:**
+- cada capa gruesa llena todas las capas que abarca;
+- la estimación de vóxeles y el modelo macizo usan las capas del laminado (`plan_layer_stack`), también con altura
+  variable;
+- prueba nueva: con relleno combinado, los vóxeles impresos quedan a ±5 % de los de sin combinar; con altura por
+  zona, la parte impresa queda a ±8 %. Falla sin el arreglo (71 % y 3 %).
+
+**Medido** (`docs/INFILL.md`, «Resistencia y rapidez, medidas»): la rigidez de cada patrón con el análisis, en un
+cubo comprimido con 500 N y una barra en voladizo con 20 N.
+- **Compresión:** la grilla, 3,1 veces más rígida por material que el rectilíneo; los triángulos, 2,9.
+- **Flexión:** todos los patrones dentro del 4 %.
+- **Combinar 2 capas:** −16 a −19 % de tiempo con menos de un 6 % de pérdida de rigidez.
+- **La altura por zona** (0,3 / 0,1): la barra en 12,1 min contra 16,2, con un 16 % menos de flecha.
+- **No probado:** probetas impresas.
+
+**Sigue:**
+1. el cúbico adaptativo, con la ficha que respondió la sesión de fichas (PR #15, espera la fusión a `main`);
+2. el relleno guiado por tensiones (A2);
+3. el tiempo de impresión más preciso (ficha `print_time.md`, en el mismo PR);
+4. el panel por niveles (ficha `settings_levels.md`).
+
+## 2026-10-25 — relleno guiado por tensiones (etapa 4)
+
+**Hecho** (`docs/INFILL.md`):
+- `infill.stress_density` y `tisma-engine slice … --case caso.json`:
+  - el motor analiza la pieza maciza bajo el caso;
+  - la carga de cada vóxel es 1 / coeficiente de seguridad, normalizada;
+  - el relleno de cada capa sube por tres bandas (cargas de 0,15, 0,35 y 0,6) hasta esa densidad;
+  - `src/infill/stress_density.*`: el campo, las regiones por corridas de vóxeles y las bandas.
+- `slice_model` y `run_analysis` aceptan el campo. `analyze` usa el mismo relleno guiado en «como impresa».
+- **Prueba:** en una barra en voladizo, la banda más cargada está junto al empotramiento, y hay más de 1,5 veces el
+  relleno por área en el tercio empotrado que en el libre. Sin tensiones, igual.
+
+**Medido** (análisis «como impresa», `docs/INFILL.md`):
+- **Cubo comprimido:** el cúbico guiado del 10 al 50 % es un 60 % más rígido por material que el uniforme al 20 %; la
+  grilla guiada da 6,65, la más alta del banco.
+- **Barra en voladizo:** el cúbico guiado del 6 al 40 % iguala la rigidez del uniforme al 20 % con un 11 % menos de
+  material y un 9 % menos de tiempo; el del 10 al 50 % es más rígido, más seguro y más rápido.
+
+**Falta:**
+- la interfaz: pasar el caso de la pestaña Análisis al laminado;
+- iterar analizar-reforzar.
+
+## 2026-10-25 — bloque nocturno: el relleno guiado por tensiones en la interfaz
+
+**Hecho:**
+- `Slicer::run` recibe un caso de carga. Con `infill.stress_density`, analiza la pieza maciza y lamina con el relleno
+  guiado. Si el análisis falla, queda parejo con un aviso `stress_infill`.
+- En Impresión:
+  - **Guiado por tensiones** (densidad máxima);
+  - **Caso de carga**, que abre un `.json` de caso con el explorador de archivos.
+- **Prueba:**
+  - con el caso, la barra tiene más de 1,5 veces el relleno junto al empotramiento;
+  - sin caso, o con un caso que no la sostiene, queda pareja;
+  - el G-code pasa el chequeo.
+
+**La pestaña Análisis** solo estima vóxeles: editar apoyos y cargas sobre la pieza queda para su interfaz (la de la
+sesión principal, o el rediseño del panel por niveles).
+
+**Sigue:** lo que no espera las fichas del PR #15. Por ejemplo, el orden completo de ZAA del artículo, o
+mantenimiento.
+
+## 2026-10-25 — bloque nocturno: el orden de Z anti-aliasing con el grafo de alturas
+
+**Medido primero:** una métrica nueva (`scratchpad`, de banco) del largo extruido más bajo que un cordón de la misma
+capa puesto antes a menos de 0,7 mm. Es lo que hace que la boquilla aplaste el relieve (Song et al. 2017,
+Sección 4). Con el orden de antes:
+- solo bajando: 0 %;
+- con subida, en la cúpula: 0,85 % (1444 mm);
+- zona + pendiente + ZAA: 0,08 %.
+
+**Hecho** (`docs/ZAA.md`, «El orden»):
+- en una isla con caminos fuera del tope, cada camino se parte donde pasa de abajo del tope a sobre él o arriba;
+- los pedazos de paredes y rellenos se ordenan juntos: por franjas de 0,005 mm, y con el grafo de alturas del
+  artículo entre los que corren al lado, decidido por la mayoría de sus puntos más cercanos;
+- también en la capa gruesa de la altura por zona.
+
+**Medido:**
+- cúpula con subida: 0,85 % → 0,00 %;
+- zona + pendiente + ZAA: 0,08 % → 0,00 %;
+- techo a 8° con subida: 7,1 % → 1,0 %;
+- costo: un 10 % más de arranques y 0,3 min en la cúpula con subida; nada solo bajando.
+
+**Prueba:** el techo a 8° queda por debajo del 1,5 %. Sin el orden falla, con un 7 %.
+
+**Sigue:** partir donde el orden con un vecino se da vuelta; menos costuras.
+
+## 2026-10-25 — bloque nocturno: mantenimiento corto
+
+**Revisado:** después de las funciones nuevas de la noche (altura variable, ZAA, relleno combinado, denso, cúbico,
+guiado y el orden por grafo):
+- **fuzz de release:** 2100 corridas con tres semillas nuevas (1792909101–103);
+- **fuzz con ASan y UBSan:** 150 corridas, sin hallazgos.
+
+**Encontrado y arreglado:** una falla del fuzz (semilla 1792909102, corrida 456).
+- **El caso:** una mesa con altura por zona (0,126 / 0,063) y ZAA al 60,3 % con subida.
+- **Lo que pasaba:** un cordón de la capa gruesa bajó a Z3.030 bajo `;Z:3.081`, y el verificador lo rechazó.
+  - El piso del escritor sale del tope real de la capa, 3,0806.
+  - El verificador lo calcula desde el `;Z:` redondeado, con margen de un solo redondeo (0,001 mm).
+- **El arreglo:** con ZAA, el margen de los límites de Z es el de los dos redondeos (0,002 mm).
+- **Prueba:** la misma pieza y los mismos ajustes; falla sin el arreglo con el mismo mensaje.
+
+**Después del arreglo:** la semilla, 700 corridas, 0 fallas.
+
+## 2026-10-25 — bloque nocturno: partir donde el orden se da vuelta (descartado)
+
+**Probado:** partir cada pedazo de ZAA donde su orden de altura con un vecino se da vuelta (los subcaminos de Song
+et al. 2017, Sección 4.1) antes del grafo de alturas.
+
+**Medido:**
+- techo a 8° con subida: interferencia del 1,34 al 1,27 %, con un 65 % más de arranques de extrusión;
+- cúpula con subida: un 4,6 % más de arranques, y la interferencia de 0,8 a 5,3 mm.
+
+**Decidido:** no se adopta; el código vuelve al orden de c21e3a9. Lo que queda en el techo son líneas de arriba
+cruzadas a la pendiente. Lo más prometedor parece orientarlas según las curvas de nivel (`docs/ZAA.md`).
+
+**Sigue:** lo que no espera las fichas del PR #15.
+
+## 2026-10-25 — bloque nocturno: cúbico adaptativo
+
+**Hecho:** `infill.pattern` = `adaptive_cubic` (ficha `infill_patterns.md`, regla 7; `docs/INFILL.md`).
+- `src/infill/adaptive.*`: la grilla de vóxeles del relleno disperso, la transformada de distancia euclídea exacta
+  (Felzenszwalb y Huttenlocher 2012) y las líneas del cúbico por nivel (una de cada dos por cada nivel más adentro).
+- El laminado arma la profundidad antes de las bandas guiadas, el denso y el combinado; las bandas y el denso van con
+  el cúbico parejo a su densidad.
+- `cell_region` (celdas de una grilla a polígonos) pasa a `src/geom/polygons.*` y la usan el relleno guiado y el
+  adaptativo.
+- En la interfaz, **Cúbico adaptativo** en el patrón de relleno; el fuzz sortea el patrón.
+
+**Medido** (cubos al 20 %): material igual, −4 %, −11 % y −26 % en cubos de 20, 40, 60 y 100 mm; tiempo −5 %, −1 %,
+−8 % y −13 %. El laminado del cubo de 100 mm pasa de 0,13 a 0,27 s.
+
+**Pruebas:** `tests/test_adaptive.cpp`: la transformada contra todos los pares, la profundidad de un bloque, las
+direcciones de P6, las líneas sobre la grilla del cúbico, un cubo de 60 mm a G-code verificado.
+
+**Pendiente:**
+- la prueba P6 de la ficha da en el cubo de 20 mm un 76 % del largo del cúbico, con la separación pareja; el nuestro
+  da el del cúbico. Se ajusta la separación base cuando la ficha lo precise;
+- la rigidez «como impresa» solo se puede medir en piezas chicas (el cubo de 60 mm pide 27 millones de vóxeles), donde
+  el adaptativo casi no cambia nada.
+
+**Sigue:** el cúbico de soporte (regla 8) y el rayo (regla 9).
+
+## 2026-10-25 — bloque nocturno: cúbico de soporte, y la rigidez del adaptativo
+
+**Hecho:** `infill.pattern` = `support_cubic` (ficha `infill_patterns.md`, regla 8; `docs/INFILL.md`): el cúbico
+adaptativo con la profundidad medida desde lo que el relleno sostiene (los vóxeles justo encima de él) y desde las
+paredes en el plano de cada vóxel, sin las capas sólidas de abajo.
+
+**Medido** (al 20 %): cubo de 60 mm, −8 % de tiempo y −15 % de material contra el cúbico; cubo de 100 mm, −14 % y
+−30 %. En el de 20 mm, igual que el adaptativo (P6).
+
+**Rigidez del adaptativo** («como impresa», cubo de 40 mm comprimido): 0,096 mm contra 0,083 del cúbico, con un 4 %
+menos de material: un 10 % menos de rigidez por material. Queda anotado en `docs/INFILL.md`: el adaptativo ahorra en
+piezas grandes; para resistencia, el guiado por tensiones.
+
+**Pruebas:** grueso sobre las capas sólidas de abajo, el cúbico bajo el techo, y el cubo de 20 mm igual al adaptativo.
+
+**Sigue:** el rayo (regla 9).
+
+## 2026-10-25 — bloque nocturno: relleno rayo
+
+**Hecho:** `infill.pattern` = `lightning` (ficha `infill_patterns.md`, regla 9; `docs/INFILL.md`), según las
+nervaduras de soporte de Tricard, Claux y Lefebvre 2020: de arriba hacia abajo, cada punto a sostener recibe una rama
+unida a la rama o la pared más cercana, y las ramas de cada capa son las de arriba recortadas 45° en las puntas.
+- `src/infill/lightning.*`: los árboles con raíz en la pared, el recorte, las raíces que se vuelven a unir, los
+  puntos en una grilla con un umbral que garantiza el alcance, y la impresión por cadenas entre bifurcaciones.
+- El laminado lo arma de una vez para todas las capas, después de las bandas guiadas y el denso (que van en cúbico);
+  el relleno combinado no se usa con el rayo.
+- En la interfaz, **Rayo** en el patrón de relleno; el fuzz sortea el patrón.
+
+**Medido** (al 20 %): −30 %, −55 % y −64 % de material y −24 %, −41 % y −50 % de tiempo contra el cúbico en cubos de
+20, 60 y 100 mm. El alcance como la separación del rectilíneo da 117 mm bajo el techo del cubo de 20 mm (P7: 134).
+
+**Pruebas:** `tests/test_lightning.cpp`: el alcance bajo el techo de una caja, menos rama más abajo, el voladizo de
+cada rama sobre la de abajo, el cubo de P7 creciendo hacia arriba con G-code verificado.
+
+**Pendiente:** enderezar y juntar ramas, menos tramos (P7 tiene hasta 18, el nuestro 32), lo que Tisma Slicer
+imprime cerca del fondo en P7, y un índice espacial para techos grandes (0,53 s en el cubo de 100 mm).
+
+**Sigue:** los otros patrones de la ficha (`stars`, `honeycomb`, `concentric`…) o el medidor de rigidez sobre el
+laminado real, mientras las fichas del PR #15 no estén en `main`.
+
+## 2026-10-25 — bloque nocturno: estrellas, rectilíneo alineado y zigzag
+
+**Hecho:** tres patrones más de la ficha `infill_patterns.md` (`docs/INFILL.md`):
+- `stars` (regla 5): las tres familias de los triángulos con la segunda corrida media separación;
+- `aligned_rectilinear` (regla 1): el rectilíneo con todas las capas a `θ`;
+- `zigzag` (regla 2): igual al rectilíneo.
+
+Los nombres de los patrones pasan a una sola tabla en `settings.cpp`, para leer y escribir.
+
+**Pruebas:** zigzag igual al rectilíneo punto por punto (P1); el alineado a 45° en capas pares e impares (P2); las
+estrellas con las tres direcciones de P4 y la segunda familia a media separación de la de los triángulos.
+
+**Sigue:** el resto de la ficha (línea, panal, curvas, concéntrico, patrones de superficies, capa sólida cada N).
+
+## 2026-10-25 — bloque nocturno: capa sólida cada N y espesor mínimo de la cáscara
+
+**Hecho** (ficha `infill_patterns.md`, reglas 21 y 22; `docs/INFILL.md`):
+- `infill.solid_every`: las capas N, 2N… pasan todo su relleno disperso a puente;
+- `surfaces.top_min_thickness` y `surfaces.bottom_min_thickness`: más capas sólidas, del alto nominal, hasta el
+  espesor;
+- en la interfaz, las tres filas; el fuzz las sortea.
+
+**Pruebas:** P12 (capas 5, 10… 95 en puente, sin relleno disperso, G-code verificado) y P13 (capas 0 a 2 y 95 a 99
+sólidas con una capa y mínimos de 0,6 y 1 mm).
+
+**Sigue:** línea, panal, curvas y concéntrico; los patrones de las superficies.
+
+## 2026-10-25 — mantenimiento
+
+**Revisado:**
+- fuzz de release: 2000 corridas con cuatro semillas nuevas (1792909701–704), sin fallas;
+- fuzz con ASan y UBSan: 150 corridas (semilla 1792909801);
+- lo nuevo de la noche (cúbico adaptativo, de soporte, rayo, estrellas, capa sólida cada N) con entradas grandes:
+  densidades altas en un cubo de 100 mm.
+
+**Encontrado:** el rayo al 100 % en un cubo de 100 mm tardaba 63 s (al 50 %, 7,8 s).
+- El rayo mismo, 1,6 s: cada punto miraba todas las ramas y las paredes.
+- El escritor, 19,6 s: el orden por el comienzo más cercano miraba todos los recorridos de la capa para elegir cada
+  uno, y bajo el techo hay miles de tramos cortos.
+
+**Arreglado:**
+- `order_paths` busca el comienzo más cercano en una grilla de extremos (más de 64 recorridos y costuras que no
+  siguen al cursor), con el mismo resultado: entre iguales, el primer recorrido y su frente. El G-code de la esfera, la
+  cúpula y los cubos del banco sale idéntico byte a byte (sin los comentarios).
+- El rayo busca ramas y paredes en grillas. Con la grilla, las ramas igual de cerca se elegían en otro orden y salían
+  cadenas largas a lo largo de las paredes que no se retiraban (la prueba de la caja lo detectó: 202 mm en la capa 0);
+  ahora gana la rama más vieja, como antes, y el G-code del cubo al 20 % sale idéntico.
+
+**Prueba nueva** (`tests/test_order.cpp`): 420 recorridos con los extremos en una grilla de 1 mm (muchos empates) se
+ordenan igual por la grilla que mirando todos; con el desempate al revés, la prueba falla.
+
+**Medido** (cubo de 100 mm, rayo): al 100 %, 63 s → 2,1 s (laminado 1,4 s, escritura 0,7 s); al 20 %, 0,53 → 0,39 s.
+La esfera de 200 mm sigue igual (escritura 0,5 s): ahí el orden no pesaba.
+
+**Recibido del equipo de fichas** (resultados de caja negra, sin código): el cúbico de soporte de Tisma Slicer se
+mide en P6c y P6d de la ficha, en el PR #15. Se ajusta cuando esté en `main`.
+
+
+## 2026-10-25 — bloque: relleno línea, panal y concéntrico
+
+**Hecho** (ficha `infill_patterns.md`, reglas 3, 10 y 13; `docs/INFILL.md`), en `src/infill/patterns.*`:
+- `line`: el rectilíneo con una línea de cada dos girada 6,7° sobre su punto en el medio de la región (+6,7° en las
+  capas pares, −6,7° en las impares), unidas en zigzag por el borde;
+- `honeycomb`: hexágonos con un centro en el origen, impresos como líneas onduladas en la dirección principal, que
+  pasa por `θ` + 90°, + 30° y − 30° capa a capa; como la teselación no cambia al girarla 60° sobre un centro, los
+  panales de todas las capas coinciden. El lado cuenta cada pared una vez, como mide Tisma Slicer (P8);
+- `concentric`: lazos paralelos al borde cada `ancho / densidad`, de afuera hacia adentro;
+- en la interfaz, **Línea**, **Panal** y **Concéntrico**; el fuzz los sortea.
+
+**Medido** (cubo de 20 mm, ajustes de la ficha, relleno poco denso por capa en el G-code):
+
+| Patrón | Tisma engine | Ficha |
+|---|---|---|
+| `line` | 182,4 a 185,0 mm en 1 tramo | P3: 185,9 mm en 1 tramo |
+| `honeycomb` | 229,9 a 237,8 mm en 4 tramos | P8: 229 a 244 mm |
+| `concentric` | 200,0 mm en 5 lazos | P9: 199,4 mm en 5 lazos |
+| `rectilinear` (referencia) | 190,9 a 194,0 mm | P1: 197,3 mm |
+
+Tiempo estimado del cubo: rectilíneo 15 min 34 s, línea 14 min 44 s, panal 18 min 51 s, concéntrico 16 min 32 s.
+
+**Pruebas** (`tests/test_combine.cpp`): P3 (las dos direcciones de cada capa, la mitad cada una, pocos tramos, el largo
+del rectilíneo), P8 (la principal 15°, 135° y 75° en las capas 5, 6 y 7 con la mitad del largo, las otras un cuarto,
+1,25 veces el rectilíneo; las cuentas de dos capas coinciden en más del 90 % del área, y con la grilla corrida medio
+lado no), P9 (5 lazos cerrados del largo esperado, iguales en otra capa) y los tres laminados en un cubo con G-code
+verificado. `tools/ci_linux.sh` pasa: 314 pruebas con gcc, clang y ASan + UBSan. Una prueba vieja usaba
+`honeycomb` como patrón desconocido; ahora usa `voronoi`, que no está en la ficha.
+
+**Sin medir ni probar:** las líneas de `line` cruzan a sus vecinas en regiones de más de unas 17 separaciones a lo
+largo de las líneas (34 mm al 20 %); la ficha no mide piezas tan grandes. No probado en una impresora.
+
+**Sigue:** panal 3D (regla 11), Hilbert, cuerdas de Arquímedes y octagrama (12), y los patrones de las superficies
+(14 a 17). El cúbico de soporte espera las pruebas P6c y P6d del PR #15.
+
+## 2026-10-25 — bloque: Hilbert, cuerdas de Arquímedes y octagrama
+
+**Hecho** (ficha `infill_patterns.md`, regla 12; `docs/INFILL.md`), en `src/infill/patterns.*`:
+- `hilbert`: la curva de Hilbert por celdas de `ancho / densidad`, recorrida en forma recursiva solo cerca de la región,
+  sobre una grilla fija de 2 m alrededor del origen girada `angle`: igual en todas las capas;
+- `archimedean`: cuerdas de la espiral `r = a·φ` con vueltas a `ancho / densidad` alrededor del centro de la pieza;
+- `octagram`: una espiral con el contorno de dos cuadrados girados 45°, con cada lado sobre una recta de dirección fija
+  que se aleja un dieciseisavo de la separación por lado (la primera versión, con el radio creciendo entre vértices,
+  dejaba solo el 87 % del largo en las cuatro direcciones; la prueba lo detectó);
+- el laminado pasa el centro de la pieza a las espirales; en la interfaz, **Hilbert**, **Cuerdas de Arquímedes** y
+  **Espiral octagrama**; el fuzz los sortea.
+
+**Medido** (cubo de 20 mm, ajustes de la ficha): Hilbert 195,4 mm en 2 tramos (P9: 206,3), Arquímedes 185,1 en 3 (P9:
+194,3), octagrama 172,1 en 3 (P9: 208,3); el rectilíneo, 190,9 (P1: 197,3). El octagrama de Tisma Slicer pone un 21 %
+más: queda por contrastar cómo cuenta la separación.
+
+**Pruebas** (`tests/test_combine.cpp`): las tres iguales en dos capas, el largo cerca del rectilíneo, pocos tramos;
+Hilbert mayormente a 45° y 135°, el octagrama con más del 95 % del largo a 0°, 45°, 90° y 135°, las cuerdas en todas
+las direcciones; las tres laminadas a G-code verificado.
+
+**Pedido nuevo del dueño:** rellenos no planares más fuertes que los tradicionales; es lo que sigue.
+
+**Sigue:** el panal 3D (regla 11) necesita más mediciones de la ficha; los patrones de las superficies (14 a 17).
+
+## 2026-10-25 — rellenos no planares y brick layers: lo publicado y la propuesta
+
+**Pedido del dueño:** rellenos no planares más fuertes que los tradicionales, y una versión no planar de brick layers
+que no infrinja patentes.
+
+**Hecho:** `docs/NONPLANAR_INFILL.md`, con:
+- lo publicado y medido: ZigZagZ (+62 % de resistencia y +245 % de tenacidad en Z), pernos en Z (más de 3,5 veces
+  en Z), capas onduladas (+50 % al impacto) y brick layers (+10 a 14 %);
+- las patentes de brick layers según sus resúmenes públicos (Stratasys, vencida; Addman, vigentes);
+- la propuesta: N1, relleno ondulado; N2, paredes tejidas, la versión no planar de brick layers; N3, medir con el
+  análisis; N4, pernos en Z si la patente lo permite.
+
+**Sin verificar:** las reivindicaciones completas de las patentes de Addman y de ORNL. Los sitios de patentes bloquean
+el acceso automático; lo dicho sale de los resúmenes. Antes de vender, que lo revise un abogado.
+
+**Sigue:** N1.
+
+## 2026-10-25 — bloque: relleno ondulado (N1)
+
+**Hecho** (`docs/NONPLANAR_INFILL.md`, N1; `src/infill/nonplanar.*`): `infill.nonplanar`, el relleno que sube y baja
+en Z según un campo fijo en el espacio, igual en todas las capas (capas anidadas, como ZigZagZ).
+- La amplitud se apaga cerca de paredes y pieles con el campo de profundidad (interpolación trilineal nueva en
+  `DepthField::at`), y se limita para que la boquilla pase sobre una línea vecina en cresta.
+- Cada punto lleva la altura del cordón de abajo (`below`); el escritor pone los recorridos ondulados en un bloque
+  `;NONPLANAR` con el espesor por movimiento, y el verificador y la vista previa lo leen.
+- En la interfaz, **Relleno ondulado** con su altura y su largo; el fuzz lo sortea.
+
+**Medido** (cubo de 40 mm, grilla al 20 %): 2 h 18 min contra 1 h 15 min plano (el eje Z a 12 mm/s), G-code de
+11,5 MB contra 0,47 MB (de 21 MB antes de quitar los cortes en recta), el mismo filamento.
+
+**Pruebas:** `tests/test_nonplanar.cpp` (4 casos); 319 pruebas en total; fuzz de 400 corridas sin fallas.
+
+**Sin medir:** la resistencia (falta N3) y una impresión real.
+
+**Sigue:** N3 (medir con el análisis), después N2 (paredes tejidas). El dueño pidió también buscar artículos sobre la
+mejor manera de laminar no planar.
+
+## 2026-10-25 — laminado no planar: los artículos
+
+**Pedido del dueño:** buscar artículos sobre la manera más óptima de laminar no planar.
+
+**Hecho:** `docs/NONPLANAR_SLICING.md`, con:
+- **en 3 ejes:** CurviSlicer (con las mismas capas, error de superficie de 57 mm³ contra 149 de la altura adaptativa),
+  techos curvos (Ahlers 2019), capas isotérmicas y no planar con ángulos optimizados;
+- **en 5 ejes:** Reinforced FDM (hasta 6,35 veces la carga), S³-Slicer y Neural Slicer;
+- **la propuesta para F7 y F9:** el motor ya corta capas como superficies de nivel de un campo, y todos estos métodos
+  dan ese campo. Se suma la idea propia de un término de resistencia con el análisis A1 en 3 ejes.
+
+**Sala limpia:** CurviSlicer y S³-Slicer publicaron código; se usan solo los artículos.
+
+**Pedido nuevo del dueño:** artículos sobre soportes no planares, Arc Overhang, y soportes más fáciles de sacar con
+mejor superficie debajo. Sigue con eso.
+
+## 2026-10-25 — soportes: los artículos
+
+**Pedido del dueño:** artículos sobre soportes no planares, Arc Overhang, y soportes más fáciles de sacar con mejor
+superficie en la parte soportada.
+
+**Hecho:** `docs/SUPPORT_RESEARCH.md`, con:
+- **voladizos sin soporte:** Arc Overhang (con la ficha `arc_overhangs.md` que ya está en `main`) y laminado cónico
+  (Wüthrich et al. 2021);
+- **menos soporte:** árbol (Vanek et al. 2014: −40,5 % de material), ramificado (Schmidt y Umetani 2014: −75 %) y
+  andamios con puentes (Dumas et al. 2014);
+- **sacar y superficie:** el patrón y la separación en Z son lo que más pesa; una interfaz de otro material baja la
+  fuerza para sacar el soporte un 63 % y la rugosidad mucho, a costa de purgas.
+
+**Propuesta, por orden (S1 a S5):**
+1. arcos en voladizos;
+2. la superficie soportada, con una interfaz no planar propia que sigue la cara de abajo;
+3. árbol;
+4. laminado cónico;
+5. interfaz de otro material.
+
+No encontré publicada la interfaz no planar.
+
+**Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).
+
+
+## 2026-10-25 — simulación del enfriamiento: los artículos y el plan
+
+**Pedido del dueño:** simular cómo se enfría el filamento, para no perder calidad en los detalles muy chicos de capas
+que sí llegan al tiempo mínimo.
+
+**Hecho:** `docs/COOLING_SIMULATION.md`, con:
+- **por qué pasa:** el tiempo mínimo mira la capa entera, y el detalle puede tener mucho menos. Hay cuatro causas:
+  - el detalle se imprime último en una capa y primero en la siguiente;
+  - no tiene masa debajo que se lleve el calor;
+  - la boquilla lo recalienta mientras pasa;
+  - sus cordones se ponen uno junto al otro;
+- **lo publicado:**
+  - la red de segmentos de filamento con contactos y criterio de adhesión (Costa, Duarte y Covas 2017);
+  - la simulación en tiempo lineal (Zhang y Shapiro 2018);
+  - las mediciones de Zhang et al. 2022: lo que manda es el tiempo entre pasadas;
+  - la unión según la historia de temperatura (Bellehumeur et al. 2004);
+- **patentes:** dos solicitudes de Siemens reordenan tramos o zonas de la capa según el calor. El motor no reordena por
+  el calor sin la revisión del abogado;
+- **el plan, de T1 a T4:**
+  1. el tiempo de vuelta local, con frenado, pausa y ventilador solo en el detalle;
+  2. la red térmica de cordones, calibrada con pernos;
+  3. las correcciones por temperatura, y la adherencia por unión en el análisis;
+  4. la GPU y el aire de A3.
+
+  La red trabaja en 3D, así que sirve también para 4 y 5 ejes.
+
+**Rumbo del dueño:** un laminador que use las técnicas que más mejoran la calidad y la resistencia, compatible con una
+impresora propia de 4 y 5 ejes. Quedó en `PLAN.md`:
+- F9 cubre 4 y 5 ejes;
+- la cinemática suma la boquilla inclinada que gira, y el G-code puede salir en coordenadas de la punta o en ejes de la
+  máquina;
+- la impresora del dueño es candidata a máquina de referencia.
+
+**Sin código todavía:** T1 es lo primero que se puede hacer, en el escritor.
+
+**En curso:** el pedido nuevo del dueño, artículos de FDM y de técnicas de laminado para mejorar funciones, calidad y
+rendimiento. Va en cuatro búsquedas: trayectorias y superficie, movimiento y extrusión, resistencia y deformación, y
+rendimiento del cómputo.
+
+## 2026-10-25 — FDM y técnicas de laminado: el mapa de lo publicado
+
+**Pedido del dueño:** artículos de FDM y de técnicas de laminado para mejorar lo más posible las funciones, la
+calidad y el rendimiento.
+
+**Hecho:** `docs/RESEARCH_MAP.md`, en cuatro búsquedas en paralelo (solo artículos, registros de patentes y
+documentación de usuario; ningún código):
+- **trayectorias y superficie:** costura en bisel y su punto débil, esquinas, ancho variable, puentes, voladizos,
+  compensación en XY según el ángulo, rugosidad, planchado;
+- **movimiento y extrusión:** estimadores de tiempo con 1,7 a 8,5 % de error contra 48 % de otros, flujo máximo según
+  la temperatura, avance de presión, orden de viajes;
+- **resistencia y deformación:**
+  - en PLA, la unión entre capas llega a la resistencia del material;
+  - con cordones de 2,5 veces la boquilla: +40 a +48 % y −67 % de tiempo;
+  - cordones según la tensión, propiedades ortótropas, alabeo, interfaz ITIL;
+- **cómputo:** corte robusto, número de vueltas para mallas rotas, transformada de distancia en GPU, Voronoi robusto,
+  orden de viajes que escala, G-code binario.
+
+**Propuesta:** Q1 a Q12 en `PLAN.md`, por ganancia medida contra esfuerzo. Lo primero: el modo resistencia con
+cordones anchos, el estimador de tiempo que imita al firmware y los topes por fusión.
+
+**Patentes que se evitan:** las B-splines filtradas (Universidad de Michigan), las espirales de Fermat conectadas
+(Shandong), los tramos para recorridos eulerianos (UT-Battelle), los detalles locales a través de capas (Tulane) y
+otras en la sección 6.
+
+**Corregido en T3** (`docs/COOLING_SIMULATION.md`): el criterio de unión fría pesa poco en PLA y más en ABS y en los
+materiales técnicos.
+
+**Para el dueño:** la especificación del G-code binario de Prusa está dentro de un repositorio AGPL. Hace falta su
+decisión para leerla; si no, se estudia como caja negra.
+
+**Sigue:** el bloque de mantenimiento programado, después S1 (arcos en voladizos).
+
+## 2026-10-25 — mantenimiento (16:40)
+
+**Revisado:**
+- búsqueda aleatoria de G-code: 2000 corridas con cuatro semillas nuevas (1792947616 a 1792947619), sin fallas;
+- lo nuevo desde el último mantenimiento, con entradas raras:
+  - Hilbert, cuerdas de Arquímedes y octagrama: piezas lejos del origen, densidad mínima y máxima, regiones de 0,5 a
+    300 mm, centro fuera de la pieza;
+  - relleno ondulado: ajustes armados en código, sin pasar por los rangos del JSON;
+- los «Sin medir» de `PROGRESS.md`: las líneas del patrón `line` se cruzan en regiones de más de unas 17
+  separaciones. Es lo que dice la ficha (una de cada dos inclinada 6,7°); los cruces son como los de la grilla. Queda
+  como pregunta de comportamiento para el equipo de fichas, sin cambio.
+
+**Encontrado y corregido:**
+- **El relleno Hilbert desaparecía lejos del origen.** La grilla de la curva cubría 2 m alrededor del origen. Girada
+  45°, una pieza cerca de (900, 900) quedaba afuera: sin relleno en las esquinas de una cama de 1 m. Ahora cubre 16 m
+  y crece si la región sale de ahí; cuesta lo mismo. Prueba nueva en `tests/test_combine.cpp`: el mismo largo en el
+  origen y a 900, 1500, −1900, 7000 y 12 000 mm, igual en dos capas. Con el código anterior falla.
+- **Relleno ondulado con longitud de onda 0** (ajustes armados en código): se marcaba ondulado sin onda, con una
+  conversión de infinito a entero sin definir. Ahora `wave_params` lo deja plano; la prueba lo cubre también con NaN.
+
+**Medido** (4 núcleos, Release, CPU):
+- esfera de banco de 100 mm (319 200 triángulos, 500 capas, 884 571 líneas): laminado 0,85–0,90 s, escritura
+  0,62–0,66 s, verificación 0,14–0,18 s. Igual que el mantenimiento anterior;
+- análisis del cubo de prueba: solución 194–225 ms (22 iteraciones, 3 niveles). El código no cambió, así que es
+  variación de la máquina;
+- **lo más lento encontrado:** Hilbert y cuerdas de Arquímedes en regiones grandes y densas. El recorte con Clipper2
+  crece más que lineal, porque la lista de aristas activas es ancha (callgrind: 54 % en insertar mínimos locales):
+  - 150 mm al 100 %: 0,14 s por capa;
+  - 300 mm al 100 %: 1,2 s por capa;
+  - 300 mm al 20 %: 13 ms por capa.
+
+  Quedó en `PLAN.md` (recortar por franjas). No se arregló en este bloque: hay que volver a unir los pedazos en los
+  bordes de las franjas, y es un caso raro (relleno ralo al 100 %).
+- **Advertencia de clang** (`-Wsign-conversion`) en una prueba del espesor mínimo de la cáscara
+  (`tests/test_combine.cpp`), de un bloque anterior: corregida.
+- **Búsqueda aleatoria con ASan y UBSan:** 150 corridas (semilla 1792949149), sin fallas.
+
+**Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).
+
+## 2026-10-25 — revisión profunda de errores (primera tanda de arreglos)
+
+**Pedido del dueño:** «una revisión general de bugs profunda, así corrijo errores graves».
+
+**Cómo:**
+- seis revisores en paralelo, uno por área: corte y geometría, trayectorias, G-code, ajustes y archivos, análisis /
+  GPU / conexión, e interfaz;
+- cada hallazgo, probado con una entrada concreta contra la compilación con ASan y UBSan;
+- además, la revisión de caja negra del equipo de fichas: unos 420 laminados desde la línea de comandos y una tanda
+  de rendimiento contra Tisma Slicer.
+
+**Arreglado en esta tanda,** cada uno con su prueba (`tests/test_hostile.cpp`, `tests/test_device.cpp`,
+`tests/test_combine.cpp`), detalle en `CHANGELOG.md`:
+- **conexión:** cable desenchufado, «ok» perdido que cancelaba la impresión y dejaba los calentadores encendidos,
+  pausa o cancelación que pasaba al trabajo siguiente, carrera de datos en `job_`, números de reenvío sin definir;
+- **G-code peligroso:** variables con saltos de línea que metían movimientos después de la impresión, índice enorme;
+- **ajustes:** alturas, anchos, elevación y retracción contra la máquina (`check_settings`), límites de lectura, avisos
+  de temperaturas de los cambios y de anchos raros, porcentajes infinitos;
+- **archivos:** JSON anidado que desbordaba la pila, excepciones de JSON como errores internos;
+- **calibraciones:** rangos de las torres y del valor elegido, tope de temperatura, etiquetas de tres decimales;
+- **paredes:** nodos del Voronoi propio fuera de la bisectriz, el «no seed node» y la recursión del marcado: el motor
+  detecta el diagrama malo y usa el de referencia (Boost.Polygon) para esa región;
+- **rellenos:** la recta desde el centro del espiral (Arquímedes y octagrama);
+- **análisis:** piezas libres de moverse, que antes corrían horas, y cargas sobre la sujeción;
+- **mallas:** piezas lejos o altas, conteo de 64 bits, bucle de la altura variable, `info` con piezas planas;
+- **exportación:** sin archivo viejo con el nombre pedido cuando falla;
+- **verificador:** la falda con esquinas en punta;
+- **interfaz:** los siete de su revisor, entre ellos la temperatura de la cama atada a la de la boquilla y los
+  cambios de una torre que quedaban en el modelo siguiente.
+
+**Probado:** 332 pruebas en una compilación aparte. Las piezas de los revisores que se colgaban o se caían (`seed145`,
+`seed58`, `rand74`, `vnotch`, `seed785`) laminan en 0,1 s. Las pruebas nuevas de conexión, espiral y Hilbert fallan
+con el código anterior.
+
+**Sigue, de la misma revisión:**
+- **graves:** el Z anti-aliasing con «raise» imprime dos veces sobre los mismos cordones cuando la capa siguiente es
+  más fina; una sola cara con la orientación invertida hace desaparecer la pieza;
+- **medios:**
+  - el escritor no se resincroniza después del G-code de un cambio por altura;
+  - las líneas sólidas se ajustan a la capa entera y no a cada isla;
+  - el proyecto puede repetir una malla muchas veces;
+- **rendimiento** (equipo de fichas y revisores):
+  - ordenar muchas islas cuesta más que lineal;
+  - las paredes duplican vértices;
+  - el gyroid escribe el triple de tramos y usa mucha memoria;
+  - las uniones del zigzag son cuadráticas;
+  - el G-code ocupa la memoria entera;
+- **otros:** aviso de `infill.nonplanar` ignorado; `infill.solid_below_area` de la ficha.
+
+## 2026-10-25 — revisión profunda de errores (segunda tanda)
+
+**Arreglado,** cada uno con su prueba, que falla con el código anterior donde se pudo comprobar:
+- **Z anti-aliasing con «raise»:** la subida llega como mucho a la mitad de la capa siguiente. Antes, con una capa
+  siguiente más fina, las dos imprimían la misma superficie: en una placa de 0,42 mm con primera capa de 0,3 mm, la
+  primera capa subía a 0,42 y la segunda pasaba por encima (+29 % de material);
+- **orientación:** `orient_consistently` da la misma orientación a toda la malla y vuelve la pieza hacia afuera si
+  hizo falta reparar algo. Una cara invertida borraba el cubo de 20 mm de la prueba del revisor;
+- **escritor:** después del G-code de un cambio por altura vuelve a fijar los modos y E, retrae y escribe los ejes
+  completos;
+- **otros:** ventilador `S1` en RepRapFirmware, líneas sólidas ajustadas por isla, mallas repetidas en un proyecto,
+  mensajes de pieza vacía, y aviso del relleno ondulado ignorado.
+
+**Medido** (196 cilindros de 4 mm, 100 capas, 4 núcleos):
+
+| Fase | Antes | Ahora | Por qué |
+|---|---|---|---|
+| Escritura | 19,6 s | 8,4 s | El 77 % era la costura alineada: cada esquina de cada lazo contra todas las costuras de abajo. Ahora busca en una grilla |
+| Laminado | 14,1 s | 10,0 s | Las uniones del zigzag miraban todo el borde por cada extremo; ahora usan una grilla |
+
+El G-code sale idéntico byte a byte. La elección de islas con cajas también da el mismo resultado; no era lo lento.
+
+**Sigue:** lo que quedó en `PLAN.md`, con la resolución del G-code primero. Después, la release 0.8.0-alpha.1.
+
+## 2026-10-25 — resolución del G-code y paredes partidas
+
+**Hecho:**
+- **Resolución del G-code** (`gcode.resolution`, 0,0125 mm, de la ficha `gcode_extras.md`; `src/gcode/resolution.*`,
+  fila nueva en la sección Impresora): cada movimiento llega tan lejos por el camino como lo permite la tolerancia,
+  sin cambiar el ancho, la Z ni el cordón de abajo más de 0,0005 mm. La costura queda. Va en el perfil de impresora.
+- **Paredes partidas** (encontrado al medir lo anterior): en cada esquina cóncava y en cada punto en medio de un lado
+  recto, la pared se cortaba en pedazos abiertos, porque los dos radios de esa esquina en un nodo leían puntos de
+  apoyo que difieren en fracciones de nanómetro. Un lazo abierto no tiene costura, así que la costura alineada no se
+  aplicaba. `extract_toolpaths` junta ahora de a pares los radios de un nodo con un solo trapecio cada uno y apoyos a
+  menos de 1e-4 mm. Un polígono de 128 lados con muescas de 1 µm salía en 205 pedazos por pared, y un rombo con cuatro muescas de
+  0,5 mm en 8; ahora, en uno.
+- Pruebas nuevas: `tests/test_resolution.cpp` (4) y una de paredes con esquinas cóncavas y rectas, que falla con el
+  código anterior; la de Z anti-aliasing con la resolución puesta.
+- El test de dispositivo que falló en la CI de Windows (una pausa al final de un trabajo): la impresora simulada
+  tarda 2 ms por movimiento, como en la otra prueba de pausa.
+
+**Medido** (Release, 4 núcleos; slice entero con escritura):
+
+| Modelo | Extrusiones antes | Ahora | Archivo antes | Ahora | Tiempo antes | Ahora |
+|---|---|---|---|---|---|---|
+| Cilindro de 128 lados (C17, `simplify_tolerance` 0) | 41 859 | 6 140 | 1,25 MB | 0,19 MB | 0,15–0,19 s | 0,12–0,13 s |
+| Esfera de 50 mm, giroide | 269 112 | 73 153 | 7,7 MB | 2,1 MB | 0,70–0,77 s | 0,60–0,62 s |
+| Esfera de 50 mm, por defecto | 292 907 | 88 907 | 8,4 MB | 2,6 MB | 0,72–0,76 s | 0,63–0,66 s |
+| 12 islas | 18 701 | 13 301 | 0,52 MB | 0,41 MB | 0,07–0,09 s | 0,07–0,08 s |
+
+- El perímetro externo del cilindro: 64 movimientos por vuelta (la ficha da 65 para Tisma Slicer), en un solo lazo;
+  antes 556 en 38 pedazos. Tramos de menos de 0,01 mm: de 3229 a ninguno.
+- El largo extruido cambia menos de 0,02 % (la cuerda en vez del arco).
+- Partir en el punto más alejado (Douglas y Peucker) por tramos de 256 o 1024 puntos dejaba 12 a 27 % más
+  movimientos que el alcance más lejano; quedó este.
+- El tiempo estimado del cilindro sube de 4 min 8 s a 4 min 14 s: con lazos cerrados, cada pared empieza en su
+  costura y hay más viajes con retracción.
+
+**No medido:** una impresión real con la resolución; el efecto en placas con poca memoria de planificación.
+
+**Sigue:** la release 0.8.0-alpha.1 con estos arreglos, después lo que queda de la revisión en `PLAN.md`.

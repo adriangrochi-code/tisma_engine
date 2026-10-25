@@ -146,6 +146,8 @@ set(BUILD_SHARED_LIBS ${_tisma_shared})
 add_library(tisma_warnings INTERFACE)
 if(MSVC)
   target_compile_options(tisma_warnings INTERFACE /W4 /permissive- /utf-8)
+  # std::getenv is only read here, never kept across a change of the environment.
+  target_compile_definitions(tisma_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(tisma_warnings INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
 endif()
@@ -168,6 +170,9 @@ add_library(tisma_core
   src/slice/level_set.cpp
   src/slice/contours.cpp
   src/slice/layers.cpp
+  src/slice/local_layers.cpp
+  src/slice/variable_layers.cpp
+  src/slice/zaa.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
@@ -181,10 +186,17 @@ add_library(tisma_core
   src/perimeters/coverage.cpp
   src/surfaces/surfaces.cpp
   src/surfaces/bridges.cpp
+  src/infill/adaptive.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
+  src/infill/lightning.cpp
+  src/infill/nonplanar.cpp
+  src/infill/patterns.cpp
+  src/infill/combine.cpp
   src/infill/connect.cpp
+  src/infill/stress_density.cpp
   src/gcode/writer.cpp
+  src/gcode/resolution.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp
   src/gcode/preview.cpp
@@ -213,6 +225,11 @@ add_library(tisma_core
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
+  src/device/gcode_host.cpp
+  src/device/printer.cpp
+  src/device/serial_port.cpp
+  src/device/simulator.cpp
+  src/device/stream.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
   src/cli/cli.cpp
 )

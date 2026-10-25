@@ -73,6 +73,22 @@ CalibrationPrint retraction_speed_tower(double start, double end, double step, d
 // shallow groove between segments. Too little advance bulges the corners;
 // too much leaves them thin or with gaps.
 CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment = 5.0);
+// The volumetric flow limit (mm3/s): the same tube, each segment with every
+// extrusion forced to its flow, past every cap and never slowed down. The
+// last segment with sound walls is the hot end's limit (machine.max_flow).
+CalibrationPrint max_flow_tower(double start, double end, double step, double segment = 5.0);
+// Acceleration (mm/s2): the same tube, each segment written with the
+// flavor's acceleration command. Ringing (ripples after the corners) shows
+// where the frame resonates.
+CalibrationPrint acceleration_tower(double start, double end, double step, double segment = 5.0);
+
+// The elephant's foot: a 20 x 20 x 6 mm block. The width of its first layer
+// against the body's gives the extra shrink of the first layer.
+CalibrationPrint elephant_foot_test();
+// The first layer shrink that makes the bottom as wide as the body: the
+// current one plus half the excess (clamped to 0..2 mm; 0 measurements
+// leave it as it is).
+double elephant_foot_from(double bottom, double body, const Settings& current);
 
 // The first layer: five squares of one layer, 30 x 30 mm, in the middle and
 // near the corners of the bed (of a 200 mm one when the bed is not given),
@@ -112,10 +128,14 @@ enum class CalibrationKind {
     PressureAdvance,
     FirstLayer,
     Fit,
+    MaxFlow,
+    Acceleration,
+    ElephantFoot,
 };
-inline constexpr int kCalibrationKinds = 9;
+inline constexpr int kCalibrationKinds = 12;
 // "dimensions", "temperature", "retraction", "flow", "speed",
-// "retraction_speed", "pressure_advance", "first_layer", "fit".
+// "retraction_speed", "pressure_advance", "first_layer", "fit", "max_flow",
+// "acceleration", "elephant_foot".
 const char* calibration_kind_name(CalibrationKind kind);
 std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name);
 // Whether the kind is a tower of segments, each trying a value from a range.
@@ -127,11 +147,12 @@ CalibrationPrint calibration_tower(CalibrationKind kind, double start, double en
 
 // Writes the value of the segment that printed best into the settings
 // (the nozzle temperature variable, the retraction length or speed, the flow,
-// the pressure advance, or the extrusion speeds scaled by the percentage) and
-// removes the tower's height changes. Returns false, changing nothing, for
-// the tests that do not set a value: Dimensions (compensation_from), the first
-// layer (the nozzle's height is set on the printer) and Fit (a clearance for
-// designs).
+// the pressure advance, the flow limit, the acceleration, or the extrusion
+// speeds scaled by the percentage) and removes the tower's height changes.
+// Returns false, changing nothing, for the tests that do not set a value:
+// Dimensions (compensation_from), the first layer (the nozzle's height is set
+// on the printer), Fit (a clearance for designs) and the elephant's foot
+// (elephant_foot_from).
 bool apply_calibration(CalibrationKind kind, double value, Settings& settings);
 
 // Text in relief: the strokes of a seven-segment style font (digits, '.',

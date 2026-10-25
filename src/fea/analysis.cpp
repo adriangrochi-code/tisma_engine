@@ -141,7 +141,7 @@ struct Prepared {
 };
 
 Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
-                 const AnalysisProgress& progress) {
+                 const AnalysisProgress& progress, const StressField* infill_stress = nullptr) {
     Prepared p;
     if (mesh.vertices.empty())
         throw AnalysisError("the model is empty");
@@ -158,13 +158,13 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
         Settings designed = settings;
         designed.scale_x = designed.scale_y = designed.scale_z = 100.0;
         designed.hole_offset = 0.0;
-        sliced = slice_model(mesh, designed, gpu);
+        sliced = slice_model(mesh, designed, gpu, infill_stress);
         p.layers = sliced.layers;
     } else {
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
         for (const Vec3f& v : mesh.vertices)
             min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
-        p.layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+        p.layers = plan_layer_stack(mesh, min_z, max_z, settings).layers;
     }
     if (p.layers.empty())
         throw AnalysisError("the model has no layers to analyse");
@@ -201,7 +201,7 @@ std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settin
     for (const Vec3f& v : mesh.vertices)
         min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
     // The same plan slice_model makes, so the same layers.
-    const std::vector<Layer> layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+    const std::vector<Layer> layers = plan_layer_stack(mesh, min_z, max_z, settings).layers;
     return static_cast<std::size_t>(grid_count(mesh, voxel, rows, layers.size()));
 }
 
@@ -227,10 +227,10 @@ namespace {
 
 // One analysis at the case's resolution, without the resolution check.
 AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
-                       const AnalysisProgress& progress) {
+                       const AnalysisProgress& progress, const StressField* infill_stress) {
     AnalysisReport out;
     const auto start = std::chrono::steady_clock::now();
-    Prepared p = prepare(mesh, settings, c, gpu, progress);
+    Prepared p = prepare(mesh, settings, c, gpu, progress, infill_stress);
     const int rows = p.rows;
     out.rows_per_layer = rows;
     out.layers = std::move(p.layers);
@@ -324,8 +324,11 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
                                                     " voxels are not joined to any fixture and were left out"});
     if (e.unapplied_loads > 0)
         out.warnings.push_back({"load_not_applied", std::to_string(e.unapplied_loads) +
-                                                        " loads found no face of the held part in their region"});
-    if (!e.converged)
+                                                        " loads found no face of the held part in their region, or fell on a fixture"});
+    if (e.free_to_move)
+        out.warnings.push_back({"free_to_move", "the fixtures leave the part free to slide or turn: hold it along x, "
+                                                "y and z, at more than one point or line"});
+    else if (!e.converged)
         out.warnings.push_back({"not_converged", "the solver stopped after " + std::to_string(e.iterations) +
                                                      " iterations at a residual of " + format(e.residual)});
     if (out.below[0] > 0)
@@ -344,7 +347,7 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
 } // namespace
 
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu, const AnalysisProgress& progress) {
+                            gpu::Context* gpu, const AnalysisProgress& progress, const StressField* infill_stress) {
     const auto [voxel, rows] = analysis_resolution(c, settings);
     AnalysisCase coarse = c;
     coarse.voxel = 2.0 * voxel;
@@ -365,13 +368,13 @@ AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, c
     AnalysisProgress main;
     if (progress)
         main = [&](std::string_view stage, double done) { progress(stage, share * done); };
-    AnalysisReport out = analyze(mesh, settings, c, gpu, main);
+    AnalysisReport out = analyze(mesh, settings, c, gpu, main, infill_stress);
     out.resolution.reason = reason;
     if (check && out.valid) {
         AnalysisProgress second;
         if (progress)
             second = [&](std::string_view, double done) { progress("resolution", share + (1.0 - share) * done); };
-        const AnalysisReport r = analyze(mesh, settings, coarse, gpu, second);
+        const AnalysisReport r = analyze(mesh, settings, coarse, gpu, second, infill_stress);
         ResolutionCheck& check_result = out.resolution;
         check_result.voxel = coarse.voxel;
         check_result.rows_per_layer = coarse.rows_per_layer;

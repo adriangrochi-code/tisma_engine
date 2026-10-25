@@ -3,8 +3,10 @@
 
 #include "infill/rectilinear.hpp"
 
+#include "infill/adaptive.hpp"
 #include "infill/connect.hpp"
 #include "infill/gyroid.hpp"
+#include "infill/patterns.hpp"
 #include "perimeters/coverage.hpp"
 
 #include <algorithm>
@@ -70,7 +72,7 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit, bool monotonic, double overlap) {
+                                       bool connect, bool fit, bool monotonic, double overlap, double shift) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -96,27 +98,62 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
         turned.push_back(std::move(t));
     }
     const double step = spacing * kUnitsPerMm;
-    Polygons lines;
+    const auto clip = [](const Polygons& lines, const Polygons& to, Polygons& open) {
+        Clipper2Lib::Clipper64 clipper;
+        clipper.AddOpenSubject(lines);
+        clipper.AddClip(to);
+        Polygons closed, pieces;
+        clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, pieces);
+        open.insert(open.end(), pieces.begin(), pieces.end());
+    };
+    Polygons open;
     if (fit) {
-        // As many lines as fit across, centred: the outer ones run along the shrunk boundary.
-        const double across = double(ymax - ymin) - 20.0; // without the slack
-        const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
-        const double first = double(ymin) + 10.0 + (across - double(count - 1) * step) / 2.0;
-        for (std::int64_t k = 0; k < count; ++k) {
-            const std::int64_t y = std::llround(first + double(k) * step);
-            lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
+        // Each connected piece on its own (an outer contour and its holes): as
+        // many lines as fit across it, centred, so its outer ones run along
+        // its shrunk boundary. Fitted to the whole layer, a second island off
+        // the first's spacing kept a strip of its edge bare (the review of
+        // 2026-10-25).
+        Clipper2Lib::Clipper64 joined;
+        joined.AddSubject(turned);
+        Clipper2Lib::PolyTree64 tree;
+        joined.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+        std::vector<const Clipper2Lib::PolyPath64*> outers;
+        for (const auto& outer : tree)
+            outers.push_back(outer.get());
+        for (std::size_t o = 0; o < outers.size(); ++o) {
+            Polygons piece{outers[o]->Polygon()};
+            for (const auto& hole : *outers[o]) {
+                piece.push_back(hole->Polygon());
+                for (const auto& island : *hole)
+                    outers.push_back(island.get());
+            }
+            std::int64_t lo = INT64_MAX, hi = INT64_MIN, left = INT64_MAX, right = INT64_MIN;
+            for (const Point64& q : piece.front()) {
+                lo = std::min(lo, q.y), hi = std::max(hi, q.y);
+                left = std::min(left, q.x), right = std::max(right, q.x);
+            }
+            const double across = double(hi - lo) - 20.0; // without the slack
+            if (across < 0.0)
+                continue;
+            const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
+            const double first = double(lo) + 10.0 + (across - double(count - 1) * step) / 2.0;
+            Polygons lines;
+            for (std::int64_t k = 0; k < count; ++k) {
+                const std::int64_t y = std::llround(first + double(k) * step);
+                lines.push_back({{left - 1, y}, {right + 1, y}});
+            }
+            clip(lines, piece, open);
         }
     } else {
-        for (auto k = static_cast<std::int64_t>(std::ceil(double(ymin) / step)); double(k) * step <= double(ymax); ++k) {
-            const std::int64_t y = std::llround(double(k) * step);
+        Polygons lines;
+        const double base = shift * kUnitsPerMm;
+        for (auto k = static_cast<std::int64_t>(std::ceil((double(ymin) - base) / step));
+             double(k) * step + base <= double(ymax); ++k) {
+            const std::int64_t y = std::llround(double(k) * step + base);
             lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
         }
+        clip(lines, turned, open);
     }
-    Clipper2Lib::Clipper64 clipper;
-    clipper.AddOpenSubject(lines);
-    clipper.AddClip(turned);
-    Polygons closed, open;
-    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
     // Order across the lines, then along them, left to right.
     for (Polygon& piece : open)
         if (piece.size() >= 2 && piece.front().x > piece.back().x)
@@ -177,7 +214,12 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         return out;
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
+    case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)
         out.sparse = rectilinear_fill(surfaces.sparse, params.width / params.density, angle, params.width, true);
+        break;
+    case InfillPattern::AlignedRectilinear: // every layer at the infill angle (rule 1)
+        out.sparse =
+            rectilinear_fill(surfaces.sparse, params.width / params.density, params.angle, params.width, true);
         break;
     case InfillPattern::Grid: {
         const double spacing = 2.0 * params.width / params.density;
@@ -189,6 +231,56 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     case InfillPattern::Gyroid:
         out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
         break;
+    case InfillPattern::Triangles:
+    case InfillPattern::Stars:
+    case InfillPattern::Cubic: {
+        // Three families of lines 60 degrees apart, each a third of the
+        // material. Triangles: the same in every layer, crossing at common
+        // points. Stars: the second family half a spacing over, so the three
+        // never meet at one point and draw six-pointed stars. Cubic: the faces
+        // of cubes standing on a vertex, so each family moves across its lines
+        // by z / sqrt(2) with the height (infill_patterns.md, rules 4 to 6).
+        const double spacing = 3.0 * params.width / params.density;
+        const double shift = params.pattern == InfillPattern::Cubic ? -z / std::numbers::sqrt2 : 0.0;
+        for (int k = 0; k < 3; ++k) {
+            const double over = params.pattern == InfillPattern::Stars && k == 1 ? 0.5 * spacing : 0.0;
+            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, params.width, false,
+                                                false, false, 0.0, std::fmod(shift, spacing) + over))
+                out.sparse.push_back(std::move(t));
+        }
+        break;
+    }
+    case InfillPattern::AdaptiveCubic:
+    case InfillPattern::SupportCubic:
+        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
+                                         params.width, z);
+        break;
+    case InfillPattern::Line: // every other line turned 6.7 degrees, the other way on odd layers (rule 3, P3)
+        out.sparse = line_fill(surfaces.sparse, params.width / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7,
+                               params.width);
+        break;
+    case InfillPattern::Honeycomb: {
+        // The principal direction goes through angle + 90, + 30 and - 30, a
+        // layer each (rule 10, P8: 135, 75 and 15 degrees at 45 in layers 6, 7 and 5).
+        const double principal = params.angle + 90.0 - 60.0 * double(layer % 3);
+        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(params.width, params.density), principal,
+                                    params.width);
+        break;
+    }
+    case InfillPattern::Concentric:
+        out.sparse = concentric_fill(surfaces.sparse, params.width / params.density, params.width);
+        break;
+    case InfillPattern::Hilbert: // the same in every layer (rule 12)
+        out.sparse = hilbert_fill(surfaces.sparse, params.width / params.density, params.angle, params.width);
+        break;
+    case InfillPattern::Archimedean:
+        out.sparse = archimedean_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        break;
+    case InfillPattern::Octagram:
+        out.sparse = octagram_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        break;
+    case InfillPattern::Lightning:
+        break; // all the layers at once, from the top down (lightning_layers)
     }
     return out;
 }

@@ -196,7 +196,7 @@ La biblioteca `tisma_ui`, que usa el programa `tisma` (`apps/tisma/`, ver `docs/
 
 El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador propio de OpenGL 3.3 y el dibujo 3D.
 
-### `calibration/`, `project/`, `catalog/`
+### `calibration/`, `project/`, `catalog/`, `device/`
 
 - **`calibration/calibration.*`:** las piezas de prueba de las calibraciones, generadas (bloque de dimensiones,
   torres), sus cambios por altura, los rangos automáticos, usar el valor elegido y la compensación desde medidas
@@ -205,6 +205,19 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
   `resources/catalog/`, y los perfiles que salen de cada entrada (`docs/CATALOG.md`).
 - **`project/project.*`:** el archivo de proyecto `.tisma`: un JSON con los ajustes, los perfiles, las piezas y la
   calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
+- **`slice/local_layers.*`:** la altura de capa por zona (`docs/LOCAL_LAYERS.md`): los grupos de subcapas, sus zonas
+  gruesas y el recorte de los caminos.
+- **`infill/stress_density.*`:** el relleno guiado por tensiones (`docs/INFILL.md`): la carga por vóxel del análisis
+  de la pieza maciza y las bandas de densidad por capa.
+- **`infill/combine.*`:** combinar el relleno disperso de varias capas en una más gruesa (`docs/INFILL.md`): las
+  corridas de capas; el pipeline corta la parte común y la imprime como capa gruesa.
+- **`slice/zaa.*`:** Z anti-aliasing (`docs/ZAA.md`): el índice de las caras que miran hacia arriba y el corte de
+  los caminos visibles, con la altura de cada punto (`ToolpathPoint::dz`) que escribe el G-code.
+- **`slice/variable_layers.*`:** la altura variable por Z (`docs/VARIABLE_LAYERS.md`): planea la pila de capas con
+  la lista de tramos, la pendiente (escalón máximo) y las subcapas de la altura por zona, y cuenta las pieles en capas
+  gruesas.
+- **`device/`:** las impresoras conectadas (`docs/DEVICE.md`): la interfaz `Printer`, el puerto serie, el host de
+  G-code por USB en su propio hilo y la impresora simulada de las pruebas.
 
 ### `config/`, `report/`, `cli/`
 

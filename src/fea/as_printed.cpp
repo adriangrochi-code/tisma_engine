@@ -30,6 +30,16 @@ int layer_at(const std::vector<Layer>& layers, double z) {
 std::vector<float> line_directions(const VoxelGrid& g, const SlicedModel& model) {
     const std::size_t plane = std::size_t(g.nx) * std::size_t(g.ny);
     std::vector<float> out(g.solid.size(), std::numeric_limits<float>::quiet_NaN());
+    // The thick layer whose height spans each layer (combined infill, layer
+    // heights by zone): printed at the top of its last layer, it fills them all.
+    std::vector<int> thick_over(model.layers.size(), -1);
+    for (std::size_t m = 0; m < model.thick.size() && m < model.layers.size(); ++m) {
+        if (model.thick[m].empty())
+            continue;
+        const double bottom = model.layers[m].top - model.thick[m].height;
+        for (std::size_t l = m + 1; l-- > 0 && model.layers[l].bottom >= bottom - 1e-9;)
+            thick_over[l] = int(m);
+    }
     tbb::parallel_for(0, g.nz, [&](int k) {
         const int l = layer_at(model.layers, 0.5 * (g.z[std::size_t(k)] + g.z[std::size_t(k) + 1]));
         if (l < 0)
@@ -74,6 +84,14 @@ std::vector<float> line_directions(const VoxelGrid& g, const SlicedModel& model)
             for (const auto* group : {&f.top, &f.solid, &f.sparse, &f.bridge, &f.gaps})
                 for (const Toolpath& t : *group)
                     paint(t);
+        }
+        if (const int m = thick_over[layer]; m >= 0) {
+            const ThickLayer& t = model.thick[std::size_t(m)];
+            for (const Toolpath& w : t.walls)
+                paint(w);
+            for (const auto* group : {&t.fill.top, &t.fill.solid, &t.fill.sparse, &t.fill.bridge, &t.fill.gaps})
+                for (const Toolpath& p : *group)
+                    paint(p);
         }
     });
     return out;

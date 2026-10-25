@@ -35,9 +35,9 @@ que el programa no depende de archivos externos.
 | `vendor`, `model` | Fabricante y nombre oficial del modelo |
 | `build_volume` | `[x, y, z]` en mm. En una cama redonda (delta), `x` es el diámetro |
 | `bed_shape` | `rectangular` (por defecto) o `circular` |
-| `nozzle_diameters` | Las boquillas en mm: la de fábrica primero, después las que vende el fabricante |
+| `nozzle_diameters` | Las boquillas en mm: la de fábrica primero, después las que vende el fabricante. Si el fabricante no la dice, 0,4 mm, la más común |
 | `filament_diameter` | 1,75 o 2,85 mm |
-| `firmware` | `marlin`, `klipper`, `reprap`, `bambu` u `other` |
+| `firmware` | `marlin`, `klipper`, `reprap`, `bambu` u `other` (propio del fabricante); vacío si el fabricante no lo dice: G-code genérico |
 | `extruder` | `direct` o `bowden` |
 | `heated_bed`, `max_bed_temp`, `max_nozzle_temp` | Cama caliente y temperaturas máximas (°C) |
 | `max_speed`, `max_acceleration` | Velocidad (mm/s) y aceleración (mm/s²) máximas publicadas |
@@ -58,6 +58,33 @@ que el programa no depende de archivos externos.
 | `enclosure` | Si el fabricante pide impresora cerrada |
 | `sources` | Las páginas u hojas técnicas oficiales (obligatorio) |
 
+**Capacidades en detalle** (todas opcionales; solo lo que dice una página oficial):
+
+| Clave | Qué es |
+|---|---|
+| `kinematics` | `cartesian` (cama que se mueve en Y), `corexy`, `corexz`, `delta`, `idex`, `belt`, `toolchanger` |
+| `max_flow` | Flujo volumétrico máximo del hot end, mm³/s |
+| `chamber_heating` | Temperatura máxima de la cámara calefaccionada activamente, °C (una impresora solo cerrada no la tiene) |
+| `hardened_nozzle` | La boquilla de fábrica acepta filamentos abrasivos (`true`) o el fabricante dice que no (`false`) |
+| `hotend`, `probe` | El hot end y el sensor de nivelación, en pocas palabras |
+| `bed_surfaces` | Las superficies de cama que trae o vende el fabricante |
+| `connectivity` | De `wifi`, `ethernet`, `lan`, `usb`, `sd`, `usb drive`, `cloud`, `app` |
+| `features` | Lo que el fabricante dice que tiene: «input shaping», «filament runout sensor», «camera»… |
+| `material_slots` | Filamentos que alimenta una unidad multimaterial oficial |
+| `tools` | Cabezales independientes, si hay más de uno (IDEX: 2) |
+
+Y en los filamentos:
+
+| Clave | Qué es |
+|---|---|
+| `max_flow` | Flujo volumétrico máximo, mm³/s |
+| `chamber_temp` | `[mín, máx]` de la cámara, °C |
+| `drying_temp`, `drying_hours` | Secado: °C y horas |
+| `abrasive`, `soluble` | Abrasivo (con fibra de carbono o vidrio); soluble (PVA, BVOH…) |
+| `hardness` | Dureza Shore, en texto («95A») |
+| `glass_transition`, `heat_deflection`, `shrinkage` | Transición vítrea y HDT en °C; contracción en % |
+| `bed_surfaces` | Las camas o adhesivos que recomienda |
+
 **Comprobaciones al leer (`parse_catalog`):** se rechazan las claves faltantes o fuera de rango (con el nombre de la
 entrada), una entrada repetida y las fuentes no permitidas. Las entradas quedan ordenadas por fabricante y modelo.
 
@@ -70,9 +97,10 @@ entrada), una entrada repetida y las fuentes no permitidas. Las entradas quedan 
 | `machine.bed` | Un rectángulo desde el origen, o un círculo de 64 lados alrededor del origen si la cama es redonda |
 | `machine.max_height` | La altura del volumen |
 | `machine.nozzle_diameter` | La boquilla elegida |
-| `machine.flavor` | `klipper` → Klipper; `reprap` → RepRap; `marlin`, `bambu` y `other` → Marlin |
+| `machine.flavor` | `klipper` → Klipper; `reprap` → RepRap; `marlin`, `bambu`, `other` y sin dato → Marlin (comandos que también entienden los demás) |
 | `retraction.length`, `speed` | Valores de partida propios: extrusor directo 0,8 mm a 35 mm/s; Bowden 4 mm a 40 mm/s. Las torres de calibración encuentran los de cada impresora |
 | `machine.max_feed_x`, `_y`, `acceleration` | Los máximos publicados, si los hay |
+| `machine.max_flow`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp`, `enclosed`, `hardened_nozzle` | Sus capacidades, si se conocen (ver «Capacidades») |
 | G-code de inicio y fin | Propios del motor, en comandos que entiende cualquier firmware: calentar, `G28`, `M420 S1` (la malla guardada) en Marlin con nivelación automática, esperar las temperaturas, una línea de cebado junto al borde, y al final apagar, subir y presentar la pieza |
 
 **Firmware propio:** las impresoras `bambu` y `other` (por ejemplo, UltiMaker) tienen su propia secuencia de inicio o
@@ -85,9 +113,28 @@ revisarlo antes de imprimir.
 |---|---|
 | `machine.filament_diameter` | El diámetro |
 | Variables `temperature` y `bed_temperature` | La temperatura recomendada; si no hay, el medio del rango redondeado a 5 °C |
+| `extrusion.max_flow`, `chamber_temperature` | Su flujo máximo; el medio del rango de cámara |
+| `extrusion.abrasive` | Lo que dice la hoja; si no dice, abrasivo si el material lleva fibra (`-CF`, `-GF`) |
+| `extrusion.needs_enclosure` | Si pide impresora cerrada |
 | `cooling.fan_min`, `fan_max` | Los de la hoja; si no da números, los del material: PLA 35–100 %, PETG 20–50 %, TPU 50–100 %, ABS, ASA, PA y PC 0–20 % con las 3 primeras capas sin ventilador (los mismos de los perfiles de fábrica) |
 
 Los nombres: «Fabricante Modelo 0.4 mm» y «Fabricante Filamento».
+
+## Capacidades
+
+El dueño pidió (2026-10-24) que el motor sepa «a lo mayor cantidad de detalles posible» lo que puede cada impresora y
+lo que pide cada filamento, y que lo use. Con los dos perfiles elegidos:
+
+- **El flujo:** ninguna extrusión pasa del flujo máximo del hot end ni del filamento (el menor de los dos). La
+  velocidad de cada tramo baja lo necesario; el tiempo estimado lo tiene en cuenta.
+- **La cámara:** si el filamento pide cámara y la impresora la calienta, el G-code la pone al principio (sin pasar del
+  máximo de la impresora) y la apaga al final.
+- **Los avisos:** si el filamento pide más que la impresora (boquilla o cama más calientes que su máximo, una cámara
+  que no calienta o no alcanza, una impresora cerrada, una boquilla endurecida), la laminación lo avisa. No frena la
+  exportación: un dato vacío del catálogo nunca avisa.
+- **La ficha:** la interfaz muestra todos los detalles conocidos de la impresora y el filamento.
+
+Un dato que el fabricante no da queda en 0 o falso: no limita nada.
 
 ## En la interfaz
 
@@ -95,8 +142,9 @@ En las filas de perfil de Impresora y Filamento (`docs/UI.md`), la lista y el me
 catálogo…**:
 - un buscador por marca y modelo (todas las palabras tienen que estar);
 - la lista agrupada por fabricante;
-- la ficha del elegido: volumen, firmware, extrusor, máximos, opción multimaterial, la advertencia de firmware propio y
-  las fuentes como enlaces;
+- la ficha del elegido: volumen, firmware, extrusor, máximos, opción multimaterial, las capacidades en detalle (o, en
+  un filamento, el secado, la dureza, si es abrasivo o soluble), la advertencia de firmware propio y las fuentes como
+  enlaces;
 - en las impresoras, la boquilla;
 - **Agregar a mis perfiles** lo guarda como perfil del usuario y lo elige.
 
@@ -108,7 +156,9 @@ catálogo…**:
    corta. Se hace por tandas de fabricantes; cada tanda queda en `PROGRESS.md`.
 2. **Revisión:** cada fuente tiene que ser del dominio del fabricante; se descartan las entradas con datos dudosos o
    sin fuente.
-3. **Carga:** al JSON del catálogo, y las pruebas lo validan entero.
+3. **Carga:** `tools/catalog_merge.py` las suma al JSON del catálogo: solo con fuentes oficiales, sin claves ni valores
+   fuera del formato. Con `--update`, una entrada que ya está solo gana las claves que no tenía y las fuentes nuevas;
+   un valor distinto del que ya tiene se informa y no se toma. Las pruebas validan el catálogo entero.
 
 Para agregar una impresora o un filamento: una entrada con sus fuentes oficiales, en orden alfabético.
 
@@ -124,4 +174,6 @@ Para agregar una impresora o un filamento: una entrada con sus fuentes oficiales
   - los perfiles de impresora (rectangular y redonda, cada firmware, directo y Bowden), que laminan el cubo a G-code
     verificado;
   - los perfiles de filamento;
+  - las capacidades en detalle, hasta los perfiles y sus avisos;
   - el catálogo incluido, entrada por entrada.
+- **`tests/test_gcode.cpp`**, «capabilities»: el tope de flujo, la cámara y los avisos en el G-code.

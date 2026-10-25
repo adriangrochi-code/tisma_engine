@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <vector>
 
@@ -15,7 +17,8 @@ using Clipper2Lib::Point64;
 Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step) {
     struct End {
         std::size_t poly = 0, edge = 0;
-        double s = 0.0; // arc length from the polygon's first vertex
+        double s = 0.0;        // arc length from the polygon's first vertex
+        double away = 0.0;     // distance to the boundary (units)
     };
     std::vector<std::vector<double>> prefix(boundary.size());
     std::vector<double> perimeter(boundary.size(), 0.0);
@@ -27,23 +30,88 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
             prefix[b][i + 1] = prefix[b][i] + length(poly[i], poly[(i + 1) % poly.size()]);
         perimeter[b] = prefix[b].back();
     }
-    auto locate = [&](const Point64& p) {
-        End best;
-        double nearest = std::numeric_limits<double>::max();
+    // The nearest boundary edge to a point: among equally near ones, the
+    // first (by polygon, then edge).
+    auto consider = [&](const Point64& p, std::size_t b, std::size_t i, End& best, double& nearest) {
+        const Point64& a = boundary[b][i];
+        const Point64& c = boundary[b][(i + 1) % boundary[b].size()];
+        const double dx = double(c.x - a.x), dy = double(c.y - a.y);
+        const double len2 = dx * dx + dy * dy;
+        const double t = len2 > 0.0 ? std::clamp((double(p.x - a.x) * dx + double(p.y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
+        const double d = std::hypot(double(p.x) - (double(a.x) + t * dx), double(p.y) - (double(a.y) + t * dy));
+        if (d < nearest || (d == nearest && (b < best.poly || (b == best.poly && i < best.edge)))) {
+            nearest = d;
+            best = {b, i, prefix[b][i] + t * std::sqrt(len2), d};
+        }
+    };
+    // Past a few dozen edges, a grid of them: every end looked at every edge
+    // (a plate of many parts, a part with many holes: seconds per layer).
+    std::size_t edge_count = 0;
+    for (const Polygon& poly : boundary)
+        edge_count += poly.size();
+    struct EdgeRef {
+        std::uint32_t poly, edge;
+    };
+    std::vector<std::vector<EdgeRef>> cells;
+    double x0 = 0.0, y0 = 0.0, cell = 1.0;
+    long nx = 0, ny = 0;
+    if (edge_count > 64) {
+        double xmin = std::numeric_limits<double>::max(), ymin = xmin, xmax = std::numeric_limits<double>::lowest(), ymax = xmax;
+        for (const Polygon& poly : boundary)
+            for (const Point64& q : poly)
+                xmin = std::min(xmin, double(q.x)), xmax = std::max(xmax, double(q.x)), ymin = std::min(ymin, double(q.y)),
+                ymax = std::max(ymax, double(q.y));
+        const double w = xmax - xmin, h = ymax - ymin;
+        cell = std::max({std::sqrt(w * h / double(edge_count)), std::max(w, h) / 1024.0, 1.0});
+        x0 = xmin, y0 = ymin;
+        nx = long(w / cell) + 1, ny = long(h / cell) + 1;
+        cells.resize(std::size_t(nx) * std::size_t(ny));
         for (std::size_t b = 0; b < boundary.size(); ++b)
             for (std::size_t i = 0; i < boundary[b].size(); ++i) {
                 const Point64& a = boundary[b][i];
                 const Point64& c = boundary[b][(i + 1) % boundary[b].size()];
-                const double dx = double(c.x - a.x), dy = double(c.y - a.y);
-                const double len2 = dx * dx + dy * dy;
-                const double t =
-                    len2 > 0.0 ? std::clamp((double(p.x - a.x) * dx + double(p.y - a.y) * dy) / len2, 0.0, 1.0) : 0.0;
-                const double d = std::hypot(double(p.x) - (double(a.x) + t * dx), double(p.y) - (double(a.y) + t * dy));
-                if (d < nearest) {
-                    nearest = d;
-                    best = {b, i, prefix[b][i] + t * std::sqrt(len2)};
-                }
+                const long cx0 = std::min(nx - 1, long((double(std::min(a.x, c.x)) - x0) / cell));
+                const long cx1 = std::min(nx - 1, long((double(std::max(a.x, c.x)) - x0) / cell));
+                const long cy0 = std::min(ny - 1, long((double(std::min(a.y, c.y)) - y0) / cell));
+                const long cy1 = std::min(ny - 1, long((double(std::max(a.y, c.y)) - y0) / cell));
+                for (long y = cy0; y <= cy1; ++y)
+                    for (long x = cx0; x <= cx1; ++x)
+                        cells[std::size_t(y) * std::size_t(nx) + std::size_t(x)].push_back({std::uint32_t(b), std::uint32_t(i)});
             }
+    }
+    auto locate = [&](const Point64& p) {
+        End best;
+        double nearest = std::numeric_limits<double>::max();
+        if (cells.empty()) {
+            for (std::size_t b = 0; b < boundary.size(); ++b)
+                for (std::size_t i = 0; i < boundary[b].size(); ++i)
+                    consider(p, b, i, best, nearest);
+            return best;
+        }
+        // Rings of cells around p's cell: an edge first met in ring r + 1 or
+        // beyond is at least r cells away.
+        const long cx = long(std::floor((double(p.x) - x0) / cell)), cy = long(std::floor((double(p.y) - y0) / cell));
+        const long far = std::max({std::labs(cx), std::labs(cx - nx), std::labs(cy), std::labs(cy - ny)}) + 1;
+        const auto visit = [&](long x, long y) {
+            if (x < 0 || y < 0 || x >= nx || y >= ny)
+                return;
+            for (const EdgeRef& e : cells[std::size_t(y) * std::size_t(nx) + std::size_t(x)])
+                consider(p, e.poly, e.edge, best, nearest);
+        };
+        for (long r = 0; r <= far; ++r) {
+            for (long x = cx - r; x <= cx + r; ++x) {
+                visit(x, cy - r);
+                if (r > 0)
+                    visit(x, cy + r);
+            }
+            for (long y = cy - r + 1; y <= cy + r - 1; ++y) {
+                visit(cx - r, y);
+                if (r > 0)
+                    visit(cx + r, y);
+            }
+            if (nearest < double(r) * cell)
+                break;
+        }
         return best;
     };
     // End 2i is the first point of piece i, end 2i + 1 its last.
@@ -74,7 +142,12 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
                 arc += perimeter[b];
             const double dy = std::fabs(double(pieces[a / 2].front().y - pieces[c / 2].front().y));
             const bool rows = row_step <= 0.0 || std::fabs(dy - row_step) < 0.25 * row_step;
-            if (a / 2 != c / 2 && rows && arc <= max_arc)
+            // Only ends on the boundary join along it: a spiral's start in
+            // the middle of the region, snapped to the nearest edge, made a
+            // straight bead across its turns (the review of 2026-10-25).
+            constexpr double kOnBoundary = 0.01 * kUnitsPerMm;
+            const bool on_boundary = ends[a].away <= kOnBoundary && ends[c].away <= kOnBoundary;
+            if (a / 2 != c / 2 && rows && arc <= max_arc && on_boundary)
                 joins.push_back({arc, a, c});
         }
     }

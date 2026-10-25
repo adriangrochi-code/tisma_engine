@@ -351,6 +351,42 @@ TEST_CASE("layer_walls: what the walls leave for infill", "[sites]") {
     CHECK(layer_walls({}, p).toolpaths.empty());
 }
 
+TEST_CASE("layer_walls: concave and straight corners do not break the walls", "[sites]") {
+    // A regular polygon away from the origin with a corner added in the middle
+    // of each side: on the side (straight), or moved in (concave) by `in` mm.
+    // Each wall broke into an open piece per corner or two: the supports of
+    // one rib, computed from the corner and from the segment ending there,
+    // differed by a fraction of a nanometre.
+    const auto notched = [](int n, double radius, double in) {
+        Polygon out;
+        for (int i = 0; i < n; ++i) {
+            const double a = 2.0 * std::numbers::pi * i / n, b = 2.0 * std::numbers::pi * (i + 1) / n;
+            out.push_back({to_units(100.0 + radius * std::cos(a)), to_units(100.0 + radius * std::sin(a))});
+            const double mx = radius * (std::cos(a) + std::cos(b)) / 2.0, my = radius * (std::sin(a) + std::sin(b)) / 2.0;
+            const double scale = 1.0 - in / std::hypot(mx, my);
+            out.push_back({to_units(100.0 + mx * scale), to_units(100.0 + my * scale)});
+        }
+        return out;
+    };
+    BeadingParams p;
+    p.wall_count = 2;
+    const struct {
+        int n;
+        double radius, in;
+    } cases[] = {{4, 10.0, 0.5}, {12, 10.0, 0.5}, {128, 10.0, 0.0}, {128, 10.0, 1e-6}, {128, 10.0, 0.1}, {1000, 80.0, 1e-4}};
+    for (const auto& c : cases) {
+        CAPTURE(c.n, c.radius, c.in);
+        const LayerWalls w = layer_walls({notched(c.n, c.radius, c.in)}, p);
+        REQUIRE(w.toolpaths.size() == 2);
+        std::set<int> indices;
+        for (const Toolpath& t : w.toolpaths) {
+            CHECK(t.closed);
+            indices.insert(t.index);
+        }
+        CHECK(indices == std::set<int>{0, 1});
+    }
+}
+
 TEST_CASE("beading conflicts: up from a thin fin, the beading turns into the body's over w*", "[sites]") {
     // A 1 mm fin (3 beads of 1/3 mm) on a 6 mm body (15 beads). The fin's centre
     // runs down to (8.5, 6) and a little beyond, between the two reflex corners,

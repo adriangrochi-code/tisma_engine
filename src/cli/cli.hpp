@@ -15,6 +15,7 @@ enum ExitCode : int {
     kExitModel = 4,          // the model cannot be printed (empty, outside the bed, too tall)
     kExitAnalysis = 5,       // the analysis gave no valid result (nothing held, no load applied, not converged)
     kExitGcode = 6,          // the G-code failed its own check: kept as <file>.rejected, nothing under <file>
+    kExitInternal = 7,       // an error of the engine itself (a bug): the message names it
 };
 
 // Runs the command line. args excludes the program name.

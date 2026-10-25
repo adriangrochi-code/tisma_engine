@@ -68,6 +68,25 @@ struct Reader {
                             std::to_string(int(hi)));
         return std::array<double, 2>{a, b};
     }
+    std::vector<std::string> texts(const char* key) const {
+        std::vector<std::string> out;
+        if (!j.contains(key) || j.at(key).is_null())
+            return out;
+        if (!j.at(key).is_array())
+            fail(where, std::string(key) + " must be a list of texts");
+        for (const json& t : j.at(key)) {
+            if (!t.is_string())
+                fail(where, std::string(key) + " must be a list of texts");
+            out.push_back(t.get<std::string>());
+        }
+        return out;
+    }
+    std::optional<int> count(const char* key, int lo, int hi) const {
+        const std::optional<double> v = number(key, lo, hi);
+        if (v && *v != std::floor(*v))
+            fail(where, std::string(key) + " must be a whole number");
+        return v ? std::optional<int>(int(*v)) : std::nullopt;
+    }
     std::optional<bool> flag(const char* key) const {
         if (!j.contains(key) || j.at(key).is_null())
             return std::nullopt;
@@ -122,20 +141,21 @@ PrinterModel read_printer(const json& j, std::size_t index) {
     if (!shape.empty() && shape != "rectangular" && shape != "circular")
         fail(r.where, "bed_shape must be rectangular or circular");
     p.circular = shape == "circular";
-    if (!j.contains("nozzle_diameters") || !j.at("nozzle_diameters").is_array() || j.at("nozzle_diameters").empty())
+    // A maker that does not state the nozzle: the common 0.4 mm (docs/CATALOG.md).
+    const json nozzles = j.contains("nozzle_diameters") && !j.at("nozzle_diameters").is_null() ? j.at("nozzle_diameters")
+                                                                                                : json::array({0.4});
+    if (!nozzles.is_array() || nozzles.empty())
         fail(r.where, "nozzle_diameters must list at least the stock nozzle");
-    for (const json& n : j.at("nozzle_diameters")) {
+    for (const json& n : nozzles) {
         if (!n.is_number() || !(n.get<double>() >= 0.1 && n.get<double>() <= 2.0))
             fail(r.where, "nozzle_diameters must be from 0.1 to 2 mm");
         if (std::find(p.nozzles.begin(), p.nozzles.end(), n.get<double>()) == p.nozzles.end())
             p.nozzles.push_back(n.get<double>());
     }
     p.filament_diameter = r.number("filament_diameter", 1.0, 3.5).value_or(1.75);
-    p.firmware = r.text("firmware", false);
-    if (p.firmware.empty())
-        p.firmware = "other";
-    if (p.firmware != "marlin" && p.firmware != "klipper" && p.firmware != "reprap" && p.firmware != "bambu" &&
-        p.firmware != "other")
+    p.firmware = r.text("firmware", false); // empty: the maker does not say
+    if (!p.firmware.empty() && p.firmware != "marlin" && p.firmware != "klipper" && p.firmware != "reprap" &&
+        p.firmware != "bambu" && p.firmware != "other")
         fail(r.where, "firmware must be marlin, klipper, reprap, bambu or other");
     const std::string extruder = r.text("extruder", false);
     if (!extruder.empty() && extruder != "direct" && extruder != "bowden")
@@ -149,6 +169,17 @@ PrinterModel read_printer(const json& j, std::size_t index) {
     p.auto_leveling = r.flag("auto_leveling");
     p.enclosed = r.flag("enclosed").value_or(false);
     p.multi_material = r.text("multi_material", false);
+    p.kinematics = r.text("kinematics", false);
+    p.max_flow = r.number("max_flow", 1.0, 1000.0);
+    p.chamber_heating = r.number("chamber_heating", 20.0, 200.0);
+    p.hardened_nozzle = r.flag("hardened_nozzle");
+    p.hotend = r.text("hotend", false);
+    p.probe = r.text("probe", false);
+    p.bed_surfaces = r.texts("bed_surfaces");
+    p.connectivity = r.texts("connectivity");
+    p.features = r.texts("features");
+    p.material_slots = r.count("material_slots", 1, 64);
+    p.tools = r.count("tools", 1, 16);
     p.sources = r.sources();
     return p;
 }
@@ -171,6 +202,17 @@ FilamentModel read_filament(const json& j, std::size_t index) {
     f.fan = r.range("fan", 0.0, 100.0);
     f.print_speed = r.range("print_speed", 1.0, 2000.0);
     f.enclosure = r.flag("enclosure");
+    f.max_flow = r.number("max_flow", 1.0, 1000.0);
+    f.chamber_temp = r.range("chamber_temp", 0.0, 200.0);
+    f.drying_temp = r.number("drying_temp", 20.0, 200.0);
+    f.drying_hours = r.number("drying_hours", 0.5, 96.0);
+    f.abrasive = r.flag("abrasive");
+    f.soluble = r.flag("soluble");
+    f.hardness = r.text("hardness", false);
+    f.glass_transition = r.number("glass_transition", -100.0, 400.0);
+    f.heat_deflection = r.number("heat_deflection", 0.0, 400.0);
+    f.shrinkage = r.number("shrinkage", 0.0, 10.0);
+    f.bed_surfaces = r.texts("bed_surfaces");
     if (!f.nozzle_temp && !f.nozzle_recommended)
         fail(r.where, "needs nozzle_temp or nozzle_temp_recommended");
     f.sources = r.sources();
@@ -276,6 +318,14 @@ std::string filament_profile_name(const FilamentModel& f) {
     return name;
 }
 
+bool is_abrasive(const FilamentModel& f) {
+    if (f.abrasive)
+        return *f.abrasive;
+    const std::string m = lower(f.material);
+    return m.ends_with("-cf") || m.ends_with("-gf") || m.find("-cf") != std::string::npos ||
+           m.find("-gf") != std::string::npos;
+}
+
 bool needs_own_start_gcode(const PrinterModel& p) { return p.firmware == "bambu" || p.firmware == "other"; }
 
 Profile printer_profile(const PrinterModel& p, double nozzle) {
@@ -308,6 +358,13 @@ Profile printer_profile(const PrinterModel& p, double nozzle) {
     }
     if (p.max_acceleration)
         s.acceleration = s.travel_acceleration = *p.max_acceleration;
+    // What it can do: the writer keeps to it, and the checks warn against it.
+    s.machine_max_flow = p.max_flow.value_or(0.0);
+    s.max_nozzle_temp = p.max_nozzle_temp.value_or(0.0);
+    s.max_bed_temp = p.heated_bed ? p.max_bed_temp.value_or(0.0) : 0.0;
+    s.max_chamber_temp = p.chamber_heating.value_or(0.0);
+    s.enclosed = p.enclosed;
+    s.hardened_nozzle = p.hardened_nozzle.value_or(false);
 
     // The engine's own start and end G-code, in plain commands every flavor
     // takes. A round bed has its origin in the middle.
@@ -366,6 +423,10 @@ Profile filament_profile(const FilamentModel& f) {
     const std::optional<double> bed = f.bed_recommended ? f.bed_recommended : middle(f.bed_temp);
     s.variables["temperature"] = {number_text(nozzle.value_or(210.0))};
     s.variables["bed_temperature"] = {number_text(bed.value_or(60.0))};
+    s.filament_max_flow = f.max_flow.value_or(0.0);
+    s.chamber_temperature = middle(f.chamber_temp).value_or(0.0);
+    s.abrasive = is_abrasive(f);
+    s.needs_enclosure = f.enclosure.value_or(false);
     // The fan: the data sheet's numbers, else the material's (src/ui/presets.*
     // uses the same).
     const std::string m = lower(f.material);

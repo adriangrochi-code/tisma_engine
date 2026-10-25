@@ -19,7 +19,7 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
-enum class InfillPattern { Rectilinear, Grid, Gyroid };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
 
@@ -36,6 +36,8 @@ struct HeightChange {
     std::optional<double> flow;            // %, replaces extrusion.flow
     std::optional<double> speed;           // %, of every extrusion's feed
     std::optional<double> pressure_advance; // the firmware's pressure advance (0 included)
+    std::optional<double> volumetric_flow; // mm3/s: every extrusion runs at this flow, past every cap (a flow tower)
+    std::optional<double> acceleration;    // mm/s2, written in the flavor's command (M204, SET_VELOCITY_LIMIT)
     std::string gcode;                     // G-code put at that layer's start, with variables
 };
 
@@ -50,6 +52,17 @@ struct Speed {
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
+    // Layer heights by zone (docs/LOCAL_LAYERS.md): the height of the fine
+    // sub-layers where the part changes, layer_height elsewhere; 0: off.
+    double detail_height = 0.0;
+    double detail_tolerance = 0.05; // mm of step accepted
+    double detail_margin = 0.0;     // mm the fine zone grows around the detail; 0: three line widths
+    // Variable layer height by Z (docs/VARIABLE_LAYERS.md): (z above the bed,
+    // height) steps, each height from its z up, sorted by z; empty: none.
+    std::vector<std::array<double, 2>> layer_heights;
+    // Adaptive by slope: the highest step a sloping surface may leave, mm
+    // (Dolenc and Mäkelä 1994); 0: off.
+    double cusp_height = 0.0;
     FillMode fill_mode = FillMode::Union;
     double gap_closing_radius = 0.049;
     double xy_offset = 0.0;
@@ -60,12 +73,33 @@ struct Settings {
     SeamMode seam = SeamMode::Aligned;
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
+    double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
+    double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
+    int infill_solid_every = 0;        // layers N, 2N... all solid infill (0: never)
+    // Combining the sparse infill of several layers (docs/INFILL.md).
+    int infill_combine_layers = 1;            // 1: each layer its own
+    bool infill_combine_auto = false;         // as many as fit in the height below
+    Speed infill_combine_max_height{100.0, true}; // mm, or percent of the nozzle; never past the nozzle
+    // Denser sparse infill right under the top surfaces (docs/INFILL.md).
+    // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1).
+    bool infill_nonplanar = false;
+    double infill_nonplanar_amplitude = 250.0; // percent of the layer height, trough to crest
+    double infill_nonplanar_wavelength = 2.0;  // mm
+    bool infill_dense_under_top = false;
+    double infill_dense_density = 40.0; // percent
+    // Stress-guided infill (docs/INFILL.md): up to this density where the
+    // part works hardest under the load case given to slice; 0: off.
+    double infill_stress_density = 0.0; // percent
     GpuMode gpu = GpuMode::Auto;
+    // Z anti-aliasing (docs/ZAA.md, docs/spec/features/z_antialiasing.md).
+    bool zaa = false;
+    double zaa_min_thickness = 25.0; // percent of the layer height an extrusion keeps at least
+    bool zaa_raise = false;          // also up to the surface above the top, half a layer at most
 
     // machine
     double nozzle_diameter = 0.4;   // mm
@@ -85,6 +119,19 @@ struct Settings {
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
     double max_height = 0.0; // mm; 0: not checked
+    // The layer heights the machine prints, mm; 0: not known (then 0.04 mm and
+    // the nozzle diameter). Variable layers keep within them.
+    double min_layer_height = 0.0;
+    double max_layer_height = 0.0;
+    // What the machine can do (docs/CATALOG.md, "Capacidades"); 0 or false:
+    // not known. The writer keeps to the flow and heats the chamber; the
+    // checks warn when a filament asks for more.
+    double machine_max_flow = 0.0;  // mm3/s the hot end melts
+    double max_nozzle_temp = 0.0;   // C
+    double max_bed_temp = 0.0;      // C
+    double max_chamber_temp = 0.0;  // C of an actively heated chamber; 0: none
+    bool enclosed = false;
+    bool hardened_nozzle = false;   // takes abrasive filaments
 
     // speed, mm/s
     double wall_speed = 60.0;
@@ -134,6 +181,14 @@ struct Settings {
     // The firmware's pressure advance, written at the start in the flavor's
     // command (M900 K, SET_PRESSURE_ADVANCE, M572); 0: not written.
     double pressure_advance = 0.0;
+    double filament_max_flow = 0.0;    // mm3/s the filament takes; 0: no limit of its own
+    double chamber_temperature = 0.0;  // C the filament wants in the chamber; 0: none
+    bool abrasive = false;             // wears a brass nozzle
+    bool needs_enclosure = false;
+
+    // gcode
+    // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
+    double gcode_resolution = 0.0125;
 
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;
@@ -151,10 +206,26 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& settin
 // engine ignored are not written.
 std::string settings_json(const Settings& settings);
 
+// The name of an infill pattern in the settings ("rectilinear", "grid"...).
+const char* infill_pattern_name(InfillPattern pattern);
+
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 
-// Reads and parses a settings file. Throws SettingsError.
+// Whether a JSON text nests at most max_depth arrays and objects. Settings,
+// profiles, projects and load cases are untrusted files: a deeper one would
+// overflow the stack once written back or compared, so it is refused first.
+bool json_depth_ok(std::string_view json, int max_depth = 64);
+
+// Reads and parses a settings file, then checks it (check_settings). Throws
+// SettingsError.
 Settings load_settings(const std::filesystem::path& path);
+
+// What a whole set of settings cannot print, whatever the model: layers
+// thicker than the nozzle (or machine.max_layer_height) or thinner than
+// machine.min_layer_height, lines narrower than a quarter of the nozzle or
+// wider than four nozzles. Profiles hold only part of the settings, so this
+// runs on the whole set, before slicing. Throws SettingsError.
+void check_settings(const Settings& settings);
 
 } // namespace tisma

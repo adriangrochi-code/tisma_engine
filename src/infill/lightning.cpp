@@ -1,0 +1,458 @@
+// Lightning infill, after Tricard, Claux and Lefebvre 2020; own design. See
+// PROVENANCE.md.
+
+#include "infill/lightning.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <numbers>
+
+namespace tisma {
+
+namespace {
+
+using Clipper2Lib::Point64;
+
+struct Node {
+    Point2d p;
+    int parent = kRoot;
+    static constexpr int kRoot = -1;   // on the wall
+    static constexpr int kLoose = -2;  // its branch lost its way to the wall: to join again
+};
+
+double distance(Point2d a, Point2d b) { return std::hypot(a.x - b.x, a.y - b.y); }
+
+// The point of segment ab nearest to p, and where along it (0 at a, 1 at b).
+Point2d nearest_on(Point2d p, Point2d a, Point2d b, double& t) {
+    const double dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+    t = l2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0.0, 1.0) : 0.0;
+    return {a.x + t * dx, a.y + t * dy};
+}
+
+Point64 units(Point2d p) { return {to_units(p.x), to_units(p.y)}; }
+
+// Inside the region: inside an odd number of its paths (outlines hold their holes).
+bool inside(const Polygons& region, Point2d p) {
+    const Point64 q = units(p);
+    int count = 0;
+    for (const Polygon& path : region)
+        count += Clipper2Lib::PointInPolygon(q, path) != Clipper2Lib::PointInPolygonResult::IsOutside;
+    return count % 2 == 1;
+}
+
+// Segments filed in a grid of square cells, for nearest queries: without it
+// every point to hold up looked at every branch, and a 100 mm cube at 100 %
+// took a minute.
+class SegmentGrid {
+public:
+    SegmentGrid(const Clipper2Lib::Rect64& box, double size) {
+        const double w = to_mm(box.right - box.left), h = to_mm(box.bottom - box.top);
+        cell_ = std::max({size, w / 512.0, h / 512.0, 1e-3});
+        x0_ = to_mm(box.left) - cell_;
+        y0_ = to_mm(box.top) - cell_;
+        nx_ = int(std::ceil(w / cell_)) + 3;
+        ny_ = int(std::ceil(h / cell_)) + 3;
+        cells_.resize(std::size_t(nx_) * std::size_t(ny_));
+    }
+
+    // Files segment `id`, from a to b, under the cells it crosses (sampled a
+    // quarter of a cell apart).
+    void add(std::size_t id, Point2d a, Point2d b) {
+        const int steps = std::max(1, int(std::ceil(4.0 * distance(a, b) / cell_)));
+        std::size_t last = cells_.size();
+        for (int s = 0; s <= steps; ++s) {
+            const double f = double(s) / double(steps);
+            const std::size_t c = at(a.x + f * (b.x - a.x), a.y + f * (b.y - a.y));
+            if (c != last)
+                cells_[c].push_back(id);
+            last = c;
+        }
+    }
+
+    // The least `measure(id)` (infinity to leave one out) over the filed
+    // segments, searched ring by ring from p's cell: a segment filed only in
+    // ring r + 1 lies at least r cells away, so the search stops there once
+    // something nearer is found (ties at exactly r cells still looked at),
+    // or past `limit`.
+    template <class Measure>
+    double nearest(Point2d p, double limit, Measure measure) const {
+        double best = std::numeric_limits<double>::infinity();
+        const int ci = column(p.x), cj = row(p.y);
+        for (int r = 0; r <= std::max(nx_, ny_); ++r) {
+            for (int j = std::max(0, cj - r); j <= std::min(ny_ - 1, cj + r); ++j) {
+                const int step = r == 0 || j == cj - r || j == cj + r ? 1 : 2 * r;
+                for (int i = ci - r; i <= ci + r; i += step)
+                    if (i >= 0 && i < nx_)
+                        for (std::size_t id : cells_[std::size_t(j) * std::size_t(nx_) + std::size_t(i)])
+                            best = std::min(best, measure(id));
+            }
+            if (best < r * cell_ || r * cell_ > limit)
+                break;
+        }
+        return best;
+    }
+
+private:
+    int column(double x) const { return std::clamp(int(std::floor((x - x0_) / cell_)), 0, nx_ - 1); }
+    int row(double y) const { return std::clamp(int(std::floor((y - y0_) / cell_)), 0, ny_ - 1); }
+    std::size_t at(double x, double y) const {
+        return std::size_t(row(y)) * std::size_t(nx_) + std::size_t(column(x));
+    }
+
+    double x0_ = 0.0, y0_ = 0.0, cell_ = 1.0;
+    int nx_ = 0, ny_ = 0;
+    std::vector<std::vector<std::size_t>> cells_;
+};
+
+// A layer's walls: the edges of its sparse infill, filed in a grid.
+struct Walls {
+    std::vector<std::array<Point2d, 2>> edges;
+    SegmentGrid grid;
+
+    Walls(const Polygons& region, const Clipper2Lib::Rect64& box, double cell) : grid(box, cell) {
+        for (const Polygon& path : region)
+            for (std::size_t i = 0; i < path.size(); ++i) {
+                const Point64& a = path[i];
+                const Point64& b = path[(i + 1) % path.size()];
+                edges.push_back({Point2d{to_mm(a.x), to_mm(a.y)}, Point2d{to_mm(b.x), to_mm(b.y)}});
+                grid.add(edges.size() - 1, edges.back()[0], edges.back()[1]);
+            }
+    }
+
+    // The point of the walls nearest to p, and how far it is.
+    Point2d nearest(Point2d p, double& best) const {
+        Point2d out = p;
+        double found = std::numeric_limits<double>::infinity();
+        best = grid.nearest(p, std::numeric_limits<double>::infinity(), [&](std::size_t e) {
+            double t = 0.0;
+            const Point2d q = nearest_on(p, edges[e][0], edges[e][1], t);
+            const double d = distance(p, q);
+            if (d < found) {
+                found = d;
+                out = q;
+            }
+            return d;
+        });
+        return out;
+    }
+};
+
+// Whether segment ab stays inside the region all along.
+bool stays_inside(const Polygons& region, Point2d a, Point2d b) {
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddOpenSubject({{units(a), units(b)}});
+    clipper.AddClip(region);
+    Polygons closed, open;
+    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+    if (open.size() != 1 || open.front().size() != 2)
+        return false;
+    const Point64& p = open.front()[0];
+    const Point64& q = open.front()[1];
+    return std::abs(std::hypot(to_mm(q.x - p.x), to_mm(q.y - p.y)) - distance(a, b)) < 1e-3;
+}
+
+// Takes out the nodes marked dead, keeping the parents' indices right.
+void compact(std::vector<Node>& nodes, const std::vector<char>& alive) {
+    std::vector<int> to(nodes.size(), Node::kLoose);
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < nodes.size(); ++i)
+        if (alive[i] != 0)
+            to[i] = int(kept++);
+    std::vector<Node> out;
+    out.reserve(kept);
+    for (std::size_t i = 0; i < nodes.size(); ++i)
+        if (alive[i] != 0) {
+            Node n = nodes[i];
+            if (n.parent >= 0)
+                n.parent = to[std::size_t(n.parent)];
+            out.push_back(n);
+        }
+    nodes = std::move(out);
+}
+
+std::vector<int> child_counts(const std::vector<Node>& nodes) {
+    std::vector<int> count(nodes.size(), 0);
+    for (const Node& n : nodes)
+        if (n.parent >= 0)
+            ++count[std::size_t(n.parent)];
+    return count;
+}
+
+// Pulls every tip back along its branch by `by` mm; a branch shorter than
+// that goes, and so does a wall's root left with no branch.
+void pull_back(std::vector<Node>& nodes, double by) {
+    std::vector<int> children = child_counts(nodes);
+    std::vector<char> alive(nodes.size(), 1);
+    std::vector<std::size_t> tips;
+    for (std::size_t i = 0; i < nodes.size(); ++i)
+        if (children[i] == 0)
+            tips.push_back(i);
+    for (std::size_t tip : tips) {
+        std::size_t at = tip;
+        double left = by;
+        for (;;) {
+            Node& n = nodes[at];
+            if (n.parent < 0) {
+                alive[at] = 0; // a root or a loose point with nothing on it
+                break;
+            }
+            const auto up = std::size_t(n.parent);
+            const double e = distance(n.p, nodes[up].p);
+            if (e > left) {
+                const double f = left / e;
+                n.p = {n.p.x + f * (nodes[up].p.x - n.p.x), n.p.y + f * (nodes[up].p.y - n.p.y)};
+                break;
+            }
+            alive[at] = 0;
+            left -= e;
+            if (--children[up] > 0)
+                break;
+            at = up;
+        }
+    }
+    compact(nodes, alive);
+}
+
+// Which nodes reach the wall through their parents.
+std::vector<char> anchored(const std::vector<Node>& nodes) {
+    std::vector<char> state(nodes.size(), 2); // 2: not known yet
+    std::vector<std::size_t> path;
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+        std::size_t at = i;
+        path.clear();
+        while (state[at] == 2) {
+            const int up = nodes[at].parent;
+            if (up < 0) {
+                state[at] = up == Node::kRoot;
+                break;
+            }
+            path.push_back(at);
+            at = std::size_t(up);
+        }
+        for (std::size_t p : path)
+            state[p] = state[at];
+    }
+    return state;
+}
+
+// Joins node i to the nearest anchored branch, or to the wall if that is
+// nearer or the way to the branch leaves the region. Between branches
+// equally near (points on a grid often are), the older one: it grew from
+// nearer the wall, so the branches go straight in from the walls instead of
+// along them, and draw back sooner. `branches` has every branch filed by its
+// child node, and gets the new ones.
+void join(std::vector<Node>& nodes, std::vector<char>& held, std::size_t i, const Polygons& region,
+          const Walls& walls, SegmentGrid& branches) {
+    double wall = 0.0;
+    const Point2d p = nodes[i].p;
+    const Point2d on_wall = walls.nearest(p, wall);
+    double best = wall, best_t = 0.0;
+    std::size_t edge = nodes.size();
+    Point2d on_branch{};
+    branches.nearest(p, wall, [&](std::size_t c) {
+        if (c == i || held[c] == 0 || nodes[c].parent < 0)
+            return std::numeric_limits<double>::infinity();
+        double t = 0.0;
+        const Point2d q = nearest_on(p, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p, t);
+        const double d = distance(p, q);
+        if (d < best || (d == best && edge < nodes.size() && c < edge)) {
+            best = d;
+            best_t = t;
+            edge = c;
+            on_branch = q;
+        }
+        return d;
+    });
+    if (edge < nodes.size() && stays_inside(region, p, on_branch)) {
+        const auto up = std::size_t(nodes[edge].parent);
+        std::size_t to = 0;
+        if (best_t < 1e-9) {
+            to = edge;
+        } else if (best_t > 1.0 - 1e-9) {
+            to = up;
+        } else {
+            // A fork on the branch: the branch's lower part is still filed
+            // under its child, the upper part under the fork.
+            nodes.push_back({on_branch, int(up)});
+            held.push_back(1);
+            to = nodes.size() - 1;
+            nodes[edge].parent = int(to);
+            branches.add(to, on_branch, nodes[up].p);
+        }
+        nodes[i].parent = int(to);
+    } else {
+        nodes.push_back({on_wall, Node::kRoot});
+        held.push_back(1);
+        nodes[i].parent = int(nodes.size() - 1);
+    }
+    branches.add(i, p, nodes[std::size_t(nodes[i].parent)].p);
+}
+
+// How far p is from the anchored branches, looking out to `limit`.
+double from_branches(const std::vector<Node>& nodes, const std::vector<char>& held, const SegmentGrid& branches,
+                     Point2d p, double limit) {
+    return branches.nearest(p, limit, [&](std::size_t c) {
+        if (held[c] == 0 || nodes[c].parent < 0)
+            return std::numeric_limits<double>::infinity();
+        double t = 0.0;
+        return distance(p, nearest_on(p, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p, t));
+    });
+}
+
+// The branches as polylines from tips and forks up to the next fork or the
+// wall, clipped to the region shrunk by half a bead.
+std::vector<Toolpath> branches(const std::vector<Node>& nodes, const Polygons& region, double width) {
+    const std::vector<int> children = child_counts(nodes);
+    Polygons chains;
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
+        if (children[i] == 1 || nodes[i].parent < 0)
+            continue;
+        Polygon chain{units(nodes[i].p)};
+        std::size_t at = i;
+        do {
+            at = std::size_t(nodes[at].parent);
+            chain.push_back(units(nodes[at].p));
+        } while (nodes[at].parent >= 0 && children[at] == 1);
+        chains.push_back(std::move(chain));
+    }
+    std::vector<Toolpath> out;
+    const Polygons inner = offset(region, -width / 2.0 + 1e-5);
+    if (chains.empty() || inner.empty())
+        return out;
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddOpenSubject(chains);
+    clipper.AddClip(inner);
+    Polygons closed, open;
+    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
+    for (const Polygon& piece : open) {
+        Toolpath t;
+        double length = 0.0;
+        for (std::size_t k = 0; k < piece.size(); ++k) {
+            const Point2d q{to_mm(piece[k].x), to_mm(piece[k].y)};
+            if (k > 0)
+                length += distance(q, t.points.back().p);
+            t.points.push_back({q, width});
+        }
+        if (t.points.size() >= 2 && length >= width)
+            out.push_back(std::move(t));
+    }
+    return out;
+}
+
+} // namespace
+
+double lightning_reach(double width, double density) { return density > 0.0 ? width / density : 0.0; }
+
+std::vector<std::vector<Toolpath>> lightning_layers(const std::vector<Polygons>& sparse,
+                                                    const std::vector<Polygons>& regions,
+                                                    const std::vector<Layer>& layers, const LightningParams& params,
+                                                    const std::vector<Polygons>* print) {
+    const std::size_t count = std::min({sparse.size(), regions.size(), layers.size()});
+    std::vector<std::vector<Toolpath>> out(count);
+    if (!(params.reach > 0.0))
+        return out;
+    const double lean = std::tan(std::clamp(params.overhang, 0.0, 85.0) * std::numbers::pi / 180.0);
+    // Points to hold up on a square grid fixed to the origin, `reach` apart: a
+    // point lies at most reach / sqrt(2) from one. A point gets a branch unless
+    // one passes within the rest of the reach, so every point to hold up has a
+    // branch within the reach.
+    const double grid = params.reach;
+    const double near = params.reach * (1.0 - 1.0 / std::numbers::sqrt2);
+    std::vector<Node> nodes;
+    for (std::size_t l = count; l-- > 0;) {
+        const Polygons& region = sparse[l];
+        if (region.empty()) {
+            nodes.clear();
+            continue;
+        }
+        if (l + 1 < count)
+            pull_back(nodes, (layers[l + 1].top - layers[l + 1].bottom) * lean);
+        const Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(region);
+        const Walls walls(region, box, 2.0 * params.reach);
+        // What lies outside this layer's sparse infill goes; branches cut off
+        // from their wall, and roots no longer at a wall, join again.
+        {
+            std::vector<char> alive(nodes.size(), 1);
+            for (std::size_t i = 0; i < nodes.size(); ++i) {
+                if (nodes[i].parent == Node::kRoot) {
+                    double d = 0.0;
+                    walls.nearest(nodes[i].p, d);
+                    if (d <= params.width / 2.0)
+                        continue;
+                    // The wall moved out (the root joins again) or in past it.
+                    if (inside(region, nodes[i].p))
+                        nodes[i].parent = Node::kLoose;
+                    else
+                        alive[i] = 0;
+                } else if (!inside(region, nodes[i].p)) {
+                    alive[i] = 0;
+                }
+            }
+            for (Node& n : nodes)
+                if (n.parent >= 0 && alive[std::size_t(n.parent)] == 0)
+                    n.parent = Node::kLoose;
+            compact(nodes, alive);
+        }
+        // What the layer above has over this layer's sparse infill.
+        Polygons above;
+        if (l + 1 < count) {
+            above = Clipper2Lib::Difference(regions[l + 1], sparse[l + 1], Clipper2Lib::FillRule::NonZero);
+            above = Clipper2Lib::Intersect(above, region, Clipper2Lib::FillRule::NonZero);
+            above = offset(offset(above, -params.width / 2.0), params.width / 2.0);
+        }
+        // Most layers only draw their branches back: the branches are filed
+        // only when something joins them.
+        const bool loose =
+            std::any_of(nodes.begin(), nodes.end(), [](const Node& n) { return n.parent == Node::kLoose; });
+        if (loose || !above.empty()) {
+            SegmentGrid filed(box, params.reach);
+            for (std::size_t c = 0; c < nodes.size(); ++c)
+                if (nodes[c].parent >= 0)
+                    filed.add(c, nodes[c].p, nodes[std::size_t(nodes[c].parent)].p);
+            std::vector<char> held = anchored(nodes);
+            for (std::size_t i = 0, n = nodes.size(); i < n; ++i)
+                if (nodes[i].parent == Node::kLoose) {
+                    join(nodes, held, i, region, walls, filed);
+                    held = anchored(nodes);
+                }
+            if (!above.empty()) {
+                const Clipper2Lib::Rect64 needed = Clipper2Lib::GetBounds(above);
+                struct Need {
+                    Point2d p;
+                    double wall;
+                };
+                std::vector<Need> points;
+                const auto first_row = std::int64_t(std::ceil(to_mm(needed.top) / grid));
+                const auto first_column = std::int64_t(std::ceil(to_mm(needed.left) / grid));
+                for (auto j = first_row; double(j) * grid <= to_mm(needed.bottom); ++j)
+                    for (auto i = first_column; double(i) * grid <= to_mm(needed.right); ++i) {
+                        const Point2d p{double(i) * grid, double(j) * grid};
+                        if (!inside(above, p))
+                            continue;
+                        double wall = 0.0;
+                        walls.nearest(p, wall);
+                        points.push_back({p, wall});
+                    }
+                // The points nearest the walls first: the branches grow in from them.
+                std::stable_sort(points.begin(), points.end(),
+                                 [](const Need& a, const Need& b) { return a.wall < b.wall; });
+                for (const Need& q : points) {
+                    if (from_branches(nodes, held, filed, q.p, near) <= near)
+                        continue;
+                    nodes.push_back({q.p, Node::kLoose});
+                    held.push_back(0);
+                    const std::size_t at = nodes.size() - 1;
+                    join(nodes, held, at, region, walls, filed);
+                    held[at] = 1;
+                }
+            }
+        }
+        out[l] = branches(nodes, print != nullptr && l < print->size() ? (*print)[l] : region, params.width);
+    }
+    return out;
+}
+
+} // namespace tisma

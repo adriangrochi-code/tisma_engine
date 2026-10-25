@@ -10,8 +10,13 @@
 
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
+#include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
+#include "device/gcode_host.hpp"
+#include "device/serial_port.hpp"
+#include "device/simulator.hpp"
+#include "fea/analysis.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
 #include "io/stl.hpp"
@@ -198,8 +203,35 @@ std::filesystem::path preferences_path() {
 #endif
 }
 
-enum class Tab { Prepare, Preview, Analysis, Calibration };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest };
+// Writes a file aside and moves it over, so a failed write leaves the old one.
+bool write_aside(const std::filesystem::path& path, const std::string& text) {
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    {
+        std::ofstream out(temporary, std::ios::binary);
+        out << text;
+        out.close();
+        if (!out)
+            return false;
+    }
+    std::error_code ec;
+    std::filesystem::rename(temporary, path, ec);
+    if (ec)
+        std::filesystem::remove(temporary, ec);
+    return !ec;
+}
+
+// Preferences this build cannot read (a newer build's setting, say) are kept
+// next to them before the defaults are written over them on leaving.
+void keep_unreadable(const std::filesystem::path& path) {
+    std::filesystem::path copy = path;
+    copy += ".unreadable";
+    std::error_code ec;
+    std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
+}
+
+enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
+enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
 
 class App {
 public:
@@ -234,6 +266,7 @@ private:
     void load_model(const std::filesystem::path& path);
     void load_gcode(const std::filesystem::path& path);
     void load_settings_file(const std::filesystem::path& path);
+    void load_case_file(const std::filesystem::path& path);
     void save_settings_file(const std::filesystem::path& path);
     void open_project(const std::filesystem::path& path);
     void begin_save_project(bool ask);
@@ -244,6 +277,14 @@ private:
     void show_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
+    void check_moire(int fb_w, int fb_h);
+    // The Device page (docs/DEVICE.md).
+    void device_panel();
+    void device_connect(const std::string& port);
+    void device_disconnect();
+    void device_poll();
+    bool device_can_print() const;
+    void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
     void bed_changed();
@@ -302,6 +343,9 @@ private:
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
+    // The load case of stress-guided infill (docs/INFILL.md), as analyze takes it.
+    std::optional<AnalysisCase> load_case_;
+    std::string load_case_name_;
     bool stale_ = false;  // the model or the settings changed since the result
     bool viewer_ = false; // the result is an opened G-code file, not a slice
     std::filesystem::path gcode_path_;
@@ -318,13 +362,14 @@ private:
     bool show_travels_ = false;
     ColorMode color_mode_ = ColorMode::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
-    float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0};
+    float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0}, height_range_[2] = {0, 0};
     PreviewBuffers preview_buffers_;
 
     // How the view is drawn, and the scene its rays are traced against.
     RenderMode render_mode_ = RenderMode::Ambient;
     int msaa_ = 4;
     bool fxaa_ = true;
+    bool moire_ = true; // the moiré filter of the preview's lines and the grid
     float ao_strength_ = 1.0f;
     struct RayBuild {
         std::uint64_t version = 0;
@@ -337,6 +382,18 @@ private:
     bool ray_preview_ = false, ray_failed_ = false;
     std::shared_ptr<RayScene> ray_scene_;
     bool ray_checked_ = false;
+    bool moire_checked_ = false;
+
+    // The connected printer: a serial port, or the simulated one.
+    std::unique_ptr<device::Printer> printer_;
+    std::unique_ptr<device::SimulatedPrinter> simulator_;
+    std::vector<std::string> device_ports_;  // last listed
+    std::string device_port_ = "sim";        // the chosen one ("sim": the simulated printer)
+    int device_baud_ = 115200;
+    double device_nozzle_ = 200.0, device_bed_ = 60.0, device_step_ = 10.0, device_fan_ = 100.0;
+    std::vector<std::string> device_log_;    // the events, newest last
+    bool device_print_sent_ = false;         // with --device-print: the job was started
+    bool device_print_done_ = false;         // and it finished (or failed)
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -358,6 +415,7 @@ private:
     // ranges, and the test loaded last (its segments, without the mesh).
     DimensionTest dimension_test_;
     Measurements measured_{30.0, 20.0, 15.0, 10.0};
+    double elephant_bottom_ = 20.0, elephant_body_ = 20.0; // the elephant's foot block, measured
     struct TowerRange {
         double start = 0.0, end = 0.0, step = 1.0, segment = 5.0;
     };
@@ -485,28 +543,41 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
 
+// Each row's ID: its label and the address of its value. The address alone
+// is not enough: a local copy (a start G-code variable, a percentage) can sit
+// in the same stack slot as another row's, and the two would move together.
+struct RowId {
+    RowId(T label, const void* v) {
+        ImGui::PushID(static_cast<int>(label));
+        ImGui::PushID(v);
+    }
+    ~RowId() {
+        ImGui::PopID();
+        ImGui::PopID();
+    }
+    RowId(const RowId&) = delete;
+    RowId& operator=(const RowId&) = delete;
+};
+
 bool row(T label, double& v, double min, double max, const char* fmt, float speed = 0.01f, const char* tip = nullptr) {
     label_cell(label, tip);
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     const bool changed =
         ImGui::DragScalar("##v", ImGuiDataType_Double, &v, speed, &min, &max, fmt, ImGuiSliderFlags_AlwaysClamp);
-    ImGui::PopID();
     return changed;
 }
 
 bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* tip = nullptr) {
     label_cell(label, tip);
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     const bool changed = ImGui::DragInt("##v", &v, 0.1f, min, max, fmt, ImGuiSliderFlags_AlwaysClamp);
-    ImGui::PopID();
     return changed;
 }
 
-bool row(T label, bool& v) {
-    label_cell(label);
-    ImGui::PushID(&v);
+bool row(T label, bool& v, const char* tip = nullptr) {
+    label_cell(label, tip);
+    const RowId id(label, &v);
     const bool changed = ImGui::Checkbox("##v", &v);
-    ImGui::PopID();
     return changed;
 }
 
@@ -518,7 +589,7 @@ bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> o
         if (value == v)
             current = name;
     bool changed = false;
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     if (ImGui::BeginCombo("##v", current)) {
         for (const auto& [value, name] : options)
             if (ImGui::Selectable(name, value == v)) {
@@ -527,7 +598,48 @@ bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> o
             }
         ImGui::EndCombo();
     }
-    ImGui::PopID();
+    return changed;
+}
+
+// The layer heights by Z (docs/VARIABLE_LAYERS.md): a row per step, its Z and
+// its height, sorted by Z once no field is being edited.
+bool height_steps_rows(std::vector<std::array<double, 2>>& steps, double layer_height) {
+    label_cell(T::LayerHeights, tr(T::LayerHeightsTip));
+    bool changed = false;
+    if (ImGui::Button(tr(T::AddStep), ImVec2(-FLT_MIN, 0))) {
+        steps.push_back({steps.empty() ? 1.0 : steps.back()[0] + 1.0, layer_height});
+        changed = true;
+    }
+    std::size_t remove = steps.size();
+    const double z_min = 0.0, z_max = 10000.0, h_min = 0.01, h_max = 10.0;
+    for (std::size_t i = 0; i < steps.size(); ++i) {
+        ImGui::PushID(int(i));
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        changed |= ImGui::DragScalar("##z", ImGuiDataType_Double, &steps[i][0], 0.05f, &z_min, &z_max, "Z %.2f mm",
+                                     ImGuiSliderFlags_AlwaysClamp);
+        ImGui::TableNextColumn();
+        const float button = ImGui::GetFrameHeight();
+        ImGui::SetNextItemWidth(-(button + ImGui::GetStyle().ItemSpacing.x));
+        changed |= ImGui::DragScalar("##h", ImGuiDataType_Double, &steps[i][1], 0.002f, &h_min, &h_max, "%.3f mm",
+                                     ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SameLine();
+        if (ImGui::Button("x", ImVec2(button, button)))
+            remove = i;
+        ImGui::PopID();
+    }
+    if (remove < steps.size()) {
+        steps.erase(steps.begin() + std::ptrdiff_t(remove));
+        changed = true;
+    }
+    if (!ImGui::IsAnyItemActive()) {
+        // Sorted, and apart: the settings file takes each Z once.
+        std::stable_sort(steps.begin(), steps.end(), [](const auto& a, const auto& b) { return a[0] < b[0]; });
+        for (std::size_t i = 1; i < steps.size(); ++i)
+            if (steps[i][0] <= steps[i - 1][0])
+                steps[i][0] = steps[i - 1][0] + 0.01, changed = true;
+    }
     return changed;
 }
 
@@ -657,6 +769,15 @@ bool App::init(std::string& error) {
         msaa_ = std::max(options_.msaa, 1);
     if (options_.fxaa >= 0)
         fxaa_ = options_.fxaa != 0;
+    if (options_.moire >= 0)
+        moire_ = options_.moire != 0;
+    if (options_.color >= 0)
+        color_mode_ = static_cast<ColorMode>(options_.color);
+    device_ports_ = device::list_serial_ports();
+    if (!options_.device.empty()) {
+        device_port_ = options_.device;
+        device_connect(device_port_);
+    }
     // The profiles; with none chosen yet, the ones the settings match.
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
@@ -690,7 +811,7 @@ bool App::init(std::string& error) {
     } else if (!c.empty()) {
         create_calibration(calibration_kind_from_name(c).value_or(CalibrationKind::Dimensions), false);
     }
-    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty()) && mesh_ &&
+    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty() || options_.device_print) && mesh_ &&
         !result_)
         start_slice();
     if (!options_.catalog.empty()) {
@@ -717,6 +838,7 @@ void App::apply_theme() {
 void App::shutdown() {
     slice_job_.wait();
     voxel_job_.wait();
+    device_disconnect();
     if (options_.screenshot.empty() && gl_loaded_)
         save_preferences();
     if (gl_loaded_) {
@@ -751,15 +873,25 @@ void App::load_preferences() {
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
+        moire_ = j.value("moire_filter", true);
+        device_port_ = j.value("device_port", std::string("sim"));
+        device_baud_ = j.value("device_baud", 115200);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
-        if (j.contains("settings"))
-            settings_ = parse_settings(j.at("settings").dump());
+        if (j.contains("settings")) {
+            try {
+                settings_ = parse_settings(j.at("settings").dump());
+            } catch (const std::exception&) {
+                // The rest still counts; the settings start from the defaults.
+                keep_unreadable(path);
+            }
+        }
         if (j.contains("profiles") && j.at("profiles").is_object())
             for (const auto& [kind, name] : j.at("profiles").items())
                 if (const auto k = profile_kind_from_name(kind); k && name.is_string())
                     chosen_profile_[std::size_t(*k)] = name.get<std::string>();
     } catch (const std::exception&) {
         // Unreadable preferences: start from the defaults.
+        keep_unreadable(path);
     }
 }
 
@@ -775,14 +907,20 @@ void App::save_preferences() {
         j["render"] = int(render_mode_);
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
+        j["moire_filter"] = moire_;
+        j["device_port"] = device_port_;
+        j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
-        j["settings"] = nlohmann::json::parse(settings_json(settings_));
+        // Without the changes of a calibration tower left on the bed.
+        Settings kept = settings_;
+        if (calibration_)
+            kept.changes.clear();
+        j["settings"] = nlohmann::json::parse(settings_json(kept));
         for (const ProfileKind kind : kProfileKinds)
             j["profiles"][std::string(profile_kind_name(kind))] = chosen_profile_[std::size_t(kind)];
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
-        std::ofstream out(path, std::ios::binary);
-        out << j.dump(2) << "\n";
+        write_aside(path, j.dump(2) + "\n");
     } catch (const std::exception&) {
     }
 }
@@ -819,6 +957,12 @@ void App::load_model(const std::filesystem::path& path) {
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
+        }
+        // A calibration tower's changes by height belong to the tower: the
+        // next model must not print with its temperatures or flows.
+        if (calibration_) {
+            settings_.changes.clear();
+            settings_changed();
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
@@ -906,11 +1050,19 @@ void App::load_settings_file(const std::filesystem::path& path) {
     }
 }
 
+void App::load_case_file(const std::filesystem::path& path) {
+    try {
+        load_case_ = load_analysis_case(path);
+        load_case_name_ = utf8(path.filename());
+        settings_changed();
+        notify(format(tr(T::CaseLoaded), load_case_name_.c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
 void App::save_settings_file(const std::filesystem::path& path) {
-    std::ofstream out(path, std::ios::binary);
-    out << settings_json(settings_);
-    out.close();
-    if (!out)
+    if (!write_aside(path, settings_json(settings_)))
         fail(T::CannotOpen, utf8(path));
     else
         notify(format(tr(T::SettingsSaved), utf8(path.filename()).c_str()));
@@ -1258,6 +1410,7 @@ void App::catalog_dialog() {
                                    : p.firmware == "klipper" ? "Klipper"
                                    : p.firmware == "reprap"  ? "RepRapFirmware"
                                    : p.firmware == "bambu"   ? "Bambu Lab"
+                                   : p.firmware == "other"   ? tr(T::OwnFirmware)
                                                              : "-";
             ImGui::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
                         p.direct_drive ? tr(T::DirectDrive) : tr(T::Bowden),
@@ -1266,6 +1419,33 @@ void App::catalog_dialog() {
             ImGui::Text(tr(T::MaxMotion), maybe(p.max_speed, "mm/s").c_str(), maybe(p.max_acceleration, "mm/s²").c_str());
             if (!p.multi_material.empty())
                 ImGui::Text("%s: %s", tr(T::MultiMaterial), p.multi_material.c_str());
+            // The capabilities in detail, those the maker states.
+            const auto join = [](const std::vector<std::string>& items) {
+                std::string out;
+                for (const std::string& i : items)
+                    out += (out.empty() ? "" : ", ") + i;
+                return out;
+            };
+            const auto line = [](T label, const std::string& value) {
+                if (!value.empty())
+                    ImGui::Text("%s: %s", tr(label), value.c_str());
+            };
+            line(T::Kinematics, p.kinematics);
+            if (p.max_flow)
+                line(T::MaxFlow, maybe(p.max_flow, "mm³/s"));
+            if (p.chamber_heating)
+                line(T::ChamberHeating, maybe(p.chamber_heating, "°C"));
+            if (p.hardened_nozzle)
+                line(T::HardenedNozzle, *p.hardened_nozzle ? tr(T::Yes) : tr(T::No));
+            line(T::Hotend, p.hotend);
+            line(T::Probe, p.probe);
+            line(T::BedSurfaces, join(p.bed_surfaces));
+            line(T::Connectivity, join(p.connectivity));
+            line(T::Features, join(p.features));
+            if (p.material_slots)
+                line(T::MaterialSlots, std::to_string(*p.material_slots));
+            if (p.tools)
+                line(T::Tools, std::to_string(*p.tools));
             if (needs_own_start_gcode(p))
                 ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::OwnStartGcode));
             catalog_nozzle_ = std::min(catalog_nozzle_, p.nozzles.size() - 1);
@@ -1297,6 +1477,31 @@ void App::catalog_dialog() {
                 ImGui::Text("%s: %s", tr(T::Density), maybe(f.density, "g/cm³").c_str());
             if (f.enclosure.value_or(false))
                 ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::NeedsEnclosure));
+            if (is_abrasive(f))
+                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::AbrasiveFilament));
+            if (f.max_flow)
+                ImGui::Text("%s: %s", tr(T::MaxFlow), maybe(f.max_flow, "mm³/s").c_str());
+            if (f.chamber_temp)
+                ImGui::Text("%s: %s", tr(T::ChamberHeating), range(f.chamber_temp, "°C").c_str());
+            if (f.drying_temp)
+                ImGui::Text("%s: %s%s", tr(T::Drying), maybe(f.drying_temp, "°C").c_str(),
+                            f.drying_hours ? (", " + maybe(f.drying_hours, "h")).c_str() : "");
+            if (f.soluble.value_or(false))
+                ImGui::Text("%s", tr(T::Soluble));
+            if (!f.hardness.empty())
+                ImGui::Text("%s: %s", tr(T::Hardness), f.hardness.c_str());
+            if (f.glass_transition)
+                ImGui::Text("Tg: %s", maybe(f.glass_transition, "°C").c_str());
+            if (f.heat_deflection)
+                ImGui::Text("HDT: %s", maybe(f.heat_deflection, "°C").c_str());
+            if (f.shrinkage)
+                ImGui::Text("%s: %s", tr(T::Shrinkage), maybe(f.shrinkage, "%").c_str());
+            if (!f.bed_surfaces.empty()) {
+                std::string surfaces;
+                for (const std::string& b : f.bed_surfaces)
+                    surfaces += (surfaces.empty() ? "" : ", ") + b;
+                ImGui::Text("%s: %s", tr(T::BedSurfaces), surfaces.c_str());
+            }
             sources = &f.sources;
         }
         if (sources) {
@@ -1329,7 +1534,13 @@ void App::catalog_dialog() {
 }
 
 // A catalog entry becomes one of the user's profiles, and the chosen one.
-void App::add_catalog_profile(const Profile& profile) {
+void App::add_catalog_profile(const Profile& catalog) {
+    // A profile of the same name may hold the user's own changes: the copy
+    // from the catalog takes a free name, "(2)", "(3)"..., instead of
+    // replacing it.
+    Profile profile = catalog;
+    for (int n = 2; find_profile(profile.kind, profile.name) != nullptr; ++n)
+        profile.name = catalog.name + " (" + std::to_string(n) + ")";
     try {
         const std::filesystem::path root = profiles_root();
         if (root.empty())
@@ -1346,8 +1557,12 @@ void App::add_catalog_profile(const Profile& profile) {
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
-    if (!result_ || !result_->ok || viewer_)
+    // The result can go while the dialog is open: say so instead of writing
+    // nothing, or an old result, without a word.
+    if (!result_ || !result_->ok || viewer_ || stale_) {
+        fail(T::ExportFailed, tr(T::Stale));
         return;
+    }
     std::vector<Warning> warnings;
     const GcodeExport e = export_gcode(path, result_->model, result_->settings, &warnings);
     if (!e.written) {
@@ -1371,12 +1586,19 @@ void App::begin_export() {
 void App::start_slice() {
     if (!mesh_ || slice_job_.running())
         return;
+    // The whole set, profiles merged: what no model can print stops here.
+    try {
+        check_settings(settings_);
+    } catch (const SettingsError& e) {
+        fail(T::CannotSlice, e.what());
+        return;
+    }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
-    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings)]() {
-        return slicer_.run(placed, settings);
+    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr);
     });
 }
 
@@ -1407,6 +1629,7 @@ void App::poll_jobs() {
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "calibration" ? Tab::Calibration
+                          : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
                                                            : Tab::Preview;
         set_tab(!options_.screenshot.empty() ? asked : calibrating ? Tab::Calibration : Tab::Preview);
@@ -1440,6 +1663,7 @@ void App::show_preview() {
     ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
+    height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     top_layer_ = int(result_->preview.layers.size()) - 1;
     bottom_layer_ = 0;
@@ -1491,16 +1715,17 @@ void App::frame_now() {
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
     camera_.fit(lo, hi, view_size_.x / std::max(view_size_.y, 1.0f));
-    // The calibration panel covers the left of the view: the part goes right.
-    if (tab_ == Tab::Calibration)
+    // The calibration and device panels cover the left of the view: the part goes right.
+    if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
 }
 
 void App::set_tab(Tab tab) {
     // The part moves aside for the calibration panel, and back when it closes
     // (a pending framing does it itself).
-    if ((tab == Tab::Calibration) != (tab_ == Tab::Calibration) && !frame_pending_ && view_size_.y > 10.0f)
-        camera_.pan((tab == Tab::Calibration ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
+    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device; };
+    if (aside(tab) != aside(tab_) && !frame_pending_ && view_size_.y > 10.0f)
+        camera_.pan((aside(tab) ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
     tab_ = tab;
     if (tab == Tab::Analysis)
         estimate_voxels_if_stale();
@@ -1554,7 +1779,8 @@ void App::top_bar() {
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
-                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration}};
+                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
+                              {Tab::Device, "tisma_printer", T::TabDevice}};
     for (const TabButton& t : tabs) {
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
@@ -1660,6 +1886,18 @@ void App::settings_panel() {
     if (print_open && begin_rows("##print")) {
         changed |= row(T::LayerHeight, s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
         changed |= row(T::FirstLayerHeight, s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
+        changed |= row(T::DetailHeight, s.detail_height, 0.0, 1.0, "%.2f mm", 0.002f, tr(T::DetailHeightTip));
+        if (s.detail_height > 0.0) {
+            changed |= row(T::DetailTolerance, s.detail_tolerance, 0.001, 1.0, "%.3f mm", 0.001f, tr(T::DetailToleranceTip));
+            changed |= row(T::DetailMargin, s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
+        }
+        changed |= row(T::CuspHeight, s.cusp_height, 0.0, 1.0, "%.3f mm", 0.001f, tr(T::CuspHeightTip));
+        changed |= height_steps_rows(s.layer_heights, s.layer_height);
+        changed |= row(T::Zaa, s.zaa, tr(T::ZaaTip));
+        if (s.zaa) {
+            changed |= row(T::ZaaMinThickness, s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::ZaaMinThicknessTip));
+            changed |= row(T::ZaaRaise, s.zaa_raise, tr(T::ZaaRaiseTip));
+        }
         changed |= row(T::Walls, s.wall_count, 0, 50);
         changed |= row(T::LineWidth, s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
         changed |= row(T::Seam, s.seam,
@@ -1669,13 +1907,48 @@ void App::settings_panel() {
                         {SeamMode::Rear, tr(T::SeamRear)}});
         changed |= row(T::TopLayers, s.top_layers, 0, 100);
         changed |= row(T::BottomLayers, s.bottom_layers, 0, 100);
+        changed |= row(T::TopMinThickness, s.top_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
+        changed |= row(T::BottomMinThickness, s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
         changed |= row(T::InfillDensity, s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         changed |= row(T::InfillPattern, s.infill_pattern,
                        {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
+                        {InfillPattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                        {InfillPattern::Zigzag, tr(T::Zigzag)},
+                        {InfillPattern::Line, tr(T::LineInfill)},
                         {InfillPattern::Grid, tr(T::Grid)},
-                        {InfillPattern::Gyroid, tr(T::Gyroid)}});
+                        {InfillPattern::Gyroid, tr(T::Gyroid)},
+                        {InfillPattern::Triangles, tr(T::TrianglesInfill)},
+                        {InfillPattern::Stars, tr(T::Stars)},
+                        {InfillPattern::Cubic, tr(T::Cubic)},
+                        {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
+                        {InfillPattern::SupportCubic, tr(T::SupportCubic)},
+                        {InfillPattern::Lightning, tr(T::Lightning)},
+                        {InfillPattern::Honeycomb, tr(T::Honeycomb)},
+                        {InfillPattern::Concentric, tr(T::ConcentricInfill)},
+                        {InfillPattern::Hilbert, tr(T::HilbertInfill)},
+                        {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},
+                        {InfillPattern::Octagram, tr(T::OctagramInfill)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
+        changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
+        changed |= row(T::NonplanarInfill, s.infill_nonplanar, tr(T::NonplanarInfillTip));
+        if (s.infill_nonplanar) {
+            changed |= row(T::NonplanarAmplitude, s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
+            changed |= row(T::NonplanarWavelength, s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm", 0.05f);
+        }
+        changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
+        changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));
+        changed |= row(T::DenseUnderTop, s.infill_dense_under_top, tr(T::DenseUnderTopTip));
+        if (s.infill_dense_under_top)
+            changed |= row(T::DenseDensity, s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::DenseUnderTopTip));
+        changed |= row(T::StressDensity, s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f, tr(T::StressDensityTip));
+        if (s.infill_stress_density > 0.0) {
+            label_cell(T::LoadCase, tr(T::StressDensityTip));
+            if (ImGui::Button(load_case_ ? load_case_name_.c_str() : tr(T::ChooseCase), ImVec2(-FLT_MIN, 0))) {
+                purpose_ = Purpose::LoadCase;
+                browser_.open(FileBrowser::Mode::Open, tr(T::LoadCase), {".json"}, last_folder_);
+            }
+        }
         changed |= row(T::Supports, s.support);
         if (s.support)
             changed |= row(T::SupportAngle, s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
@@ -1731,12 +2004,15 @@ void App::settings_panel() {
         }
         changed |= row(T::MaxHeight, s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
         changed |= row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
+        changed |= row(T::MinLayerHeight, s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
+        changed |= row(T::MaxLayerHeight, s.max_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
         changed |= row(T::Flavor, s.flavor,
                        {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
         changed |= row(T::RelativeE, s.relative_extrusion);
         changed |= row(T::Retraction, s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
         changed |= row(T::RetractSpeed, s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
+        changed |= row(T::GcodeResolution, s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f, tr(T::GcodeResolutionTip));
         ImGui::EndTable();
         ImGui::TextUnformatted(tr(T::StartGcode));
         changed |= ImGui::InputTextMultiline("##start", &s.start_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 7));
@@ -1807,6 +2083,21 @@ void App::status_bar() {
                                format(tr(T::GcodeOk), number_text(result_->check.stats.lines).c_str()).c_str());
         else
             ImGui::TextColored(rgb(0xE5484D), "%s", format(tr(T::GcodeBad), int(result_->check.problem_count)).c_str());
+        // The slicing's warnings (thin details, short layers, what the
+        // machine cannot give the filament), listed when hovered.
+        if (!result_->warnings.empty()) {
+            ImGui::SameLine(0, 16.0f * scale_);
+            ImGui::TextColored(rgb(0xE8A33D), "%s", format(tr(T::Warnings), int(result_->warnings.size())).c_str());
+            if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
+                for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i)
+                    ImGui::BulletText("%s", result_->warnings[i].message.c_str());
+                if (result_->warnings.size() > 20)
+                    ImGui::TextDisabled("…");
+                ImGui::PopTextWrapPos();
+                ImGui::EndTooltip();
+            }
+        }
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }
@@ -1938,6 +2229,9 @@ void App::view_tools() {
             ImGui::EndCombo();
         }
         ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
+        ImGui::Checkbox(tr(T::MoireFilter), &moire_);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::MoireFilterTip));
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
@@ -2051,8 +2345,8 @@ void App::preview_panels() {
     ImGui::SameLine();
     ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByKind)).x + ImGui::GetFrameHeight() * 2.0f);
     int mode = int(color_mode_);
-    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth)};
-    if (ImGui::Combo("##colour_mode", &mode, modes, 3))
+    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth), tr(T::ByHeight)};
+    if (ImGui::Combo("##colour_mode", &mode, modes, 4))
         color_mode_ = static_cast<ColorMode>(mode);
     const float swatch = ImGui::GetTextLineHeight();
     if (color_mode_ == ColorMode::Kind) {
@@ -2086,9 +2380,10 @@ void App::preview_panels() {
                 stops[i], stops[i + 1], stops[i + 1], stops[i]);
         ImGui::Dummy(ImVec2(w, swatch));
         const bool speed = color_mode_ == ColorMode::Speed;
+        const float* range = speed ? feed_range_ : color_mode_ == ColorMode::Height ? height_range_ : width_range_;
         const char* unit = speed ? "%.0f mm/s" : "%.2f mm";
-        const std::string low = format(unit, double(speed ? feed_range_[0] : width_range_[0]));
-        const std::string high = format(unit, double(speed ? feed_range_[1] : width_range_[1]));
+        const std::string low = format(unit, double(range[0]));
+        const std::string high = format(unit, double(range[1]));
         const float left = ImGui::GetCursorPosX();
         ImGui::TextUnformatted(low.c_str());
         ImGui::SameLine(left + w - ImGui::CalcTextSize(high.c_str()).x);
@@ -2241,6 +2536,7 @@ void App::calibration_panel() {
     };
     const Card cards[] = {
         {CalibrationKind::Dimensions, T::CalDimensions, T::CalDimensionsWhat, T::CalDimensionsHint},
+        {CalibrationKind::ElephantFoot, T::CalElephantFoot, T::CalElephantFootWhat, T::CalElephantFootHint},
         {CalibrationKind::FirstLayer, T::CalFirstLayer, T::CalFirstLayerWhat, T::CalFirstLayerHint},
         {CalibrationKind::Temperature, T::CalTemperature, T::CalTemperatureWhat, T::CalTemperatureHint},
         {CalibrationKind::Flow, T::CalFlow, T::CalFlowWhat, T::CalFlowHint},
@@ -2248,6 +2544,8 @@ void App::calibration_panel() {
         {CalibrationKind::RetractionSpeed, T::CalRetractionSpeed, T::CalRetractionSpeedWhat, T::CalRetractionSpeedHint},
         {CalibrationKind::PressureAdvance, T::CalPressureAdvance, T::CalPressureAdvanceWhat, T::CalPressureAdvanceHint},
         {CalibrationKind::Speed, T::CalSpeed, T::CalSpeedWhat, T::CalSpeedHint},
+        {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
+        {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
     };
     const float button_h = 30.0f * scale_;
@@ -2358,6 +2656,20 @@ void App::calibration_panel() {
                     settings_.hole_offset = 0.0;
                     settings_changed();
                 }
+            } else if (card.kind == CalibrationKind::ElephantFoot) {
+                // 3: measure the bottom against the body.
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                number(T::MeasuredBottom, elephant_bottom_, 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredBody, elephant_body_, 1.0, 1000.0, "%.3f mm", 0.005f);
+                const double next = elephant_foot_from(elephant_bottom_, elephant_body_, settings_);
+                ImGui::Text("%s: %.3f mm (%s) · %.3f mm (%s)", tr(T::FirstLayerShrink), settings_.first_layer_shrink,
+                            tr(T::Current), next, tr(T::New));
+                if (button("##apply_shrink", nullptr, tr(T::ApplyShrink), true, false, true, nullptr, button_h)) {
+                    settings_.first_layer_shrink = next;
+                    elephant_bottom_ = elephant_body_; // printed with this shrink, the bottom would match the body
+                    settings_changed();
+                    notify(format(tr(T::ShrinkApplied), next));
+                }
             } else if (card.kind == CalibrationKind::FirstLayer) {
                 // 3: what each look means; the height is set on the printer.
                 ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
@@ -2399,6 +2711,8 @@ void App::calibration_panel() {
                     case CalibrationKind::Flow: lo = 10.0, hi = 300.0; break;
                     case CalibrationKind::Speed: lo = 5.0, hi = 1000.0, fmt = "%.0f"; break;
                     case CalibrationKind::PressureAdvance: hi = 2.0, fmt = "%.3f", step_lo = 0.001, drag = 0.001f; break;
+                    case CalibrationKind::MaxFlow: lo = 0.5, hi = 1000.0, step_lo = 0.5; break;
+                    case CalibrationKind::Acceleration: lo = 100.0, hi = 100000.0, fmt = "%.0f", step_lo = 100.0, drag = 10.0f; break;
                     default: break;
                     }
                     number(T::TowerStart, r.start, lo, hi, fmt, drag);
@@ -2480,6 +2794,8 @@ void App::create_calibration(CalibrationKind kind, bool custom) {
     chosen_value_.reset();
     if (kind == CalibrationKind::Dimensions)
         measured_ = {dimension_test_.x, dimension_test_.y, dimension_test_.z, dimension_test_.hole};
+    if (kind == CalibrationKind::ElephantFoot)
+        elephant_bottom_ = elephant_body_ = 20.0;
     load_calibration(std::move(print));
     start_slice();
 }
@@ -2518,6 +2834,7 @@ void App::dialogs() {
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
         case Purpose::SaveProject: save_project_to(chosen); break;
+        case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
             std::ofstream out(chosen, std::ios::binary);
             out << extruder_test_gcode(settings_);
@@ -2633,7 +2950,7 @@ void App::layout() {
     settings_panel();
     status_bar();
     view_tools();
-    if (!mesh_ && !result_ && tab_ != Tab::Calibration) // the calibration panel has its own buttons
+    if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
         empty_hint();
     if (tab_ == Tab::Preview)
         preview_panels();
@@ -2641,6 +2958,8 @@ void App::layout() {
         analysis_panel();
     if (tab_ == Tab::Calibration)
         calibration_panel();
+    if (tab_ == Tab::Device)
+        device_panel();
     toasts();
     dialogs();
 
@@ -2713,6 +3032,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.mode = render_mode_;
     f.samples = msaa_;
     f.fxaa = fxaa_;
+    f.moire_filter = moire_;
     f.ao_strength = ao_strength_;
     static const bool debug = [] {
         const char* v = std::getenv("TISMA_DEBUG_VISIBILITY");
@@ -2822,6 +3142,346 @@ void App::check_rays(const ViewFrame& f) {
     }
 }
 
+// The Device page (docs/DEVICE.md): the port, the connection, the state and
+// the temperatures, printing what is sliced (or the opened G-code), pausing
+// and cancelling, moving and extruding, and the events.
+void App::device_connect(const std::string& port) {
+    device_disconnect();
+    std::shared_ptr<device::ByteStream> stream;
+    if (port == "sim") {
+        auto [host_end, printer_end] = device::make_pipe();
+        device::SimulatorOptions sim;
+        sim.tick = std::chrono::milliseconds(50);
+        simulator_ = std::make_unique<device::SimulatedPrinter>(printer_end, sim);
+        stream = host_end;
+    } else {
+        auto serial = std::make_shared<device::SerialPort>();
+        std::string error;
+        if (!serial->open(port, device_baud_, error)) {
+            notify(format(tr(T::DeviceCannotOpen), error.c_str()), true);
+            device_log_.push_back(error);
+            return;
+        }
+        stream = serial;
+    }
+    printer_ = std::make_unique<device::GcodeHost>(stream);
+    printer_->connect();
+}
+
+void App::device_disconnect() {
+    if (printer_)
+        printer_->disconnect();
+    printer_.reset();
+    simulator_.reset();
+}
+
+void App::device_poll() {
+    if (!printer_)
+        return;
+    using K = device::PrinterEvent::Kind;
+    for (const device::PrinterEvent& e : printer_->take_events()) {
+        std::string line;
+        switch (e.kind) {
+        case K::Connected: line = format(tr(T::DeviceConnected), e.text.c_str()); notify(line); break;
+        case K::Started: line = format(tr(T::DevicePrintStarted), e.text.c_str()); break;
+        case K::Finished:
+            line = format(tr(T::DevicePrintFinished), e.text.c_str());
+            notify(line);
+            if (options_.device_print)
+                device_print_done_ = true;
+            break;
+        case K::Cancelled:
+            line = format(tr(T::DevicePrintCancelled), e.text.c_str());
+            notify(line, true);
+            if (options_.device_print) {
+                std::fprintf(stderr, "error: the print was cancelled: %s\n", printer_->status().error.c_str());
+                failed_ = true;
+                device_print_done_ = true;
+            }
+            break;
+        case K::Error: line = format(tr(T::DevicePrinterError), e.text.c_str()); notify(line, true); break;
+        case K::Paused: line = tr(T::DeviceStatePaused); break;
+        case K::Resumed: line = tr(T::DeviceStatePrinting); break;
+        case K::Disconnected: line = tr(T::DeviceStateDisconnected); break;
+        case K::Message: line = e.text; break;
+        }
+        device_log_.push_back(std::move(line));
+    }
+    if (device_log_.size() > 200)
+        device_log_.erase(device_log_.begin(), device_log_.end() - 200);
+}
+
+bool App::device_can_print() const {
+    return result_ && !result_->gcode.empty() && (viewer_ || (result_->ok && result_->check.ok() && !stale_));
+}
+
+void App::device_print() {
+    if (!printer_ || !device_can_print())
+        return;
+    const std::string name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                             : model_path_.empty()          ? std::string("tisma.gcode")
+                                                            : utf8(model_path_.stem()) + ".gcode";
+    printer_->start_print(result_->gcode, name);
+}
+
+void App::device_panel() {
+    const float margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(450.0f * scale_, view_size_.y - 72.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##device", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BeginChild("##device_scroll", ImVec2(0, 0));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::DeviceTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", tr(T::DeviceHint));
+    const float button_h = 30.0f * scale_;
+    const float field = 150.0f * scale_;
+
+    const device::PrinterStatus s = printer_ ? printer_->status() : device::PrinterStatus{};
+    using State = device::PrinterState;
+    const bool connected = printer_ && s.state != State::Disconnected && s.state != State::Error;
+
+    // 1: the port and the connection.
+    ImGui::Separator();
+    const auto port_name = [&](const std::string& p) { return p == "sim" ? std::string(tr(T::DeviceSimulated)) : p; };
+    ImGui::BeginDisabled(connected);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::DevicePort), port_name(device_port_).c_str())) {
+        for (const std::string& p : device_ports_)
+            if (ImGui::Selectable(p.c_str(), p == device_port_))
+                device_port_ = p;
+        if (ImGui::Selectable(tr(T::DeviceSimulated), device_port_ == "sim"))
+            device_port_ = "sim";
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::DeviceRefresh)))
+        device_ports_ = device::list_serial_ports();
+    if (device_port_ != "sim") {
+        ImGui::SetNextItemWidth(field);
+        const int bauds[] = {115200, 250000, 57600, 230400};
+        if (ImGui::BeginCombo(tr(T::DeviceBaud), std::to_string(device_baud_).c_str())) {
+            for (int b : bauds)
+                if (ImGui::Selectable(std::to_string(b).c_str(), b == device_baud_))
+                    device_baud_ = b;
+            ImGui::EndCombo();
+        }
+    }
+    if (device_ports_.empty())
+        ImGui::TextDisabled("%s", tr(T::DeviceNoPorts));
+    ImGui::EndDisabled();
+    if (!connected) {
+        if (button("##connect", "tisma_printer", tr(T::DeviceConnect), true, false, true, nullptr, button_h))
+            device_connect(device_port_);
+    } else if (button("##disconnect", nullptr, tr(T::DeviceDisconnect), false, false, true, nullptr, button_h)) {
+        device_disconnect();
+    }
+
+    // 2: the state and the temperatures.
+    ImGui::Separator();
+    const T state_text[] = {T::DeviceStateDisconnected, T::DeviceStateConnecting, T::DeviceStateIdle,
+                            T::DeviceStatePrinting,     T::DeviceStatePaused,     T::DeviceStateError};
+    const std::uint32_t state_colour = s.state == State::Error      ? 0xE5484D
+                                       : s.state == State::Printing ? theme_.accent_hover
+                                       : s.state == State::Idle     ? 0x30A46C
+                                                                    : 0x8B8D98;
+    {
+        const float r = ImGui::GetTextLineHeight() * 0.28f;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x + r, at.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                    ImGui::GetColorU32(rgb(state_colour)));
+        ImGui::Dummy(ImVec2(r * 2.0f, ImGui::GetTextLineHeight()));
+        ImGui::SameLine(0, 6.0f * scale_);
+        ImGui::TextColored(rgb(state_colour), "%s", tr(state_text[int(s.state)]));
+    }
+    if (!s.firmware.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled(tr(T::DeviceFirmware), s.firmware.c_str());
+    }
+    if (!s.error.empty())
+        ImGui::TextColored(rgb(0xE5484D), "%s", s.error.c_str());
+    if (connected) {
+        const auto heater = [&](T label, const device::Temperature& t, double& target, bool nozzle) {
+            ImGui::PushID(nozzle ? "nozzle" : "bed");
+            ImGui::Text("%s  %.1f / %.0f °C", tr(label), t.actual, t.target);
+            ImGui::SetNextItemWidth(field * 0.7f);
+            double lo = 0.0, hi = nozzle ? 400.0 : 150.0;
+            ImGui::DragScalar("##target", ImGuiDataType_Double, &target, 1.0f, &lo, &hi, "%.0f °C",
+                              ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::DeviceSet)))
+                nozzle ? printer_->set_nozzle(target) : printer_->set_bed(target);
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::DeviceOff)))
+                nozzle ? printer_->set_nozzle(0.0) : printer_->set_bed(0.0);
+            ImGui::PopID();
+        };
+        heater(T::DeviceNozzle, s.nozzle, device_nozzle_, true);
+        heater(T::DeviceBed, s.bed, device_bed_, false);
+    }
+
+    // 3: the job.
+    ImGui::Separator();
+    const bool busy = s.state == State::Printing || s.state == State::Paused;
+    if (busy || (s.lines_total > 0 && s.progress > 0.0)) {
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+        ImGui::ProgressBar(float(s.progress), ImVec2(-FLT_MIN, 0.0f));
+        ImGui::PopStyleColor();
+        ImGui::Text(tr(T::DeviceProgress), s.job.c_str(), s.progress * 100.0, number_text(s.lines_sent).c_str(),
+                    number_text(s.lines_total).c_str());
+        const double total = result_ && result_->preview.estimated_seconds > 0.0 ? result_->preview.estimated_seconds
+                             : s.progress > 0.01                                ? s.elapsed / s.progress
+                                                                                : 0.0;
+        if (busy)
+            ImGui::TextDisabled(tr(T::DeviceTimes), format_duration(s.elapsed).c_str(),
+                                format_duration(std::max(0.0, total * (1.0 - s.progress))).c_str());
+        if (s.resends > 0)
+            ImGui::TextDisabled(tr(T::DeviceResends), s.resends);
+    }
+    if (busy) {
+        if (s.state == State::Paused) {
+            if (button("##resume", nullptr, tr(T::DeviceResume), true, false, true, nullptr, button_h))
+                printer_->resume();
+        } else if (button("##pause", nullptr, tr(T::DevicePause), false, false, true, nullptr, button_h)) {
+            printer_->pause();
+        }
+        ImGui::SameLine();
+        if (button("##cancel", nullptr, tr(T::DeviceCancel), false, false, true, nullptr, button_h))
+            printer_->cancel();
+    } else if (device_can_print()) {
+        const std::string what = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                                 : model_path_.empty()          ? std::string("G-code")
+                                                                : utf8(model_path_.filename());
+        ImGui::TextDisabled(tr(T::DevicePrintWhat), what.c_str());
+        if (button("##print", "tisma_print", tr(T::DevicePrint), true, false, s.state == State::Idle, nullptr,
+                   button_h))
+            device_print();
+    } else {
+        ImGui::TextDisabled("%s", tr(T::DeviceNothingToPrint));
+    }
+
+    // 4: moving and extruding, when idle.
+    if (s.state == State::Idle && ImGui::CollapsingHeader(tr(T::DeviceControls))) {
+        if (ImGui::SmallButton(tr(T::DeviceHome)))
+            printer_->home();
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(field * 0.6f);
+        double lo = 0.1, hi = 100.0;
+        ImGui::DragScalar(tr(T::DeviceStep), ImGuiDataType_Double, &device_step_, 0.1f, &lo, &hi, "%.1f mm",
+                          ImGuiSliderFlags_AlwaysClamp);
+        for (const char axis : {'X', 'Y', 'Z'}) {
+            ImGui::PushID(axis);
+            const double feed = axis == 'Z' ? 10.0 : 50.0;
+            const std::string minus = std::string("-") + axis, plus = std::string("+") + axis;
+            if (ImGui::Button(minus.c_str(), ImVec2(56.0f * scale_, 0)))
+                printer_->move(axis, -device_step_, feed);
+            ImGui::SameLine();
+            if (ImGui::Button(plus.c_str(), ImVec2(56.0f * scale_, 0)))
+                printer_->move(axis, device_step_, feed);
+            ImGui::PopID();
+            if (axis != 'Z')
+                ImGui::SameLine(0, 16.0f * scale_);
+        }
+        if (ImGui::SmallButton(tr(T::DeviceExtrude)))
+            printer_->extrude(5.0, 5.0);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::DeviceRetract)))
+            printer_->extrude(-5.0, 20.0);
+        ImGui::SetNextItemWidth(field * 0.6f);
+        double flo = 0.0, fhi = 100.0;
+        ImGui::DragScalar("##fan", ImGuiDataType_Double, &device_fan_, 1.0f, &flo, &fhi, "%.0f %%",
+                          ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::DeviceFan)))
+            printer_->fan(device_fan_);
+    }
+
+    // 5: what happened.
+    if (!device_log_.empty() && ImGui::CollapsingHeader(tr(T::DeviceLog))) {
+        for (auto it = device_log_.rbegin(); it != device_log_.rend() && it - device_log_.rbegin() < 30; ++it)
+            ImGui::TextDisabled("%s", it->c_str());
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// The moiré filter against the plain picture: the preview from far enough
+// that its layers are finer than a pixel, drawn both ways without
+// multisampling. Where the filter changes pixels, the picture must get
+// smoother: neighbouring pixels differ less in luma, because the fine lines
+// blend instead of aliasing into bands.
+void App::check_moire(int fb_w, int fb_h) {
+    moire_checked_ = true;
+    const float distance = camera_.distance;
+    camera_.distance *= 2.0f;
+    std::vector<std::uint8_t> picture[2];
+    int w = 0, h = 0;
+    for (int pass = 0; pass < 2; ++pass) {
+        ViewFrame f = view_frame(fb_w, fb_h);
+        f.samples = 1;
+        f.moire_filter = pass == 1;
+        renderer_.draw(f);
+        picture[pass] = renderer_.read_colour();
+        w = f.width, h = f.height;
+    }
+    camera_.distance = distance;
+    // Both pictures next to the screenshot, as evidence.
+    for (int pass = 0; pass < 2; ++pass) {
+        std::vector<std::uint8_t> flipped(picture[pass].size());
+        const std::size_t row = std::size_t(w) * 4;
+        for (int yy = 0; yy < h; ++yy)
+            std::copy_n(picture[pass].begin() + std::ptrdiff_t(std::size_t(h - 1 - yy) * row), row,
+                        flipped.begin() + std::ptrdiff_t(std::size_t(yy) * row));
+        for (std::size_t i = 3; i < flipped.size(); i += 4)
+            flipped[i] = 255;
+        std::filesystem::path out = from_utf8(options_.screenshot);
+        out.replace_extension();
+        write_png(out.string() + (pass == 0 ? "_moire_off.png" : "_moire_on.png"), w, h, flipped.data());
+    }
+    const auto luma = [&](int pass, int x, int y) {
+        const std::uint8_t* p = &picture[pass][(std::size_t(y) * std::size_t(w) + std::size_t(x)) * 4];
+        return 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+    };
+    // The pixels the filter changed, and their neighbours.
+    std::vector<std::uint8_t> changed(std::size_t(w) * std::size_t(h), 0);
+    std::size_t region = 0;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            if (std::abs(luma(0, x, y) - luma(1, x, y)) > 4.0)
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx)
+                        if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < h)
+                            changed[std::size_t(y + dy) * std::size_t(w) + std::size_t(x + dx)] = 1;
+    double energy[2] = {0.0, 0.0};
+    for (int y = 0; y + 1 < h; ++y)
+        for (int x = 0; x + 1 < w; ++x) {
+            if (!changed[std::size_t(y) * std::size_t(w) + std::size_t(x)])
+                continue;
+            ++region;
+            for (int pass = 0; pass < 2; ++pass)
+                energy[pass] += std::abs(luma(pass, x + 1, y) - luma(pass, x, y)) +
+                                std::abs(luma(pass, x, y + 1) - luma(pass, x, y));
+        }
+    for (double& e : energy)
+        e /= double(std::max<std::size_t>(region, 1));
+    std::printf("moire check: %zu pixels; neighbours differ by %.2f without the filter, %.2f with it\n", region,
+                energy[0], energy[1]);
+    if (region < 200 || energy[1] > energy[0] * 0.85) {
+        std::fprintf(stderr, "error: the moire filter does not smooth the fine lines\n");
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
@@ -2833,9 +3493,13 @@ void App::frame() {
         glfwPollEvents();
     else
         glfwWaitEventsTimeout(0.1);
-    for (const std::filesystem::path& path : std::exchange(dropped_, {}))
-        open_path(path);
+    // Files dropped while a file dialog is open wait for it to close: opening
+    // one would change the model under a pending export.
+    if (!browser_.is_open())
+        for (const std::filesystem::path& path : std::exchange(dropped_, {}))
+            open_path(path);
     poll_jobs();
+    device_poll();
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -2870,13 +3534,34 @@ void App::frame() {
     if (!options_.screenshot.empty()) {
         ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
-        const bool slice_pending = options_.view == "preview" && mesh_ && !result_ && error_title_.empty();
+        const bool slice_pending =
+            (options_.view == "preview" || options_.device_print) && mesh_ && !result_ && error_title_.empty();
         // Ray tracing waits for its scene and for enough samples.
         const bool rays_pending = render_mode_ == RenderMode::RayTraced && !ray_failed_ &&
                                   (ray_job_.running() || !renderer_.has_ray_scene() ||
                                    renderer_.ray_samples() < std::min(options_.ray_samples, 256) ||
                                    (options_.ray_check && !ray_checked_));
-        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending;
+        if (options_.moire_check && !moire_checked_ && frames_ > 3 && f.show_preview && !slice_job_.running() &&
+            !rays_pending)
+            check_moire(fb_w, fb_h);
+        // --device-print: connect, print what was sliced and wait for the end.
+        if (options_.device_print && !device_print_sent_ && printer_ &&
+            printer_->status().state == device::PrinterState::Idle && device_can_print()) {
+            device_print();
+            device_print_sent_ = true;
+        }
+        if (options_.device_print && printer_ && !device_print_done_) {
+            const device::PrinterState s = printer_->status().state;
+            if (s == device::PrinterState::Error) {
+                std::fprintf(stderr, "error: the printer: %s\n", printer_->status().error.c_str());
+                failed_ = true;
+                device_print_done_ = true;
+            }
+        }
+        const bool device_pending =
+            options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
+        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
+                             (options_.moire_check && !moire_checked_) || device_pending;
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);
@@ -2886,6 +3571,8 @@ void App::frame() {
                 set_tab(Tab::Prepare);
             else if (options_.view == "calibration")
                 set_tab(Tab::Calibration);
+            else if (options_.view == "device")
+                set_tab(Tab::Device);
         }
         settled_frames_ = waiting ? 0 : settled_frames_ + 1;
         if (frames_ > 3 && settled_frames_ >= 3) {

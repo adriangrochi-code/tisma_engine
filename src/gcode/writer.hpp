@@ -15,6 +15,28 @@ namespace tisma {
 // are left as they are.
 std::string substitute_variables(std::string_view text, const std::map<std::string, std::vector<std::string>>& variables);
 
+// v with `decimals` decimals as the G-code carries it: rounded as
+// std::to_chars rounds (the exact binary value, ties to even), without a
+// negative zero. Exposed for its test against std::to_chars.
+std::string fixed_number(double v, int decimals);
+
+// The command that sets the chamber's temperature: M141 S, or Klipper's
+// SET_HEATER_TEMPERATURE for a heater named "chamber".
+std::string chamber_gcode(GcodeFlavor flavor, double celsius);
+
+// What the filament asks that the machine cannot give (docs/CATALOG.md,
+// "Capacidades"): a nozzle or bed hotter than its maximum, a chamber it does
+// not heat, an enclosure, a hardened nozzle. write_gcode adds them to its
+// warnings.
+std::vector<Warning> capability_warnings(const Settings& settings);
+
+// The command that sets the accelerations: M204 P (printing) T (travel) in
+// Marlin and RepRapFirmware, SET_VELOCITY_LIMIT ACCEL= in Klipper (one value
+// for both), from each firmware's public documentation. Written after the
+// start G-code, so the printer runs at the acceleration the time estimate
+// assumes, and by a height change (an acceleration tower).
+std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel);
+
 // The command that sets the firmware's pressure advance: M900 K (Marlin's
 // linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S
 // (RepRapFirmware), from each firmware's public documentation.

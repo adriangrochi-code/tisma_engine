@@ -19,6 +19,16 @@ es una fila del inventario `docs/spec/COVERAGE.md` (que manda el equipo de ficha
 primera versión plana es la base: la malla, el corte, los perímetros, los rellenos y el G-code se reutilizan. Por eso
 las reglas de «Diseño para la visión» valen desde F1.
 
+**Rumbo (decisión del dueño, 2026-10-25):**
+- un laminador que use las técnicas que más mejoran la **calidad** y la **resistencia**;
+- compatible con una **impresora propia de 4 y 5 ejes** que el dueño quiere hacer a futuro.
+
+Por eso:
+- F9 cubre 4 y 5 ejes;
+- la cinemática describe la cadena de ejes de cualquier máquina, sin atarse a una (regla 2 de abajo);
+- todo análisis nuevo trabaja con las trayectorias 3D y su orientación, por ejemplo la simulación del enfriamiento
+  (`docs/COOLING_SIMULATION.md`).
+
 **Enfoque (decisión del dueño, 2026-10-24):** un laminador **profesional e industrial**, sin uso comercial de
 terceros (la licencia de hoy), que sigue pudiendo cerrarse:
 - **calidad y control antes que velocidad de laminado:** puede ser más pesado si imprime mejor;
@@ -69,7 +79,10 @@ Reglas que se cumplen desde F1, aunque la primera versión sea plana, para no te
    corte. Para 5 ejes el campo vive dentro del volumen y hará falta una malla de tetraedros; eso queda para F9.
 2. **Las trayectorias son 3D y tienen orientación.** Cada punto guarda x, y, z y la dirección de la boquilla; en una capa
    plana esa dirección es (0, 0, 1). La cinemática de cada máquina es un módulo aparte que traduce a ejes y G-code:
-   3 ejes, mesa giratoria A/C, cabezal B/C, etc. El resto del motor no sabe de ejes.
+   3 ejes, boquilla inclinada que gira (4 ejes, como la RotBot de Wüthrich et al. para el laminado cónico), mesa
+   giratoria A/C, cabezal B/C, etc. El resto del motor no sabe de ejes. El G-code puede salir de dos maneras:
+   - en coordenadas de la punta con su orientación, para firmwares que hacen la cinemática;
+   - en ejes de la máquina, con la cinemática inversa propia.
 3. **Datos listos para la GPU:**
    - arreglos contiguos (estructura de arreglos);
    - índices en vez de punteros;
@@ -143,7 +156,8 @@ antes de usarlas. Revisadas el 2026-10-24:
 - Después de la primera versión: F7 (no planar en 3 ejes) y F8 (lo propio de Tisma, desde sus fichas); después las
   fases de producto P1–P5, en el orden que decida el dueño; al final F9 (5 ejes) y F10 (macOS).
 - La máquina de 5 ejes de referencia se elige al empezar F9, la última fase antes de macOS. Hasta entonces la
-  cinemática queda como módulo aparte, sin atarse a ninguna máquina.
+  cinemática queda como módulo aparte, sin atarse a ninguna máquina. Desde el 2026-10-25 F9 cubre también 4 ejes.
+  La impresora propia del dueño es candidata a máquina de referencia; decide el dueño.
 - Eje medio: un Voronoi de segmentos propio, a partir de artículos, en vez del híbrido con Clipper2.
 - Enfriamiento: una de las primeras capas (sin ventilador) que tiene que ir más lento por el tiempo mínimo lleva el
   ventilador al máximo, como cualquier otra capa frenada.
@@ -194,6 +208,7 @@ el dueño; P1 ya empezó, ver «Estado de P1»):
 |---|---|---|
 | P1 | Interfaz propia: ventana, vista 3D, vista previa del G-code, ajustes, plancha | Fichas de la interfaz de Tisma (qué hay en cada pantalla y cómo se comporta) |
 | P2 | Device y conexión con impresoras de varias marcas (pedido del dueño, 2026-10-24): la página de dispositivos (lista, estado, temperaturas, avance, cámara, controles, subir e imprimir); USB, Bambu Lab, OctoPrint, Moonraker/Klipper, PrusaLink, Duet/RepRapFirmware, Creality, Elegoo, Anycubic, Flashforge y las demás | La ficha de Device que se le pidió al equipo de fichas el 2026-10-24 (comportamiento, sin código: los hosts de Tisma Slicer vienen de código de OrcaSlicer) y la documentación pública oficial de cada API. Donde no hay documentación oficial (por ejemplo, el modo LAN de Bambu Lab), decide el dueño. Las bibliotecas (HTTP, TLS, MQTT, descubrimiento en la red, puerto serie) se revisan con las reglas de licencias antes de usarlas |
+| P6 | App móvil de Android que sigue la impresión (decisión del dueño, 2026-10-24: la opción 1, la estética de la app de Prusa —EasyPrint— como caja negra, y el teléfono solo por WiFi: el USB es del laminador de PC): impresoras, impresión, cámara, controles, archivos y avisos, con la capa de dispositivos de P2 compartida en C++; las impresoras por USB de la PC se siguen a través de un servicio local de `tisma`; después, laminar simple desde el teléfono con el motor | `docs/MOBILE.md`; la ficha de Device; la documentación pública de la API USB Host de Android y de los chips serie; las bibliotecas revisadas con las reglas de licencias |
 | P3 | Perfiles de impresoras y filamentos, desde los datos oficiales de cada fabricante (en curso: `docs/CATALOG.md`) | Nuevo: los perfiles actuales vienen de PrusaSlicer, OrcaSlicer y Cura, y no se usan |
 | P4 | Formatos: 3MF (especificación pública), STEP (OCCT es LGPL-2.1 con excepción: no entra en la lista de licencias permitidas; hace falta otra biblioteca o una decisión del dueño), formatos de resina desde las especificaciones de los fabricantes | Nuevo |
 | P5 | Tisma Cloud, app móvil, CI, instaladores y marca sobre el slicer propio | Fichas; el logo lo da el dueño |
@@ -213,7 +228,7 @@ Antes estaba «fuera de la primera versión»; ahora es una fase.
 
 | Fase | Cuándo | Contenido | Terminada cuando |
 |---|---|---|---|
-| F9 | antes de macOS | 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina, choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 5 ejes (hace falta decidir cuál) |
+| F9 | antes de macOS | 4 y 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina (boquilla inclinada que gira, mesa giratoria, cabezal), choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 4 ejes y en una de 5 (hace falta decidir cuáles; la impresora propia del dueño es candidata) |
 | F10 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
 
 **Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
@@ -436,6 +451,128 @@ con nombres propios en `docs/CONFIG.md`.
 - [ ] En GPU: voladizos y proyección, si conviene
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
 
+## Altura de capa por zona (pedido del dueño, 2026-10-25)
+
+«Altura de capa variable que dependa del detalle y no de la pieza entera»: a la misma altura, capas finas donde la
+pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adaptive slicing, Tyberg y Bøhn 1998).
+
+- [x] Las zonas, el recorte de caminos y la escritura, con `layers.detail_height`, `detail_tolerance` y
+  `detail_margin`; G-code verificado
+- [x] La interfaz: los ajustes en Impresión y la vista previa con el color por alto de capa
+- [x] Medir en el banco contra todo fino y todo grueso (−39 a −52 % de tiempo contra todo fino); el recorte,
+  indexado, cuesta poco: sin GPU
+- [x] La altura variable por Z de la ficha (`slicing.md`): la lista de (Z, alto), la altura por pendiente (escalón
+  máximo) y las dos combinadas con la altura por zona, dentro de una misma pieza (`docs/VARIABLE_LAYERS.md`). La
+  lista vale para toda la cama: el motor lamina los objetos en una sola pila
+- [x] Z anti-aliasing (`docs/spec/features/z_antialiasing.md`; Song, Ray, Sokolov y Lefebvre 2017): las extrusiones
+  de arriba siguen la superficie dentro de la capa, hacia abajo (la ficha) y hacia arriba (el artículo), y el perfil
+  Máxima calidad las combina con la altura por zona y por pendiente (`docs/ZAA.md`)
+- [x] ZAA: el orden del artículo con grafo de alturas (pedazos por lado, franjas, el más bajo primero entre
+  vecinos): interferencia del 7 % al 1 % en un techo a 8°, 0 % en la cúpula
+- [ ] ZAA: las líneas de arriba según las curvas de nivel (partir donde el orden se da vuelta se probó y no rinde: +65 %
+  de arranques por 0,07 puntos), menos costuras (Sección 4.2), y medir en una impresión real
+- [ ] Pedidos del dueño en cola (2026-10-25):
+  - relleno optimizado para resistencia y rapidez (`docs/INFILL.md`), por etapas:
+    - [x] combinar capas de relleno (ficha `infill_patterns.md`, reglas 18 a 20): −24 a −45 % de tiempo, el mismo
+      material
+    - [x] relleno denso bajo las superficies de arriba (ficha `dense_infill.md`)
+    - [x] patrones triángulos y cúbico (ficha `infill_patterns.md`, reglas 4 y 6)
+    - [x] cúbico adaptativo (regla 7): la profundidad con la transformada de distancia exacta, una línea de cada dos
+      por nivel; −26 % de material y −13 % de tiempo en un cubo de 100 mm al 20 %
+    - [x] cúbico de soporte (regla 8): el adaptativo medido desde lo que el relleno sostiene y las paredes
+    - [x] rayo (regla 9): ramas de arriba hacia abajo, según Tricard, Claux y Lefebvre 2020
+    - [ ] rayo: enderezar y juntar ramas (el índice espacial ya está: 63 s → 2,1 s al 100 % en el cubo de 100 mm)
+    - [ ] cúbico de soporte: ajustarlo a las pruebas P6c y P6d de la ficha cuando el PR #15 esté en `main`
+  - el resto de la ficha `infill_patterns.md` (pieza de la cobertura de Tisma Slicer):
+    - [x] estrellas, rectilíneo alineado y zigzag (reglas 1, 2 y 5)
+    - [x] línea, panal y concéntrico (reglas 3, 10 y 13): los largos de P3, P8 y P9 dentro del 2 %
+    - [x] Hilbert, cuerdas de Arquímedes y octagrama (regla 12): Hilbert y Arquímedes a −5 % de P9, el octagrama a
+      −17 % (la separación de Tisma Slicer en ese patrón queda por contrastar)
+    - [ ] Hilbert y cuerdas de Arquímedes en regiones grandes y densas: el recorte con Clipper2 crece más que lineal
+      (lista de aristas activas ancha): 150 mm al 100 %, 0,14 s por capa; 300 mm, 1,2 s. Recortar por franjas y volver
+      a unir los pedazos en los bordes de las franjas
+    - [ ] panal 3D (regla 11): la ficha describe poco su forma; pedir más mediciones al equipo de fichas
+    - [ ] los patrones de las superficies de arriba y de abajo (14 a 17)
+    - [x] una capa sólida cada N y el espesor mínimo de la cáscara (21 y 22)
+    - [x] relleno guiado por tensiones (fase A2): `infill.stress_density` con `slice --case`
+    - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
+    - [ ] editar el caso en la interfaz (apoyos y cargas), y la iteración analizar-reforzar
+    - [ ] medir la rigidez con el análisis «como impresa» leyendo el laminado real
+  - relleno y paredes no planares para más resistencia, y una versión no planar de brick layers que no infrinja
+    patentes (`docs/NONPLANAR_INFILL.md`):
+    - [x] N1: relleno ondulado (ZigZagZ en el relleno que se repite capa a capa), con la amplitud que baja cerca de
+      paredes y pieles y el espesor según el cordón de abajo; con el tope de Z de 12 mm/s, un 85 % más de tiempo
+    - [ ] N3: el análisis «como impresa» con la unión entre capas inclinada, para medir N1 y N2
+    - [ ] N2: paredes tejidas (perímetros ondulados en contrafase, capas anidadas), la versión no planar de brick
+      layers
+    - [ ] N4: pernos en Z, si la patente de ORNL lo permite (decide el dueño)
+    - revisión de patentes por un abogado antes de vender (decide el dueño)
+  - laminado no planar: los artículos y qué conviene (`docs/NONPLANAR_SLICING.md`): en 3 ejes, techos curvos, después
+    el campo optimizado de CurviSlicer y un término de resistencia con el análisis propio (F7); en 5 ejes, S³-Slicer
+    (F9)
+  - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
+    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md`
+    - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
+      abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
+    - [ ] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17)
+    - [ ] S4: laminado cónico como campo (con F7)
+    - [ ] S5: interfaz de otro material (con MM1)
+  - simulación del enfriamiento para los detalles chicos que la capa entera no ve (`docs/COOLING_SIMULATION.md`):
+    - [ ] T1: tiempo de vuelta local (desde el cordón de abajo y con la boquilla cerca): vista previa, aviso, y
+      frenado, pausa y ventilador solo en el detalle
+    - [ ] T2: red térmica de cordones (Costa et al. 2017; Zhang y Shapiro 2018), calibrada con pernos
+    - [ ] T3: las correcciones por temperatura, menos ventilador donde la unión queda fría, y la adherencia por unión en
+      el análisis «como impresa»
+    - [ ] T4: la red en GPU, y el aire del ventilador de A3
+    - no reordenar según el calor sin la revisión de patentes (dos solicitudes de Siemens)
+  - lo publicado sobre FDM y técnicas de laminado que el motor todavía no usa (`docs/RESEARCH_MAP.md`), por ganancia
+    medida contra esfuerzo:
+    - [ ] Q1: modo resistencia con cordones anchos (2,5 veces la boquilla o más: +40 a +48 % entre capas, −67 % de
+      tiempo, Allum et al. 2023)
+    - [ ] Q2: estimador de tiempo que imita al firmware (aceleración por tramo, velocidad de esquina, calibración
+      contra impresiones medidas); va junto con el pedido del tiempo de impresión
+    - [ ] Q3: topes por fusión y enfriamiento (flujo volumétrico según la temperatura y el material)
+    - [ ] Q4: flujo según la velocidad planeada en las esquinas, y avance de presión por tipo de tramo
+    - [ ] Q5: cordones alineados con la tensión por región, y propiedades ortótropas según las trayectorias en el
+      análisis
+    - [ ] Q6: costura por costo (cóncava, atrás, lo que se ve, tensión) y en bisel (`walls_extra.md`)
+    - [ ] Q7: mapa de rugosidad por cara y compensación en XY según el ángulo
+    - [ ] Q8: riesgo de alabeo con un modelo cerrado, borde automático y patrón según el material
+    - [ ] Q9: orden de islas y viajes que escala (curva que llena el plano y 2-opt)
+    - [ ] Q10: umbral de voladizo según ventilador, velocidad y temperatura; puentes con anchos enteros de línea
+    - [ ] Q11: transformada de distancia exacta en Vulkan, número de vueltas para mallas rotas, Voronoi robusto
+    - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
+    - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
+      de Fermat conectadas)
+  - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
+    - [x] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
+      duplican vértices, el gyroid escribe el triple de tramos y quedan tramos de un micrón que extruyen
+    - [ ] el gyroid por franjas, sin la grilla entera en memoria; el orden monótono sin costo cuadrático
+    - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
+    - [ ] el Voronoi propio más rápido en capas con miles de sitios (hoy es lo más lento con muchas islas)
+    - [ ] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo)
+    - [ ] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
+    - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados
+  - el tiempo de impresión estimado lo más preciso posible;
+  - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
+    filamento, objetos) en el mismo panel
+
+## Estado de P2
+
+Empezado el 2026-10-24 por pedido del dueño («arrancá con `src/device` y el host serie»), antes de que la ficha de
+Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la ficha no cambia. Diseño en
+`docs/DEVICE.md`.
+
+- [x] La capa de dispositivos `src/device/`: `Printer`, `ByteStream`, el puerto serie (Linux y Windows), el host de
+  G-code por serie (numeración, suma de verificación, reenvíos, temperaturas, pausa y cancelación) y la impresora
+  simulada, con pruebas de punta a punta
+- [x] La página Device de `tisma` (pestaña Impresora): puertos, conectar, estado y temperaturas, imprimir lo laminado
+  o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
+  máquina, con una prueba de punta a punta
+- [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Probado con una impresora real por USB (necesita al dueño)
+
 ## Estado de P1
 
 La interfaz propia se adelantó (pedido del dueño, 2026-10-24: «hagamos la interfaz con esos íconos y centrémonos en
@@ -458,8 +595,12 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Calibraciones estándar, segunda tanda: primera capa, velocidad de retracción, avance de presión (ajuste nuevo
   `extrusion.pressure_advance`), tolerancias de encastre, pasos del extrusor y el flujo volumétrico en la torre de
   velocidad
-- [ ] Calibraciones estándar que faltan: resonancias (el motor tiene que escribir la aceleración), puentes y
-  voladizos, tope de flujo volumétrico (ajuste nuevo), pata de elefante
+- [x] Calibraciones estándar, tercera tanda: tope de flujo volumétrico (`machine.max_flow`), resonancias (el motor
+  escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
+- [ ] Calibraciones estándar que faltan: puentes y voladizos
+- [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24). Decidido: la opción 1 (seguir
+  la impresión, no la interfaz entera), solo por WiFi (el USB es de la PC), con la estética de la app de Prusa
+  (EasyPrint) como caja negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)
 - [ ] Calibraciones nuevas propuestas: compensación por mínimos cuadrados, ancho de línea variable, adherencia entre
   capas con el análisis, contracción por material
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7

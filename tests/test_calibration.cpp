@@ -462,3 +462,123 @@ TEST_CASE("calibration: first layer squares, fit test, volumetric flow and extru
     CHECK_THAT(test, ContainsSubstring("G1 E100.0 F60"));
     CHECK_THAT(test, ContainsSubstring("120 mm above"));
 }
+
+TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot", "[calibration]") {
+    // The flow tower: every extrusion of a segment runs at its flow, past the
+    // speed cap and never slowed down for the minimum layer time.
+    const CalibrationPrint flow = max_flow_tower(8.0, 16.0, 4.0);
+    REQUIRE(flow.segments.size() == 3);
+    CHECK(flow.unit == "mm³/s");
+    Settings s = plain();
+    s.max_speed = 20.0;
+    s.min_layer_time = 60.0;
+    s.max_feed_x = s.max_feed_y = 1000.0;
+    s.changes = flow.changes;
+    const SlicedModel m = slice_model(weld_exact(flow.mesh), s);
+    const std::string g = gcode_of(m, s);
+    CHECK(checks(g, gcode_limits(m, s)));
+    // A 0.4 x 0.2 mm line at 16 mm3/s runs at 200 mm/s; at 8 mm3/s, 100 mm/s.
+    const std::size_t top = g.find(";Z:10.2");
+    REQUIRE(top != std::string::npos);
+    CHECK(g.find("F12000", top) != std::string::npos);
+    CHECK(g.find("F6000") < top);
+    CHECK(g.find("F12000") > top);
+    // What the machine cannot move is not asked.
+    s.max_feed_x = s.max_feed_y = 150.0;
+    const std::string slow = gcode_of(slice_model(weld_exact(flow.mesh), s), s);
+    CHECK(slow.find("F12000") == std::string::npos);
+    CHECK(slow.find("F9000", slow.find(";Z:10.2")) != std::string::npos);
+
+    // The acceleration tower: the start writes the acceleration in use, each
+    // segment its own, in the flavor's command.
+    CHECK(acceleration_gcode(GcodeFlavor::Marlin, 1500.0, 2000.0) == "M204 P1500 T2000 ; acceleration");
+    CHECK(acceleration_gcode(GcodeFlavor::RepRap, 1500.0, 2000.0) == "M204 P1500 T2000 ; acceleration");
+    CHECK(acceleration_gcode(GcodeFlavor::Klipper, 1500.0, 2000.0) == "SET_VELOCITY_LIMIT ACCEL=1500");
+    const CalibrationPrint acc = acceleration_tower(2000.0, 4000.0, 1000.0);
+    CHECK(acc.unit == "mm/s²");
+    for (GcodeFlavor flavor : {GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}) {
+        Settings a = plain();
+        a.flavor = flavor;
+        a.changes = acc.changes;
+        const SlicedModel am = slice_model(weld_exact(acc.mesh), a);
+        const std::string ag = gcode_of(am, a);
+        INFO(int(flavor));
+        CHECK(checks(ag, gcode_limits(am, a)));
+        CHECK(ag.find(acceleration_gcode(flavor, a.acceleration, a.travel_acceleration)) < ag.find("G1 "));
+        std::size_t at = 0;
+        for (const CalibrationSegment& seg : acc.segments) {
+            const std::size_t found = ag.find(acceleration_gcode(flavor, seg.value, a.travel_acceleration), at);
+            REQUIRE(found != std::string::npos);
+            at = found + 1;
+        }
+    }
+
+    // The elephant's foot: a block, and the shrink from the bottom's excess.
+    const CalibrationPrint foot = elephant_foot_test();
+    CHECK(foot.kind == "elephant_foot");
+    const BoundingBox box = foot.mesh.bounding_box();
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(20.0, 1e-9));
+    CHECK_THAT(box.max.z, WithinAbs(6.0, 1e-9));
+    CHECK_FALSE(is_tower(CalibrationKind::ElephantFoot));
+    Settings e;
+    CHECK_THAT(elephant_foot_from(20.4, 20.0, e), WithinAbs(0.2, 1e-9));
+    e.first_layer_shrink = 0.1;
+    CHECK_THAT(elephant_foot_from(20.3, 20.0, e), WithinAbs(0.25, 1e-9));
+    CHECK(elephant_foot_from(0.0, 20.0, e) == 0.1); // not measured
+    CHECK(elephant_foot_from(19.0, 20.0, e) == 0.0); // the bottom is narrower: nothing to shrink
+    CHECK_FALSE(apply_calibration(CalibrationKind::ElephantFoot, 0.2, e));
+
+    // Using the towers' values, and the automatic ranges.
+    Settings t;
+    REQUIRE(apply_calibration(CalibrationKind::MaxFlow, 14.0, t));
+    CHECK(t.machine_max_flow == 14.0);
+    REQUIRE(apply_calibration(CalibrationKind::Acceleration, 3000.0, t));
+    CHECK(t.acceleration == 3000.0);
+    CHECK(t.travel_acceleration == 3000.0); // raised to it
+    CHECK(automatic_calibration(CalibrationKind::MaxFlow, Settings{}).segments.front().value == 4.0);
+    t.machine_max_flow = 20.0;
+    const CalibrationPrint around = automatic_calibration(CalibrationKind::MaxFlow, t);
+    CHECK(around.segments.front().value == 10.0);
+    CHECK(around.segments.back().value == 30.0);
+    CHECK(automatic_calibration(CalibrationKind::Acceleration, t).segments.back().value == 6000.0);
+    CHECK(automatic_calibration(CalibrationKind::Acceleration, Settings{}).segments.back().value == 5000.0);
+}
+
+
+TEST_CASE("calibration: a forced flow on a wedge that thins to an edge checks", "[calibration]") {
+    // A wedge that thins to an edge: the walls narrow to their thinnest beads.
+    TriangleMesh wedge;
+    const auto tri = [&](Vec3f a, Vec3f b, Vec3f c) { wedge.add_triangle(a, b, c); };
+    const Vec3f a0{0, 0, 0}, b0{30, 0, 0}, c0{0, 6, 0}, a1{0, 0, 3}, b1{30, 0, 3}, c1{0, 6, 3};
+    tri(a0, c0, b0);
+    tri(a1, b1, c1);
+    tri(a0, b0, b1), tri(a0, b1, a1);
+    tri(b0, c0, c1), tri(b0, c1, b1);
+    tri(c0, a0, a1), tri(c0, a1, c1);
+    for (const double flow : {2.0, 4.0}) {
+        Settings s = plain();
+        s.wall_width = 0.8;
+        s.layer_height = s.first_layer_height = 0.1;
+        HeightChange c;
+        c.volumetric_flow = flow;
+        s.changes = {c};
+        const SlicedModel m = slice_model(weld_exact(wedge), s);
+        INFO(flow);
+        const std::string g = gcode_of(m, s);
+        const GcodeLimits limits = gcode_limits(m, s);
+        CHECK(checks(g, limits));
+        // The forced flow is applied (a full-width bead at that flow, at least) and stays within the limit.
+        double fastest = 0.0, feed = 0.0;
+        std::istringstream in(g);
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind("G1 ", 0) != 0)
+                continue;
+            if (const std::size_t f = line.find(" F"); f != std::string::npos)
+                feed = std::stod(line.substr(f + 2)) / 60.0; // modal
+            if (line.find(" E") != std::string::npos && (line.find(" X") != std::string::npos || line.find(" Y") != std::string::npos))
+                fastest = std::max(fastest, feed);
+        }
+        CHECK(fastest >= flow / (s.wall_width * s.layer_height) - 1.0 / 60.0);
+        CHECK(fastest <= limits.max_feed + 1.0 / 60.0);
+    }
+}

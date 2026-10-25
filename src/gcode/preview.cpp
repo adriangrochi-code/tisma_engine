@@ -136,6 +136,8 @@ private:
         } else if (c.starts_with("Z:")) {
             if (const std::optional<double> v = number(c.substr(2)); v && !out_.layers.empty())
                 out_.layers.back().z = *v;
+        } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
+            nonplanar_ = c == "NONPLANAR:1";
         } else if (c.starts_with("HEIGHT:")) {
             if (const std::optional<double> v = number(c.substr(7)); v && *v > 0.0) {
                 height_ = *v;
@@ -236,7 +238,12 @@ private:
         mv.layer = static_cast<std::uint32_t>(out_.layers.size() - 1);
         PreviewLayer& layer = out_.layers.back();
         if (extrudes) {
-            const double height = layer.height > 0.0 ? layer.height : height_ > 0.0 ? height_ : std::max(z, 0.0);
+            double height = layer.height > 0.0 ? layer.height : height_ > 0.0 ? height_ : std::max(z, 0.0);
+            // Off the layer's Z (Z anti-aliasing, docs/ZAA.md): what is left down to its bottom.
+            if (nonplanar_ && height_ > 0.0)
+                height = height_; // a wavy bead: its own thickness (docs/NONPLANAR_INFILL.md)
+            else if (layer_comments_ && layer.height > 0.0)
+                height = std::max(0.0, height + ((z_ - layer.z) + (z - layer.z)) / 2.0);
             double width = width_;
             if (!width_comments_ && height > 0.0)
                 width = de * filament_area_ / (length * height);
@@ -269,6 +276,7 @@ private:
     double width_ = 0.4, height_ = 0.0;
     bool absolute_ = true, absolute_e_ = true;
     bool layer_comments_ = false, width_comments_ = false;
+    bool nonplanar_ = false; // in a ;NONPLANAR block
     LineKind kind_ = LineKind::Other;
 };
 

@@ -24,8 +24,13 @@ struct AppOptions {
     int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
     int msaa = -1;                  // multisampling samples; -1: the preference
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
+    int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
+    int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
+    bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
+    bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish
     bool language_given = false;
     Language language = Language::Spanish;
 };

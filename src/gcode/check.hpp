@@ -20,6 +20,14 @@ struct GcodeLimits {
     double retract_length = 0.0;  // mm of filament
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
+    // Z anti-aliasing (docs/ZAA.md): how far an extrusion may leave its layer's
+    // Z, down and up, as shares of the layer height; its bead is as thick as
+    // what is left down to the layer's bottom.
+    double zaa_below = 0.0, zaa_above = 0.0;
+    // Wavy infill (docs/NONPLANAR_INFILL.md): how far, in mm, an extrusion in
+    // a ;NONPLANAR block may leave its layer's Z either way; there each
+    // move's ;HEIGHT is its bead's own thickness.
+    double wave = 0.0;
     // From the height changes of the settings: the values for the layers whose
     // top is above z, in order of z.
     struct Change {

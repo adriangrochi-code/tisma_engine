@@ -51,7 +51,16 @@ std::vector<Profile> builtin_profiles(ProfileKind kind) {
         fast.first_layer_height = 0.28;
         fast.wall_count = 2;
         fast.infill_density = 15.0;
-        return {make(kind, "0.20 mm", base), make(kind, "0.12 mm", fine), make(kind, "0.28 mm", fast)};
+        // The finest finish for the time (docs/ZAA.md, «Medido»): thick layers,
+        // fine sub-layers only on slopes, and the tops on the surface.
+        Settings best = base;
+        best.layer_height = 0.3;
+        best.detail_height = 0.1;
+        best.cusp_height = 0.05;
+        best.zaa = true;
+        best.zaa_raise = true;
+        return {make(kind, "0.20 mm", base), make(kind, "0.12 mm", fine), make(kind, "0.28 mm", fast),
+                make(kind, "Máxima calidad", best)};
     }
     }
     return {};

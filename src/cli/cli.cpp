@@ -21,6 +21,7 @@
 #include "slice/printable.hpp"
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -35,6 +36,7 @@ namespace {
 constexpr std::string_view kUsage =
     "usage:\n"
     "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
+    "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
     "  tisma-engine analyze <model.stl> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model.stl>\n"
@@ -71,7 +73,7 @@ struct SliceArgs {
     std::string config;
     std::string output;
     std::string warnings; // empty: not written
-    std::string analysis_case; // analyze only
+    std::string analysis_case; // analyze; slice: the load case of stress-guided infill
     std::string vtk;           // analyze only; empty: not written
     std::string mesh;          // analyze only; empty: not written
     bool progress = false;     // analyze only: progress lines on the output
@@ -101,7 +103,7 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         } else if (a == "--warnings" && !analyze) {
             if (!value(out.warnings))
                 return std::nullopt;
-        } else if (a == "--case" && analyze) {
+        } else if (a == "--case") {
             if (!value(out.analysis_case))
                 return std::nullopt;
         } else if (a == "--vtk" && analyze) {
@@ -177,6 +179,13 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     out << "vertices: " << indexed.vertices.size() << "\n";
     out << "weld_ms: " << weld_ms << "\n";
 
+    // Models the engine refuses to slice are not sliced here either (one at
+    // 1e30 mm used to grow memory without end).
+    if (const std::string reason = unprintable_reason(indexed, Settings{}); !reason.empty()) {
+        out << "slicing: skipped (" << reason << ")\n";
+        return kExitOk;
+    }
+
     // Planar slicing with 0.2 mm layers: level-set segments and contours.
     const BoundingBox box = stl.mesh.bounding_box();
     if (!box.empty) {
@@ -193,6 +202,8 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         out << "layers: " << layers.size() << "\n";
         out << "contours: " << contours << "\n";
         out << "slice_ms: " << slice_ms << "\n";
+        if (layers.empty())
+            return kExitOk; // flat or thinner than a layer: no middle layer to look at
 
         // Regions: closed contours merged into polygons with holes (Clipper2).
         const auto region_start = std::chrono::steady_clock::now();
@@ -263,16 +274,44 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (settings.gpu == GpuMode::Auto)
         gpu = gpu::Context::create();
     out << "gpu: " << (gpu ? gpu->device_name() : std::string("none, using the CPU")) << "\n";
+    // Stress-guided infill (docs/INFILL.md): the part analysed under the load
+    // case first, to know where it works hardest.
+    StressField stress;
+    if (settings.infill_stress_density > 0.0) {
+        if (parsed->analysis_case.empty()) {
+            err << "warning: infill.stress_density needs a load case (--case): the infill stays even\n";
+        } else {
+            AnalysisCase c;
+            try {
+                c = load_analysis_case(parsed->analysis_case);
+            } catch (const SettingsError& e) {
+                err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
+                return kExitInput;
+            }
+            const auto analysis_start = std::chrono::steady_clock::now();
+            try {
+                stress = infill_stress_field(mesh, settings, c, gpu.get());
+            } catch (const AnalysisError& e) {
+                err << "error: the analysis for stress-guided infill: " << e.what() << "\n";
+                return kExitAnalysis;
+            }
+            out << "stress_analysis_ms: "
+                << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - analysis_start).count()
+                << "\n";
+            if (stress.empty())
+                err << "warning: the analysis gave no valid result: the infill stays even\n";
+        }
+    }
     SlicedModel sliced;
     std::vector<Warning> warnings;
     try {
-        sliced = slice_model(mesh, settings, gpu.get());
+        sliced = slice_model(mesh, settings, gpu.get(), &stress);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr);
+        sliced = slice_model(mesh, settings, nullptr, &stress);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
@@ -395,7 +434,11 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         };
     AnalysisReport report;
     try {
-        report = run_analysis(mesh, settings, analysis, gpu.get(), progress);
+        // Stress-guided infill: the same infill the slicing would print.
+        const StressField infill = settings.infill_stress_density > 0.0
+                                       ? infill_stress_field(mesh, settings, analysis, gpu.get())
+                                       : StressField{};
+        report = run_analysis(mesh, settings, analysis, gpu.get(), progress, &infill);
     } catch (const AnalysisError& e) {
         err << "error: " << e.what() << "\n";
         return kExitAnalysis;
@@ -463,12 +506,18 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         out << "tisma-engine " << TISMA_VERSION << "\n";
         return kExitOk;
     }
-    if (command == "slice")
-        return cmd_slice(rest, out, err);
-    if (command == "info")
-        return cmd_info(rest, out, err);
-    if (command == "analyze")
-        return cmd_analyze(rest, out, err);
+    try {
+        if (command == "slice")
+            return cmd_slice(rest, out, err);
+        if (command == "info")
+            return cmd_info(rest, out, err);
+        if (command == "analyze")
+            return cmd_analyze(rest, out, err);
+    } catch (const std::exception& e) {
+        // What the commands do not catch is the engine's own fault: said, not a crash.
+        err << "error: internal: " << e.what() << "\n";
+        return kExitInternal;
+    }
     err << "error: unknown command '" << command << "'\n" << kUsage;
     return kExitUsage;
 }

@@ -17,6 +17,14 @@ add_executable(tisma_tests
   test_level_set.cpp
   test_contours.cpp
   test_layers.cpp
+  test_local_layers.cpp
+  test_variable_layers.cpp
+  test_zaa.cpp
+  test_combine.cpp
+  test_adaptive.cpp
+  test_lightning.cpp
+  test_nonplanar.cpp
+  test_hostile.cpp
   test_polygons.cpp
   test_gpu.cpp
   test_settings.cpp
@@ -28,6 +36,7 @@ add_executable(tisma_tests
   test_surfaces.cpp
   test_infill.cpp
   test_gcode.cpp
+  test_resolution.cpp
   test_order.cpp
   test_travel.cpp
   test_cooling.cpp
@@ -43,6 +52,7 @@ add_executable(tisma_tests
   test_profiles.cpp
   test_project.cpp
   test_catalog.cpp
+  test_device.cpp
 )
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
@@ -82,6 +92,18 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
+    # The moiré filter: the preview from far away, its layers finer than a
+    # pixel, gets smoother with the filter where the filter acts.
+    add_test(NAME ui_moire_filter_smooths_fine_lines
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview --moire-check
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_moire.png)
+    # The Device page: the cube, sliced, printed to the simulated printer
+    # until it finishes.
+    add_test(NAME ui_device_prints_to_simulator
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
+              --device-print --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device.png)
     # A project saved with chosen profiles opens again to the same G-code.
     add_test(NAME ui_project_save
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -101,7 +123,8 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_project_save PROPERTIES FIXTURES_SETUP ui_project)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")
-    set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_project_save ui_project_reopen PROPERTIES
+    set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_moire_filter_smooths_fine_lines
+                         ui_device_prints_to_simulator ui_project_save ui_project_reopen PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()

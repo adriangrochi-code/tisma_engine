@@ -10,14 +10,237 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.8.0-alpha.1] - 2026-10-25
+
+Tercera versión publicada. Trae el catálogo de 144 impresoras y 108 filamentos con sus capacidades, la altura de
+capa variable por Z y por zona, el Z anti-aliasing, catorce patrones de relleno nuevos (entre ellos el cúbico
+adaptativo y el rayo), el relleno guiado por tensiones y el ondulado, la pestaña Impresora para imprimir por USB (el
+comienzo de P2), la tercera tanda de calibraciones y la resolución del G-code. Corrige lo que encontró la revisión profunda de
+errores a pedido del dueño: la conexión con la impresora, G-code peligroso, ajustes imposibles, archivos dañinos,
+paredes partidas o colgadas, y el rendimiento con muchas islas. Sigue siendo una alfa: los formatos de ajustes,
+perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y cada cambio se anota acá.
+
 ### Agregado
 
-- **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): datos de las páginas oficiales de cada fabricante, con
-  sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
+- **Catálogo de impresoras y filamentos** (`docs/CATALOG.md`): 144 impresoras de 21 fabricantes y 108 filamentos de
+  14, con los datos de las páginas oficiales de cada fabricante y sus fuentes. **Agregar desde el catálogo…** en las filas de perfil de Impresora y Filamento busca por marca y
   modelo, muestra la ficha y crea el perfil (cama, boquilla, firmware, retracción de partida, G-code de inicio propio;
   temperaturas y ventilador del filamento).
-- El plan de Device y conexiones (P2) y el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
-  en el relleno (`docs/MULTIMATERIAL.md`).
+- **Capacidades de impresoras y filamentos** (`docs/CATALOG.md`, «Capacidades»): el catálogo trae, cuando el
+  fabricante lo dice, la cinemática, el flujo máximo, la cámara calefaccionada, la boquilla endurecida, el hot end, el
+  sensor, las camas, la conectividad y las funciones de cada impresora, y el secado, la dureza, si es abrasivo o
+  soluble y las temperaturas del material de cada filamento. El motor las usa:
+  - ninguna extrusión pasa del flujo máximo del hot end ni del filamento (`machine.max_flow`, `extrusion.max_flow`);
+  - calienta la cámara que pide el filamento si la impresora puede (`M141` o `SET_HEATER_TEMPERATURE`) y la apaga al
+    final;
+  - avisa cuando el filamento pide más de lo que la impresora da: temperatura de boquilla o cama, cámara, impresora
+    cerrada, boquilla endurecida.
+- **Altura de capa por zona** (`docs/LOCAL_LAYERS.md`, pedido del dueño): con `layers.detail_height`, las capas se
+  parten en subcapas finas solo donde la pieza cambia (pendientes, detalles, topes y fondos) y el resto se imprime en
+  una capa gruesa, así dos partes a la misma altura salen con capas de alto distinto. Una caja recta y una pirámide
+  lado a lado, con capas de 0,3 y detalle de 0,1 mm: 32 % menos de tiempo que todo a 0,1 mm, con el mismo material.
+  En Impresión, **Alto del detalle**, **Escalón aceptado** y **Margen del detalle**; en la vista previa, **Color por →
+  Alto de capa**.
+- **Altura de capa variable por Z** (`docs/VARIABLE_LAYERS.md`, pedido del dueño):
+  - `layers.heights`: una lista de tramos (Z, altura);
+  - `layers.cusp_height`: altura automática por pendiente, según el escalón máximo que puede dejar una superficie
+    inclinada;
+  - las caras planas cierran una capa a su altura exacta;
+  - `machine.min_layer_height` y `max_layer_height` limitan las alturas, y nunca pasan la boquilla.
+
+  Con la altura por zona, la pendiente decide cuántas subcapas finas lleva cada capa gruesa, dentro de una misma pieza.
+  En una cúpula sobre una columna, con escalón de 0,05 mm, tarda 56 min. Todo a 0,05 mm tarda 225 min, con el mismo
+  escalón máximo.
+
+  En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
+  máxima**.
+- **Cúbico adaptativo** (`docs/INFILL.md`, ficha `infill_patterns.md`, regla 7): `infill.pattern` acepta
+  `adaptive_cubic`, el cúbico a 0°, 60° y 120° con cubos chicos junto a las paredes y superficies y más grandes
+  adentro. En un cubo de 100 mm al 20 % usa un 26 % menos de material y tarda un 13 % menos que el cúbico; en piezas
+  chicas da lo mismo que el cúbico. En Impresión, **Cúbico adaptativo** en el patrón de relleno.
+- **Cúbico de soporte** (regla 8): `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno
+  no sostiene: cubos chicos bajo los techos y grandes sobre los pisos. En un cubo de 100 mm al 20 %, un 30 % menos de
+  material y un 14 % menos de tiempo que el cúbico.
+- **Relleno ondulado** (`docs/NONPLANAR_INFILL.md`, N1): con `infill.nonplanar`, el relleno sube y baja en Z
+  igual en todas las capas, así las capas quedan anidadas con la unión inclinada, según ZigZagZ (Allum et al. 2021:
+  +62 % de resistencia en Z en sus ensayos). Solo con patrones que se repiten capa a capa; la onda se apaga cerca de
+  paredes y pieles. En Impresión, **Relleno ondulado**, **Altura de la onda** y **Largo de la onda**. Con el eje Z a
+  12 mm/s tarda bastante más; la resistencia todavía no está medida en el motor.
+- **Hilbert, cuerdas de Arquímedes y espiral octagrama** (ficha `infill_patterns.md`, regla 12): `hilbert`, `archimedean` y
+  `octagram` en `infill.pattern` y en la interfaz; iguales en todas las capas, las espirales centradas en la pieza.
+- **Capa sólida cada N y espesor mínimo de la cáscara** (ficha `infill_patterns.md`, reglas 21 y 22):
+  `infill.solid_every` imprime las capas N, 2N… sólidas, como puente sobre el relleno; `surfaces.top_min_thickness` y
+  `surfaces.bottom_min_thickness` agregan capas sólidas hasta ese espesor. En Impresión, **Capa sólida cada**,
+  **Espesor mínimo arriba** y **Espesor mínimo abajo**.
+- **Línea, panal y concéntrico** (ficha `infill_patterns.md`, reglas 3, 10 y 13): `line`, `honeycomb` y `concentric`
+  en `infill.pattern` y en la interfaz. En el cubo de 20 mm de la ficha, 182 a 185 mm por capa en un tramo (P3: 185,9),
+  230 a 238 mm (P8: 229 a 244) y 200 mm en 5 lazos (P9: 199,4 en 5).
+- **Estrellas, rectilíneo alineado y zigzag** (ficha `infill_patterns.md`, reglas 5, 1 y 2): `stars` (el patrón por
+  defecto de Tisma Slicer), `aligned_rectilinear` y `zigzag` en `infill.pattern` y en la interfaz.
+- **Rayo** (regla 9): `lightning`, solo ramas que nacen en las paredes y llegan bajo cada techo, retirándose hacia las
+  paredes más abajo. Para piezas que solo se miran: en un cubo de 100 mm al 20 %, un 64 % menos de material y la
+  mitad del tiempo que el cúbico. En Impresión, **Rayo** en el patrón de relleno.
+- **Relleno guiado por tensiones** (`docs/INFILL.md`, etapa 4): con `infill.stress_density` y un caso de carga
+  (`tisma-engine slice … --case caso.json`), el motor analiza la pieza bajo esa carga y sube el relleno por bandas
+  donde trabaja más, hasta esa densidad. El resto queda liviano. `analyze` usa el mismo relleno. En Impresión,
+  **Guiado por tensiones** y **Caso de carga** (un `.json` como el de `analyze`).
+- **Relleno denso bajo el techo y patrones de triángulos y cúbico** (`docs/INFILL.md`, fichas `dense_infill.md` e
+  `infill_patterns.md`):
+  - con `infill.dense_under_top`, la capa de relleno justo debajo de una superficie de arriba va a
+    `infill.dense_density` (40 %), solo bajo esa superficie: un relleno general más liviano sin que el techo se hunda;
+  - `infill.pattern` acepta `triangles` (tres familias de líneas a 60°) y `cubic` (las mismas, corridas con la altura:
+    cubos apoyados en un vértice, rígidos en las tres direcciones y en líneas rectas).
+
+  En Impresión, **Denso bajo el techo**, **Densidad bajo el techo** y los patrones **Triángulos** y **Cúbico**.
+- **Combinar capas de relleno** (`docs/INFILL.md`, ficha `infill_patterns.md`, primera etapa del relleno por
+  resistencia y rapidez que pidió el dueño): con `infill.combine_layers` o `combine_auto`, el relleno disperso se
+  imprime cada N capas con el alto de las N, nunca más que la boquilla. El mismo material en menos pasadas: en la
+  esfera del banco, de 447 a 297 min con capas de 0,2 mm y de 736 a 402 min con capas de 0,12 mm. En Impresión,
+  **Combinar relleno** y **Combinar lo más posible**.
+- **Z anti-aliasing** (`docs/ZAA.md`, ficha `z_antialiasing.md`, pedido del dueño): con `zaa.enabled`, las paredes,
+  el relleno de arriba y el de huecos bajan hasta la superficie donde esta corta su capa, con el material del espesor
+  que queda (nunca menos que `zaa.min_thickness`). Con `zaa.raise` también suben hasta media capa, como en Song et al.
+  2017.
+  - El G-code lleva X, Y y Z en el mismo movimiento.
+  - El chequeo y la vista previa lo entienden.
+  - En la esfera del banco, el error de la superficie de arriba baja de 0,048 a 0,003 mm en el mismo tiempo.
+
+  Nuevo perfil de impresión **Máxima calidad**: capas de 0,3 mm, subcapas de 0,1 mm en las pendientes y ZAA con
+  subida. En la esfera deja 0,001 mm de error en 526 min, contra 0,014 mm en 1788 min de todo a 0,05 mm.
+- **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
+  (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
+  trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.
+- **La pestaña Impresora** de la interfaz (`docs/DEVICE.md`): conectar por USB (o a la impresora simulada), ver el
+  estado y las temperaturas, imprimir lo laminado o un G-code abierto con su avance y tiempo restante, pausar,
+  seguir, cancelar, mover, extruir y el ventilador. `--device` y `--device-print` para las capturas.
+- **Calibraciones estándar, tercera tanda** (`docs/CALIBRATION.md`): el tope de flujo volumétrico (cada segmento
+  con todas sus líneas a ese flujo; el elegido pasa a `machine.max_flow`), las resonancias (cada segmento con su
+  aceleración, `M204` o `SET_VELOCITY_LIMIT`; la elegida pasa a `machine.acceleration`) y la pata de elefante (un
+  bloque que se mide; el exceso de la primera capa pasa a `slicing.first_layer_shrink`). Cambios por altura nuevos
+  `volumetric_flow` y `acceleration`.
+- **Filtro de moiré** en el menú de imagen de la vista 3D (pedido del dueño): de lejos, las líneas de capa de la
+  vista previa más finas que un píxel se dibujan con la luz promedio de su perfil en vez de hacer bandas, y las líneas de
+  la grilla se desvanecen cuando quedan a menos de unos píxeles de la siguiente. Activado por defecto; `--moire
+  on|off` en las capturas.
+- El plan de Device y conexiones (P2), el diseño de multimaterial con un cabezal: mezcla de colores por capas y purga
+  en el relleno (`docs/MULTIMATERIAL.md`), y el plan de la app de Android que sigue la impresión, con USB
+  (`docs/MOBILE.md`).
+- **Resolución del G-code** (`gcode.resolution`, 0,0125 mm, de la ficha `gcode_extras.md`; en la interfaz, sección
+  Impresora): los puntos que mueven el camino menos que eso no se escriben, sin cambiar el ancho, la Z ni el material.
+  Las paredes repetían puntos casi iguales, el giroide escribía el triple de tramos y quedaban tramos de un micrón que
+  extruían. Un cilindro de 128 lados pasa de 41 859 a 6 140 extrusiones y de 1,25 MB a 0,19 MB; la esfera del banco
+  con giroide, de 269 mil a 73 mil (2,1 MB en vez de 7,7): menos líneas que el firmware tiene que leer y planear.
+
+### Cambiado
+
+- Escribir el G-code es un 28 % más rápido (la esfera del banco: de 0,81–0,88 s a 0,60–0,62 s), con el mismo texto
+  byte a byte: los números se escriben por un camino propio que da lo mismo que `std::to_chars`.
+- El G-code escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…`, o
+  `SET_VELOCITY_LIMIT ACCEL=…` en Klipper), así la impresora corre a la aceleración con la que se estima el tiempo.
+
+### Corregido
+
+Revisión profunda de errores (2026-10-25), a pedido del dueño: seis revisores por área del motor y la revisión de caja
+negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_hostile.cpp`).
+
+- **Conexión con la impresora:**
+  - un cable desenchufado se nota enseguida (antes, el programa seguía «conectado» con un núcleo al 100 %);
+  - un «ok» perdido ya no cancela la impresión: el motor vuelve a mandar la línea y, si la impresora ya la había
+    hecho, sigue con la siguiente sin repetirla;
+  - si la impresión se abandona, apaga la boquilla, la cama y el ventilador;
+  - una pausa o cancelación pedida justo al terminar un trabajo ya no afecta al siguiente;
+  - las esperas de calentamiento (`M109`, `M190`) cuentan los informes de temperatura como señal de vida.
+- **G-code peligroso:**
+  - una variable del G-code de inicio con un salto de línea podía meter comandos de movimiento después de la
+    impresión; ahora queda en su comentario, y los nombres con saltos de línea o corchetes se rechazan;
+  - un índice de variable enorme (`{temperature[99999999999999999999]}`) daba un error interno y dejaba un `.part`.
+- **Ajustes que la impresora no puede imprimir:**
+  - capas más gruesas que la boquilla o que `machine.max_layer_height`, más finas que `machine.min_layer_height`, y
+    líneas de menos de un cuarto o más de cuatro boquillas: la línea de comandos sale con código 2 y la interfaz no
+    lamina;
+  - límites de lectura: altura de capa de 0,01 a 2 mm, ancho de 0,05 a 10 mm, `slicing.xy_offset` de −10 a 10 mm,
+    `first_layer_shrink` hasta 2 mm, `retraction.length` hasta 50 mm, `retraction.lift` hasta 10 mm,
+    `machine.min_layer_height` y `max_layer_height` 0 o desde 0,01 mm, porcentajes finitos;
+  - avisos nuevos: temperaturas de los cambios por altura por encima de las de la impresora, y anchos de línea poco
+    comunes.
+- **Archivos dañinos:** un perfil, proyecto o caso de carga con JSON anidado a gran profundidad tiraba el programa
+  (desborde de pila); un número fuera de rango o un tipo equivocado salía como error interno. Ahora son errores del
+  archivo.
+- **Calibraciones:** las torres y el «usar valor» respetan los rangos de los ajustes (antes se podían guardar valores
+  que después no se abrían), la torre de temperatura no pasa la temperatura máxima de la impresora, y las etiquetas de
+  avance de presión muestran tres decimales cuando hace falta.
+- **Paredes:** el diagrama de Voronoi propio podía dejar un nodo fuera de su bisectriz o fallar donde dos contornos se
+  tocan en una esquina; las paredes se colgaban, se caían o salían en tramos de un micrón. Ahora el motor lo detecta y
+  usa el diagrama de referencia para esa región.
+- **Paredes partidas en las esquinas cóncavas y rectas:** cada pared se cortaba en pedazos abiertos en cada esquina
+  cóncava (un agujero, una muesca, el ruido de una malla) y en cada punto en medio de un lado recto (los que deja el
+  corte de la malla con `slicing.simplify_tolerance` 0). Un lazo abierto no tiene costura: la costura alineada o
+  atrás no se aplicaba y cada pedazo empezaba donde caía. Un cilindro de 128 lados salía con 38 pedazos por capa;
+  ahora cada pared es un lazo cerrado.
+- **Rellenos de Arquímedes y octagrama:** ya no trazan una línea recta desde el centro del espiral hasta la pared.
+- **Análisis estructural:** una pieza sujeta solo en algunos ejes (apoyada en la cama y empujada de costado) se avisa
+  al instante, en vez de horas de cálculo o un resultado sin sentido; una carga que cae sobre la sujeción también se
+  avisa.
+- **Mallas:** las piezas a más de 2000 mm del origen o más altas que 2000 mm se rechazan con un mensaje claro (antes,
+  memoria sin límite o desbordes); el conteo de cortes usa 64 bits; la altura variable ya no queda en un bucle con una
+  altura mínima diminuta; `info` no se cae con piezas planas.
+- **Exportación:** si el G-code no pasa la verificación o falla al escribirse, no queda ningún archivo viejo con el
+  nombre pedido.
+- **Verificador:** acepta las esquinas en punta de la falda y el borde (antes rechazaba el G-code propio de algunas
+  piezas con esquinas agudas).
+- **Interfaz:**
+  - mover la temperatura de la boquilla cambiaba también la de la cama: compartían el identificador;
+  - los cambios por altura de una torre de calibración quedaban en el modelo siguiente y se guardaban;
+  - la respuesta «¿Reemplazar?» pasaba a otro archivo elegido después;
+  - el explorador de archivos rompía una regla de ImGui (cuadro de error, y cierre en las compilaciones de depuración);
+  - agregar del catálogo un perfil con el nombre de uno propio lo reemplazaba sin avisar: ahora toma «(2)»;
+  - unas preferencias ilegibles se perdían enteras y se pisaban al salir: ahora se guardan aparte, y los ajustes y
+    preferencias se escriben aparte y se mueven encima;
+  - un archivo soltado con el explorador abierto cambiaba el modelo bajo la exportación pendiente.
+- **Segunda tanda de la revisión:**
+  - **Z anti-aliasing con «raise»:** con una capa siguiente más fina (la primera capa más gruesa, la altura por
+    zona, los tramos de altura), la capa subía hasta donde la siguiente volvía a imprimir la misma superficie: la
+    boquilla pasaba dentro del cordón fresco y el material salía dos veces. Ahora sube como mucho hasta la mitad de la
+    capa siguiente.
+  - **Una cara con la orientación invertida** hacía desaparecer la pieza entera; ahora la malla se orienta pareja
+    antes de laminar.
+  - **Después del G-code de un cambio por altura** (una pausa que estaciona el cabezal), el motor vuelve a fijar los
+    modos y E, retrae y escribe X, Y, Z y F completos. Antes seguía desde donde creía que estaba, o el verificador
+    rechazaba la exportación.
+  - **Ventilador mínimo:** `M106 S1` es el ventilador al máximo en RepRapFirmware; ahora sale `S2`.
+  - **Líneas sólidas por isla:** se ajustan a cada isla, no a la capa entera (quedaba sin cubrir una franja del borde
+    de las otras islas).
+  - **Proyectos:** una malla nombrada por muchos modelos multiplicaba la memoria; ahora cada malla es de un modelo.
+  - **Mensajes:** una pieza que queda vacía dice si fue `slicing.xy_offset` o una malla con agujeros, y el relleno
+    ondulado ignorado por el patrón avisa.
+  - **Rendimiento con muchas islas** (pedido del equipo de fichas): las costuras alineadas buscan la costura de
+    abajo en una grilla, las uniones del zigzag buscan el borde en una grilla, y las islas se eligen con cajas, con el
+    mismo G-code byte a byte. 196 cilindros: escritura de 19,6 a 8,4 s, laminado de 14,1 a 10,0 s.
+- **El relleno Hilbert desaparecía lejos del origen:** la grilla de la curva cubría 2 m alrededor del origen. Girada
+  por el ángulo del relleno, una pieza en una esquina de una cama de 1 m quedaba afuera y salía sin relleno. Ahora
+  cubre 16 m, y crece si hace falta.
+- **Relleno ondulado sin longitud de onda:** con ajustes armados en código (sin pasar por el JSON), una longitud de
+  onda de 0 marcaba el relleno como ondulado sin onda, con una conversión sin definir en el medio. Ahora queda plano.
+- **Z anti-aliasing sobre la capa gruesa de la altura por zona:** el verificador podía rechazar un cordón válido. El
+  piso sale del tope real de la capa, y tanto ese tope como la Z del movimiento se redondean a 3 decimales; el margen
+  era el de un solo redondeo. Ahora cuenta los dos.
+- **El análisis «como impresa» ignoraba las capas gruesas:** la zona gruesa de la altura por zona y el relleno
+  combinado no se veían. Con altura por zona, el análisis veía el 3 % de los vóxeles impresos en vez del 53 %. Ahora
+  cada capa gruesa llena todas las capas que abarca. La estimación de vóxeles y el modelo macizo usan las capas del
+  laminado, también con altura variable.
+- **Contornos con zigzags de 1 nm:** quedaban en las esquinas tras un desplazamiento XY de una fracción de micrómetro y
+  hacían fallar el diagrama de Voronoi de los perímetros. Ahora se limpian antes. Antes el laminado terminaba sin
+  mensaje; ahora sale bien, y el G-code de las piezas comunes no cambia.
+- **Errores internos en `tisma-engine`:** terminan con el código 7 y un mensaje. Antes cortaban el programa.
+- **Un cambio por altura (`changes`) a menos de 0,0005 mm del tope de una capa:** se aplicaba en esa capa en el
+  verificador y en la siguiente en el escritor, y el G-code se rechazaba. Ahora los dos usan el tope tal como se
+  escribe.
+
+### Arreglado
+
+- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
+  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
+  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
 
 ## [0.7.0-alpha.1] - 2026-10-24
 
@@ -222,6 +445,7 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...HEAD
+[0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
 [0.6.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.6.0-alpha.1

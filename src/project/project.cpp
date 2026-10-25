@@ -98,7 +98,7 @@ std::string write_project(const Project& project) {
     return out;
 }
 
-Project read_project(std::string_view data) {
+static Project read_project_checked(std::string_view data) {
     if (data.size() < kMagic.size() + 4 || data.substr(0, kMagic.size()) != kMagic)
         fail("not a project file");
     const auto version = get_le(data, kMagic.size(), 4);
@@ -132,6 +132,8 @@ Project read_project(std::string_view data) {
     if (!has_json)
         fail("no JSON chunk");
 
+    if (!json_depth_ok(json_text))
+        fail("the JSON chunk is nested more than 64 levels deep");
     ordered_json root;
     try {
         root = ordered_json::parse(json_text.begin(), json_text.end());
@@ -162,6 +164,10 @@ Project read_project(std::string_view data) {
         const ordered_json& models = root.at("models");
         if (!models.is_array())
             fail("models: must be a list");
+        // Each model has its own MESH chunk (write_project): one chunk named
+        // by many models multiplied its memory (300 references to a 20 000
+        // triangle chunk took 200 MB from a 3 kB larger file).
+        std::vector<bool> used(meshes.size(), false);
         for (std::size_t i = 0; i < models.size(); ++i) {
             const ordered_json& m = models[i];
             const std::string what = "models[" + std::to_string(i) + "]";
@@ -170,6 +176,9 @@ Project read_project(std::string_view data) {
             const auto index = m.at("mesh").get<std::size_t>();
             if (index >= meshes.size())
                 fail(what + ".mesh: there is no MESH chunk " + std::to_string(index));
+            if (used[index])
+                fail(what + ".mesh: MESH chunk " + std::to_string(index) + " belongs to another model");
+            used[index] = true;
             ProjectModel model;
             model.name = m.value("name", std::string());
             try {
@@ -203,6 +212,14 @@ Project read_project(std::string_view data) {
         p.calibration = std::move(cal);
     }
     return p;
+}
+
+Project read_project(std::string_view data) {
+    try {
+        return read_project_checked(data);
+    } catch (const nlohmann::json::exception& e) {
+        fail(std::string("not a valid project: ") + e.what());
+    }
 }
 
 void save_project(const std::filesystem::path& path, const Project& project) {

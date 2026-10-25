@@ -10,6 +10,8 @@
 
 namespace tisma {
 
+struct DepthField;
+
 // Parallel lines `spacing` mm apart at `angle_degrees` from the X axis, on a
 // grid fixed to the origin so that the lines of different layers line up,
 // clipped to the region shrunk by width / 2 (the beads stay inside). Each piece
@@ -18,18 +20,19 @@ namespace tisma {
 // other along the boundary, at most kMaxJoin spacings apart along it, are
 // joined by that stretch of boundary into zig-zag polylines: the line ends are
 // anchored and part of the edge band is filled, without entering the walls.
-// With `fit`, the lines are not on the grid: as many as fit across the region
-// (per connected piece of the whole region, measured across its extent), centred,
-// so the outer ones run along the shrunk boundary; for solid surfaces.
+// With `fit`, the lines are not on the grid: as many as fit across each
+// connected piece of the region (measured across its extent), centred, so the
+// outer ones run along its shrunk boundary; for solid surfaces.
 // With `monotonic` (instead of `connect`), the pieces all run the same way and
 // each comes after every piece of the line below that touches it; among those
 // that may come next, the one starting nearest to the last one's end.
 // With `overlap` (mm, for unjoined lines), the lines reach that far past the
-// region shrunk by half a bead, into the walls around it.
+// region shrunk by half a bead, into the walls around it. `shift` (mm) moves
+// the grid across the lines (the cubic infill's planes with the height).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0);
+                                       double overlap = 0.0, double shift = 0.0);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -57,6 +60,8 @@ struct FillParams {
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
+    const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
+    Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
@@ -72,7 +77,18 @@ struct FillParams {
 //    2 width / density apart (the same material), not connected: the lines
 //    cross each other and their ends touch the walls;
 //  - gyroid: the gyroid's section at height z (gyroid_fill), with the period
-//    for the density.
+//    for the density;
+//  - aligned rectilinear: rectilinear, every layer at the angle;
+//  - zigzag: rectilinear;
+//  - triangles, stars and cubic: three families of lines 60 degrees apart;
+//  - adaptive and support cubic: the cubic lines, fewer where `depth` says
+//    the infill lies deep (adaptive_cubic_fill);
+//  - line: rectilinear with every other line turned 6.7 degrees (line_fill);
+//  - honeycomb: hexagons whose principal direction turns 60 degrees a layer
+//    (honeycomb_fill);
+//  - concentric: loops width / density apart (concentric_fill);
+//  - lightning: none here, since each layer's branches come from the layer
+//    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
 
 } // namespace tisma

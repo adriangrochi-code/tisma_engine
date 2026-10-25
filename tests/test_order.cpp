@@ -119,3 +119,76 @@ TEST_CASE("islands: connected pieces of a region, an island in a hole on its own
     CHECK(island_of(islands, {35, 5}) == -1);
     CHECK(island_of(islands, {0, 15}) == frame);    // on the boundary
 }
+
+TEST_CASE("ordering many paths through the grid picks what looking at every path picks", "[order]") {
+    // Short lines with their ends on a 1 mm grid, so that many starts tie, and
+    // a few loops; more than the grid's threshold.
+    std::mt19937 random(11);
+    std::uniform_int_distribution<int> coordinate(0, 40), length(1, 3);
+    std::vector<Toolpath> paths;
+    for (int i = 0; i < 400; ++i) {
+        Toolpath t;
+        const double x = coordinate(random), y = coordinate(random);
+        t.points = {{{x, y}, 0.4}, {{x + length(random), y + (i % 3 == 0 ? 1.0 : 0.0)}, 0.4}};
+        paths.push_back(std::move(t));
+    }
+    for (int i = 0; i < 20; ++i)
+        paths.push_back(square_loop(coordinate(random), coordinate(random), 2.0));
+    // The greedy order, every path looked at each time: the nearest start;
+    // between equals the first path, its front before its back.
+    std::vector<Toolpath> want;
+    {
+        std::vector<Toolpath> left = paths;
+        std::vector<bool> done(left.size(), false);
+        Point2d cursor{-5.0, -5.0};
+        for (std::size_t k = 0; k < left.size(); ++k) {
+            std::size_t best = left.size();
+            bool back = false;
+            double nearest = 1e300;
+            for (std::size_t i = 0; i < left.size(); ++i) {
+                if (done[i])
+                    continue;
+                const auto& pts = left[i].points;
+                // A loop starts at its rear seam: the largest Y, then the smallest X.
+                Point2d start = pts.front().p;
+                if (left[i].closed)
+                    for (const ToolpathPoint& q : pts)
+                        if (q.p.y > start.y || (q.p.y == start.y && q.p.x < start.x))
+                            start = q.p;
+                const double front = std::hypot(cursor.x - start.x, cursor.y - start.y);
+                if (front < nearest)
+                    nearest = front, best = i, back = false;
+                if (!left[i].closed) {
+                    const double end = std::hypot(cursor.x - pts.back().p.x, cursor.y - pts.back().p.y);
+                    if (end < nearest)
+                        nearest = end, best = i, back = true;
+                }
+            }
+            done[best] = true;
+            Toolpath t = left[best];
+            if (back)
+                std::reverse(t.points.begin(), t.points.end());
+            if (t.closed) {
+                cursor = t.points.front().p;
+                for (const ToolpathPoint& q : t.points)
+                    if (q.p.y > cursor.y || (q.p.y == cursor.y && q.p.x < cursor.x))
+                        cursor = q.p;
+            } else {
+                cursor = t.points.back().p;
+            }
+            want.push_back(std::move(t));
+        }
+    }
+    Point2d cursor{-5.0, -5.0};
+    SeamMemory memory;
+    const std::vector<Toolpath> got = order_paths(paths, cursor, SeamMode::Rear, 1, memory);
+    REQUIRE(got.size() == want.size());
+    int differ = 0;
+    for (std::size_t k = 0; k < got.size(); ++k)
+        if (!want[k].closed)
+            differ += got[k].points.front().p.x != want[k].points.front().p.x ||
+                      got[k].points.front().p.y != want[k].points.front().p.y ||
+                      got[k].points.back().p.x != want[k].points.back().p.x ||
+                      got[k].points.back().p.y != want[k].points.back().p.y;
+    CHECK(differ == 0);
+}

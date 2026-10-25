@@ -3,6 +3,8 @@
 
 #include "gcode/check.hpp"
 
+#include "infill/nonplanar.hpp"
+
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "slice/pipeline.hpp"
@@ -129,6 +131,10 @@ private:
                 flow_ = limits_.changes[next_change_].flow;
                 ++next_change_;
             }
+        } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
+            nonplanar_ = c == "NONPLANAR:1";
+            if (nonplanar_ && !(limits_.wave > 0.0))
+                problem("a nonplanar block, but the settings ask for no wavy infill");
         } else if (const std::optional<double> h = value("HEIGHT:")) {
             if (*h <= 0.0)
                 problem("layer height " + text(*h) + " is not positive");
@@ -238,16 +244,33 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("extrudes while the filament is retracted");
-            if (layer_z_ && known_[2] && std::abs(position_[2] - *layer_z_) > kPositionSlack)
-                problem("extrudes at Z" + text(position_[2]) + ", not at the layer's Z" + text(*layer_z_));
+            const bool at_layer = layer_z_ && known_[2];
+            if (at_layer) {
+                const double h = height_.value_or(0.0);
+                // Off the layer's Z (Z anti-aliasing) the bound comes from the
+                // layer's true top, and both it and the move's Z are rounded.
+                const bool zaa = limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0;
+                const double slack = zaa ? 2.0 * kPositionSlack : kPositionSlack;
+                const double low = *layer_z_ - (nonplanar_ ? limits_.wave : limits_.zaa_below * h) - slack;
+                const double high = *layer_z_ + (nonplanar_ ? limits_.wave : limits_.zaa_above * h) + slack;
+                for (const double z : {position_[2], to[2]})
+                    if (z < low || z > high) {
+                        problem("extrudes at Z" + text(z) + ", not at the layer's Z" + text(*layer_z_));
+                        break;
+                    }
+            }
             if (!width_ || !height_) {
                 problem("extrudes before any ;WIDTH and ;HEIGHT");
             } else if (known_[0] && known_[1]) {
-                const double per_mm = *width_ * *height_ / limits_.filament_area * flow_;
+                // Off the layer's Z (Z anti-aliasing), the bead is what is left down to its bottom.
+                // In a nonplanar block, ;HEIGHT is the bead's own thickness.
+                const double thickness =
+                    *height_ + (at_layer && !nonplanar_ ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
+                const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + 2e-5)
                     problem("extrudes " + text(de) + " mm of filament over " + text(length) + " mm, where width " +
-                            text(*width_) + " and height " + text(*height_) + " ask for " + text(expected));
+                            text(*width_) + " and height " + text(thickness) + " ask for " + text(expected));
             }
         } else if (moves && de < -1e-9) {
             problem("pulls the filament back during a move");
@@ -278,6 +301,7 @@ private:
     GcodeCheck out_;
     std::size_t line_ = 0;
     bool custom_ = false;
+    bool nonplanar_ = false; // in a ;NONPLANAR block
     bool absolute_ = true;
     bool relative_e_ = false;
     double position_[4] = {0.0, 0.0, 0.0, 0.0};
@@ -301,8 +325,10 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
             }
     // Around the part: the brim, the skirt beyond it, and slack for half a bead
     // and the travels that go round the outside.
+    // The brim and skirt are mitred offsets (offset(), miter limit 2): at a
+    // sharp corner they reach out up to twice their distance.
     const double skirt = s.skirt_loops > 0 ? s.skirt_distance + s.skirt_loops * s.wall_width : 0.0;
-    const double margin = s.brim_width + skirt + 2.0 * s.wall_width + 1.0;
+    const double margin = 2.0 * (s.brim_width + skirt) + 2.0 * s.wall_width + 1.0;
     limits.min_x = lo[0] - margin, limits.max_x = hi[0] + margin;
     limits.min_y = lo[1] - margin, limits.max_y = hi[1] + margin;
     if (!s.bed.empty()) { // and never off the bed
@@ -316,12 +342,43 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     }
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + s.retract_lift;
+    if (s.zaa) {
+        limits.zaa_below = 1.0 - s.zaa_min_thickness / 100.0;
+        limits.zaa_above = s.zaa_raise ? 0.5 : 0.0;
+        // Raised beads, and the travels over them, go up to half a layer higher.
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        for (const ThickLayer& t : model.thick)
+            thickest = std::max(thickest, t.height);
+        limits.max_z += limits.zaa_above * thickest;
+    }
+    if (const std::optional<WaveParams> waves = wave_params(s)) {
+        // The crests, and the travels over them, go up to half the amplitude higher.
+        limits.wave = 0.5 * waves->amplitude;
+        limits.max_z += limits.wave;
+    }
     double speed_factor = 1.0, retract_speed = s.retract_speed;
     for (const HeightChange& c : s.changes) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);
         retract_speed = std::max(retract_speed, c.retract_speed.value_or(0.0));
     }
     limits.max_feed = std::max({s.travel_speed, s.max_speed * speed_factor, retract_speed});
+    // A forced flow (a flow tower) runs its lines as fast as that flow needs
+    // on the narrowest bead and thinnest layer, up to what the machine moves.
+    double forced = 0.0, min_flow = s.flow / 100.0;
+    for (const HeightChange& c : s.changes) {
+        forced = std::max(forced, c.volumetric_flow.value_or(0.0));
+        min_flow = std::min(min_flow, c.flow.value_or(s.flow) / 100.0);
+    }
+    if (forced > 0.0) {
+        double height = s.layer_height;
+        for (const Layer& layer : model.layers)
+            height = std::min(height, layer.top - layer.bottom);
+        const double narrow = 0.25 * s.wall_width;
+        limits.max_feed = std::max(limits.max_feed, std::min(std::max(s.max_feed_x, s.max_feed_y),
+                                                             forced / std::max(narrow * height * min_flow, 1e-9)));
+    }
     const double r = s.filament_diameter / 2.0;
     limits.filament_area = std::numbers::pi * r * r;
     limits.retract_length = s.retract_length;

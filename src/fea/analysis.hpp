@@ -17,6 +17,8 @@
 
 namespace tisma {
 
+struct StressField; // infill/stress_density.hpp
+
 struct IndexedMesh;
 struct Settings;
 namespace gpu {
@@ -143,9 +145,11 @@ Box resolve_region(const Region& region, const VoxelGrid& grid);
 // the whole analysis is done, from 0 to 1.
 using AnalysisProgress = std::function<void(std::string_view stage, double done)>;
 
-// Slices (as printed) and voxelizes the part, solves, and summarizes.
+// Slices (as printed) and voxelizes the part, solves, and summarizes. With
+// infill_stress, the slicing's stress-guided infill (docs/INFILL.md).
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu = nullptr, const AnalysisProgress& progress = {});
+                            gpu::Context* gpu = nullptr, const AnalysisProgress& progress = {},
+                            const StressField* infill_stress = nullptr);
 
 // What an analysis would take, without solving: the voxels (slicing as
 // printed to find the gaps), and the memory and time they need.

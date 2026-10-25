@@ -14,15 +14,16 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
-    "                            pressure_advance|speed|fit|extruder]\n"
+    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
-    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
+    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check]]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -66,8 +67,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--view") {
             options.view = value();
             if (options.view != "prepare" && options.view != "preview" && options.view != "analysis" &&
-                options.view != "calibration") {
-                std::fprintf(stderr, "error: --view must be prepare, preview, analysis or calibration\n");
+                options.view != "calibration" && options.view != "device") {
+                std::fprintf(stderr, "error: --view must be prepare, preview, analysis, calibration or device\n");
                 return 2;
             }
         } else if (arg == "--layer") {
@@ -114,10 +115,30 @@ int main(int argc, char** argv) {
                 return 2;
             }
             options.fxaa = on == "on" ? 1 : 0;
+        } else if (arg == "--moire") {
+            const std::string_view on = value();
+            if (on != "on" && on != "off") {
+                std::fprintf(stderr, "error: --moire must be on or off\n");
+                return 2;
+            }
+            options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
         } else if (arg == "--ray-check") {
             options.ray_check = true;
+        } else if (arg == "--moire-check") {
+            options.moire_check = true;
+        } else if (arg == "--color") {
+            const std::string_view c = value();
+            options.color = c == "kind" ? 0 : c == "speed" ? 1 : c == "width" ? 2 : c == "height" ? 3 : -2;
+            if (options.color == -2) {
+                std::fprintf(stderr, "error: --color must be kind, speed, width or height\n");
+                return 2;
+            }
+        } else if (arg == "--device") {
+            options.device = value();
+        } else if (arg == "--device-print") {
+            options.device_print = true;
         } else if (arg == "--calibration") {
             options.calibration = value();
             const std::string& c = options.calibration;
@@ -143,9 +164,14 @@ int main(int argc, char** argv) {
             options.files.emplace_back(arg);
         }
     }
-    if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check) &&
+    if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check ||
+         options.moire_check) &&
         options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export, --save-project, --browse and --ray-check go with --screenshot\n");
+        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check and --moire-check go with --screenshot\n");
+        return 2;
+    }
+    if (options.device_print && (options.device.empty() || options.screenshot.empty())) {
+        std::fprintf(stderr, "error: --device-print goes with --device and --screenshot\n");
         return 2;
     }
     if (options.ray_check)

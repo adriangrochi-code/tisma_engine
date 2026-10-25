@@ -42,6 +42,7 @@ private:
     std::string folder_text_;
     bool show_all_ = false;
     bool open_ = false, pending_open_ = false, confirm_replace_ = false;
+    std::filesystem::path replace_for_; // the file the "Replace?" question is about
     int selected_ = -1;
 };
 

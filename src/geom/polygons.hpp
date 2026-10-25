@@ -59,4 +59,10 @@ std::vector<Polygons> layer_regions(const std::vector<std::vector<Contour>>& lay
 // Enclosed area in mm2: counter-clockwise polygons count positive, holes negative.
 double area_mm2(const Polygons& region);
 
+// The region of the set cells of a grid of nx by ny cells, hx by hy mm from
+// (x0, y0), row by row (cell (i, j) is mask[j * nx + i]): each row's runs of
+// set cells as rectangles, joined, and closed over by half a cell so that
+// diagonal neighbours join.
+Polygons cell_region(const std::vector<char>& mask, int nx, int ny, double x0, double y0, double hx, double hy);
+
 } // namespace tisma

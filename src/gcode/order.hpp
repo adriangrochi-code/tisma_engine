@@ -17,6 +17,20 @@ struct SeamMemory {
     std::map<int, std::vector<Point2d>> below;
     std::map<int, std::vector<Point2d>> current;
     void next_layer();
+
+    // The distance from p to the nearest seam below of this wall index (the
+    // same value as looking at every one), through a grid built on first use:
+    // hundreds of islands made every corner of every loop look at every seam.
+    // Infinity if there is none.
+    double nearest_below(int index, const Point2d& p) const;
+
+private:
+    struct Grid {
+        double x0 = 0.0, y0 = 0.0, cell = 1.0;
+        long nx = 0, ny = 0;
+        std::vector<std::vector<std::uint32_t>> cells;
+    };
+    mutable std::map<int, Grid> grids_;
 };
 
 // The seam of a closed loop (docs/spec/BEHAVIOR.md, "Costura"): the index of

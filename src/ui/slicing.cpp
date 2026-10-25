@@ -83,7 +83,7 @@ Settings default_settings() {
 Slicer::Slicer() = default;
 Slicer::~Slicer() = default;
 
-SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings) {
+SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load) {
     SliceResult out;
     out.settings = settings;
     try {
@@ -101,8 +101,20 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings) {
             }
             gpu = gpu_.get();
         }
+        // Stress-guided infill: the part analysed under the load case first.
+        StressField stress;
+        if (settings.infill_stress_density > 0.0 && load) {
+            try {
+                stress = infill_stress_field(welded, settings, *load, gpu);
+            } catch (const std::exception& e) {
+                out.warnings.push_back({"stress_infill", -1, 0.0,
+                                        std::string("the analysis for stress-guided infill failed (") + e.what() +
+                                            "): the infill stays even",
+                                        0.0});
+            }
+        }
         try {
-            out.model = slice_model(welded, settings, gpu);
+            out.model = slice_model(welded, settings, gpu, &stress);
             if (gpu)
                 out.gpu = gpu->device_name();
         } catch (const std::runtime_error& e) {
@@ -111,7 +123,7 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings) {
             out.warnings.push_back(
                 {"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
             gpu_.reset(); // do not try a failing device again
-            out.model = slice_model(welded, settings, nullptr);
+            out.model = slice_model(welded, settings, nullptr, &stress);
         }
         if (std::string reason = unprintable_reason(out.model, settings); !reason.empty()) {
             out.error = std::move(reason);

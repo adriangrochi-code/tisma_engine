@@ -54,6 +54,9 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 | **Avance de presión** | Tubo cuadrado de 36 mm con paredes de 1,6 mm y esquinas vivas, con una ranura entre segmentos de 5 mm. Cada segmento escribe el comando del dialecto (ver abajo) | Esquinas abultadas: poco avance. Finas o con huecos al empezar las líneas: mucho | `extrusion.pressure_advance` |
 | **Tolerancias de encastre** | Siete bloques de 14 × 16 × 5 mm en fila, cada uno con un perno de 8 mm impreso adentro de su agujero, con 0,1, 0,15, 0,2, 0,25, 0,3, 0,4 y 0,5 mm de juego en el radio | El de menos juego cuyo perno sale o gira | Nada: es el juego que hay que dejar en los diseños que encastran. La interfaz lo dice al elegirlo |
 | **Pasos del extrusor** | Sin pieza: un G-code que calienta y extruye 100 mm a 1 mm/s, con una marca en el filamento 120 mm arriba de la entrada | Cuánto quedó hasta la marca | El valor del firmware: `M92 E` (y `M500`) en Marlin, `M92 E` en `config.g` de RepRapFirmware, `rotation_distance` en `printer.cfg` de Klipper. La interfaz calcula el nuevo y lo deja para copiar |
+| **Tope de flujo volumétrico** | El tubo cuadrado del avance de presión, segmentos de 5 mm; en cada segmento todas las líneas corren al flujo del segmento (`changes[].volumetric_flow`), por encima del tope de velocidad y sin el frenado del tiempo mínimo de capa, hasta lo que la máquina se mueve | El último segmento con paredes llenas y parejas: desde el siguiente, el fusor no funde a tiempo | `machine.max_flow`: el motor no pasa de ahí |
+| **Resonancias (aceleración)** | El mismo tubo, cada segmento con su aceleración escrita en el comando del dialecto (`changes[].acceleration`: `M204 P… T…`, o `SET_VELOCITY_LIMIT ACCEL=…` en Klipper) | Las ondas en las paredes justo después de cada esquina: el último segmento sin ondas | `machine.acceleration` (y `travel_acceleration`, si quedaba más baja) |
+| **Pata de elefante** | Bloque de 20 × 20 × 6 mm | El ancho del borde de abajo (la primera capa) y el del cuerpo, con calibre, del mismo lado | `slicing.first_layer_shrink`: el actual más la mitad del exceso (`elephant_foot_from`) |
 
 Cada segmento de una torre lleva su valor escrito en relieve en la cara del frente (−Y), con una tipografía propia
 de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza impresa se lee sin la pantalla.
@@ -68,6 +71,8 @@ de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza
 | Velocidad máxima | De 100 a 300 % de las velocidades actuales, de a 25 | Desde lo que ya imprime bien hasta el triple |
 | Velocidad de retracción | De 20 a 60 mm/s, de a 5 | El rango habitual de directos y Bowden |
 | Avance de presión | Extrusor directo (retracción de 1,5 mm o menos): de 0 a 0,08, de a 0,01. Bowden: de 0 a 0,8, de a 0,1 | Un tubo Bowden necesita unas diez veces más |
+| Tope de flujo volumétrico | Si `machine.max_flow` se conoce (del catálogo o de una torre anterior): de la mitad a una vez y media, en unos diez pasos. Si no: de 4 a 30 mm³/s de a 2 | El rango de los fusores comunes, o alrededor del tope que ya se sabe |
+| Resonancias (aceleración) | De 500 mm/s² hasta el doble de la aceleración en uso (al menos 5000), en unos diez pasos de 500 o más | Desde lo que cualquier máquina aguanta hasta el doble de lo que se usa |
 
 **Al usar un valor** (`apply_calibration`):
 - la temperatura va a la variable `temperature` (la que usa el G-code de inicio);
@@ -125,10 +130,7 @@ se escribe nada y vale lo que tenga la impresora.
 
 | Prueba | Pieza o G-code | Qué ajusta |
 |---|---|---|
-| Resonancias (input shaping) | Torre con aristas y aceleración creciente por segmento (`M204`, o `SET_VELOCITY_LIMIT` en Klipper) | Aceleraciones y, en Klipper, la frecuencia del filtro. Falta que el motor escriba la aceleración (hoy `machine.acceleration` solo sirve para estimar el tiempo) |
 | Puentes y voladizos | Puentes de 10 a 50 mm y voladizos de 20° a 70° | El ángulo de los soportes; la velocidad y el ventilador de puentes cuando existan esos ajustes |
-| Tope de flujo volumétrico | La torre de velocidad ya muestra los mm³/s de cada segmento | Un ajuste nuevo que limite cada extrusión a ese flujo |
-| Pata de elefante | Medir la base del bloque de dimensiones | `slicing.first_layer_shrink` |
 
 ### Nuevas (propias de este motor)
 

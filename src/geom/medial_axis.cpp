@@ -80,11 +80,31 @@ constexpr std::size_t kMaxPieces = 100000;
 // The region's contours as segments, each knowing its neighbours along the
 // contour. Collinear points and spikes make degenerate cells (a corner on its
 // neighbour segment's line, where the parabola has no width): they go.
+// The contour without corners closer than kSpeck to the last one kept: an
+// offset by a hair (a fraction of a micrometre) leaves zig-zags of 1 nm edges
+// at its corners, which neither Voronoi diagram takes (fuzz, 2026-10-25), and
+// which no bead could follow anyway.
+constexpr std::int64_t kSpeck = 10; // nm
+
+Polygon without_specks(const Polygon& path) {
+    Polygon out;
+    out.reserve(path.size());
+    const auto near = [](const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return std::llabs(a.x - b.x) <= kSpeck && std::llabs(a.y - b.y) <= kSpeck;
+    };
+    for (const auto& p : path)
+        if (out.empty() || !near(p, out.back()))
+            out.push_back(p);
+    while (out.size() > 1 && near(out.back(), out.front()))
+        out.pop_back();
+    return out;
+}
+
 std::vector<Segment> contour_segments(const Polygons& region) {
     constexpr std::int64_t kLimit = std::numeric_limits<std::int32_t>::max();
     std::vector<Segment> segments;
     for (const Polygon& raw : region) {
-        const Polygon path = Clipper2Lib::TrimCollinear(raw, false);
+        const Polygon path = Clipper2Lib::TrimCollinear(without_specks(raw), false);
         if (path.size() < 3)
             continue;
         const std::uint32_t first = static_cast<std::uint32_t>(segments.size());
@@ -119,6 +139,11 @@ struct Cell {
 class Pieces {
 public:
     explicit Pieces(const std::vector<Segment>& segments) : segments_(segments) {}
+
+    // Set when a parabolic edge ends off its parabola: the diagram placed a
+    // node that is not equidistant from its sites. medial_axis then takes the
+    // reference diagram for the whole region.
+    mutable bool off_bisector = false;
 
     // The edge from a to b between the cells c0 and c1 (in units).
     template <typename Emit>
@@ -253,6 +278,14 @@ private:
             return Point2d{sx + u * ux + v * nx, sy + u * uy + v * ny};
         };
         const double u0 = along(a), u1 = along(b);
+        // Both ends must be on the parabola, or the refinement below never
+        // ends (the first and last chords do not shrink): 1 um of slack.
+        constexpr double kOnParabola = 1000.0; // units
+        const Point2d pa = at(u0), pb = at(u1);
+        if (std::hypot(pa.x - a.x, pa.y - a.y) > kOnParabola || std::hypot(pb.x - b.x, pb.y - b.y) > kOnParabola) {
+            off_bisector = true;
+            return {a, b};
+        }
         // Arc length is at least |u1 - u0|; refine until every chord is short enough.
         const double max_piece = kMaxCurvedPiece * kUnitsPerMm;
         std::size_t pieces = std::max<std::size_t>(1, std::size_t(std::ceil(std::fabs(u1 - u0) / max_piece)));
@@ -319,9 +352,9 @@ void shuffle(std::vector<std::uint32_t>& order) {
 // The pieces from the own Voronoi diagram (src/geom/voronoi.*): corners first,
 // then segments, each in a random order (Held and Huber 2009, 2.1).
 template <typename Emit>
-void own_pieces(const std::vector<Segment>& segments, Emit&& emit) {
+bool own_pieces(const std::vector<Segment>& segments, Emit&& emit) {
     if (segments.empty())
-        return;
+        return true;
     double min_x = 1e300, min_y = 1e300, max_x = -1e300, max_y = -1e300;
     for (const Segment& s : segments) {
         min_x = std::min(min_x, double(s.p.x)), max_x = std::max(max_x, double(s.p.x));
@@ -412,6 +445,7 @@ void own_pieces(const std::vector<Segment>& segments, Emit&& emit) {
         pieces.edge({na.x, na.y}, {nb.x, nb.y}, cell_of_site[std::size_t(l)], cell_of_site[std::size_t(r)],
                     lseg != rseg, emit);
     }
+    return !pieces.off_bisector;
 }
 
 std::vector<MedialEdge> to_millimetres(std::vector<MedialEdge> out) {
@@ -432,8 +466,19 @@ std::vector<MedialEdge> to_millimetres(std::vector<MedialEdge> out) {
 } // namespace
 
 std::vector<MedialEdge> medial_axis(const Polygons& region) {
+    const std::vector<Segment> segments = contour_segments(region);
     std::vector<MedialEdge> out;
-    own_pieces(contour_segments(region), [&](const MedialEdge& m) { out.push_back(m); });
+    bool good = false;
+    try {
+        good = own_pieces(segments, [&](const MedialEdge& m) { out.push_back(m); });
+    } catch (const std::logic_error&) {
+        // A region the own diagram cannot build (contours touching at corners
+        // around a pocket, the review of 2026-10-25): the reference does.
+    }
+    if (!good) {
+        out.clear();
+        boost_pieces(segments, [&](const MedialEdge& m) { out.push_back(m); });
+    }
     return to_millimetres(std::move(out));
 }
 
@@ -493,30 +538,47 @@ void filter_marking(MedialGraph& g, double max_length) {
         const Point2d& b = g.nodes[g.edges[e].b].p;
         return std::hypot(b.x - a.x, b.y - a.y);
     };
-    // Depth-first walk up along non-central edges, bounded by max_length.
+    // Depth-first walk up along non-central edges, bounded by max_length,
+    // with its own stack: a long chain of short edges would overflow the
+    // call stack (the review of 2026-10-25).
     std::vector<std::uint32_t> path;
     std::vector<std::uint32_t> to_mark;
-    auto walk = [&](auto&& self, std::uint32_t node, double travelled) -> void {
-        for (std::uint32_t e : incident[node]) {
+    struct Frame {
+        std::uint32_t node;
+        double travelled;
+        std::size_t next_edge; // index into incident[node]
+    };
+    std::vector<Frame> stack;
+    for (std::uint32_t n = 0; n < g.nodes.size(); ++n) {
+        if (!g.nodes[n].central)
+            continue;
+        stack.push_back({n, 0.0, 0});
+        while (!stack.empty()) {
+            Frame& f = stack.back();
+            if (f.next_edge == incident[f.node].size()) {
+                stack.pop_back();
+                if (!path.empty())
+                    path.pop_back();
+                continue;
+            }
+            const std::uint32_t e = incident[f.node][f.next_edge++];
             if (g.edges[e].central)
                 continue;
-            const std::uint32_t next = other(e, node);
-            if (g.nodes[next].radius <= g.nodes[node].radius)
+            const std::uint32_t next = other(e, f.node);
+            if (g.nodes[next].radius <= g.nodes[f.node].radius)
                 continue; // only upward
-            const double total = travelled + length(e);
+            const double total = f.travelled + length(e);
             if (total > max_length)
                 continue;
             path.push_back(e);
-            if (g.nodes[next].central)
+            if (g.nodes[next].central) {
                 to_mark.insert(to_mark.end(), path.begin(), path.end());
-            else
-                self(self, next, total);
-            path.pop_back();
+                path.pop_back();
+            } else {
+                stack.push_back({next, total, 0}); // f is not used after this
+            }
         }
-    };
-    for (std::uint32_t n = 0; n < g.nodes.size(); ++n)
-        if (g.nodes[n].central)
-            walk(walk, n, 0.0);
+    }
     for (std::uint32_t e : to_mark) {
         g.edges[e].central = true;
         g.nodes[g.edges[e].a].central = g.nodes[g.edges[e].b].central = true;
