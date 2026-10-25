@@ -51,6 +51,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Cúbico de soporte** (regla 8): `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno
   no sostiene: cubos chicos bajo los techos y grandes sobre los pisos. En un cubo de 100 mm al 20 %, un 30 % menos de
   material y un 14 % menos de tiempo que el cúbico.
+- **Estrellas, rectilíneo alineado y zigzag** (ficha `infill_patterns.md`, reglas 5, 1 y 2): `stars` (el patrón por
+  defecto de Tisma Slicer), `aligned_rectilinear` y `zigzag` en `infill.pattern` y en la interfaz.
 - **Rayo** (regla 9): `lightning`, solo ramas que nacen en las paredes y llegan bajo cada techo, retirándose hacia las
   paredes más abajo. Para piezas que solo se miran: en un cubo de 100 mm al 20 %, un 64 % menos de material y la
   mitad del tiempo que el cúbico. En Impresión, **Rayo** en el patrón de relleno.

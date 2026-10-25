@@ -77,7 +77,9 @@ struct FillParams {
 //    cross each other and their ends touch the walls;
 //  - gyroid: the gyroid's section at height z (gyroid_fill), with the period
 //    for the density;
-//  - triangles and cubic: three families of lines 60 degrees apart;
+//  - aligned rectilinear: rectilinear, every layer at the angle;
+//  - zigzag: rectilinear;
+//  - triangles, stars and cubic: three families of lines 60 degrees apart;
 //  - adaptive and support cubic: the cubic lines, fewer where `depth` says
 //    the infill lies deep (adaptive_cubic_fill);
 //  - lightning: none here, since each layer's branches come from the layer

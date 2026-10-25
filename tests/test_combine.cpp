@@ -339,3 +339,72 @@ TEST_CASE("stress-guided infill: denser where the part works hardest", "[combine
     write_gcode(g, guided, s);
     CHECK(check_gcode(g.str(), gcode_limits(guided, s)).ok());
 }
+
+TEST_CASE("infill patterns: aligned rectilinear and zigzag (P1, P2)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    const LayerSurfaces region = square_sparse(20.0);
+    // Zigzag is rectilinear.
+    p.pattern = InfillPattern::Rectilinear;
+    const std::vector<Toolpath> plain = fill_layer(region, 5, p, 1.0).sparse;
+    p.pattern = InfillPattern::Zigzag;
+    const std::vector<Toolpath> zigzag = fill_layer(region, 5, p, 1.0).sparse;
+    REQUIRE(zigzag.size() == plain.size());
+    for (std::size_t i = 0; i < plain.size(); ++i) {
+        REQUIRE(zigzag[i].points.size() == plain[i].points.size());
+        for (std::size_t k = 0; k < plain[i].points.size(); ++k) {
+            CHECK(zigzag[i].points[k].p.x == plain[i].points[k].p.x);
+            CHECK(zigzag[i].points[k].p.y == plain[i].points[k].p.y);
+        }
+    }
+    // Aligned: every layer mostly at the angle, odd ones too.
+    p.pattern = InfillPattern::AlignedRectilinear;
+    for (const std::size_t layer : {std::size_t(5), std::size_t(6)}) {
+        const std::vector<Toolpath> lines = fill_layer(region, layer, p, 0.2 * double(layer)).sparse;
+        const std::map<int, double> d = by_direction(lines);
+        CHECK(d.count(45) == 1);
+        CHECK((d.count(45) ? d.at(45) : 0.0) > 0.75 * total(lines));
+    }
+}
+
+TEST_CASE("infill patterns: stars, the triangles' lines with one family half a spacing over (P4)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    const LayerSurfaces region = square_sparse(20.0);
+    p.pattern = InfillPattern::Stars;
+    const std::vector<Toolpath> stars = fill_layer(region, 5, p, 1.0).sparse;
+    const std::map<int, double> d = by_direction(stars);
+    const double all = total(stars);
+    for (const int a : {45, 105, 165})
+        CHECK_THAT(d.count(a) ? d.at(a) / all : 0.0, WithinAbs(1.0 / 3.0, 0.06));
+    // The family at 105 degrees lies half a spacing from the triangles'; the
+    // others are the triangles'.
+    const double spacing = 3.0 * 0.4 / 0.2;
+    const auto offsets = [&](const std::vector<Toolpath>& lines, int angle) {
+        std::vector<double> out;
+        const double a = angle * std::numbers::pi / 180.0;
+        for (const Toolpath& t : lines) {
+            const auto& s = t.points.front().p;
+            const auto& e = t.points.back().p;
+            const double dir = std::fmod(std::atan2(e.y - s.y, e.x - s.x) * 180.0 / std::numbers::pi + 360.0, 180.0);
+            if (std::abs(dir - angle) < 0.5)
+                out.push_back(std::fmod(-std::sin(a) * s.x + std::cos(a) * s.y + 100.0 * spacing, spacing));
+        }
+        return out;
+    };
+    p.pattern = InfillPattern::Triangles;
+    const std::vector<Toolpath> triangles = fill_layer(region, 5, p, 1.0).sparse;
+    for (const int angle : {45, 105, 165}) {
+        const std::vector<double> ts = offsets(triangles, angle), ss = offsets(stars, angle);
+        REQUIRE(!ts.empty());
+        REQUIRE(!ss.empty());
+        const double want = angle == 105 ? 0.5 * spacing : 0.0;
+        double gap = std::fmod(ss.front() - ts.front() + 2.0 * spacing, spacing);
+        gap = std::min(gap, spacing - gap);
+        CHECK_THAT(gap, WithinAbs(want, 1e-3));
+    }
+}

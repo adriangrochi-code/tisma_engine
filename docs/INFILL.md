@@ -96,6 +96,9 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
 |---|---|
 | `triangles` | Tres familias de líneas a `angle`, +60° y +120°, cada una con un tercio del material (separación `3 · ancho / densidad`), iguales en todas las capas: forman triángulos |
 | `cubic` | Las mismas tres familias, pero cada una corrida `z / √2` en su normal con la altura: son las caras de cubos apoyados sobre un vértice |
+| `stars` | Las tres familias de los triángulos, con la segunda corrida media separación: nunca se cruzan las tres en un punto y forman estrellas de seis puntas (regla 5). Es el patrón por defecto de Tisma Slicer |
+| `aligned_rectilinear` | El rectilíneo con todas las capas a `angle`, sin girar 90° (regla 1) |
+| `zigzag` | El rectilíneo: en Tisma Slicer dan exactamente lo mismo (regla 2) |
 
 **Por qué el cúbico:**
 - es una estructura 3D: rígida en X, Y y Z, como el giroide;

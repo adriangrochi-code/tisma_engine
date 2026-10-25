@@ -180,7 +180,12 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         return out;
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
+    case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)
         out.sparse = rectilinear_fill(surfaces.sparse, params.width / params.density, angle, params.width, true);
+        break;
+    case InfillPattern::AlignedRectilinear: // every layer at the infill angle (rule 1)
+        out.sparse =
+            rectilinear_fill(surfaces.sparse, params.width / params.density, params.angle, params.width, true);
         break;
     case InfillPattern::Grid: {
         const double spacing = 2.0 * params.width / params.density;
@@ -193,18 +198,22 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
         break;
     case InfillPattern::Triangles:
+    case InfillPattern::Stars:
     case InfillPattern::Cubic: {
         // Three families of lines 60 degrees apart, each a third of the
         // material. Triangles: the same in every layer, crossing at common
-        // points. Cubic: the faces of cubes standing on a vertex, so each family
-        // moves across its lines by z / sqrt(2) with the height (infill_patterns.md,
-        // rules 4 and 6).
+        // points. Stars: the second family half a spacing over, so the three
+        // never meet at one point and draw six-pointed stars. Cubic: the faces
+        // of cubes standing on a vertex, so each family moves across its lines
+        // by z / sqrt(2) with the height (infill_patterns.md, rules 4 to 6).
         const double spacing = 3.0 * params.width / params.density;
         const double shift = params.pattern == InfillPattern::Cubic ? -z / std::numbers::sqrt2 : 0.0;
-        for (int k = 0; k < 3; ++k)
+        for (int k = 0; k < 3; ++k) {
+            const double over = params.pattern == InfillPattern::Stars && k == 1 ? 0.5 * spacing : 0.0;
             for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, params.width, false,
-                                                false, false, 0.0, std::fmod(shift, spacing)))
+                                                false, false, 0.0, std::fmod(shift, spacing) + over))
                 out.sparse.push_back(std::move(t));
+        }
         break;
     }
     case InfillPattern::AdaptiveCubic:

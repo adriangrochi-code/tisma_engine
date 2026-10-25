@@ -3469,3 +3469,17 @@ imprime cerca del fondo en P7, y un índice espacial para techos grandes (0,53 s
 **Sigue:** los otros patrones de la ficha (`stars`, `honeycomb`, `concentric`…) o el medidor de rigidez sobre el
 laminado real, mientras las fichas del PR #15 no estén en `main`.
 
+## 2026-10-25 — bloque nocturno: estrellas, rectilíneo alineado y zigzag
+
+**Hecho:** tres patrones más de la ficha `infill_patterns.md` (`docs/INFILL.md`):
+- `stars` (regla 5): las tres familias de los triángulos con la segunda corrida media separación;
+- `aligned_rectilinear` (regla 1): el rectilíneo con todas las capas a `θ`;
+- `zigzag` (regla 2): igual al rectilíneo.
+
+Los nombres de los patrones pasan a una sola tabla en `settings.cpp`, para leer y escribir.
+
+**Pruebas:** zigzag igual al rectilíneo punto por punto (P1); el alineado a 45° en capas pares e impares (P2); las
+estrellas con las tres direcciones de P4 y la segunda familia a media separación de la de los triángulos.
+
+**Sigue:** el resto de la ficha (línea, panal, curvas, concéntrico, patrones de superficies, capa sólida cada N).
+

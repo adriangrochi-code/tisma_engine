@@ -92,6 +92,9 @@
     X(AdaptiveCubic, "Cúbico adaptativo", "Adaptive cubic")                                                           \
     X(SupportCubic, "Cúbico de soporte", "Support cubic")                                                             \
     X(Lightning, "Rayo", "Lightning")                                                                                 \
+    X(Stars, "Estrellas", "Stars")                                                                                    \
+    X(AlignedRectilinear, "Rectilíneo alineado", "Aligned rectilinear")                                               \
+    X(Zigzag, "Zigzag", "Zigzag")                                                                                     \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \

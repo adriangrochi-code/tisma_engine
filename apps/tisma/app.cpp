@@ -1842,9 +1842,12 @@ void App::settings_panel() {
         changed |= row(T::InfillDensity, s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         changed |= row(T::InfillPattern, s.infill_pattern,
                        {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
+                        {InfillPattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                        {InfillPattern::Zigzag, tr(T::Zigzag)},
                         {InfillPattern::Grid, tr(T::Grid)},
                         {InfillPattern::Gyroid, tr(T::Gyroid)},
                         {InfillPattern::Triangles, tr(T::TrianglesInfill)},
+                        {InfillPattern::Stars, tr(T::Stars)},
                         {InfillPattern::Cubic, tr(T::Cubic)},
                         {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
                         {InfillPattern::SupportCubic, tr(T::SupportCubic)},

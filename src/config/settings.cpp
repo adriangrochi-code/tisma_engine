@@ -44,6 +44,30 @@ Enum choice(const json& group, const std::string& name, const std::string& key, 
     return it->second;
 }
 
+// The infill patterns by name, for reading and writing.
+const std::map<std::string, InfillPattern>& infill_patterns() {
+    static const std::map<std::string, InfillPattern> names = {
+        {"rectilinear", InfillPattern::Rectilinear},
+        {"aligned_rectilinear", InfillPattern::AlignedRectilinear},
+        {"zigzag", InfillPattern::Zigzag},
+        {"grid", InfillPattern::Grid},
+        {"gyroid", InfillPattern::Gyroid},
+        {"triangles", InfillPattern::Triangles},
+        {"stars", InfillPattern::Stars},
+        {"cubic", InfillPattern::Cubic},
+        {"adaptive_cubic", InfillPattern::AdaptiveCubic},
+        {"support_cubic", InfillPattern::SupportCubic},
+        {"lightning", InfillPattern::Lightning}};
+    return names;
+}
+
+const char* infill_pattern_name(InfillPattern pattern) {
+    for (const auto& [name, value] : infill_patterns())
+        if (value == pattern)
+            return name.c_str();
+    return "rectilinear";
+}
+
 // Calls read(name, key) for every member of the group; rejects unknown names.
 template <typename Read>
 void read_group(const json& root, const std::string& group_name, const std::vector<std::string>& known, Read read) {
@@ -227,16 +251,7 @@ Settings parse_settings(std::string_view text) {
             return;
         }
         if (n == "pattern") {
-            s.infill_pattern =
-                choice<InfillPattern>(g, n, k,
-                                      {{"rectilinear", InfillPattern::Rectilinear},
-                                       {"grid", InfillPattern::Grid},
-                                       {"gyroid", InfillPattern::Gyroid},
-                                       {"triangles", InfillPattern::Triangles},
-                                       {"cubic", InfillPattern::Cubic},
-                                       {"adaptive_cubic", InfillPattern::AdaptiveCubic},
-                                       {"support_cubic", InfillPattern::SupportCubic},
-                                       {"lightning", InfillPattern::Lightning}});
+            s.infill_pattern = choice<InfillPattern>(g, n, k, infill_patterns());
             return;
         }
         const double v = number(g, n, k);
@@ -586,14 +601,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
-    const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
-                          : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                          : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
-                          : s.infill_pattern == InfillPattern::Triangles ? "triangles"
-                          : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
-                          : s.infill_pattern == InfillPattern::AdaptiveCubic ? "adaptive_cubic"
-                          : s.infill_pattern == InfillPattern::SupportCubic  ? "support_cubic"
-                                                                             : "lightning";
+    const char* pattern = infill_pattern_name(s.infill_pattern);
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
@@ -706,14 +714,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
 std::string settings_json(const Settings& s) {
     using nlohmann::ordered_json;
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
-    const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
-                          : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                          : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
-                          : s.infill_pattern == InfillPattern::Triangles ? "triangles"
-                          : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
-                          : s.infill_pattern == InfillPattern::AdaptiveCubic ? "adaptive_cubic"
-                          : s.infill_pattern == InfillPattern::SupportCubic  ? "support_cubic"
-                                                                             : "lightning";
+    const char* pattern = infill_pattern_name(s.infill_pattern);
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"
