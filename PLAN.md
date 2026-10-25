@@ -453,8 +453,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
 - [x] Z anti-aliasing (`docs/spec/features/z_antialiasing.md`; Song, Ray, Sokolov y Lefebvre 2017): las extrusiones
   de arriba siguen la superficie dentro de la capa, hacia abajo (la ficha) y hacia arriba (el artículo), y el perfil
   Máxima calidad las combina con la altura por zona y por pendiente (`docs/ZAA.md`)
-- [ ] ZAA: el orden completo del artículo (subcaminos, grafo de alturas, menos costuras) y medir el daño de la
-  boquilla en una impresión real
+- [x] ZAA: el orden del artículo con grafo de alturas (pedazos por lado, franjas, el más bajo primero entre
+  vecinos): interferencia del 7 % al 1 % en un techo a 8°, 0 % en la cúpula
+- [ ] ZAA: partir donde el orden con un vecino se da vuelta, menos costuras (Sección 4.2), y medir en una impresión real
 - [ ] Pedidos del dueño en cola (2026-10-25):
   - relleno optimizado para resistencia y rapidez (`docs/INFILL.md`), por etapas:
     - [x] combinar capas de relleno (ficha `infill_patterns.md`, reglas 18 a 20): −24 a −45 % de tiempo, el mismo

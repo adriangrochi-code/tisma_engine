@@ -18,6 +18,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
+#include <set>
 #include <numbers>
 #include <optional>
 #include <string_view>
@@ -83,6 +85,153 @@ std::string fixed(double v, int decimals) {
 std::string fixed_number(double v, int decimals) { return fixed(v, decimals); }
 
 namespace {
+
+// Z anti-aliasing (docs/ZAA.md): the pieces of a path where its points go from
+// below the layer's top to on it, or above it; each piece lies on one side,
+// and the piece after a change starts at the last point before it.
+std::vector<Toolpath> split_by_height(const Toolpath& t) {
+    constexpr double kSide = 0.005; // mm
+    const auto side = [](const ToolpathPoint& p) { return p.dz < -kSide ? -1 : p.dz > kSide ? 1 : 0; };
+    const std::size_t n = t.points.size();
+    std::size_t change = n;
+    for (std::size_t i = 1; i < n && change == n; ++i)
+        if (side(t.points[i]) != side(t.points[i - 1]))
+            change = i;
+    if (n < 2 || (change == n && (!t.closed || side(t.points.front()) == side(t.points.back()))))
+        return {t};
+    // A loop runs from a change around to it again, as an open path.
+    std::vector<ToolpathPoint> run;
+    if (t.closed) {
+        const std::size_t from = change == n ? 0 : change - 1;
+        for (std::size_t k = 0; k <= n; ++k)
+            run.push_back(t.points[(from + k) % n]);
+    } else {
+        run = t.points;
+    }
+    std::vector<Toolpath> out;
+    Toolpath piece;
+    piece.index = t.index;
+    piece.points.push_back(run.front());
+    for (std::size_t i = 1; i < run.size(); ++i) {
+        if (side(run[i]) != side(run[i - 1]) && piece.points.size() > 1) {
+            out.push_back(piece);
+            piece.points.assign(1, run[i - 1]);
+        }
+        piece.points.push_back(run[i]);
+    }
+    if (piece.points.size() > 1)
+        out.push_back(std::move(piece));
+    return out;
+}
+
+// The order to lay paths off the layer's top in (Z anti-aliasing), after the
+// height constraint graph of Song et al. 2017, Section 4.1: where two paths
+// run beside each other (within `beside`), the lower there goes first, by the
+// majority of their nearest points; among those free to go, the one first in
+// the given order. A cycle is broken by the given order.
+std::vector<std::size_t> height_order(const std::vector<const Toolpath*>& paths, double beside) {
+    const double reach = beside;
+    constexpr double kStep = 0.2, kSlack = 0.002; // mm
+    struct Sample {
+        double x, y, dz;
+        std::uint32_t path;
+    };
+    std::vector<Sample> samples;
+    for (std::uint32_t k = 0; k < paths.size(); ++k) {
+        const std::vector<ToolpathPoint>& p = paths[k]->points;
+        const std::size_t segments = paths[k]->closed ? p.size() : p.size() - 1;
+        for (std::size_t i = 0; i < segments && p.size() > 1; ++i) {
+            const ToolpathPoint& a = p[i];
+            const ToolpathPoint& b = p[(i + 1) % p.size()];
+            const int n = std::max(1, int(std::ceil(std::hypot(b.p.x - a.p.x, b.p.y - a.p.y) / kStep)));
+            for (int j = 0; j < n; ++j) {
+                const double f = double(j) / n;
+                samples.push_back({a.p.x + f * (b.p.x - a.p.x), a.p.y + f * (b.p.y - a.p.y), a.dz + f * (b.dz - a.dz), k});
+            }
+        }
+        if (!paths[k]->closed && !p.empty())
+            samples.push_back({p.back().p.x, p.back().p.y, p.back().dz, k});
+    }
+    std::unordered_map<std::uint64_t, std::vector<std::uint32_t>> cells;
+    const auto cell = [&](double x, double y) {
+        return (std::uint64_t(std::uint32_t(std::int32_t(std::floor(x / reach)))) << 32) |
+               std::uint32_t(std::int32_t(std::floor(y / reach)));
+    };
+    for (std::uint32_t s = 0; s < samples.size(); ++s)
+        cells[cell(samples[s].x, samples[s].y)].push_back(s);
+    // For each sample, the nearest sample of every other path within reach:
+    // whether it is higher there. Each pair of paths goes by the majority.
+    std::map<std::uint64_t, double> votes; // (a, b), a < b: positive when b is higher than a beside it
+    std::map<std::uint32_t, std::pair<double, double>> nearest; // other path: (distance2, dz)
+    for (const Sample& s : samples) {
+        nearest.clear();
+        for (int dx = -1; dx <= 1; ++dx)
+            for (int dy = -1; dy <= 1; ++dy) {
+                const auto it = cells.find(cell(s.x + dx * reach, s.y + dy * reach));
+                if (it == cells.end())
+                    continue;
+                for (const std::uint32_t o : it->second) {
+                    const Sample& q = samples[o];
+                    const double d2 = (q.x - s.x) * (q.x - s.x) + (q.y - s.y) * (q.y - s.y);
+                    if (q.path == s.path || d2 > reach * reach)
+                        continue;
+                    const auto [at, fresh] = nearest.try_emplace(q.path, d2, q.dz);
+                    if (!fresh && d2 < at->second.first)
+                        at->second = {d2, q.dz};
+                }
+            }
+        for (const auto& [other, near] : nearest) {
+            const double diff = near.second - s.dz; // the other path's height over this one's, beside it
+            if (std::abs(diff) <= kSlack)
+                continue;
+            const bool ascending = s.path < other;
+            const std::uint64_t key = ascending ? (std::uint64_t(s.path) << 32) | other : (std::uint64_t(other) << 32) | s.path;
+            votes[key] += (diff > 0.0) == ascending ? 1.0 : -1.0;
+        }
+    }
+    std::vector<std::vector<std::uint32_t>> after(paths.size()); // after[a]: paths that go after a
+    std::size_t edges = 0;
+    for (const auto& [key, vote] : votes) {
+        if (vote == 0.0)
+            continue;
+        const auto a = std::uint32_t(key >> 32), b = std::uint32_t(key & 0xFFFFFFFFu);
+        if (vote > 0.0)
+            after[a].push_back(b); // b higher: a first
+        else
+            after[b].push_back(a);
+        ++edges;
+    }
+    std::vector<std::uint32_t> waiting(paths.size(), 0);
+    for (const auto& list : after)
+        for (const std::uint32_t b : list)
+            ++waiting[b];
+    std::vector<std::size_t> order;
+    std::vector<bool> done(paths.size(), false);
+    std::set<std::size_t> ready;
+    for (std::size_t k = 0; k < paths.size(); ++k)
+        if (waiting[k] == 0)
+            ready.insert(k);
+    std::size_t next_unlaid = 0;
+    while (order.size() < paths.size()) {
+        std::size_t k;
+        if (!ready.empty()) {
+            k = *ready.begin();
+            ready.erase(ready.begin());
+        } else { // a cycle: the first not laid yet
+            while (done[next_unlaid])
+                ++next_unlaid;
+            k = next_unlaid;
+        }
+        if (done[k])
+            continue;
+        done[k] = true;
+        order.push_back(k);
+        for (const std::uint32_t b : after[k])
+            if (!done[b] && --waiting[b] == 0)
+                ready.insert(b);
+    }
+    return order;
+}
 
 void append_integer(std::string& text, long v) {
     char buffer[24];
@@ -540,20 +689,57 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
         // lower ones first, so the nozzle never runs beside a higher bead it
-        // has just laid (Song et al. 2017, Section 4), in bands of 0.02 mm.
+        // has just laid (Song et al. 2017, Section 4), in bands of 0.005 mm.
         auto band = [](const Toolpath& t) {
             double sum = 0.0;
             for (const ToolpathPoint& p : t.points)
                 sum += p.dz;
-            return std::floor(sum / double(std::max<std::size_t>(t.points.size(), 1)) / 0.02);
+            return std::floor(sum / double(std::max<std::size_t>(t.points.size(), 1)) / 0.005);
         };
+        // In an island with paths off the layer's top, every path is split
+        // where it goes below, on or above the top, and all of them, walls and
+        // fills alike, are laid lowest first.
+        struct Pending {
+            Toolpath path;
+            const char* type;
+            double feed;
+        };
+        std::vector<Pending> pending;
+        bool deferring = false;
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
             std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams);
-            if (s.zaa)
-                std::stable_sort(ordered.begin(), ordered.end(),
-                                 [&](const Toolpath& lhs, const Toolpath& rhs) { return band(lhs) < band(rhs); });
+            if (deferring) {
+                for (const Toolpath& t : ordered)
+                    for (Toolpath& piece : split_by_height(t))
+                        pending.push_back({std::move(piece), type, feed});
+                return;
+            }
             for (const Toolpath& t : ordered)
                 lay(t, type, feed);
+        };
+        auto off_top = [](std::initializer_list<const std::vector<Toolpath>*> lists) {
+            for (const std::vector<Toolpath>* list : lists)
+                for (const Toolpath& t : *list)
+                    for (const ToolpathPoint& p : t.points)
+                        if (p.dz != 0.0)
+                            return true;
+            return false;
+        };
+        // The nozzle's reach (Song et al. 2017, Fig. 13): its flat end around
+        // the bead, and a layer's height at 45 degrees up its side.
+        const double reach = std::min(0.5 * (2.5 * s.nozzle_diameter + s.wall_width) + (layer.top - layer.bottom),
+                                      1.6 * s.wall_width);
+        auto flush = [&]() {
+            // By height bands first, then the height graph within the island.
+            std::stable_sort(pending.begin(), pending.end(),
+                             [&](const Pending& lhs, const Pending& rhs) { return band(lhs.path) < band(rhs.path); });
+            std::vector<const Toolpath*> paths;
+            for (const Pending& p : pending)
+                paths.push_back(&p.path);
+            for (const std::size_t k : height_order(paths, reach))
+                lay(pending[k].path, pending[k].type, pending[k].feed);
+            pending.clear();
+            deferring = false;
         };
         if (s.zaa && s.zaa_raise) {
             // Travels keep above the highest raised bead of the layer.
@@ -639,27 +825,23 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 group(paths, outer ? "External perimeter" : "Perimeter",
                       speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
             };
-            // Walls off the layer's top (Z anti-aliasing): the outer one, the
-            // lowest, first.
-            bool off_top = false;
-            for (const auto& [index, paths] : i.walls)
-                for (const Toolpath& t : paths)
-                    for (const ToolpathPoint& p : t.points)
-                        off_top = off_top || p.dz != 0.0;
-            if (off_top)
-                for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
-                    walls(w->first, w->second);
-            else
+            if (s.zaa) {
                 for (const auto& [index, paths] : i.walls)
-                    walls(index, paths);
+                    deferring = deferring || off_top({&paths});
+                deferring = deferring || off_top({&i.fills[1], &i.fills[3]});
+            }
+            for (const auto& [index, paths] : i.walls)
+                walls(index, paths);
             for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+            flush();
         }
         // The thick zone of a group that ends here: the whole group's height at
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
         if (l < model.thick.size() && !model.thick[l].empty()) {
             const ThickLayer& t = model.thick[l];
             g.set_height(t.height);
+            deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
                 by_index[w.index].push_back(w);
@@ -672,6 +854,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                                      &t.fill.sparse};
             for (std::size_t k = 0; k < 5; ++k)
                 group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+            flush();
             g.set_height(layer.top - layer.bottom);
         }
     };

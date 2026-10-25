@@ -248,3 +248,40 @@ TEST_CASE("Z anti-aliasing: raised, with layer heights by zone and by slope", "[
     CHECK(above);
 
 }
+
+TEST_CASE("Z anti-aliasing: lower beads first and the nozzle never beside a higher one", "[zaa]") {
+    // Song et al. 2017, Section 4: a bead laid lower than a neighbour laid
+    // before it, within the nozzle's reach, gets the nozzle's flat end over
+    // that neighbour. With raised and lowered paths, walls and fills alike.
+    const IndexedMesh m = roof(8.0);
+    Settings s = base();
+    s.zaa = true;
+    s.zaa_raise = true;
+    const SlicedModel sliced = slice_model(m, s);
+    std::ostringstream gcode;
+    write_gcode(gcode, sliced, s);
+    struct Laid {
+        double x, y, z;
+    };
+    std::vector<Laid> layer;
+    double under = 0.0, total = 0.0, layer_z = -1.0;
+    for (const Extrusion& x : extrusions(gcode.str(), s.filament_diameter)) {
+        if (x.layer_z != layer_z)
+            layer.clear(), layer_z = x.layer_z;
+        const double length = std::hypot(x.x - x.x0, x.y - x.y0);
+        total += length;
+        for (const Laid& q : layer) {
+            const double d2 = (q.x - x.x) * (q.x - x.x) + (q.y - x.y) * (q.y - x.y);
+            if (q.z > x.z + 0.01 && d2 < 0.7 * 0.7 && d2 > 0.2 * 0.2) {
+                under += length;
+                break;
+            }
+        }
+        layer.push_back({x.x, x.y, x.z});
+    }
+    REQUIRE(total > 0.0);
+    // 7 % laid in the order of the kinds, 1.0 % with the height graph: what
+    // is left are paths whose order with a neighbour turns along them, which
+    // the article splits where it turns (docs/ZAA.md).
+    CHECK(under / total < 0.015);
+}

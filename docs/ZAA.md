@@ -60,12 +60,27 @@ fábrica **Máxima calidad** lo trae prendido con subida, junto con la altura po
    El tope de flujo usa ese mismo espesor.
 6. **Los viajes:** antes de viajar, la boquilla vuelve al tope de la capa. Con `raise`, viaja por encima del cordón
    más alto que subió en esa capa. El G-code sigue con coordenadas absolutas en XYZ y sin arcos, como pide la ficha.
-7. **El orden** (del artículo, simplificado):
-   - en cada grupo de caminos, los más bajos primero, por franjas de 0,02 mm;
-   - en una isla con paredes fuera del tope, la pared externa (la más baja) va antes que las internas.
+7. **El orden** (del artículo, Sección 4.1). En una isla con caminos fuera del tope:
+   - cada camino (paredes y rellenos por igual) se parte donde pasa de abajo del tope a sobre él o arriba;
+   - los pedazos se ordenan por franjas de altura de 0,005 mm;
+   - con un grafo de restricciones, entre dos pedazos que corren al lado (a menos de 1,6 anchos de línea), va primero
+     el más bajo, por la mayoría de sus puntos más cercanos;
+   - un orden topológico que respeta el orden de antes donde puede; un ciclo se rompe por ese orden.
 
-   El corte en subcaminos con un grafo de restricciones de altura y la búsqueda del orden con menos costuras
-   (Sección 4.1–4.2) quedan para después.
+   **Medido**, como el largo extruido más bajo que un cordón de la misma capa puesto antes a menos de 0,7 mm (más de
+   0,01 mm abajo):
+
+   | Pieza | Sin orden | Por franjas | Con el grafo |
+   |---|---|---|---|
+   | cúpula, ZAA con subida | 0,85 % | 0,00 % | 0,00 % |
+   | cúpula, zona + pendiente + ZAA | 0,08 % | 0,00 % | 0,00 % |
+   | techo a 8°, ZAA con subida | 7,1 % | 1,55 % | 1,02 % |
+
+   **Costo:** en la cúpula con subida, un 10 % más de arranques de extrusión y 0,3 min. Solo bajando, nada.
+
+   **Queda:**
+   - partir los pedazos donde su orden con un vecino se da vuelta (el resto del techo);
+   - buscar el orden con menos costuras (Sección 4.2).
 
 ## El chequeo y la vista previa
 

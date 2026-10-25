@@ -3348,3 +3348,28 @@ sesión principal, o el rediseño del panel por niveles).
 **Sigue:** lo que no espera las fichas del PR #15. Por ejemplo, el orden completo de ZAA del artículo, o
 mantenimiento.
 
+## 2026-10-25 — bloque nocturno: el orden de Z anti-aliasing con el grafo de alturas
+
+**Medido primero:** una métrica nueva (`scratchpad`, de banco) del largo extruido más bajo que un cordón de la misma
+capa puesto antes a menos de 0,7 mm. Es lo que hace que la boquilla aplaste el relieve (Song et al. 2017,
+Sección 4). Con el orden de antes:
+- solo bajando: 0 %;
+- con subida, en la cúpula: 0,85 % (1444 mm);
+- zona + pendiente + ZAA: 0,08 %.
+
+**Hecho** (`docs/ZAA.md`, «El orden»):
+- en una isla con caminos fuera del tope, cada camino se parte donde pasa de abajo del tope a sobre él o arriba;
+- los pedazos de paredes y rellenos se ordenan juntos: por franjas de 0,005 mm, y con el grafo de alturas del
+  artículo entre los que corren al lado, decidido por la mayoría de sus puntos más cercanos;
+- también en la capa gruesa de la altura por zona.
+
+**Medido:**
+- cúpula con subida: 0,85 % → 0,00 %;
+- zona + pendiente + ZAA: 0,08 % → 0,00 %;
+- techo a 8° con subida: 7,1 % → 1,0 %;
+- costo: un 10 % más de arranques y 0,3 min en la cúpula con subida; nada solo bajando.
+
+**Prueba:** el techo a 8° queda por debajo del 1,5 %. Sin el orden falla, con un 7 %.
+
+**Sigue:** partir donde el orden con un vecino se da vuelta; menos costuras.
+
