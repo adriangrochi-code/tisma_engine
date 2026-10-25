@@ -1826,10 +1826,15 @@ void App::settings_panel() {
         changed |= row(T::InfillPattern, s.infill_pattern,
                        {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
                         {InfillPattern::Grid, tr(T::Grid)},
-                        {InfillPattern::Gyroid, tr(T::Gyroid)}});
+                        {InfillPattern::Gyroid, tr(T::Gyroid)},
+                        {InfillPattern::Triangles, tr(T::TrianglesInfill)},
+                        {InfillPattern::Cubic, tr(T::Cubic)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
         changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));
+        changed |= row(T::DenseUnderTop, s.infill_dense_under_top, tr(T::DenseUnderTopTip));
+        if (s.infill_dense_under_top)
+            changed |= row(T::DenseDensity, s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::DenseUnderTopTip));
         changed |= row(T::Supports, s.support);
         if (s.support)
             changed |= row(T::SupportAngle, s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);

@@ -36,6 +36,9 @@
     X(CombineInfill, "Combinar relleno", "Combine infill")                                                                                                                                                                                                                               \
     X(CombineInfillTip, "El relleno poco denso se imprime cada N capas, con el alto de las N juntas (nunca más que la boquilla): el mismo relleno en menos pasadas. 1: cada capa el suyo. Ver docs/INFILL.md.", "Sparse infill prints every N layers, as tall as the N together (never more than the nozzle): the same infill in fewer passes. 1: each layer its own. See docs/INFILL.md.") \
     X(CombineAuto, "Combinar lo más posible", "Combine as much as fits")                                                                                                                                                                                                                 \
+    X(DenseUnderTop, "Denso bajo el techo", "Dense under tops")                                                                                                                                                                                                                          \
+    X(DenseUnderTopTip, "La capa de relleno justo debajo de una superficie de arriba va más densa, solo bajo esa superficie: permite un relleno general más liviano sin que el techo se hunda. Ver docs/INFILL.md.", "The infill layer right under a top surface goes denser, only under that surface: a lighter infill elsewhere without the top sagging. See docs/INFILL.md.") \
+    X(DenseDensity, "Densidad bajo el techo", "Density under tops")                                                                                                                                                                                                                      \
     X(Nozzle, "Boquilla", "Nozzle")                                                                                   \
     X(Flavor, "Dialecto de G-code", "G-code flavor")                                                                  \
     X(RelativeE, "Extrusión relativa (M83)", "Relative extrusion (M83)")                                             \
@@ -79,6 +82,8 @@
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \
     X(Grid, "Grilla", "Grid")                                                                                         \
     X(Gyroid, "Giroide", "Gyroid")                                                                                    \
+    X(TrianglesInfill, "Triángulos", "Triangles")                                                                     \
+    X(Cubic, "Cúbico", "Cubic")                                                                                       \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \

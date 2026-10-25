@@ -180,12 +180,19 @@ Settings parse_settings(std::string_view text) {
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
-                                "combine_max_height"},
+                                "combine_max_height", "dense_under_top", "dense_density"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "combine_auto") {
+        if (n == "combine_auto" || n == "dense_under_top") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            s.infill_combine_auto = g.at(n).get<bool>();
+            (n == "combine_auto" ? s.infill_combine_auto : s.infill_dense_under_top) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "dense_density") {
+            const double v = number(g, n, k);
+            if (!(v > 0.0) || v > 100.0)
+                fail(k, "must be from 0 to 100");
+            s.infill_dense_density = v;
             return;
         }
         if (n == "combine_max_height") {
@@ -217,7 +224,9 @@ Settings parse_settings(std::string_view text) {
                 choice<InfillPattern>(g, n, k,
                                       {{"rectilinear", InfillPattern::Rectilinear},
                                        {"grid", InfillPattern::Grid},
-                                       {"gyroid", InfillPattern::Gyroid}});
+                                       {"gyroid", InfillPattern::Gyroid},
+                                       {"triangles", InfillPattern::Triangles},
+                                       {"cubic", InfillPattern::Cubic}});
             return;
         }
         const double v = number(g, n, k);
@@ -569,7 +578,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
     const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
                           : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                                                                         : "gyroid";
+                          : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
+                          : s.infill_pattern == InfillPattern::Triangles ? "triangles"
+                                                                         : "cubic";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
@@ -597,6 +608,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
+        {"infill.dense_under_top", flag(s.infill_dense_under_top)},
+        {"infill.dense_density", num(s.infill_dense_density)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
@@ -681,7 +694,9 @@ std::string settings_json(const Settings& s) {
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
     const char* pattern = s.infill_pattern == InfillPattern::Rectilinear ? "rectilinear"
                           : s.infill_pattern == InfillPattern::Grid      ? "grid"
-                                                                         : "gyroid";
+                          : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
+                          : s.infill_pattern == InfillPattern::Triangles ? "triangles"
+                                                                         : "cubic";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"
@@ -727,6 +742,8 @@ std::string settings_json(const Settings& s) {
           {"wall_overlap", s.infill_wall_overlap},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
+          {"dense_under_top", s.infill_dense_under_top},
+          {"dense_density", s.infill_dense_density},
           {"combine_max_height", s.infill_combine_max_height.percent
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},

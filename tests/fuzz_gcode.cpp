@@ -105,7 +105,8 @@ int main(int argc, char** argv) {
         s.wall_count = pick(7);
         s.wall_width = uni(0.3, 0.8);
         s.infill_density = pick(5) == 0 ? 0.0 : pick(5) == 0 ? 100.0 : uni(5, 60);
-        s.infill_pattern = std::array{InfillPattern::Rectilinear, InfillPattern::Grid, InfillPattern::Gyroid}[std::size_t(pick(3))];
+        s.infill_pattern = std::array{InfillPattern::Rectilinear, InfillPattern::Grid, InfillPattern::Gyroid,
+                                      InfillPattern::Triangles, InfillPattern::Cubic}[std::size_t(pick(5))];
         s.infill_angle = uni(0, 180);
         s.top_layers = pick(6);
         s.bottom_layers = pick(6);
@@ -148,6 +149,10 @@ int main(int argc, char** argv) {
             s.infill_combine_layers = 2 + pick(3);
             s.infill_combine_auto = pick(3) == 0;
             s.infill_combine_max_height = pick(2) == 0 ? Speed{uni(50, 150), true} : Speed{uni(0.1, 0.8), false};
+        }
+        if (pick(4) == 0) {
+            s.infill_dense_under_top = true;
+            s.infill_dense_density = uni(10, 100);
         }
         // Z anti-aliasing (docs/ZAA.md).
         if (pick(3) == 0) {

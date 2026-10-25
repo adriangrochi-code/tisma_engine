@@ -70,7 +70,7 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit, bool monotonic, double overlap) {
+                                       bool connect, bool fit, bool monotonic, double overlap, double shift) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -107,8 +107,10 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
             lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
         }
     } else {
-        for (auto k = static_cast<std::int64_t>(std::ceil(double(ymin) / step)); double(k) * step <= double(ymax); ++k) {
-            const std::int64_t y = std::llround(double(k) * step);
+        const double base = shift * kUnitsPerMm;
+        for (auto k = static_cast<std::int64_t>(std::ceil((double(ymin) - base) / step));
+             double(k) * step + base <= double(ymax); ++k) {
+            const std::int64_t y = std::llround(double(k) * step + base);
             lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
         }
     }
@@ -189,6 +191,21 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     case InfillPattern::Gyroid:
         out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
         break;
+    case InfillPattern::Triangles:
+    case InfillPattern::Cubic: {
+        // Three families of lines 60 degrees apart, each a third of the
+        // material. Triangles: the same in every layer, crossing at common
+        // points. Cubic: the faces of cubes standing on a vertex, so each family
+        // moves across its lines by z / sqrt(2) with the height (infill_patterns.md,
+        // rules 4 and 6).
+        const double spacing = 3.0 * params.width / params.density;
+        const double shift = params.pattern == InfillPattern::Cubic ? -z / std::numbers::sqrt2 : 0.0;
+        for (int k = 0; k < 3; ++k)
+            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, params.width, false,
+                                                false, false, 0.0, std::fmod(shift, spacing)))
+                out.sparse.push_back(std::move(t));
+        break;
+    }
     }
     return out;
 }

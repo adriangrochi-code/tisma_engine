@@ -25,11 +25,12 @@ namespace tisma {
 // each comes after every piece of the line below that touches it; among those
 // that may come next, the one starting nearest to the last one's end.
 // With `overlap` (mm, for unjoined lines), the lines reach that far past the
-// region shrunk by half a bead, into the walls around it.
+// region shrunk by half a bead, into the walls around it. `shift` (mm) moves
+// the grid across the lines (the cubic infill's planes with the height).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0);
+                                       double overlap = 0.0, double shift = 0.0);
 
 // The infill toolpaths of one layer.
 struct LayerFill {

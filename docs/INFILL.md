@@ -67,3 +67,45 @@ El mismo material en menos pasadas: el ahorro crece cuanto más relleno tiene la
   cordón; el motor usa ancho × alto, así que da 2.
 
 El fuzz sortea la combinación.
+
+## Relleno denso bajo las superficies de arriba (etapa 2)
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `infill.dense_under_top` | no | La capa de relleno disperso justo debajo de una superficie de arriba va más densa |
+| `infill.dense_density` | 40 % | Su densidad |
+
+**Cómo** (ficha `dense_infill.md`):
+- en cada capa, la parte del relleno disperso que tiene encima la piel de arriba de la capa siguiente (la
+  intersección, sin piezas más angostas que medio cordón) se rellena a `dense_density`, con el mismo patrón y la misma
+  dirección;
+- el resto de la capa sigue a la densidad general.
+
+Así el techo se apoya bien aunque el relleno general sea liviano: menos material y tiempo con la misma superficie.
+Se combina con combinar capas, porque la capa densa sale de la corrida antes de buscar la parte común.
+
+**Prueba D1 de la ficha** (`tests/test_combine.cpp`):
+- cubo de 20 × 20 × 10 al 10 %;
+- la capa 46, debajo de la piel (47 a 49), lleva cuatro veces las líneas de una capa común en la misma dirección;
+- las demás capas, iguales entre sí;
+- el G-code pasa el chequeo.
+
+## Triángulos y cúbico (etapa 3)
+
+| `infill.pattern` | Qué es |
+|---|---|
+| `triangles` | Tres familias de líneas a `angle`, +60° y +120°, cada una con un tercio del material (separación `3 · ancho / densidad`), iguales en todas las capas: forman triángulos |
+| `cubic` | Las mismas tres familias, pero cada una corrida `z / √2` en su normal con la altura: son las caras de cubos apoyados sobre un vértice |
+
+**Por qué el cúbico:**
+- es una estructura 3D: rígida en X, Y y Z, como el giroide;
+- se imprime en líneas rectas, más rápido;
+- con la normal de cada cara a un ángulo de coseno `1/√3` de la vertical, su traza en un plano horizontal se corre
+  `z / √2` al subir `z` (ficha `infill_patterns.md`, regla 6, y la geometría del cubo).
+
+**Pruebas** (`tests/test_combine.cpp`):
+- los triángulos tienen las tres direcciones (45°, 105° y 165°) con un tercio del largo cada una, iguales en dos
+  capas, con el largo que da la densidad;
+- el cúbico tiene las mismas tres direcciones; sus líneas cambian de una capa a otra, y a un período `s·√2` de
+  altura vuelve el mismo largo;
+- el fuzz sortea los dos patrones y el relleno denso.

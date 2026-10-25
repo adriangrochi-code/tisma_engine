@@ -1,4 +1,5 @@
 #include "infill/combine.hpp"
+#include "infill/rectilinear.hpp"
 
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -56,6 +57,7 @@ Settings base() {
 // Per layer (by its ;Z:), the sparse infill's height and filament per mm.
 struct Sparse {
     double height = 0.0, filament = 0.0, length = 0.0;
+    int long_lines = 0; // across the part, not the joins along its edge
 };
 
 std::map<long, Sparse> sparse_by_layer(const std::string& gcode) {
@@ -87,6 +89,7 @@ std::map<long, Sparse> sparse_by_layer(const std::string& gcode) {
                 s.height = height;
                 s.filament += e;
                 s.length += length;
+                s.long_lines += length > 8.0;
             }
             x = nx, y = ny;
         }
@@ -167,4 +170,97 @@ TEST_CASE("combined infill: the spec's cube (P11), sliced to checked G-code", "[
     CHECK_THAT((thick.filament / thick.length) / (thin.filament / thin.length), WithinAbs(2.0, 0.03));
     // The same infill in half the passes: less time.
     CHECK(minutes(b.str()) < minutes(a.str()));
+}
+
+namespace {
+
+// Length of the lines of a fill by direction (degrees 0 to 180, to 1 degree).
+std::map<int, double> by_direction(const std::vector<Toolpath>& paths) {
+    std::map<int, double> out;
+    for (const Toolpath& t : paths)
+        for (std::size_t i = 1; i < t.points.size(); ++i) {
+            const double dx = t.points[i].p.x - t.points[i - 1].p.x, dy = t.points[i].p.y - t.points[i - 1].p.y;
+            const double length = std::hypot(dx, dy);
+            if (length < 0.3)
+                continue;
+            double a = std::atan2(dy, dx) * 180.0 / std::numbers::pi;
+            a = std::fmod(a + 360.0, 180.0);
+            out[int(std::lround(a)) % 180] += length;
+        }
+    return out;
+}
+
+double total(const std::vector<Toolpath>& paths) {
+    double sum = 0.0;
+    for (const auto& [a, l] : by_direction(paths))
+        sum += l;
+    return sum;
+}
+
+LayerSurfaces square_sparse(double side) {
+    LayerSurfaces s;
+    const auto u = [](double v) { return to_units(v); };
+    s.sparse = {{{u(0), u(0)}, {u(side), u(0)}, {u(side), u(side)}, {u(0), u(side)}}};
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("infill patterns: triangles and cubic, three directions 60 degrees apart", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    const LayerSurfaces region = square_sparse(20.0);
+    p.pattern = InfillPattern::Triangles;
+    const std::vector<Toolpath> t1 = fill_layer(region, 5, p, 1.0).sparse;
+    const std::vector<Toolpath> t2 = fill_layer(region, 6, p, 1.2).sparse;
+    const std::map<int, double> d = by_direction(t1);
+    const double all = total(t1);
+    for (const int a : {45, 105, 165})
+        CHECK_THAT(d.count(a) ? d.at(a) / all : 0.0, WithinAbs(1.0 / 3.0, 0.05)); // each a third
+    // The same in every layer, about the density's length: 20 % of 400 mm2 at 0.4 mm.
+    CHECK_THAT(total(t2), WithinAbs(all, 1e-6));
+    CHECK_THAT(all, WithinAbs(0.2 * 400.0 / 0.4, 30.0));
+
+    p.pattern = InfillPattern::Cubic;
+    const std::vector<Toolpath> c1 = fill_layer(region, 5, p, 1.0).sparse;
+    const std::vector<Toolpath> c2 = fill_layer(region, 6, p, 1.2).sparse;
+    const std::map<int, double> dc = by_direction(c1);
+    for (const int a : {45, 105, 165})
+        CHECK(dc.count(a) == 1);
+    // The planes move with the height: other lines a layer up, the same ones a
+    // whole period (spacing x sqrt 2) up.
+    REQUIRE(!c1.empty());
+    REQUIRE(!c2.empty());
+    CHECK(std::abs(c1.front().points.front().p.x - c2.front().points.front().p.x) +
+              std::abs(c1.front().points.front().p.y - c2.front().points.front().p.y) > 1e-3);
+    const double period = 3.0 * 0.4 / 0.2 * std::numbers::sqrt2;
+    const std::vector<Toolpath> c3 = fill_layer(region, 5, p, 1.0 + period).sparse;
+    CHECK_THAT(total(c3), WithinAbs(total(c1), 0.05 * total(c1)));
+}
+
+TEST_CASE("dense infill under the top surfaces (D1), sliced to checked G-code", "[combine]") {
+    // A cube of 20 x 20 x 10: the infill at 10 %, the layer right under the top
+    // skin at 40 %, only there.
+    IndexedMesh m = cube(20.0f);
+    for (Vec3f& v : m.vertices)
+        v.z = v.z > 0.0f ? 10.0f : 0.0f;
+    Settings s = base();
+    s.infill_density = 10.0;
+    s.infill_dense_under_top = true;
+    const SlicedModel sliced = slice_model(m, s);
+    std::ostringstream g;
+    write_gcode(g, sliced, s);
+    const GcodeCheck check = check_gcode(g.str(), gcode_limits(sliced, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    const std::map<long, Sparse> sparse = sparse_by_layer(g.str());
+    // Layers 0 to 49, 0.2 mm each: 47 to 49 are the top skin, 46 the dense one.
+    REQUIRE(sparse.count(9400) == 1); // layer 46
+    REQUIRE(sparse.count(9000) == 1); // layer 44, the same direction
+    CHECK(sparse.count(9600) == 0);
+    // Four times the lines across (spacing 1 mm instead of 4).
+    CHECK_THAT(double(sparse.at(9400).long_lines) / sparse.at(9000).long_lines, WithinAbs(4.0, 0.6));
+    CHECK(sparse.at(5000).long_lines == sparse.at(9000).long_lines); // the others alike
 }

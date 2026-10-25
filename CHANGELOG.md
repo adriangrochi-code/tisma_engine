@@ -44,6 +44,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
   En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
   máxima**.
+- **Relleno denso bajo el techo y patrones de triángulos y cúbico** (`docs/INFILL.md`, fichas `dense_infill.md` e
+  `infill_patterns.md`):
+  - con `infill.dense_under_top`, la capa de relleno justo debajo de una superficie de arriba va a
+    `infill.dense_density` (40 %), solo bajo esa superficie: un relleno general más liviano sin que el techo se hunda;
+  - `infill.pattern` acepta `triangles` (tres familias de líneas a 60°) y `cubic` (las mismas, corridas con la altura:
+    cubos apoyados en un vértice, rígidos en las tres direcciones y en líneas rectas).
+
+  En Impresión, **Denso bajo el techo**, **Densidad bajo el techo** y los patrones **Triángulos** y **Cúbico**.
 - **Combinar capas de relleno** (`docs/INFILL.md`, ficha `infill_patterns.md`, primera etapa del relleno por
   resistencia y rapidez que pidió el dueño): con `infill.combine_layers` o `combine_auto`, el relleno disperso se
   imprime cada N capas con el alto de las N, nunca más que la boquilla. El mismo material en menos pasadas: en la

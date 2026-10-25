@@ -3254,3 +3254,26 @@ Laminar cuesta un 8–9 % más.
 
 **Sigue:** el relleno denso bajo las superficies de arriba (`dense_infill.md`), y después cúbico y cúbico adaptativo.
 
+## 2026-10-25 — relleno: denso bajo el techo, triángulos y cúbico (etapas 2 y 3)
+
+**Hecho** (`docs/INFILL.md`):
+- `infill.dense_under_top` y `dense_density` (ficha `dense_infill.md`): la parte del relleno que tiene encima la piel
+  de arriba de la capa siguiente va más densa, con el mismo patrón y dirección.
+- Patrones `triangles` y `cubic` (ficha `infill_patterns.md`, reglas 4 y 6): tres familias a 60°. En el cúbico,
+  corridas `z / √2` con la altura, con un `shift` nuevo en `rectilinear_fill`.
+- En el panel: las dos filas del denso y los dos patrones.
+- **Pruebas:** 2 casos.
+  - Los patrones: direcciones, tercios, igualdad entre capas, el corrimiento y su período.
+  - D1 de la ficha: cuatro veces las líneas bajo el techo, el resto igual, chequeo.
+- **El fuzz** sortea los patrones y el denso: 600 corridas en 2 semillas, 0 fallas.
+
+**Midiendo:** la rigidez de cada patrón con el análisis «como impresa» del motor:
+- un cubo de 20 mm comprimido;
+- una barra de 60 × 10 × 10 en voladizo;
+- con tiempo y material.
+
+Va en un commit aparte, con los números en `docs/INFILL.md`.
+
+**Sigue:** cúbico adaptativo (más chico cerca de las superficies), con la respuesta de la sesión de fichas sobre el
+tamaño de los cubos; después, el relleno guiado por tensiones.
+

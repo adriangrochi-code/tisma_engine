@@ -97,6 +97,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
                                            settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // Dense infill under the top surfaces (docs/INFILL.md, dense_infill.md):
+    // the sparse infill right under a top skin, denser, so the skin does not
+    // sag on a light infill.
+    std::vector<Polygons> dense_region(out.layers.size());
+    if (settings.infill_dense_under_top && settings.infill_density > 0.0 && out.layers.size() > 1)
+        tbb::parallel_for(std::size_t(0), out.layers.size() - 1, [&](std::size_t l) {
+            Polygons under = Clipper2Lib::Intersect(out.surfaces[l].sparse, out.surfaces[l + 1].top,
+                                                    Clipper2Lib::FillRule::NonZero);
+            under = offset(offset(under, -settings.wall_width / 2.0), settings.wall_width / 2.0);
+            if (under.empty())
+                return;
+            out.surfaces[l].sparse =
+                Clipper2Lib::Difference(out.surfaces[l].sparse, under, Clipper2Lib::FillRule::NonZero);
+            dense_region[l] = std::move(under);
+        });
     // Combined sparse infill (docs/INFILL.md): what every layer of a run has
     // as sparse infill prints once, at the run's top layer, as thick as the
     // run. Layer heights by zone already print it thick: not with them.
@@ -142,6 +157,15 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          if (!dense_region[l].empty()) {
+                              // Same pattern and direction, closer lines.
+                              FillParams dense = fill;
+                              dense.density = settings.infill_dense_density / 100.0;
+                              LayerSurfaces only;
+                              only.sparse = dense_region[l];
+                              for (Toolpath& t : fill_layer(only, l, dense, out.layers[l].slice_z()).sparse)
+                                  out.fills[l].sparse.push_back(std::move(t));
+                          }
                           if (out.support_areas[l].empty())
                               return;
                           // Interface: the support with the part above it within the next

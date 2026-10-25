@@ -459,8 +459,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
   - relleno optimizado para resistencia y rapidez (`docs/INFILL.md`), por etapas:
     - [x] combinar capas de relleno (ficha `infill_patterns.md`, reglas 18 a 20): −24 a −45 % de tiempo, el mismo
       material
-    - [ ] relleno denso bajo las superficies de arriba (ficha `dense_infill.md`)
-    - [ ] patrones cúbico y cúbico adaptativo (ficha `infill_patterns.md`, reglas 6 y 7)
+    - [x] relleno denso bajo las superficies de arriba (ficha `dense_infill.md`)
+    - [x] patrones triángulos y cúbico (ficha `infill_patterns.md`, reglas 4 y 6)
+    - [ ] cúbico adaptativo y de soporte (reglas 7 y 8), y rayo (regla 9)
     - [ ] relleno guiado por tensiones (fase A2)
     - [ ] medir la rigidez con el análisis «como impresa» leyendo el laminado real
   - el tiempo de impresión estimado lo más preciso posible;

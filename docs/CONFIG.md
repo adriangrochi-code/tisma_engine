@@ -72,10 +72,12 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `walls.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
 | `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
 | `wall_overlap` | número | 25 | 0 a 100 | Cuánto entran en la pared interna, en % del ancho de cordón, las líneas sólidas que no se unen en zigzag (superficies superiores monotónicas). Con 25 %, el material depositado queda entre −0,5 % y +1,5 % del área |
-| `pattern` | texto | `"rectilinear"` | `rectilinear`, `grid`, `gyroid` | Patrón del relleno disperso: `rectilinear`, líneas que giran 90° cada capa y se unen en zigzag; `grid`, las dos direcciones en cada capa, cada una al doble de separación (el mismo material); `gyroid`, el corte de la superficie giroide a la altura de cada capa, con el período que da la densidad (`angle` no se usa) |
+| `pattern` | texto | `"rectilinear"` | `rectilinear`, `grid`, `gyroid`, `triangles`, `cubic` | Patrón del relleno disperso: `rectilinear`, líneas que giran 90° cada capa y se unen en zigzag; `grid`, las dos direcciones en cada capa, cada una al doble de separación (el mismo material); `gyroid`, el corte de la superficie giroide a la altura de cada capa, con el período que da la densidad (`angle` no se usa); `triangles`, tres familias de líneas a `angle`, +60° y +120°, cada una con un tercio del material, iguales en todas las capas; `cubic`, las mismas tres familias corridas `z / √2` con la altura: las caras de cubos apoyados en un vértice, resistentes en las tres direcciones (`docs/INFILL.md`) |
 | `combine_layers` | entero | 1 | 1 a 20 | Combina el relleno disperso de N capas en una (`docs/INFILL.md`): lo que todas tienen se imprime una vez, en la de arriba, con el alto de las N. Nunca más alto que `combine_max_height` ni que la boquilla. No se usa con `layers.detail_height`, que ya imprime grueso el relleno. 1: cada capa el suyo |
 | `combine_auto` | booleano | false | | N es la mayor cantidad de capas que entra en `combine_max_height` |
 | `combine_max_height` | número o texto | `"100%"` | mm (0 a 10), o `"N%"` de la boquilla | Alto máximo de la capa de relleno combinada; nunca pasa `machine.nozzle_diameter` |
+| `dense_under_top` | booleano | false | | La capa de relleno disperso justo debajo de una superficie de arriba va a `dense_density`, solo bajo esa superficie (`docs/INFILL.md`): permite un relleno general más liviano sin que el techo se hunda |
+| `dense_density` | número | 40 | 0 a 100 | Densidad de esa capa, en %, con el mismo patrón y la misma dirección |
 
 ### `machine`
 

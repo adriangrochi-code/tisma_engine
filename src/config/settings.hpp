@@ -19,7 +19,7 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
-enum class InfillPattern { Rectilinear, Grid, Gyroid };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
 
@@ -82,6 +82,9 @@ struct Settings {
     int infill_combine_layers = 1;            // 1: each layer its own
     bool infill_combine_auto = false;         // as many as fit in the height below
     Speed infill_combine_max_height{100.0, true}; // mm, or percent of the nozzle; never past the nozzle
+    // Denser sparse infill right under the top surfaces (docs/INFILL.md).
+    bool infill_dense_under_top = false;
+    double infill_dense_density = 40.0; // percent
     GpuMode gpu = GpuMode::Auto;
     // Z anti-aliasing (docs/ZAA.md, docs/spec/features/z_antialiasing.md).
     bool zaa = false;
