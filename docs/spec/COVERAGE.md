@@ -228,8 +228,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Simplificar la malla | `slicing.md` (contornos) | ◐ falta la de la malla → `model_tools.md` |
 | Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
 | Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | — | ✘ → `model_tools.md` |
-| Ajustes por objeto, por parte y por rango de alturas | `calibration_models.md` (los usa), `settings_levels.md` (reglas 10 y 11) | ◐ falta por parte y por rango de alturas → `model_tools.md` |
+| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | `model_tools.md`, `supports_more.md` (bloqueadores y forzadores) | ✔ |
+| Ajustes por objeto, por parte y por rango de alturas | `model_tools.md` (reglas 5 a 7), `settings_levels.md` (reglas 10 y 11) | ✔ |
 | Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias) | ◐ → `model_tools.md` |
 | Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
 | Galería de formas | — | ✘ → `model_tools.md` |
