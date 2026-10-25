@@ -27,7 +27,9 @@ origen y, sin moverla, queda fuera de la cama.
    - el centro de la caja del conjunto va a `placement.center`, sin importar dónde estaba en el archivo (pruebas PL1,
      PL2 y PL6);
    - varias copias quedan en una grilla compacta, con `placement.spacing` entre cajas, y todo el conjunto centrado
-     (PL7 y PL8). Qué copia va en qué lugar lo elige el motor;
+     (PL7 y PL8). Qué copia va en qué lugar lo elige el motor. Tisma Slicer no centra el conjunto cuando el centro
+     se da a mano en la línea de comandos: la primera copia queda en ese centro y las otras al costado (PL14). Eso no
+     se copia: el motor centra el conjunto siempre;
    - no se gira ni se escala nada para que entre.
 3. **Base** (`placement.drop_to_bed`):
    - lo que flota baja y lo que está en parte debajo de la cama sube, hasta que la base queda en Z = 0 (PL1, PL2, PL4);
@@ -64,3 +66,4 @@ externo queda a 0,22 mm hacia adentro.
 | PL11 | Torre de 20 × 20 × 250 mm | — | Error, fuera del volumen (más alta que 200 mm) |
 | PL12 | Barra de 190 × 20 × 10 mm | — | Entra: X de 5 a 195 |
 | PL13 | El cubo de PL1 y un cubo de 20 mm, en una misma placa | — | Tisma Slicer se cierra con una falla de memoria (código 139). No se copia |
+| PL14 | Cubo de 20 mm, dos copias | `placement.center` (100, 100) dado a mano | X de 64 a 110: una copia de 90 a 110 y la otra de 64 a 84. Sin darlo, de 77 a 123 (PL7) |

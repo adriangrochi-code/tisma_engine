@@ -1,4 +1,4 @@
-# Partes, volúmenes negativos, modificadores y ajustes por pieza
+# Partes, modificadores, ajustes por pieza y transformaciones
 
 **Qué hace:** un objeto puede tener varias mallas con distintos papeles:
 - partes que se imprimen;
@@ -11,7 +11,8 @@ cómo se combinan, medido como caja negra.
 
 Los bloqueadores y forzadores de soporte están en `supports_more.md`; el extrusor por parte, en `multi_extruder.md`;
 cómo se agregan desde la interfaz, en `settings_levels.md` (reglas 10 y 11); cómo se guardan en el proyecto, en
-`formats.md`. Las demás herramientas del modelo (mover, cortar, medir, pintar, simplificar) todavía no tienen ficha.
+`formats.md`. Escalar, girar, cortar y separar están al final. Faltan medir, pintar, espejar, simplificar y los
+conectores del corte.
 
 **Fase:** F3 para partes, volúmenes negativos y ajustes por objeto; modificadores y rangos de alturas, P4.
 
@@ -80,6 +81,35 @@ varias mallas, y un proyecto guardado desde la interfaz para ver cómo guarda un
 10. **Regiones:** una región por combinación de ajustes distinta. Dos regiones con los mismos ajustes de paredes
     comparten las paredes; si los de paredes cambian, cada una lleva las suyas (regla 3).
 
+## Escalar, girar, cortar y separar
+
+Medido desde la línea de comandos de Tisma Slicer; la interfaz tiene las mismas herramientas (`interface.md`). Las
+claves son propuestas:
+
+| Clave | Unidad | Por defecto | Qué hace |
+|---|---|---|---|
+| `transform.scale` | factor o % | 1 | Escala igual en los tres ejes: `2` y `200%` son lo mismo |
+| `transform.scale_to_fit` | mm (x, y, z) | — | Escala igual en los tres ejes hasta el mayor tamaño que entra en esa caja |
+| `transform.rotate_x`, `transform.rotate_y`, `transform.rotate_z` | ° | 0 | Gira alrededor del centro de la caja del objeto |
+| `transform.cut_z` | mm | — | Corta el objeto con un plano horizontal a esa altura |
+| `transform.split` | — | no | Cada pedazo suelto de la malla pasa a ser un objeto |
+
+11. **Escala:** alrededor del centro de la caja del objeto. `transform.scale_to_fit` usa el menor de los tres
+    cocientes (caja pedida / tamaño): una caja de 30 × 20 × 10 mm con 60, 60, 60 se duplica; con 15, 100, 100 queda a
+    la mitad (pruebas MT14 y MT15).
+12. **Giro:** alrededor del centro de la caja; después se aplica la ubicación (`placement.md`): el objeto baja a la
+    cama y se centra. Un giro de 90° en X de una caja de 20 mm de fondo y 10 de alto la deja de 20 mm de alto (prueba
+    MT16).
+13. **Corte:** las dos mitades quedan como objetos separados, sin girarlas; cada una baja a la cama y se ordenan una al
+    lado de la otra. Un cono de 10 mm de radio y 10 de alto cortado a 5 mm da un tronco de 915,9 mm³ y una punta de
+    130,8 mm³ (el exacto es 916,3 y 130,9) (prueba MT17).
+14. **Separar:** dos cajas sueltas en un mismo archivo:
+    - sin separar, son un objeto y conservan la distancia entre ellas (20 mm);
+    - separadas, son dos objetos y se ordenan con `placement.spacing` entre ellas (6 mm) (prueba MT18).
+15. **Copias en grilla:** en Tisma Slicer, la opción de copias en una grilla de filas y columnas cierra el programa con
+    una falla de memoria (código 139) con cualquier pieza (prueba MT19). No se copia: el motor pone las copias en la
+    grilla pedida, con `placement.spacing` entre cajas, y el conjunto centrado.
+
 ## Pruebas
 
 Medidas en Tisma Slicer (25-10-2026) con los ajustes base de `walls_extra.md` (2 perímetros, sin relleno ni capas
@@ -101,3 +131,16 @@ sólidas, capas de 0,2 mm, centro en 100, 100). Cada prueba es un 3MF de un obje
 | MT11 | Las dos cajas de MT2, la segunda con 4 perímetros; después, el mismo par con la de 4 primero | Segunda con 4: la zona común (X 95 a 115) con 4. Primera con 4: solo X 105 a 115 con 4 |
 | MT12 | Caja de 40 × 20 × 10 mm; modificador X 10 a 30 con 3 perímetros y otro X 20 a 41 con 5 | X 0 a 10: 2; X 10 a 20: 3; X 20 a 40: 5 |
 | MT13 | Caja de 20 × 20 × 10 mm; objeto con 3 perímetros y rango de 6 a 10 mm con 5 | Capa 10: 3. Capa 40: 5 |
+
+Desde MT14, un STL de una caja de 30 × 20 × 10 mm que no está en el origen (de 5, 7, 3 a 35, 27, 13), salvo donde se
+dice otra cosa:
+
+| # | Ajustes | Resultado |
+|---|---|---|
+| MT14 | `transform.scale` 2 y 200 %; 150 % | 60 × 40 × 20 mm (100 capas) y 48 000 mm³; 45 × 30 × 15 mm y 20 250 mm³ |
+| MT15 | `transform.scale_to_fit` (60, 60, 60) y (15, 100, 100) | 60 × 40 × 20 mm; 15 × 10 × 5 mm |
+| MT16 | `transform.rotate_z` 90 y 45; `transform.rotate_x` 90; `transform.rotate_y` 90 | 20 × 30 × 10; 35,36 × 35,36 × 10; 30 × 10 × 20; 10 × 20 × 30 mm. En la cama: con 45°, X e Y de 82,6 a 117,4; con 90° en X, 100 capas |
+| MT17 | `transform.cut_z` 5, en la caja y en un cono de 10 mm de radio y 10 de alto | Caja: dos objetos de 30 × 20 × 5 mm, 3000 mm³ cada uno, los dos impresos. Cono: tronco de 20 × 20 × 5 mm (915,9 mm³) y punta de 10 × 10 × 5 mm (130,8 mm³) |
+| MT18 | Dos cajas sueltas de 10 × 10 × 10 y 10 × 10 × 5 mm a 20 mm, sin y con `transform.split` | Sin separar: X de 80 a 90 y de 110 a 120. Separadas: X de 87 a 97 y de 103 a 113 |
+| MT19 | Cubo de 20 mm y la caja, copias en grilla de 2 × 2 y de 2 × 1 | Tisma Slicer se cierra (código 139). No se copia |
+

@@ -220,17 +220,17 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Mover, rotar, escalar (también por medidas), espejar | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Mover, rotar, escalar (también por medidas), espejar | `model_tools.md` (reglas 11 y 12) | ◐ falta espejar y escalar por medidas en un solo eje |
 | Apoyar sobre una cara | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Separar en objetos y en partes | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `model_tools.md` (regla 13) | ◐ falta el corte con conectores, solo en la interfaz |
+| Separar en objetos y en partes | `model_tools.md` (regla 14) | ◐ falta separar en partes, solo en la interfaz |
 | Medir (distancias, ángulos, diámetros) | `interface.md` (nombra) | ◐ → `model_tools.md` |
 | Simplificar la malla | `slicing.md` (contornos) | ◐ falta la de la malla → `model_tools.md` |
 | Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
 | Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
 | Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | `model_tools.md`, `supports_more.md` (bloqueadores y forzadores) | ✔ |
 | Ajustes por objeto, por parte y por rango de alturas | `model_tools.md` (reglas 5 a 7), `settings_levels.md` (reglas 10 y 11) | ✔ |
-| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias) | ◐ → `model_tools.md` |
+| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias), `model_tools.md` (reglas 11 y 15) | ◐ falta llenar la cama, convertir unidades, reemplazar y recargar |
 | Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
 | Galería de formas | — | ✘ → `model_tools.md` |
 | Orientación automática (Tisma) | `orientation.md` | ✔ |
