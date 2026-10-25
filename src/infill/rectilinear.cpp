@@ -237,6 +237,15 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     case InfillPattern::Concentric:
         out.sparse = concentric_fill(surfaces.sparse, params.width / params.density, params.width);
         break;
+    case InfillPattern::Hilbert: // the same in every layer (rule 12)
+        out.sparse = hilbert_fill(surfaces.sparse, params.width / params.density, params.angle, params.width);
+        break;
+    case InfillPattern::Archimedean:
+        out.sparse = archimedean_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        break;
+    case InfillPattern::Octagram:
+        out.sparse = octagram_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        break;
     case InfillPattern::Lightning:
         break; // all the layers at once, from the top down (lightning_layers)
     }

@@ -3561,3 +3561,28 @@ largo de las líneas (34 mm al 20 %); la ficha no mide piezas tan grandes. No pr
 
 **Sigue:** panal 3D (regla 11), Hilbert, cuerdas de Arquímedes y octagrama (12), y los patrones de las superficies
 (14 a 17). El cúbico de soporte espera las pruebas P6c y P6d del PR #15.
+
+## 2026-10-25 — bloque: Hilbert, cuerdas de Arquímedes y octagrama
+
+**Hecho** (ficha `infill_patterns.md`, regla 12; `docs/INFILL.md`), en `src/infill/patterns.*`:
+- `hilbert`: la curva de Hilbert por celdas de `ancho / densidad`, recorrida en forma recursiva solo cerca de la región,
+  sobre una grilla fija de 2 m alrededor del origen girada `angle`: igual en todas las capas;
+- `archimedean`: cuerdas de la espiral `r = a·φ` con vueltas a `ancho / densidad` alrededor del centro de la pieza;
+- `octagram`: una espiral con el contorno de dos cuadrados girados 45°, con cada lado sobre una recta de dirección fija
+  que se aleja un dieciseisavo de la separación por lado (la primera versión, con el radio creciendo entre vértices,
+  dejaba solo el 87 % del largo en las cuatro direcciones; la prueba lo detectó);
+- el laminado pasa el centro de la pieza a las espirales; en la interfaz, **Hilbert**, **Cuerdas de Arquímedes** y
+  **Espiral octagrama**; el fuzz los sortea.
+
+**Medido** (cubo de 20 mm, ajustes de la ficha): Hilbert 195,4 mm en 2 tramos (P9: 206,3), Arquímedes 185,1 en 3 (P9:
+194,3), octagrama 172,1 en 3 (P9: 208,3); el rectilíneo, 190,9 (P1: 197,3). El octagrama de Tisma Slicer pone un 21 %
+más: queda por contrastar cómo cuenta la separación.
+
+**Pruebas** (`tests/test_combine.cpp`): las tres iguales en dos capas, el largo cerca del rectilíneo, pocos tramos;
+Hilbert mayormente a 45° y 135°, el octagrama con más del 95 % del largo a 0°, 45°, 90° y 135°, las cuerdas en todas
+las direcciones; las tres laminadas a G-code verificado.
+
+**Pedido nuevo del dueño:** rellenos no planares más fuertes que los tradicionales; es lo que sigue.
+
+**Sigue:** el panal 3D (regla 11) necesita más mediciones de la ficha; los patrones de las superficies (14 a 17).
+

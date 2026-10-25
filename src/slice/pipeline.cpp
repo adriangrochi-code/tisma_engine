@@ -43,9 +43,12 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         return out;
     const IndexedMesh mesh = compensated(input, settings);
     float min_z = mesh.vertices.front().z, max_z = min_z;
+    float min_x = mesh.vertices.front().x, max_x = min_x, min_y = mesh.vertices.front().y, max_y = min_y;
     for (const Vec3f& v : mesh.vertices) {
         min_z = std::min(min_z, v.z);
         max_z = std::max(max_z, v.z);
+        min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
+        min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
     }
     // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md);
     // with variable heights, planned layer by layer (docs/VARIABLE_LAYERS.md).
@@ -205,6 +208,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
+    fill.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress
     // bands and the dense infill left of the sparse infill.
     std::vector<std::vector<Toolpath>> branches;

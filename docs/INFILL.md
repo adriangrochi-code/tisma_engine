@@ -102,6 +102,15 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
 | `line` | El rectilíneo con una línea de cada dos girada 6,7° sobre su punto en el medio de la región (+6,7° en las capas pares, −6,7° en las impares, como P3), unidas en zigzag por el borde (regla 3). Cuando la región mide a lo largo de las líneas más de unas 17 separaciones (34 mm al 20 %), las giradas cruzan a sus vecinas en las puntas, como en `grid`; la ficha no mide piezas tan grandes |
 | `honeycomb` | Hexágonos de lado `2 · ancho / (√3 · densidad)` con un centro en el origen y lados a `angle` − 30°, + 30° y + 90°. Cada capa los imprime como líneas onduladas en una dirección principal, la mitad del largo a lo largo de ella; dos vecinas comparten esos tramos, que salen dobles. La principal pasa por `angle` + 90°, + 30° y − 30° capa a capa, y como la teselación de hexágonos no cambia al girarla 60° sobre un centro, los panales de todas las capas coinciden (regla 10). El lado cuenta cada pared una vez, como mide Tisma Slicer: el material sale unos 4/3 de la densidad |
 | `concentric` | Lazos paralelos al borde de la región, el primero a medio cordón y después cada `ancho / densidad` hacia adentro, de afuera hacia adentro (regla 13) |
+| `hilbert` | La curva de Hilbert (1891) por celdas de `ancho / densidad`, en una grilla de 2 m alrededor del origen girada `angle`: igual en todas las capas; solo se recorren las celdas cerca de la región (regla 12) |
+| `archimedean` | Cuerdas de una espiral de Arquímedes `r = a·φ` con vueltas a `ancho / densidad`, alrededor del centro de la pieza; cuerdas que se apartan como mucho 0,05 mm de la curva (regla 12) |
+| `octagram` | Una espiral con forma de estrella de ocho puntas (el contorno de dos cuadrados girados 45°) alrededor del centro de la pieza: cada lado sobre una recta de dirección fija que se aleja `ancho / densidad / 16` de la anterior, así los lados quedan exactos a 0°, 45°, 90° y 135° y a `ancho / densidad` del mismo lado una vuelta después (regla 12) |
+
+**Las curvas, medidas** en el cubo de 20 mm de la ficha (relleno poco denso por capa): `hilbert` 195,4 mm en 2 tramos
+(P9: 206,3 en 3), `archimedean` 185,1 mm en 3 (P9: 194,3 en 4), `octagram` 172,1 mm en 3 (P9: 208,3 en 8); el
+rectilíneo, 190,9 (P1: 197,3). Hilbert y Arquímedes quedan a −5 %, como el rectilíneo (−3 %). El octagrama de Tisma
+Slicer pone un 21 % más que el nuestro: con los lados a `ancho / densidad` el material es el de líneas a esa
+separación, y la ficha no dice cómo cuenta la separación. Queda como diferencia a contrastar con la ficha.
 
 **Por qué el cúbico:**
 - es una estructura 3D: rígida en X, Y y Z, como el giroide;

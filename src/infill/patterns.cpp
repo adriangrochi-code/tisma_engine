@@ -8,6 +8,7 @@
 #include "infill/rectilinear.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
@@ -136,6 +137,156 @@ std::vector<Toolpath> honeycomb_fill(const Polygons& region, double side, double
         waves.push_back(std::move(wave));
     }
     return f.clip(waves, kMaxJoin * h, width);
+}
+
+namespace {
+
+// A box in mm, for the curves' pruning.
+struct Box {
+    double x0, y0, x1, y1;
+    bool misses(double ax, double ay, double bx, double by) const {
+        return std::max(ax, bx) < x0 || std::min(ax, bx) > x1 || std::max(ay, by) < y0 || std::min(ay, by) > y1;
+    }
+};
+
+// Appends the centres of the cells of the Hilbert curve that fills the square
+// with corner (ox, oy), spanned by a (from the curve's start towards its end)
+// and b, 2^level cells a side: four such curves of half the size, the first
+// turned so that it ends next to the second's start, the last so that it ends
+// next to the corner o + a. Squares that miss the box are skipped, and the
+// curve starts a new path after them.
+void hilbert(int level, double ox, double oy, double ax, double ay, double bx, double by, const Box& box,
+             std::vector<std::vector<Point2d>>& out, bool& gap) {
+    const double xs[4] = {ox, ox + ax, ox + bx, ox + ax + bx}, ys[4] = {oy, oy + ay, oy + by, oy + ay + by};
+    if (box.misses(*std::min_element(xs, xs + 4), *std::min_element(ys, ys + 4), *std::max_element(xs, xs + 4),
+                   *std::max_element(ys, ys + 4))) {
+        gap = true;
+        return;
+    }
+    if (level == 0) {
+        if (gap || out.empty())
+            out.emplace_back();
+        out.back().push_back({ox + 0.5 * (ax + bx), oy + 0.5 * (ay + by)});
+        gap = false;
+        return;
+    }
+    const double hax = 0.5 * ax, hay = 0.5 * ay, hbx = 0.5 * bx, hby = 0.5 * by;
+    hilbert(level - 1, ox, oy, hbx, hby, hax, hay, box, out, gap);
+    hilbert(level - 1, ox + hbx, oy + hby, hax, hay, hbx, hby, box, out, gap);
+    hilbert(level - 1, ox + hax + hbx, oy + hay + hby, hax, hay, hbx, hby, box, out, gap);
+    hilbert(level - 1, ox + ax + hbx, oy + ay + hby, -hbx, -hby, -hax, -hay, box, out, gap);
+}
+
+Polygons to_paths(const std::vector<std::vector<Point2d>>& curves) {
+    Polygons out;
+    for (const std::vector<Point2d>& curve : curves) {
+        if (curve.size() < 2)
+            continue;
+        Polygon path;
+        path.reserve(curve.size());
+        for (const Point2d& p : curve)
+            path.push_back({to_units(p.x), to_units(p.y)});
+        out.push_back(std::move(path));
+    }
+    return out;
+}
+
+// The distances from p to the nearest and the farthest point of the box.
+std::array<double, 2> radii(const Box& box, Point2d p) {
+    const double dx = std::max({box.x0 - p.x, 0.0, p.x - box.x1}), dy = std::max({box.y0 - p.y, 0.0, p.y - box.y1});
+    const double fx = std::max(std::fabs(p.x - box.x0), std::fabs(p.x - box.x1));
+    const double fy = std::max(std::fabs(p.y - box.y0), std::fabs(p.y - box.y1));
+    return {std::hypot(dx, dy), std::hypot(fx, fy)};
+}
+
+// The spiral of `radius(phi)` around the centre, through the angles `step`
+// gives, over the turns that reach the box (`growth` mm apart).
+template <class Radius, class Step>
+Polygons spiral(Point2d centre, const Box& box, double growth, Radius radius, Step step) {
+    const auto [near, far] = radii(box, centre);
+    const double turn = 2.0 * std::numbers::pi;
+    std::vector<Point2d> curve;
+    for (double phi = std::max(0.0, std::floor((near - growth) / growth) * turn); radius(phi) <= far + growth;
+         phi += step(phi)) {
+        const double r = radius(phi);
+        curve.push_back({centre.x + r * std::cos(phi), centre.y + r * std::sin(phi)});
+    }
+    return to_paths({curve});
+}
+
+} // namespace
+
+std::vector<Toolpath> hilbert_fill(const Polygons& region, double spacing, double angle_degrees, double width) {
+    if (!(spacing > 0.0) || region.empty())
+        return {};
+    const Frame f(region, width, angle_degrees);
+    if (f.turned.empty())
+        return {};
+    // A square of cells around the origin big enough for any print (2 m a
+    // side), so that the curve is the same in every layer; only the cells
+    // near the region are visited.
+    int level = 1;
+    while (std::ldexp(spacing, level) < 2000.0)
+        ++level;
+    const double half = std::ldexp(spacing, level - 1);
+    const Box box{to_mm(f.xmin) - spacing, to_mm(f.ymin) - spacing, to_mm(f.xmax) + spacing, to_mm(f.ymax) + spacing};
+    std::vector<std::vector<Point2d>> curves;
+    bool gap = true;
+    hilbert(level, -half, -half, 2.0 * half, 0.0, 0.0, 2.0 * half, box, curves, gap);
+    return f.clip(to_paths(curves), kMaxJoin * spacing * kUnitsPerMm, width);
+}
+
+std::vector<Toolpath> archimedean_fill(const Polygons& region, double spacing, Point2d centre, double width) {
+    if (!(spacing > 0.0) || region.empty())
+        return {};
+    const Frame f(region, width, 0.0);
+    if (f.turned.empty())
+        return {};
+    const Box box{to_mm(f.xmin), to_mm(f.ymin), to_mm(f.xmax), to_mm(f.ymax)};
+    // r = a phi with the turns `spacing` apart; chords that stray at most
+    // 0.05 mm from the curve (a chord of length c on radius r strays c^2 / 8r),
+    // and at most an eighth of a turn.
+    const double a = spacing / (2.0 * std::numbers::pi);
+    const Polygons paths = spiral(
+        centre, box, spacing, [&](double phi) { return a * phi; },
+        [&](double phi) {
+            const double r = std::max(a * phi, spacing);
+            return std::min(std::sqrt(8.0 * 0.05 * r) / r, 0.25 * std::numbers::pi);
+        });
+    return f.clip(paths, kMaxJoin * spacing * kUnitsPerMm, width);
+}
+
+std::vector<Toolpath> octagram_fill(const Polygons& region, double spacing, Point2d centre, double width) {
+    if (!(spacing > 0.0) || region.empty())
+        return {};
+    const Frame f(region, width, 0.0);
+    if (f.turned.empty())
+        return {};
+    const Box box{to_mm(f.xmin), to_mm(f.ymin), to_mm(f.xmax), to_mm(f.ymax)};
+    // The outline of two squares turned 45 degrees from each other has 16
+    // sides, each on a line whose normal points at a multiple of 45 degrees
+    // (in this order going round), all at the same distance from the centre.
+    // Moving each line out by a sixteenth of `spacing` from the one before
+    // turns the outline into a spiral whose sides keep their directions (0,
+    // 45, 90 and 135 degrees) and lie `spacing` from the same side a turn
+    // later; each corner is where two neighbouring lines cross.
+    constexpr int kNormals[16] = {45, 0, 90, 45, 135, 90, 180, 135, 225, 180, 270, 225, 315, 270, 0, 315};
+    const double step = spacing / 16.0;
+    const auto [near, far] = radii(box, centre);
+    const auto line = [&](std::int64_t i) {
+        const double a = kNormals[i % 16] * std::numbers::pi / 180.0;
+        return std::array<double, 3>{std::cos(a), std::sin(a), step * double(i)};
+    };
+    // The corners lie within sqrt(2) of a side's distance from the centre.
+    std::vector<Point2d> curve;
+    for (auto i = std::max<std::int64_t>(0, std::int64_t((near / std::numbers::sqrt2 - spacing) / step) / 16 * 16);
+         step * double(i) <= far + spacing; ++i) {
+        const auto [c1, s1, h1] = line(i);
+        const auto [c2, s2, h2] = line(i + 1);
+        const double det = c1 * s2 - s1 * c2;
+        curve.push_back({centre.x + (h1 * s2 - h2 * s1) / det, centre.y + (h2 * c1 - h1 * c2) / det});
+    }
+    return f.clip(to_paths({curve}), kMaxJoin * spacing * kUnitsPerMm, width);
 }
 
 std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, double width) {

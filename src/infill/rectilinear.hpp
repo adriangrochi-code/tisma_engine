@@ -61,6 +61,7 @@ struct FillParams {
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
     const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
+    Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

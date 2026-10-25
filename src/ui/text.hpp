@@ -102,6 +102,9 @@
     X(LineInfill, "Línea", "Line")                                                                                    \
     X(Honeycomb, "Panal", "Honeycomb")                                                                                \
     X(ConcentricInfill, "Concéntrico", "Concentric")                                                                  \
+    X(HilbertInfill, "Hilbert", "Hilbert")                                                                            \
+    X(ArchimedeanInfill, "Cuerdas de Arquímedes", "Archimedean chords")                                               \
+    X(OctagramInfill, "Espiral octagrama", "Octagram spiral")                                                         \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \

@@ -32,4 +32,18 @@ double honeycomb_side(double width, double density);
 // and then `spacing` mm apart inwards, outside first (rule 13).
 std::vector<Toolpath> concentric_fill(const Polygons& region, double spacing, double width);
 
+// The curves of rule 12, the same in every layer, clipped to the region and
+// joined along its boundary:
+//  - hilbert_fill: a Hilbert curve (Hilbert 1891) through cells `spacing` mm
+//    wide, on a grid around the origin turned by `angle_degrees`;
+//  - archimedean_fill: chords of an Archimedean spiral r = a phi around
+//    `centre`, its turns `spacing` mm apart;
+//  - octagram_fill: a spiral around `centre` with the outline of two squares
+//    turned 45 degrees from each other, an eight-pointed star whose sides run
+//    at 0, 45, 90 and 135 degrees, each side `spacing` mm from the same side
+//    a turn before.
+std::vector<Toolpath> hilbert_fill(const Polygons& region, double spacing, double angle_degrees, double width);
+std::vector<Toolpath> archimedean_fill(const Polygons& region, double spacing, Point2d centre, double width);
+std::vector<Toolpath> octagram_fill(const Polygons& region, double spacing, Point2d centre, double width);
+
 } // namespace tisma

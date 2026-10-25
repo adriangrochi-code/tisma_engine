@@ -546,8 +546,9 @@ TEST_CASE("infill patterns: concentric loops (P9)", "[combine]") {
     CHECK(fill_layer(region, 6, p, 1.2).sparse.size() == 5);
 }
 
-TEST_CASE("infill patterns: line, honeycomb and concentric sliced into checked G-code", "[combine]") {
-    for (const InfillPattern pattern : {InfillPattern::Line, InfillPattern::Honeycomb, InfillPattern::Concentric}) {
+TEST_CASE("infill patterns: line, honeycomb, concentric and the curves sliced into checked G-code", "[combine]") {
+    for (const InfillPattern pattern : {InfillPattern::Line, InfillPattern::Honeycomb, InfillPattern::Concentric,
+                                        InfillPattern::Hilbert, InfillPattern::Archimedean, InfillPattern::Octagram}) {
         Settings s = base();
         s.infill_pattern = pattern;
         const SlicedModel m = slice_model(cube(20.0f), s);
@@ -558,5 +559,54 @@ TEST_CASE("infill patterns: line, honeycomb and concentric sliced into checked G
         std::ostringstream g;
         write_gcode(g, m, s);
         CHECK(check_gcode(g.str(), gcode_limits(m, s)).ok());
+    }
+}
+
+TEST_CASE("infill patterns: Hilbert, Archimedean chords and octagram, the same in every layer (P9)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    const LayerSurfaces region = square_sparse(20.0);
+    p.pattern = InfillPattern::Rectilinear;
+    const double lines = total(fill_layer(region, 5, p, 1.0).sparse);
+    p.centre = {10.0, 10.0};
+    for (const InfillPattern pattern : {InfillPattern::Hilbert, InfillPattern::Archimedean, InfillPattern::Octagram}) {
+        INFO("pattern " << int(pattern));
+        p.pattern = pattern;
+        const std::vector<Toolpath> a = fill_layer(region, 5, p, 1.0).sparse;
+        const std::vector<Toolpath> b = fill_layer(region, 6, p, 1.2).sparse;
+        // The same in every layer, about as long as the rectilinear lines
+        // (P9: 0.98 to 1.06 times), in a few joined pieces.
+        REQUIRE(a.size() == b.size());
+        for (std::size_t i = 0; i < a.size(); ++i)
+            CHECK(a[i].points.size() == b[i].points.size());
+        CHECK_THAT(total(a) / lines, WithinAbs(1.0, 0.12));
+        CHECK(a.size() <= 10);
+        const std::map<int, double> d = by_direction(a);
+        const double all = total(a);
+        if (pattern == InfillPattern::Hilbert) {
+            // Turned by the infill angle: most of it at 45 and 135 degrees.
+            CHECK((d.count(45) ? d.at(45) : 0.0) + (d.count(135) ? d.at(135) : 0.0) > 0.7 * all);
+        } else if (pattern == InfillPattern::Octagram) {
+            // Sides at 0, 45, 90 and 135 degrees (within the spiral's growth).
+            double sides = 0.0;
+            for (const auto& [angle, length] : d)
+                for (const int s : {0, 45, 90, 135, 180})
+                    if (std::abs(angle - s) <= 4)
+                        sides += length;
+            CHECK(sides > 0.95 * all);
+        } else {
+            // Chords in every direction.
+            int bins = 0;
+            for (int s = 0; s < 180; s += 15) {
+                double in = 0.0;
+                for (const auto& [angle, length] : d)
+                    if (angle >= s && angle < s + 15)
+                        in += length;
+                bins += in > 0.02 * all;
+            }
+            CHECK(bins == 12);
+        }
     }
 }

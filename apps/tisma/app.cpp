@@ -1856,7 +1856,10 @@ void App::settings_panel() {
                         {InfillPattern::SupportCubic, tr(T::SupportCubic)},
                         {InfillPattern::Lightning, tr(T::Lightning)},
                         {InfillPattern::Honeycomb, tr(T::Honeycomb)},
-                        {InfillPattern::Concentric, tr(T::ConcentricInfill)}});
+                        {InfillPattern::Concentric, tr(T::ConcentricInfill)},
+                        {InfillPattern::Hilbert, tr(T::HilbertInfill)},
+                        {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},
+                        {InfillPattern::Octagram, tr(T::OctagramInfill)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));

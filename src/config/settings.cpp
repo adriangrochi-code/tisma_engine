@@ -60,7 +60,10 @@ const std::map<std::string, InfillPattern>& infill_patterns() {
         {"lightning", InfillPattern::Lightning},
         {"line", InfillPattern::Line},
         {"honeycomb", InfillPattern::Honeycomb},
-        {"concentric", InfillPattern::Concentric}};
+        {"concentric", InfillPattern::Concentric},
+        {"hilbert", InfillPattern::Hilbert},
+        {"archimedean", InfillPattern::Archimedean},
+        {"octagram", InfillPattern::Octagram}};
     return names;
 }
 
