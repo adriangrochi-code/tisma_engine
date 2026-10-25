@@ -52,6 +52,27 @@ y contesta `M110`, `M115` («TismaSim»), `M105`, `M155`, `M104`/`M140`, `M109`/
 tick (50 ms). Con `fail_line = n`, contesta la línea `n` con error de suma una vez, para probar el reenvío. Guarda
 cada comando recibido, así las pruebas comprueban qué llegó.
 
+## La página Impresora de `tisma`
+
+La pestaña **Impresora** (ícono de impresora, a la derecha de Calibración) muestra un panel a la izquierda; la pieza
+se corre a la derecha, como en Calibración:
+
+1. **Conexión:** el puerto (los USB que se ven, y **Impresora simulada**), **Actualizar** la lista, la velocidad
+   (115 200, 250 000, 57 600 o 230 400) y **Conectar** / **Desconectar**. El puerto y la velocidad se recuerdan.
+2. **Estado:** un punto de color con el estado (lista, imprimiendo, en pausa, error), el firmware, el último error, y
+   las temperaturas de boquilla y cama (actual / objetivo) con un campo, **Fijar** y **Apagar**.
+3. **Trabajo:** **Imprimir** manda lo laminado (o el G-code abierto) línea por línea; la barra de avance, las líneas
+   enviadas, el tiempo que pasó y el que falta (con el tiempo estimado del G-code), los reenvíos; **Pausar**,
+   **Seguir** y **Cancelar**.
+4. **Mover y extruir** (con la impresora lista): **Inicio**, ±X, ±Y y ±Z con un paso, extruir y retraer 5 mm, y el
+   ventilador.
+5. **Registro:** los eventos (conectada, empezó, terminó, cancelada, errores), los más nuevos arriba. Los importantes
+   también salen como avisos.
+
+`--device PUERTO|sim` conecta al empezar; `--view device` abre la pestaña; con `--screenshot`, `--device-print`
+lamina, imprime y espera el final (sale con 1 si la impresión se cancela o la impresora da error). La prueba
+`ui_device_prints_to_simulator` lo hace con el cubo contra la impresora simulada.
+
 ## Pruebas (`tests/test_device.cpp`)
 
 - Los textos del protocolo: la suma del ejemplo de Marlin (`N0 M110 N0*125`), temperaturas en sus formas, la
@@ -62,12 +83,13 @@ cada comando recibido, así las pruebas comprueban qué llegó.
   interfaz.
 - Pausar, seguir y cancelar (con un firmware sin `M155`: el host pregunta `M105`), y la secuencia de apagado.
 - Una impresora que nunca contesta (error con «no answer») y una conexión que se corta (error con «lost»).
+- El estado y su evento cambian juntos (bajo el mismo bloqueo): quien ve «error» o «terminó» encuentra el evento.
+  Una carrera que mostró UBSan en el CI de Linux (2026-10-25).
 - Los puertos serie se listan y un puerto inexistente falla con su motivo.
 
 ## Qué sigue (en orden, `docs/MOBILE.md`)
 
-1. La página Device de `tisma`: la lista de puertos, conectar, el estado y las temperaturas, imprimir el G-code
-   recién exportado, pausar y cancelar; el simulador como «impresora» para probarla sin máquina.
+1. ~~La página Device de `tisma`~~: hecha (arriba).
 2. El servicio local de `tisma` en la red y la app de Android que lo sigue.
 3. Las conexiones de red de la ficha de Device, en esta misma capa: Moonraker, OctoPrint, PrusaLink, Duet y las
    marcas.

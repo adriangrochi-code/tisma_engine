@@ -78,7 +78,8 @@ private:
     Reply send_line(const std::string& command);
     std::optional<std::string> read_line(std::chrono::milliseconds timeout);
     void handle_report(std::string_view line);
-    void set_state(PrinterState state);
+    // A new state and its event, together: whoever sees the state finds the event.
+    void change(PrinterState state, PrinterEvent::Kind kind, std::string text = {});
     void push_event(PrinterEvent::Kind kind, std::string text = {});
     void finish_job(PrinterEvent::Kind how);
     void drain_commands();

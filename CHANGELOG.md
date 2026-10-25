@@ -27,8 +27,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
     cerrada, boquilla endurecida.
 - **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
   (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
-  trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas. Todavía sin página en la
-  interfaz.
+  trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.
+- **La pestaña Impresora** de la interfaz (`docs/DEVICE.md`): conectar por USB (o a la impresora simulada), ver el
+  estado y las temperaturas, imprimir lo laminado o un G-code abierto con su avance y tiempo restante, pausar,
+  seguir, cancelar, mover, extruir y el ventilador. `--device` y `--device-print` para las capturas.
 - **Calibraciones estándar, tercera tanda** (`docs/CALIBRATION.md`): el tope de flujo volumétrico (cada segmento
   con todas sus líneas a ese flujo; el elegido pasa a `machine.max_flow`), las resonancias (cada segmento con su
   aceleración, `M204` o `SET_VELOCITY_LIMIT`; la elegida pasa a `machine.acceleration`) y la pata de elefante (un

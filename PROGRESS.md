@@ -2997,3 +2997,36 @@ sale igual byte a byte.
 
 **No probado:** la búsqueda aleatoria ampliada con ASan (solo en Release).
 
+## 2026-10-25 — la pestaña Impresora (Device)
+
+**Pedido del dueño:** «seguí con la página Device». Diseño en `docs/DEVICE.md`, «La página Impresora».
+
+**Hecho:**
+- La pestaña **Impresora** en `tisma` (`apps/tisma/app.cpp`, `device_panel`): puerto y velocidad (recordados),
+  conectar y desconectar, estado con su color, firmware y error, temperaturas con objetivo, imprimir lo laminado o
+  el G-code abierto, avance con líneas, tiempo pasado y restante (el estimado del G-code), reenvíos, pausar, seguir,
+  cancelar, mover los ejes, extruir, retraer, ventilador, y el registro de eventos; los eventos importantes también
+  como avisos. La pieza se corre a la derecha, como en Calibración.
+- `--device PUERTO|sim`, `--view device` y `--device-print` (lamina, imprime y espera el final); la prueba
+  `ui_device_prints_to_simulator`.
+- El host pide `M105` al conectar: las temperaturas aparecen enseguida, no al primer informe de `M155`.
+
+**Encontrado y corregido en el camino:**
+- **Una carrera en el host** (la encontró UBSan en el CI de Linux): el estado nuevo (error, lista, terminado, en
+  pausa) se publicaba y su evento se agregaba después, en otro bloqueo; quien veía el estado y retiraba los eventos
+  en ese instante los encontraba vacíos (y la prueba leía `.back()` de una lista vacía). Ahora `change()` publica
+  los dos juntos; las pruebas nunca leen `.back()` sin comprobar que haya algo. 15 corridas seguidas con ASan +
+  UBSan sin fallas.
+- **La prueba de pausa en Windows:** el trabajo de 2000 líneas contra el simulador en memoria terminaba antes de que
+  la prueba alcanzara a pausar (allá un `sleep_for(5ms)` dura ~15 ms). El simulador ahora puede tardar por movimiento
+  (`move_time`, 2 ms en esa prueba): el trabajo dura segundos y la pausa siempre cae en medio.
+
+**Medido:** el cubo, laminado e impreso a la impresora simulada desde la interfaz, en 1,4 s de punta a punta (2552
+líneas, con las esperas de `M190` y `M109` del simulador).
+
+**No probado:** con una impresora real por USB (necesita al dueño); la pestaña a mano, con el ratón (las pruebas
+usan la línea de comandos).
+
+**Sigue:** la altura de capa variable por zona (pedido del dueño): el plan, con *local adaptive slicing* (Tyberg y
+Bøhn 1998); después, el servicio local para la app de Android.
+

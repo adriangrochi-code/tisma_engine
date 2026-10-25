@@ -28,6 +28,8 @@ struct AppOptions {
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
+    bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish
     bool language_given = false;
     Language language = Language::Spanish;
 };

@@ -227,6 +227,8 @@ void SimulatedPrinter::handle(const std::string& line) {
                 position_[std::size_t(i)] = *v;
         reply("ok");
     } else if (code == "G0" || code == "G1") {
+        if (options_.move_time.count() > 0)
+            std::this_thread::sleep_for(options_.move_time);
         std::lock_guard lock(mutex_);
         const char axes[4] = {'X', 'Y', 'Z', 'E'};
         for (int i = 0; i < 4; ++i)

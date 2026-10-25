@@ -14,12 +14,12 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--moire on|off]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
-    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration]\n"
+    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
@@ -67,8 +67,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--view") {
             options.view = value();
             if (options.view != "prepare" && options.view != "preview" && options.view != "analysis" &&
-                options.view != "calibration") {
-                std::fprintf(stderr, "error: --view must be prepare, preview, analysis or calibration\n");
+                options.view != "calibration" && options.view != "device") {
+                std::fprintf(stderr, "error: --view must be prepare, preview, analysis, calibration or device\n");
                 return 2;
             }
         } else if (arg == "--layer") {
@@ -128,6 +128,10 @@ int main(int argc, char** argv) {
             options.ray_check = true;
         } else if (arg == "--moire-check") {
             options.moire_check = true;
+        } else if (arg == "--device") {
+            options.device = value();
+        } else if (arg == "--device-print") {
+            options.device_print = true;
         } else if (arg == "--calibration") {
             options.calibration = value();
             const std::string& c = options.calibration;
@@ -157,6 +161,10 @@ int main(int argc, char** argv) {
          options.moire_check) &&
         options.screenshot.empty()) {
         std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check and --moire-check go with --screenshot\n");
+        return 2;
+    }
+    if (options.device_print && (options.device.empty() || options.screenshot.empty())) {
+        std::fprintf(stderr, "error: --device-print goes with --device and --screenshot\n");
         return 2;
     }
     if (options.ray_check)

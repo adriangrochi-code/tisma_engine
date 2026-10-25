@@ -205,9 +205,10 @@ bool GcodeHost::send(std::string command) {
     return true;
 }
 
-void GcodeHost::set_state(PrinterState state) {
+void GcodeHost::change(PrinterState state, PrinterEvent::Kind kind, std::string text) {
     std::lock_guard lock(mutex_);
     status_.state = state;
+    events_.push_back({kind, std::move(text)});
 }
 
 void GcodeHost::push_event(PrinterEvent::Kind kind, std::string text) {
@@ -351,6 +352,8 @@ bool GcodeHost::handshake() {
     if (send_line("M155 S2") != Reply::Ok) // temperatures by themselves, every 2 s
         return false;
     auto_report_ = !unknown_command_;
+    if (send_line("M105") != Reply::Ok) // the temperatures now, not at the first report
+        return false;
     last_temperatures_ = std::chrono::steady_clock::now();
     return true;
 }
@@ -363,9 +366,9 @@ void GcodeHost::finish_job(PrinterEvent::Kind how) {
         if (how == PrinterEvent::Kind::Finished)
             status_.progress = 1.0;
         status_.state = PrinterState::Idle;
+        events_.push_back({how, name});
     }
     job_.reset();
-    push_event(how, name);
 }
 
 void GcodeHost::drain_commands() {
@@ -387,13 +390,13 @@ void GcodeHost::run() {
             std::lock_guard lock(mutex_);
             status_.error = stop_ ? "" : "no answer from the printer";
             status_.state = stop_ ? PrinterState::Disconnected : PrinterState::Error;
+            events_.push_back({stop_ ? PrinterEvent::Kind::Disconnected : PrinterEvent::Kind::Error,
+                               "no answer from the printer"});
         }
-        push_event(stop_ ? PrinterEvent::Kind::Disconnected : PrinterEvent::Kind::Error, "no answer from the printer");
         stream_->close();
         return;
     }
-    set_state(PrinterState::Idle);
-    push_event(PrinterEvent::Kind::Connected, status().firmware);
+    change(PrinterState::Idle, PrinterEvent::Kind::Connected, status().firmware);
     bool lost = false;
     while (!stop_) {
         drain_commands();
@@ -431,12 +434,10 @@ void GcodeHost::run() {
             }
             if (pause_) {
                 if (status().state != PrinterState::Paused) {
-                    set_state(PrinterState::Paused);
-                    push_event(PrinterEvent::Kind::Paused, job_->name);
+                    change(PrinterState::Paused, PrinterEvent::Kind::Paused, job_->name);
                 }
             } else if (status().state == PrinterState::Paused) {
-                set_state(PrinterState::Printing);
-                push_event(PrinterEvent::Kind::Resumed, job_->name);
+                change(PrinterState::Printing, PrinterEvent::Kind::Resumed, job_->name);
             }
             if (status().state == PrinterState::Printing) {
                 if (job_->next >= job_->lines.size()) {
@@ -491,12 +492,12 @@ void GcodeHost::run() {
         if (lost && !stop_) {
             status_.error = "the connection was lost";
             status_.state = PrinterState::Error;
+            events_.push_back({PrinterEvent::Kind::Error, "the connection was lost"});
         } else {
             status_.state = PrinterState::Disconnected;
+            events_.push_back({PrinterEvent::Kind::Disconnected, ""});
         }
     }
-    push_event(lost && !stop_ ? PrinterEvent::Kind::Error : PrinterEvent::Kind::Disconnected,
-               lost && !stop_ ? "the connection was lost" : "");
 }
 
 } // namespace tisma::device

@@ -129,6 +129,8 @@ TEST_CASE("device: the host prints a job to the simulated printer, line by line,
     CHECK(printer.count("M110") == 1);
     CHECK(printer.count("M115") == 1);
     CHECK(printer.count("M155") == 1);
+    CHECK(printer.count("M105") == 1); // the temperatures right away
+    CHECK_THAT(host.status().nozzle.actual, WithinAbs(25.0, 1.0));
 
     const std::string gcode = cube_gcode();
     const std::size_t lines = sendable_lines(gcode);
@@ -172,13 +174,21 @@ TEST_CASE("device: the host prints a job to the simulated printer, line by line,
 
     host.disconnect();
     CHECK(host.status().state == PrinterState::Disconnected);
-    CHECK(host.take_events().back().kind == PrinterEvent::Kind::Disconnected);
+    {
+        const std::vector<PrinterEvent> last = host.take_events();
+        REQUIRE(!last.empty());
+        CHECK(last.back().kind == PrinterEvent::Kind::Disconnected);
+    }
 }
 
 TEST_CASE("device: pause, resume and cancel", "[device]") {
     auto [host_end, printer_end] = make_pipe();
     SimulatorOptions options;
     options.auto_report = false; // an older firmware: the host polls M105
+    // Each move takes a while, as on a printer: the job lasts seconds, so the
+    // pause lands in the middle of it on any machine (in memory it would end
+    // before the test could pause it).
+    options.move_time = std::chrono::milliseconds(2);
     SimulatedPrinter printer(printer_end, options);
     HostOptions host_options;
     host_options.temperature_period = 100ms;
@@ -224,7 +234,11 @@ TEST_CASE("device: a printer that never answers, and a broken connection", "[dev
     REQUIRE(host.connect());
     REQUIRE(within(3000ms, [&] { return host.status().state == PrinterState::Error; }));
     CHECK_THAT(host.status().error, ContainsSubstring("no answer"));
-    CHECK(host.take_events().back().kind == PrinterEvent::Kind::Error);
+    {
+        const std::vector<PrinterEvent> events = host.take_events();
+        REQUIRE(!events.empty());
+        CHECK(events.back().kind == PrinterEvent::Kind::Error);
+    }
     CHECK_FALSE(host.send("G28"));
     host.disconnect();
 

@@ -216,6 +216,8 @@ sombras en lugar de la luz, para revisarlas.
   - `ui_slice_export_screenshot`: abre el cubo de prueba, lo lamina, exporta y dibuja la vista previa;
   - `ui_raytrace_matches_cpu`: los rayos de la GPU contra los de la CPU;
   - `ui_moire_filter_smooths_fine_lines`: la vista previa de lejos, con y sin el filtro de moiré;
+  - `ui_device_prints_to_simulator`: el cubo laminado e impreso en la impresora simulada desde la pestaña Impresora
+    (`docs/DEVICE.md`);
   - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
     exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
 

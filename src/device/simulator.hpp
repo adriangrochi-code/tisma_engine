@@ -27,6 +27,7 @@ struct SimulatorOptions {
     bool auto_report = true;                // whether M155 is known
     std::chrono::milliseconds tick{50};     // how often the temperatures move
     double heating = 0.3;                   // of the way to the target, per tick
+    std::chrono::microseconds move_time{0}; // how long each G0/G1 takes before its "ok", like a moving printer
 };
 
 class SimulatedPrinter {

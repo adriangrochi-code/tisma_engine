@@ -446,8 +446,9 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
 - [x] La capa de dispositivos `src/device/`: `Printer`, `ByteStream`, el puerto serie (Linux y Windows), el host de
   G-code por serie (numeración, suma de verificación, reenvíos, temperaturas, pausa y cancelación) y la impresora
   simulada, con pruebas de punta a punta
-- [ ] La página Device de `tisma`: puertos, conectar, estado, imprimir lo exportado, pausar y cancelar; el simulador
-  como impresora de prueba
+- [x] La página Device de `tisma` (pestaña Impresora): puertos, conectar, estado y temperaturas, imprimir lo laminado
+  o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
+  máquina, con una prueba de punta a punta
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
 - [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
 - [ ] Probado con una impresora real por USB (necesita al dueño)

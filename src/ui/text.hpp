@@ -87,6 +87,49 @@
     X(ZoomOut, "Alejar", "Zoom out")                                                                                  \
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
     X(TabCalibration, "Calibración", "Calibration")                                                                   \
+    X(TabDevice, "Impresora", "Printer")                                                                              \
+    X(DeviceTitle, "Impresora conectada", "Connected printer")                                                        \
+    X(DeviceHint, "Por USB: elegí el puerto y conectá. Imprime lo que está laminado o el G-code abierto. La impresora simulada sirve para probar sin máquina.", "Over USB: pick the port and connect. It prints what is sliced or the opened G-code. The simulated printer is for trying without a machine.") \
+    X(DevicePort, "Puerto", "Port")                                                                                   \
+    X(DeviceBaud, "Velocidad", "Baud rate")                                                                           \
+    X(DeviceSimulated, "Impresora simulada", "Simulated printer")                                                     \
+    X(DeviceNoPorts, "No se ven puertos USB: conectá la impresora y tocá Actualizar.", "No USB ports in sight: plug the printer in and press Refresh.") \
+    X(DeviceRefresh, "Actualizar", "Refresh")                                                                         \
+    X(DeviceConnect, "Conectar", "Connect")                                                                           \
+    X(DeviceDisconnect, "Desconectar", "Disconnect")                                                                  \
+    X(DeviceStateDisconnected, "Desconectada", "Disconnected")                                                        \
+    X(DeviceStateConnecting, "Conectando…", "Connecting…")                                                            \
+    X(DeviceStateIdle, "Lista", "Ready")                                                                              \
+    X(DeviceStatePrinting, "Imprimiendo", "Printing")                                                                 \
+    X(DeviceStatePaused, "En pausa", "Paused")                                                                        \
+    X(DeviceStateError, "Error", "Error")                                                                             \
+    X(DeviceFirmware, "Firmware: %s", "Firmware: %s")                                                                 \
+    X(DeviceNozzle, "Boquilla", "Nozzle")                                                                             \
+    X(DeviceBed, "Cama", "Bed")                                                                                       \
+    X(DeviceSet, "Fijar", "Set")                                                                                      \
+    X(DeviceOff, "Apagar", "Off")                                                                                     \
+    X(DevicePrint, "Imprimir", "Print")                                                                               \
+    X(DevicePrintWhat, "Manda %s a la impresora, línea por línea.", "Sends %s to the printer, line by line.")         \
+    X(DeviceNothingToPrint, "Laminá un modelo o abrí un G-code para imprimir.", "Slice a model or open a G-code file to print.") \
+    X(DevicePause, "Pausar", "Pause")                                                                                 \
+    X(DeviceResume, "Seguir", "Resume")                                                                               \
+    X(DeviceCancel, "Cancelar", "Cancel")                                                                             \
+    X(DeviceProgress, "%s · %.1f %% · %s de %s líneas", "%s · %.1f %% · %s of %s lines")                              \
+    X(DeviceTimes, "Pasó %s · falta ≈ %s", "Elapsed %s · about %s left")                                              \
+    X(DeviceControls, "Mover y extruir", "Move and extrude")                                                          \
+    X(DeviceHome, "Inicio", "Home")                                                                                   \
+    X(DeviceExtrude, "Extruir", "Extrude")                                                                            \
+    X(DeviceRetract, "Retraer", "Retract")                                                                            \
+    X(DeviceStep, "Paso", "Step")                                                                                     \
+    X(DeviceFan, "Ventilador", "Fan")                                                                                 \
+    X(DeviceLog, "Registro", "Log")                                                                                   \
+    X(DeviceConnected, "Impresora conectada: %s", "Printer connected: %s")                                            \
+    X(DevicePrintStarted, "Imprimiendo %s", "Printing %s")                                                            \
+    X(DevicePrintFinished, "Terminó la impresión de %s", "%s finished printing")                                      \
+    X(DevicePrintCancelled, "Impresión cancelada: %s", "Print cancelled: %s")                                         \
+    X(DevicePrinterError, "Impresora: %s", "Printer: %s")                                                             \
+    X(DeviceCannotOpen, "No se pudo abrir el puerto: %s", "Cannot open the port: %s")                                 \
+    X(DeviceResends, "%zu líneas reenviadas", "%zu lines sent again")                                                 \
     X(CalibrationTitle, "Calibración de la impresora", "Printer calibration")                                         \
     X(CalibrationHint, "Tocá Crear: la pieza se arma y se lamina sola, con rangos elegidos desde tus ajustes. Imprimila, mirala y elegí lo que salió mejor.", \
       "Press Create: the part is built and sliced by itself, with ranges chosen from your settings. Print it, look at it and pick what came out best.") \

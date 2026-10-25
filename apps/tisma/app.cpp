@@ -12,6 +12,9 @@
 #include "catalog/catalog.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
+#include "device/gcode_host.hpp"
+#include "device/serial_port.hpp"
+#include "device/simulator.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
 #include "io/stl.hpp"
@@ -198,7 +201,7 @@ std::filesystem::path preferences_path() {
 #endif
 }
 
-enum class Tab { Prepare, Preview, Analysis, Calibration };
+enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
 enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest };
 
 class App {
@@ -245,6 +248,13 @@ private:
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
     void check_moire(int fb_w, int fb_h);
+    // The Device page (docs/DEVICE.md).
+    void device_panel();
+    void device_connect(const std::string& port);
+    void device_disconnect();
+    void device_poll();
+    bool device_can_print() const;
+    void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
     void bed_changed();
@@ -340,6 +350,17 @@ private:
     std::shared_ptr<RayScene> ray_scene_;
     bool ray_checked_ = false;
     bool moire_checked_ = false;
+
+    // The connected printer: a serial port, or the simulated one.
+    std::unique_ptr<device::Printer> printer_;
+    std::unique_ptr<device::SimulatedPrinter> simulator_;
+    std::vector<std::string> device_ports_;  // last listed
+    std::string device_port_ = "sim";        // the chosen one ("sim": the simulated printer)
+    int device_baud_ = 115200;
+    double device_nozzle_ = 200.0, device_bed_ = 60.0, device_step_ = 10.0, device_fan_ = 100.0;
+    std::vector<std::string> device_log_;    // the events, newest last
+    bool device_print_sent_ = false;         // with --device-print: the job was started
+    bool device_print_done_ = false;         // and it finished (or failed)
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -663,6 +684,11 @@ bool App::init(std::string& error) {
         fxaa_ = options_.fxaa != 0;
     if (options_.moire >= 0)
         moire_ = options_.moire != 0;
+    device_ports_ = device::list_serial_ports();
+    if (!options_.device.empty()) {
+        device_port_ = options_.device;
+        device_connect(device_port_);
+    }
     // The profiles; with none chosen yet, the ones the settings match.
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
@@ -696,7 +722,7 @@ bool App::init(std::string& error) {
     } else if (!c.empty()) {
         create_calibration(calibration_kind_from_name(c).value_or(CalibrationKind::Dimensions), false);
     }
-    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty()) && mesh_ &&
+    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty() || options_.device_print) && mesh_ &&
         !result_)
         start_slice();
     if (!options_.catalog.empty()) {
@@ -723,6 +749,7 @@ void App::apply_theme() {
 void App::shutdown() {
     slice_job_.wait();
     voxel_job_.wait();
+    device_disconnect();
     if (options_.screenshot.empty() && gl_loaded_)
         save_preferences();
     if (gl_loaded_) {
@@ -758,6 +785,8 @@ void App::load_preferences() {
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
         moire_ = j.value("moire_filter", true);
+        device_port_ = j.value("device_port", std::string("sim"));
+        device_baud_ = j.value("device_baud", 115200);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (j.contains("settings"))
             settings_ = parse_settings(j.at("settings").dump());
@@ -783,6 +812,8 @@ void App::save_preferences() {
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
         j["moire_filter"] = moire_;
+        j["device_port"] = device_port_;
+        j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
         j["settings"] = nlohmann::json::parse(settings_json(settings_));
         for (const ProfileKind kind : kProfileKinds)
@@ -1468,6 +1499,7 @@ void App::poll_jobs() {
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "calibration" ? Tab::Calibration
+                          : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
                                                            : Tab::Preview;
         set_tab(!options_.screenshot.empty() ? asked : calibrating ? Tab::Calibration : Tab::Preview);
@@ -1552,16 +1584,17 @@ void App::frame_now() {
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
     camera_.fit(lo, hi, view_size_.x / std::max(view_size_.y, 1.0f));
-    // The calibration panel covers the left of the view: the part goes right.
-    if (tab_ == Tab::Calibration)
+    // The calibration and device panels cover the left of the view: the part goes right.
+    if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
 }
 
 void App::set_tab(Tab tab) {
     // The part moves aside for the calibration panel, and back when it closes
     // (a pending framing does it itself).
-    if ((tab == Tab::Calibration) != (tab_ == Tab::Calibration) && !frame_pending_ && view_size_.y > 10.0f)
-        camera_.pan((tab == Tab::Calibration ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
+    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device; };
+    if (aside(tab) != aside(tab_) && !frame_pending_ && view_size_.y > 10.0f)
+        camera_.pan((aside(tab) ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
     tab_ = tab;
     if (tab == Tab::Analysis)
         estimate_voxels_if_stale();
@@ -1615,7 +1648,8 @@ void App::top_bar() {
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
-                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration}};
+                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
+                              {Tab::Device, "tisma_printer", T::TabDevice}};
     for (const TabButton& t : tabs) {
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
@@ -2733,7 +2767,7 @@ void App::layout() {
     settings_panel();
     status_bar();
     view_tools();
-    if (!mesh_ && !result_ && tab_ != Tab::Calibration) // the calibration panel has its own buttons
+    if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
         empty_hint();
     if (tab_ == Tab::Preview)
         preview_panels();
@@ -2741,6 +2775,8 @@ void App::layout() {
         analysis_panel();
     if (tab_ == Tab::Calibration)
         calibration_panel();
+    if (tab_ == Tab::Device)
+        device_panel();
     toasts();
     dialogs();
 
@@ -2923,6 +2959,279 @@ void App::check_rays(const ViewFrame& f) {
     }
 }
 
+// The Device page (docs/DEVICE.md): the port, the connection, the state and
+// the temperatures, printing what is sliced (or the opened G-code), pausing
+// and cancelling, moving and extruding, and the events.
+void App::device_connect(const std::string& port) {
+    device_disconnect();
+    std::shared_ptr<device::ByteStream> stream;
+    if (port == "sim") {
+        auto [host_end, printer_end] = device::make_pipe();
+        device::SimulatorOptions sim;
+        sim.tick = std::chrono::milliseconds(50);
+        simulator_ = std::make_unique<device::SimulatedPrinter>(printer_end, sim);
+        stream = host_end;
+    } else {
+        auto serial = std::make_shared<device::SerialPort>();
+        std::string error;
+        if (!serial->open(port, device_baud_, error)) {
+            notify(format(tr(T::DeviceCannotOpen), error.c_str()), true);
+            device_log_.push_back(error);
+            return;
+        }
+        stream = serial;
+    }
+    printer_ = std::make_unique<device::GcodeHost>(stream);
+    printer_->connect();
+}
+
+void App::device_disconnect() {
+    if (printer_)
+        printer_->disconnect();
+    printer_.reset();
+    simulator_.reset();
+}
+
+void App::device_poll() {
+    if (!printer_)
+        return;
+    using K = device::PrinterEvent::Kind;
+    for (const device::PrinterEvent& e : printer_->take_events()) {
+        std::string line;
+        switch (e.kind) {
+        case K::Connected: line = format(tr(T::DeviceConnected), e.text.c_str()); notify(line); break;
+        case K::Started: line = format(tr(T::DevicePrintStarted), e.text.c_str()); break;
+        case K::Finished:
+            line = format(tr(T::DevicePrintFinished), e.text.c_str());
+            notify(line);
+            if (options_.device_print)
+                device_print_done_ = true;
+            break;
+        case K::Cancelled:
+            line = format(tr(T::DevicePrintCancelled), e.text.c_str());
+            notify(line, true);
+            if (options_.device_print) {
+                std::fprintf(stderr, "error: the print was cancelled: %s\n", printer_->status().error.c_str());
+                failed_ = true;
+                device_print_done_ = true;
+            }
+            break;
+        case K::Error: line = format(tr(T::DevicePrinterError), e.text.c_str()); notify(line, true); break;
+        case K::Paused: line = tr(T::DeviceStatePaused); break;
+        case K::Resumed: line = tr(T::DeviceStatePrinting); break;
+        case K::Disconnected: line = tr(T::DeviceStateDisconnected); break;
+        case K::Message: line = e.text; break;
+        }
+        device_log_.push_back(std::move(line));
+    }
+    if (device_log_.size() > 200)
+        device_log_.erase(device_log_.begin(), device_log_.end() - 200);
+}
+
+bool App::device_can_print() const {
+    return result_ && !result_->gcode.empty() && (viewer_ || (result_->ok && result_->check.ok() && !stale_));
+}
+
+void App::device_print() {
+    if (!printer_ || !device_can_print())
+        return;
+    const std::string name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                             : model_path_.empty()          ? std::string("tisma.gcode")
+                                                            : utf8(model_path_.stem()) + ".gcode";
+    printer_->start_print(result_->gcode, name);
+}
+
+void App::device_panel() {
+    const float margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(450.0f * scale_, view_size_.y - 72.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##device", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BeginChild("##device_scroll", ImVec2(0, 0));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::DeviceTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", tr(T::DeviceHint));
+    const float button_h = 30.0f * scale_;
+    const float field = 150.0f * scale_;
+
+    const device::PrinterStatus s = printer_ ? printer_->status() : device::PrinterStatus{};
+    using State = device::PrinterState;
+    const bool connected = printer_ && s.state != State::Disconnected && s.state != State::Error;
+
+    // 1: the port and the connection.
+    ImGui::Separator();
+    const auto port_name = [&](const std::string& p) { return p == "sim" ? std::string(tr(T::DeviceSimulated)) : p; };
+    ImGui::BeginDisabled(connected);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::DevicePort), port_name(device_port_).c_str())) {
+        for (const std::string& p : device_ports_)
+            if (ImGui::Selectable(p.c_str(), p == device_port_))
+                device_port_ = p;
+        if (ImGui::Selectable(tr(T::DeviceSimulated), device_port_ == "sim"))
+            device_port_ = "sim";
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::DeviceRefresh)))
+        device_ports_ = device::list_serial_ports();
+    if (device_port_ != "sim") {
+        ImGui::SetNextItemWidth(field);
+        const int bauds[] = {115200, 250000, 57600, 230400};
+        if (ImGui::BeginCombo(tr(T::DeviceBaud), std::to_string(device_baud_).c_str())) {
+            for (int b : bauds)
+                if (ImGui::Selectable(std::to_string(b).c_str(), b == device_baud_))
+                    device_baud_ = b;
+            ImGui::EndCombo();
+        }
+    }
+    if (device_ports_.empty())
+        ImGui::TextDisabled("%s", tr(T::DeviceNoPorts));
+    ImGui::EndDisabled();
+    if (!connected) {
+        if (button("##connect", "tisma_printer", tr(T::DeviceConnect), true, false, true, nullptr, button_h))
+            device_connect(device_port_);
+    } else if (button("##disconnect", nullptr, tr(T::DeviceDisconnect), false, false, true, nullptr, button_h)) {
+        device_disconnect();
+    }
+
+    // 2: the state and the temperatures.
+    ImGui::Separator();
+    const T state_text[] = {T::DeviceStateDisconnected, T::DeviceStateConnecting, T::DeviceStateIdle,
+                            T::DeviceStatePrinting,     T::DeviceStatePaused,     T::DeviceStateError};
+    const std::uint32_t state_colour = s.state == State::Error      ? 0xE5484D
+                                       : s.state == State::Printing ? theme_.accent_hover
+                                       : s.state == State::Idle     ? 0x30A46C
+                                                                    : 0x8B8D98;
+    {
+        const float r = ImGui::GetTextLineHeight() * 0.28f;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x + r, at.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                    ImGui::GetColorU32(rgb(state_colour)));
+        ImGui::Dummy(ImVec2(r * 2.0f, ImGui::GetTextLineHeight()));
+        ImGui::SameLine(0, 6.0f * scale_);
+        ImGui::TextColored(rgb(state_colour), "%s", tr(state_text[int(s.state)]));
+    }
+    if (!s.firmware.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled(tr(T::DeviceFirmware), s.firmware.c_str());
+    }
+    if (!s.error.empty())
+        ImGui::TextColored(rgb(0xE5484D), "%s", s.error.c_str());
+    if (connected) {
+        const auto heater = [&](T label, const device::Temperature& t, double& target, bool nozzle) {
+            ImGui::PushID(nozzle ? "nozzle" : "bed");
+            ImGui::Text("%s  %.1f / %.0f °C", tr(label), t.actual, t.target);
+            ImGui::SetNextItemWidth(field * 0.7f);
+            double lo = 0.0, hi = nozzle ? 400.0 : 150.0;
+            ImGui::DragScalar("##target", ImGuiDataType_Double, &target, 1.0f, &lo, &hi, "%.0f °C",
+                              ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::DeviceSet)))
+                nozzle ? printer_->set_nozzle(target) : printer_->set_bed(target);
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::DeviceOff)))
+                nozzle ? printer_->set_nozzle(0.0) : printer_->set_bed(0.0);
+            ImGui::PopID();
+        };
+        heater(T::DeviceNozzle, s.nozzle, device_nozzle_, true);
+        heater(T::DeviceBed, s.bed, device_bed_, false);
+    }
+
+    // 3: the job.
+    ImGui::Separator();
+    const bool busy = s.state == State::Printing || s.state == State::Paused;
+    if (busy || (s.lines_total > 0 && s.progress > 0.0)) {
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+        ImGui::ProgressBar(float(s.progress), ImVec2(-FLT_MIN, 0.0f));
+        ImGui::PopStyleColor();
+        ImGui::Text(tr(T::DeviceProgress), s.job.c_str(), s.progress * 100.0, number_text(s.lines_sent).c_str(),
+                    number_text(s.lines_total).c_str());
+        const double total = result_ && result_->preview.estimated_seconds > 0.0 ? result_->preview.estimated_seconds
+                             : s.progress > 0.01                                ? s.elapsed / s.progress
+                                                                                : 0.0;
+        if (busy)
+            ImGui::TextDisabled(tr(T::DeviceTimes), format_duration(s.elapsed).c_str(),
+                                format_duration(std::max(0.0, total * (1.0 - s.progress))).c_str());
+        if (s.resends > 0)
+            ImGui::TextDisabled(tr(T::DeviceResends), s.resends);
+    }
+    if (busy) {
+        if (s.state == State::Paused) {
+            if (button("##resume", nullptr, tr(T::DeviceResume), true, false, true, nullptr, button_h))
+                printer_->resume();
+        } else if (button("##pause", nullptr, tr(T::DevicePause), false, false, true, nullptr, button_h)) {
+            printer_->pause();
+        }
+        ImGui::SameLine();
+        if (button("##cancel", nullptr, tr(T::DeviceCancel), false, false, true, nullptr, button_h))
+            printer_->cancel();
+    } else if (device_can_print()) {
+        const std::string what = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                                 : model_path_.empty()          ? std::string("G-code")
+                                                                : utf8(model_path_.filename());
+        ImGui::TextDisabled(tr(T::DevicePrintWhat), what.c_str());
+        if (button("##print", "tisma_print", tr(T::DevicePrint), true, false, s.state == State::Idle, nullptr,
+                   button_h))
+            device_print();
+    } else {
+        ImGui::TextDisabled("%s", tr(T::DeviceNothingToPrint));
+    }
+
+    // 4: moving and extruding, when idle.
+    if (s.state == State::Idle && ImGui::CollapsingHeader(tr(T::DeviceControls))) {
+        if (ImGui::SmallButton(tr(T::DeviceHome)))
+            printer_->home();
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(field * 0.6f);
+        double lo = 0.1, hi = 100.0;
+        ImGui::DragScalar(tr(T::DeviceStep), ImGuiDataType_Double, &device_step_, 0.1f, &lo, &hi, "%.1f mm",
+                          ImGuiSliderFlags_AlwaysClamp);
+        for (const char axis : {'X', 'Y', 'Z'}) {
+            ImGui::PushID(axis);
+            const double feed = axis == 'Z' ? 10.0 : 50.0;
+            const std::string minus = std::string("-") + axis, plus = std::string("+") + axis;
+            if (ImGui::Button(minus.c_str(), ImVec2(56.0f * scale_, 0)))
+                printer_->move(axis, -device_step_, feed);
+            ImGui::SameLine();
+            if (ImGui::Button(plus.c_str(), ImVec2(56.0f * scale_, 0)))
+                printer_->move(axis, device_step_, feed);
+            ImGui::PopID();
+            if (axis != 'Z')
+                ImGui::SameLine(0, 16.0f * scale_);
+        }
+        if (ImGui::SmallButton(tr(T::DeviceExtrude)))
+            printer_->extrude(5.0, 5.0);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::DeviceRetract)))
+            printer_->extrude(-5.0, 20.0);
+        ImGui::SetNextItemWidth(field * 0.6f);
+        double flo = 0.0, fhi = 100.0;
+        ImGui::DragScalar("##fan", ImGuiDataType_Double, &device_fan_, 1.0f, &flo, &fhi, "%.0f %%",
+                          ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::DeviceFan)))
+            printer_->fan(device_fan_);
+    }
+
+    // 5: what happened.
+    if (!device_log_.empty() && ImGui::CollapsingHeader(tr(T::DeviceLog))) {
+        for (auto it = device_log_.rbegin(); it != device_log_.rend() && it - device_log_.rbegin() < 30; ++it)
+            ImGui::TextDisabled("%s", it->c_str());
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 // The moiré filter against the plain picture: the preview from far enough
 // that its layers are finer than a pixel, drawn both ways without
 // multisampling. Where the filter changes pixels, the picture must get
@@ -3004,6 +3313,7 @@ void App::frame() {
     for (const std::filesystem::path& path : std::exchange(dropped_, {}))
         open_path(path);
     poll_jobs();
+    device_poll();
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -3038,7 +3348,8 @@ void App::frame() {
     if (!options_.screenshot.empty()) {
         ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
-        const bool slice_pending = options_.view == "preview" && mesh_ && !result_ && error_title_.empty();
+        const bool slice_pending =
+            (options_.view == "preview" || options_.device_print) && mesh_ && !result_ && error_title_.empty();
         // Ray tracing waits for its scene and for enough samples.
         const bool rays_pending = render_mode_ == RenderMode::RayTraced && !ray_failed_ &&
                                   (ray_job_.running() || !renderer_.has_ray_scene() ||
@@ -3047,8 +3358,24 @@ void App::frame() {
         if (options_.moire_check && !moire_checked_ && frames_ > 3 && f.show_preview && !slice_job_.running() &&
             !rays_pending)
             check_moire(fb_w, fb_h);
+        // --device-print: connect, print what was sliced and wait for the end.
+        if (options_.device_print && !device_print_sent_ && printer_ &&
+            printer_->status().state == device::PrinterState::Idle && device_can_print()) {
+            device_print();
+            device_print_sent_ = true;
+        }
+        if (options_.device_print && printer_ && !device_print_done_) {
+            const device::PrinterState s = printer_->status().state;
+            if (s == device::PrinterState::Error) {
+                std::fprintf(stderr, "error: the printer: %s\n", printer_->status().error.c_str());
+                failed_ = true;
+                device_print_done_ = true;
+            }
+        }
+        const bool device_pending =
+            options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
         const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
-                             (options_.moire_check && !moire_checked_);
+                             (options_.moire_check && !moire_checked_) || device_pending;
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);
@@ -3058,6 +3385,8 @@ void App::frame() {
                 set_tab(Tab::Prepare);
             else if (options_.view == "calibration")
                 set_tab(Tab::Calibration);
+            else if (options_.view == "device")
+                set_tab(Tab::Device);
         }
         settled_frames_ = waiting ? 0 : settled_frames_ + 1;
         if (frames_ > 3 && settled_frames_ >= 3) {
