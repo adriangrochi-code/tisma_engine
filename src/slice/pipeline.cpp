@@ -3,6 +3,7 @@
 #include "slice/pipeline.hpp"
 
 #include "adhesion/adhesion.hpp"
+#include "infill/combine.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
@@ -96,6 +97,27 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
                                            settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // Combined sparse infill (docs/INFILL.md): what every layer of a run has
+    // as sparse infill prints once, at the run's top layer, as thick as the
+    // run. Layer heights by zone already print it thick: not with them.
+    const std::vector<std::array<std::size_t, 2>> combined =
+        stack.groups.empty() && settings.infill_density > 0.0 ? combine_runs(out.layers, settings)
+                                                              : std::vector<std::array<std::size_t, 2>>{};
+    std::vector<Polygons> combined_region(combined.size());
+    tbb::parallel_for(std::size_t(0), combined.size(), [&](std::size_t r) {
+        const auto [first, last] = combined[r];
+        Polygons common = out.surfaces[first].sparse;
+        for (std::size_t l = first + 1; l <= last && !common.empty(); ++l)
+            common = Clipper2Lib::Intersect(common, out.surfaces[l].sparse, Clipper2Lib::FillRule::NonZero);
+        // Pieces narrower than a bead are not worth a thick pass.
+        common = offset(offset(common, -settings.wall_width), settings.wall_width);
+        if (common.empty())
+            return;
+        for (std::size_t l = first; l <= last; ++l)
+            out.surfaces[l].sparse =
+                Clipper2Lib::Difference(out.surfaces[l].sparse, common, Clipper2Lib::FillRule::NonZero);
+        combined_region[r] = std::move(common);
+    });
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
@@ -136,6 +158,19 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
                       });
+    if (!combined.empty()) {
+        out.thick.resize(out.layers.size());
+        tbb::parallel_for(std::size_t(0), combined.size(), [&](std::size_t r) {
+            const auto [first, last] = combined[r];
+            LayerSurfaces only;
+            only.sparse = combined_region[r];
+            // The runs take turns in the infill's direction, as layers do.
+            const double z = 0.5 * (out.layers[first].bottom + out.layers[last].top);
+            ThickLayer& t = out.thick[last];
+            t.height = out.layers[last].top - out.layers[first].bottom;
+            t.fill.sparse = fill_layer(only, r, fill, z).sparse;
+        });
+    }
     if (!stack.groups.empty()) {
         LocalLayerParams lp;
         lp.ratio = ratio;

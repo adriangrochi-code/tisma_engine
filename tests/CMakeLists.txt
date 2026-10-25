@@ -20,6 +20,7 @@ add_executable(tisma_tests
   test_local_layers.cpp
   test_variable_layers.cpp
   test_zaa.cpp
+  test_combine.cpp
   test_polygons.cpp
   test_gpu.cpp
   test_settings.cpp

@@ -188,6 +188,7 @@ add_library(tisma_core
   src/surfaces/bridges.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
+  src/infill/combine.cpp
   src/infill/connect.cpp
   src/gcode/writer.cpp
   src/gcode/check.cpp

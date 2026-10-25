@@ -207,6 +207,8 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
   calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
 - **`slice/local_layers.*`:** la altura de capa por zona (`docs/LOCAL_LAYERS.md`): los grupos de subcapas, sus zonas
   gruesas y el recorte de los caminos.
+- **`infill/combine.*`:** combinar el relleno disperso de varias capas en una más gruesa (`docs/INFILL.md`): las
+  corridas de capas; el pipeline corta la parte común y la imprime como capa gruesa.
 - **`slice/zaa.*`:** Z anti-aliasing (`docs/ZAA.md`): el índice de las caras que miran hacia arriba y el corte de
   los caminos visibles, con la altura de cada punto (`ToolpathPoint::dz`) que escribe el G-code.
 - **`slice/variable_layers.*`:** la altura variable por Z (`docs/VARIABLE_LAYERS.md`): planea la pila de capas con

@@ -78,6 +78,10 @@ struct Settings {
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
+    // Combining the sparse infill of several layers (docs/INFILL.md).
+    int infill_combine_layers = 1;            // 1: each layer its own
+    bool infill_combine_auto = false;         // as many as fit in the height below
+    Speed infill_combine_max_height{100.0, true}; // mm, or percent of the nozzle; never past the nozzle
     GpuMode gpu = GpuMode::Auto;
     // Z anti-aliasing (docs/ZAA.md, docs/spec/features/z_antialiasing.md).
     bool zaa = false;

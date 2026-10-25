@@ -456,7 +456,13 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
 - [ ] ZAA: el orden completo del artículo (subcaminos, grafo de alturas, menos costuras) y medir el daño de la
   boquilla en una impresión real
 - [ ] Pedidos del dueño en cola (2026-10-25):
-  - relleno optimizado para resistencia y rapidez;
+  - relleno optimizado para resistencia y rapidez (`docs/INFILL.md`), por etapas:
+    - [x] combinar capas de relleno (ficha `infill_patterns.md`, reglas 18 a 20): −24 a −45 % de tiempo, el mismo
+      material
+    - [ ] relleno denso bajo las superficies de arriba (ficha `dense_infill.md`)
+    - [ ] patrones cúbico y cúbico adaptativo (ficha `infill_patterns.md`, reglas 6 y 7)
+    - [ ] relleno guiado por tensiones (fase A2)
+    - [ ] medir la rigidez con el análisis «como impresa» leyendo el laminado real
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

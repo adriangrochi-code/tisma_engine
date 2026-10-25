@@ -3218,3 +3218,39 @@ Laminar cuesta un 8–9 % más.
 2. el tiempo de impresión más preciso;
 3. el panel izquierdo por niveles, con Impresora, Filamento y Objetos.
 
+## 2026-10-25 — relleno por resistencia y rapidez: combinar capas (etapa 1)
+
+**Pedido del dueño:** «el relleno debe optimizarse para fuerza y rapidez de impresión». El plan va por etapas en
+`docs/INFILL.md`, cada una medida en tiempo, material y rigidez:
+1. combinar capas;
+2. relleno denso bajo las superficies de arriba;
+3. cúbico y cúbico adaptativo;
+4. relleno guiado por tensiones.
+
+**Hecho:**
+- `infill.combine_layers`, `combine_auto` y `combine_max_height` (ficha `infill_patterns.md`, reglas 18 a 20).
+- Las corridas de capas empiezan en la capa 1. Lo que todas tienen como relleno disperso se imprime una vez, en la de
+  arriba, con el alto de la corrida (la misma capa gruesa de la altura por zona), alternando la dirección por corrida.
+- Nunca más alto que la boquilla, y no se combina con la altura por zona.
+- En Impresión, **Combinar relleno** y **Combinar lo más posible**.
+- **Pruebas:** 2 casos.
+  - Las corridas.
+  - P11 de la ficha en el cubo de 20 mm:
+    - el relleno solo en las capas pares desde la 4, a 0,4 mm;
+    - la capa 3 sin relleno;
+    - el doble de filamento por mm;
+    - menos tiempo;
+    - el chequeo.
+- **Fuzz:** 900 corridas en 3 semillas, 0 fallas.
+
+**Medido:** el mismo material (±0,15 %).
+- Esfera de 100 mm: 447 → 297 min (−34 %) con capas de 0,2; 736 → 402 min (−45 %) con capas de 0,12 en automático.
+- Cúpula: 55,5 → 42,3 min (−24 %).
+
+**No medido:**
+- la resistencia del relleno combinado: el análisis «como impresa» corta sus propias capas uniformes, así que primero
+  tiene que leer el laminado real;
+- una impresión real.
+
+**Sigue:** el relleno denso bajo las superficies de arriba (`dense_infill.md`), y después cúbico y cúbico adaptativo.
+

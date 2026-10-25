@@ -179,8 +179,39 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be a whole number from 0 to 1000");
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
-    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap"}, [&](const json& g, const std::string& n,
-                                                                                const std::string& k) {
+    read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
+                                "combine_max_height"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "combine_auto") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.infill_combine_auto = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "combine_max_height") {
+            const json& v = g.at(n);
+            if (v.is_string()) {
+                const std::string t = v.get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) || p > 1000.0)
+                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\"");
+                s.infill_combine_max_height = {p, true};
+                return;
+            }
+            const double d = number(g, n, k);
+            if (!(d > 0.0) || d > 10.0)
+                fail(k, "must be from 0 to 10 mm, or a percentage of the nozzle");
+            s.infill_combine_max_height = {d, false};
+            return;
+        }
+        if (n == "combine_layers") {
+            const double v = number(g, n, k);
+            if (v != std::floor(v) || v < 1.0 || v > 20.0)
+                fail(k, "must be a whole number from 1 to 20");
+            s.infill_combine_layers = int(v);
+            return;
+        }
         if (n == "pattern") {
             s.infill_pattern =
                 choice<InfillPattern>(g, n, k,
@@ -564,6 +595,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
+        {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
+        {"infill.combine_auto", flag(s.infill_combine_auto)},
+        {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
+                                                                          : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
         {"machine.filament_diameter", num(s.filament_diameter)},
         {"machine.relative_extrusion", flag(s.relative_extrusion)},
@@ -689,7 +724,12 @@ std::string settings_json(const Settings& s) {
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
           {"pattern", pattern},
-          {"wall_overlap", s.infill_wall_overlap}}},
+          {"wall_overlap", s.infill_wall_overlap},
+          {"combine_layers", s.infill_combine_layers},
+          {"combine_auto", s.infill_combine_auto},
+          {"combine_max_height", s.infill_combine_max_height.percent
+                                     ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
+                                     : ordered_json(s.infill_combine_max_height.value)}}},
         {"machine",
          {{"nozzle_diameter", s.nozzle_diameter},
           {"filament_diameter", s.filament_diameter},

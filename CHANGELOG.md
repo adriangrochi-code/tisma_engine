@@ -44,6 +44,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
   En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
   máxima**.
+- **Combinar capas de relleno** (`docs/INFILL.md`, ficha `infill_patterns.md`, primera etapa del relleno por
+  resistencia y rapidez que pidió el dueño): con `infill.combine_layers` o `combine_auto`, el relleno disperso se
+  imprime cada N capas con el alto de las N, nunca más que la boquilla. El mismo material en menos pasadas: en la
+  esfera del banco, de 447 a 297 min con capas de 0,2 mm y de 736 a 402 min con capas de 0,12 mm. En Impresión,
+  **Combinar relleno** y **Combinar lo más posible**.
 - **Z anti-aliasing** (`docs/ZAA.md`, ficha `z_antialiasing.md`, pedido del dueño): con `zaa.enabled`, las paredes,
   el relleno de arriba y el de huecos bajan hasta la superficie donde esta corta su capa, con el material del espesor
   que queda (nunca menos que `zaa.min_thickness`). Con `zaa.raise` también suben hasta media capa, como en Song et al.

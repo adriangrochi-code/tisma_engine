@@ -143,6 +143,12 @@ int main(int argc, char** argv) {
             s.min_layer_height = uni(0.04, 0.12);
         if (pick(4) == 0)
             s.max_layer_height = uni(0.12, 0.5);
+        // Combined sparse infill (docs/INFILL.md).
+        if (pick(4) == 0) {
+            s.infill_combine_layers = 2 + pick(3);
+            s.infill_combine_auto = pick(3) == 0;
+            s.infill_combine_max_height = pick(2) == 0 ? Speed{uni(50, 150), true} : Speed{uni(0.1, 0.8), false};
+        }
         // Z anti-aliasing (docs/ZAA.md).
         if (pick(3) == 0) {
             s.zaa = true;
