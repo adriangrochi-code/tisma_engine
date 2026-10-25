@@ -208,6 +208,7 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         break;
     }
     case InfillPattern::AdaptiveCubic:
+    case InfillPattern::SupportCubic:
         out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
                                          params.width, z);
         break;

@@ -3428,3 +3428,21 @@ direcciones de P6, las líneas sobre la grilla del cúbico, un cubo de 60 mm a G
   el adaptativo casi no cambia nada.
 
 **Sigue:** el cúbico de soporte (regla 8) y el rayo (regla 9).
+
+## 2026-10-25 — bloque nocturno: cúbico de soporte, y la rigidez del adaptativo
+
+**Hecho:** `infill.pattern` = `support_cubic` (ficha `infill_patterns.md`, regla 8; `docs/INFILL.md`): el cúbico
+adaptativo con la profundidad medida desde lo que el relleno sostiene (los vóxeles justo encima de él) y desde las
+paredes en el plano de cada vóxel, sin las capas sólidas de abajo.
+
+**Medido** (al 20 %): cubo de 60 mm, −8 % de tiempo y −15 % de material contra el cúbico; cubo de 100 mm, −14 % y
+−30 %. En el de 20 mm, igual que el adaptativo (P6).
+
+**Rigidez del adaptativo** («como impresa», cubo de 40 mm comprimido): 0,096 mm contra 0,083 del cúbico, con un 4 %
+menos de material: un 10 % menos de rigidez por material. Queda anotado en `docs/INFILL.md`: el adaptativo ahorra en
+piezas grandes; para resistencia, el guiado por tensiones.
+
+**Pruebas:** grueso sobre las capas sólidas de abajo, el cúbico bajo el techo, y el cubo de 20 mm igual al adaptativo.
+
+**Sigue:** el rayo (regla 9).
+

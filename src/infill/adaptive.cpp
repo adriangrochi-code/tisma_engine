@@ -137,7 +137,7 @@ std::vector<float> distance_transform(const std::vector<char>& set, int nx, int 
 }
 
 DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<Layer>& layers, double cell,
-                        std::size_t max_voxels) {
+                        DepthFrom from, std::size_t max_voxels) {
     DepthField f;
     const std::size_t count = std::min(sparse.size(), layers.size());
     std::int64_t xmin = INT64_MAX, xmax = INT64_MIN, ymin = INT64_MAX, ymax = INT64_MIN;
@@ -183,13 +183,32 @@ DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<L
         if (any)
             std::copy(slab.begin(), slab.end(), inside.begin() + std::ptrdiff_t(std::size_t(k) * plane));
     });
-    f.depth = distance_transform(inside, f.nx, f.ny, f.nz);
+    if (from == DepthFrom::Surfaces) {
+        f.depth = distance_transform(inside, f.nx, f.ny, f.nz);
+    } else {
+        // What the infill holds up: the voxels right above it, outside it.
+        std::vector<char> far(inside.size(), 1);
+        for (std::size_t c = plane; c < inside.size(); ++c)
+            if (inside[c] == 0 && inside[c - plane] != 0)
+                far[c] = 0;
+        f.depth = distance_transform(far, f.nx, f.ny, f.nz);
+        // And the walls, in each voxel's plane.
+        tbb::parallel_for(0, f.nz, [&](int k) {
+            const auto first = inside.begin() + std::ptrdiff_t(std::size_t(k) * plane);
+            const std::vector<float> side =
+                distance_transform(std::vector<char>(first, first + std::ptrdiff_t(plane)), f.nx, f.ny, 1);
+            for (std::size_t c = 0; c < plane; ++c)
+                f.depth[std::size_t(k) * plane + c] = std::min(f.depth[std::size_t(k) * plane + c], side[c]);
+        });
+    }
     // From a voxel's centre to the nearest outside one's, less half a voxel:
     // the boundary lies between them.
     for (std::size_t c = 0; c < f.depth.size(); ++c)
         if (inside[c] != 0) {
             f.depth[c] = float(cell * (f.depth[c] - 0.5));
             f.deepest = std::max(f.deepest, double(f.depth[c]));
+        } else {
+            f.depth[c] = 0.0f;
         }
     return f;
 }

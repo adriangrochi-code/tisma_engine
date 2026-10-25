@@ -19,7 +19,7 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
-enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
 

@@ -99,16 +99,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
                                            settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
-    // Adaptive cubic infill (docs/INFILL.md): how deep each point lies in the
-    // whole sparse infill, before stress bands and the rest take parts of it.
+    // Adaptive and support cubic infill (docs/INFILL.md): how deep each point
+    // lies in the whole sparse infill, from all its surfaces or from the ones
+    // it holds up, before stress bands and the rest take parts of it.
     DepthField depth;
-    if (settings.infill_pattern == InfillPattern::AdaptiveCubic && settings.infill_density > 0.0) {
+    if ((settings.infill_pattern == InfillPattern::AdaptiveCubic ||
+         settings.infill_pattern == InfillPattern::SupportCubic) &&
+        settings.infill_density > 0.0) {
         std::vector<Polygons> sparse(out.surfaces.size());
         for (std::size_t l = 0; l < sparse.size(); ++l)
             sparse[l] = out.surfaces[l].sparse;
         // A quarter of the finest line spacing: the levels start 1.4, 2.8...
         // spacings deep.
-        depth = sparse_depth(sparse, out.layers, 0.75 * settings.wall_width / (settings.infill_density / 100.0));
+        depth = sparse_depth(sparse, out.layers, 0.75 * settings.wall_width / (settings.infill_density / 100.0),
+                             settings.infill_pattern == InfillPattern::SupportCubic ? DepthFrom::TopsAndWalls
+                                                                                    : DepthFrom::Surfaces);
     }
     // Stress-guided infill (docs/INFILL.md): bands of each layer's sparse
     // infill where the part works hardest, each at its density.

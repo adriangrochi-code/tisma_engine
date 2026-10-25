@@ -78,8 +78,8 @@ struct FillParams {
 //  - gyroid: the gyroid's section at height z (gyroid_fill), with the period
 //    for the density;
 //  - triangles and cubic: three families of lines 60 degrees apart;
-//  - adaptive cubic: the cubic lines, fewer where `depth` says the infill
-//    lies deep (adaptive_cubic_fill).
+//  - adaptive and support cubic: the cubic lines, fewer where `depth` says
+//    the infill lies deep (adaptive_cubic_fill).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
 
 } // namespace tisma

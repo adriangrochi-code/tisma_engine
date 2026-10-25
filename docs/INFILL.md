@@ -150,6 +150,23 @@ sin importar `infill.angle` (regla 7, prueba P6). La densidad es la de los cubos
   del cúbico (prueba P6), con la separación pareja: la separación base se ajusta cuando la ficha lo precise.
 - El laminado del cubo de 100 mm pasa de 0,13 a 0,27 s con 4 hilos: la grilla, la transformada y las regiones de
   cada nivel.
+- **Rigidez** («como impresa», cubo de 40 mm comprimido con 500 N, el banco de arriba): el cúbico se hunde 0,083 mm y el
+  adaptativo 0,096 mm, con un 4 % menos de material: un 10 % menos de rigidez por material. Bajo una carga que
+  reparte todo el volumen, el centro ralo pierde más de lo que ahorra. El adaptativo es para piezas grandes que no
+  trabajan así (ahorra material y tiempo en el centro); para resistencia, el guiado por tensiones. Las piezas
+  grandes no se pueden analizar «como impresas» (el cubo de 60 mm pide 27 millones de vóxeles).
+
+**Cúbico de soporte** (`support_cubic`, regla 8): el mismo cúbico adaptativo, pero las capas sólidas de abajo no
+cuentan, porque el relleno no las sostiene. La profundidad se mide:
+- desde lo que el relleno sostiene: los vóxeles justo encima de él (las superficies de arriba, los techos internos);
+- desde las paredes, en el plano de cada vóxel, para que un cubo grueso siga entrando entre ellas.
+
+Así, sobre una superficie de abajo los cubos son grandes, y bajo un techo, chicos. En un cubo chico da lo mismo que el
+adaptativo (prueba P6): las paredes no dejan entrar un nivel más.
+
+**Medido** (2026-10-25, al 20 %): en el cubo de 60 mm, 217,7 min y 50,75 cm³ (−8 % de tiempo y −15 % de material
+contra el cúbico); en el de 100 mm, 743,8 min y 170,7 cm³ (**−14 % y −30 %**). En el de 20 mm, igual que el
+adaptativo.
 
 **Pruebas** (`tests/test_adaptive.cpp`):
 - la transformada de distancia es exacta: contra la distancia a cada vóxel de afuera, en una grilla al azar;
@@ -158,7 +175,9 @@ sin importar `infill.angle` (regla 7, prueba P6). La densidad es la de los cubos
 - 0°, 60° y 120° con `infill.angle` 45°;
 - junto a las superficies, las mismas líneas que el cúbico; en el medio, menos; y todas sobre la grilla del cúbico;
 - un cubo de 60 mm laminado a G-code que pasa el chequeo, con un 8 a 25 % menos de relleno que el cúbico;
-- el fuzz sortea el patrón.
+- el cúbico de soporte: grueso sobre las capas sólidas de abajo, el cúbico bajo el techo, y en el cubo de 20 mm igual
+  al adaptativo (P6);
+- el fuzz sortea los dos patrones.
 
 ## Resistencia y rapidez, medidas (2026-10-25)
 

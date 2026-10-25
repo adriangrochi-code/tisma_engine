@@ -124,7 +124,7 @@ TEST_CASE("depth field: how deep a block of sparse infill is", "[adaptive]") {
     const DepthField g = sparse_depth(split.sparse, split.layers, 0.5);
     CHECK_THAT(g.deepest, WithinAbs(4.5, 0.5));
     // Too many voxels: wider ones.
-    const DepthField coarse = sparse_depth(b.sparse, b.layers, 0.1, 100000);
+    const DepthField coarse = sparse_depth(b.sparse, b.layers, 0.1, DepthFrom::Surfaces, 100000);
     CHECK(coarse.cell > 0.1);
     CHECK(std::size_t(coarse.nx) * std::size_t(coarse.ny) * std::size_t(coarse.nz) <= 100000);
 }
@@ -214,4 +214,45 @@ TEST_CASE("adaptive cubic: a 60 mm cube sliced to checked G-code, less infill th
     }
     CHECK(length[1] < 0.92 * length[0]);
     CHECK(length[1] > 0.75 * length[0]);
+}
+
+TEST_CASE("support cubic: fine under what it holds up, not over the solid layers below (rule 8)", "[adaptive]") {
+    // 60 mm square, sparse from z 1 to 39.
+    const Block b = block(60.0, 40.0, 1.0, 39.0);
+    const DepthField all = sparse_depth(b.sparse, b.layers, 1.5);
+    const DepthField tops = sparse_depth(b.sparse, b.layers, 1.5, DepthFrom::TopsAndWalls);
+    // The middle of the bottom is 38 mm under the top but 30 from the walls.
+    CHECK_THAT(tops.deepest, WithinAbs(30.0, 1.5));
+    const double width = 0.4, spacing = 6.0;
+    const Polygons region = square(0, 0, 60.0);
+    // Just over the bottom solid layers: the adaptive cubic is the cubic, the
+    // support cubic coarse in the middle.
+    CHECK(total(adaptive_cubic_fill(region, &tops, spacing, width, 2.1)) <
+          0.8 * total(adaptive_cubic_fill(region, &all, spacing, width, 2.1)));
+    // Right under the top, both are the cubic.
+    CHECK_THAT(total(adaptive_cubic_fill(region, &tops, spacing, width, 38.1)),
+               WithinRel(total(adaptive_cubic_fill(region, &all, spacing, width, 38.1)), 1e-6));
+}
+
+TEST_CASE("support cubic: the spec's 20 mm cube, the same as adaptive cubic (P6)", "[adaptive]") {
+    const IndexedMesh m = cube(20.0f);
+    Settings s;
+    s.gpu = GpuMode::Off;
+    s.wall_count = 2;
+    s.infill_density = 20.0;
+    s.skirt_loops = 0;
+    double length[2] = {0.0, 0.0};
+    for (const InfillPattern pattern : {InfillPattern::AdaptiveCubic, InfillPattern::SupportCubic}) {
+        s.infill_pattern = pattern;
+        const SlicedModel sliced = slice_model(m, s);
+        std::ostringstream out;
+        write_gcode(out, sliced, s);
+        const GcodeCheck check = check_gcode(out.str(), gcode_limits(sliced, s));
+        INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+        CHECK(check.ok());
+        for (const LayerFill& fill : sliced.fills)
+            length[pattern == InfillPattern::SupportCubic] += total(fill.sparse);
+    }
+    REQUIRE(length[0] > 0.0);
+    CHECK_THAT(length[1], WithinRel(length[0], 1e-6));
 }

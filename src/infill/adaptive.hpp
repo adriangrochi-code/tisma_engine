@@ -37,12 +37,19 @@ struct DepthField {
     }
 };
 
+// What the depth is measured from: every surface of the sparse infill (walls,
+// solid layers above and below, air), or all but the solid layers below it,
+// which it does not hold up (the support cubic infill, rule 8): what lies
+// right above it, and the walls beside it in its plane, so that a coarse
+// cube still fits between them.
+enum class DepthFrom { Surfaces, TopsAndWalls };
+
 // The field of the layers' sparse infill. A voxel is inside only where every
 // layer its height overlaps has sparse infill, so a thin solid layer between
 // two sparse ones still counts as a surface. Voxels `cell` mm wide, wider if
 // the grid would have more than `max_voxels`.
 DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<Layer>& layers, double cell,
-                        std::size_t max_voxels = std::size_t(1) << 22);
+                        DepthFrom from = DepthFrom::Surfaces, std::size_t max_voxels = std::size_t(1) << 22);
 
 // Where, in the plane at height z, the infill is at least `depth` mm deep.
 Polygons deep_region(const DepthField& field, double z, double depth);
