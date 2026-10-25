@@ -55,6 +55,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `infill.solid_every` imprime las capas N, 2N… sólidas, como puente sobre el relleno; `surfaces.top_min_thickness` y
   `surfaces.bottom_min_thickness` agregan capas sólidas hasta ese espesor. En Impresión, **Capa sólida cada**,
   **Espesor mínimo arriba** y **Espesor mínimo abajo**.
+- **Línea, panal y concéntrico** (ficha `infill_patterns.md`, reglas 3, 10 y 13): `line`, `honeycomb` y `concentric`
+  en `infill.pattern` y en la interfaz. En el cubo de 20 mm de la ficha, 182 a 185 mm por capa en un tramo (P3: 185,9),
+  230 a 238 mm (P8: 229 a 244) y 200 mm en 5 lazos (P9: 199,4 en 5).
 - **Estrellas, rectilíneo alineado y zigzag** (ficha `infill_patterns.md`, reglas 5, 1 y 2): `stars` (el patrón por
   defecto de Tisma Slicer), `aligned_rectilinear` y `zigzag` en `infill.pattern` y en la interfaz.
 - **Rayo** (regla 9): `lightning`, solo ramas que nacen en las paredes y llegan bajo cada techo, retirándose hacia las

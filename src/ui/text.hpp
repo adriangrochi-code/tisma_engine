@@ -99,6 +99,9 @@
     X(Stars, "Estrellas", "Stars")                                                                                    \
     X(AlignedRectilinear, "Rectilíneo alineado", "Aligned rectilinear")                                               \
     X(Zigzag, "Zigzag", "Zigzag")                                                                                     \
+    X(LineInfill, "Línea", "Line")                                                                                    \
+    X(Honeycomb, "Panal", "Honeycomb")                                                                                \
+    X(ConcentricInfill, "Concéntrico", "Concentric")                                                                  \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \

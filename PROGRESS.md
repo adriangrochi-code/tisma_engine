@@ -3526,3 +3526,37 @@ La esfera de 200 mm sigue igual (escritura 0,5 s): ahí el orden no pesaba.
 **Recibido del equipo de fichas** (resultados de caja negra, sin código): el cúbico de soporte de Tisma Slicer se
 mide en P6c y P6d de la ficha, en el PR #15. Se ajusta cuando esté en `main`.
 
+
+## 2026-10-25 — bloque: relleno línea, panal y concéntrico
+
+**Hecho** (ficha `infill_patterns.md`, reglas 3, 10 y 13; `docs/INFILL.md`), en `src/infill/patterns.*`:
+- `line`: el rectilíneo con una línea de cada dos girada 6,7° sobre su punto en el medio de la región (+6,7° en las
+  capas pares, −6,7° en las impares), unidas en zigzag por el borde;
+- `honeycomb`: hexágonos con un centro en el origen, impresos como líneas onduladas en la dirección principal, que
+  pasa por `θ` + 90°, + 30° y − 30° capa a capa; como la teselación no cambia al girarla 60° sobre un centro, los
+  panales de todas las capas coinciden. El lado cuenta cada pared una vez, como mide Tisma Slicer (P8);
+- `concentric`: lazos paralelos al borde cada `ancho / densidad`, de afuera hacia adentro;
+- en la interfaz, **Línea**, **Panal** y **Concéntrico**; el fuzz los sortea.
+
+**Medido** (cubo de 20 mm, ajustes de la ficha, relleno poco denso por capa en el G-code):
+
+| Patrón | Tisma engine | Ficha |
+|---|---|---|
+| `line` | 182,4 a 185,0 mm en 1 tramo | P3: 185,9 mm en 1 tramo |
+| `honeycomb` | 229,9 a 237,8 mm en 4 tramos | P8: 229 a 244 mm |
+| `concentric` | 200,0 mm en 5 lazos | P9: 199,4 mm en 5 lazos |
+| `rectilinear` (referencia) | 190,9 a 194,0 mm | P1: 197,3 mm |
+
+Tiempo estimado del cubo: rectilíneo 15 min 34 s, línea 14 min 44 s, panal 18 min 51 s, concéntrico 16 min 32 s.
+
+**Pruebas** (`tests/test_combine.cpp`): P3 (las dos direcciones de cada capa, la mitad cada una, pocos tramos, el largo
+del rectilíneo), P8 (la principal 15°, 135° y 75° en las capas 5, 6 y 7 con la mitad del largo, las otras un cuarto,
+1,25 veces el rectilíneo; las cuentas de dos capas coinciden en más del 90 % del área, y con la grilla corrida medio
+lado no), P9 (5 lazos cerrados del largo esperado, iguales en otra capa) y los tres laminados en un cubo con G-code
+verificado.
+
+**Sin medir ni probar:** las líneas de `line` cruzan a sus vecinas en regiones de más de unas 17 separaciones a lo
+largo de las líneas (34 mm al 20 %); la ficha no mide piezas tan grandes. No probado en una impresora.
+
+**Sigue:** panal 3D (regla 11), Hilbert, cuerdas de Arquímedes y octagrama (12), y los patrones de las superficies
+(14 a 17). El cúbico de soporte espera las pruebas P6c y P6d del PR #15.

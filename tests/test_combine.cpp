@@ -1,4 +1,5 @@
 #include "infill/combine.hpp"
+#include "infill/patterns.hpp"
 #include "infill/rectilinear.hpp"
 #include "infill/stress_density.hpp"
 
@@ -6,6 +7,7 @@
 #include "fea/analysis.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
+#include "perimeters/coverage.hpp"
 #include "slice/pipeline.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -17,6 +19,7 @@
 #include <numbers>
 #include <sstream>
 #include <string>
+#include <tuple>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -453,4 +456,107 @@ TEST_CASE("the minimum shell thickness adds solid layers (P13)", "[combine]") {
     const SlicedModel plain = slice_model(m, s);
     CHECK(!plain.surfaces[1].sparse.empty());
     CHECK(!plain.surfaces[98].sparse.empty());
+}
+
+TEST_CASE("infill patterns: line, every other line turned 6.7 degrees (P3)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.pattern = InfillPattern::Line;
+    const LayerSurfaces region = square_sparse(20.0);
+    // Odd layers at 135 and 128.3 degrees, even ones at 45 and 51.7, about half each.
+    for (const auto& [layer, a, b] : {std::tuple{5, 135, 128}, std::tuple{6, 45, 52}}) {
+        const std::vector<Toolpath> lines = fill_layer(region, std::size_t(layer), p, 0.2 * layer).sparse;
+        const std::map<int, double> d = by_direction(lines);
+        const double all = total(lines);
+        CHECK_THAT(d.count(a) ? d.at(a) / all : 0.0, WithinAbs(0.45, 0.1));
+        CHECK_THAT(d.count(b) ? d.at(b) / all : 0.0, WithinAbs(0.45, 0.1));
+        // Joined into a few zig-zags, about the rectilinear's length.
+        CHECK(lines.size() <= 4);
+        p.pattern = InfillPattern::Rectilinear;
+        CHECK_THAT(all / total(fill_layer(region, std::size_t(layer), p, 0.2 * layer).sparse), WithinAbs(1.0, 0.1));
+        p.pattern = InfillPattern::Line;
+    }
+}
+
+TEST_CASE("infill patterns: honeycomb, the principal direction turning a layer each (P8)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.pattern = InfillPattern::Honeycomb;
+    const LayerSurfaces region = square_sparse(20.0);
+    std::vector<std::vector<Toolpath>> layers;
+    for (const auto& [layer, main] : {std::pair{5, 15}, std::pair{6, 135}, std::pair{7, 75}}) {
+        layers.push_back(fill_layer(region, std::size_t(layer), p, 0.2 * layer).sparse);
+        const std::map<int, double> d = by_direction(layers.back());
+        const double all = total(layers.back());
+        // Half along the principal direction, a quarter along each of the others.
+        CHECK_THAT(d.count(main) ? d.at(main) / all : 0.0, WithinAbs(0.5, 0.06));
+        for (const int other : {15, 75, 135})
+            if (other != main)
+                CHECK_THAT(d.count(other) ? d.at(other) / all : 0.0, WithinAbs(0.25, 0.06));
+        // About 1.2 times the rectilinear's length, as P8 measures (229 to 244 mm against 197).
+        p.pattern = InfillPattern::Rectilinear;
+        CHECK_THAT(all / total(fill_layer(region, std::size_t(layer), p, 0.2 * layer).sparse), WithinAbs(1.25, 0.15));
+        p.pattern = InfillPattern::Honeycomb;
+    }
+    // The same hexagons in every layer: the beads of one layer lie on the other's.
+    const Polygons a = bead_area(layers[0]), b = bead_area(layers[1]);
+    const double area_a = std::abs(Clipper2Lib::Area(a));
+    const double common = std::abs(Clipper2Lib::Area(Clipper2Lib::Intersect(a, b, Clipper2Lib::FillRule::NonZero)));
+    CHECK(common > 0.9 * area_a);
+    // Against a grid moved by half a hexagon, they would not.
+    const LayerSurfaces moved = [&] {
+        LayerSurfaces s = region;
+        for (auto& q : s.sparse.front())
+            q.x += to_units(0.5 * honeycomb_side(0.4, 0.2));
+        return s;
+    }();
+    std::vector<Toolpath> shifted = fill_layer(moved, 6, p, 1.2).sparse;
+    for (Toolpath& t : shifted)
+        for (auto& q : t.points)
+            q.p.x -= 0.5 * honeycomb_side(0.4, 0.2);
+    CHECK(std::abs(Clipper2Lib::Area(Clipper2Lib::Intersect(a, bead_area(shifted), Clipper2Lib::FillRule::NonZero))) <
+          0.7 * area_a);
+}
+
+TEST_CASE("infill patterns: concentric loops (P9)", "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.pattern = InfillPattern::Concentric;
+    const LayerSurfaces region = square_sparse(20.0);
+    const std::vector<Toolpath> loops = fill_layer(region, 5, p, 1.0).sparse;
+    // Squares of side 19.6, 17.6 ... 1.6 mm, 2 mm apart: 5 loops, the outer first.
+    REQUIRE(loops.size() == 5);
+    double length = 0.0;
+    for (const Toolpath& t : loops) {
+        CHECK(t.closed);
+        for (std::size_t i = 0; i < t.points.size(); ++i) {
+            const auto& a = t.points[i].p;
+            const auto& b = t.points[(i + 1) % t.points.size()].p;
+            length += std::hypot(b.x - a.x, b.y - a.y);
+        }
+    }
+    CHECK_THAT(length, WithinAbs(4.0 * (19.6 + 15.6 + 11.6 + 7.6 + 3.6), 0.5));
+    CHECK_THAT(loops.front().points.front().p.x, WithinAbs(0.2, 1e-3) || WithinAbs(19.8, 1e-3));
+    // The same in every layer.
+    CHECK(fill_layer(region, 6, p, 1.2).sparse.size() == 5);
+}
+
+TEST_CASE("infill patterns: line, honeycomb and concentric sliced into checked G-code", "[combine]") {
+    for (const InfillPattern pattern : {InfillPattern::Line, InfillPattern::Honeycomb, InfillPattern::Concentric}) {
+        Settings s = base();
+        s.infill_pattern = pattern;
+        const SlicedModel m = slice_model(cube(20.0f), s);
+        std::size_t sparse = 0;
+        for (const LayerFill& f : m.fills)
+            sparse += f.sparse.size();
+        CHECK(sparse > 0);
+        std::ostringstream g;
+        write_gcode(g, m, s);
+        CHECK(check_gcode(g.str(), gcode_limits(m, s)).ok());
+    }
 }

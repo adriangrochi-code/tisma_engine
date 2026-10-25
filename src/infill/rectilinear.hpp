@@ -82,6 +82,10 @@ struct FillParams {
 //  - triangles, stars and cubic: three families of lines 60 degrees apart;
 //  - adaptive and support cubic: the cubic lines, fewer where `depth` says
 //    the infill lies deep (adaptive_cubic_fill);
+//  - line: rectilinear with every other line turned 6.7 degrees (line_fill);
+//  - honeycomb: hexagons whose principal direction turns 60 degrees a layer
+//    (honeycomb_fill);
+//  - concentric: loops width / density apart (concentric_fill);
 //  - lightning: none here, since each layer's branches come from the layer
 //    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);

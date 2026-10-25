@@ -6,6 +6,7 @@
 #include "infill/adaptive.hpp"
 #include "infill/connect.hpp"
 #include "infill/gyroid.hpp"
+#include "infill/patterns.hpp"
 #include "perimeters/coverage.hpp"
 
 #include <algorithm>
@@ -220,6 +221,21 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     case InfillPattern::SupportCubic:
         out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
                                          params.width, z);
+        break;
+    case InfillPattern::Line: // every other line turned 6.7 degrees, the other way on odd layers (rule 3, P3)
+        out.sparse = line_fill(surfaces.sparse, params.width / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7,
+                               params.width);
+        break;
+    case InfillPattern::Honeycomb: {
+        // The principal direction goes through angle + 90, + 30 and - 30, a
+        // layer each (rule 10, P8: 135, 75 and 15 degrees at 45 in layers 6, 7 and 5).
+        const double principal = params.angle + 90.0 - 60.0 * double(layer % 3);
+        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(params.width, params.density), principal,
+                                    params.width);
+        break;
+    }
+    case InfillPattern::Concentric:
+        out.sparse = concentric_fill(surfaces.sparse, params.width / params.density, params.width);
         break;
     case InfillPattern::Lightning:
         break; // all the layers at once, from the top down (lightning_layers)

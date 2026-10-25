@@ -109,7 +109,8 @@ int main(int argc, char** argv) {
                                       InfillPattern::Triangles, InfillPattern::Cubic,
                                       InfillPattern::AdaptiveCubic, InfillPattern::SupportCubic,
                                       InfillPattern::Lightning, InfillPattern::Stars, InfillPattern::AlignedRectilinear,
-                                      InfillPattern::Zigzag}[std::size_t(pick(11))];
+                                      InfillPattern::Zigzag, InfillPattern::Line, InfillPattern::Honeycomb,
+                                      InfillPattern::Concentric}[std::size_t(pick(14))];
         s.infill_angle = uni(0, 180);
         s.top_layers = pick(6);
         s.bottom_layers = pick(6);

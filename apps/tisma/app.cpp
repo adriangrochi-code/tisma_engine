@@ -1846,6 +1846,7 @@ void App::settings_panel() {
                        {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
                         {InfillPattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
                         {InfillPattern::Zigzag, tr(T::Zigzag)},
+                        {InfillPattern::Line, tr(T::LineInfill)},
                         {InfillPattern::Grid, tr(T::Grid)},
                         {InfillPattern::Gyroid, tr(T::Gyroid)},
                         {InfillPattern::Triangles, tr(T::TrianglesInfill)},
@@ -1853,7 +1854,9 @@ void App::settings_panel() {
                         {InfillPattern::Cubic, tr(T::Cubic)},
                         {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
                         {InfillPattern::SupportCubic, tr(T::SupportCubic)},
-                        {InfillPattern::Lightning, tr(T::Lightning)}});
+                        {InfillPattern::Lightning, tr(T::Lightning)},
+                        {InfillPattern::Honeycomb, tr(T::Honeycomb)},
+                        {InfillPattern::Concentric, tr(T::ConcentricInfill)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));

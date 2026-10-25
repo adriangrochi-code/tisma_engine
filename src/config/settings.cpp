@@ -57,7 +57,10 @@ const std::map<std::string, InfillPattern>& infill_patterns() {
         {"cubic", InfillPattern::Cubic},
         {"adaptive_cubic", InfillPattern::AdaptiveCubic},
         {"support_cubic", InfillPattern::SupportCubic},
-        {"lightning", InfillPattern::Lightning}};
+        {"lightning", InfillPattern::Lightning},
+        {"line", InfillPattern::Line},
+        {"honeycomb", InfillPattern::Honeycomb},
+        {"concentric", InfillPattern::Concentric}};
     return names;
 }
 

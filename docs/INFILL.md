@@ -99,6 +99,9 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
 | `stars` | Las tres familias de los triángulos, con la segunda corrida media separación: nunca se cruzan las tres en un punto y forman estrellas de seis puntas (regla 5). Es el patrón por defecto de Tisma Slicer |
 | `aligned_rectilinear` | El rectilíneo con todas las capas a `angle`, sin girar 90° (regla 1) |
 | `zigzag` | El rectilíneo: en Tisma Slicer dan exactamente lo mismo (regla 2) |
+| `line` | El rectilíneo con una línea de cada dos girada 6,7° sobre su punto en el medio de la región (+6,7° en las capas pares, −6,7° en las impares, como P3), unidas en zigzag por el borde (regla 3). Cuando la región mide a lo largo de las líneas más de unas 17 separaciones (34 mm al 20 %), las giradas cruzan a sus vecinas en las puntas, como en `grid`; la ficha no mide piezas tan grandes |
+| `honeycomb` | Hexágonos de lado `2 · ancho / (√3 · densidad)` con un centro en el origen y lados a `angle` − 30°, + 30° y + 90°. Cada capa los imprime como líneas onduladas en una dirección principal, la mitad del largo a lo largo de ella; dos vecinas comparten esos tramos, que salen dobles. La principal pasa por `angle` + 90°, + 30° y − 30° capa a capa, y como la teselación de hexágonos no cambia al girarla 60° sobre un centro, los panales de todas las capas coinciden (regla 10). El lado cuenta cada pared una vez, como mide Tisma Slicer: el material sale unos 4/3 de la densidad |
+| `concentric` | Lazos paralelos al borde de la región, el primero a medio cordón y después cada `ancho / densidad` hacia adentro, de afuera hacia adentro (regla 13) |
 
 **Por qué el cúbico:**
 - es una estructura 3D: rígida en X, Y y Z, como el giroide;
