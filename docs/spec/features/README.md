@@ -56,8 +56,10 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`sequential.md`](sequential.md): objeto por objeto, con la holgura de la cabeza | después de F6 | Para revisar |
 | [`devices.md`](devices.md): página Devices y conexión con impresoras por marca, con capturas | F9 | Para revisar |
 | [`presets.md`](presets.md): perfiles del sistema y de la persona: guardar, heredar, compatibilidad, comparar, paquetes, instantáneas, parámetros propios | P3 | Para revisar |
+| [`formats.md`](formats.md): leer STL, OBJ, AMF, 3MF, STEP y SVG, reparación al abrir, el proyecto 3MF y qué guarda, exportar STL y OBJ | F1 (leer), P4 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
 - Perfiles: los datos de cada impresora y material, desde sus fabricantes (P3).
-- Formatos: proyectos 3MF y lo que guarda Tisma en ellos (P4).
+- Formatos: lo que guarda Tisma en el 3MF desde la interfaz (pintura, modificadores, varias camas, análisis), y
+  los proyectos de Bambu Studio y OrcaSlicer.
