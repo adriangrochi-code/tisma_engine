@@ -3553,7 +3553,8 @@ Tiempo estimado del cubo: rectilíneo 15 min 34 s, línea 14 min 44 s, panal 18 
 del rectilíneo), P8 (la principal 15°, 135° y 75° en las capas 5, 6 y 7 con la mitad del largo, las otras un cuarto,
 1,25 veces el rectilíneo; las cuentas de dos capas coinciden en más del 90 % del área, y con la grilla corrida medio
 lado no), P9 (5 lazos cerrados del largo esperado, iguales en otra capa) y los tres laminados en un cubo con G-code
-verificado.
+verificado. `tools/ci_linux.sh` pasa: 314 pruebas con gcc, clang y ASan + UBSan. Una prueba vieja usaba
+`honeycomb` como patrón desconocido; ahora usa `voronoi`, que no está en la ficha.
 
 **Sin medir ni probar:** las líneas de `line` cruzan a sus vecinas en regiones de más de unas 17 separaciones a lo
 largo de las líneas (34 mm al 20 %); la ficha no mide piezas tan grandes. No probado en una impresora.
