@@ -3329,3 +3329,22 @@ cubo comprimido con 500 N y una barra en voladizo con 20 N.
 - la interfaz: pasar el caso de la pestaña Análisis al laminado;
 - iterar analizar-reforzar.
 
+## 2026-10-25 — bloque nocturno: el relleno guiado por tensiones en la interfaz
+
+**Hecho:**
+- `Slicer::run` recibe un caso de carga. Con `infill.stress_density`, analiza la pieza maciza y lamina con el relleno
+  guiado. Si el análisis falla, queda parejo con un aviso `stress_infill`.
+- En Impresión:
+  - **Guiado por tensiones** (densidad máxima);
+  - **Caso de carga**, que abre un `.json` de caso con el explorador de archivos.
+- **Prueba:**
+  - con el caso, la barra tiene más de 1,5 veces el relleno junto al empotramiento;
+  - sin caso, o con un caso que no la sostiene, queda pareja;
+  - el G-code pasa el chequeo.
+
+**La pestaña Análisis** solo estima vóxeles: editar apoyos y cargas sobre la pieza queda para su interfaz (la de la
+sesión principal, o el rediseño del panel por niveles).
+
+**Sigue:** lo que no espera las fichas del PR #15. Por ejemplo, el orden completo de ZAA del artículo, o
+mantenimiento.
+

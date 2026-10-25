@@ -463,7 +463,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] patrones triángulos y cúbico (ficha `infill_patterns.md`, reglas 4 y 6)
     - [ ] cúbico adaptativo y de soporte (reglas 7 y 8), y rayo (regla 9)
     - [x] relleno guiado por tensiones (fase A2): `infill.stress_density` con `slice --case`
-    - [ ] el caso de la pestaña Análisis al laminado de la interfaz, y la iteración analizar-reforzar
+    - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
+    - [ ] editar el caso en la interfaz (apoyos y cargas), y la iteración analizar-reforzar
     - [ ] medir la rigidez con el análisis «como impresa» leyendo el laminado real
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,

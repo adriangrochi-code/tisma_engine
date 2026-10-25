@@ -209,8 +209,13 @@ carga: más rigidez por gramo y por minuto.
     menos de tiempo.
   - El del 10 al 50 % es más rígido y más seguro, y además más rápido.
 
+**En la interfaz:**
+- en Impresión, la fila **Guiado por tensiones** pone la densidad máxima;
+- debajo, **Caso de carga** abre un caso `.json`, el mismo formato de `tisma-engine analyze`;
+- el laminado lo usa. Si el análisis falla, o el caso no sostiene la pieza, el relleno queda parejo y hay un aviso.
+
 **Lo que falta:**
-- en la interfaz, pasar el caso de la pestaña Análisis al laminado;
+- editar el caso en la interfaz (apoyos y cargas sobre la pieza), con la pestaña Análisis;
 - iterar: volver a analizar con el relleno guiado y ajustar.
 
 **Prueba** (`tests/test_combine.cpp`): una barra de 60 × 10 × 10 empotrada en un extremo y cargada en el otro.

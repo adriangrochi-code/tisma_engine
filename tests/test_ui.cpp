@@ -1,3 +1,5 @@
+#include "config/analysis_case.hpp"
+#include "fea/analysis.hpp"
 #include "gcode/writer.hpp"
 #include "io/stl.hpp"
 #include "ui/camera.hpp"
@@ -435,4 +437,51 @@ TEST_CASE("ui: a background result is matched against what changed since it star
     Revision other_model = made;
     ++other_model.model;
     CHECK(fit(made, other_model) == Fit::OtherModel);
+}
+
+TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
+    // A bar of 60 x 10 x 10 on the bed, held at x = 100 and pushed down at x = 160.
+    TriangleMesh bar;
+    const Vec3f v[8] = {{100, 100, 0}, {160, 100, 0}, {160, 110, 0}, {100, 110, 0},
+                        {100, 100, 10}, {160, 100, 10}, {160, 110, 10}, {100, 110, 10}};
+    const int quads[6][4] = {{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {1, 2, 6, 5}, {2, 3, 7, 6}, {3, 0, 4, 7}};
+    for (const auto& q : quads) {
+        bar.add_triangle(v[q[0]], v[q[1]], v[q[2]]);
+        bar.add_triangle(v[q[0]], v[q[2]], v[q[3]]);
+    }
+    Settings s = default_settings();
+    s.gpu = GpuMode::Off;
+    s.infill_density = 10.0;
+    s.infill_stress_density = 50.0;
+    const AnalysisCase load = parse_analysis_case(
+        R"({"model": "solid", "quality": "normal", "fixtures": [{"face": "x_min"}],
+            "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
+    auto held_over_free = [](const SliceResult& r) {
+        double held = 0.0, free = 0.0;
+        for (const LayerFill& f : r.model.fills)
+            for (const Toolpath& t : f.sparse)
+                for (std::size_t i = 1; i < t.points.size(); ++i) {
+                    const double mx = 0.5 * (t.points[i].p.x + t.points[i - 1].p.x);
+                    const double l = std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+                    if (mx < 120.0)
+                        held += l;
+                    else if (mx >= 140.0)
+                        free += l;
+                }
+        return held / free;
+    };
+    Slicer slicer;
+    const SliceResult guided = slicer.run(bar, s, &load);
+    INFO(guided.error);
+    REQUIRE(guided.ok);
+    CHECK(guided.check.ok());
+    CHECK(held_over_free(guided) > 1.5);
+    // Without a case the infill stays even; with one that holds nothing, too, with a warning.
+    const SliceResult even = slicer.run(bar, s);
+    REQUIRE(even.ok);
+    CHECK_THAT(held_over_free(even), Catch::Matchers::WithinAbs(1.0, 0.15));
+    const AnalysisCase loose = parse_analysis_case(R"({"model": "solid", "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
+    const SliceResult unheld = slicer.run(bar, s, &loose);
+    REQUIRE(unheld.ok);
+    CHECK_THAT(held_over_free(unheld), Catch::Matchers::WithinAbs(1.0, 0.15));
 }

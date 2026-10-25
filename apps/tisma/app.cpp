@@ -10,11 +10,13 @@
 
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
+#include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/gcode_host.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
+#include "fea/analysis.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
 #include "io/stl.hpp"
@@ -202,7 +204,7 @@ std::filesystem::path preferences_path() {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest };
+enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
 
 class App {
 public:
@@ -237,6 +239,7 @@ private:
     void load_model(const std::filesystem::path& path);
     void load_gcode(const std::filesystem::path& path);
     void load_settings_file(const std::filesystem::path& path);
+    void load_case_file(const std::filesystem::path& path);
     void save_settings_file(const std::filesystem::path& path);
     void open_project(const std::filesystem::path& path);
     void begin_save_project(bool ask);
@@ -313,6 +316,9 @@ private:
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
+    // The load case of stress-guided infill (docs/INFILL.md), as analyze takes it.
+    std::optional<AnalysisCase> load_case_;
+    std::string load_case_name_;
     bool stale_ = false;  // the model or the settings changed since the result
     bool viewer_ = false; // the result is an opened G-code file, not a slice
     std::filesystem::path gcode_path_;
@@ -989,6 +995,17 @@ void App::load_settings_file(const std::filesystem::path& path) {
     }
 }
 
+void App::load_case_file(const std::filesystem::path& path) {
+    try {
+        load_case_ = load_analysis_case(path);
+        load_case_name_ = utf8(path.filename());
+        settings_changed();
+        notify(format(tr(T::CaseLoaded), load_case_name_.c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
 void App::save_settings_file(const std::filesystem::path& path) {
     std::ofstream out(path, std::ios::binary);
     out << settings_json(settings_);
@@ -1511,8 +1528,8 @@ void App::start_slice() {
     Settings settings = settings_;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
-    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings)]() {
-        return slicer_.run(placed, settings);
+    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr);
     });
 }
 
@@ -1835,6 +1852,14 @@ void App::settings_panel() {
         changed |= row(T::DenseUnderTop, s.infill_dense_under_top, tr(T::DenseUnderTopTip));
         if (s.infill_dense_under_top)
             changed |= row(T::DenseDensity, s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::DenseUnderTopTip));
+        changed |= row(T::StressDensity, s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f, tr(T::StressDensityTip));
+        if (s.infill_stress_density > 0.0) {
+            label_cell(T::LoadCase, tr(T::StressDensityTip));
+            if (ImGui::Button(load_case_ ? load_case_name_.c_str() : tr(T::ChooseCase), ImVec2(-FLT_MIN, 0))) {
+                purpose_ = Purpose::LoadCase;
+                browser_.open(FileBrowser::Mode::Open, tr(T::LoadCase), {".json"}, last_folder_);
+            }
+        }
         changed |= row(T::Supports, s.support);
         if (s.support)
             changed |= row(T::SupportAngle, s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
@@ -2719,6 +2744,7 @@ void App::dialogs() {
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
         case Purpose::SaveProject: save_project_to(chosen); break;
+        case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
             std::ofstream out(chosen, std::ios::binary);
             out << extruder_test_gcode(settings_);
