@@ -3586,3 +3586,20 @@ las direcciones; las tres laminadas a G-code verificado.
 
 **Sigue:** el panal 3D (regla 11) necesita más mediciones de la ficha; los patrones de las superficies (14 a 17).
 
+## 2026-10-25 — rellenos no planares y brick layers: lo publicado y la propuesta
+
+**Pedido del dueño:** rellenos no planares más fuertes que los tradicionales, y una versión no planar de brick layers
+que no infrinja patentes.
+
+**Hecho:** `docs/NONPLANAR_INFILL.md`, con:
+- lo publicado y medido: ZigZagZ (+62 % de resistencia y +245 % de tenacidad en Z), pernos en Z (más de 3,5 veces
+  en Z), capas onduladas (+50 % al impacto) y brick layers (+10 a 14 %);
+- las patentes de brick layers según sus resúmenes públicos (Stratasys, vencida; Addman, vigentes);
+- la propuesta: N1, relleno ondulado; N2, paredes tejidas, la versión no planar de brick layers; N3, medir con el
+  análisis; N4, pernos en Z si la patente lo permite.
+
+**Sin verificar:** las reivindicaciones completas de las patentes de Addman y de ORNL. Los sitios de patentes bloquean
+el acceso automático; lo dicho sale de los resúmenes. Antes de vender, que lo revise un abogado.
+
+**Sigue:** N1.
+

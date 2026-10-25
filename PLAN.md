@@ -481,6 +481,15 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
     - [ ] editar el caso en la interfaz (apoyos y cargas), y la iteración analizar-reforzar
     - [ ] medir la rigidez con el análisis «como impresa» leyendo el laminado real
+  - relleno y paredes no planares para más resistencia, y una versión no planar de brick layers que no infrinja
+    patentes (`docs/NONPLANAR_INFILL.md`):
+    - [ ] N1: relleno ondulado (ZigZagZ en el relleno que se repite capa a capa), con la amplitud que baja cerca de
+      paredes y pieles, el espesor según el cordón de abajo y el tope de velocidad en Z
+    - [ ] N3: el análisis «como impresa» con la unión entre capas inclinada, para medir N1 y N2
+    - [ ] N2: paredes tejidas (perímetros ondulados en contrafase, capas anidadas), la versión no planar de brick
+      layers
+    - [ ] N4: pernos en Z, si la patente de ORNL lo permite (decide el dueño)
+    - revisión de patentes por un abogado antes de vender (decide el dueño)
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel
