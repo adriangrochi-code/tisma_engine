@@ -3105,3 +3105,61 @@ recorte que el banco mostró: las aristas de la zona indexadas por franjas de Y.
 **Sigue:** la altura variable por Z de la ficha (`slicing.md`), una lista de (Z, alto) por objeto, que la altura
 por zona generaliza; o lo que el dueño elija.
 
+## 2026-10-25 — altura de capa variable por Z
+
+**Pedido del dueño:** «seguí con la altura variable por Z y por Z anti-aliasing así las combinamos para máxima calidad»,
+y que no dependa de dos objetos: que sirva en una pieza compleja.
+
+**Hecho** (`docs/VARIABLE_LAYERS.md`):
+- `layers.heights`: la lista de tramos (Z, altura) de la ficha (`slicing.md`).
+- `layers.cusp_height`: la altura por pendiente, por el escalón máximo (Dolenc y Mäkelä 1994). Las caras de la malla
+  limitan bandas de Z de 0,005 mm, y las caras planas cierran una capa.
+- `machine.min_layer_height` y `max_layer_height`, nunca por encima de la boquilla.
+- **Con la altura por zona**, la pendiente decide cuántas subcapas lleva cada capa gruesa (1 donde no hace falta). Si
+  ni las más finas alcanzan, la capa gruesa se achica. Las pieles cuentan capas gruesas.
+- **Sin lista ni pendiente,** la pila es la de siempre: el mismo G-code byte a byte (comprobado en la cúpula y la
+  esfera, en cuatro modos).
+- **La interfaz:** «Escalón en pendientes» y «Alturas por Z» (con agregar y quitar tramos) en Impresión; «Capa mínima»
+  y «Capa máxima» en Impresora.
+- **Pruebas:** 4 casos nuevos.
+  - Un prisma de techo a 10° y una cúpula sobre una columna, cada uno en una sola malla.
+  - La columna va gruesa y la cúpula fina.
+  - Con lista, con pendiente y con zona + pendiente, el G-code pasa el chequeo y el material queda en ±6 %.
+- **El fuzz** sortea pendiente, tramos y límites de máquina: 2000 corridas en 5 semillas, 0 fallas.
+
+**Corregido, por el fuzz** (fallas que ya estaban y que las combinaciones nuevas del sorteo destaparon):
+- **Un desplazamiento XY de −0,00013 mm sobre la esfera:** dejaba zigzags de aristas de 1 nm en las esquinas, y el
+  diagrama de Voronoi propio lanzaba «no seed node». El de referencia, como respaldo, armaba grafos de 260 000 nodos
+  y colgaba el laminado: ese respaldo se descartó.
+  - Ahora las esquinas a menos de 10 nm de la anterior se quitan antes de armar el diagrama (de un cuelgue a 0,16 s).
+  - El G-code de los modelos comunes no cambia.
+  - Prueba con el contorno real de esa capa: falla sin el arreglo.
+- **Un cambio por altura a 0,0002 mm del tope de una capa:** el escritor lo aplicaba en la capa siguiente y el
+  verificador, que lee el Z redondeado a 3 decimales, en esa. Ahora el escritor usa el tope tal como se escribe.
+- **`tisma-engine`:** un error interno no atrapado cortaba el programa («terminate called»). Ahora sale con el código
+  7 y un mensaje.
+- **El fuzz** deja el modelo, los ajustes y el G-code de una corrida que falla en la carpeta de `TISMA_FUZZ_DUMP`.
+
+**Medido** (cúpula sobre columna de 40 mm y esfera de 100 mm, CPU; el escalón es `h · |n_z|` del perímetro externo):
+- **Escalón máximo 0,1 mm:**
+  - zona + pendiente: cúpula 48,6 min y esfera 425,8 min, con p95 de 0,094 y 0,096;
+  - todo a 0,1 mm: 113,0 y 918,6 min, con p95 de 0,079 y 0,088;
+  - por zona sola: 54,4 y 495,7 min.
+- **Escalón máximo 0,05 mm, cúpula:**
+  - zona + pendiente: 56,1 min, p95 0,050;
+  - por pendiente sola: 61,4 min;
+  - todo a 0,05 mm: 224,6 min, p95 0,039.
+- **Material:** ±1,5 % en todos los modos.
+
+**No probado:**
+- la calidad impresa (necesita una impresora);
+- la lista por objeto: el motor lamina toda la cama en una pila, así que la lista vale para toda la cama.
+
+**Sigue:**
+1. Z anti-aliasing (`docs/spec/features/z_antialiasing.md` y Song et al. 2017), para bajar el escalón que queda en
+   las superficies de arriba de poca pendiente.
+2. Después, en la cola del dueño:
+   - el relleno por resistencia y rapidez;
+   - el tiempo de impresión más preciso;
+   - el panel izquierdo por niveles con Impresora, Filamento y Objetos.
+

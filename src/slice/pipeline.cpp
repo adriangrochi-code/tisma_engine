@@ -43,10 +43,12 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         min_z = std::min(min_z, v.z);
         max_z = std::max(max_z, v.z);
     }
-    // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md).
+    // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md);
+    // with variable heights, planned layer by layer (docs/VARIABLE_LAYERS.md).
     const int ratio = detail_ratio(settings);
-    const double stack_height = settings.layer_height / double(ratio);
-    out.layers = plan_layers(min_z, max_z, {settings.first_layer_height, stack_height});
+    const double stack_height = settings.layer_height / double(ratio); // nominal, for the support's gap
+    const LayerStack stack = plan_layer_stack(mesh, min_z, max_z, settings);
+    out.layers = stack.layers;
     std::vector<float> heights;
     heights.reserve(out.layers.size());
     for (const Layer& l : out.layers)
@@ -88,9 +90,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)
         infill[l] = out.walls[l].infill;
-    out.surfaces =
-        classify_surfaces(out.regions, infill, settings.top_layers * ratio, settings.bottom_layers * ratio,
-                          settings.wall_width);
+    out.surfaces = variable_layers(settings)
+                       ? classify_surfaces(out.regions, infill, skin_counts(stack.share, settings.top_layers, +1),
+                                           skin_counts(stack.share, settings.bottom_layers, -1), settings.wall_width)
+                       : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
+                                           settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
@@ -132,13 +136,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
                       });
-    if (ratio > 1) {
+    if (!stack.groups.empty()) {
         LocalLayerParams lp;
         lp.ratio = ratio;
         lp.tolerance = settings.detail_tolerance;
         lp.margin = settings.detail_margin > 0.0 ? settings.detail_margin : 3.0 * settings.wall_width;
         lp.min_coarse = 2.0 * settings.wall_width;
-        out.groups = plan_layer_groups(out.regions, lp);
+        out.groups = plan_layer_groups(out.regions, stack.groups, lp);
         std::vector<double> group_heights;
         for (const LayerGroup& g : out.groups)
             group_heights.push_back(out.layers[g.last].top - out.layers[g.first].bottom);

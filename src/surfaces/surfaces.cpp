@@ -43,12 +43,21 @@ Polygons widen_thin(const Polygons& solid, const Polygons& infill, double min_wi
 
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
                                              int top_layers, int bottom_layers, double min_width) {
+    return classify_surfaces(regions, infill, std::vector<int>(infill.size(), top_layers),
+                             std::vector<int>(infill.size(), bottom_layers), min_width);
+}
+
+std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
+                                             const std::vector<int>& top_counts, const std::vector<int>& bottom_counts,
+                                             double min_width) {
     std::vector<LayerSurfaces> out(infill.size());
     tbb::parallel_for(std::size_t(0), infill.size(), [&](std::size_t i) {
         LayerSurfaces& s = out[i];
         if (infill[i].empty())
             return;
         Polygons rest = infill[i];
+        const int top_layers = i < top_counts.size() ? top_counts[i] : 0;
+        const int bottom_layers = i < bottom_counts.size() ? bottom_counts[i] : 0;
         if (top_layers > 0) {
             s.top = Clipper2Lib::Difference(rest, covered_by_all(regions, i, top_layers, +1), FillRule::NonZero);
             s.top = widen_thin(s.top, rest, min_width);

@@ -31,6 +31,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   lado a lado, con capas de 0,3 y detalle de 0,1 mm: 32 % menos de tiempo que todo a 0,1 mm, con el mismo material.
   En Impresión, **Alto del detalle**, **Escalón aceptado** y **Margen del detalle**; en la vista previa, **Color por →
   Alto de capa**.
+- **Altura de capa variable por Z** (`docs/VARIABLE_LAYERS.md`, pedido del dueño):
+  - `layers.heights`: una lista de tramos (Z, altura);
+  - `layers.cusp_height`: altura automática por pendiente, según el escalón máximo que puede dejar una superficie
+    inclinada;
+  - las caras planas cierran una capa a su altura exacta;
+  - `machine.min_layer_height` y `max_layer_height` limitan las alturas, y nunca pasan la boquilla.
+
+  Con la altura por zona, la pendiente decide cuántas subcapas finas lleva cada capa gruesa, dentro de una misma pieza.
+  En una cúpula sobre una columna, con escalón de 0,05 mm, tarda 56 min. Todo a 0,05 mm tarda 225 min, con el mismo
+  escalón máximo.
+
+  En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
+  máxima**.
 - **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
   (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
   trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.
@@ -56,6 +69,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   byte a byte: los números se escriben por un camino propio que da lo mismo que `std::to_chars`.
 - El G-code escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…`, o
   `SET_VELOCITY_LIMIT ACCEL=…` en Klipper), así la impresora corre a la aceleración con la que se estima el tiempo.
+
+### Corregido
+
+- **Contornos con zigzags de 1 nm:** quedaban en las esquinas tras un desplazamiento XY de una fracción de micrómetro y
+  hacían fallar el diagrama de Voronoi de los perímetros. Ahora se limpian antes. Antes el laminado terminaba sin
+  mensaje; ahora sale bien, y el G-code de las piezas comunes no cambia.
+- **Errores internos en `tisma-engine`:** terminan con el código 7 y un mensaje. Antes cortaban el programa.
+- **Un cambio por altura (`changes`) a menos de 0,0005 mm del tope de una capa:** se aplicaba en esa capa en el
+  verificador y en la siguiente en el escritor, y el G-code se rechazaba. Ahora los dos usan el tope tal como se
+  escribe.
 
 ## [0.7.0-alpha.1] - 2026-10-24
 

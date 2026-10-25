@@ -57,6 +57,12 @@ struct Settings {
     double detail_height = 0.0;
     double detail_tolerance = 0.05; // mm of step accepted
     double detail_margin = 0.0;     // mm the fine zone grows around the detail; 0: three line widths
+    // Variable layer height by Z (docs/VARIABLE_LAYERS.md): (z above the bed,
+    // height) steps, each height from its z up, sorted by z; empty: none.
+    std::vector<std::array<double, 2>> layer_heights;
+    // Adaptive by slope: the highest step a sloping surface may leave, mm
+    // (Dolenc and Mäkelä 1994); 0: off.
+    double cusp_height = 0.0;
     FillMode fill_mode = FillMode::Union;
     double gap_closing_radius = 0.049;
     double xy_offset = 0.0;
@@ -92,6 +98,10 @@ struct Settings {
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
     double max_height = 0.0; // mm; 0: not checked
+    // The layer heights the machine prints, mm; 0: not known (then 0.04 mm and
+    // the nozzle diameter). Variable layers keep within them.
+    double min_layer_height = 0.0;
+    double max_layer_height = 0.0;
     // What the machine can do (docs/CATALOG.md, "Capacidades"); 0 or false:
     // not known. The writer keeps to the flow and heats the chamber; the
     // checks warn when a filament asks for more.

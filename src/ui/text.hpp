@@ -24,6 +24,9 @@
     X(BedWidth, "Ancho de la cama", "Bed width")                                                                      \
     X(BedDepth, "Fondo de la cama", "Bed depth")                                                                      \
     X(MaxHeight, "Altura máxima", "Maximum height")                                                                   \
+    X(MinLayerHeight, "Capa mínima", "Thinnest layer")                                                                \
+    X(MaxLayerHeight, "Capa máxima", "Thickest layer")                                                                \
+    X(LayerLimitTip, "La altura de capa variable se queda entre estas dos y nunca pasa el diámetro de la boquilla. 0: 0,04 mm y la boquilla.", "Variable layer heights keep between these two and never exceed the nozzle diameter. 0: 0.04 mm and the nozzle.") \
     X(Nozzle, "Boquilla", "Nozzle")                                                                                   \
     X(Flavor, "Dialecto de G-code", "G-code flavor")                                                                  \
     X(RelativeE, "Extrusión relativa (M83)", "Relative extrusion (M83)")                                             \
@@ -48,6 +51,11 @@
     X(DetailToleranceTip, "Donde las capas finas difieren menos que esto, va grueso.", "Where the fine layers differ by less than this, it goes thick.") \
     X(DetailMargin, "Margen del detalle", "Detail margin")                                                            \
     X(DetailMarginTip, "Cuánto se agranda la zona fina alrededor del detalle. 0: tres anchos de línea.", "How far the fine zone grows around the detail. 0: three line widths.") \
+    X(CuspHeight, "Escalón en pendientes", "Slope step")                                                                                                                         \
+    X(CuspHeightTip, "Altura variable automática: el escalón más alto que puede dejar una superficie inclinada. Las capas se afinan donde la pendiente es suave; con alto del detalle, solo en la zona del detalle. 0: apagado. Ver docs/VARIABLE_LAYERS.md.", "Automatic variable height: the highest step a sloping surface may leave. Layers thin where the slope is gentle; with a detail height, only in the detail's zone. 0: off. See docs/VARIABLE_LAYERS.md.") \
+    X(LayerHeights, "Alturas por Z", "Heights by Z")                                                                                                                             \
+    X(LayerHeightsTip, "Tramos: desde cada Z (sobre la cama) hacia arriba, esa altura de capa. Debajo del primero, la altura de capa.", "Steps: from each Z (above the bed) up, that layer height. Below the first, the layer height.") \
+    X(AddStep, "Agregar tramo", "Add step")                                                                                                                                      \
     X(Walls, "Paredes", "Walls")                                                                                      \
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \

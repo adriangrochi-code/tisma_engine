@@ -447,7 +447,16 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
 - [x] La interfaz: los ajustes en Impresión y la vista previa con el color por alto de capa
 - [x] Medir en el banco contra todo fino y todo grueso (−39 a −52 % de tiempo contra todo fino); el recorte,
   indexado, cuesta poco: sin GPU
-- [ ] La altura variable por Z de la ficha (`slicing.md`), que esta generaliza: una lista de (Z, alto) por objeto
+- [x] La altura variable por Z de la ficha (`slicing.md`): la lista de (Z, alto), la altura por pendiente (escalón
+  máximo) y las dos combinadas con la altura por zona, dentro de una misma pieza (`docs/VARIABLE_LAYERS.md`). La
+  lista vale para toda la cama: el motor lamina los objetos en una sola pila
+- [ ] Z anti-aliasing (`docs/spec/features/z_antialiasing.md`; Song, Ray, Sokolov y Lefebvre 2017): las extrusiones
+  de arriba siguen la superficie dentro de la capa, para la máxima calidad junto con lo anterior
+- [ ] Pedidos del dueño en cola (2026-10-25):
+  - relleno optimizado para resistencia y rapidez;
+  - el tiempo de impresión estimado lo más preciso posible;
+  - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
+    filamento, objetos) en el mismo panel
 
 ## Estado de P2
 

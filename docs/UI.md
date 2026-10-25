@@ -34,7 +34,8 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Lugar | Qué tiene |
 |---|---|
 | Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (guardar el proyecto, idioma, tema claro u oscuro, acerca de, salir). |
-| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
+| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas —con la altura por zona y la altura variable por Z: escalón en pendientes y alturas por Z,
+`docs/VARIABLE_LAYERS.md`—, paredes, superficies, relleno, soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, capa mínima y máxima, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
 
@@ -71,7 +72,7 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
 (`src/gcode/preview.hpp`). Cada extrusión se dibuja como un cordón de su ancho y su alto.
 - **Barra de capas:** a la derecha; muestra hasta la capa elegida. «Solo esta capa» deja una sola.
 - **Leyenda:** abajo a la izquierda.
-  - **Color por:** tipo de línea, velocidad o ancho.
+  - **Color por:** tipo de línea, velocidad, ancho o alto de capa.
   - Cada tipo de línea se puede ocultar, y los viajes se pueden mostrar.
   - Los números: tiempo estimado, filamento (metros y cm³), capas y líneas del G-code.
 

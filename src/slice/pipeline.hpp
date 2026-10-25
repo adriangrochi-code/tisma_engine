@@ -7,6 +7,7 @@
 #include "surfaces/surfaces.hpp"
 #include "slice/layers.hpp"
 #include "slice/local_layers.hpp"
+#include "slice/variable_layers.hpp"
 
 #include <vector>
 

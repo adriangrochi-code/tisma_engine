@@ -32,6 +32,13 @@ Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 | `detail_tolerance` | número | 0,05 | 0,001 a 1 | El escalón que se acepta, en mm: donde las secciones de un grupo difieren menos que esto, va grueso |
 | `detail_margin` | número | 0 | 0 a 10 | Cuánto se agranda la zona fina alrededor del detalle, en mm. 0: tres anchos de línea |
 
+Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `heights` | lista de `[z, altura]` | `[]` | z de 0 a 10000, ordenada sin repetir; altura de 0,01 a 10 | Tramos: desde cada z (mm sobre la cama) hacia arriba, esa altura de capa (la capa gruesa con `detail_height`). Debajo del primero, `height`. Cada altura se acota a `machine.min_layer_height` y `max_layer_height`, y un tramo empieza una capa |
+| `cusp_height` | número | 0 | 0 a 1 | Altura automática por pendiente: el escalón más alto, en mm, que puede dejar una superficie inclinada (una cara de normal n admite capas de hasta `cusp_height / \|n_z\|`). Sin `detail_height`, la capa entera se afina; con él, la pendiente decide cuántas subcapas lleva cada capa gruesa. Las caras planas cierran una capa. 0: apagado |
+
 ### `slicing`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -85,6 +92,7 @@ Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 | `corner_speed` | número | 10 | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
+| `min_layer_height`, `max_layer_height` | número | 0 | 0 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del hot end, en mm³/s. Ninguna extrusión lo pasa: su velocidad baja a flujo / (ancho × alto × `extrusion.flow`), redondeada hacia abajo a mm/min enteros. Con `extrusion.max_flow` vale el menor de los dos. 0: sin límite |
 | `max_nozzle_temp`, `max_bed_temp` | número | 0 | 0 a 600 | Temperaturas máximas de la boquilla y la cama, en °C. Si las variables `temperature` o `bed_temperature` piden más, hay un aviso. 0: no se sabe |
 | `max_chamber_temp` | número | 0 | 0 a 600 | Temperatura máxima de la cámara calefaccionada, en °C. 0: la impresora no calienta la cámara |

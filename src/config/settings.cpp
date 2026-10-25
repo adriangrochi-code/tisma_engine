@@ -84,9 +84,33 @@ Settings parse_settings(std::string_view text) {
             fail(group, "unknown group (see docs/CONFIG.md)");
     }
 
-    read_group(root, "layers", {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin"},
+    read_group(root, "layers",
+               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "heights") {
+            const json& v = g.at(n);
+            const char* what = "must be a list of [z, height] pairs in mm, sorted by z, heights from 0.01 to 10";
+            if (!v.is_array())
+                fail(k, what);
+            std::vector<std::array<double, 2>> steps;
+            for (const json& p : v) {
+                if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                    fail(k, what);
+                const double z = p[0].get<double>(), h = p[1].get<double>();
+                if (!(z >= 0.0 && z <= 10000.0) || !(h >= 0.01 && h <= 10.0) || (!steps.empty() && z <= steps.back()[0]))
+                    fail(k, what);
+                steps.push_back({z, h});
+            }
+            s.layer_heights = std::move(steps);
+            return;
+        }
         const double v = number(g, n, k);
+        if (n == "cusp_height") {
+            if (v < 0.0 || v > 1.0)
+                fail(k, "must be from 0 to 1 mm");
+            s.cusp_height = v;
+            return;
+        }
         if (n == "detail_height" || n == "detail_margin") {
             if (v < 0.0 || v > 10.0)
                 fail(k, "must be from 0 to 10 mm");
@@ -178,7 +202,7 @@ Settings parse_settings(std::string_view text) {
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
-                "hardened_nozzle"},
+                "hardened_nozzle", "min_layer_height", "max_layer_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "relative_extrusion" || n == "enclosed" || n == "hardened_nozzle") {
@@ -232,6 +256,11 @@ Settings parse_settings(std::string_view text) {
                            bed.push_back({p[0].get<double>(), p[1].get<double>()});
                        }
                        s.bed = std::move(bed);
+                   } else if (n == "min_layer_height" || n == "max_layer_height") {
+                       const double d = number(g, n, k);
+                       if (d < 0.0 || d > 10.0)
+                           fail(k, "must be from 0 to 10 mm");
+                       (n == "min_layer_height" ? s.min_layer_height : s.max_layer_height) = d;
                    } else if (n == "corner_speed" || n == "max_height") {
                        const double d = number(g, n, k);
                        if (d < 0.0)
@@ -505,6 +534,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"layers.detail_height", num(s.detail_height)},
         {"layers.detail_tolerance", num(s.detail_tolerance)},
         {"layers.detail_margin", num(s.detail_margin)},
+        {"layers.heights", json(s.layer_heights).dump()},
+        {"layers.cusp_height", num(s.cusp_height)},
         {"slicing.fill_mode", fill_mode},
         {"slicing.gap_closing_radius", num(s.gap_closing_radius)},
         {"slicing.xy_offset", num(s.xy_offset)},
@@ -536,6 +567,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.corner_speed", num(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
+        {"machine.min_layer_height", num(s.min_layer_height)},
+        {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", num(s.wall_speed)},
         {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
         {"speed.infill", num(s.infill_speed)},
@@ -612,6 +645,9 @@ std::string settings_json(const Settings& s) {
     ordered_json bed = ordered_json::array();
     for (const auto& p : s.bed)
         bed.push_back({p[0], p[1]});
+    ordered_json layer_heights = ordered_json::array();
+    for (const auto& p : s.layer_heights)
+        layer_heights.push_back({p[0], p[1]});
     const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
                                                                : ordered_json(s.outer_wall_speed.value);
     const ordered_json root = {
@@ -620,7 +656,9 @@ std::string settings_json(const Settings& s) {
           {"first_height", s.first_layer_height},
           {"detail_height", s.detail_height},
           {"detail_tolerance", s.detail_tolerance},
-          {"detail_margin", s.detail_margin}}},
+          {"detail_margin", s.detail_margin},
+          {"heights", layer_heights},
+          {"cusp_height", s.cusp_height}}},
         {"slicing",
          {{"fill_mode", fill_mode},
           {"gap_closing_radius", s.gap_closing_radius},
@@ -654,6 +692,8 @@ std::string settings_json(const Settings& s) {
           {"corner_speed", s.corner_speed},
           {"bed", bed},
           {"max_height", s.max_height},
+          {"min_layer_height", s.min_layer_height},
+          {"max_layer_height", s.max_layer_height},
           {"max_flow", s.machine_max_flow},
           {"max_nozzle_temp", s.max_nozzle_temp},
           {"max_bed_temp", s.max_bed_temp},

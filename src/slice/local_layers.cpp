@@ -1,5 +1,7 @@
 #include "slice/local_layers.hpp"
 
+#include "slice/variable_layers.hpp"
+
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
@@ -126,14 +128,9 @@ double length(const Toolpath& t) {
 } // namespace
 
 int detail_ratio(const Settings& s) {
-    if (!(s.detail_height > 0.0) || s.detail_height >= s.layer_height)
-        return 1;
-    int ratio = std::clamp(int(std::lround(s.layer_height / s.detail_height)), 2, 4);
     // No sub-layer thinner than a printer lays down (and than the G-code's
     // ;HEIGHT: carries well with three decimals).
-    while (ratio > 1 && s.layer_height / ratio < kThinnestSubLayer - 1e-12)
-        --ratio;
-    return ratio < 2 ? 1 : ratio;
+    return sub_layers(s.layer_height, s.detail_height, kThinnestSubLayer);
 }
 
 std::vector<ThickLayer> split_thick_zones(const std::vector<LayerGroup>& groups, std::vector<LayerWalls>& walls,
@@ -164,17 +161,15 @@ std::vector<ThickLayer> split_thick_zones(const std::vector<LayerGroup>& groups,
     return thick;
 }
 
-std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions, const LocalLayerParams& params) {
-    std::vector<LayerGroup> groups;
+namespace {
+
+// Each group's thick zone; groups of fewer than `least` layers have none.
+void find_coarse(std::vector<LayerGroup>& groups, const std::vector<Polygons>& regions, const LocalLayerParams& params,
+                 std::size_t least) {
     const std::size_t n = regions.size();
-    if (n < 2 || params.ratio < 2)
-        return groups;
-    const auto ratio = std::size_t(params.ratio);
-    for (std::size_t first = 1; first < n; first += ratio)
-        groups.push_back({first, std::min(n - 1, first + ratio - 1), {}});
     tbb::parallel_for(std::size_t(0), groups.size(), [&](std::size_t i) {
         LayerGroup& g = groups[i];
-        if (g.last - g.first + 1 < ratio)
+        if (g.last - g.first + 1 < least || g.first == 0 || g.last >= n)
             return;
         Polygons all = regions[g.first], some = regions[g.first];
         for (std::size_t l = g.first + 1; l <= g.last; ++l) {
@@ -201,6 +196,29 @@ std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions, 
         // Thick pieces narrower than min_coarse are not worth a thick bead.
         g.coarse = offset(offset(coarse, -params.min_coarse / 2.0), params.min_coarse / 2.0);
     });
+}
+
+} // namespace
+
+std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions, const LocalLayerParams& params) {
+    std::vector<LayerGroup> groups;
+    const std::size_t n = regions.size();
+    if (n < 2 || params.ratio < 2)
+        return groups;
+    const auto ratio = std::size_t(params.ratio);
+    for (std::size_t first = 1; first < n; first += ratio)
+        groups.push_back({first, std::min(n - 1, first + ratio - 1), {}});
+    find_coarse(groups, regions, params, ratio);
+    return groups;
+}
+
+std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions,
+                                          const std::vector<std::array<std::size_t, 2>>& runs,
+                                          const LocalLayerParams& params) {
+    std::vector<LayerGroup> groups;
+    for (const auto& r : runs)
+        groups.push_back({r[0], r[1], {}});
+    find_coarse(groups, regions, params, 2);
     return groups;
 }
 

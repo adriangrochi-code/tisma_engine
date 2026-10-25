@@ -556,6 +556,48 @@ bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> o
     return changed;
 }
 
+// The layer heights by Z (docs/VARIABLE_LAYERS.md): a row per step, its Z and
+// its height, sorted by Z once no field is being edited.
+bool height_steps_rows(std::vector<std::array<double, 2>>& steps, double layer_height) {
+    label_cell(T::LayerHeights, tr(T::LayerHeightsTip));
+    bool changed = false;
+    if (ImGui::Button(tr(T::AddStep), ImVec2(-FLT_MIN, 0))) {
+        steps.push_back({steps.empty() ? 1.0 : steps.back()[0] + 1.0, layer_height});
+        changed = true;
+    }
+    std::size_t remove = steps.size();
+    const double z_min = 0.0, z_max = 10000.0, h_min = 0.01, h_max = 10.0;
+    for (std::size_t i = 0; i < steps.size(); ++i) {
+        ImGui::PushID(int(i));
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        changed |= ImGui::DragScalar("##z", ImGuiDataType_Double, &steps[i][0], 0.05f, &z_min, &z_max, "Z %.2f mm",
+                                     ImGuiSliderFlags_AlwaysClamp);
+        ImGui::TableNextColumn();
+        const float button = ImGui::GetFrameHeight();
+        ImGui::SetNextItemWidth(-(button + ImGui::GetStyle().ItemSpacing.x));
+        changed |= ImGui::DragScalar("##h", ImGuiDataType_Double, &steps[i][1], 0.002f, &h_min, &h_max, "%.3f mm",
+                                     ImGuiSliderFlags_AlwaysClamp);
+        ImGui::SameLine();
+        if (ImGui::Button("x", ImVec2(button, button)))
+            remove = i;
+        ImGui::PopID();
+    }
+    if (remove < steps.size()) {
+        steps.erase(steps.begin() + std::ptrdiff_t(remove));
+        changed = true;
+    }
+    if (!ImGui::IsAnyItemActive()) {
+        // Sorted, and apart: the settings file takes each Z once.
+        std::stable_sort(steps.begin(), steps.end(), [](const auto& a, const auto& b) { return a[0] < b[0]; });
+        for (std::size_t i = 1; i < steps.size(); ++i)
+            if (steps[i][0] <= steps[i - 1][0])
+                steps[i][0] = steps[i - 1][0] + 0.01, changed = true;
+    }
+    return changed;
+}
+
 // A whole-number variable of the start G-code ([temperature]), edited as a number.
 bool variable_row(T label, Settings& s, const char* name, int min, int max, const char* fmt, const char* tip) {
     std::vector<std::string>& values = s.variables[name];
@@ -1763,6 +1805,8 @@ void App::settings_panel() {
             changed |= row(T::DetailTolerance, s.detail_tolerance, 0.001, 1.0, "%.3f mm", 0.001f, tr(T::DetailToleranceTip));
             changed |= row(T::DetailMargin, s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
         }
+        changed |= row(T::CuspHeight, s.cusp_height, 0.0, 1.0, "%.3f mm", 0.001f, tr(T::CuspHeightTip));
+        changed |= height_steps_rows(s.layer_heights, s.layer_height);
         changed |= row(T::Walls, s.wall_count, 0, 50);
         changed |= row(T::LineWidth, s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
         changed |= row(T::Seam, s.seam,
@@ -1834,6 +1878,8 @@ void App::settings_panel() {
         }
         changed |= row(T::MaxHeight, s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
         changed |= row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
+        changed |= row(T::MinLayerHeight, s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
+        changed |= row(T::MaxLayerHeight, s.max_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
         changed |= row(T::Flavor, s.flavor,
                        {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
         changed |= row(T::RelativeE, s.relative_extrusion);

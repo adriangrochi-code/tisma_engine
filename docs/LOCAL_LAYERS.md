@@ -7,6 +7,9 @@ La altura variable común (`docs/spec/features/slicing.md`, «Altura de capa var
 capa según Z. Acá la altura cambia también en XY: a la misma altura, la zona con detalle va en capas finas y el resto
 en capas gruesas.
 
+La altura variable por Z (`docs/VARIABLE_LAYERS.md`) se combina con esta: la lista de tramos fija la capa gruesa de
+cada Z, y la pendiente decide cuántas subcapas finas lleva.
+
 ## De dónde sale
 
 - **Local adaptive slicing:** Tyberg, J. y Bøhn, J. H., *Local adaptive slicing*, Rapid Prototyping Journal 4(3),

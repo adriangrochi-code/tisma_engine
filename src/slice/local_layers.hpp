@@ -5,6 +5,7 @@
 #include "infill/rectilinear.hpp"
 #include "perimeters/sites.hpp"
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -35,6 +36,12 @@ struct LayerGroup {
 // its layers agree, away from where they differ (by more than the tolerance)
 // by the margin. A last group shorter than the ratio has no thick zone.
 std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions, const LocalLayerParams& params);
+
+// The same for given runs of fine layers, [first, last] each, of two layers or
+// more (variable layer heights, docs/VARIABLE_LAYERS.md): params.ratio is not used.
+std::vector<LayerGroup> plan_layer_groups(const std::vector<Polygons>& regions,
+                                          const std::vector<std::array<std::size_t, 2>>& runs,
+                                          const LocalLayerParams& params);
 
 // What a thick layer prints at the top of its last fine layer: the parts of
 // that layer's walls and fills in the thick zone (support stays fine).
