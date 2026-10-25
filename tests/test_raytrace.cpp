@@ -174,26 +174,38 @@ TEST_CASE("raytrace: scenes from the model and the preview", "[ui][raytrace]") {
     CHECK(scene.occluded({beside, normalize(Vec3{-1, 0, 0.3f})}));
     CHECK_FALSE(scene.occluded({beside, normalize(Vec3{1, 0, 0.3f})}));
 
-    // The preview: boxes hang under the path, as tall as the layer.
+    // The preview: beads hang under the path, as tall as the layer.
     const GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2\n;TYPE:Perimeter\n"
                                               ";WIDTH:0.4\nG1 X10 E1\n;LAYER_CHANGE\n;Z:0.4\n;HEIGHT:0.2\nG1 Z0.4\n"
                                               ";TYPE:Internal infill\nG1 X0 E2\n");
     const std::vector<RayPrimitive> lines = preview_primitives(preview_buffers(p));
     REQUIRE(lines.size() == 2);
-    CHECK(lines[0].box);
-    CHECK_THAT(lines[0].p0.z, WithinAbs(0.1, 1e-6));
-    CHECK_THAT(length(lines[0].p1), WithinAbs(5.2, 1e-5));
+    CHECK(lines[0].bead);
+    CHECK_THAT(lines[0].p0.z, WithinAbs(0.2, 1e-6));
+    CHECK_THAT(lines[0].p1.x, WithinAbs(10.0, 1e-6));
+    CHECK(lines[0].p2.z == kFreeEnd);
     CHECK(lines[1].layer == 1);
     CHECK(lines[1].kind == std::uint32_t(LineKind::SparseInfill));
-    // Joined ends reach only to the mitre: two moves in a straight line meet
-    // without overlapping, a right angle overlaps by half a width.
-    const std::vector<RayPrimitive> straight = preview_primitives(preview_buffers(read_gcode_preview(
-        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2\n;TYPE:Perimeter\n;WIDTH:0.4\nG1 X10 E1\nG1 X20 E2\nG1 Y10 E3\n")));
-    REQUIRE(straight.size() == 3);
-    CHECK_THAT(straight[0].p0.x - straight[0].p1.x, WithinAbs(-0.2, 1e-5)); // the free start
-    CHECK_THAT(straight[0].p0.x + straight[0].p1.x, WithinAbs(10.0, 1e-5));
-    CHECK_THAT(straight[1].p0.x - straight[1].p1.x, WithinAbs(10.0, 1e-5));
-    CHECK_THAT(straight[1].p0.x + straight[1].p1.x, WithinAbs(20.2, 1e-5)); // the corner: half a width
+    // A wall of three moves: straight on, then a right angle. The beads are
+    // continuous: no gap at the joints, the corner closed by the mitre, and
+    // the free start grown by half a width.
+    {
+        RayScene wall;
+        wall.build(preview_primitives(preview_buffers(read_gcode_preview(
+            ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2\n;TYPE:Perimeter\n;WIDTH:0.4\nG1 X10 E1\nG1 X20 E2\nG1 Y10 E3\n"))));
+        const auto down = [&](float x, float y) { return wall.closest({{x, y, 5}, {0, 0, -1}}); };
+        for (const float x : {0.0f, 5.0f, 9.999f, 10.0f, 10.001f, 15.0f, 19.9f})
+            CHECK_THAT(down(x, 0.0f), WithinAbs(4.8, 1e-4));
+        CHECK(down(20.15f, -0.15f) > 0.0f); // the corner's outer square, inside the mitred beads
+        CHECK(down(19.9f, 5.0f) > 0.0f);    // up the second side
+        CHECK(down(-0.15f, 0.0f) > 0.0f);   // the free start
+        CHECK(down(-0.25f, 0.0f) < 0.0f);
+        CHECK(down(5.0f, 0.25f) < 0.0f);    // beside the bead
+        // The same hits as one long bead: the joints add nothing.
+        CHECK_THAT(down(10.0f, 0.15f), WithinAbs(down(5.0f, 0.15f), 1e-4));
+        // A ray grazing along the top of the wall meets nothing: no joint sticks up.
+        CHECK(wall.closest({{1, 0, 0.201f}, {1, 0, 0}}) < 0.0f);
+    }
     RayScene preview;
     preview.build(lines);
     CHECK_THAT(preview.closest({{5, 0, 5}, {0, 0, -1}}), WithinAbs(4.6, 1e-5));

@@ -38,9 +38,43 @@ struct Bounds {
 
 float axis(Vec3 v, int k) { return k == 0 ? v.x : k == 1 ? v.y : v.z; }
 
+// A bead's own axes: along the move, across it (horizontal) and up.
+struct BeadAxes {
+    Vec3 dir, side, up;
+    float length = 0.0f;
+};
+BeadAxes bead_axes(Vec3 p0, Vec3 p1) {
+    BeadAxes a;
+    const Vec3 along = p1 - p0;
+    a.length = length(along);
+    a.dir = a.length > 0.0f ? along * (1.0f / a.length) : Vec3{1, 0, 0};
+    const Vec3 side = cross(a.dir, Vec3{0, 0, 1});
+    a.side = dot(side, side) > 1e-8f ? normalize(side) : Vec3{1, 0, 0};
+    a.up = cross(a.side, a.dir);
+    return a;
+}
+
+// How far a bead reaches past the end of its move: half a width at a free
+// end, as far as the mitre's outer corner at a joined one.
+float bead_reach(Vec3 dir, float width, float angle) {
+    if (!(angle < 0.5f * kFreeEnd))
+        return 0.5f * width;
+    const float c = std::clamp(dir.x * std::cos(angle) + dir.y * std::sin(angle), 1e-3f, 1.0f);
+    return 0.5f * width * std::sqrt(std::max(1.0f - c * c, 0.0f)) / c;
+}
+
 Bounds bounds_of(const RayPrimitive& p) {
     Bounds b;
-    if (p.box) {
+    if (p.bead) {
+        // The box around the prism and its mitres, a little larger.
+        const BeadAxes a = bead_axes(p.p0, p.p1);
+        const float w = p.p2.x, h = p.p2.y;
+        const float r0 = bead_reach(a.dir, w, p.p2.z) * 1.01f + 1e-4f, r1 = bead_reach(a.dir, w, p.p3.x) * 1.01f + 1e-4f;
+        for (const float s : {-0.5f * w, 0.5f * w})
+            for (const float u : {-h, 0.0f})
+                for (const Vec3 end : {p.p0 - a.dir * r0, p.p1 + a.dir * r1})
+                    b.add(end + a.side * s + a.up * u);
+    } else if (p.box) {
         const Vec3 r{std::abs(p.p1.x) + std::abs(p.p2.x) + std::abs(p.p3.x),
                      std::abs(p.p1.y) + std::abs(p.p2.y) + std::abs(p.p3.y),
                      std::abs(p.p1.z) + std::abs(p.p2.z) + std::abs(p.p3.z)};
@@ -54,7 +88,9 @@ Bounds bounds_of(const RayPrimitive& p) {
     return b;
 }
 
-Vec3 centroid(const RayPrimitive& p) { return p.box ? p.p0 : (p.p0 + p.p1 + p.p2) * (1.0f / 3.0f); }
+Vec3 centroid(const RayPrimitive& p) {
+    return p.bead ? (p.p0 + p.p1) * 0.5f : p.box ? p.p0 : (p.p0 + p.p1 + p.p2) * (1.0f / 3.0f);
+}
 
 float safe(float d) { return std::abs(d) < kTiny ? (d < 0.0f ? -kTiny : kTiny) : d; }
 
@@ -106,6 +142,54 @@ float intersect_box(const Ray& ray, Vec3 centre, Vec3 half_x, Vec3 half_y, Vec3 
             return -1.0f; // parallel to these faces and outside them
         }
     }
+    return near > 0.0f ? near : -1.0f; // from inside: no hit
+}
+
+float intersect_bead(const Ray& ray, Vec3 p0, Vec3 p1, float width, float height, float start, float end) {
+    const BeadAxes a = bead_axes(p0, p1);
+    if (!(a.length > 0.0f) || !(width > 0.0f) || !(height > 0.0f))
+        return -1.0f;
+    // Everything from p0, for precision far from the origin; each plane keeps
+    // dot(q, n) <= k, with q the point from p0.
+    const Vec3 o = ray.origin - p0;
+    float near = -std::numeric_limits<float>::infinity(), far = std::numeric_limits<float>::infinity();
+    const auto clip = [&](Vec3 n, float k) {
+        const float denom = dot(ray.dir, n), num = k - dot(o, n);
+        if (std::abs(denom) < 1e-12f)
+            return num >= 0.0f;
+        const float t = num / denom;
+        if (denom > 0.0f)
+            far = std::min(far, t);
+        else
+            near = std::max(near, t);
+        return near <= far;
+    };
+    // The rhombus around its centre, half a height under the path.
+    const Vec3 c = a.up * (-0.5f * height);
+    for (const float s : {-1.0f, 1.0f})
+        for (const float u : {-1.0f, 1.0f}) {
+            const Vec3 n = a.side * (s * 2.0f / width) + a.up * (u * 2.0f / height);
+            if (!clip(n, dot(c, n) + 1.0f))
+                return -1.0f;
+        }
+    // The two ends: the mitre plane through the end point, or half a width past it.
+    if (start < 0.5f * kFreeEnd) {
+        const Vec3 n{std::cos(start), std::sin(start), 0.0f};
+        if (!clip(n * -1.0f, 0.0f))
+            return -1.0f;
+    } else if (!clip(a.dir * -1.0f, 0.5f * width)) {
+        return -1.0f;
+    }
+    const Vec3 to_end = p1 - p0;
+    if (end < 0.5f * kFreeEnd) {
+        const Vec3 n{std::cos(end), std::sin(end), 0.0f};
+        if (!clip(n, dot(to_end, n)))
+            return -1.0f;
+    } else if (!clip(a.dir, dot(to_end, a.dir) + 0.5f * width)) {
+        return -1.0f;
+    }
+    if (far < 0.0f)
+        return -1.0f;
     return near > 0.0f ? near : -1.0f; // from inside: no hit
 }
 
@@ -245,8 +329,9 @@ void RayScene::traverse(const Ray& ray, const RayFilter& filter, Visit visit) co
                         continue;
                     if (p.kind != kAlwaysVisible && !((filter.kind_mask >> p.kind) & 1u))
                         continue;
-                    const float t = p.box ? intersect_box(ray, p.p0, p.p1, p.p2, p.p3)
-                                          : intersect_triangle(ray, p.p0, p.p1 - p.p0, p.p2 - p.p0);
+                    const float t = p.bead  ? intersect_bead(ray, p.p0, p.p1, p.p2.x, p.p2.y, p.p2.z, p.p3.x)
+                                    : p.box ? intersect_box(ray, p.p0, p.p1, p.p2, p.p3)
+                                            : intersect_triangle(ray, p.p0, p.p1 - p.p0, p.p2 - p.p0);
                     if (t >= 0.0f && t < tmax && visit(t, tmax))
                         return;
                 }
@@ -294,9 +379,10 @@ std::vector<float> RayScene::primitive_texels() const {
     std::vector<float> out;
     out.reserve(primitives_.size() * kPrimitiveTexels * 4);
     for (const RayPrimitive& p : primitives_) {
+        const bool solid = p.box || p.bead;
         put(out, p.p0, float(p.layer));
-        put(out, p.box ? p.p1 : p.p1 - p.p0, p.box ? 1.0f : 0.0f);
-        put(out, p.box ? p.p2 : p.p2 - p.p0, float(p.kind));
+        put(out, solid ? p.p1 : p.p1 - p.p0, p.bead ? 2.0f : p.box ? 1.0f : 0.0f);
+        put(out, solid ? p.p2 : p.p2 - p.p0, float(p.kind));
         put(out, p.p3, 0.0f);
     }
     pad(out);
@@ -334,30 +420,17 @@ std::vector<RayPrimitive> plate_primitives(const BedPolygon& bed) {
 std::vector<RayPrimitive> preview_primitives(const PreviewBuffers& preview) {
     std::vector<RayPrimitive> out;
     out.reserve(preview.extrusions.size());
+    const auto angle = [](float x, float y) { return x * x + y * y < 0.25f ? kFreeEnd : std::atan2(y, x); };
     for (const PreviewInstance& e : preview.extrusions) {
         const Vec3 a{e.x0, e.y0, e.z0}, b{e.x1, e.y1, e.z1};
-        const float len = length(b - a);
-        if (len <= 0.0f || e.width <= 0.0f || e.height <= 0.0f)
+        if (length(b - a) <= 0.0f || e.width <= 0.0f || e.height <= 0.0f)
             continue;
-        const Vec3 dir = (b - a) * (1.0f / len);
-        Vec3 side = cross(dir, Vec3{0, 0, 1});
-        side = dot(side, side) > 1e-8f ? normalize(side) : Vec3{1, 0, 0};
-        const Vec3 up = cross(side, dir);
-        // A free end grows by half a width; a joined one only as far as the
-        // mitre's outer corner, so a curve does not stick out at every move.
-        const auto reach = [&](float jx, float jy) {
-            if (jx * jx + jy * jy < 0.25f)
-                return 0.5f * e.width;
-            const float c = std::clamp(dir.x * jx + dir.y * jy, 1e-3f, 1.0f);
-            return 0.5f * e.width * std::sqrt(std::max(1.0f - c * c, 0.0f)) / c;
-        };
-        const float r0 = reach(e.join0_x, e.join0_y), r1 = reach(e.join1_x, e.join1_y);
         RayPrimitive p;
-        p.box = true;
-        p.p0 = (a + b) * 0.5f + dir * (0.5f * (r1 - r0)) - up * (0.5f * e.height);
-        p.p1 = dir * (0.5f * (len + r0 + r1));
-        p.p2 = side * (0.5f * e.width);
-        p.p3 = up * (0.5f * e.height);
+        p.bead = true;
+        p.p0 = a;
+        p.p1 = b;
+        p.p2 = {e.width, e.height, angle(e.join0_x, e.join0_y)};
+        p.p3 = {angle(e.join1_x, e.join1_y), 0.0f, 0.0f};
         p.layer = e.kind_layer >> 8;
         p.kind = e.kind_layer & 0xFFu;
         out.push_back(p);

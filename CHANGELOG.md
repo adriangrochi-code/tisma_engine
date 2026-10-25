@@ -22,8 +22,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Vista previa más parecida a la pieza impresa** (pedido del dueño, con una foto de una esquina): los cordones que
   siguen de un movimiento al siguiente se unen en inglete. En las curvas ya no sobresale el extremo de cada tramo en
   dientes, y las paredes no titilan donde dos tramos se encimaban. La luz sigue el perfil de un cordón real: plano
-  arriba y redondo a los costados. También en ray tracing, donde las uniones llegan hasta la esquina del inglete.
-  `--look` acerca la cámara en las capturas.
+  arriba y redondo a los costados. `--look` acerca la cámara en las capturas.
+- **Ray tracing con el filamento continuo** (pedido del dueño): los rayos chocan con los mismos cordones que dibuja la
+  vista, unidos en inglete, en vez de una caja por tramo. Las sombras y la oclusión de una pared ya no tienen muescas
+  oscuras entre tramos.
 
 ### Corregido
 

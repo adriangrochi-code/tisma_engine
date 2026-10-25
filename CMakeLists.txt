@@ -263,6 +263,7 @@ if(TISMA_BUILD_UI)
     src/ui/slicing.cpp
     src/ui/presets.cpp
     src/ui/raytrace.cpp
+    src/ui/plate.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)

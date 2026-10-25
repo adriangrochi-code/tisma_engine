@@ -550,6 +550,61 @@ float hit_box(vec3 o, vec3 d, vec3 centre, vec3 hx, vec3 hy, vec3 hz) {
     return near > 0.0 ? near : -1.0;
 }
 
+// The bead of the move p0 to p1 (src/ui/raytrace.cpp, intersect_bead): six
+// planes clip the ray, all from p0.
+float hit_bead(vec3 o, vec3 d, vec3 p0, vec3 p1, vec3 size, float end_angle) {
+    vec3 along = p1 - p0;
+    float len = length(along), w = size.x, h = size.y;
+    if (len <= 0.0 || w <= 0.0 || h <= 0.0)
+        return -1.0;
+    vec3 dir = along / len;
+    vec3 side = cross(dir, vec3(0.0, 0.0, 1.0));
+    side = dot(side, side) > 1e-8 ? normalize(side) : vec3(1.0, 0.0, 0.0);
+    vec3 up = cross(side, dir);
+    vec3 q = o - p0;
+    float near = -1e30, far = 1e30;
+    vec3 n[6];
+    float k[6];
+    vec3 c = up * (-0.5 * h);
+    for (int i = 0; i < 4; ++i) {
+        float s = (i & 1) == 0 ? -1.0 : 1.0, u = (i & 2) == 0 ? -1.0 : 1.0;
+        n[i] = side * (s * 2.0 / w) + up * (u * 2.0 / h);
+        k[i] = dot(c, n[i]) + 1.0;
+    }
+    if (size.z < 50.0) {
+        n[4] = -vec3(cos(size.z), sin(size.z), 0.0);
+        k[4] = 0.0;
+    } else {
+        n[4] = -dir;
+        k[4] = 0.5 * w;
+    }
+    if (end_angle < 50.0) {
+        n[5] = vec3(cos(end_angle), sin(end_angle), 0.0);
+        k[5] = dot(along, n[5]);
+    } else {
+        n[5] = dir;
+        k[5] = dot(along, dir) + 0.5 * w;
+    }
+    for (int i = 0; i < 6; ++i) {
+        float denom = dot(d, n[i]), num = k[i] - dot(q, n[i]);
+        if (abs(denom) < 1e-12) {
+            if (num < 0.0)
+                return -1.0;
+            continue;
+        }
+        float t = num / denom;
+        if (denom > 0.0)
+            far = min(far, t);
+        else
+            near = max(near, t);
+        if (near > far)
+            return -1.0;
+    }
+    if (far < 0.0)
+        return -1.0;
+    return near > 0.0 ? near : -1.0;
+}
+
 bool occluded(vec3 o, vec3 d, float tmax) {
     vec3 safe = mix(d, sign(d) * 1e-12 + vec3(equal(d, vec3(0.0))) * 1e-12, lessThan(abs(d), vec3(1e-12)));
     vec3 inv = 1.0 / safe;
@@ -576,8 +631,9 @@ bool occluded(vec3 o, vec3 d, float tmax) {
                     uint kind = uint(p2.w);
                     if (kind != 31u && ((u_kind_mask >> kind) & 1u) == 0u)
                         continue;
-                    float t = p1.w > 0.5 ? hit_box(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).xyz)
-                                         : hit_triangle(o, d, p0.xyz, p1.xyz, p2.xyz);
+                    float t = p1.w > 1.5   ? hit_bead(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).x)
+                              : p1.w > 0.5 ? hit_box(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).xyz)
+                                           : hit_triangle(o, d, p0.xyz, p1.xyz, p2.xyz);
                     if (t >= 0.0 && t < tmax)
                         return true;
                 }

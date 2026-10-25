@@ -168,6 +168,8 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
 - **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
   jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
   - El recorrido de la GPU es una copia del de la CPU (`src/ui/raytrace.*`), que es la referencia.
+  - Los cordones de la vista previa son los mismos prismas que dibuja la vista, unidos en inglete: las sombras y la
+    oclusión de una pared son continuas, sin muescas entre tramos.
   - La prueba `ui_raytrace_matches_cpu` dispara en la GPU los rayos de sombra del primer cuadro, repite los mismos
     rayos en la CPU y exige que coincidan.
 - **Modelos muy grandes:** si la escena no entra en las texturas de la GPU (más de 4 millones de primitivas, o
