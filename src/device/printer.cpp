@@ -1,5 +1,6 @@
 #include "device/printer.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
