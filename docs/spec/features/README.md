@@ -60,6 +60,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`print_time.md`](print_time.md): tiempo estimado: límites de la máquina por firmware, modos normal y silencioso, qué cuenta y qué no, cómo hacerlo más preciso | después de F4 | Para revisar |
 | [`settings_levels.md`](settings_levels.md): niveles de ajustes, lista propia (Quick settings), ajustes por objeto, con capturas | P1 | Para revisar |
 | [`model_tools.md`](model_tools.md): partes, volúmenes negativos, modificadores, rangos de alturas, ajustes por objeto y por parte, y cuál gana; escalar, girar, cortar y separar | F3, P4 | Para revisar |
+| [`preview.md`](preview.md): vista previa: las 13 vistas, leyenda con tiempos y material, escala de colores, deslizadores, con capturas | P1 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.

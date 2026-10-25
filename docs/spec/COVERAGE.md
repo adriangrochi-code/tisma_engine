@@ -242,8 +242,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Leyenda por tipo, deslizadores, tiempos | `interface.md` | ✔ |
-| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | — | ✘ → `preview.md` |
-| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos) | ◐ → `preview.md` |
+| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | `preview.md` | ✔ |
+| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos), `preview.md` (regla 5) | ◐ falta qué hace cada ícono |
 | Visor de G-code aparte | `interface.md` (Más) | ◐ → `preview.md` |
 | Estimación de tiempo normal y silenciosa, filamento por tipo | `interface.md` | ✔ |
 
