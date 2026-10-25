@@ -19,6 +19,16 @@ es una fila del inventario `docs/spec/COVERAGE.md` (que manda el equipo de ficha
 primera versión plana es la base: la malla, el corte, los perímetros, los rellenos y el G-code se reutilizan. Por eso
 las reglas de «Diseño para la visión» valen desde F1.
 
+**Rumbo (decisión del dueño, 2026-10-25):**
+- un laminador que use las técnicas que más mejoran la **calidad** y la **resistencia**;
+- compatible con una **impresora propia de 4 y 5 ejes** que el dueño quiere hacer a futuro.
+
+Por eso:
+- F9 cubre 4 y 5 ejes;
+- la cinemática describe la cadena de ejes de cualquier máquina, sin atarse a una (regla 2 de abajo);
+- todo análisis nuevo trabaja con las trayectorias 3D y su orientación, por ejemplo la simulación del enfriamiento
+  (`docs/COOLING_SIMULATION.md`).
+
 **Enfoque (decisión del dueño, 2026-10-24):** un laminador **profesional e industrial**, sin uso comercial de
 terceros (la licencia de hoy), que sigue pudiendo cerrarse:
 - **calidad y control antes que velocidad de laminado:** puede ser más pesado si imprime mejor;
@@ -69,7 +79,10 @@ Reglas que se cumplen desde F1, aunque la primera versión sea plana, para no te
    corte. Para 5 ejes el campo vive dentro del volumen y hará falta una malla de tetraedros; eso queda para F9.
 2. **Las trayectorias son 3D y tienen orientación.** Cada punto guarda x, y, z y la dirección de la boquilla; en una capa
    plana esa dirección es (0, 0, 1). La cinemática de cada máquina es un módulo aparte que traduce a ejes y G-code:
-   3 ejes, mesa giratoria A/C, cabezal B/C, etc. El resto del motor no sabe de ejes.
+   3 ejes, boquilla inclinada que gira (4 ejes, como la RotBot de Wüthrich et al. para el laminado cónico), mesa
+   giratoria A/C, cabezal B/C, etc. El resto del motor no sabe de ejes. El G-code puede salir de dos maneras:
+   - en coordenadas de la punta con su orientación, para firmwares que hacen la cinemática;
+   - en ejes de la máquina, con la cinemática inversa propia.
 3. **Datos listos para la GPU:**
    - arreglos contiguos (estructura de arreglos);
    - índices en vez de punteros;
@@ -143,7 +156,8 @@ antes de usarlas. Revisadas el 2026-10-24:
 - Después de la primera versión: F7 (no planar en 3 ejes) y F8 (lo propio de Tisma, desde sus fichas); después las
   fases de producto P1–P5, en el orden que decida el dueño; al final F9 (5 ejes) y F10 (macOS).
 - La máquina de 5 ejes de referencia se elige al empezar F9, la última fase antes de macOS. Hasta entonces la
-  cinemática queda como módulo aparte, sin atarse a ninguna máquina.
+  cinemática queda como módulo aparte, sin atarse a ninguna máquina. Desde el 2026-10-25 F9 cubre también 4 ejes.
+  La impresora propia del dueño es candidata a máquina de referencia; decide el dueño.
 - Eje medio: un Voronoi de segmentos propio, a partir de artículos, en vez del híbrido con Clipper2.
 - Enfriamiento: una de las primeras capas (sin ventilador) que tiene que ir más lento por el tiempo mínimo lleva el
   ventilador al máximo, como cualquier otra capa frenada.
@@ -214,7 +228,7 @@ Antes estaba «fuera de la primera versión»; ahora es una fase.
 
 | Fase | Cuándo | Contenido | Terminada cuando |
 |---|---|---|---|
-| F9 | antes de macOS | 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina, choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 5 ejes (hace falta decidir cuál) |
+| F9 | antes de macOS | 4 y 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina (boquilla inclinada que gira, mesa giratoria, cabezal), choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 4 ejes y en una de 5 (hace falta decidir cuáles; la impresora propia del dueño es candidata) |
 | F10 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
 
 **Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
@@ -500,6 +514,14 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17)
     - [ ] S4: laminado cónico como campo (con F7)
     - [ ] S5: interfaz de otro material (con MM1)
+  - simulación del enfriamiento para los detalles chicos que la capa entera no ve (`docs/COOLING_SIMULATION.md`):
+    - [ ] T1: tiempo de vuelta local (desde el cordón de abajo y con la boquilla cerca): vista previa, aviso, y
+      frenado, pausa y ventilador solo en el detalle
+    - [ ] T2: red térmica de cordones (Costa et al. 2017; Zhang y Shapiro 2018), calibrada con pernos
+    - [ ] T3: las correcciones por temperatura, menos ventilador donde la unión queda fría, y la adherencia por unión en
+      el análisis «como impresa»
+    - [ ] T4: la red en GPU, y el aire del ventilador de A3
+    - no reordenar según el calor sin la revisión de patentes (dos solicitudes de Siemens)
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

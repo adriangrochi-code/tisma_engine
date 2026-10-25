@@ -3663,3 +3663,42 @@ No encontré publicada la interfaz no planar.
 
 **Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).
 
+
+## 2026-10-25 — simulación del enfriamiento: los artículos y el plan
+
+**Pedido del dueño:** simular cómo se enfría el filamento, para no perder calidad en los detalles muy chicos de capas
+que sí llegan al tiempo mínimo.
+
+**Hecho:** `docs/COOLING_SIMULATION.md`, con:
+- **por qué pasa:** el tiempo mínimo mira la capa entera, y el detalle puede tener mucho menos. Hay cuatro causas:
+  - el detalle se imprime último en una capa y primero en la siguiente;
+  - no tiene masa debajo que se lleve el calor;
+  - la boquilla lo recalienta mientras pasa;
+  - sus cordones se ponen uno junto al otro;
+- **lo publicado:**
+  - la red de segmentos de filamento con contactos y criterio de adhesión (Costa, Duarte y Covas 2017);
+  - la simulación en tiempo lineal (Zhang y Shapiro 2018);
+  - las mediciones de Zhang et al. 2022: lo que manda es el tiempo entre pasadas;
+  - la unión según la historia de temperatura (Bellehumeur et al. 2004);
+- **patentes:** dos solicitudes de Siemens reordenan tramos o zonas de la capa según el calor. El motor no reordena por
+  el calor sin la revisión del abogado;
+- **el plan, de T1 a T4:**
+  1. el tiempo de vuelta local, con frenado, pausa y ventilador solo en el detalle;
+  2. la red térmica de cordones, calibrada con pernos;
+  3. las correcciones por temperatura, y la adherencia por unión en el análisis;
+  4. la GPU y el aire de A3.
+
+  La red trabaja en 3D, así que sirve también para 4 y 5 ejes.
+
+**Rumbo del dueño:** un laminador que use las técnicas que más mejoran la calidad y la resistencia, compatible con una
+impresora propia de 4 y 5 ejes. Quedó en `PLAN.md`:
+- F9 cubre 4 y 5 ejes;
+- la cinemática suma la boquilla inclinada que gira, y el G-code puede salir en coordenadas de la punta o en ejes de la
+  máquina;
+- la impresora del dueño es candidata a máquina de referencia.
+
+**Sin código todavía:** T1 es lo primero que se puede hacer, en el escritor.
+
+**En curso:** el pedido nuevo del dueño, artículos de FDM y de técnicas de laminado para mejorar funciones, calidad y
+rendimiento. Va en cuatro búsquedas: trayectorias y superficie, movimiento y extrusión, resistencia y deformación, y
+rendimiento del cómputo.
