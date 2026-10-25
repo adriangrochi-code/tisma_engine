@@ -81,6 +81,7 @@ struct Settings {
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     int infill_solid_every = 0;        // layers N, 2N... all solid infill (0: never)
+    double infill_solid_below_area = 70.0; // mm2: an infill zone smaller than this is solid (0: never)
     // Combining the sparse infill of several layers (docs/INFILL.md).
     int infill_combine_layers = 1;            // 1: each layer its own
     bool infill_combine_auto = false;         // as many as fit in the height below

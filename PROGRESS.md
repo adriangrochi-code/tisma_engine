@@ -3885,3 +3885,20 @@ El G-code sale idéntico byte a byte. La elección de islas con cajas también d
 **No medido:** una impresión real con la resolución; el efecto en placas con poca memoria de planificación.
 
 **Sigue:** la release 0.8.0-alpha.1 con estos arreglos, después lo que queda de la revisión en `PLAN.md`.
+
+## 2026-10-25 — release 0.8.0-alpha.1 y zonas chicas sólidas
+
+**Hecho:**
+- Release 0.8.0-alpha.1: `VERSION`, su sección del CHANGELOG y la fila de `docs/VERSIONING.md`; la CI de Linux pasó
+  entera en la sesión y la de Windows con el commit anterior.
+- `infill.solid_below_area` (70 mm², ficha `surfaces_infill.md`, regla 9): la parte dispersa de cada isla del relleno
+  más chica que eso pasa a sólida. Prueba nueva con la pata de la mesa de la prueba I6 (zona de 62,6 mm², sólida en
+  todas las capas) y el cubo de 20 mm (335 mm², disperso). Cinco pruebas con el cubo de 10 mm (57,8 mm² de relleno)
+  lo apagan para seguir probando lo suyo.
+- `check_settings` nombra primero un alto mínimo de capa mayor que el máximo (equipo de fichas).
+
+**Medido:** la placa de 12 islas pasa de 69 750 a 111 570 mm extruidos (+60 %) y de 34 min 50 s a 52 min 49 s; la
+esfera de 50 mm, +0,07 % (sus casquetes). El cilindro de 20 mm de diámetro no cambia.
+
+**Sigue:** lo que queda de la revisión en `PLAN.md` (verificación con muchas islas, `info`, gyroid por franjas,
+streaming del G-code).

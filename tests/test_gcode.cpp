@@ -96,6 +96,7 @@ TEST_CASE("start and end G-code variables", "[gcode]") {
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
     Settings s;
+    s.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     s.start_gcode = "M104 S[temp]";
     s.end_gcode = "M84 ; [temp]";
     s.variables["temp"] = {"210"};

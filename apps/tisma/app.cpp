@@ -1931,6 +1931,7 @@ void App::settings_panel() {
                         {InfillPattern::Octagram, tr(T::OctagramInfill)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
+        changed |= row(T::SolidBelowArea, s.infill_solid_below_area, 0.0, 1000.0, "%.0f mm²", 1.0f, tr(T::SolidBelowAreaTip));
         changed |= row(T::NonplanarInfill, s.infill_nonplanar, tr(T::NonplanarInfillTip));
         if (s.infill_nonplanar) {
             changed |= row(T::NonplanarAmplitude, s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);

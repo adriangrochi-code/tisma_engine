@@ -267,7 +267,8 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
-                                "solid_every", "nonplanar", "nonplanar_amplitude", "nonplanar_wavelength"},
+                                "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
+                                "nonplanar_wavelength"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar") {
             if (!g.at(n).is_boolean())
@@ -303,6 +304,13 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                 fail(k, "must be a whole number from 0 to 1000");
             s.infill_solid_every = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "solid_below_area") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10000.0)
+                fail(k, "must be from 0 to 10000 mm2");
+            s.infill_solid_below_area = v;
             return;
         }
         if (n == "stress_density") {
@@ -739,6 +747,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.dense_density", num(s.infill_dense_density)},
         {"infill.stress_density", num(s.infill_stress_density)},
         {"infill.solid_every", std::to_string(s.infill_solid_every)},
+        {"infill.solid_below_area", num(s.infill_solid_below_area)},
         {"infill.nonplanar", flag(s.infill_nonplanar)},
         {"infill.nonplanar_amplitude", num(s.infill_nonplanar_amplitude)},
         {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
@@ -877,6 +886,7 @@ std::string settings_json(const Settings& s) {
           {"dense_density", s.infill_dense_density},
           {"stress_density", s.infill_stress_density},
           {"solid_every", s.infill_solid_every},
+          {"solid_below_area", s.infill_solid_below_area},
           {"nonplanar", s.infill_nonplanar},
           {"nonplanar_amplitude", s.infill_nonplanar_amplitude},
           {"nonplanar_wavelength", s.infill_nonplanar_wavelength},
@@ -971,6 +981,13 @@ Settings load_settings(const std::filesystem::path& path) {
 
 void check_settings(const Settings& s) {
     char text[200];
+    if (s.min_layer_height > 0.0 && s.max_layer_height > 0.0 && s.min_layer_height > s.max_layer_height + 1e-9) {
+        std::snprintf(text, sizeof text,
+                      "machine.min_layer_height: %.3g mm is above machine.max_layer_height (%.3g mm): no layer fits "
+                      "between them",
+                      s.min_layer_height, s.max_layer_height);
+        throw SettingsError(text);
+    }
     const double nozzle = s.nozzle_diameter;
     const double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
     for (const auto& [key, h] : {std::pair{"layers.height", s.layer_height}, {"layers.first_height", s.first_layer_height}}) {

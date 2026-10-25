@@ -551,8 +551,11 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
     - [ ] el Voronoi propio más rápido en capas con miles de sitios (hoy es lo más lento con muchas islas)
     - [ ] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo)
-    - [ ] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
-    - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados
+    - [x] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
+    - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados, y su `volume` suma las mallas que
+      se pisan (el laminado está bien)
+    - [ ] la verificación del G-code crece más que lineal con las islas (equipo de fichas: ×37 de 25 a 400 cilindros,
+      el 16 % del total con 400)
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

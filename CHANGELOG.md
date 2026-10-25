@@ -10,6 +10,18 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Zonas de relleno chicas, sólidas** (`infill.solid_below_area`, 70 mm², de la ficha `surfaces_infill.md`; en la
+  interfaz, sección Relleno): una isla del relleno de una capa más chica que eso (una pata fina, un perno) se llena
+  sólida. Cambia las piezas chicas: un cubo de 10 mm con 3 paredes queda sólido entero, y una placa de 12 islas
+  chicas lleva 60 % más de material (35 → 53 min). 0 lo apaga.
+
+### Corregido
+
+- Con `machine.min_layer_height` mayor que `machine.max_layer_height`, el error decía que la capa no entraba; ahora
+  dice que los dos límites se contradicen (equipo de fichas).
+
 ## [0.8.0-alpha.1] - 2026-10-25
 
 Tercera versión publicada. Trae el catálogo de 144 impresoras y 108 filamentos con sus capacidades, la altura de

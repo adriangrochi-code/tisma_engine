@@ -15,12 +15,14 @@
 #include "slice/printable.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cstdint>
 #include <sstream>
 #include <string>
 
 using namespace tisma;
+using Catch::Matchers::ContainsSubstring;
 
 namespace {
 
@@ -116,6 +118,12 @@ TEST_CASE("hostile input: settings out of reach of the printer are refused or wa
     s.min_layer_height = 0.1;
     s.layer_height = 0.08;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
+    // Limits that contradict each other are named as such, before the layers.
+    s = Settings{};
+    s.min_layer_height = 0.3;
+    s.max_layer_height = 0.25;
+    CHECK_THROWS_WITH(check_settings(s), ContainsSubstring("machine.min_layer_height") &&
+                                             ContainsSubstring("above machine.max_layer_height"));
     s = Settings{};
     s.wall_width = 0.05;
     CHECK_THROWS_AS(check_settings(s), SettingsError);

@@ -135,6 +135,7 @@ TEST_CASE("the preview of the engine's G-code matches its check", "[gcode][previ
     Settings settings;
     settings.gpu = GpuMode::Off;
     settings.skirt_loops = 1;
+    settings.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     const SlicedModel model = slice_model(mesh, settings);
     std::ostringstream out;
     write_gcode(out, model, settings);

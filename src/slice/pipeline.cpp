@@ -3,6 +3,7 @@
 #include "slice/pipeline.hpp"
 
 #include "adhesion/adhesion.hpp"
+#include "gcode/order.hpp"
 #include "infill/adaptive.hpp"
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
@@ -127,6 +128,27 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             s.bridge = Clipper2Lib::Union(s.bridge, s.sparse, Clipper2Lib::FillRule::NonZero);
             s.sparse.clear();
         }
+    // Small infill zones (surfaces_infill.md, rule 9): an island of a layer's
+    // infill region smaller than infill.solid_below_area (a thin leg, a pin)
+    // is solid, where sparse lines would hardly hold anything. Not with no
+    // infill asked for.
+    if (settings.infill_solid_below_area > 0.0 && settings.infill_density > 0.0)
+        tbb::parallel_for(std::size_t(0), out.surfaces.size(), [&](std::size_t l) {
+            LayerSurfaces& s = out.surfaces[l];
+            if (s.sparse.empty())
+                return;
+            Polygons small;
+            for (const Polygons& island : split_islands(infill[l]))
+                if (area_mm2(island) < settings.infill_solid_below_area)
+                    small.insert(small.end(), island.begin(), island.end());
+            if (small.empty())
+                return;
+            const Polygons solid = Clipper2Lib::Intersect(s.sparse, small, Clipper2Lib::FillRule::NonZero);
+            if (solid.empty())
+                return;
+            s.sparse = Clipper2Lib::Difference(s.sparse, small, Clipper2Lib::FillRule::NonZero);
+            s.bottom = Clipper2Lib::Union(s.bottom, solid, Clipper2Lib::FillRule::NonZero);
+        });
     // Adaptive and support cubic infill (docs/INFILL.md): how deep each point
     // lies in the whole sparse infill, from all its surfaces or from the ones
     // it holds up, before stress bands and the rest take parts of it.
