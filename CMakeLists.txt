@@ -190,6 +190,7 @@ add_library(tisma_core
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
   src/infill/lightning.cpp
+  src/infill/nonplanar.cpp
   src/infill/patterns.cpp
   src/infill/combine.cpp
   src/infill/connect.cpp

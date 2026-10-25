@@ -219,12 +219,28 @@ Settings parse_settings(std::string_view text) {
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
-                                "solid_every"},
+                                "solid_every", "nonplanar", "nonplanar_amplitude", "nonplanar_wavelength"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "combine_auto" || n == "dense_under_top") {
+        if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "combine_auto" ? s.infill_combine_auto : s.infill_dense_under_top) = g.at(n).get<bool>();
+            (n == "combine_auto"      ? s.infill_combine_auto
+             : n == "dense_under_top" ? s.infill_dense_under_top
+                                      : s.infill_nonplanar) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "nonplanar_amplitude") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 500.0)
+                fail(k, "must be from 0 to 500 (percent of the layer height)");
+            s.infill_nonplanar_amplitude = v;
+            return;
+        }
+        if (n == "nonplanar_wavelength") {
+            const double v = number(g, n, k);
+            if (v < 0.5 || v > 20.0)
+                fail(k, "must be from 0.5 to 20 mm");
+            s.infill_nonplanar_wavelength = v;
             return;
         }
         if (n == "dense_density") {
@@ -657,6 +673,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.dense_density", num(s.infill_dense_density)},
         {"infill.stress_density", num(s.infill_stress_density)},
         {"infill.solid_every", std::to_string(s.infill_solid_every)},
+        {"infill.nonplanar", flag(s.infill_nonplanar)},
+        {"infill.nonplanar_amplitude", num(s.infill_nonplanar_amplitude)},
+        {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
@@ -791,6 +810,9 @@ std::string settings_json(const Settings& s) {
           {"dense_density", s.infill_dense_density},
           {"stress_density", s.infill_stress_density},
           {"solid_every", s.infill_solid_every},
+          {"nonplanar", s.infill_nonplanar},
+          {"nonplanar_amplitude", s.infill_nonplanar_amplitude},
+          {"nonplanar_wavelength", s.infill_nonplanar_wavelength},
           {"combine_max_height", s.infill_combine_max_height.percent
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},

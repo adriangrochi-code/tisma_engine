@@ -3603,3 +3603,23 @@ el acceso automático; lo dicho sale de los resúmenes. Antes de vender, que lo 
 
 **Sigue:** N1.
 
+## 2026-10-25 — bloque: relleno ondulado (N1)
+
+**Hecho** (`docs/NONPLANAR_INFILL.md`, N1; `src/infill/nonplanar.*`): `infill.nonplanar`, el relleno que sube y baja
+en Z según un campo fijo en el espacio, igual en todas las capas (capas anidadas, como ZigZagZ).
+- La amplitud se apaga cerca de paredes y pieles con el campo de profundidad (interpolación trilineal nueva en
+  `DepthField::at`), y se limita para que la boquilla pase sobre una línea vecina en cresta.
+- Cada punto lleva la altura del cordón de abajo (`below`); el escritor pone los recorridos ondulados en un bloque
+  `;NONPLANAR` con el espesor por movimiento, y el verificador y la vista previa lo leen.
+- En la interfaz, **Relleno ondulado** con su altura y su largo; el fuzz lo sortea.
+
+**Medido** (cubo de 40 mm, grilla al 20 %): 2 h 18 min contra 1 h 15 min plano (el eje Z a 12 mm/s), G-code de
+11,5 MB contra 0,47 MB (de 21 MB antes de quitar los cortes en recta), el mismo filamento.
+
+**Pruebas:** `tests/test_nonplanar.cpp` (4 casos); 319 pruebas en total; fuzz de 400 corridas sin fallas.
+
+**Sin medir:** la resistencia (falta N3) y una impresión real.
+
+**Sigue:** N3 (medir con el análisis), después N2 (paredes tejidas). El dueño pidió también buscar artículos sobre la
+mejor manera de laminar no planar.
+

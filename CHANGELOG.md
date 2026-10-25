@@ -51,6 +51,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Cúbico de soporte** (regla 8): `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno
   no sostiene: cubos chicos bajo los techos y grandes sobre los pisos. En un cubo de 100 mm al 20 %, un 30 % menos de
   material y un 14 % menos de tiempo que el cúbico.
+- **Relleno ondulado** (`docs/NONPLANAR_INFILL.md`, N1): con `infill.nonplanar`, el relleno sube y baja en Z
+  igual en todas las capas, así las capas quedan anidadas con la unión inclinada, según ZigZagZ (Allum et al. 2021:
+  +62 % de resistencia en Z en sus ensayos). Solo con patrones que se repiten capa a capa; la onda se apaga cerca de
+  paredes y pieles. En Impresión, **Relleno ondulado**, **Altura de la onda** y **Largo de la onda**. Con el eje Z a
+  12 mm/s tarda bastante más; la resistencia todavía no está medida en el motor.
 - **Hilbert, cuerdas de Arquímedes y espiral octagrama** (ficha `infill_patterns.md`, regla 12): `hilbert`, `archimedean` y
   `octagram` en `infill.pattern` y en la interfaz; iguales en todas las capas, las espirales centradas en la pieza.
 - **Capa sólida cada N y espesor mínimo de la cáscara** (ficha `infill_patterns.md`, reglas 21 y 22):

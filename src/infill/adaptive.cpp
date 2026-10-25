@@ -213,6 +213,23 @@ DepthField sparse_depth(const std::vector<Polygons>& sparse, const std::vector<L
     return f;
 }
 
+double DepthField::at(double x, double y, double z) const {
+    if (depth.empty())
+        return 0.0;
+    const double u = (x - x0) / cell - 0.5, v = (y - y0) / cell - 0.5, w = (z - z0) / cell - 0.5;
+    const int i = int(std::floor(u)), j = int(std::floor(v)), k = int(std::floor(w));
+    const double fu = u - i, fv = v - j, fw = w - k;
+    double sum = 0.0;
+    for (int c = 0; c < 8; ++c) {
+        const int a = i + (c & 1), b = j + ((c >> 1) & 1), d = k + ((c >> 2) & 1);
+        if (a < 0 || b < 0 || d < 0 || a >= nx || b >= ny || d >= nz)
+            continue;
+        const double weight = ((c & 1) ? fu : 1.0 - fu) * (((c >> 1) & 1) ? fv : 1.0 - fv) * (((c >> 2) & 1) ? fw : 1.0 - fw);
+        sum += weight * double(depth[index(a, b, d)]);
+    }
+    return sum;
+}
+
 Polygons deep_region(const DepthField& f, double z, double depth) {
     if (f.empty())
         return {};

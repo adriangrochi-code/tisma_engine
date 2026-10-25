@@ -86,6 +86,10 @@ struct Settings {
     bool infill_combine_auto = false;         // as many as fit in the height below
     Speed infill_combine_max_height{100.0, true}; // mm, or percent of the nozzle; never past the nozzle
     // Denser sparse infill right under the top surfaces (docs/INFILL.md).
+    // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1).
+    bool infill_nonplanar = false;
+    double infill_nonplanar_amplitude = 250.0; // percent of the layer height, trough to crest
+    double infill_nonplanar_wavelength = 2.0;  // mm
     bool infill_dense_under_top = false;
     double infill_dense_density = 40.0; // percent
     // Stress-guided infill (docs/INFILL.md): up to this density where the

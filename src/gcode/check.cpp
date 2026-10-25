@@ -3,6 +3,8 @@
 
 #include "gcode/check.hpp"
 
+#include "infill/nonplanar.hpp"
+
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "slice/pipeline.hpp"
@@ -129,6 +131,10 @@ private:
                 flow_ = limits_.changes[next_change_].flow;
                 ++next_change_;
             }
+        } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
+            nonplanar_ = c == "NONPLANAR:1";
+            if (nonplanar_ && !(limits_.wave > 0.0))
+                problem("a nonplanar block, but the settings ask for no wavy infill");
         } else if (const std::optional<double> h = value("HEIGHT:")) {
             if (*h <= 0.0)
                 problem("layer height " + text(*h) + " is not positive");
@@ -245,8 +251,8 @@ private:
                 // layer's true top, and both it and the move's Z are rounded.
                 const bool zaa = limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0;
                 const double slack = zaa ? 2.0 * kPositionSlack : kPositionSlack;
-                const double low = *layer_z_ - limits_.zaa_below * h - slack;
-                const double high = *layer_z_ + limits_.zaa_above * h + slack;
+                const double low = *layer_z_ - (nonplanar_ ? limits_.wave : limits_.zaa_below * h) - slack;
+                const double high = *layer_z_ + (nonplanar_ ? limits_.wave : limits_.zaa_above * h) + slack;
                 for (const double z : {position_[2], to[2]})
                     if (z < low || z > high) {
                         problem("extrudes at Z" + text(z) + ", not at the layer's Z" + text(*layer_z_));
@@ -257,8 +263,9 @@ private:
                 problem("extrudes before any ;WIDTH and ;HEIGHT");
             } else if (known_[0] && known_[1]) {
                 // Off the layer's Z (Z anti-aliasing), the bead is what is left down to its bottom.
+                // In a nonplanar block, ;HEIGHT is the bead's own thickness.
                 const double thickness =
-                    *height_ + (at_layer ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
+                    *height_ + (at_layer && !nonplanar_ ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
                 const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + 2e-5)
@@ -294,6 +301,7 @@ private:
     GcodeCheck out_;
     std::size_t line_ = 0;
     bool custom_ = false;
+    bool nonplanar_ = false; // in a ;NONPLANAR block
     bool absolute_ = true;
     bool relative_e_ = false;
     double position_[4] = {0.0, 0.0, 0.0, 0.0};
@@ -342,6 +350,11 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         for (const ThickLayer& t : model.thick)
             thickest = std::max(thickest, t.height);
         limits.max_z += limits.zaa_above * thickest;
+    }
+    if (const std::optional<WaveParams> waves = wave_params(s)) {
+        // The crests, and the travels over them, go up to half the amplitude higher.
+        limits.wave = 0.5 * waves->amplitude;
+        limits.max_z += limits.wave;
     }
     double speed_factor = 1.0, retract_speed = s.retract_speed;
     for (const HeightChange& c : s.changes) {

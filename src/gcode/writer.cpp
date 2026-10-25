@@ -330,6 +330,22 @@ public:
     // Above the layer's top the nozzle travels this high (Z anti-aliasing that
     // raises paths, docs/ZAA.md), so it clears them.
     void set_clearance(double clearance) { clearance_ = clearance; }
+    double clearance() const { return clearance_; }
+
+    // A wavy path (docs/NONPLANAR_INFILL.md) between nonplanar(true) and
+    // nonplanar(false): each move's ;HEIGHT is the bead's own thickness, the
+    // gap from the bead below up to the nozzle, and the layer's comes back after.
+    void nonplanar(bool on) {
+        if (on == nonplanar_)
+            return;
+        nonplanar_ = on;
+        text_ += on ? ";NONPLANAR:1\n" : ";NONPLANAR:0\n";
+        if (on) {
+            shown_height_ = fixed(height_, 3);
+        } else if (shown_height_ != fixed(height_, 3)) {
+            text_ += ";HEIGHT:" + fixed(height_, 3) + "\n";
+        }
+    }
 
     void new_layer(double z, double height, double travel_feed) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
@@ -415,7 +431,16 @@ public:
             move("G1", std::nullopt, std::nullopt, z_from, std::nullopt, feed);
             z_now_ = z_from;
         }
-        const double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
+        double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
+        if (nonplanar_) {
+            // On the wavy bead below, not on the layer below's top.
+            height -= (from.below + to.below) / 2.0;
+            const std::string shown = fixed(height, 3);
+            if (shown != shown_height_) {
+                text_ += ";HEIGHT:" + shown + "\n";
+                shown_height_ = shown;
+            }
+        }
         const double e = width * height * length / filament_area_ * flow_;
         if (forced_flow_ > 0.0 && width * height * flow_ > 0.0) {
             // A flow tower: exactly this flow, past every cap (it looks for the
@@ -514,6 +539,8 @@ private:
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
     double z_now_ = 0.0;     // the nozzle's Z as written: off the layer's top with Z anti-aliasing
     double clearance_ = 0.0; // mm above the layer's top that travels keep
+    bool nonplanar_ = false; // in a wavy path: ;HEIGHT is each move's own
+    std::string shown_height_;
     bool known_ = false;     // the position is known (after the first move in XY)
     bool retracted_ = false;
     std::string x_, y_, z_, e_text_, width_;
@@ -681,10 +708,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 return;
             g.travel(t.points.front().p, s.travel_speed, planner);
             g.type(type);
+            g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)
                 g.extrude(t.points[i - 1], t.points[i], feed);
             if (t.closed && t.points.size() > 2)
                 g.extrude(t.points.back(), t.points.front(), feed);
+            g.nonplanar(false);
         };
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -709,9 +738,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
             std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams);
             if (deferring) {
-                for (const Toolpath& t : ordered)
+                for (const Toolpath& t : ordered) {
+                    if (t.wavy) { // its waves are its own: not cut by height
+                        pending.push_back({t, type, feed});
+                        continue;
+                    }
                     for (Toolpath& piece : split_by_height(t))
                         pending.push_back({std::move(piece), type, feed});
+                }
                 return;
             }
             for (const Toolpath& t : ordered)
@@ -756,6 +790,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             if (l < model.thick.size())
                 scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
             g.set_clearance(highest);
+        }
+        if (l < model.fills.size()) {
+            // Wavy infill: travels keep above its crests.
+            double highest = 0.0;
+            for (const Toolpath& t : model.fills[l].sparse)
+                if (t.wavy)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            if (highest > 0.0)
+                g.set_clearance(std::max(g.clearance(), highest));
         }
         // Skirt, then brim, before the part, at the first layer's speed.
         if (l < std::size_t(std::max(s.skirt_layers, 0)))

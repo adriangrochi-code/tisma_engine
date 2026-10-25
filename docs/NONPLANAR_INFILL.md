@@ -81,6 +81,53 @@ capas, así cada capa queda anidada sobre la de abajo, con la unión inclinada c
   husillo en Z no pasan de 10 a 20 mm/s en Z, así que el relleno ondulado se limita a lo que dé el eje Z de la
   impresora. Hace falta un ajuste nuevo, `machine.max_speed_z`, que también sirve para el resto del motor.
 
+**Hecho (2026-10-25):** `src/infill/nonplanar.*`.
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `infill.nonplanar` | no | El relleno sube y baja en Z, igual en todas las capas |
+| `infill.nonplanar_amplitude` | 250 % | La altura de la onda, de valle a cresta, en % de la altura de capa (0,5 mm con capas de 0,2) |
+| `infill.nonplanar_wavelength` | 2 mm | El largo de la onda a lo largo de las líneas a 45° de su dirección |
+
+- **La onda:** un triángulo a lo largo de `angle + 45°`, que sube la amplitud en media onda: pendiente 0,5, como
+  ZigZagZ. En la grilla las dos familias la ven igual; en los triángulos, panal y curvas, cada dirección la ve más o
+  menos larga.
+- **El tope de amplitud:** la cara plana de la boquilla (unos 2,5 orificios) y su costado a 45° tienen que pasar sobre
+  una línea vecina tan alta como una cresta, así que `A ≤ separación − 1,25·boquilla − ancho/2`. Al 80 % en el
+  alineado no queda lugar y no hay onda.
+- **Cerca de paredes y pieles:** el campo de profundidad del relleno disperso, con vóxeles de 0,25 a 0,5 mm e
+  interpolación trilineal. Sin onda a menos de `A/2 + ancho/2 + vóxel/2`; después crece a lo largo de `2A`.
+- **Los cortes:** cada 0,25 mm. Se quitan los que quedan en la recta entre sus vecinos (en X, Y, Z y la altura de
+  abajo): entre cresta y valle la onda es recta.
+- **El cordón:** cada punto sabe dónde está el de abajo (`below`). El escritor pone los recorridos ondulados entre
+  `;NONPLANAR:1` y `;NONPLANAR:0`, y ahí cada movimiento lleva su propio `;HEIGHT` (el hueco hasta el cordón de abajo).
+  Donde las dos capas tienen toda la onda, el hueco es la altura de capa y no hace falta escribirlo. El verificador y
+  la vista previa leen ese espesor; los viajes van por encima de las crestas.
+- **No se usa** con capas combinadas, altura por zona o bandas del guiado por tensiones.
+- **La velocidad:** el eje Z sube a la mitad de la velocidad de avance. `machine.max_feed_z` (12 mm/s por defecto) la
+  limita, y el estimador ya lo cuenta.
+
+**Medido** (cubo de 40 mm, grilla al 20 %, capas de 0,2, `machine.max_feed_z` 12 mm/s):
+
+| | Plano | Ondulado |
+|---|---|---|
+| Tiempo estimado | 1 h 15 min | 2 h 18 min |
+| G-code | 0,47 MB | 11,5 MB |
+| Filamento | igual | igual |
+
+La resistencia todavía no se midió: el análisis «como impresa» toma la unión entre capas plana (N3). Con un eje Z más
+rápido, o una onda más larga (4 mm: pendiente 0,25), el tiempo extra baja a la mitad o menos.
+
+**Pruebas** (`tests/test_nonplanar.cpp`):
+- la onda va de −A/2 a +A/2 con pendiente 0,5 y el largo pedido;
+- la parte de la onda según la profundidad;
+- qué ajustes la dan y cuáles no;
+- un cubo de 30 mm con grilla: crestas de A/2, capas anidadas (la altura de cada punto igual a la de abajo), plano
+  junto a las paredes y sobre las pieles, y el G-code verificado;
+- el verificador rechaza un cordón ondulado con el filamento que no corresponde, y un bloque no planar si los ajustes
+  no lo piden;
+- con patrones que cambian de capa a capa (rectilíneo), nada ondula.
+
 ### N2 — Paredes tejidas (la versión no planar de brick layers)
 
 En vez de subir perímetros enteros media capa, cada perímetro ondula en Z a lo largo de su recorrido:

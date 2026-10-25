@@ -53,11 +53,13 @@ struct ToolpathPoint {
     Point2d p;
     double width;
     double dz = 0.0; // mm from the layer's top: Z anti-aliasing moves the nozzle to the surface (docs/ZAA.md)
+    double below = 0.0; // mm from the layer below's top: where the bead below lies (wavy infill)
 };
 struct Toolpath {
     std::vector<ToolpathPoint> points;
     bool closed = false;
-    int index = 0; // bead index, counted from the outline
+    int index = 0;      // bead index, counted from the outline
+    bool wavy = false;  // nonplanar infill (docs/NONPLANAR_INFILL.md): each bead fills the gap down to the one below
 };
 
 // Connects the sites of each bead index inside every trapezoid into extrusion

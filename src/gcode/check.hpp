@@ -24,6 +24,10 @@ struct GcodeLimits {
     // Z, down and up, as shares of the layer height; its bead is as thick as
     // what is left down to the layer's bottom.
     double zaa_below = 0.0, zaa_above = 0.0;
+    // Wavy infill (docs/NONPLANAR_INFILL.md): how far, in mm, an extrusion in
+    // a ;NONPLANAR block may leave its layer's Z either way; there each
+    // move's ;HEIGHT is its bead's own thickness.
+    double wave = 0.0;
     // From the height changes of the settings: the values for the layers whose
     // top is above z, in order of z.
     struct Change {

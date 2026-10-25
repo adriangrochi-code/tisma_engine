@@ -35,6 +35,8 @@ struct DepthField {
     std::size_t index(int i, int j, int k) const {
         return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i);
     }
+    // The depth at any point, between the voxels' centres (trilinear); 0 off the grid.
+    double at(double x, double y, double z) const;
 };
 
 // What the depth is measured from: every surface of the sparse infill (walls,

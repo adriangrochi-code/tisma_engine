@@ -86,6 +86,10 @@
     X(BottomMinThickness, "Espesor mínimo abajo", "Minimum bottom thickness")                                         \
     X(SolidEvery, "Capa sólida cada", "Solid layer every")                                                            \
     X(SolidEveryTip, "Las capas N, 2N, 3N… llevan relleno sólido en todo el relleno, impreso como puente sobre el relleno de abajo. 0: nunca. Ver docs/INFILL.md.", "Layers N, 2N, 3N… get solid infill in all the infill, printed as a bridge over the infill below. 0: never. See docs/INFILL.md.") \
+    X(NonplanarInfill, "Relleno ondulado", "Wavy infill")                                                             \
+    X(NonplanarInfillTip, "El relleno sube y baja en Z mientras avanza, igual en todas las capas, así cada capa se anida en la de abajo y la unión queda inclinada: más resistencia en Z. Solo con patrones que se repiten capa a capa (grilla, triángulos, estrellas, panal, alineado, concéntrico, curvas). Ver docs/NONPLANAR_INFILL.md.", "The infill goes up and down in Z as it runs, the same in every layer, so each layer nests on the one below and the joint leans: stronger in Z. Only with patterns that repeat layer to layer (grid, triangles, stars, honeycomb, aligned, concentric, curves). See docs/NONPLANAR_INFILL.md.") \
+    X(NonplanarAmplitude, "Altura de la onda", "Wave height")                                                         \
+    X(NonplanarWavelength, "Largo de la onda", "Wavelength")                                                          \
     X(TopPattern, "Superficie superior", "Top surface")                                                               \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \

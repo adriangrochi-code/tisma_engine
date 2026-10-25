@@ -6,6 +6,7 @@
 #include "infill/adaptive.hpp"
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
+#include "infill/nonplanar.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
@@ -129,8 +130,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     // it holds up, before stress bands and the rest take parts of it.
     DepthField depth;
     const bool lightning = settings.infill_pattern == InfillPattern::Lightning && settings.infill_density > 0.0;
-    std::vector<Polygons> whole_sparse; // the lightning branches hold up what lies over all of it
-    if (lightning)
+    // The lightning branches hold up what lies over all of it, and the waves of
+    // the nonplanar infill fade by the walls and the solid layers around it.
+    std::vector<Polygons> whole_sparse;
+    if (lightning || wave_params(settings))
         for (const LayerSurfaces& s : out.surfaces)
             whole_sparse.push_back(s.sparse);
     if ((settings.infill_pattern == InfillPattern::AdaptiveCubic ||
@@ -286,6 +289,20 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
                       });
+    // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
+    // beads stack, in patterns that repeat layer to layer, and not with thick
+    // layers or stress bands.
+    if (const std::optional<WaveParams> waves = wave_params(settings);
+        waves && bands.empty() && combined.empty() && stack.groups.empty()) {
+        std::vector<Polygons> sparse(out.layers.size());
+        for (std::size_t l = 0; l < sparse.size(); ++l)
+            sparse[l] = l < whole_sparse.size() ? whole_sparse[l] : Polygons{};
+        const DepthField field = sparse_depth(sparse, out.layers, waves->cell);
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            const double below = l > 0 ? out.layers[l - 1].slice_z() : 0.0;
+            make_wavy(out.fills[l].sparse, field, out.layers[l].slice_z(), l > 0 ? &below : nullptr, *waves);
+        });
+    }
     if (!combined.empty()) {
         out.thick.resize(out.layers.size());
         tbb::parallel_for(std::size_t(0), combined.size(), [&](std::size_t r) {
