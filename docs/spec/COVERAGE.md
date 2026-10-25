@@ -155,7 +155,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Color, diámetro, temperaturas de boquilla y cama (primera capa y resto), cama por tipo de cama | `profiles.md`, `gcode_motion.md` | ✔ |
 | Densidad, costo, peso del carrete: peso y costo de la impresión | `interface.md` (los muestra), `gcode_extras.md` | ✔ |
 | Temperatura de la cámara y mínima de la cámara | `gcode_extras.md` | ✔ |
-| Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
+| Tipo, soluble, abrasivo | `profiles.md` (regla 8, prueba PF8) | ✔ no cambian el laminado |
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
 | G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
 | Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | `retraction_travel.md` (regla 10) | ✔ |
