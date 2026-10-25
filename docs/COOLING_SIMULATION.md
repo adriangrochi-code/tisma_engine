@@ -135,7 +135,12 @@ Con una cámara térmica se calibra mejor.
 - **Calidad:** las mismas correcciones de T1 (frenado local, pausa y ventilador por zona), pero decididas por la
   temperatura y no solo por el tiempo.
 - **Resistencia:** donde la unión queda fría, menos ventilador en esa zona. Pasa en piezas grandes y lentas con
-  ventilador fuerte.
+  ventilador fuerte. Importa según el material:
+  - en PLA, la unión entre capas ya llega a la resistencia del material, y lo débil es la ranura entre cordones
+    (Allum et al. 2020, `docs/RESEARCH_MAP.md`);
+  - en ABS y en los materiales técnicos, la unión va del 40 al 85 % según las condiciones (Coogan y Kazmer 2017).
+
+  El criterio puede usar el tiempo de soldadura isotérmico equivalente (Seppälä et al. 2017).
 - **Análisis estructural:** el análisis «como impresa» (A1, N3) toma la adherencia de cada unión de la temperatura
   simulada, en vez de un valor fijo por material.
 - **Orden:** reordenar según el calor solo si el abogado lo permite.

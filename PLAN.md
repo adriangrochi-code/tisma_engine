@@ -522,6 +522,25 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       el análisis «como impresa»
     - [ ] T4: la red en GPU, y el aire del ventilador de A3
     - no reordenar según el calor sin la revisión de patentes (dos solicitudes de Siemens)
+  - lo publicado sobre FDM y técnicas de laminado que el motor todavía no usa (`docs/RESEARCH_MAP.md`), por ganancia
+    medida contra esfuerzo:
+    - [ ] Q1: modo resistencia con cordones anchos (2,5 veces la boquilla o más: +40 a +48 % entre capas, −67 % de
+      tiempo, Allum et al. 2023)
+    - [ ] Q2: estimador de tiempo que imita al firmware (aceleración por tramo, velocidad de esquina, calibración
+      contra impresiones medidas); va junto con el pedido del tiempo de impresión
+    - [ ] Q3: topes por fusión y enfriamiento (flujo volumétrico según la temperatura y el material)
+    - [ ] Q4: flujo según la velocidad planeada en las esquinas, y avance de presión por tipo de tramo
+    - [ ] Q5: cordones alineados con la tensión por región, y propiedades ortótropas según las trayectorias en el
+      análisis
+    - [ ] Q6: costura por costo (cóncava, atrás, lo que se ve, tensión) y en bisel (`walls_extra.md`)
+    - [ ] Q7: mapa de rugosidad por cara y compensación en XY según el ángulo
+    - [ ] Q8: riesgo de alabeo con un modelo cerrado, borde automático y patrón según el material
+    - [ ] Q9: orden de islas y viajes que escala (curva que llena el plano y 2-opt)
+    - [ ] Q10: umbral de voladizo según ventilador, velocidad y temperatura; puentes con anchos enteros de línea
+    - [ ] Q11: transformada de distancia exacta en Vulkan, número de vueltas para mallas rotas, Voronoi robusto
+    - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
+    - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
+      de Fermat conectadas)
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

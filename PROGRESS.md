@@ -3702,3 +3702,36 @@ impresora propia de 4 y 5 ejes. Quedó en `PLAN.md`:
 **En curso:** el pedido nuevo del dueño, artículos de FDM y de técnicas de laminado para mejorar funciones, calidad y
 rendimiento. Va en cuatro búsquedas: trayectorias y superficie, movimiento y extrusión, resistencia y deformación, y
 rendimiento del cómputo.
+
+## 2026-10-25 — FDM y técnicas de laminado: el mapa de lo publicado
+
+**Pedido del dueño:** artículos de FDM y de técnicas de laminado para mejorar lo más posible las funciones, la
+calidad y el rendimiento.
+
+**Hecho:** `docs/RESEARCH_MAP.md`, en cuatro búsquedas en paralelo (solo artículos, registros de patentes y
+documentación de usuario; ningún código):
+- **trayectorias y superficie:** costura en bisel y su punto débil, esquinas, ancho variable, puentes, voladizos,
+  compensación en XY según el ángulo, rugosidad, planchado;
+- **movimiento y extrusión:** estimadores de tiempo con 1,7 a 8,5 % de error contra 48 % de otros, flujo máximo según
+  la temperatura, avance de presión, orden de viajes;
+- **resistencia y deformación:**
+  - en PLA, la unión entre capas llega a la resistencia del material;
+  - con cordones de 2,5 veces la boquilla: +40 a +48 % y −67 % de tiempo;
+  - cordones según la tensión, propiedades ortótropas, alabeo, interfaz ITIL;
+- **cómputo:** corte robusto, número de vueltas para mallas rotas, transformada de distancia en GPU, Voronoi robusto,
+  orden de viajes que escala, G-code binario.
+
+**Propuesta:** Q1 a Q12 en `PLAN.md`, por ganancia medida contra esfuerzo. Lo primero: el modo resistencia con
+cordones anchos, el estimador de tiempo que imita al firmware y los topes por fusión.
+
+**Patentes que se evitan:** las B-splines filtradas (Universidad de Michigan), las espirales de Fermat conectadas
+(Shandong), los tramos para recorridos eulerianos (UT-Battelle), los detalles locales a través de capas (Tulane) y
+otras en la sección 6.
+
+**Corregido en T3** (`docs/COOLING_SIMULATION.md`): el criterio de unión fría pesa poco en PLA y más en ABS y en los
+materiales técnicos.
+
+**Para el dueño:** la especificación del G-code binario de Prusa está dentro de un repositorio AGPL. Hace falta su
+decisión para leerla; si no, se estudia como caja negra.
+
+**Sigue:** el bloque de mantenimiento programado, después S1 (arcos en voladizos).
