@@ -325,8 +325,10 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
             }
     // Around the part: the brim, the skirt beyond it, and slack for half a bead
     // and the travels that go round the outside.
+    // The brim and skirt are mitred offsets (offset(), miter limit 2): at a
+    // sharp corner they reach out up to twice their distance.
     const double skirt = s.skirt_loops > 0 ? s.skirt_distance + s.skirt_loops * s.wall_width : 0.0;
-    const double margin = s.brim_width + skirt + 2.0 * s.wall_width + 1.0;
+    const double margin = 2.0 * (s.brim_width + skirt) + 2.0 * s.wall_width + 1.0;
     limits.min_x = lo[0] - margin, limits.max_x = hi[0] + margin;
     limits.min_y = lo[1] - margin, limits.max_y = hi[1] + margin;
     if (!s.bed.empty()) { // and never off the bed

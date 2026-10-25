@@ -190,7 +190,6 @@ std::vector<std::size_t> height_order(const std::vector<const Toolpath*>& paths,
         }
     }
     std::vector<std::vector<std::uint32_t>> after(paths.size()); // after[a]: paths that go after a
-    std::size_t edges = 0;
     for (const auto& [key, vote] : votes) {
         if (vote == 0.0)
             continue;
@@ -199,7 +198,6 @@ std::vector<std::size_t> height_order(const std::vector<const Toolpath*>& paths,
             after[a].push_back(b); // b higher: a first
         else
             after[b].push_back(a);
-        ++edges;
     }
     std::vector<std::uint32_t> waiting(paths.size(), 0);
     for (const auto& list : after)
@@ -566,9 +564,10 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
                     const std::size_t bracket = name.find('[');
                     if (bracket != std::string::npos && name.back() == ']') {
                         const std::string digits = name.substr(bracket + 1, name.size() - bracket - 2);
-                        ok = !digits.empty() && std::all_of(digits.begin(), digits.end(), [](char c) { return c >= '0' && c <= '9'; });
-                        if (ok)
-                            index = std::stoul(digits);
+                        // from_chars: an index too big for a size_t is no index
+                        // (std::stoul threw out of the writer).
+                        const auto [last, error] = std::from_chars(digits.data(), digits.data() + digits.size(), index);
+                        ok = !digits.empty() && error == std::errc() && last == digits.data() + digits.size();
                         name = name.substr(0, bracket);
                     }
                 }
@@ -611,6 +610,26 @@ std::vector<Warning> capability_warnings(const Settings& s) {
         std::snprintf(text, sizeof text, "the filament wants the bed at %.0f C; the printer reaches %.0f C", t,
                       s.max_bed_temp);
         add("bed_temperature", text, t);
+    }
+    // The changes by height too (a temperature tower, a project's changes).
+    for (const HeightChange& c : s.changes) {
+        if (c.temperature && s.max_nozzle_temp > 0.0 && *c.temperature > s.max_nozzle_temp) {
+            std::snprintf(text, sizeof text, "the change at Z %.2f asks %.0f C at the nozzle; the printer reaches %.0f C",
+                          c.z, *c.temperature, s.max_nozzle_temp);
+            add("nozzle_temperature", text, *c.temperature);
+        }
+        if (c.bed_temperature && s.max_bed_temp > 0.0 && *c.bed_temperature > s.max_bed_temp) {
+            std::snprintf(text, sizeof text, "the change at Z %.2f asks the bed at %.0f C; the printer reaches %.0f C", c.z,
+                          *c.bed_temperature, s.max_bed_temp);
+            add("bed_temperature", text, *c.bed_temperature);
+        }
+    }
+    // Lines this far from the nozzle print, but rarely well (check_settings
+    // refuses the impossible ones).
+    if (const double w = s.wall_width, d = s.nozzle_diameter; w < 0.6 * d || w > 2.5 * d) {
+        std::snprintf(text, sizeof text, "lines of %.3g mm from a %.3g mm nozzle: %.3g to %.3g mm print best", w, d,
+                      0.6 * d, 2.5 * d);
+        add("line_width", text, w);
     }
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp <= 0.0) {
         std::snprintf(text, sizeof text, "the filament wants a chamber at %.0f C; the printer does not heat one",
@@ -974,8 +993,26 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
     out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
+    // Each setting on one comment line: a line break in a value (a start
+    // G-code variable, say) would otherwise end the comment and run the rest
+    // as G-code after the print.
+    const auto one_line = [](const std::string& text) {
+        std::string line;
+        line.reserve(text.size());
+        for (const char c : text) {
+            if (c == '\n')
+                line += "\\n";
+            else if (c == '\r')
+                line += "\\r";
+            else if (static_cast<unsigned char>(c) < 0x20 && c != '\t')
+                line += ' ';
+            else
+                line += c;
+        }
+        return line;
+    };
     for (const auto& [key, value] : describe(s))
-        out << "; " << key << " = " << value << "\n";
+        out << "; " << one_line(key) << " = " << one_line(value) << "\n";
 }
 
 } // namespace tisma

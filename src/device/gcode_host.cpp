@@ -118,7 +118,9 @@ std::optional<std::uint32_t> parse_resend(std::string_view line) {
     else
         return std::nullopt;
     const std::optional<double> n = number_at(line, at);
-    if (!n || *n < 0.0)
+    // A line number: whole, and one a 32-bit counter holds (NaN, infinity
+    // and 1e30 were undefined to convert).
+    if (!n || !(*n >= 0.0 && *n <= 4294967295.0) || *n != std::floor(*n))
         return std::nullopt;
     return std::uint32_t(*n);
 }
@@ -225,7 +227,13 @@ std::optional<std::string> GcodeHost::read_line(std::chrono::milliseconds timeou
         }
         char buffer[512];
         const int n = stream_->read(buffer, sizeof buffer, timeout);
-        if (n <= 0)
+        if (n < 0) {
+            // The other side is gone (unplugged): closed, so that is_open()
+            // says so, instead of reading nothing forever at full speed.
+            stream_->close();
+            return std::nullopt;
+        }
+        if (n == 0)
             return std::nullopt;
         pending_.append(buffer, std::size_t(n));
     }
@@ -260,7 +268,11 @@ void GcodeHost::handle_report(std::string_view line) {
 }
 
 GcodeHost::Reply GcodeHost::send_line(const std::string& command) {
-    for (int attempt = 0;;) {
+    // Heating waits answer only once hot: their temperature reports show the
+    // printer is alive.
+    const bool heating = starts_with(command, "M109") || starts_with(command, "M190") ||
+                         starts_with(command, "M191") || starts_with(command, "M116");
+    for (int attempt = 0, probes = 0;;) {
         const std::string line = numbered_line(line_number_, command);
         if (!stream_->write(line + "\n"))
             return Reply::Gone;
@@ -273,8 +285,17 @@ GcodeHost::Reply GcodeHost::send_line(const std::string& command) {
             if (!got) {
                 if (!stream_->is_open())
                     return Reply::Gone;
-                if (std::chrono::steady_clock::now() > deadline)
-                    return Reply::Timeout;
+                if (std::chrono::steady_clock::now() > deadline) {
+                    // No "ok": the line or its answer was lost. The same
+                    // line again asks: a firmware that never got it runs it
+                    // and answers; one that did asks for the next line
+                    // (handled below), so nothing runs twice.
+                    if (++probes > 2)
+                        return Reply::Timeout;
+                    if (!stream_->write(line + "\n"))
+                        return Reply::Gone;
+                    deadline = std::chrono::steady_clock::now() + options_.ok_timeout;
+                }
                 continue;
             }
             const std::string& r = *got;
@@ -289,7 +310,18 @@ GcodeHost::Reply GcodeHost::send_line(const std::string& command) {
                     if (ack)
                         handle_report(*ack);
                 }
-                line_number_ = *n;
+                if (*n == line_number_ + 1) {
+                    // It already ran this line (its "ok" was lost) and wants
+                    // the next one.
+                    ++line_number_;
+                    return Reply::Ok;
+                }
+                if (*n != line_number_) {
+                    // Only the line in flight can be sent again.
+                    std::lock_guard lock(mutex_);
+                    status_.error = "the printer asked for line " + std::to_string(*n) + ", which is no longer at hand";
+                    return Reply::Timeout;
+                }
                 {
                     std::lock_guard lock(mutex_);
                     ++status_.resends;
@@ -304,7 +336,9 @@ GcodeHost::Reply GcodeHost::send_line(const std::string& command) {
                 handle_report(r);
                 ++line_number_;
                 return Reply::Ok;
-            } else if (starts_with(r, "echo:busy")) {
+            } else if (starts_with(r, "echo:busy") || (heating && parse_temperatures(r))) {
+                if (heating)
+                    handle_report(r);
                 deadline = std::chrono::steady_clock::now() + options_.ok_timeout;
             } else if (starts_with(r, "Error:")) {
                 // A broken line is routine (a Resend follows); anything else is told.
@@ -367,8 +401,11 @@ void GcodeHost::finish_job(PrinterEvent::Kind how) {
             status_.progress = 1.0;
         status_.state = PrinterState::Idle;
         events_.push_back({how, name});
+        job_.reset(); // under the lock: start_print reads it from the interface's thread
     }
-    job_.reset();
+    // A pause or cancel asked as the job ended is not for the next one.
+    pause_ = false;
+    cancel_ = false;
 }
 
 void GcodeHost::drain_commands() {
@@ -407,6 +444,8 @@ void GcodeHost::run() {
             if (!job_ && next_job_) {
                 job_ = std::move(*next_job_);
                 next_job_.reset();
+                pause_ = false;
+                cancel_ = false;
                 job_->started = std::chrono::steady_clock::now();
                 status_.job = job_->name;
                 status_.lines_total = job_->lines.size();
@@ -465,6 +504,12 @@ void GcodeHost::run() {
                 }
                 push_event(PrinterEvent::Kind::Error, status().error);
                 finish_job(PrinterEvent::Kind::Cancelled);
+                // The heaters off, as a cancel does, without waiting for answers
+                // that may not come: firmwares take unnumbered lines at any time.
+                if (!stream_->write("M104 S0\nM140 S0\nM107\n")) {
+                    lost = true;
+                    break;
+                }
                 continue;
             }
             std::lock_guard lock(mutex_);

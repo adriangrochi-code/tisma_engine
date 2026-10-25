@@ -7,6 +7,7 @@
 #include "slice/pipeline.hpp"
 
 #include <chrono>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <system_error>
@@ -27,6 +28,9 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
     part += ".part";
     rejected += ".rejected";
     std::error_code ignored;
+    // Whatever happens next, nothing is left under the requested name: an
+    // older G-code there would be printed by mistake (docs/GCODE_CHECK.md).
+    std::filesystem::remove(path, ignored);
     const auto start = std::chrono::steady_clock::now();
     {
         std::ofstream file(part, std::ios::binary);
@@ -34,7 +38,14 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
             out.error = "cannot write '" + part.string() + "'";
             return out;
         }
-        write_gcode(file, model, settings, warnings);
+        try {
+            write_gcode(file, model, settings, warnings);
+        } catch (const std::exception& e) {
+            file.close();
+            std::filesystem::remove(part, ignored);
+            out.error = std::string("writing the G-code failed: ") + e.what();
+            return out;
+        }
         file.close();
         if (!file) {
             std::filesystem::remove(part, ignored);

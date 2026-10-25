@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <numbers>
+#include <utility>
 
 namespace tisma {
 namespace {
@@ -103,8 +104,10 @@ std::string value_text(double v) {
         std::snprintf(text, sizeof text, "%.0f", v);
     else if (std::abs(v * 10.0 - std::round(v * 10.0)) < 1e-6)
         std::snprintf(text, sizeof text, "%.1f", v);
-    else
+    else if (std::abs(v * 100.0 - std::round(v * 100.0)) < 1e-6)
         std::snprintf(text, sizeof text, "%.2f", v);
+    else // steps of 0.001 (pressure advance): two decimals made neighbours look alike
+        std::snprintf(text, sizeof text, "%.3f", v);
     return text;
 }
 
@@ -183,6 +186,29 @@ void add_tube(TriangleMesh& m, double h, double t, double z0, double z1) {
     add_box(m, h - t, -h + t, z0, h, h - t, z1);
 }
 
+// The values each kind takes in the settings and in the changes by height
+// (docs/CONFIG.md): a tower or a chosen value past them would make settings,
+// profiles and projects that cannot be read back.
+std::pair<double, double> calibration_range(CalibrationKind kind) {
+    switch (kind) {
+    case CalibrationKind::Temperature: return {100.0, 500.0};
+    case CalibrationKind::Retraction: return {0.0, 50.0};
+    case CalibrationKind::Flow: return {10.0, 300.0};
+    case CalibrationKind::Speed: return {5.0, 1000.0};
+    case CalibrationKind::RetractionSpeed: return {1.0, 500.0};
+    case CalibrationKind::PressureAdvance: return {0.0, 2.0};
+    case CalibrationKind::MaxFlow: return {0.5, 1000.0};
+    case CalibrationKind::Acceleration: return {100.0, 100000.0};
+    default: return {-1e9, 1e9};
+    }
+}
+
+void within(CalibrationKind kind, double& start, double& end) {
+    const auto [lo, hi] = calibration_range(kind);
+    start = std::clamp(start, lo, hi);
+    end = std::clamp(end, lo, hi);
+}
+
 } // namespace
 
 std::vector<double> tower_values(double start, double end, double step) {
@@ -211,6 +237,7 @@ CalibrationPrint dimension_test(const DimensionTest& t) {
 }
 
 CalibrationPrint temperature_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::Temperature, start, end);
     CalibrationPrint out;
     out.kind = "temperature";
     out.unit = "C";
@@ -271,6 +298,7 @@ CalibrationPrint temperature_tower(double start, double end, double step, double
 }
 
 CalibrationPrint retraction_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::Retraction, start, end);
     CalibrationPrint out;
     out.kind = "retraction";
     out.unit = "mm";
@@ -281,6 +309,7 @@ CalibrationPrint retraction_tower(double start, double end, double step, double 
 }
 
 CalibrationPrint retraction_speed_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::RetractionSpeed, start, end);
     CalibrationPrint out;
     out.kind = "retraction_speed";
     out.unit = "mm/s";
@@ -310,6 +339,7 @@ void tube_tower(CalibrationPrint& out, const std::vector<double>& values, double
 }
 
 CalibrationPrint pressure_advance_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::PressureAdvance, start, end);
     CalibrationPrint out;
     out.kind = "pressure_advance";
     out.unit = "";
@@ -321,6 +351,7 @@ CalibrationPrint pressure_advance_tower(double start, double end, double step, d
 }
 
 CalibrationPrint max_flow_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::MaxFlow, start, end);
     CalibrationPrint out;
     out.kind = "max_flow";
     out.unit = "mm³/s";
@@ -332,6 +363,7 @@ CalibrationPrint max_flow_tower(double start, double end, double step, double se
 }
 
 CalibrationPrint acceleration_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::Acceleration, start, end);
     CalibrationPrint out;
     out.kind = "acceleration";
     out.unit = "mm/s²";
@@ -449,6 +481,7 @@ std::string extruder_steps_text(GcodeFlavor flavor, double value) {
 }
 
 CalibrationPrint flow_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::Flow, start, end);
     CalibrationPrint out;
     out.kind = "flow";
     out.unit = "%";
@@ -463,6 +496,7 @@ CalibrationPrint flow_tower(double start, double end, double step, double segmen
 }
 
 CalibrationPrint speed_tower(double start, double end, double step, double segment) {
+    within(CalibrationKind::Speed, start, end);
     CalibrationPrint out;
     out.kind = "speed";
     out.unit = "%";
@@ -598,7 +632,9 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         if (const auto it = s.variables.find("temperature"); it != s.variables.end() && !it->second.empty())
             t = std::clamp(std::atof(it->second.front().c_str()), 150.0, 400.0);
         t = std::round(t / 5.0) * 5.0;
-        return temperature_tower(t + 20.0, t - 20.0, 5.0);
+        // Never past what the printer reaches.
+        const double top = s.max_nozzle_temp > 0.0 ? std::min(t + 20.0, std::floor(s.max_nozzle_temp / 5.0) * 5.0) : t + 20.0;
+        return temperature_tower(top, std::min(t - 20.0, top - 5.0), 5.0);
     }
     case CalibrationKind::Retraction:
         return direct ? retraction_tower(0.2, 2.0, 0.2) : retraction_tower(1.0, 6.0, 0.5);
@@ -611,6 +647,8 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
 }
 
 bool apply_calibration(CalibrationKind kind, double value, Settings& s) {
+    const auto [lo, hi] = calibration_range(kind);
+    value = std::clamp(value, lo, hi);
     switch (kind) {
     case CalibrationKind::Dimensions:
     case CalibrationKind::FirstLayer:

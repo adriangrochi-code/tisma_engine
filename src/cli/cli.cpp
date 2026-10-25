@@ -179,6 +179,13 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     out << "vertices: " << indexed.vertices.size() << "\n";
     out << "weld_ms: " << weld_ms << "\n";
 
+    // Models the engine refuses to slice are not sliced here either (one at
+    // 1e30 mm used to grow memory without end).
+    if (const std::string reason = unprintable_reason(indexed, Settings{}); !reason.empty()) {
+        out << "slicing: skipped (" << reason << ")\n";
+        return kExitOk;
+    }
+
     // Planar slicing with 0.2 mm layers: level-set segments and contours.
     const BoundingBox box = stl.mesh.bounding_box();
     if (!box.empty) {
@@ -195,6 +202,8 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         out << "layers: " << layers.size() << "\n";
         out << "contours: " << contours << "\n";
         out << "slice_ms: " << slice_ms << "\n";
+        if (layers.empty())
+            return kExitOk; // flat or thinner than a layer: no middle layer to look at
 
         // Regions: closed contours merged into polygons with holes (Clipper2).
         const auto region_start = std::chrono::steady_clock::now();

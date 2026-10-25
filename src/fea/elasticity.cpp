@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
@@ -63,6 +64,60 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
                     }
             }
 
+    // Whether the fixed degrees of freedom stop every rigid motion: the three
+    // slides and the three turns (about the grid's centre, lengths over its
+    // half diagonal). A motion that moves no fixed one leaves K singular: a
+    // part resting on the bed (held along z only) and pushed sideways has no
+    // answer, and the solver used to run for hours or return nonsense.
+    {
+        const double cx = g.x0 + 0.5 * g.nx * g.hx, cy = g.y0 + 0.5 * g.ny * g.hy;
+        const double cz = 0.5 * (g.z.front() + g.z.back());
+        const double half = 0.5 * std::sqrt(std::pow(g.nx * g.hx, 2) + std::pow(g.ny * g.hy, 2) +
+                                            std::pow(g.z.back() - g.z.front(), 2));
+        double gram[6][6] = {};
+        for (int k = 0; k < op.nz(); ++k)
+            for (int j = 0; j < op.ny(); ++j)
+                for (int i = 0; i < op.nx(); ++i) {
+                    const std::size_t n = op.node(i, j, k);
+                    const double dx = (g.x0 + i * g.hx - cx) / half, dy = (g.y0 + j * g.hy - cy) / half,
+                                 dz = (g.z[std::size_t(k)] - cz) / half;
+                    for (int a = 0; a < 3; ++a) {
+                        const std::size_t q = 3 * n + std::size_t(a);
+                        if (!(diag[q] > 0.0) || free[q])
+                            continue;
+                        // The six motions' components along this axis at this node.
+                        const double m[6] = {a == 0 ? 1.0 : 0.0, a == 1 ? 1.0 : 0.0, a == 2 ? 1.0 : 0.0,
+                                             a == 1 ? -dz : a == 2 ? dy : 0.0, a == 0 ? dz : a == 2 ? -dx : 0.0,
+                                             a == 0 ? -dy : a == 1 ? dx : 0.0};
+                        for (int r = 0; r < 6; ++r)
+                            for (int c = 0; c < 6; ++c)
+                                gram[r][c] += m[r] * m[c];
+                    }
+                }
+        // Cholesky: a pivot that vanishes against the largest diagonal is a free motion.
+        double largest = 0.0;
+        for (int r = 0; r < 6; ++r)
+            largest = std::max(largest, gram[r][r]);
+        for (int c = 0; c < 6 && !out.free_to_move; ++c) {
+            double pivot = gram[c][c];
+            for (int t = 0; t < c; ++t)
+                pivot -= gram[c][t] * gram[c][t];
+            if (!(pivot > 1e-9 * largest)) {
+                out.free_to_move = true;
+                break;
+            }
+            gram[c][c] = std::sqrt(pivot);
+            for (int r = c + 1; r < 6; ++r) {
+                double v = gram[r][c];
+                for (int t = 0; t < c; ++t)
+                    v -= gram[r][t] * gram[c][t];
+                gram[r][c] = v / gram[c][c];
+            }
+        }
+        if (out.free_to_move)
+            return out;
+    }
+
     // Forces: each load's total over the boundary faces whose centre is in its
     // box, in proportion to area, a quarter of each face to each corner.
     std::vector<double> f(dofs, 0.0);
@@ -104,6 +159,7 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
                 for (int a = 0; a < 3; ++a)
                     f[3 * n + std::size_t(a)] += load.force[a] * weight[n] / total;
     }
+    const double applied = std::sqrt(deterministic_dot(f, f));
     for (std::size_t q = 0; q < dofs; ++q)
         if (!free[q])
             f[q] = 0.0;
@@ -113,6 +169,10 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
     std::vector<double> r = f, z(dofs), p(dofs), q(dofs);
     const double norm_f = std::sqrt(deterministic_dot(f, f));
     if (norm_f == 0.0) {
+        // Loads that all fell on held nodes stress nothing: told, not a
+        // valid result with no stress.
+        if (applied > 0.0)
+            out.unapplied_loads = int(loads.size());
         out.converged = true;
         return out;
     }
@@ -130,13 +190,23 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
     precondition();
     p = z;
     double rz = deterministic_dot(r, z);
+    // A part held along some axes only (resting on the bed, pushed sideways)
+    // is free to move: the system has no solution and the residual grows by
+    // orders of magnitude. Stop there and keep the best iterate, instead of
+    // running to max_iterations (hours on fine grids). Near the tolerance the
+    // residual wanders without improving for long stretches: that goes on.
+    double best = std::numeric_limits<double>::infinity();
+    std::vector<double> u_best;
     for (out.iterations = 0; out.iterations < options.max_iterations; ++out.iterations) {
         op.apply(p, q);
         tbb::parallel_for(std::size_t(0), dofs, [&](std::size_t i) {
             if (!free[i])
                 q[i] = 0.0;
         });
-        const double alpha = rz / deterministic_dot(p, q);
+        const double pq = deterministic_dot(p, q);
+        if (!(pq > 0.0) || !std::isfinite(pq))
+            break; // a direction with no stiffness: the part can move freely
+        const double alpha = rz / pq;
         tbb::parallel_for(std::size_t(0), dofs, [&](std::size_t i) {
             u[i] += alpha * p[i];
             r[i] -= alpha * q[i];
@@ -149,11 +219,21 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
             ++out.iterations;
             break;
         }
+        if (!std::isfinite(out.residual) || out.residual > 1e6 * best)
+            break;
+        if (out.residual < best) {
+            best = out.residual;
+            u_best = u;
+        }
         precondition();
         const double rz_next = deterministic_dot(r, z);
         const double beta = rz_next / rz;
         rz = rz_next;
         tbb::parallel_for(std::size_t(0), dofs, [&](std::size_t i) { p[i] = z[i] + beta * p[i]; });
+    }
+    if (!out.converged && !u_best.empty() && !(out.residual <= best)) {
+        u = std::move(u_best);
+        out.residual = best;
     }
 
     // Von Mises stress at the centre of every element.

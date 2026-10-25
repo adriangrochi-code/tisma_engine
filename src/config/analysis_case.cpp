@@ -146,7 +146,7 @@ Region read_region(const json& item, const std::string& key) {
 
 } // namespace
 
-AnalysisCase parse_analysis_case(std::string_view text) {
+static AnalysisCase parse_analysis_case_checked(std::string_view text) {
     json root;
     try {
         root = json::parse(text.begin(), text.end());
@@ -247,6 +247,16 @@ AnalysisCase parse_analysis_case(std::string_view text) {
                                                                                    {"jacobi", Preconditioner::Jacobi}});
     }
     return c;
+}
+
+AnalysisCase parse_analysis_case(std::string_view text) {
+    if (!json_depth_ok(text))
+        throw SettingsError("case: nested more than 64 levels deep");
+    try {
+        return parse_analysis_case_checked(text);
+    } catch (const nlohmann::json::exception& e) {
+        throw SettingsError(std::string("case: ") + e.what());
+    }
 }
 
 AnalysisCase load_analysis_case(const std::filesystem::path& path) {

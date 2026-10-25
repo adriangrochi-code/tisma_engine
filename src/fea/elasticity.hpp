@@ -63,6 +63,9 @@ struct ElasticityResult {
     // probably wrong.
     std::size_t loose_voxels = 0;
     int unapplied_loads = 0;
+    // The fixtures leave a rigid motion (a slide or a turn) of the part free:
+    // there is no answer, and the solver does not run.
+    bool free_to_move = false;
     double residual = 0.0; // |r| / |f| at the end
     bool converged = false;
     double max_displacement = 0.0;

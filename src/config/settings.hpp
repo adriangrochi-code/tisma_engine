@@ -205,7 +205,20 @@ std::string settings_json(const Settings& settings);
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 
-// Reads and parses a settings file. Throws SettingsError.
+// Whether a JSON text nests at most max_depth arrays and objects. Settings,
+// profiles, projects and load cases are untrusted files: a deeper one would
+// overflow the stack once written back or compared, so it is refused first.
+bool json_depth_ok(std::string_view json, int max_depth = 64);
+
+// Reads and parses a settings file, then checks it (check_settings). Throws
+// SettingsError.
 Settings load_settings(const std::filesystem::path& path);
+
+// What a whole set of settings cannot print, whatever the model: layers
+// thicker than the nozzle (or machine.max_layer_height) or thinner than
+// machine.min_layer_height, lines narrower than a quarter of the nozzle or
+// wider than four nozzles. Profiles hold only part of the settings, so this
+// runs on the whole set, before slicing. Throws SettingsError.
+void check_settings(const Settings& settings);
 
 } // namespace tisma

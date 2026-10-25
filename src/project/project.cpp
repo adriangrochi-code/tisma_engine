@@ -98,7 +98,7 @@ std::string write_project(const Project& project) {
     return out;
 }
 
-Project read_project(std::string_view data) {
+static Project read_project_checked(std::string_view data) {
     if (data.size() < kMagic.size() + 4 || data.substr(0, kMagic.size()) != kMagic)
         fail("not a project file");
     const auto version = get_le(data, kMagic.size(), 4);
@@ -132,6 +132,8 @@ Project read_project(std::string_view data) {
     if (!has_json)
         fail("no JSON chunk");
 
+    if (!json_depth_ok(json_text))
+        fail("the JSON chunk is nested more than 64 levels deep");
     ordered_json root;
     try {
         root = ordered_json::parse(json_text.begin(), json_text.end());
@@ -203,6 +205,14 @@ Project read_project(std::string_view data) {
         p.calibration = std::move(cal);
     }
     return p;
+}
+
+Project read_project(std::string_view data) {
+    try {
+        return read_project_checked(data);
+    } catch (const nlohmann::json::exception& e) {
+        fail(std::string("not a valid project: ") + e.what());
+    }
 }
 
 void save_project(const std::filesystem::path& path, const Project& project) {

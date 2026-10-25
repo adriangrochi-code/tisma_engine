@@ -90,9 +90,48 @@ void read_group(const json& root, const std::string& group_name, const std::vect
     }
 }
 
+Settings parse_checked(std::string_view text);
+
 } // namespace
 
+bool json_depth_ok(std::string_view text, int max_depth) {
+    int depth = 0;
+    bool in_string = false, escaped = false;
+    for (const char c : text) {
+        if (in_string) {
+            if (escaped)
+                escaped = false;
+            else if (c == '\\')
+                escaped = true;
+            else if (c == '"')
+                in_string = false;
+        } else if (c == '"') {
+            in_string = true;
+        } else if (c == '[' || c == '{') {
+            if (++depth > max_depth)
+                return false;
+        } else if (c == ']' || c == '}') {
+            --depth;
+        }
+    }
+    return true;
+}
+
 Settings parse_settings(std::string_view text) {
+    if (!json_depth_ok(text))
+        throw SettingsError("settings: nested more than 64 levels deep");
+    try {
+        return parse_checked(text);
+    } catch (const json::exception& e) {
+        // A number out of range, a value of the wrong type deep inside: still
+        // a bad settings file, not an internal error.
+        throw SettingsError(std::string("settings: ") + e.what());
+    }
+}
+
+namespace {
+
+Settings parse_checked(std::string_view text) {
     json root;
     try {
         root = json::parse(text.begin(), text.end());
@@ -153,8 +192,10 @@ Settings parse_settings(std::string_view text) {
             s.detail_tolerance = v;
             return;
         }
-        if (!(v > 0.0))
-            fail(k, "must be greater than 0");
+        // Below 0.01 mm the layers run to the hundreds of thousands; the
+        // nozzle limits them from above (check_settings).
+        if (!(v >= 0.01 && v <= 2.0))
+            fail(k, "must be from 0.01 to 2 mm");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
     });
     read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink", "simplify_tolerance"},
@@ -166,7 +207,11 @@ Settings parse_settings(std::string_view text) {
                        return;
                    }
                    const double v = number(g, n, k);
+                   // Offsets beyond these overflow the polygon library or
+                   // empty the part.
                    if (n == "xy_offset") {
+                       if (!(v >= -10.0 && v <= 10.0))
+                           fail(k, "must be from -10 to 10 mm");
                        s.xy_offset = v;
                        return;
                    }
@@ -174,8 +219,11 @@ Settings parse_settings(std::string_view text) {
                        fail(k, "must not be negative");
                    if (n == "gap_closing_radius")
                        s.gap_closing_radius = v;
-                   else if (n == "first_layer_shrink")
+                   else if (n == "first_layer_shrink") {
+                       if (v > 2.0)
+                           fail(k, "must be from 0 to 2 mm");
                        s.first_layer_shrink = v;
+                   }
                    else
                        s.simplify_tolerance = v;
                });
@@ -194,8 +242,8 @@ Settings parse_settings(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (!(v > 0.0))
-            fail(k, "must be greater than 0");
+        if (!(v >= 0.05 && v <= 10.0))
+            fail(k, "must be from 0.05 to 10 mm");
         s.wall_width = v;
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
@@ -339,6 +387,12 @@ Settings parse_settings(std::string_view text) {
                            fail(key, "values must be strings, numbers or booleans");
                        };
                        for (const auto& [name, value] : v.items()) {
+                           // Names go into [brackets] of the start G-code and
+                           // into comments: no line breaks or brackets.
+                           if (name.empty() || std::any_of(name.begin(), name.end(), [](char c) {
+                                   return static_cast<unsigned char>(c) < 0x20 || c == '[' || c == ']';
+                               }))
+                               fail(k + "." + name, "names must be text without line breaks or brackets");
                            std::vector<std::string> list;
                            if (value.is_array())
                                for (const json& item : value)
@@ -361,8 +415,8 @@ Settings parse_settings(std::string_view text) {
                        s.bed = std::move(bed);
                    } else if (n == "min_layer_height" || n == "max_layer_height") {
                        const double d = number(g, n, k);
-                       if (d < 0.0 || d > 10.0)
-                           fail(k, "must be from 0 to 10 mm");
+                       if (d != 0.0 && !(d >= 0.01 && d <= 10.0))
+                           fail(k, "must be 0 (unknown) or from 0.01 to 10 mm");
                        (n == "min_layer_height" ? s.min_layer_height : s.max_layer_height) = d;
                    } else if (n == "corner_speed" || n == "max_height") {
                        const double d = number(g, n, k);
@@ -389,8 +443,10 @@ Settings parse_settings(std::string_view text) {
                        const std::string t = v.get<std::string>();
                        char* end = nullptr;
                        const double p = std::strtod(t.c_str(), &end);
-                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0))
-                           fail(k, "must be a number of mm/s or a percentage like \"50%\"");
+                       // strtod reads "inf%" too: a finite share, up to 1000 %.
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) ||
+                           !(p <= 1000.0))
+                           fail(k, "must be a number of mm/s or a percentage from 0 to 1000 like \"50%\"");
                        s.outer_wall_speed = {p, true};
                        return;
                    }
@@ -427,6 +483,12 @@ Settings parse_settings(std::string_view text) {
                    }
                    if (d < 0.0)
                        fail(k, "must not be negative");
+                   // As the changes by height: more would pull the filament
+                   // out of the hot end, or lift the head off the machine.
+                   if (n == "length" && d > 50.0)
+                       fail(k, "must be from 0 to 50 mm");
+                   if (n == "lift" && d > 10.0)
+                       fail(k, "must be from 0 to 10 mm");
                    (n == "length" ? s.retract_length : n == "lift" ? s.retract_lift : s.retract_min_travel) = d;
                });
     read_group(root, "adhesion", {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width"},
@@ -608,8 +670,6 @@ Settings parse_settings(std::string_view text) {
     }
     return s;
 }
-
-namespace {
 
 nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
     nlohmann::ordered_json list = nlohmann::ordered_json::array();
@@ -896,7 +956,34 @@ Settings load_settings(const std::filesystem::path& path) {
         throw SettingsError("settings: cannot open '" + path.string() + "'");
     std::ostringstream text;
     text << in.rdbuf();
-    return parse_settings(text.str());
+    Settings s = parse_settings(text.str());
+    check_settings(s);
+    return s;
+}
+
+void check_settings(const Settings& s) {
+    char text[200];
+    const double nozzle = s.nozzle_diameter;
+    const double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
+    for (const auto& [key, h] : {std::pair{"layers.height", s.layer_height}, {"layers.first_height", s.first_layer_height}}) {
+        if (h > top + 1e-9) {
+            std::snprintf(text, sizeof text,
+                          "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, or "
+                          "machine.max_layer_height)",
+                          key, h, top);
+            throw SettingsError(text);
+        }
+        if (s.min_layer_height > 0.0 && h < s.min_layer_height - 1e-9) {
+            std::snprintf(text, sizeof text, "%s: %.3g mm is thinner than machine.min_layer_height (%.3g mm)", key, h,
+                          s.min_layer_height);
+            throw SettingsError(text);
+        }
+    }
+    if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
+        std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
+                      s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
 }
 
 } // namespace tisma

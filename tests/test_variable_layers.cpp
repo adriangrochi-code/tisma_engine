@@ -53,7 +53,7 @@ IndexedMesh dome_on_column(float r, float column, int segments = 48, int rings =
         }
     const auto top = std::uint32_t(m.vertices.size());
     m.vertices.push_back({0, 0, column + r});
-    const auto at = [&](std::size_t ring, int s) { return std::uint32_t(1 + ring * segments + std::size_t(s % segments)); };
+    const auto at = [&](std::size_t ring, int s) { return std::uint32_t(1 + ring * std::size_t(segments) + std::size_t(s % segments)); };
     for (int s = 0; s < segments; ++s)
         m.triangles.push_back({0, at(0, s + 1), at(0, s)});
     for (std::size_t ring = 0; ring + 1 < profile.size(); ++ring)

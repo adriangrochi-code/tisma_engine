@@ -208,7 +208,7 @@ std::string profile_file_json(const Profile& profile) {
     return root.dump(2) + "\n";
 }
 
-Profile parse_profile(std::string_view text) {
+static Profile parse_profile_checked(std::string_view text) {
     ordered_json root;
     try {
         root = ordered_json::parse(text.begin(), text.end());
@@ -251,6 +251,16 @@ Profile parse_profile(std::string_view text) {
     }
     p.settings = parse_settings(settings.dump());
     return p;
+}
+
+Profile parse_profile(std::string_view text) {
+    if (!json_depth_ok(text))
+        fail("nested more than 64 levels deep");
+    try {
+        return parse_profile_checked(text);
+    } catch (const nlohmann::json::exception& e) {
+        fail(std::string("not a valid profile: ") + e.what());
+    }
 }
 
 std::vector<Profile> load_profiles(const std::filesystem::path& root, ProfileKind kind, std::vector<std::string>* errors) {

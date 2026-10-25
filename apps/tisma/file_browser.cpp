@@ -137,6 +137,9 @@ bool FileBrowser::draw(std::filesystem::path& chosen, ImTextureRef folder_icon, 
             ImGui::SetCursorPos(ImVec2(start.x, start.y + line + ImGui::GetStyle().ItemSpacing.y));
             ImGui::PopID();
         }
+        // An item after the last SetCursorPos, as ImGui wants before EndChild:
+        // without it, Debug builds stop on an assertion.
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
         if (!enter.empty())
             go(enter);
     }
@@ -165,6 +168,10 @@ bool FileBrowser::draw(std::filesystem::path& chosen, ImTextureRef folder_icon, 
         picked = true;
     ImGui::EndDisabled();
 
+    // The answer to "Replace?" is for one file: another name or folder asks
+    // again.
+    if (confirm_replace_ && target() != replace_for_)
+        confirm_replace_ = false;
     if (picked && can_pick) {
         std::error_code ec;
         const std::filesystem::path path = target();
@@ -173,6 +180,7 @@ bool FileBrowser::draw(std::filesystem::path& chosen, ImTextureRef folder_icon, 
             name_.clear();
         } else if (mode_ == Mode::Save && std::filesystem::exists(path, ec) && !confirm_replace_) {
             confirm_replace_ = true;
+            replace_for_ = path;
         } else if (mode_ == Mode::Open && !std::filesystem::exists(path, ec)) {
             // A name typed for a file that is not there: nothing to open.
         } else {

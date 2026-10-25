@@ -324,8 +324,11 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
                                                     " voxels are not joined to any fixture and were left out"});
     if (e.unapplied_loads > 0)
         out.warnings.push_back({"load_not_applied", std::to_string(e.unapplied_loads) +
-                                                        " loads found no face of the held part in their region"});
-    if (!e.converged)
+                                                        " loads found no face of the held part in their region, or fell on a fixture"});
+    if (e.free_to_move)
+        out.warnings.push_back({"free_to_move", "the fixtures leave the part free to slide or turn: hold it along x, "
+                                                "y and z, at more than one point or line"});
+    else if (!e.converged)
         out.warnings.push_back({"not_converged", "the solver stopped after " + std::to_string(e.iterations) +
                                                      " iterations at a residual of " + format(e.residual)});
     if (out.below[0] > 0)

@@ -125,6 +125,58 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+Revisión profunda de errores (2026-10-25), a pedido del dueño: seis revisores por área del motor y la revisión de caja
+negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_hostile.cpp`).
+
+- **Conexión con la impresora:**
+  - un cable desenchufado se nota enseguida (antes, el programa seguía «conectado» con un núcleo al 100 %);
+  - un «ok» perdido ya no cancela la impresión: el motor vuelve a mandar la línea y, si la impresora ya la había
+    hecho, sigue con la siguiente sin repetirla;
+  - si la impresión se abandona, apaga la boquilla, la cama y el ventilador;
+  - una pausa o cancelación pedida justo al terminar un trabajo ya no afecta al siguiente;
+  - las esperas de calentamiento (`M109`, `M190`) cuentan los informes de temperatura como señal de vida.
+- **G-code peligroso:**
+  - una variable del G-code de inicio con un salto de línea podía meter comandos de movimiento después de la
+    impresión; ahora queda en su comentario, y los nombres con saltos de línea o corchetes se rechazan;
+  - un índice de variable enorme (`{temperature[99999999999999999999]}`) daba un error interno y dejaba un `.part`.
+- **Ajustes que la impresora no puede imprimir:**
+  - capas más gruesas que la boquilla o que `machine.max_layer_height`, más finas que `machine.min_layer_height`, y
+    líneas de menos de un cuarto o más de cuatro boquillas: la línea de comandos sale con código 2 y la interfaz no
+    lamina;
+  - límites de lectura: altura de capa de 0,01 a 2 mm, ancho de 0,05 a 10 mm, `slicing.xy_offset` de −10 a 10 mm,
+    `first_layer_shrink` hasta 2 mm, `retraction.length` hasta 50 mm, `retraction.lift` hasta 10 mm,
+    `machine.min_layer_height` y `max_layer_height` 0 o desde 0,01 mm, porcentajes finitos;
+  - avisos nuevos: temperaturas de los cambios por altura por encima de las de la impresora, y anchos de línea poco
+    comunes.
+- **Archivos dañinos:** un perfil, proyecto o caso de carga con JSON anidado a gran profundidad tiraba el programa
+  (desborde de pila); un número fuera de rango o un tipo equivocado salía como error interno. Ahora son errores del
+  archivo.
+- **Calibraciones:** las torres y el «usar valor» respetan los rangos de los ajustes (antes se podían guardar valores
+  que después no se abrían), la torre de temperatura no pasa la temperatura máxima de la impresora, y las etiquetas de
+  avance de presión muestran tres decimales cuando hace falta.
+- **Paredes:** el diagrama de Voronoi propio podía dejar un nodo fuera de su bisectriz o fallar donde dos contornos se
+  tocan en una esquina; las paredes se colgaban, se caían o salían en tramos de un micrón. Ahora el motor lo detecta y
+  usa el diagrama de referencia para esa región.
+- **Rellenos de Arquímedes y octagrama:** ya no trazan una línea recta desde el centro del espiral hasta la pared.
+- **Análisis estructural:** una pieza sujeta solo en algunos ejes (apoyada en la cama y empujada de costado) se avisa
+  al instante, en vez de horas de cálculo o un resultado sin sentido; una carga que cae sobre la sujeción también se
+  avisa.
+- **Mallas:** las piezas a más de 2000 mm del origen o más altas que 2000 mm se rechazan con un mensaje claro (antes,
+  memoria sin límite o desbordes); el conteo de cortes usa 64 bits; la altura variable ya no queda en un bucle con una
+  altura mínima diminuta; `info` no se cae con piezas planas.
+- **Exportación:** si el G-code no pasa la verificación o falla al escribirse, no queda ningún archivo viejo con el
+  nombre pedido.
+- **Verificador:** acepta las esquinas en punta de la falda y el borde (antes rechazaba el G-code propio de algunas
+  piezas con esquinas agudas).
+- **Interfaz:**
+  - mover la temperatura de la boquilla cambiaba también la de la cama: compartían el identificador;
+  - los cambios por altura de una torre de calibración quedaban en el modelo siguiente y se guardaban;
+  - la respuesta «¿Reemplazar?» pasaba a otro archivo elegido después;
+  - el explorador de archivos rompía una regla de ImGui (cuadro de error, y cierre en las compilaciones de depuración);
+  - agregar del catálogo un perfil con el nombre de uno propio lo reemplazaba sin avisar: ahora toma «(2)»;
+  - unas preferencias ilegibles se perdían enteras y se pisaban al salir: ahora se guardan aparte, y los ajustes y
+    preferencias se escriben aparte y se mueven encima;
+  - un archivo soltado con el explorador abierto cambiaba el modelo bajo la exportación pendiente.
 - **El relleno Hilbert desaparecía lejos del origen:** la grilla de la curva cubría 2 m alrededor del origen. Girada
   por el ángulo del relleno, una pieza en una esquina de una cama de 1 m quedaba afuera y salía sin relleno. Ahora
   cubre 16 m, y crece si hace falta.

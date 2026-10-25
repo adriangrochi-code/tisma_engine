@@ -83,7 +83,9 @@ SlopeLimit slope_limit(const IndexedMesh& mesh, double cusp_height, double max_h
 HeightBounds height_bounds(const Settings& s) {
     HeightBounds b;
     b.max = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, s.nozzle_diameter) : s.nozzle_diameter;
-    b.min = std::min(s.min_layer_height > 0.0 ? s.min_layer_height : 0.04, b.max);
+    // Never below 0.01 mm: a printer limit of 1e-12 left layers of no height
+    // at flat faces, forever (the review of 2026-10-25).
+    b.min = std::min(std::max(s.min_layer_height > 0.0 ? s.min_layer_height : 0.04, 0.01), b.max);
     return b;
 }
 
@@ -175,7 +177,7 @@ LayerStack plan_layer_stack(const IndexedMesh& mesh, double min_z, double max_z,
             }
             // A flat face ends a layer: the next one within reach, or just
             // past it when the layer can stretch to it.
-            const auto flat = std::upper_bound(slope.flats.begin(), slope.flats.end(), z + bounds.min - 1e-9);
+            const auto flat = std::upper_bound(slope.flats.begin(), slope.flats.end(), z + std::max(bounds.min - 1e-9, 1e-6));
             if (flat != slope.flats.end()) {
                 const double to_flat = *flat - z;
                 if (to_flat <= h || (to_flat < h + bounds.min && to_flat <= bounds.max))
@@ -184,6 +186,8 @@ LayerStack plan_layer_stack(const IndexedMesh& mesh, double min_z, double max_z,
         } else if (zones) {
             k = sub_layers(h, s.detail_height, fine_min);
         }
+        if (!(h > 1e-6))
+            break; // no height left: never a layer of nothing
         const std::size_t first = out.layers.size();
         bool whole = true;
         for (int i = 0; i < k && whole; ++i)

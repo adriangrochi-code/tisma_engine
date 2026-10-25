@@ -3774,3 +3774,52 @@ decisión para leerla; si no, se estudia como caja negra.
 - **Búsqueda aleatoria con ASan y UBSan:** 150 corridas (semilla 1792949149), sin fallas.
 
 **Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).
+
+## 2026-10-25 — revisión profunda de errores (primera tanda de arreglos)
+
+**Pedido del dueño:** «una revisión general de bugs profunda, así corrijo errores graves».
+
+**Cómo:**
+- seis revisores en paralelo, uno por área: corte y geometría, trayectorias, G-code, ajustes y archivos, análisis /
+  GPU / conexión, e interfaz;
+- cada hallazgo, probado con una entrada concreta contra la compilación con ASan y UBSan;
+- además, la revisión de caja negra del equipo de fichas: unos 420 laminados desde la línea de comandos y una tanda
+  de rendimiento contra Tisma Slicer.
+
+**Arreglado en esta tanda,** cada uno con su prueba (`tests/test_hostile.cpp`, `tests/test_device.cpp`,
+`tests/test_combine.cpp`), detalle en `CHANGELOG.md`:
+- **conexión:** cable desenchufado, «ok» perdido que cancelaba la impresión y dejaba los calentadores encendidos,
+  pausa o cancelación que pasaba al trabajo siguiente, carrera de datos en `job_`, números de reenvío sin definir;
+- **G-code peligroso:** variables con saltos de línea que metían movimientos después de la impresión, índice enorme;
+- **ajustes:** alturas, anchos, elevación y retracción contra la máquina (`check_settings`), límites de lectura, avisos
+  de temperaturas de los cambios y de anchos raros, porcentajes infinitos;
+- **archivos:** JSON anidado que desbordaba la pila, excepciones de JSON como errores internos;
+- **calibraciones:** rangos de las torres y del valor elegido, tope de temperatura, etiquetas de tres decimales;
+- **paredes:** nodos del Voronoi propio fuera de la bisectriz, el «no seed node» y la recursión del marcado: el motor
+  detecta el diagrama malo y usa el de referencia (Boost.Polygon) para esa región;
+- **rellenos:** la recta desde el centro del espiral (Arquímedes y octagrama);
+- **análisis:** piezas libres de moverse, que antes corrían horas, y cargas sobre la sujeción;
+- **mallas:** piezas lejos o altas, conteo de 64 bits, bucle de la altura variable, `info` con piezas planas;
+- **exportación:** sin archivo viejo con el nombre pedido cuando falla;
+- **verificador:** la falda con esquinas en punta;
+- **interfaz:** los siete de su revisor, entre ellos la temperatura de la cama atada a la de la boquilla y los
+  cambios de una torre que quedaban en el modelo siguiente.
+
+**Probado:** 332 pruebas en una compilación aparte. Las piezas de los revisores que se colgaban o se caían (`seed145`,
+`seed58`, `rand74`, `vnotch`, `seed785`) laminan en 0,1 s. Las pruebas nuevas de conexión, espiral y Hilbert fallan
+con el código anterior.
+
+**Sigue, de la misma revisión:**
+- **graves:** el Z anti-aliasing con «raise» imprime dos veces sobre los mismos cordones cuando la capa siguiente es
+  más fina; una sola cara con la orientación invertida hace desaparecer la pieza;
+- **medios:**
+  - el escritor no se resincroniza después del G-code de un cambio por altura;
+  - las líneas sólidas se ajustan a la capa entera y no a cada isla;
+  - el proyecto puede repetir una malla muchas veces;
+- **rendimiento** (equipo de fichas y revisores):
+  - ordenar muchas islas cuesta más que lineal;
+  - las paredes duplican vértices;
+  - el gyroid escribe el triple de tramos y usa mucha memoria;
+  - las uniones del zigzag son cuadráticas;
+  - el G-code ocupa la memoria entera;
+- **otros:** aviso de `infill.nonplanar` ignorado; `infill.solid_below_area` de la ficha.

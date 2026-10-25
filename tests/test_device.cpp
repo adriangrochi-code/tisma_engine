@@ -8,7 +8,12 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <string>
 #include <cmath>
 #include <sstream>
 #include <thread>
@@ -250,6 +255,165 @@ TEST_CASE("device: a printer that never answers, and a broken connection", "[dev
     printer.reset(); // the printer goes away: the pipe closes
     REQUIRE(within(3000ms, [&] { return connected.status().state == PrinterState::Error; }));
     CHECK_THAT(connected.status().error, ContainsSubstring("lost"));
+}
+
+namespace {
+
+// A firmware that checks the line numbers as Marlin's documentation says:
+// the next number runs and answers "ok"; a number it already ran asks for
+// the one after it. The "ok" of one line is garbled once, as noise would.
+class NumberedFirmware {
+public:
+    NumberedFirmware(std::shared_ptr<ByteStream> end, std::uint32_t garble)
+        : end_(std::move(end)), garble_(garble), thread_([this] { run(); }) {}
+    ~NumberedFirmware() {
+        stop_ = true;
+        thread_.join();
+    }
+    // How many times each numbered command ran.
+    std::map<std::uint32_t, int> runs() {
+        std::lock_guard lock(mutex_);
+        return runs_;
+    }
+
+private:
+    void run() {
+        std::string pending;
+        char buffer[512];
+        while (!stop_) {
+            const int n = end_->read(buffer, sizeof buffer, 10ms);
+            if (n < 0)
+                return;
+            pending.append(buffer, std::size_t(std::max(n, 0)));
+            for (std::size_t nl; (nl = pending.find('\n')) != std::string::npos; pending.erase(0, nl + 1)) {
+                const std::string line = pending.substr(0, nl);
+                if (line.empty())
+                    continue;
+                if (line[0] != 'N') {
+                    end_->write("ok\n");
+                    continue;
+                }
+                const auto number = std::uint32_t(std::stoul(line.substr(1)));
+                if (line.find("M110") != std::string::npos) {
+                    last_ = number;
+                    end_->write("ok\n");
+                } else if (number == last_ + 1) {
+                    last_ = number;
+                    {
+                        std::lock_guard lock(mutex_);
+                        ++runs_[number];
+                    }
+                    end_->write(number == garble_ && !garbled_ ? "o\x7fk\n" : "ok\n");
+                    garbled_ = garbled_ || number == garble_;
+                } else {
+                    end_->write("Error:Line Number is not Last Line Number+1, Last Line: " + std::to_string(last_) +
+                                "\nResend: " + std::to_string(last_ + 1) + "\nok\n");
+                }
+            }
+        }
+    }
+
+    std::shared_ptr<ByteStream> end_;
+    std::uint32_t garble_, last_ = 0;
+    bool garbled_ = false;
+    std::atomic<bool> stop_{false};
+    std::mutex mutex_;
+    std::map<std::uint32_t, int> runs_;
+    std::thread thread_;
+};
+
+// A serial port whose cable is pulled: reads say the other side is gone,
+// but the port stays open until closed, as on Linux.
+class Unplugged : public ByteStream {
+public:
+    explicit Unplugged(std::shared_ptr<ByteStream> inner) : inner_(std::move(inner)) {}
+    int read(char* data, int size, std::chrono::milliseconds timeout) override {
+        return pulled ? -1 : inner_->read(data, size, timeout);
+    }
+    bool write(std::string_view data) override { return !pulled && inner_->write(data); }
+    void close() override { open_ = false; }
+    bool is_open() const override { return open_; }
+    std::atomic<bool> pulled{false};
+
+private:
+    std::shared_ptr<ByteStream> inner_;
+    std::atomic<bool> open_{true};
+};
+
+} // namespace
+
+TEST_CASE("device: a lost ok is recovered, and no line runs twice", "[device]") {
+    auto [host_end, printer_end] = make_pipe();
+    NumberedFirmware firmware(printer_end, 20);
+    HostOptions options;
+    options.ok_timeout = 300ms;
+    GcodeHost host(host_end, options);
+    REQUIRE(host.connect());
+    REQUIRE(within(5000ms, [&] { return host.status().state == PrinterState::Idle; }));
+    std::string gcode;
+    for (int i = 0; i < 60; ++i)
+        gcode += "G1 X" + std::to_string(i) + "\n";
+    REQUIRE(host.start_print(gcode, "long"));
+    REQUIRE(within(10000ms, [&] {
+        return host.status().state == PrinterState::Idle && host.status().lines_sent == 60;
+    }));
+    // The line whose "ok" was lost was asked again: the firmware wanted the
+    // next one, and every line ran once.
+    for (const auto& [number, count] : firmware.runs())
+        CHECK(count == 1);
+    std::vector<PrinterEvent::Kind> kinds;
+    for (const PrinterEvent& e : host.take_events())
+        kinds.push_back(e.kind);
+    CHECK(std::find(kinds.begin(), kinds.end(), PrinterEvent::Kind::Finished) != kinds.end());
+    host.disconnect();
+}
+
+TEST_CASE("device: a pause or cancel left over is not for the next job", "[device]") {
+    auto [host_end, printer_end] = make_pipe();
+    SimulatedPrinter printer(printer_end);
+    GcodeHost host(host_end);
+    REQUIRE(host.connect());
+    REQUIRE(within(5000ms, [&] { return host.status().state == PrinterState::Idle; }));
+    // Cancel with nothing printing (clicked as a job ended), then a job.
+    host.cancel();
+    std::this_thread::sleep_for(50ms);
+    REQUIRE(host.start_print("G1 X1\nG1 X2\nG1 X3\n", "one"));
+    REQUIRE(within(5000ms, [&] { return host.status().lines_sent == 3 && host.status().state == PrinterState::Idle; }));
+    // Paused, then cancelled while paused: the next job prints.
+    std::string gcode;
+    for (int i = 0; i < 3000; ++i)
+        gcode += "G1 X" + std::to_string(i % 50) + "\n";
+    REQUIRE(host.start_print(gcode, "two"));
+    REQUIRE(within(5000ms, [&] { return host.status().lines_sent > 10; }));
+    host.pause();
+    REQUIRE(within(2000ms, [&] { return host.status().state == PrinterState::Paused; }));
+    host.cancel();
+    REQUIRE(within(2000ms, [&] { return host.status().state == PrinterState::Idle; }));
+    REQUIRE(host.start_print("G1 X1\nG1 X2\n", "three"));
+    REQUIRE(within(5000ms, [&] { return host.status().lines_sent == 2 && host.status().state == PrinterState::Idle; }));
+    host.disconnect();
+}
+
+TEST_CASE("device: an unplugged printer is noticed at once", "[device]") {
+    auto [host_end, printer_end] = make_pipe();
+    SimulatedPrinter printer(printer_end);
+    auto port = std::make_shared<Unplugged>(host_end);
+    GcodeHost host(port);
+    REQUIRE(host.connect());
+    REQUIRE(within(5000ms, [&] { return host.status().state == PrinterState::Idle; }));
+    port->pulled = true;
+    REQUIRE(within(3000ms, [&] { return host.status().state == PrinterState::Error; }));
+    CHECK_THAT(host.status().error, ContainsSubstring("lost"));
+    host.disconnect();
+}
+
+TEST_CASE("device: resend requests with numbers no counter holds are ignored", "[device]") {
+    CHECK(parse_resend("Resend: 5") == 5u);
+    CHECK(parse_resend("rs 7") == 7u);
+    CHECK(!parse_resend("Resend: 1e30"));
+    CHECK(!parse_resend("Resend: nan"));
+    CHECK(!parse_resend("Resend: 2.5"));
+    CHECK(!parse_resend("Resend: -3"));
 }
 
 TEST_CASE("device: serial ports are listed and a missing one fails cleanly", "[device]") {

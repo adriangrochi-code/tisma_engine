@@ -15,7 +15,8 @@ using Clipper2Lib::Point64;
 Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, double max_arc, double row_step) {
     struct End {
         std::size_t poly = 0, edge = 0;
-        double s = 0.0; // arc length from the polygon's first vertex
+        double s = 0.0;        // arc length from the polygon's first vertex
+        double away = 0.0;     // distance to the boundary (units)
     };
     std::vector<std::vector<double>> prefix(boundary.size());
     std::vector<double> perimeter(boundary.size(), 0.0);
@@ -41,7 +42,7 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
                 const double d = std::hypot(double(p.x) - (double(a.x) + t * dx), double(p.y) - (double(a.y) + t * dy));
                 if (d < nearest) {
                     nearest = d;
-                    best = {b, i, prefix[b][i] + t * std::sqrt(len2)};
+                    best = {b, i, prefix[b][i] + t * std::sqrt(len2), d};
                 }
             }
         return best;
@@ -74,7 +75,12 @@ Polygons join_along_boundary(const Polygons& pieces, const Polygons& boundary, d
                 arc += perimeter[b];
             const double dy = std::fabs(double(pieces[a / 2].front().y - pieces[c / 2].front().y));
             const bool rows = row_step <= 0.0 || std::fabs(dy - row_step) < 0.25 * row_step;
-            if (a / 2 != c / 2 && rows && arc <= max_arc)
+            // Only ends on the boundary join along it: a spiral's start in
+            // the middle of the region, snapped to the nearest edge, made a
+            // straight bead across its turns (the review of 2026-10-25).
+            constexpr double kOnBoundary = 0.01 * kUnitsPerMm;
+            const bool on_boundary = ends[a].away <= kOnBoundary && ends[c].away <= kOnBoundary;
+            if (a / 2 != c / 2 && rows && arc <= max_arc && on_boundary)
                 joins.push_back({arc, a, c});
         }
     }

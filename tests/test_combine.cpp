@@ -632,3 +632,26 @@ TEST_CASE("infill patterns: the Hilbert curve reaches the corners of a large bed
             CHECK(far[i].points.size() == above[i].points.size());
     }
 }
+
+TEST_CASE("infill patterns: the spirals never jump straight from their centre to a wall", "[combine]") {
+    // The spiral starts at the centre, inside the region; the zigzag joins
+    // took that end for one on the boundary and drew a straight bead across
+    // four turns (the review of 2026-10-25).
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.centre = {10.0, 10.0};
+    const LayerSurfaces region = square_sparse(20.0);
+    for (const InfillPattern pattern : {InfillPattern::Archimedean, InfillPattern::Octagram}) {
+        INFO("pattern " << int(pattern));
+        p.pattern = pattern;
+        for (const Toolpath& t : fill_layer(region, 5, p, 1.0).sparse)
+            for (std::size_t i = 0; i + 1 < t.points.size(); ++i) {
+                const Point2d a = t.points[i].p, b = t.points[i + 1].p;
+                const bool from_centre = std::hypot(a.x - 10.0, a.y - 10.0) < 0.3 || std::hypot(b.x - 10.0, b.y - 10.0) < 0.3;
+                if (from_centre)
+                    CHECK(std::hypot(b.x - a.x, b.y - a.y) < 2.5);
+            }
+    }
+}

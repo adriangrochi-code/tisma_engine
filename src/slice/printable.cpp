@@ -45,6 +45,24 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
             return text;
         }
     }
+    // The engine's coordinates: within 2 m of the origin (the medial axis
+    // works in 32-bit nanometres, about 2147 mm), and no taller. Past that,
+    // integer overflows or runaway layer counts (the review of 2026-10-25).
+    constexpr double kReach = 2000.0;
+    for (const Vec3f& v : mesh.vertices)
+        if (!(std::fabs(double(v.x)) <= kReach && std::fabs(double(v.y)) <= kReach)) {
+            char text[200];
+            std::snprintf(text, sizeof text,
+                          "the model reaches x %.6g, y %.6g: the engine works within %.0f mm of the origin", double(v.x),
+                          double(v.y), kReach);
+            return text;
+        }
+    if (!(double(top) - double(bottom) <= kReach)) {
+        char text[160];
+        std::snprintf(text, sizeof text, "the model is %.6g mm tall: the engine prints up to %.0f mm",
+                      double(top) - double(bottom), kReach);
+        return text;
+    }
     if (s.max_height > 0.0 && double(top) - double(bottom) > s.max_height) {
         char text[160];
         std::snprintf(text, sizeof text, "the model is %.3f mm tall, more than machine.max_height (%.3f mm)",

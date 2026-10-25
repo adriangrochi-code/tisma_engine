@@ -21,8 +21,8 @@ Reglas:
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `height` | número | 0.2 | > 0 | Alto de las capas, salvo la primera |
-| `first_height` | número | 0.2 | > 0 | Alto de la primera capa |
+| `height` | número | 0.2 | 0,01 a 2 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
+| `first_height` | número | 0.2 | 0,01 a 2 | Alto de la primera capa, con los mismos topes que `height` |
 
 Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 
@@ -45,8 +45,8 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 |---|---|---|---|---|
 | `fill_mode` | texto | `"union"` | `union`, `even_odd`, `fill_holes` | Cómo se decide qué está adentro cuando los contornos se superponen o se cruzan: `union` suma los volúmenes, `even_odd` alterna adentro y afuera en cada cruce, `fill_holes` además rellena los agujeros |
 | `gap_closing_radius` | número | 0.049 | ≥ 0 | Largo máximo de un hueco que se cierra al unir contornos abiertos |
-| `xy_offset` | número | 0 | cualquiera | Agranda (positivo) o achica (negativo) cada capa en XY; los agujeros se mueven al revés |
-| `first_layer_shrink` | número | 0 | ≥ 0 | Cuánto se achica además la primera capa, contra la pata de elefante |
+| `xy_offset` | número | 0 | −10 a 10 | Agranda (positivo) o achica (negativo) cada capa en XY; los agujeros se mueven al revés |
+| `first_layer_shrink` | número | 0 | 0 a 2 | Cuánto se achica además la primera capa, contra la pata de elefante |
 | `simplify_tolerance` | número | 0.01 | ≥ 0 | Se quitan los vértices de los contornos que se apartan menos que esto de la recta entre sus vecinos; 0 no simplifica. Menos segmentos aceleran los pasos siguientes (en una capa circular de 708 segmentos, 0,01 mm deja 208 y el eje medio tarda 3,4 veces menos) |
 
 ### `walls`
@@ -54,7 +54,7 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
-| `width` | número | 0.4 | > 0 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine` |
+| `width` | número | 0.4 | 0,05 a 10 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
 | `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 
 ### `surfaces`
@@ -95,7 +95,7 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `relative_extrusion` | booleano | false | | `true`: E relativa (`M83`), cada movimiento lleva su E; `false`: absoluta (`M82`), con `G92 E0` en cada capa |
 | `flavor` | texto | `"reprap"` | `marlin`, `klipper`, `reprap` | Dialecto de G-code (cambiará los comandos de ventilador, temperatura y aceleración) |
 | `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin |
-| `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está |
+| `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
 | `max_feed_x`, `max_feed_y` | número | 200 | > 0 | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo |
 | `max_feed_z` | número | 12 | > 0 | Ídem para Z |
 | `max_feed_e` | número | 120 | > 0 | Ídem para el extrusor |
@@ -104,9 +104,9 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `corner_speed` | número | 10 | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
-| `min_layer_height`, `max_layer_height` | número | 0 | 0 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
+| `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del hot end, en mm³/s. Ninguna extrusión lo pasa: su velocidad baja a flujo / (ancho × alto × `extrusion.flow`), redondeada hacia abajo a mm/min enteros. Con `extrusion.max_flow` vale el menor de los dos. 0: sin límite |
-| `max_nozzle_temp`, `max_bed_temp` | número | 0 | 0 a 600 | Temperaturas máximas de la boquilla y la cama, en °C. Si las variables `temperature` o `bed_temperature` piden más, hay un aviso. 0: no se sabe |
+| `max_nozzle_temp`, `max_bed_temp` | número | 0 | 0 a 600 | Temperaturas máximas de la boquilla y la cama, en °C. Si las variables `temperature` o `bed_temperature`, o los cambios por altura, piden más, hay un aviso. 0: no se sabe |
 | `max_chamber_temp` | número | 0 | 0 a 600 | Temperatura máxima de la cámara calefaccionada, en °C. 0: la impresora no calienta la cámara |
 | `enclosed` | booleano | false | | La impresora es cerrada |
 | `hardened_nozzle` | booleano | false | | La boquilla acepta filamentos abrasivos (acero endurecido o similar) |
@@ -133,9 +133,9 @@ Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ningu
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `length` | número | 2 | ≥ 0 | Cuánto filamento se retrae, en mm; 0 no retrae |
+| `length` | número | 2 | 0 a 50 | Cuánto filamento se retrae, en mm; 0 no retrae |
 | `speed` | número | 40 | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
-| `lift` | número | 0 | ≥ 0 | Cuánto sube Z durante un viaje que retrae, en mm |
+| `lift` | número | 0 | 0 a 10 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
 
 ### `adhesion`

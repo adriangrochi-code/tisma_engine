@@ -203,6 +203,33 @@ std::filesystem::path preferences_path() {
 #endif
 }
 
+// Writes a file aside and moves it over, so a failed write leaves the old one.
+bool write_aside(const std::filesystem::path& path, const std::string& text) {
+    std::filesystem::path temporary = path;
+    temporary += ".tmp";
+    {
+        std::ofstream out(temporary, std::ios::binary);
+        out << text;
+        out.close();
+        if (!out)
+            return false;
+    }
+    std::error_code ec;
+    std::filesystem::rename(temporary, path, ec);
+    if (ec)
+        std::filesystem::remove(temporary, ec);
+    return !ec;
+}
+
+// Preferences this build cannot read (a newer build's setting, say) are kept
+// next to them before the defaults are written over them on leaving.
+void keep_unreadable(const std::filesystem::path& path) {
+    std::filesystem::path copy = path;
+    copy += ".unreadable";
+    std::error_code ec;
+    std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
+}
+
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
 enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
 
@@ -516,28 +543,41 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
 
+// Each row's ID: its label and the address of its value. The address alone
+// is not enough: a local copy (a start G-code variable, a percentage) can sit
+// in the same stack slot as another row's, and the two would move together.
+struct RowId {
+    RowId(T label, const void* v) {
+        ImGui::PushID(static_cast<int>(label));
+        ImGui::PushID(v);
+    }
+    ~RowId() {
+        ImGui::PopID();
+        ImGui::PopID();
+    }
+    RowId(const RowId&) = delete;
+    RowId& operator=(const RowId&) = delete;
+};
+
 bool row(T label, double& v, double min, double max, const char* fmt, float speed = 0.01f, const char* tip = nullptr) {
     label_cell(label, tip);
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     const bool changed =
         ImGui::DragScalar("##v", ImGuiDataType_Double, &v, speed, &min, &max, fmt, ImGuiSliderFlags_AlwaysClamp);
-    ImGui::PopID();
     return changed;
 }
 
 bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* tip = nullptr) {
     label_cell(label, tip);
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     const bool changed = ImGui::DragInt("##v", &v, 0.1f, min, max, fmt, ImGuiSliderFlags_AlwaysClamp);
-    ImGui::PopID();
     return changed;
 }
 
 bool row(T label, bool& v, const char* tip = nullptr) {
     label_cell(label, tip);
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     const bool changed = ImGui::Checkbox("##v", &v);
-    ImGui::PopID();
     return changed;
 }
 
@@ -549,7 +589,7 @@ bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> o
         if (value == v)
             current = name;
     bool changed = false;
-    ImGui::PushID(&v);
+    const RowId id(label, &v);
     if (ImGui::BeginCombo("##v", current)) {
         for (const auto& [value, name] : options)
             if (ImGui::Selectable(name, value == v)) {
@@ -558,7 +598,6 @@ bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> o
             }
         ImGui::EndCombo();
     }
-    ImGui::PopID();
     return changed;
 }
 
@@ -838,14 +877,21 @@ void App::load_preferences() {
         device_port_ = j.value("device_port", std::string("sim"));
         device_baud_ = j.value("device_baud", 115200);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
-        if (j.contains("settings"))
-            settings_ = parse_settings(j.at("settings").dump());
+        if (j.contains("settings")) {
+            try {
+                settings_ = parse_settings(j.at("settings").dump());
+            } catch (const std::exception&) {
+                // The rest still counts; the settings start from the defaults.
+                keep_unreadable(path);
+            }
+        }
         if (j.contains("profiles") && j.at("profiles").is_object())
             for (const auto& [kind, name] : j.at("profiles").items())
                 if (const auto k = profile_kind_from_name(kind); k && name.is_string())
                     chosen_profile_[std::size_t(*k)] = name.get<std::string>();
     } catch (const std::exception&) {
         // Unreadable preferences: start from the defaults.
+        keep_unreadable(path);
     }
 }
 
@@ -865,13 +911,16 @@ void App::save_preferences() {
         j["device_port"] = device_port_;
         j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
-        j["settings"] = nlohmann::json::parse(settings_json(settings_));
+        // Without the changes of a calibration tower left on the bed.
+        Settings kept = settings_;
+        if (calibration_)
+            kept.changes.clear();
+        j["settings"] = nlohmann::json::parse(settings_json(kept));
         for (const ProfileKind kind : kProfileKinds)
             j["profiles"][std::string(profile_kind_name(kind))] = chosen_profile_[std::size_t(kind)];
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
-        std::ofstream out(path, std::ios::binary);
-        out << j.dump(2) << "\n";
+        write_aside(path, j.dump(2) + "\n");
     } catch (const std::exception&) {
     }
 }
@@ -908,6 +957,12 @@ void App::load_model(const std::filesystem::path& path) {
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
+        }
+        // A calibration tower's changes by height belong to the tower: the
+        // next model must not print with its temperatures or flows.
+        if (calibration_) {
+            settings_.changes.clear();
+            settings_changed();
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
@@ -1007,10 +1062,7 @@ void App::load_case_file(const std::filesystem::path& path) {
 }
 
 void App::save_settings_file(const std::filesystem::path& path) {
-    std::ofstream out(path, std::ios::binary);
-    out << settings_json(settings_);
-    out.close();
-    if (!out)
+    if (!write_aside(path, settings_json(settings_)))
         fail(T::CannotOpen, utf8(path));
     else
         notify(format(tr(T::SettingsSaved), utf8(path.filename()).c_str()));
@@ -1482,7 +1534,13 @@ void App::catalog_dialog() {
 }
 
 // A catalog entry becomes one of the user's profiles, and the chosen one.
-void App::add_catalog_profile(const Profile& profile) {
+void App::add_catalog_profile(const Profile& catalog) {
+    // A profile of the same name may hold the user's own changes: the copy
+    // from the catalog takes a free name, "(2)", "(3)"..., instead of
+    // replacing it.
+    Profile profile = catalog;
+    for (int n = 2; find_profile(profile.kind, profile.name) != nullptr; ++n)
+        profile.name = catalog.name + " (" + std::to_string(n) + ")";
     try {
         const std::filesystem::path root = profiles_root();
         if (root.empty())
@@ -1499,8 +1557,12 @@ void App::add_catalog_profile(const Profile& profile) {
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
-    if (!result_ || !result_->ok || viewer_)
+    // The result can go while the dialog is open: say so instead of writing
+    // nothing, or an old result, without a word.
+    if (!result_ || !result_->ok || viewer_ || stale_) {
+        fail(T::ExportFailed, tr(T::Stale));
         return;
+    }
     std::vector<Warning> warnings;
     const GcodeExport e = export_gcode(path, result_->model, result_->settings, &warnings);
     if (!e.written) {
@@ -1524,6 +1586,13 @@ void App::begin_export() {
 void App::start_slice() {
     if (!mesh_ || slice_job_.running())
         return;
+    // The whole set, profiles merged: what no model can print stops here.
+    try {
+        check_settings(settings_);
+    } catch (const SettingsError& e) {
+        fail(T::CannotSlice, e.what());
+        return;
+    }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
     slice_started_ = glfwGetTime();
@@ -3423,8 +3492,11 @@ void App::frame() {
         glfwPollEvents();
     else
         glfwWaitEventsTimeout(0.1);
-    for (const std::filesystem::path& path : std::exchange(dropped_, {}))
-        open_path(path);
+    // Files dropped while a file dialog is open wait for it to close: opening
+    // one would change the model under a pending export.
+    if (!browser_.is_open())
+        for (const std::filesystem::path& path : std::exchange(dropped_, {}))
+            open_path(path);
     poll_jobs();
     device_poll();
 
