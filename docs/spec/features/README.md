@@ -57,6 +57,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`devices.md`](devices.md): página Devices y conexión con impresoras por marca, con capturas | F9 | Para revisar |
 | [`presets.md`](presets.md): perfiles del sistema y de la persona: guardar, heredar, compatibilidad, comparar, paquetes, instantáneas, parámetros propios | P3 | Para revisar |
 | [`formats.md`](formats.md): leer STL, OBJ, AMF, 3MF, STEP y SVG, reparación al abrir, el proyecto 3MF y qué guarda, exportar STL y OBJ | F1 (leer), P4 | Para revisar |
+| [`print_time.md`](print_time.md): tiempo estimado: límites de la máquina por firmware, modos normal y silencioso, qué cuenta y qué no, cómo hacerlo más preciso | después de F4 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.

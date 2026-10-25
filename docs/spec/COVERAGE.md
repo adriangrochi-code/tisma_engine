@@ -169,7 +169,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Desfase de Z | `gcode_extras.md` | ✔ |
 | Firmware (dialectos) | `gcode_firmware.md`, `gcode_extras.md` | ✔ |
 | Límites de la máquina (avance, aceleración, jerk, avance mínimo) y su uso (escribir, solo estimar, ignorar) | `gcode_firmware.md` | ✔ |
-| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md` | ✔ |
+| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md`, `print_time.md` | ✔ |
+| Tiempo de impresión estimado: límites, comandos del G-code, qué cuenta | `print_time.md` | ◐ faltan pares medidos con impresoras reales |
 | Tiempo restante, etiquetas de objetos | `gcode_firmware.md` | ✔ |
 | Miniaturas en el G-code (tamaños y formatos PNG, JPG, QOI, la de las pantallas de BTT) | `gcode_extras.md` | ◐ falta el formato exacto: solo la interfaz las escribe → `formats.md` |
 | G-code binario | `gcode_extras.md` | ✔ |

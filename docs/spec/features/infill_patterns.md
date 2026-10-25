@@ -44,8 +44,18 @@ Con `θ` el ángulo del relleno (`infill.angle`) y la separación elegida para q
 6. **`cubic`:** una red de cubos apoyados sobre un vértice. En cada capa se ven las mismas tres familias de `stars`,
    pero cada familia se corre con la altura: `z / √2` en su dirección normal, así las líneas de capas seguidas forman
    las caras de los cubos. El largo por capa cambia con Z (prueba P5).
-7. **`adaptive_cubic`:** cubos más chicos cerca de las paredes y de las superficies, y más grandes adentro (un octree).
-   En Tisma Slicer usa las direcciones 0°, 60° y 120° sin importar `θ` (prueba P6).
+7. **`adaptive_cubic`:** la idea es un octree, con cubos más chicos cerca de las paredes y de las superficies, y más
+   grandes adentro. Lo medido en Tisma Slicer:
+   - usa las direcciones 0°, 60° y 120° sin importar `θ` (prueba P6);
+   - la separación entre líneas paralelas es `165,4 mm / densidad en %` (8,27 mm al 20 %, 4,13 al 40 %): 1,356 veces
+     la de `cubic` a la misma densidad, y sin saltos de potencias de 2 (15 % da 11,02 mm);
+   - en bloques macizos de 40 × 40 × 20 y 100 × 100 × 50 mm, la separación es la misma en todas las capas: no se
+     achica cerca de las paredes, de la tapa ni del fondo. El largo por capa varía con la altura (de 2272 a 4211 mm
+     por capa en el bloque grande) porque las líneas de los cubos se cortan a distintas alturas, no por la cercanía a
+     las superficies;
+   - en total, entre el 66 % (al 40 %) y el 76 % (al 10 %) del largo de `cubic` a la misma densidad (prueba P6b).
+   El motor puede hacer el octree de verdad (cubos más chicos solo donde hace falta sostener); la separación de
+   arriba es la del cubo más grande.
 8. **`support_cubic`:** como `adaptive_cubic`, pero solo donde hace falta para sostener las superficies de arriba. En
    un cubo, toda la superficie de arriba necesita apoyo y da lo mismo que `adaptive_cubic` (prueba P6).
 9. **`lightning`:** solo lo necesario para sostener las superficies de arriba. Son ramas que bajan desde la superficie
@@ -100,6 +110,7 @@ largos son los del relleno poco denso de la capa; las direcciones, en % del larg
 | P4 | `triangles` / `stars` | Tres direcciones, 45°, 105° y 165°, con un 28–30 % cada una, en todas las capas. `triangles` 196,9 mm en un tramo; `stars` 187,2 mm en dos tramos |
 | P5 | `cubic` | Las mismas tres direcciones; el largo cambia con la capa: 184,1 (capa 5), 181,9 (6), 179,8 (7), 182,8 (20), 197,0 (40), 191,6 (45) |
 | P6 | `adaptive_cubic` y `support_cubic` | Iguales en el cubo: direcciones 0°, 60° y 120°; 148 a 153 mm por capa (cerca del 76 % de `cubic`) |
+| P6b | Bloque de 40 × 40 × 20 mm, 3 capas sólidas arriba y abajo; densidad 10, 15, 20, 30 y 40 % | `adaptive_cubic`: separación de 16,54, 11,02, 8,27, 5,51 y 4,13 mm, igual en todas las capas; 308, 439, 568, 847 y 971 mm de relleno por capa en promedio. `cubic`: separación de 12,20, 8,14, 6,10, 4,07 y 3,05 mm; 404, 580, 760, 1120 y 1479 mm por capa |
 | P7 | `lightning` | Crece hacia arriba: 18,9 mm en la capa 5, 39,2 en la 7, 51,4 en la 20, 93,8 en la 40 y 134,2 en la 45, de 2 a 18 tramos |
 | P8 | `honeycomb` / `honeycomb_3d` | `honeycomb`: 229 a 244 mm; la dirección principal (49–51 %) pasa por 15°, 135° y 75° en las capas 5, 6 y 7 y se repite. `honeycomb_3d`: 190 a 209 mm en un tramo; capa 5: 55 % a 0° y 20 % a 45° y a 135°; capa 6: 43 % a 90°; capa 45: 78 % a 0° |
 | P9 | `hilbert`, `archimedean`, `octagram`, `concentric` | Iguales en todas las capas. `hilbert` 206,3 mm en 3 tramos (0°, 45°, 90°, 135°). `archimedean` 194,3 mm en 4 tramos, todas las direcciones. `octagram` 208,3 mm en 8 tramos (0°, 90°, 45°, 135°). `concentric` 199,4 mm en 5 lazos |
