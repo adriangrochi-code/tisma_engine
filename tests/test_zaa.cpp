@@ -1,5 +1,6 @@
 #include "slice/zaa.hpp"
 
+#include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
@@ -284,4 +285,37 @@ TEST_CASE("Z anti-aliasing: lower beads first and the nozzle never beside a high
     // is left are paths whose order with a neighbour turns along them, which
     // the article splits where it turns (docs/ZAA.md).
     CHECK(under / total < 0.015);
+}
+
+TEST_CASE("Z anti-aliasing: the check allows for both roundings of Z", "[zaa]") {
+    // The fuzz test, 2026-10-25: a thick layer lowered by (1 - 60.3 %) of its
+    // height, from the layer's true top 3.0806, wrote Z3.030 under ;Z:3.081;
+    // the bound from the rounded layer Z was 3.0301 with the slack of one
+    // rounding. A table: a leg and a top.
+    IndexedMesh m;
+    auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto base = std::uint32_t(m.vertices.size());
+        m.vertices.insert(m.vertices.end(), {{x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0},
+                                             {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}});
+        quad(m, base + 0, base + 3, base + 2, base + 1);
+        quad(m, base + 4, base + 5, base + 6, base + 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(m, base + i, base + (i + 1) % 4, base + 4 + (i + 1) % 4, base + 4 + i);
+    };
+    box(0, 0, 0, 3, 3, 3);
+    box(0, 0, 3, 12, 8, 4);
+    Settings s = parse_settings(R"({
+        "layers": {"height": 0.12628996392101, "first_height": 0.3021450602493405,
+                   "detail_height": 0.063144981960505, "detail_tolerance": 0.14779673875755328},
+        "zaa": {"enabled": true, "min_thickness": 60.31808648343541, "raise": true},
+        "walls": {"count": 2, "width": 0.322565738384905},
+        "surfaces": {"top_layers": 1, "bottom_layers": 0},
+        "infill": {"density": 10.488678555769042, "angle": 10.136240883184465, "pattern": "grid"},
+        "machine": {"filament_diameter": 2.85}, "compute": {"gpu": "off"}})");
+    const SlicedModel sliced = slice_model(m, s);
+    std::ostringstream gcode;
+    write_gcode(gcode, sliced, s);
+    const GcodeCheck check = check_gcode(gcode.str(), gcode_limits(sliced, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
 }

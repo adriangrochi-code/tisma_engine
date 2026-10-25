@@ -241,8 +241,12 @@ private:
             const bool at_layer = layer_z_ && known_[2];
             if (at_layer) {
                 const double h = height_.value_or(0.0);
-                const double low = *layer_z_ - limits_.zaa_below * h - kPositionSlack;
-                const double high = *layer_z_ + limits_.zaa_above * h + kPositionSlack;
+                // Off the layer's Z (Z anti-aliasing) the bound comes from the
+                // layer's true top, and both it and the move's Z are rounded.
+                const bool zaa = limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0;
+                const double slack = zaa ? 2.0 * kPositionSlack : kPositionSlack;
+                const double low = *layer_z_ - limits_.zaa_below * h - slack;
+                const double high = *layer_z_ + limits_.zaa_above * h + slack;
                 for (const double z : {position_[2], to[2]})
                     if (z < low || z > high) {
                         problem("extrudes at Z" + text(z) + ", not at the layer's Z" + text(*layer_z_));

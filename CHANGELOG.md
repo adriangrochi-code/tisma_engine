@@ -99,6 +99,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Z anti-aliasing sobre la capa gruesa de la altura por zona:** el verificador podía rechazar un cordón válido. El
+  piso sale del tope real de la capa, y tanto ese tope como la Z del movimiento se redondean a 3 decimales; el margen
+  era el de un solo redondeo. Ahora cuenta los dos.
 - **El análisis «como impresa» ignoraba las capas gruesas:** la zona gruesa de la altura por zona y el relleno
   combinado no se veían. Con altura por zona, el análisis veía el 3 % de los vóxeles impresos en vez del 53 %. Ahora
   cada capa gruesa llena todas las capas que abarca. La estimación de vóxeles y el modelo macizo usan las capas del

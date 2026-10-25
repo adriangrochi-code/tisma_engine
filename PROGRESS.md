@@ -3373,3 +3373,20 @@ Sección 4). Con el orden de antes:
 
 **Sigue:** partir donde el orden con un vecino se da vuelta; menos costuras.
 
+## 2026-10-25 — bloque nocturno: mantenimiento corto
+
+**Revisado:** después de las funciones nuevas de la noche (altura variable, ZAA, relleno combinado, denso, cúbico,
+guiado y el orden por grafo):
+- **fuzz de release:** 2100 corridas con tres semillas nuevas (1792909101–103);
+- **fuzz con ASan y UBSan:** 150 corridas, sin hallazgos.
+
+**Encontrado y arreglado:** una falla del fuzz (semilla 1792909102, corrida 456).
+- **El caso:** una mesa con altura por zona (0,126 / 0,063) y ZAA al 60,3 % con subida.
+- **Lo que pasaba:** un cordón de la capa gruesa bajó a Z3.030 bajo `;Z:3.081`, y el verificador lo rechazó.
+  - El piso del escritor sale del tope real de la capa, 3,0806.
+  - El verificador lo calcula desde el `;Z:` redondeado, con margen de un solo redondeo (0,001 mm).
+- **El arreglo:** con ZAA, el margen de los límites de Z es el de los dos redondeos (0,002 mm).
+- **Prueba:** la misma pieza y los mismos ajustes; falla sin el arreglo con el mismo mensaje.
+
+**Después del arreglo:** la semilla, 700 corridas, 0 fallas.
+
