@@ -157,7 +157,7 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"variables": {"x": {"y": 1}}}})"), ContainsSubstring("machine.variables.x: values must be"));
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
-    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "honeycomb"}})"), ContainsSubstring("infill.pattern: must be one of"));
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "voronoi"}})"), ContainsSubstring("infill.pattern: must be one of"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {
