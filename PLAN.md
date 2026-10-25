@@ -437,6 +437,17 @@ con nombres propios en `docs/CONFIG.md`.
 - [ ] En GPU: voladizos y proyección, si conviene
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
 
+## Altura de capa por zona (pedido del dueño, 2026-10-25)
+
+«Altura de capa variable que dependa del detalle y no de la pieza entera»: a la misma altura, capas finas donde la
+pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adaptive slicing, Tyberg y Bøhn 1998).
+
+- [x] Las zonas, el recorte de caminos y la escritura, con `layers.detail_height`, `detail_tolerance` y
+  `detail_margin`; G-code verificado
+- [ ] La interfaz: los ajustes en Impresión y la vista previa con el color por alto de capa
+- [ ] Medir en el banco contra todo fino y todo grueso; recortar en la GPU si conviene
+- [ ] La altura variable por Z de la ficha (`slicing.md`), que esta generaliza: una lista de (Z, alto) por objeto
+
 ## Estado de P2
 
 Empezado el 2026-10-24 por pedido del dueño («arrancá con `src/device` y el host serie»), antes de que la ficha de

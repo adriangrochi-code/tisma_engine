@@ -170,6 +170,7 @@ add_library(tisma_core
   src/slice/level_set.cpp
   src/slice/contours.cpp
   src/slice/layers.cpp
+  src/slice/local_layers.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp

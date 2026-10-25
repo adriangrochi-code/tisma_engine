@@ -170,6 +170,14 @@ public:
             type(before);
     }
 
+    // Another bead height within the layer (a thick zone, docs/LOCAL_LAYERS.md).
+    void set_height(double height) {
+        if (height == height_)
+            return;
+        text_ += ";HEIGHT:" + fixed(height, 3) + "\n";
+        height_ = height;
+    }
+
     void new_layer(double z, double height, double travel_feed) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
@@ -577,6 +585,25 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             }
             for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+        }
+        // The thick zone of a group that ends here: the whole group's height at
+        // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
+        if (l < model.thick.size() && !model.thick[l].empty()) {
+            const ThickLayer& t = model.thick[l];
+            g.set_height(t.height);
+            std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
+            for (const Toolpath& w : t.walls)
+                by_index[w.index].push_back(w);
+            for (const auto& [index, paths] : by_index) {
+                const bool outer = index == 0;
+                group(paths, outer ? "External perimeter" : "Perimeter",
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
+            }
+            const std::vector<Toolpath>* kinds[5] = {&t.fill.solid, &t.fill.top, &t.fill.bridge, &t.fill.gaps,
+                                                     &t.fill.sparse};
+            for (std::size_t k = 0; k < 5; ++k)
+                group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+            g.set_height(layer.top - layer.bottom);
         }
     };
 

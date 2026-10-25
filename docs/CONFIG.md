@@ -24,6 +24,14 @@ Reglas:
 | `height` | número | 0.2 | > 0 | Alto de las capas, salvo la primera |
 | `first_height` | número | 0.2 | > 0 | Alto de la primera capa |
 
+Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `detail_height` | número | 0 | 0 a 10 | Alto de las subcapas finas, en mm. Con un valor menor que `height`, las capas de `height` se parten en `k` subcapas (`height / detail_height` redondeado, de 2 a 4, ninguna de menos de 0,04 mm) solo donde la pieza cambia; en el resto se imprime una capa gruesa por grupo. 0: apagado |
+| `detail_tolerance` | número | 0,05 | 0,001 a 1 | El escalón que se acepta, en mm: donde las secciones de un grupo difieren menos que esto, va grueso |
+| `detail_margin` | número | 0 | 0 a 10 | Cuánto se agranda la zona fina alrededor del detalle, en mm. 0: tres anchos de línea |
+
 ### `slicing`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

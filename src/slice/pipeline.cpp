@@ -43,7 +43,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         min_z = std::min(min_z, v.z);
         max_z = std::max(max_z, v.z);
     }
-    out.layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+    // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md).
+    const int ratio = detail_ratio(settings);
+    const double stack_height = settings.layer_height / double(ratio);
+    out.layers = plan_layers(min_z, max_z, {settings.first_layer_height, stack_height});
     std::vector<float> heights;
     heights.reserve(out.layers.size());
     for (const Layer& l : out.layers)
@@ -86,7 +89,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     for (std::size_t l = 0; l < out.walls.size(); ++l)
         infill[l] = out.walls[l].infill;
     out.surfaces =
-        classify_surfaces(out.regions, infill, settings.top_layers, settings.bottom_layers, settings.wall_width);
+        classify_surfaces(out.regions, infill, settings.top_layers * ratio, settings.bottom_layers * ratio,
+                          settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
@@ -98,7 +102,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             thickness.push_back(layer.top - layer.bottom);
         SupportParams sp;
         sp.threshold_angle = settings.support_angle;
-        sp.z_gap_layers = int(std::lround(settings.support_z_gap / settings.layer_height));
+        sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
         sp.xy_gap = settings.support_xy_gap;
         sp.bead = settings.wall_width;
         out.support_areas = support_areas(out.regions, thickness, sp);
@@ -116,7 +120,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                               return;
                           // Interface: the support with the part above it within the next
                           // interface_layers layers past the Z gap; the rest is the base.
-                          const std::size_t gap = std::size_t(std::max(0L, std::lround(settings.support_z_gap / settings.layer_height)));
+                          const std::size_t gap = std::size_t(std::max(0L, std::lround(settings.support_z_gap / stack_height)));
                           Polygons above;
                           for (int k = 1; k <= settings.support_interface_layers; ++k)
                               if (const std::size_t a = l + gap + std::size_t(k); a < out.regions.size())
@@ -128,6 +132,18 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
                       });
+    if (ratio > 1) {
+        LocalLayerParams lp;
+        lp.ratio = ratio;
+        lp.tolerance = settings.detail_tolerance;
+        lp.margin = settings.detail_margin > 0.0 ? settings.detail_margin : 3.0 * settings.wall_width;
+        lp.min_coarse = 2.0 * settings.wall_width;
+        out.groups = plan_layer_groups(out.regions, lp);
+        std::vector<double> group_heights;
+        for (const LayerGroup& g : out.groups)
+            group_heights.push_back(out.layers[g.last].top - out.layers[g.first].bottom);
+        out.thick = split_thick_zones(out.groups, out.walls, out.fills, group_heights, 0.25 * settings.wall_width);
+    }
     return out;
 }
 

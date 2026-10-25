@@ -3030,3 +3030,39 @@ usan la línea de comandos).
 **Sigue:** la altura de capa variable por zona (pedido del dueño): el plan, con *local adaptive slicing* (Tyberg y
 Bøhn 1998); después, el servicio local para la app de Android.
 
+## 2026-10-25 — altura de capa por zona (etapas 1 y 2)
+
+**Pedido del dueño:** «altura de capa variable que dependa del detalle y no de la pieza entera, así podemos
+conseguir que aunque dos partes estén a la misma altura tengan capas de alturas distintas para mejorar calidades».
+Diseño en `docs/LOCAL_LAYERS.md`.
+
+**Hecho:**
+- La ficha `docs/spec/features/slicing.md` (pasa `tools/check_spec.py`) solo pide alturas por Z para el objeto
+  entero; esto va más allá, con la idea de *local adaptive slicing* (Tyberg y Bøhn 1998) y *region-based adaptive
+  slicing* (Mani, Kulkarni y Dutta 1999), y un método propio.
+- `src/slice/local_layers.*`: los grupos de `k` subcapas (después de la primera capa), la zona gruesa de cada uno
+  (donde sus secciones coinciden, sin fondos ni topes expuestos, lejos del detalle por un margen, sin pedazos de
+  menos de dos anchos), el recorte de los caminos por zona con el ancho interpolado, y el reparto: lo fino en cada
+  subcapa y lo grueso una vez, en la última, con alto `H`.
+- La tubería lamina la pila fina; las pieles se cuentan en capas gruesas y el espacio de los soportes en subcapas.
+- El escritor pone lo grueso al final de su capa entre `;HEIGHT:H` y `;HEIGHT:h`; el verificador y la vista previa ya
+  leen el alto por tramo.
+- Ajustes `layers.detail_height`, `detail_tolerance` y `detail_margin` (`docs/CONFIG.md`); la subcapa no baja de
+  0,04 mm.
+- La búsqueda aleatoria de G-code sortea la altura por zona.
+
+**Encontrado en el camino:** la búsqueda aleatoria dio dos fallas con subcapas de 0,0215 mm (una capa de 0,086 mm
+partida en 4): `;HEIGHT:` va con 3 decimales y a ese alto el redondeo ya es un 2,4 %, más que lo que tolera el
+verificador. Con el piso de 0,04 mm, 0 fallas en 3000 casos (semillas 1792898697 y 1792898943).
+
+**Medido** (Release, CPU): una caja de 20 × 20 × 9 mm y una pirámide de 20 mm de base y 9 de alto lado a lado, capas
+de 0,3 mm con detalle de 0,1 mm (88 subcapas, 28 capas gruesas con zona gruesa): el tiempo estimado baja de 1425 s
+(todo a 0,1 mm, con las mismas pieles en mm) a **968 s (−32 %)**, con el 97,8 % del material. En la interfaz,
+cargando los ajustes desde un JSON: 16 min 4 s, G-code verificado.
+
+**No probado:** impreso en una máquina real (necesita al dueño): en especial el pegado entre la zona gruesa y la fina
+y si 0,3 mm de golpe llena bien el hueco de las subcapas; el aspecto en piezas con curvas suaves (solo cajas y
+pirámides).
+
+**Sigue:** la etapa 3 (los ajustes en la interfaz y la vista previa con el color por alto de capa).
+

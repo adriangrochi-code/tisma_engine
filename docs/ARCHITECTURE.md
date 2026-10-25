@@ -205,6 +205,8 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
   `resources/catalog/`, y los perfiles que salen de cada entrada (`docs/CATALOG.md`).
 - **`project/project.*`:** el archivo de proyecto `.tisma`: un JSON con los ajustes, los perfiles, las piezas y la
   calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
+- **`slice/local_layers.*`:** la altura de capa por zona (`docs/LOCAL_LAYERS.md`): los grupos de subcapas, sus zonas
+  gruesas y el recorte de los caminos.
 - **`device/`:** las impresoras conectadas (`docs/DEVICE.md`): la interfaz `Printer`, el puerto serie, el host de
   G-code por USB en su propio hilo y la impresora simulada de las pruebas.
 

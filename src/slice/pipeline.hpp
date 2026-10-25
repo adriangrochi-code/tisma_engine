@@ -6,6 +6,7 @@
 #include "infill/rectilinear.hpp"
 #include "surfaces/surfaces.hpp"
 #include "slice/layers.hpp"
+#include "slice/local_layers.hpp"
 
 #include <vector>
 
@@ -28,6 +29,10 @@ struct SlicedModel {
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
     std::vector<std::size_t> open_by_layer; // the same per layer
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
+    // Layer heights by zone (docs/LOCAL_LAYERS.md): the layers above are the
+    // fine ones; each group of them prints its thick zone once, at its top.
+    std::vector<LayerGroup> groups;
+    std::vector<ThickLayer> thick; // one per layer, empty but at a group's top
 };
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by

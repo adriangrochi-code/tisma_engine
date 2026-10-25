@@ -52,6 +52,11 @@ struct Speed {
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
+    // Layer heights by zone (docs/LOCAL_LAYERS.md): the height of the fine
+    // sub-layers where the part changes, layer_height elsewhere; 0: off.
+    double detail_height = 0.0;
+    double detail_tolerance = 0.05; // mm of step accepted
+    double detail_margin = 0.0;     // mm the fine zone grows around the detail; 0: three line widths
     FillMode fill_mode = FillMode::Union;
     double gap_closing_radius = 0.049;
     double xy_offset = 0.0;

@@ -17,6 +17,7 @@ add_executable(tisma_tests
   test_level_set.cpp
   test_contours.cpp
   test_layers.cpp
+  test_local_layers.cpp
   test_polygons.cpp
   test_gpu.cpp
   test_settings.cpp

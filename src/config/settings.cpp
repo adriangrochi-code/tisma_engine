@@ -84,8 +84,21 @@ Settings parse_settings(std::string_view text) {
             fail(group, "unknown group (see docs/CONFIG.md)");
     }
 
-    read_group(root, "layers", {"height", "first_height"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "layers", {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin"},
+               [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
+        if (n == "detail_height" || n == "detail_margin") {
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 to 10 mm");
+            (n == "detail_height" ? s.detail_height : s.detail_margin) = v;
+            return;
+        }
+        if (n == "detail_tolerance") {
+            if (v < 0.001 || v > 1.0)
+                fail(k, "must be from 0.001 to 1 mm");
+            s.detail_tolerance = v;
+            return;
+        }
         if (!(v > 0.0))
             fail(k, "must be greater than 0");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
@@ -489,6 +502,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
         {"layers.first_height", num(s.first_layer_height)},
+        {"layers.detail_height", num(s.detail_height)},
+        {"layers.detail_tolerance", num(s.detail_tolerance)},
+        {"layers.detail_margin", num(s.detail_margin)},
         {"slicing.fill_mode", fill_mode},
         {"slicing.gap_closing_radius", num(s.gap_closing_radius)},
         {"slicing.xy_offset", num(s.xy_offset)},
@@ -599,7 +615,12 @@ std::string settings_json(const Settings& s) {
     const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
                                                                : ordered_json(s.outer_wall_speed.value);
     const ordered_json root = {
-        {"layers", {{"height", s.layer_height}, {"first_height", s.first_layer_height}}},
+        {"layers",
+         {{"height", s.layer_height},
+          {"first_height", s.first_layer_height},
+          {"detail_height", s.detail_height},
+          {"detail_tolerance", s.detail_tolerance},
+          {"detail_margin", s.detail_margin}}},
         {"slicing",
          {{"fill_mode", fill_mode},
           {"gap_closing_radius", s.gap_closing_radius},

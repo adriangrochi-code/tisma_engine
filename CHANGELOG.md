@@ -25,6 +25,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
     final;
   - avisa cuando el filamento pide más de lo que la impresora da: temperatura de boquilla o cama, cámara, impresora
     cerrada, boquilla endurecida.
+- **Altura de capa por zona** (`docs/LOCAL_LAYERS.md`, pedido del dueño): con `layers.detail_height`, las capas se
+  parten en subcapas finas solo donde la pieza cambia (pendientes, detalles, topes y fondos) y el resto se imprime en
+  una capa gruesa, así dos partes a la misma altura salen con capas de alto distinto. Una caja recta y una pirámide
+  lado a lado, con capas de 0,3 y detalle de 0,1 mm: 32 % menos de tiempo que todo a 0,1 mm, con el mismo material.
 - **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
   (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
   trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.
