@@ -1847,7 +1847,8 @@ void App::settings_panel() {
                         {InfillPattern::Triangles, tr(T::TrianglesInfill)},
                         {InfillPattern::Cubic, tr(T::Cubic)},
                         {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
-                        {InfillPattern::SupportCubic, tr(T::SupportCubic)}});
+                        {InfillPattern::SupportCubic, tr(T::SupportCubic)},
+                        {InfillPattern::Lightning, tr(T::Lightning)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
         changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));

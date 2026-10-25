@@ -51,6 +51,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Cúbico de soporte** (regla 8): `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno
   no sostiene: cubos chicos bajo los techos y grandes sobre los pisos. En un cubo de 100 mm al 20 %, un 30 % menos de
   material y un 14 % menos de tiempo que el cúbico.
+- **Rayo** (regla 9): `lightning`, solo ramas que nacen en las paredes y llegan bajo cada techo, retirándose hacia las
+  paredes más abajo. Para piezas que solo se miran: en un cubo de 100 mm al 20 %, un 64 % menos de material y la
+  mitad del tiempo que el cúbico. En Impresión, **Rayo** en el patrón de relleno.
 - **Relleno guiado por tensiones** (`docs/INFILL.md`, etapa 4): con `infill.stress_density` y un caso de carga
   (`tisma-engine slice … --case caso.json`), el motor analiza la pieza bajo esa carga y sube el relleno por bandas
   donde trabaja más, hasta esa densidad. El resto queda liviano. `analyze` usa el mismo relleno. En Impresión,

@@ -189,6 +189,7 @@ add_library(tisma_core
   src/infill/adaptive.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
+  src/infill/lightning.cpp
   src/infill/combine.cpp
   src/infill/connect.cpp
   src/infill/stress_density.cpp

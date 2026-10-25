@@ -466,7 +466,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] cúbico adaptativo (regla 7): la profundidad con la transformada de distancia exacta, una línea de cada dos
       por nivel; −26 % de material y −13 % de tiempo en un cubo de 100 mm al 20 %
     - [x] cúbico de soporte (regla 8): el adaptativo medido desde lo que el relleno sostiene y las paredes
-    - [ ] rayo (regla 9)
+    - [x] rayo (regla 9): ramas de arriba hacia abajo, según Tricard, Claux y Lefebvre 2020
+    - [ ] rayo: enderezar y juntar ramas, índice espacial para techos grandes
     - [x] relleno guiado por tensiones (fase A2): `infill.stress_density` con `slice --case`
     - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
     - [ ] editar el caso en la interfaz (apoyos y cargas), y la iteración analizar-reforzar

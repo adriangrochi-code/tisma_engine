@@ -179,6 +179,61 @@ adaptativo.
   al adaptativo (P6);
 - el fuzz sortea los dos patrones.
 
+## Rayo (etapa 3)
+
+`infill.pattern` = `lightning` (ficha `infill_patterns.md`, regla 9): solo lo que hace falta para sostener las
+superficies de arriba. Son ramas que nacen en las paredes y llegan bajo cada techo; más abajo se retiran hacia las
+paredes, así arriba hay mucho y abajo casi nada. No da resistencia: es para piezas que solo se miran.
+
+**De dónde:** las nervaduras de soporte de Tricard, Claux y Lefebvre (2020, «Ribbed Support Vaults for 3D Printing of
+Hollowed Objects»): de arriba hacia abajo, cada punto a sostener recibe una rama a menos de una distancia dada, unida a
+la rama o la pared más cercana, y las ramas de cada capa son las de la de arriba, recortadas en las puntas lo que deja
+un voladizo imprimible.
+
+**Cómo,** capa por capa de arriba hacia abajo:
+1. **Las ramas de la capa de arriba bajan,** recortadas en cada punta `alto de capa · tan 45°` (0,2 mm con capas de
+   0,2): cada rama sobresale de la de abajo a lo sumo un voladizo de 45°. Una rama más corta que eso desaparece.
+2. **Lo que sale del relleno de esta capa se va.** Una rama que quedó sin camino a la pared, o una raíz que ya no
+   está en una pared, se vuelve a unir.
+3. **Lo que hay que sostener:** lo que la capa de arriba tiene sobre el relleno de esta capa (pieles, paredes), sin
+   partes más angostas que un cordón. Se toman puntos en una grilla fija al origen, a `alcance` de distancia: todo
+   punto queda a `alcance / √2` de uno. Un punto recibe rama si ninguna pasa a menos del resto del alcance, así todo
+   lo que hay que sostener queda a menos del `alcance` de una rama.
+4. **Cada punto nuevo se une** a lo más cercano: una rama ya anclada o la pared. Si el tramo hasta la rama sale del
+   relleno, va a la pared. Los puntos más cerca de las paredes van primero, así las ramas crecen desde ellas.
+5. **Se imprimen** las ramas como líneas desde cada punta o bifurcación hasta la siguiente o la pared, dentro del
+   relleno achicado medio cordón, sin tramos de menos de un cordón.
+
+**El alcance** sale de la densidad: la separación del rectilíneo a esa densidad (`ancho / densidad`, 2,25 mm al 20 %
+con cordones de 0,45). Con la mitad, bajo el techo del cubo de 20 mm salían 263 mm de rama, el doble que Tisma Slicer
+(134 mm, prueba P7); con la separación entera salen 117 mm. Las bandas del guiado por tensiones y el relleno denso bajo el
+techo van en cúbico; el relleno combinado no se usa con el rayo.
+
+**Medido** (2026-10-25), cubos al 20 %:
+
+| Cubo | Cúbico | Rayo | Material | Tiempo | Laminado |
+|---|---|---|---|---|---|
+| 20 mm | 18,0 min, 3,29 cm³ | 13,7 min, 2,30 cm³ | −30 % | −24 % | 0,02 s |
+| 60 mm | 237,8 min, 59,39 cm³ | 140,7 min, 26,60 cm³ | −55 % | −41 % | 0,12 s |
+| 100 mm | 866,6 min, 245,5 cm³ | 430,6 min, 87,8 cm³ | **−64 %** | **−50 %** | 0,53 s |
+
+En el cubo de 20 mm, el largo por capa crece hacia arriba: nada debajo de z 11, 5 mm en z 13,2, 60 mm en z 17,2 y
+117 mm bajo el techo, en 32 tramos. Tisma Slicer (P7) tiene 134 mm bajo el techo en hasta 18 tramos, y algo de rayo
+cerca del fondo (18,9 mm en la capa 5).
+
+**Pruebas** (`tests/test_lightning.cpp`):
+- en una caja de 30 mm con techo, todo punto bajo el techo queda a menos del alcance de una rama o una pared;
+- hay menos rama cuanto más abajo, y casi nada al fondo;
+- cada rama sobresale de la de abajo a lo sumo el voladizo de una capa, o nace en una pared;
+- el cubo de 20 mm de la ficha (P7) crece hacia arriba y su G-code pasa el chequeo;
+- el fuzz sortea el patrón.
+
+**Lo que falta:**
+- enderezar y juntar ramas (el artículo las endereza y las funde con las paredes), e imprimir cada árbol en menos
+  tramos (P7 tiene hasta 18 donde el nuestro tiene 32);
+- lo que Tisma Slicer imprime cerca del fondo en P7, que la regla no explica;
+- un índice espacial para los puntos de techos grandes (hoy cada punto mira todas las ramas).
+
 ## Resistencia y rapidez, medidas (2026-10-25)
 
 **Cómo:**

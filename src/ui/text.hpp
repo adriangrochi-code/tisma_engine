@@ -91,6 +91,7 @@
     X(Cubic, "Cúbico", "Cubic")                                                                                       \
     X(AdaptiveCubic, "Cúbico adaptativo", "Adaptive cubic")                                                           \
     X(SupportCubic, "Cúbico de soporte", "Support cubic")                                                             \
+    X(Lightning, "Rayo", "Lightning")                                                                                 \
     X(InfillDensity, "Densidad de relleno", "Infill density")                                                         \
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \

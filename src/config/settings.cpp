@@ -235,7 +235,8 @@ Settings parse_settings(std::string_view text) {
                                        {"triangles", InfillPattern::Triangles},
                                        {"cubic", InfillPattern::Cubic},
                                        {"adaptive_cubic", InfillPattern::AdaptiveCubic},
-                                       {"support_cubic", InfillPattern::SupportCubic}});
+                                       {"support_cubic", InfillPattern::SupportCubic},
+                                       {"lightning", InfillPattern::Lightning}});
             return;
         }
         const double v = number(g, n, k);
@@ -591,7 +592,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
                           : s.infill_pattern == InfillPattern::Triangles ? "triangles"
                           : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
                           : s.infill_pattern == InfillPattern::AdaptiveCubic ? "adaptive_cubic"
-                                                                             : "support_cubic";
+                          : s.infill_pattern == InfillPattern::SupportCubic  ? "support_cubic"
+                                                                             : "lightning";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
@@ -710,7 +712,8 @@ std::string settings_json(const Settings& s) {
                           : s.infill_pattern == InfillPattern::Triangles ? "triangles"
                           : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
                           : s.infill_pattern == InfillPattern::AdaptiveCubic ? "adaptive_cubic"
-                                                                             : "support_cubic";
+                          : s.infill_pattern == InfillPattern::SupportCubic  ? "support_cubic"
+                                                                             : "lightning";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"

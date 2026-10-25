@@ -5,6 +5,7 @@
 #include "adhesion/adhesion.hpp"
 #include "infill/adaptive.hpp"
 #include "infill/combine.hpp"
+#include "infill/lightning.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
@@ -103,6 +104,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     // lies in the whole sparse infill, from all its surfaces or from the ones
     // it holds up, before stress bands and the rest take parts of it.
     DepthField depth;
+    const bool lightning = settings.infill_pattern == InfillPattern::Lightning && settings.infill_density > 0.0;
+    std::vector<Polygons> whole_sparse; // the lightning branches hold up what lies over all of it
+    if (lightning)
+        for (const LayerSurfaces& s : out.surfaces)
+            whole_sparse.push_back(s.sparse);
     if ((settings.infill_pattern == InfillPattern::AdaptiveCubic ||
          settings.infill_pattern == InfillPattern::SupportCubic) &&
         settings.infill_density > 0.0) {
@@ -154,10 +160,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         });
     // Combined sparse infill (docs/INFILL.md): what every layer of a run has
     // as sparse infill prints once, at the run's top layer, as thick as the
-    // run. Layer heights by zone already print it thick: not with them.
+    // run. Layer heights by zone already print it thick: not with them; nor
+    // lightning, whose branches each layer draws from the one above.
     const std::vector<std::array<std::size_t, 2>> combined =
-        stack.groups.empty() && settings.infill_density > 0.0 ? combine_runs(out.layers, settings)
-                                                              : std::vector<std::array<std::size_t, 2>>{};
+        stack.groups.empty() && settings.infill_density > 0.0 && !lightning ? combine_runs(out.layers, settings)
+                                                                            : std::vector<std::array<std::size_t, 2>>{};
     std::vector<Polygons> combined_region(combined.size());
     tbb::parallel_for(std::size_t(0), combined.size(), [&](std::size_t r) {
         const auto [first, last] = combined[r];
@@ -177,6 +184,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
+    // Lightning (docs/INFILL.md): from the top down, in what the stress
+    // bands and the dense infill left of the sparse infill.
+    std::vector<std::vector<Toolpath>> branches;
+    if (lightning) {
+        std::vector<Polygons> left(out.surfaces.size());
+        for (std::size_t l = 0; l < left.size(); ++l)
+            left[l] = out.surfaces[l].sparse;
+        LightningParams lp;
+        lp.width = settings.wall_width;
+        lp.reach = lightning_reach(settings.wall_width, settings.infill_density / 100.0);
+        branches = lightning_layers(whole_sparse, out.regions, out.layers, lp, &left);
+    }
+    // The stress bands and the dense infill hold up loads and skins all
+    // through: with lightning, they are cubic.
+    const InfillPattern banded_pattern = lightning ? InfillPattern::Cubic : settings.infill_pattern;
     out.support_areas.resize(out.layers.size());
     if (settings.support) {
         std::vector<double> thickness;
@@ -198,12 +220,15 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          if (l < branches.size())
+                              out.fills[l].sparse = std::move(branches[l]);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {
                               if (banded[l][b].empty())
                                   continue;
                               FillParams denser = fill;
                               denser.density = bands[b].density;
                               denser.depth = nullptr; // as dense all through
+                              denser.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
                               for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
@@ -214,6 +239,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                               FillParams dense = fill;
                               dense.density = settings.infill_dense_density / 100.0;
                               dense.depth = nullptr;
+                              dense.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = dense_region[l];
                               for (Toolpath& t : fill_layer(only, l, dense, out.layers[l].slice_z()).sparse)

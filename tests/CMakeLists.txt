@@ -22,6 +22,7 @@ add_executable(tisma_tests
   test_zaa.cpp
   test_combine.cpp
   test_adaptive.cpp
+  test_lightning.cpp
   test_polygons.cpp
   test_gpu.cpp
   test_settings.cpp

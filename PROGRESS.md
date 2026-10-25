@@ -3446,3 +3446,26 @@ piezas grandes; para resistencia, el guiado por tensiones.
 
 **Sigue:** el rayo (regla 9).
 
+## 2026-10-25 — bloque nocturno: relleno rayo
+
+**Hecho:** `infill.pattern` = `lightning` (ficha `infill_patterns.md`, regla 9; `docs/INFILL.md`), según las
+nervaduras de soporte de Tricard, Claux y Lefebvre 2020: de arriba hacia abajo, cada punto a sostener recibe una rama
+unida a la rama o la pared más cercana, y las ramas de cada capa son las de arriba recortadas 45° en las puntas.
+- `src/infill/lightning.*`: los árboles con raíz en la pared, el recorte, las raíces que se vuelven a unir, los
+  puntos en una grilla con un umbral que garantiza el alcance, y la impresión por cadenas entre bifurcaciones.
+- El laminado lo arma de una vez para todas las capas, después de las bandas guiadas y el denso (que van en cúbico);
+  el relleno combinado no se usa con el rayo.
+- En la interfaz, **Rayo** en el patrón de relleno; el fuzz sortea el patrón.
+
+**Medido** (al 20 %): −30 %, −55 % y −64 % de material y −24 %, −41 % y −50 % de tiempo contra el cúbico en cubos de
+20, 60 y 100 mm. El alcance como la separación del rectilíneo da 117 mm bajo el techo del cubo de 20 mm (P7: 134).
+
+**Pruebas:** `tests/test_lightning.cpp`: el alcance bajo el techo de una caja, menos rama más abajo, el voladizo de
+cada rama sobre la de abajo, el cubo de P7 creciendo hacia arriba con G-code verificado.
+
+**Pendiente:** enderezar y juntar ramas, menos tramos (P7 tiene hasta 18, el nuestro 32), lo que Tisma Slicer
+imprime cerca del fondo en P7, y un índice espacial para techos grandes (0,53 s en el cubo de 100 mm).
+
+**Sigue:** los otros patrones de la ficha (`stars`, `honeycomb`, `concentric`…) o el medidor de rigidez sobre el
+laminado real, mientras las fichas del PR #15 no estén en `main`.
+
