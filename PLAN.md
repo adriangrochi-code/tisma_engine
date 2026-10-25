@@ -488,6 +488,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] línea, panal y concéntrico (reglas 3, 10 y 13): los largos de P3, P8 y P9 dentro del 2 %
     - [x] Hilbert, cuerdas de Arquímedes y octagrama (regla 12): Hilbert y Arquímedes a −5 % de P9, el octagrama a
       −17 % (la separación de Tisma Slicer en ese patrón queda por contrastar)
+    - [ ] Hilbert y cuerdas de Arquímedes en regiones grandes y densas: el recorte con Clipper2 crece más que lineal
+      (lista de aristas activas ancha): 150 mm al 100 %, 0,14 s por capa; 300 mm, 1,2 s. Recortar por franjas y volver
+      a unir los pedazos en los bordes de las franjas
     - [ ] panal 3D (regla 11): la ficha describe poco su forma; pedir más mediciones al equipo de fichas
     - [ ] los patrones de las superficies de arriba y de abajo (14 a 17)
     - [x] una capa sólida cada N y el espesor mínimo de la cáscara (21 y 22)

@@ -125,6 +125,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **El relleno Hilbert desaparecía lejos del origen:** la grilla de la curva cubría 2 m alrededor del origen. Girada
+  por el ángulo del relleno, una pieza en una esquina de una cama de 1 m quedaba afuera y salía sin relleno. Ahora
+  cubre 16 m, y crece si hace falta.
+- **Relleno ondulado sin longitud de onda:** con ajustes armados en código (sin pasar por el JSON), una longitud de
+  onda de 0 marcaba el relleno como ondulado sin onda, con una conversión sin definir en el medio. Ahora queda plano.
 - **Z anti-aliasing sobre la capa gruesa de la altura por zona:** el verificador podía rechazar un cordón válido. El
   piso sale del tope real de la capa, y tanto ese tope como la Z del movimiento se redondean a 3 decimales; el margen
   era el de un solo redondeo. Ahora cuenta los dos.

@@ -203,10 +203,10 @@ double total(const std::vector<Toolpath>& paths) {
     return sum;
 }
 
-LayerSurfaces square_sparse(double side) {
+LayerSurfaces square_sparse(double side, double x0 = 0.0, double y0 = 0.0) {
     LayerSurfaces s;
     const auto u = [](double v) { return to_units(v); };
-    s.sparse = {{{u(0), u(0)}, {u(side), u(0)}, {u(side), u(side)}, {u(0), u(side)}}};
+    s.sparse = {{{u(x0), u(y0)}, {u(x0 + side), u(y0)}, {u(x0 + side), u(y0 + side)}, {u(x0), u(y0 + side)}}};
     return s;
 }
 
@@ -444,9 +444,9 @@ TEST_CASE("the minimum shell thickness adds solid layers (P13)", "[combine]") {
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(sliced.surfaces.size() == 100);
     // Layers 0 to 2 solid (0.6 mm), 95 to 99 too (1 mm).
-    for (const std::size_t l : {0, 1, 2, 95, 96, 97, 98, 99}) {
+    for (const int l : {0, 1, 2, 95, 96, 97, 98, 99}) {
         INFO("layer " << l);
-        CHECK(sliced.surfaces[l].sparse.empty());
+        CHECK(sliced.surfaces[std::size_t(l)].sparse.empty());
     }
     CHECK(!sliced.surfaces[3].sparse.empty());
     CHECK(!sliced.surfaces[94].sparse.empty());
@@ -608,5 +608,27 @@ TEST_CASE("infill patterns: Hilbert, Archimedean chords and octagram, the same i
             }
             CHECK(bins == 12);
         }
+    }
+}
+
+TEST_CASE("infill patterns: the Hilbert curve reaches the corners of a large bed", "[combine]") {
+    // The curve's square of cells once ended 1 m from the origin: turned by
+    // 45 degrees, a part near (900, 900) fell outside it and got no infill.
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.pattern = InfillPattern::Hilbert;
+    const double home = total(fill_layer(square_sparse(20.0), 5, p, 1.0).sparse);
+    REQUIRE(home > 0.0);
+    for (const double at : {900.0, 1500.0, -1900.0, 7000.0, 12000.0}) {
+        INFO("corner at " << at);
+        const std::vector<Toolpath> far = fill_layer(square_sparse(20.0, at, at), 5, p, 1.0).sparse;
+        CHECK_THAT(total(far) / home, WithinAbs(1.0, 0.12));
+        // The same in every layer there too.
+        const std::vector<Toolpath> above = fill_layer(square_sparse(20.0, at, at), 6, p, 1.2).sparse;
+        REQUIRE(far.size() == above.size());
+        for (std::size_t i = 0; i < far.size(); ++i)
+            CHECK(far[i].points.size() == above[i].points.size());
     }
 }

@@ -3735,3 +3735,42 @@ materiales técnicos.
 decisión para leerla; si no, se estudia como caja negra.
 
 **Sigue:** el bloque de mantenimiento programado, después S1 (arcos en voladizos).
+
+## 2026-10-25 — mantenimiento (16:40)
+
+**Revisado:**
+- búsqueda aleatoria de G-code: 2000 corridas con cuatro semillas nuevas (1792947616 a 1792947619), sin fallas;
+- lo nuevo desde el último mantenimiento, con entradas raras:
+  - Hilbert, cuerdas de Arquímedes y octagrama: piezas lejos del origen, densidad mínima y máxima, regiones de 0,5 a
+    300 mm, centro fuera de la pieza;
+  - relleno ondulado: ajustes armados en código, sin pasar por los rangos del JSON;
+- los «Sin medir» de `PROGRESS.md`: las líneas del patrón `line` se cruzan en regiones de más de unas 17
+  separaciones. Es lo que dice la ficha (una de cada dos inclinada 6,7°); los cruces son como los de la grilla. Queda
+  como pregunta de comportamiento para el equipo de fichas, sin cambio.
+
+**Encontrado y corregido:**
+- **El relleno Hilbert desaparecía lejos del origen.** La grilla de la curva cubría 2 m alrededor del origen. Girada
+  45°, una pieza cerca de (900, 900) quedaba afuera: sin relleno en las esquinas de una cama de 1 m. Ahora cubre 16 m
+  y crece si la región sale de ahí; cuesta lo mismo. Prueba nueva en `tests/test_combine.cpp`: el mismo largo en el
+  origen y a 900, 1500, −1900, 7000 y 12 000 mm, igual en dos capas. Con el código anterior falla.
+- **Relleno ondulado con longitud de onda 0** (ajustes armados en código): se marcaba ondulado sin onda, con una
+  conversión de infinito a entero sin definir. Ahora `wave_params` lo deja plano; la prueba lo cubre también con NaN.
+
+**Medido** (4 núcleos, Release, CPU):
+- esfera de banco de 100 mm (319 200 triángulos, 500 capas, 884 571 líneas): laminado 0,85–0,90 s, escritura
+  0,62–0,66 s, verificación 0,14–0,18 s. Igual que el mantenimiento anterior;
+- análisis del cubo de prueba: solución 194–225 ms (22 iteraciones, 3 niveles). El código no cambió, así que es
+  variación de la máquina;
+- **lo más lento encontrado:** Hilbert y cuerdas de Arquímedes en regiones grandes y densas. El recorte con Clipper2
+  crece más que lineal, porque la lista de aristas activas es ancha (callgrind: 54 % en insertar mínimos locales):
+  - 150 mm al 100 %: 0,14 s por capa;
+  - 300 mm al 100 %: 1,2 s por capa;
+  - 300 mm al 20 %: 13 ms por capa.
+
+  Quedó en `PLAN.md` (recortar por franjas). No se arregló en este bloque: hay que volver a unir los pedazos en los
+  bordes de las franjas, y es un caso raro (relleno ralo al 100 %).
+- **Advertencia de clang** (`-Wsign-conversion`) en una prueba del espesor mínimo de la cáscara
+  (`tests/test_combine.cpp`), de un bloque anterior: corregida.
+- **Búsqueda aleatoria con ASan y UBSan:** 150 corridas (semilla 1792949149), sin fallas.
+
+**Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).

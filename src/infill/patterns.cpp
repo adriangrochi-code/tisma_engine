@@ -222,11 +222,16 @@ std::vector<Toolpath> hilbert_fill(const Polygons& region, double spacing, doubl
     const Frame f(region, width, angle_degrees);
     if (f.turned.empty())
         return {};
-    // A square of cells around the origin big enough for any print (2 m a
-    // side), so that the curve is the same in every layer; only the cells
-    // near the region are visited.
+    // A square of cells around the origin big enough for any print, so that
+    // the curve is the same in every layer; only the cells near the region
+    // are visited. 16 m a side keeps a part anywhere on a large bed inside it
+    // once turned (2 m lost the corners of a 1 m bed); a region beyond that
+    // grows the square.
+    const double reach = std::max({8192.0, std::fabs(to_mm(f.xmin)), std::fabs(to_mm(f.xmax)),
+                                   std::fabs(to_mm(f.ymin)), std::fabs(to_mm(f.ymax))}) +
+                         spacing;
     int level = 1;
-    while (std::ldexp(spacing, level) < 2000.0)
+    while (std::ldexp(spacing, level) < 2.0 * reach)
         ++level;
     const double half = std::ldexp(spacing, level - 1);
     const Box box{to_mm(f.xmin) - spacing, to_mm(f.ymin) - spacing, to_mm(f.xmax) + spacing, to_mm(f.ymax) + spacing};

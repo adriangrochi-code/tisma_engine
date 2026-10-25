@@ -12,7 +12,10 @@
 namespace tisma {
 
 std::optional<WaveParams> wave_params(const Settings& s) {
-    if (!s.infill_nonplanar || !(s.infill_density > 0.0) || !(s.infill_nonplanar_amplitude > 0.0))
+    // A caller of the library can skip the JSON ranges: no wave without a
+    // length (the cuts every wavelength / 8 would have none).
+    if (!s.infill_nonplanar || !(s.infill_density > 0.0) || !(s.infill_nonplanar_amplitude > 0.0) ||
+        !(s.infill_nonplanar_wavelength > 0.0))
         return std::nullopt;
     const double w = s.wall_width, density = s.infill_density / 100.0;
     double spacing = 0.0; // between neighbouring lines of the pattern

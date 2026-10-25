@@ -89,6 +89,17 @@ TEST_CASE("wavy infill: the wave, its share by depth, and which settings get it"
     Settings off = wavy(InfillPattern::Grid);
     off.infill_nonplanar = false;
     CHECK(!wave_params(off));
+    // Settings built in code skip the JSON ranges: a wave without a length is
+    // no wave, and the slice still ends.
+    Settings flat = wavy(InfillPattern::Grid);
+    flat.infill_nonplanar_wavelength = 0.0;
+    CHECK(!wave_params(flat));
+    flat.infill_nonplanar_wavelength = std::nan("");
+    CHECK(!wave_params(flat));
+    const SlicedModel m = slice_model(cube(10.0f), flat);
+    for (const LayerFill& f : m.fills)
+        for (const Toolpath& t : f.sparse)
+            CHECK(!t.wavy);
 }
 
 TEST_CASE("wavy infill: a cube with grid infill, nested layers and checked G-code", "[nonplanar]") {
