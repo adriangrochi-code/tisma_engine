@@ -56,8 +56,17 @@ Con `θ` el ángulo del relleno (`infill.angle`) y la separación elegida para q
    - en total, entre el 66 % (al 40 %) y el 76 % (al 10 %) del largo de `cubic` a la misma densidad (prueba P6b).
    El motor puede hacer el octree de verdad (cubos más chicos solo donde hace falta sostener); la separación de
    arriba es la del cubo más grande.
-8. **`support_cubic`:** como `adaptive_cubic`, pero solo donde hace falta para sostener las superficies de arriba. En
-   un cubo, toda la superficie de arriba necesita apoyo y da lo mismo que `adaptive_cubic` (prueba P6).
+8. **`support_cubic`:** las mismas líneas que `adaptive_cubic`, pero completas solo debajo de las superficies de
+   arriba; más abajo quedan cada vez menos. Medido en un bloque de 40 × 40 × 60 mm (prueba P6c):
+   - en los primeros 8 mm debajo de la superficie de arriba, igual que `adaptive_cubic` (97 a 100 % del largo);
+   - más abajo baja de a poco: cerca de la mitad entre 16 y 32 mm de profundidad, y entre el 6 y el 20 % cerca de la
+     cama. Nunca llega a cero;
+   - a más densidad, la parte completa es más corta: al 40 % ya baja al 67 % entre 8 y 12 mm;
+   - en total, 50 % del largo de `adaptive_cubic` al 20 % y 41 % al 40 %.
+   Una pieza baja o con superficies de arriba en todas las alturas da casi lo mismo que `adaptive_cubic`: un cubo de
+   20 mm (prueba P6) y un bloque de 40 × 40 × 10 mm con una columna de 20 × 20 mm hasta los 30 mm (prueba P6d).
+   El motor lo hace como un octree con cubos que crecen hacia abajo, empezando por el tamaño de la regla 7 debajo de
+   cada superficie de arriba.
 9. **`lightning`:** solo lo necesario para sostener las superficies de arriba. Son ramas que bajan desde la superficie
    y se juntan como un árbol: arriba hay mucho y abajo casi nada (prueba P7).
 10. **`honeycomb`:** panales hexagonales que se repiten en todas las capas. Cada capa imprime en zigzag una de las
@@ -110,6 +119,8 @@ largos son los del relleno poco denso de la capa; las direcciones, en % del larg
 | P4 | `triangles` / `stars` | Tres direcciones, 45°, 105° y 165°, con un 28–30 % cada una, en todas las capas. `triangles` 196,9 mm en un tramo; `stars` 187,2 mm en dos tramos |
 | P5 | `cubic` | Las mismas tres direcciones; el largo cambia con la capa: 184,1 (capa 5), 181,9 (6), 179,8 (7), 182,8 (20), 197,0 (40), 191,6 (45) |
 | P6 | `adaptive_cubic` y `support_cubic` | Iguales en el cubo: direcciones 0°, 60° y 120°; 148 a 153 mm por capa (cerca del 76 % de `cubic`) |
+| P6c | Bloque de 40 × 40 × 60 mm, 3 capas sólidas arriba y abajo; `adaptive_cubic` y `support_cubic` al 20 y 40 % | Largo de `support_cubic` / `adaptive_cubic` por profundidad debajo del relleno de arriba (20 % / 40 %): 0–4 mm 1,00 / 1,00; 4–8 mm 0,97 / 0,92; 8–12 mm 0,93 / 0,67; 12–16 mm 0,72 / 0,51; 16–20 mm 0,53 / 0,43; 28–32 mm 0,46 / 0,36; 40–44 mm 0,23 / 0,18; 56–60 mm 0,12 / 0,06. Total: 80 655 contra 160 024 mm; 97 878 contra 238 733 mm |
+| P6d | Bloque de 40 × 40 × 10 mm con una columna de 20 × 20 mm de 10 a 30 mm, 20 % | `support_cubic` y `adaptive_cubic` dan casi lo mismo en cada capa: 439 a 675 mm contra 546 a 606 mm en la base, 131 a 160 mm en la columna |
 | P6b | Bloque de 40 × 40 × 20 mm, 3 capas sólidas arriba y abajo; densidad 10, 15, 20, 30 y 40 % | `adaptive_cubic`: separación de 16,54, 11,02, 8,27, 5,51 y 4,13 mm, igual en todas las capas; 308, 439, 568, 847 y 971 mm de relleno por capa en promedio. `cubic`: separación de 12,20, 8,14, 6,10, 4,07 y 3,05 mm; 404, 580, 760, 1120 y 1479 mm por capa |
 | P7 | `lightning` | Crece hacia arriba: 18,9 mm en la capa 5, 39,2 en la 7, 51,4 en la 20, 93,8 en la 40 y 134,2 en la 45, de 2 a 18 tramos |
 | P8 | `honeycomb` / `honeycomb_3d` | `honeycomb`: 229 a 244 mm; la dirección principal (49–51 %) pasa por 15°, 135° y 75° en las capas 5, 6 y 7 y se repite. `honeycomb_3d`: 190 a 209 mm en un tramo; capa 5: 55 % a 0° y 20 % a 45° y a 135°; capa 6: 43 % a 90°; capa 45: 78 % a 0° |
