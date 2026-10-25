@@ -94,12 +94,33 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)
         infill[l] = out.walls[l].infill;
+    // The minimum shell thickness (infill_patterns.md, rule 22): more solid
+    // layers, of the nominal height, until they add up to it.
+    const auto shell = [&](int count, double thickness) {
+        return std::max(count, int(std::ceil(thickness / settings.layer_height - 1e-9)));
+    };
+    const int top_count = shell(settings.top_layers, settings.top_min_thickness);
+    const int bottom_count = shell(settings.bottom_layers, settings.bottom_min_thickness);
     out.surfaces = variable_layers(settings)
-                       ? classify_surfaces(out.regions, infill, skin_counts(stack.share, settings.top_layers, +1),
-                                           skin_counts(stack.share, settings.bottom_layers, -1), settings.wall_width)
-                       : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
-                                           settings.bottom_layers * ratio, settings.wall_width);
+                       ? classify_surfaces(out.regions, infill, skin_counts(stack.share, top_count, +1),
+                                           skin_counts(stack.share, bottom_count, -1), settings.wall_width)
+                       : classify_surfaces(out.regions, infill, top_count * ratio, bottom_count * ratio,
+                                           settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // A solid layer every N (infill_patterns.md, rule 21): layers N, 2N...
+    // fill all their sparse infill solid, as bridges over the sparse infill
+    // below.
+    if (settings.infill_solid_every > 0)
+        for (auto l = std::size_t(settings.infill_solid_every); l < out.surfaces.size();
+             l += std::size_t(settings.infill_solid_every)) {
+            LayerSurfaces& s = out.surfaces[l];
+            if (s.sparse.empty())
+                continue;
+            if (s.bridge.empty())
+                s.bridge_angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0);
+            s.bridge = Clipper2Lib::Union(s.bridge, s.sparse, Clipper2Lib::FillRule::NonZero);
+            s.sparse.clear();
+        }
     // Adaptive and support cubic infill (docs/INFILL.md): how deep each point
     // lies in the whole sparse infill, from all its surfaces or from the ones
     // it holds up, before stress bands and the rest take parts of it.

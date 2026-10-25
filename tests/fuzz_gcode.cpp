@@ -147,6 +147,12 @@ int main(int argc, char** argv) {
             s.min_layer_height = uni(0.04, 0.12);
         if (pick(4) == 0)
             s.max_layer_height = uni(0.12, 0.5);
+        // Shell thickness and solid layers every N (docs/INFILL.md).
+        if (pick(5) == 0) {
+            s.top_min_thickness = uni(0, 2);
+            s.bottom_min_thickness = uni(0, 2);
+            s.infill_solid_every = 2 + pick(8);
+        }
         // Combined sparse infill (docs/INFILL.md).
         if (pick(4) == 0) {
             s.infill_combine_layers = 2 + pick(3);

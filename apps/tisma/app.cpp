@@ -1838,6 +1838,8 @@ void App::settings_panel() {
                         {SeamMode::Rear, tr(T::SeamRear)}});
         changed |= row(T::TopLayers, s.top_layers, 0, 100);
         changed |= row(T::BottomLayers, s.bottom_layers, 0, 100);
+        changed |= row(T::TopMinThickness, s.top_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
+        changed |= row(T::BottomMinThickness, s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
         changed |= row(T::InfillDensity, s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         changed |= row(T::InfillPattern, s.infill_pattern,
@@ -1853,6 +1855,7 @@ void App::settings_panel() {
                         {InfillPattern::SupportCubic, tr(T::SupportCubic)},
                         {InfillPattern::Lightning, tr(T::Lightning)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
+        changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
         changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));
         changed |= row(T::DenseUnderTop, s.infill_dense_under_top, tr(T::DenseUnderTopTip));

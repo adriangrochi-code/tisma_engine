@@ -82,6 +82,10 @@
     X(SeamRear, "Atrás", "Rear")                                                                                      \
     X(TopLayers, "Capas superiores", "Top layers")                                                                    \
     X(BottomLayers, "Capas inferiores", "Bottom layers")                                                              \
+    X(TopMinThickness, "Espesor mínimo arriba", "Minimum top thickness")                                              \
+    X(BottomMinThickness, "Espesor mínimo abajo", "Minimum bottom thickness")                                         \
+    X(SolidEvery, "Capa sólida cada", "Solid layer every")                                                            \
+    X(SolidEveryTip, "Las capas N, 2N, 3N… llevan relleno sólido en todo el relleno, impreso como puente sobre el relleno de abajo. 0: nunca. Ver docs/INFILL.md.", "Layers N, 2N, 3N… get solid infill in all the infill, printed as a bridge over the infill below. 0: never. See docs/INFILL.md.") \
     X(TopPattern, "Superficie superior", "Top surface")                                                               \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \

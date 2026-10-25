@@ -408,3 +408,49 @@ TEST_CASE("infill patterns: stars, the triangles' lines with one family half a s
         CHECK_THAT(gap, WithinAbs(want, 1e-3));
     }
 }
+
+TEST_CASE("a solid layer every N layers, printed as a bridge (P12)", "[combine]") {
+    const IndexedMesh m = cube(20.0f);
+    Settings s = base();
+    s.infill_solid_every = 5;
+    const SlicedModel sliced = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, sliced, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(sliced, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    REQUIRE(sliced.fills.size() == 100);
+    // Layers 5, 10 ... 95 under the top shell: bridge lines, no sparse infill.
+    for (std::size_t l = 5; l < 97; l += 5) {
+        INFO("layer " << l);
+        CHECK(sliced.fills[l].sparse.empty());
+        CHECK(!sliced.fills[l].bridge.empty());
+    }
+    CHECK(!sliced.fills[6].sparse.empty());
+    CHECK(sliced.fills[6].bridge.empty());
+    CHECK(out.str().find(";TYPE:Bridge infill") != std::string::npos);
+}
+
+TEST_CASE("the minimum shell thickness adds solid layers (P13)", "[combine]") {
+    const IndexedMesh m = cube(20.0f);
+    Settings s = base();
+    s.top_layers = 1;
+    s.bottom_layers = 1;
+    s.top_min_thickness = 1.0;
+    s.bottom_min_thickness = 0.6;
+    const SlicedModel sliced = slice_model(m, s);
+    REQUIRE(sliced.surfaces.size() == 100);
+    // Layers 0 to 2 solid (0.6 mm), 95 to 99 too (1 mm).
+    for (const std::size_t l : {0, 1, 2, 95, 96, 97, 98, 99}) {
+        INFO("layer " << l);
+        CHECK(sliced.surfaces[l].sparse.empty());
+    }
+    CHECK(!sliced.surfaces[3].sparse.empty());
+    CHECK(!sliced.surfaces[94].sparse.empty());
+    // Without the minimum, one layer each.
+    s.top_min_thickness = 0.0;
+    s.bottom_min_thickness = 0.0;
+    const SlicedModel plain = slice_model(m, s);
+    CHECK(!plain.surfaces[1].sparse.empty());
+    CHECK(!plain.surfaces[98].sparse.empty());
+}

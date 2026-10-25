@@ -73,11 +73,14 @@ struct Settings {
     SeamMode seam = SeamMode::Aligned;
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
+    double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
+    double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
+    int infill_solid_every = 0;        // layers N, 2N... all solid infill (0: never)
     // Combining the sparse infill of several layers (docs/INFILL.md).
     int infill_combine_layers = 1;            // 1: each layer its own
     bool infill_combine_auto = false;         // as many as fit in the height below

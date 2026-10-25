@@ -192,8 +192,16 @@ Settings parse_settings(std::string_view text) {
             fail(k, "must be greater than 0");
         s.wall_width = v;
     });
-    read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern"}, [&](const json& g, const std::string& n,
-                                                                                  const std::string& k) {
+    read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
+                                  "bottom_min_thickness"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "top_min_thickness" || n == "bottom_min_thickness") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 100.0)
+                fail(k, "must be from 0 to 100 mm");
+            (n == "top_min_thickness" ? s.top_min_thickness : s.bottom_min_thickness) = v;
+            return;
+        }
         if (n == "top_pattern") {
             s.monotonic_top = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
             return;
@@ -204,7 +212,8 @@ Settings parse_settings(std::string_view text) {
         (n == "top_layers" ? s.top_layers : s.bottom_layers) = static_cast<int>(v.get<long long>());
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
-                                "combine_max_height", "dense_under_top", "dense_density", "stress_density"},
+                                "combine_max_height", "dense_under_top", "dense_density", "stress_density",
+                                "solid_every"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "combine_auto" || n == "dense_under_top") {
             if (!g.at(n).is_boolean())
@@ -217,6 +226,13 @@ Settings parse_settings(std::string_view text) {
             if (!(v > 0.0) || v > 100.0)
                 fail(k, "must be from 0 to 100");
             s.infill_dense_density = v;
+            return;
+        }
+        if (n == "solid_every") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
+                fail(k, "must be a whole number from 0 to 1000");
+            s.infill_solid_every = static_cast<int>(v.get<long long>());
             return;
         }
         if (n == "stress_density") {
@@ -623,6 +639,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+        {"surfaces.top_min_thickness", num(s.top_min_thickness)},
+        {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -632,6 +650,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
         {"infill.dense_density", num(s.infill_dense_density)},
         {"infill.stress_density", num(s.infill_stress_density)},
+        {"infill.solid_every", std::to_string(s.infill_solid_every)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", num(s.nozzle_diameter)},
@@ -752,7 +771,9 @@ std::string settings_json(const Settings& s) {
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
-          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"}}},
+          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+          {"top_min_thickness", s.top_min_thickness},
+          {"bottom_min_thickness", s.bottom_min_thickness}}},
         {"infill",
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
@@ -763,6 +784,7 @@ std::string settings_json(const Settings& s) {
           {"dense_under_top", s.infill_dense_under_top},
           {"dense_density", s.infill_dense_density},
           {"stress_density", s.infill_stress_density},
+          {"solid_every", s.infill_solid_every},
           {"combine_max_height", s.infill_combine_max_height.percent
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},

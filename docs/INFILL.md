@@ -182,6 +182,23 @@ adaptativo.
   al adaptativo (P6);
 - el fuzz sortea los dos patrones.
 
+## Capa sólida cada N y espesor mínimo de la cáscara
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `infill.solid_every` | 0 (nunca) | Las capas N, 2N, 3N… (contadas desde 0) llevan relleno sólido en todo su relleno disperso, impreso como puente (`;TYPE:Bridge infill`) sobre el relleno de abajo (regla 21) |
+| `surfaces.top_min_thickness` | 0 | Si las capas sólidas de arriba suman menos que esto (mm), se agregan capas hasta llegar (regla 22) |
+| `surfaces.bottom_min_thickness` | 0 | Lo mismo abajo |
+
+- El espesor se cuenta en capas del alto nominal: `max(capas, ⌈espesor / alto⌉)`. Con alturas variables, esa cuenta
+  pasa por el mismo reparto que `surfaces.top_layers`.
+- La capa sólida se arma después de los puentes: si la capa ya tenía puentes, todo va con el ángulo de esos puentes;
+  si no, con el del relleno.
+
+**Pruebas** (`tests/test_combine.cpp`): con `solid_every` 5, las capas 5, 10… 95 del cubo de 20 mm son puente y no
+tienen relleno disperso (P12); con una capa arriba y abajo y mínimos de 1 y 0,6 mm, las capas 0 a 2 y 95 a 99 son
+sólidas (P13).
+
 ## Rayo (etapa 3)
 
 `infill.pattern` = `lightning` (ficha `infill_patterns.md`, regla 9): solo lo que hace falta para sostener las

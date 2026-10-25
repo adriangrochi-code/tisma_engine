@@ -472,7 +472,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [x] estrellas, rectilíneo alineado y zigzag (reglas 1, 2 y 5)
     - [ ] línea (regla 3), panal y panal 3D (10 y 11), Hilbert, cuerdas de Arquímedes, octagrama y concéntrico (12 y 13)
     - [ ] los patrones de las superficies de arriba y de abajo (14 a 17)
-    - [ ] una capa sólida cada N y el espesor mínimo de la cáscara (21 y 22)
+    - [x] una capa sólida cada N y el espesor mínimo de la cáscara (21 y 22)
     - [x] relleno guiado por tensiones (fase A2): `infill.stress_density` con `slice --case`
     - [x] el caso de carga en el laminado de la interfaz (un `.json` como el de `analyze`)
     - [ ] editar el caso en la interfaz (apoyos y cargas), y la iteración analizar-reforzar

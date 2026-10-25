@@ -51,6 +51,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Cúbico de soporte** (regla 8): `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno
   no sostiene: cubos chicos bajo los techos y grandes sobre los pisos. En un cubo de 100 mm al 20 %, un 30 % menos de
   material y un 14 % menos de tiempo que el cúbico.
+- **Capa sólida cada N y espesor mínimo de la cáscara** (ficha `infill_patterns.md`, reglas 21 y 22):
+  `infill.solid_every` imprime las capas N, 2N… sólidas, como puente sobre el relleno; `surfaces.top_min_thickness` y
+  `surfaces.bottom_min_thickness` agregan capas sólidas hasta ese espesor. En Impresión, **Capa sólida cada**,
+  **Espesor mínimo arriba** y **Espesor mínimo abajo**.
 - **Estrellas, rectilíneo alineado y zigzag** (ficha `infill_patterns.md`, reglas 5, 1 y 2): `stars` (el patrón por
   defecto de Tisma Slicer), `aligned_rectilinear` y `zigzag` en `infill.pattern` y en la interfaz.
 - **Rayo** (regla 9): `lightning`, solo ramas que nacen en las paredes y llegan bajo cada techo, retirándose hacia las

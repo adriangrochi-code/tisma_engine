@@ -3483,3 +3483,16 @@ estrellas con las tres direcciones de P4 y la segunda familia a media separació
 
 **Sigue:** el resto de la ficha (línea, panal, curvas, concéntrico, patrones de superficies, capa sólida cada N).
 
+## 2026-10-25 — bloque nocturno: capa sólida cada N y espesor mínimo de la cáscara
+
+**Hecho** (ficha `infill_patterns.md`, reglas 21 y 22; `docs/INFILL.md`):
+- `infill.solid_every`: las capas N, 2N… pasan todo su relleno disperso a puente;
+- `surfaces.top_min_thickness` y `surfaces.bottom_min_thickness`: más capas sólidas, del alto nominal, hasta el
+  espesor;
+- en la interfaz, las tres filas; el fuzz las sortea.
+
+**Pruebas:** P12 (capas 5, 10… 95 en puente, sin relleno disperso, G-code verificado) y P13 (capas 0 a 2 y 95 a 99
+sólidas con una capa y mínimos de 0,6 y 1 mm).
+
+**Sigue:** línea, panal, curvas y concéntrico; los patrones de las superficies.
+
