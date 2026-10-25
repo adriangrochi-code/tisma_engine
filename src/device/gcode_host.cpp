@@ -63,8 +63,8 @@ std::optional<Temperature> temperature_after(std::string_view line, std::string_
 
 std::uint8_t gcode_checksum(std::string_view line) {
     std::uint8_t cs = 0;
-    for (const unsigned char c : line)
-        cs ^= c;
+    for (const char c : line)
+        cs ^= static_cast<std::uint8_t>(c);
     return cs;
 }
 

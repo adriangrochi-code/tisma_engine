@@ -544,3 +544,41 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     CHECK(automatic_calibration(CalibrationKind::Acceleration, Settings{}).segments.back().value == 5000.0);
 }
 
+
+TEST_CASE("calibration: a forced flow on a wedge that thins to an edge checks", "[calibration]") {
+    // A wedge that thins to an edge: the walls narrow to their thinnest beads.
+    TriangleMesh wedge;
+    const auto tri = [&](Vec3f a, Vec3f b, Vec3f c) { wedge.add_triangle(a, b, c); };
+    const Vec3f a0{0, 0, 0}, b0{30, 0, 0}, c0{0, 6, 0}, a1{0, 0, 3}, b1{30, 0, 3}, c1{0, 6, 3};
+    tri(a0, c0, b0);
+    tri(a1, b1, c1);
+    tri(a0, b0, b1), tri(a0, b1, a1);
+    tri(b0, c0, c1), tri(b0, c1, b1);
+    tri(c0, a0, a1), tri(c0, a1, c1);
+    for (const double flow : {2.0, 4.0}) {
+        Settings s = plain();
+        s.wall_width = 0.8;
+        s.layer_height = s.first_layer_height = 0.1;
+        HeightChange c;
+        c.volumetric_flow = flow;
+        s.changes = {c};
+        const SlicedModel m = slice_model(weld_exact(wedge), s);
+        INFO(flow);
+        const std::string g = gcode_of(m, s);
+        const GcodeLimits limits = gcode_limits(m, s);
+        CHECK(checks(g, limits));
+        // The forced flow is applied (a full-width bead at that flow, at least) and stays within the limit.
+        double fastest = 0.0, feed = 0.0;
+        std::istringstream in(g);
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind("G1 ", 0) != 0)
+                continue;
+            if (const std::size_t f = line.find(" F"); f != std::string::npos)
+                feed = std::stod(line.substr(f + 2)) / 60.0; // modal
+            if (line.find(" E") != std::string::npos && (line.find(" X") != std::string::npos || line.find(" Y") != std::string::npos))
+                fastest = std::max(fastest, feed);
+        }
+        CHECK(fastest >= flow / (s.wall_width * s.layer_height) - 1.0 / 60.0);
+        CHECK(fastest <= limits.max_feed + 1.0 / 60.0);
+    }
+}

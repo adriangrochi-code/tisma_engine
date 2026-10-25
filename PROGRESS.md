@@ -2954,3 +2954,46 @@ Windows se compila en el CI de Windows pero no se ejecutó contra un puerto real
 **Sigue:** la página Device en `tisma` (puertos, conectar, estado, imprimir lo exportado, pausar, cancelar; el
 simulador como impresora de prueba); después el servicio local para la app y las conexiones de red de la ficha.
 
+## 2026-10-25 — mantenimiento
+
+Bloque de la tarea programada cada 8 horas (decisión del dueño). Antes, un arreglo del CI de Windows: a
+`tests/test_device.cpp` le faltaba `#include <algorithm>` (MSVC no lo trae por otros encabezados; gcc y clang sí);
+`8bf65d1`.
+
+**Revisado:**
+- `origin/main` en `dev`: nada nuevo.
+- `tools/ci_linux.sh` (272 pruebas en gcc, clang y ASan + UBSan).
+- La búsqueda aleatoria de G-code: 2000 corridas con la semilla 1792896531; después de ampliarla (abajo), 2000 más
+  con 1792896647. 0 fallas (0 y 4 piezas rechazadas como no imprimibles, lo esperado).
+- Los cambios recientes: el tope de flujo, la cámara, los avisos, el flujo forzado y la aceleración por altura, la
+  capa de dispositivos. Una sospecha: que el verificador rechazara cordones más finos que un cuarto del ancho con
+  flujo forzado. No se reproduce: en una cuña que se afina hasta un filo, las líneas forzadas corren a la velocidad del
+  cordón de ancho completo; queda una prueba de guarda (`calibration: a forced flow on a wedge that thins to an edge
+  checks`).
+- Los avisos del compilador en los tres compiladores y en el CI de Windows.
+
+**Encontrado y corregido:**
+- **La búsqueda aleatoria no probaba nada de lo nuevo.** Ahora sortea también el dialecto, los topes de flujo de la
+  máquina y del filamento, el avance de presión, las aceleraciones, la cámara y hasta tres cambios por altura de los
+  de las torres (temperatura, flujo, velocidad, retracción, flujo forzado, aceleración, avance de presión,
+  ventilador), y los muestra cuando una corrida falla.
+- **Avisos del compilador:** clang (`-Wsign-conversion` en la suma de verificación del host serie); MSVC (C4996 en
+  `std::getenv`, que acá solo se lee: `_CRT_SECURE_NO_WARNINGS` en las opciones de aviso; C4702 dentro de nanosvg,
+  apagado alrededor de su `#include`); una sombra de variable en la búsqueda aleatoria.
+
+**Optimizado:** la escritura del G-code se iba casi la mitad en `std::to_chars` con decimales fijos (callgrind: 2,84
+de 5,84 mil millones de instrucciones del escritor, la esfera de 200 segmentos). Un camino rápido propio escala por
+10^d, redondea a entero y pone el punto; los valores a menos de 0,001 de un medio, los enormes (desde 2^40) y los de
+más de 9 decimales siguen yendo a `to_chars`. Da el mismo texto: lo prueba `numbers in the G-code: the fast
+formatter writes what std::to_chars writes` (casos de borde y 2 millones de valores al azar) y el G-code de la esfera
+sale igual byte a byte.
+
+**Medido** (4 núcleos, Release, CPU):
+- Esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`, 319 200 triángulos, 500 capas, 884 549 líneas):
+  laminado 0,84–0,89 s; escritura del G-code de 0,81–0,88 s a **0,60–0,62 s**; verificación 0,22–0,24 s.
+- Análisis del cubo de prueba: solución 173–210 ms (22 iteraciones, 3 niveles); el bloque anterior midió 141–151 ms.
+  El código del análisis no cambió desde entonces (`git log src/fea`) y el laminado mide lo mismo: lo tomo como
+  variación de la máquina; no se investigó más.
+
+**No probado:** la búsqueda aleatoria ampliada con ASan (solo en Release).
+

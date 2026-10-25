@@ -44,6 +44,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- Escribir el G-code es un 28 % más rápido (la esfera del banco: de 0,81–0,88 s a 0,60–0,62 s), con el mismo texto
+  byte a byte: los números se escriben por un camino propio que da lo mismo que `std::to_chars`.
 - El G-code escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…`, o
   `SET_VELOCITY_LIMIT ACCEL=…` en Klipper), así la impresora corre a la aceleración con la que se estima el tiempo.
 

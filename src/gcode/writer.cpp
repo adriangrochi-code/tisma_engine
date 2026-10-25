@@ -26,10 +26,44 @@ namespace tisma {
 namespace {
 
 // A number with fixed decimals, as printf's "%.*f" writes it (std::to_chars
-// is specified to round the same way, and is much faster), without a negative
-// zero. Returns the length written to buffer.
+// is specified to round the same way), without a negative zero. Returns the
+// length written to buffer.
+//
+// Most numbers take a fast path that gives the same text: the value times
+// 10^decimals, rounded to a whole number, with the point put back. The
+// product's own rounding error is under 2^-12 below 2^40, so a fraction more
+// than 0.001 away from one half rounds the same way as the exact value; the
+// rest (near a half, huge, or more than 9 decimals) go to std::to_chars.
 constexpr std::size_t kNumberCapacity = 400; // any finite double with a few decimals
 std::size_t format_fixed(char* buffer, double v, int decimals) {
+    static constexpr double kScale[] = {1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9};
+    static constexpr std::uint64_t kDivisor[] = {1,         10,         100,         1000,         10000,
+                                                 100000,    1000000,    10000000,    100000000,    1000000000};
+    if (decimals >= 0 && decimals <= 9) {
+        const double scaled = std::abs(v) * kScale[decimals];
+        if (scaled < 1099511627776.0) { // 2^40; false for NaN
+            const double whole = std::floor(scaled);
+            const double fraction = scaled - whole;
+            if (std::abs(fraction - 0.5) > 1e-3) {
+                const std::uint64_t n = std::uint64_t(whole) + (fraction > 0.5 ? 1u : 0u);
+                const std::uint64_t divisor = kDivisor[decimals];
+                char* p = buffer;
+                if (v < 0.0 && n != 0)
+                    *p++ = '-';
+                p = std::to_chars(p, buffer + kNumberCapacity, n / divisor).ptr;
+                if (decimals > 0) {
+                    *p++ = '.';
+                    std::uint64_t rest = n % divisor;
+                    for (int i = decimals - 1; i >= 0; --i) {
+                        p[i] = char('0' + rest % 10);
+                        rest /= 10;
+                    }
+                    p += decimals;
+                }
+                return std::size_t(p - buffer);
+            }
+        }
+    }
     const auto result = std::to_chars(buffer, buffer + kNumberCapacity, v, std::chars_format::fixed, decimals);
     std::size_t n = std::size_t(result.ptr - buffer);
     if (n > 1 && buffer[0] == '-' && std::all_of(buffer + 1, buffer + n, [](char c) { return c == '0' || c == '.'; })) {
@@ -43,6 +77,12 @@ std::string fixed(double v, int decimals) {
     char buffer[kNumberCapacity];
     return std::string(buffer, format_fixed(buffer, v, decimals));
 }
+
+} // namespace
+
+std::string fixed_number(double v, int decimals) { return fixed(v, decimals); }
+
+namespace {
 
 void append_integer(std::string& text, long v) {
     char buffer[24];

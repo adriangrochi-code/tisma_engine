@@ -146,6 +146,8 @@ set(BUILD_SHARED_LIBS ${_tisma_shared})
 add_library(tisma_warnings INTERFACE)
 if(MSVC)
   target_compile_options(tisma_warnings INTERFACE /W4 /permissive- /utf-8)
+  # std::getenv is only read here, never kept across a change of the environment.
+  target_compile_definitions(tisma_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
 else()
   target_compile_options(tisma_warnings INTERFACE -Wall -Wextra -Wpedantic -Wshadow -Wconversion)
 endif()

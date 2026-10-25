@@ -15,6 +15,11 @@ namespace tisma {
 // are left as they are.
 std::string substitute_variables(std::string_view text, const std::map<std::string, std::vector<std::string>>& variables);
 
+// v with `decimals` decimals as the G-code carries it: rounded as
+// std::to_chars rounds (the exact binary value, ties to even), without a
+// negative zero. Exposed for its test against std::to_chars.
+std::string fixed_number(double v, int decimals);
+
 // The command that sets the chamber's temperature: M141 S, or Klipper's
 // SET_HEATER_TEMPERATURE for a heater named "chamber".
 std::string chamber_gcode(GcodeFlavor flavor, double celsius);

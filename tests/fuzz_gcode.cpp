@@ -11,6 +11,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -105,6 +106,35 @@ int main(int argc, char** argv) {
         s.first_layer_shrink = pick(4) == 0 ? uni(0, 0.3) : 0.0;
         s.max_speed = uni(40, 300);
         s.travel_speed = uni(80, 400);
+        // The machine's capabilities and the firmware's commands (docs/CATALOG.md, "Capacidades").
+        s.flavor = std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
+        s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
+        s.filament_max_flow = pick(4) == 0 ? uni(2, 30) : 0.0;
+        s.pressure_advance = pick(4) == 0 ? uni(0, 0.1) : 0.0;
+        s.acceleration = uni(300, 10000);
+        s.travel_acceleration = uni(300, 10000);
+        if (pick(4) == 0) {
+            s.chamber_temperature = uni(30, 60);
+            s.max_chamber_temp = pick(2) == 0 ? uni(40, 70) : 0.0;
+        }
+        // Height changes like the calibration towers' (docs/CALIBRATION.md).
+        for (int i = pick(4); i > 0; --i) {
+            HeightChange c;
+            c.z = uni(0, 8);
+            switch (pick(8)) {
+            case 0: c.temperature = uni(180, 260); break;
+            case 1: c.flow = uni(80, 120); break;
+            case 2: c.speed = uni(50, 300); break;
+            case 3: c.retract_length = uni(0, 5); break;
+            case 4: c.volumetric_flow = uni(2, 30); break;
+            case 5: c.acceleration = uni(500, 10000); break;
+            case 6: c.pressure_advance = uni(0, 0.1); break;
+            default: c.fan = uni(0, 100); break;
+            }
+            s.changes.push_back(c);
+        }
+        std::stable_sort(s.changes.begin(), s.changes.end(),
+                         [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
         s.gpu = GpuMode::Off;
         const auto& [name, mesh] = shapes[std::size_t(pick(int(shapes.size())))];
         try {
@@ -122,6 +152,15 @@ int main(int argc, char** argv) {
                             c.problems[0].line, c.problems[0].message.c_str());
                 std::printf("  layer %.3f first %.3f walls %d width %.3f infill %.1f pattern %d support %d brim %.2f skirt %d retract %.2f lift %.2f relE %d seam %d minlt %.1f fil %.2f xyoff %.3f shrink %.3f maxv %.0f travel %.0f\n",
                             s.layer_height, s.first_layer_height, s.wall_count, s.wall_width, s.infill_density, int(s.infill_pattern), int(s.support), s.brim_width, s.skirt_loops, s.retract_length, s.retract_lift, int(s.relative_extrusion), int(s.seam), s.min_layer_time, s.filament_diameter, s.xy_offset, s.first_layer_shrink, s.max_speed, s.travel_speed);
+                std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
+                            s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
+                            s.chamber_temperature, s.max_chamber_temp);
+                for (const HeightChange& h : s.changes)
+                    std::printf(" [z %.2f%s%s%s%s%s%s%s%s]", h.z, h.temperature ? " T" : "", h.flow ? " flow" : "",
+                                h.speed ? " speed" : "", h.retract_length ? " retract" : "",
+                                h.volumetric_flow ? " volumetric" : "", h.acceleration ? " accel" : "",
+                                h.pressure_advance ? " pa" : "", h.fan ? " fan" : "");
+                std::printf("\n");
             }
         } catch (const std::exception& e) {
             ++failures;

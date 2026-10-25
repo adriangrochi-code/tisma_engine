@@ -12,9 +12,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <numbers>
+#include <random>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -598,4 +600,33 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
     write_gcode(out, model, s);
     CHECK(out.str().find(";TYPE:Support material\n") != std::string::npos);
     CHECK(out.str().find(";TYPE:Support material interface\n") != std::string::npos);
+}
+
+TEST_CASE("numbers in the G-code: the fast formatter writes what std::to_chars writes", "[gcode]") {
+    const auto reference = [](double v, int decimals) {
+        char buffer[400];
+        const auto r = std::to_chars(buffer, buffer + sizeof buffer, v, std::chars_format::fixed, decimals);
+        std::string s(buffer, r.ptr);
+        if (s.size() > 1 && s[0] == '-' && s.find_first_not_of("0.", 1) == std::string::npos)
+            s.erase(0, 1); // no negative zero
+        return s;
+    };
+    // Ties, near ties, signs, zeros, carries and big values.
+    for (const double v : {0.0, -0.0, 0.5, 1.5, 2.5, -2.5, 0.125, 0.0005, -0.0004, 1.2345, 9.9995, 99.9996, 0.1, 0.2,
+                           0.3, 123456.789, -98765.4321, 1e10, 1.0e12, 4.5e15, -1e-12, 1.0000005})
+        for (int d = 0; d <= 9; ++d) {
+            INFO(v << " with " << d);
+            CHECK(fixed_number(v, d) == reference(v, d));
+        }
+    // Random values at the scales the writer uses: positions, extrusion, feeds, widths.
+    std::mt19937_64 rng(20261025);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    std::size_t differ = 0;
+    for (int i = 0; i < 2000000; ++i) {
+        const double scale = std::pow(10.0, unit(rng) * 14.0 - 6.0); // 1e-6 to 1e8
+        const double v = (unit(rng) - 0.3) * scale;
+        const int d = int(unit(rng) * 7.0); // 0 to 6
+        differ += fixed_number(v, d) != reference(v, d);
+    }
+    CHECK(differ == 0);
 }
