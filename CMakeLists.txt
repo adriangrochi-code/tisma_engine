@@ -186,6 +186,7 @@ add_library(tisma_core
   src/perimeters/coverage.cpp
   src/surfaces/surfaces.cpp
   src/surfaces/bridges.cpp
+  src/infill/adaptive.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
   src/infill/combine.cpp

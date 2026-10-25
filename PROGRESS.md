@@ -3404,3 +3404,27 @@ cruzadas a la pendiente. Lo más prometedor parece orientarlas según las curvas
 
 **Sigue:** lo que no espera las fichas del PR #15.
 
+## 2026-10-25 — bloque nocturno: cúbico adaptativo
+
+**Hecho:** `infill.pattern` = `adaptive_cubic` (ficha `infill_patterns.md`, regla 7; `docs/INFILL.md`).
+- `src/infill/adaptive.*`: la grilla de vóxeles del relleno disperso, la transformada de distancia euclídea exacta
+  (Felzenszwalb y Huttenlocher 2012) y las líneas del cúbico por nivel (una de cada dos por cada nivel más adentro).
+- El laminado arma la profundidad antes de las bandas guiadas, el denso y el combinado; las bandas y el denso van con
+  el cúbico parejo a su densidad.
+- `cell_region` (celdas de una grilla a polígonos) pasa a `src/geom/polygons.*` y la usan el relleno guiado y el
+  adaptativo.
+- En la interfaz, **Cúbico adaptativo** en el patrón de relleno; el fuzz sortea el patrón.
+
+**Medido** (cubos al 20 %): material igual, −4 %, −11 % y −26 % en cubos de 20, 40, 60 y 100 mm; tiempo −5 %, −1 %,
+−8 % y −13 %. El laminado del cubo de 100 mm pasa de 0,13 a 0,27 s.
+
+**Pruebas:** `tests/test_adaptive.cpp`: la transformada contra todos los pares, la profundidad de un bloque, las
+direcciones de P6, las líneas sobre la grilla del cúbico, un cubo de 60 mm a G-code verificado.
+
+**Pendiente:**
+- la prueba P6 de la ficha da en el cubo de 20 mm un 76 % del largo del cúbico, con la separación pareja; el nuestro
+  da el del cúbico. Se ajusta la separación base cuando la ficha lo precise;
+- la rigidez «como impresa» solo se puede medir en piezas chicas (el cubo de 60 mm pide 27 millones de vóxeles), donde
+  el adaptativo casi no cambia nada.
+
+**Sigue:** el cúbico de soporte (regla 8) y el rayo (regla 9).

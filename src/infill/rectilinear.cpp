@@ -3,6 +3,7 @@
 
 #include "infill/rectilinear.hpp"
 
+#include "infill/adaptive.hpp"
 #include "infill/connect.hpp"
 #include "infill/gyroid.hpp"
 #include "perimeters/coverage.hpp"
@@ -206,6 +207,10 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
                 out.sparse.push_back(std::move(t));
         break;
     }
+    case InfillPattern::AdaptiveCubic:
+        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
+                                         params.width, z);
+        break;
     }
     return out;
 }

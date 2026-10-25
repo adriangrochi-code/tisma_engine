@@ -101,4 +101,28 @@ double area_mm2(const Polygons& region) {
     return Clipper2Lib::Area(region) / (kUnitsPerMm * kUnitsPerMm);
 }
 
+Polygons cell_region(const std::vector<char>& mask, int nx, int ny, double x0, double y0, double hx, double hy) {
+    Polygons boxes;
+    for (int j = 0; j < ny; ++j) {
+        int start = -1;
+        for (int i = 0; i <= nx; ++i) {
+            const bool set = i < nx && mask[std::size_t(j) * std::size_t(nx) + std::size_t(i)] != 0;
+            if (set && start < 0)
+                start = i;
+            if (!set && start >= 0) {
+                const double xa = x0 + start * hx, xb = x0 + i * hx;
+                const double ya = y0 + j * hy, yb = ya + hy;
+                boxes.push_back({{to_units(xa), to_units(ya)}, {to_units(xb), to_units(ya)},
+                                 {to_units(xb), to_units(yb)}, {to_units(xa), to_units(yb)}});
+                start = -1;
+            }
+        }
+    }
+    if (boxes.empty())
+        return {};
+    const Polygons joined = Clipper2Lib::Union(boxes, Clipper2Lib::FillRule::NonZero);
+    const double half = 0.5 * std::max(hx, hy);
+    return offset(offset(joined, half), -half);
+}
+
 } // namespace tisma

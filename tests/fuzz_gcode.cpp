@@ -106,7 +106,8 @@ int main(int argc, char** argv) {
         s.wall_width = uni(0.3, 0.8);
         s.infill_density = pick(5) == 0 ? 0.0 : pick(5) == 0 ? 100.0 : uni(5, 60);
         s.infill_pattern = std::array{InfillPattern::Rectilinear, InfillPattern::Grid, InfillPattern::Gyroid,
-                                      InfillPattern::Triangles, InfillPattern::Cubic}[std::size_t(pick(5))];
+                                      InfillPattern::Triangles, InfillPattern::Cubic,
+                                      InfillPattern::AdaptiveCubic}[std::size_t(pick(6))];
         s.infill_angle = uni(0, 180);
         s.top_layers = pick(6);
         s.bottom_layers = pick(6);

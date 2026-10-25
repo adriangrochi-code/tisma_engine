@@ -44,6 +44,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
   En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
   máxima**.
+- **Cúbico adaptativo** (`docs/INFILL.md`, ficha `infill_patterns.md`, regla 7): `infill.pattern` acepta
+  `adaptive_cubic`, el cúbico a 0°, 60° y 120° con cubos chicos junto a las paredes y superficies y más grandes
+  adentro. En un cubo de 100 mm al 20 % usa un 26 % menos de material y tarda un 13 % menos que el cúbico; en piezas
+  chicas da lo mismo que el cúbico. En Impresión, **Cúbico adaptativo** en el patrón de relleno.
 - **Relleno guiado por tensiones** (`docs/INFILL.md`, etapa 4): con `infill.stress_density` y un caso de carga
   (`tisma-engine slice … --case caso.json`), el motor analiza la pieza bajo esa carga y sube el relleno por bandas
   donde trabaja más, hasta esa densidad. El resto queda liviano. `analyze` usa el mismo relleno. En Impresión,

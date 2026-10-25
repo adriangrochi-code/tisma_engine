@@ -41,28 +41,11 @@ Polygons loaded_region(const StressField& f, double z, double level) {
     if (f.empty() || g.z.size() < 2 || z < g.z.front() || z >= g.z.back())
         return {};
     const auto k = int(std::upper_bound(g.z.begin(), g.z.end(), z) - g.z.begin()) - 1;
-    // Each row's runs of loaded voxels as rectangles, then one union.
-    Polygons boxes;
-    for (int j = 0; j < g.ny; ++j) {
-        int start = -1;
-        for (int i = 0; i <= g.nx; ++i) {
-            const bool loaded = i < g.nx && f.load[g.index(i, j, k)] >= float(level);
-            if (loaded && start < 0)
-                start = i;
-            if (!loaded && start >= 0) {
-                const double x0 = g.x0 + start * g.hx, x1 = g.x0 + i * g.hx;
-                const double y0 = g.y0 + j * g.hy, y1 = y0 + g.hy;
-                boxes.push_back({{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)},
-                                 {to_units(x1), to_units(y1)}, {to_units(x0), to_units(y1)}});
-                start = -1;
-            }
-        }
-    }
-    if (boxes.empty())
-        return {};
-    const Polygons joined = Clipper2Lib::Union(boxes, Clipper2Lib::FillRule::NonZero);
-    const double half = 0.5 * std::max(g.hx, g.hy);
-    return offset(offset(joined, half), -half);
+    std::vector<char> loaded(std::size_t(g.nx) * std::size_t(g.ny));
+    for (int j = 0; j < g.ny; ++j)
+        for (int i = 0; i < g.nx; ++i)
+            loaded[std::size_t(j) * std::size_t(g.nx) + std::size_t(i)] = f.load[g.index(i, j, k)] >= float(level);
+    return cell_region(loaded, g.nx, g.ny, g.x0, g.y0, g.hx, g.hy);
 }
 
 std::vector<DensityBand> density_bands(double plain, double most) {

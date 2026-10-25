@@ -3,6 +3,7 @@
 #include "slice/pipeline.hpp"
 
 #include "adhesion/adhesion.hpp"
+#include "infill/adaptive.hpp"
 #include "infill/combine.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
@@ -98,6 +99,17 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, settings.top_layers * ratio,
                                            settings.bottom_layers * ratio, settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // Adaptive cubic infill (docs/INFILL.md): how deep each point lies in the
+    // whole sparse infill, before stress bands and the rest take parts of it.
+    DepthField depth;
+    if (settings.infill_pattern == InfillPattern::AdaptiveCubic && settings.infill_density > 0.0) {
+        std::vector<Polygons> sparse(out.surfaces.size());
+        for (std::size_t l = 0; l < sparse.size(); ++l)
+            sparse[l] = out.surfaces[l].sparse;
+        // A quarter of the finest line spacing: the levels start 1.4, 2.8...
+        // spacings deep.
+        depth = sparse_depth(sparse, out.layers, 0.75 * settings.wall_width / (settings.infill_density / 100.0));
+    }
     // Stress-guided infill (docs/INFILL.md): bands of each layer's sparse
     // infill where the part works hardest, each at its density.
     const std::vector<DensityBand> bands =
@@ -159,6 +171,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
+    fill.depth = depth.empty() ? nullptr : &depth;
     out.support_areas.resize(out.layers.size());
     if (settings.support) {
         std::vector<double> thickness;
@@ -185,6 +198,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                   continue;
                               FillParams denser = fill;
                               denser.density = bands[b].density;
+                              denser.depth = nullptr; // as dense all through
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
                               for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
@@ -194,6 +208,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                               // Same pattern and direction, closer lines.
                               FillParams dense = fill;
                               dense.density = settings.infill_dense_density / 100.0;
+                              dense.depth = nullptr;
                               LayerSurfaces only;
                               only.sparse = dense_region[l];
                               for (Toolpath& t : fill_layer(only, l, dense, out.layers[l].slice_z()).sparse)

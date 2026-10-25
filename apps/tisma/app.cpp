@@ -1845,7 +1845,8 @@ void App::settings_panel() {
                         {InfillPattern::Grid, tr(T::Grid)},
                         {InfillPattern::Gyroid, tr(T::Gyroid)},
                         {InfillPattern::Triangles, tr(T::TrianglesInfill)},
-                        {InfillPattern::Cubic, tr(T::Cubic)}});
+                        {InfillPattern::Cubic, tr(T::Cubic)},
+                        {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)}});
         changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
         changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
         changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));

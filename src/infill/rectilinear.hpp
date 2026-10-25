@@ -10,6 +10,8 @@
 
 namespace tisma {
 
+struct DepthField;
+
 // Parallel lines `spacing` mm apart at `angle_degrees` from the X axis, on a
 // grid fixed to the origin so that the lines of different layers line up,
 // clipped to the region shrunk by width / 2 (the beads stay inside). Each piece
@@ -58,6 +60,7 @@ struct FillParams {
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
+    const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
@@ -73,7 +76,10 @@ struct FillParams {
 //    2 width / density apart (the same material), not connected: the lines
 //    cross each other and their ends touch the walls;
 //  - gyroid: the gyroid's section at height z (gyroid_fill), with the period
-//    for the density.
+//    for the density;
+//  - triangles and cubic: three families of lines 60 degrees apart;
+//  - adaptive cubic: the cubic lines, fewer where `depth` says the infill
+//    lies deep (adaptive_cubic_fill).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
 
 } // namespace tisma

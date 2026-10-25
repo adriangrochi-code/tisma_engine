@@ -110,6 +110,56 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
   altura vuelve el mismo largo;
 - el fuzz sortea los dos patrones y el relleno denso.
 
+## Cúbico adaptativo (etapa 3)
+
+`infill.pattern` = `adaptive_cubic`: los cubos del cúbico, chicos cerca de las paredes y de las superficies y más
+grandes adentro, como en un octree (ficha `infill_patterns.md`, regla 7). Las tres familias van a 0°, 60° y 120°,
+sin importar `infill.angle` (regla 7, prueba P6). La densidad es la de los cubos más chicos, junto a las superficies.
+
+**Cómo:**
+1. **Qué tan adentro está cada punto.** El relleno disperso de todas las capas se pasa a una grilla de vóxeles
+   cúbicos de un cuarto de la separación de las líneas, con un vóxel de afuera alrededor. Un vóxel está adentro si
+   todas las capas que toca tienen relleno disperso ahí: una capa sólida fina entre dos de relleno también cuenta
+   como superficie. La distancia de cada vóxel al afuera más cercano sale de la transformada de distancia euclídea
+   exacta de Felzenszwalb y Huttenlocher (2012): una pasada de la transformada 1D de distancias al cuadrado por eje.
+   Si la grilla pasara de 4 millones de vóxeles, los vóxeles se agrandan.
+2. **Los niveles.** Los planos del cúbico están a `s·√(2/3)` (la arista de sus cubos, con `s` la separación de las
+   líneas en la capa), y las esquinas de un cubo quedan a `s/√2` de su centro. El nivel `l` (cubos `2^l` veces los
+   más chicos) entra donde la profundidad es al menos `2^l · s / √2`: ahí un cubo entero de ese tamaño cabe adentro.
+   La cantidad de niveles es la misma en todas las capas (hasta 5, cubos 32 veces los más chicos).
+3. **Las líneas.** Son las del cúbico: la línea `k` de cada familia está a `k·s + desplazamiento`, con el
+   desplazamiento `−z/√2` del cúbico. La línea es del nivel `r` si `2^r` divide a `k` y `2^(r+1)` no, y se dibuja
+   donde el relleno es menos profundo que el comienzo del nivel `r + 1`. Así, en cada nivel más adentro queda una
+   línea de cada dos, y las líneas gruesas son líneas del cúbico fino: siguen de corrido por todos los niveles y,
+   capa a capa, forman las caras de los cubos grandes.
+4. Las bandas del relleno guiado por tensiones y el relleno denso bajo el techo van con el cúbico parejo a su
+   densidad; el relleno combinado usa la profundidad a la altura de su capa gruesa.
+
+**Medido** (2026-10-25): cubos al 20 %, boquilla 0,4, capas de 0,2.
+
+| Cubo | Cúbico | Adaptativo | Material | Tiempo |
+|---|---|---|---|---|
+| 20 mm | 18,0 min, 3,29 cm³ | 17,1 min, 3,29 cm³ | igual | −5 % |
+| 40 mm | 88,4 min, 19,88 cm³ | 87,5 min, 19,11 cm³ | −4 % | −1 % |
+| 60 mm | 237,8 min, 59,39 cm³ | 219,0 min, 52,67 cm³ | −11 % | −8 % |
+| 100 mm | 866,6 min, 245,5 cm³ | 756,5 min, 180,6 cm³ | **−26 %** | **−13 %** |
+
+- Cuanto más grande la pieza, más rinde: el centro de una pieza chica está demasiado cerca de las superficies para
+  que entre un cubo más grande.
+- En el cubo de 20 mm no entra ningún nivel: es el cúbico a 0°, 60° y 120°. Tisma Slicer da ahí un 76 % del largo
+  del cúbico (prueba P6), con la separación pareja: la separación base se ajusta cuando la ficha lo precise.
+- El laminado del cubo de 100 mm pasa de 0,13 a 0,27 s con 4 hilos: la grilla, la transformada y las regiones de
+  cada nivel.
+
+**Pruebas** (`tests/test_adaptive.cpp`):
+- la transformada de distancia es exacta: contra la distancia a cada vóxel de afuera, en una grilla al azar;
+- la profundidad de un bloque de relleno, la región profunda a una altura, una capa sólida fina en el medio y el tope
+  de vóxeles;
+- 0°, 60° y 120° con `infill.angle` 45°;
+- junto a las superficies, las mismas líneas que el cúbico; en el medio, menos; y todas sobre la grilla del cúbico;
+- un cubo de 60 mm laminado a G-code que pasa el chequeo, con un 8 a 25 % menos de relleno que el cúbico;
+- el fuzz sortea el patrón.
+
 ## Resistencia y rapidez, medidas (2026-10-25)
 
 **Cómo:**

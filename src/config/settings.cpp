@@ -233,7 +233,8 @@ Settings parse_settings(std::string_view text) {
                                        {"grid", InfillPattern::Grid},
                                        {"gyroid", InfillPattern::Gyroid},
                                        {"triangles", InfillPattern::Triangles},
-                                       {"cubic", InfillPattern::Cubic}});
+                                       {"cubic", InfillPattern::Cubic},
+                                       {"adaptive_cubic", InfillPattern::AdaptiveCubic}});
             return;
         }
         const double v = number(g, n, k);
@@ -587,7 +588,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
                           : s.infill_pattern == InfillPattern::Grid      ? "grid"
                           : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
                           : s.infill_pattern == InfillPattern::Triangles ? "triangles"
-                                                                         : "cubic";
+                          : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
+                                                                         : "adaptive_cubic";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
@@ -704,7 +706,8 @@ std::string settings_json(const Settings& s) {
                           : s.infill_pattern == InfillPattern::Grid      ? "grid"
                           : s.infill_pattern == InfillPattern::Gyroid    ? "gyroid"
                           : s.infill_pattern == InfillPattern::Triangles ? "triangles"
-                                                                         : "cubic";
+                          : s.infill_pattern == InfillPattern::Cubic     ? "cubic"
+                                                                         : "adaptive_cubic";
     const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"
