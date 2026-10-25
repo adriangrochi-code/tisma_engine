@@ -229,7 +229,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
 | Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
 | Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | — | ✘ → `model_tools.md` |
-| Ajustes por objeto, por parte y por rango de alturas | `calibration_models.md` (los usa) | ◐ → `model_tools.md` |
+| Ajustes por objeto, por parte y por rango de alturas | `calibration_models.md` (los usa), `settings_levels.md` (reglas 10 y 11) | ◐ falta por parte y por rango de alturas → `model_tools.md` |
 | Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias) | ◐ → `model_tools.md` |
 | Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
 | Galería de formas | — | ✘ → `model_tools.md` |
@@ -269,6 +269,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | `presets.md` | ◐ falta medir la actualización de los perfiles del sistema y volver a una instantánea |
 | Plantillas de filamento | `interface.md` (menú del filamento) | ◐ falta medir cómo se instalan y se usan (no entraron en `presets.md`) |
 | Buscar un ajuste | `interface.md` | ✔ |
+| Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta la lista completa de ajustes de Advanced contra Expert |
 | Asistente de primer uso | `interface.md` | ✔ |
 | Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
 
