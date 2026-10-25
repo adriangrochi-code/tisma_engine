@@ -3639,3 +3639,27 @@ mejor manera de laminar no planar.
 **Pedido nuevo del dueño:** artículos sobre soportes no planares, Arc Overhang, y soportes más fáciles de sacar con
 mejor superficie debajo. Sigue con eso.
 
+## 2026-10-25 — soportes: los artículos
+
+**Pedido del dueño:** artículos sobre soportes no planares, Arc Overhang, y soportes más fáciles de sacar con mejor
+superficie en la parte soportada.
+
+**Hecho:** `docs/SUPPORT_RESEARCH.md`, con:
+- **voladizos sin soporte:** Arc Overhang (con la ficha `arc_overhangs.md` que ya está en `main`) y laminado cónico
+  (Wüthrich et al. 2021);
+- **menos soporte:** árbol (Vanek et al. 2014: −40,5 % de material), ramificado (Schmidt y Umetani 2014: −75 %) y
+  andamios con puentes (Dumas et al. 2014);
+- **sacar y superficie:** el patrón y la separación en Z son lo que más pesa; una interfaz de otro material baja la
+  fuerza para sacar el soporte un 63 % y la rugosidad mucho, a costa de purgas.
+
+**Propuesta, por orden (S1 a S5):**
+1. arcos en voladizos;
+2. la superficie soportada, con una interfaz no planar propia que sigue la cara de abajo;
+3. árbol;
+4. laminado cónico;
+5. interfaz de otro material.
+
+No encontré publicada la interfaz no planar.
+
+**Sigue:** S1, arcos en voladizos (ficha `arc_overhangs.md`).
+

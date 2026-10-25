@@ -493,6 +493,13 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
   - laminado no planar: los artículos y qué conviene (`docs/NONPLANAR_SLICING.md`): en 3 ejes, techos curvos, después
     el campo optimizado de CurviSlicer y un término de resistencia con el análisis propio (F7); en 5 ejes, S³-Slicer
     (F9)
+  - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
+    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md`
+    - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
+      abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
+    - [ ] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17)
+    - [ ] S4: laminado cónico como campo (con F7)
+    - [ ] S5: interfaz de otro material (con MM1)
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel
