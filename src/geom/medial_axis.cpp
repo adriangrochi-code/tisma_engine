@@ -80,11 +80,31 @@ constexpr std::size_t kMaxPieces = 100000;
 // The region's contours as segments, each knowing its neighbours along the
 // contour. Collinear points and spikes make degenerate cells (a corner on its
 // neighbour segment's line, where the parabola has no width): they go.
+// The contour without corners closer than kSpeck to the last one kept: an
+// offset by a hair (a fraction of a micrometre) leaves zig-zags of 1 nm edges
+// at its corners, which neither Voronoi diagram takes (fuzz, 2026-10-25), and
+// which no bead could follow anyway.
+constexpr std::int64_t kSpeck = 10; // nm
+
+Polygon without_specks(const Polygon& path) {
+    Polygon out;
+    out.reserve(path.size());
+    const auto near = [](const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return std::llabs(a.x - b.x) <= kSpeck && std::llabs(a.y - b.y) <= kSpeck;
+    };
+    for (const auto& p : path)
+        if (out.empty() || !near(p, out.back()))
+            out.push_back(p);
+    while (out.size() > 1 && near(out.back(), out.front()))
+        out.pop_back();
+    return out;
+}
+
 std::vector<Segment> contour_segments(const Polygons& region) {
     constexpr std::int64_t kLimit = std::numeric_limits<std::int32_t>::max();
     std::vector<Segment> segments;
     for (const Polygon& raw : region) {
-        const Polygon path = Clipper2Lib::TrimCollinear(raw, false);
+        const Polygon path = Clipper2Lib::TrimCollinear(without_specks(raw), false);
         if (path.size() < 3)
             continue;
         const std::uint32_t first = static_cast<std::uint32_t>(segments.size());

@@ -616,9 +616,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const Point2d cursor_before = cursor;
         const SeamMemory seams_before = seams;
         g.reset_times();
-        // Changes below this layer's top take effect now.
+        // Changes below this layer's top take effect now: its top as ;Z: writes
+        // it, so a reader of the G-code (the check) takes them at the same layer.
         active.lines.clear();
-        while (next_change < s.changes.size() && s.changes[next_change].z < model.layers[l].top - base - 1e-6) {
+        const double written_top = std::strtod(fixed(model.layers[l].top - base, 3).c_str(), nullptr);
+        while (next_change < s.changes.size() && s.changes[next_change].z < written_top - 1e-6) {
             const HeightChange& c = s.changes[next_change++];
             if (c.temperature)
                 active.lines += "M104 S" + std::to_string(std::lround(*c.temperature)) + " ; change at Z " + fixed(c.z, 3) + "\n";

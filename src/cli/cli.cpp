@@ -21,6 +21,7 @@
 #include "slice/printable.hpp"
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -463,12 +464,18 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         out << "tisma-engine " << TISMA_VERSION << "\n";
         return kExitOk;
     }
-    if (command == "slice")
-        return cmd_slice(rest, out, err);
-    if (command == "info")
-        return cmd_info(rest, out, err);
-    if (command == "analyze")
-        return cmd_analyze(rest, out, err);
+    try {
+        if (command == "slice")
+            return cmd_slice(rest, out, err);
+        if (command == "info")
+            return cmd_info(rest, out, err);
+        if (command == "analyze")
+            return cmd_analyze(rest, out, err);
+    } catch (const std::exception& e) {
+        // What the commands do not catch is the engine's own fault: said, not a crash.
+        err << "error: internal: " << e.what() << "\n";
+        return kExitInternal;
+    }
     err << "error: unknown command '" << command << "'\n" << kUsage;
     return kExitUsage;
 }
