@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -20,7 +21,7 @@ constexpr const char* kUsage =
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
-    "                                   [--layer N]\n"
+    "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
@@ -73,6 +74,17 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--layer") {
             options.layer = std::atoi(value());
+        } else if (arg == "--look") {
+            std::string text = value();
+            for (char& c : text)
+                c = c == ',' ? ' ' : c;
+            std::istringstream in(text);
+            for (float v; in >> v;)
+                options.look.push_back(v);
+            if (options.look.size() != 6 || !(options.look[3] > 0.0f)) {
+                std::fprintf(stderr, "error: --look must read X,Y,Z,DISTANCE,YAW,PITCH (mm and degrees)\n");
+                return 2;
+            }
         } else if (arg == "--export") {
             options.export_path = value();
         } else if (arg == "--catalog") {

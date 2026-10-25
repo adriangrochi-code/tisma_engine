@@ -230,9 +230,15 @@ sombras en lugar de la luz, para revisarlas.
 | Programa | `apps/tisma/` | Ventana (GLFW), paneles (Dear ImGui), cargador propio de OpenGL 3.3 (`gl.hpp`), dibujo 3D (`renderer.*`), explorador de archivos propio, recursos incrustados. |
 | Recursos | `assets/brand/`, `cmake/embed.cmake` | Los íconos de Tisma y la fuente Roboto Medium van dentro del programa, que corre desde cualquier carpeta. |
 
-- **Dibujo de la vista previa:** cada extrusión es una instancia de 40 bytes (extremos, ancho, alto, avance, tipo y
-  capa). El shader de vértices arma un prisma de sección rómbica con normales de elipse. Los datos son contiguos y
-  quedan en la GPU; mostrar otra capa no los vuelve a subir.
+- **Dibujo de la vista previa:** cada extrusión es una instancia de 56 bytes (extremos, ancho, alto, avance, tipo,
+  capa y las uniones). El shader de vértices arma un prisma de sección rómbica:
+  - donde el cordón sigue en el movimiento siguiente, los dos terminan en el plano de la bisectriz (inglete) y
+    comparten las esquinas, sin puntas que sobresalgan ni caras encimadas que titilen;
+  - un extremo libre (la costura, un giro de más de 120°) crece medio ancho, como el cordón después de la boquilla;
+  - la luz sigue el perfil de un cordón impreso, calculado por píxel: plano arriba y abajo, redondo a los costados.
+
+  Los datos son contiguos y quedan en la GPU; mostrar otra capa no los vuelve a subir. `--look X,Y,Z,DISTANCIA,GIRO,
+  INCLINACIÓN` pone la cámara de la captura cerca de las líneas.
 - **Un cuadro de la vista 3D, todo fuera de pantalla y del tamaño de la vista:**
   1. normales y profundidad de la escena;
   2. cuánta luz principal y cuánta luz ambiente llega a cada píxel: oclusión en pantalla o rayos;

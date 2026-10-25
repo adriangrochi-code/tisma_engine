@@ -1718,6 +1718,13 @@ void App::frame_now() {
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
+    if (options_.look.size() == 6) {
+        constexpr float kDegrees = 3.14159265f / 180.0f;
+        camera_.target = {options_.look[0], options_.look[1], options_.look[2]};
+        camera_.distance = options_.look[3];
+        camera_.yaw = options_.look[4] * kDegrees;
+        camera_.pitch = options_.look[5] * kDegrees;
+    }
 }
 
 void App::set_tab(Tab tab) {

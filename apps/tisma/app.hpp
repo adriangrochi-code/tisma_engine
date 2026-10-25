@@ -26,6 +26,9 @@ struct AppOptions {
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
     int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
+    // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
+    // (mm and degrees); empty: the framing's own (a close look at the lines).
+    std::vector<float> look;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel

@@ -343,10 +343,19 @@ std::vector<RayPrimitive> preview_primitives(const PreviewBuffers& preview) {
         Vec3 side = cross(dir, Vec3{0, 0, 1});
         side = dot(side, side) > 1e-8f ? normalize(side) : Vec3{1, 0, 0};
         const Vec3 up = cross(side, dir);
+        // A free end grows by half a width; a joined one only as far as the
+        // mitre's outer corner, so a curve does not stick out at every move.
+        const auto reach = [&](float jx, float jy) {
+            if (jx * jx + jy * jy < 0.25f)
+                return 0.5f * e.width;
+            const float c = std::clamp(dir.x * jx + dir.y * jy, 1e-3f, 1.0f);
+            return 0.5f * e.width * std::sqrt(std::max(1.0f - c * c, 0.0f)) / c;
+        };
+        const float r0 = reach(e.join0_x, e.join0_y), r1 = reach(e.join1_x, e.join1_y);
         RayPrimitive p;
         p.box = true;
-        p.p0 = (a + b) * 0.5f - up * (0.5f * e.height);
-        p.p1 = dir * (0.5f * len + 0.5f * e.width);
+        p.p0 = (a + b) * 0.5f + dir * (0.5f * (r1 - r0)) - up * (0.5f * e.height);
+        p.p1 = dir * (0.5f * (len + r0 + r1));
         p.p2 = side * (0.5f * e.width);
         p.p3 = up * (0.5f * e.height);
         p.layer = e.kind_layer >> 8;

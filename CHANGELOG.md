@@ -17,6 +17,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   sólida. Cambia las piezas chicas: un cubo de 10 mm con 3 paredes queda sólido entero, y una placa de 12 islas
   chicas lleva 60 % más de material (35 → 53 min). 0 lo apaga.
 
+### Cambiado
+
+- **Vista previa más parecida a la pieza impresa** (pedido del dueño, con una foto de una esquina): los cordones que
+  siguen de un movimiento al siguiente se unen en inglete. En las curvas ya no sobresale el extremo de cada tramo en
+  dientes, y las paredes no titilan donde dos tramos se encimaban. La luz sigue el perfil de un cordón real: plano
+  arriba y redondo a los costados. También en ray tracing, donde las uniones llegan hasta la esquina del inglete.
+  `--look` acerca la cámara en las capturas.
+
 ### Corregido
 
 - Con `machine.min_layer_height` mayor que `machine.max_layer_height`, el error decía que la capa no entraba; ahora

@@ -185,6 +185,15 @@ TEST_CASE("raytrace: scenes from the model and the preview", "[ui][raytrace]") {
     CHECK_THAT(length(lines[0].p1), WithinAbs(5.2, 1e-5));
     CHECK(lines[1].layer == 1);
     CHECK(lines[1].kind == std::uint32_t(LineKind::SparseInfill));
+    // Joined ends reach only to the mitre: two moves in a straight line meet
+    // without overlapping, a right angle overlaps by half a width.
+    const std::vector<RayPrimitive> straight = preview_primitives(preview_buffers(read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2\n;TYPE:Perimeter\n;WIDTH:0.4\nG1 X10 E1\nG1 X20 E2\nG1 Y10 E3\n")));
+    REQUIRE(straight.size() == 3);
+    CHECK_THAT(straight[0].p0.x - straight[0].p1.x, WithinAbs(-0.2, 1e-5)); // the free start
+    CHECK_THAT(straight[0].p0.x + straight[0].p1.x, WithinAbs(10.0, 1e-5));
+    CHECK_THAT(straight[1].p0.x - straight[1].p1.x, WithinAbs(10.0, 1e-5));
+    CHECK_THAT(straight[1].p0.x + straight[1].p1.x, WithinAbs(20.2, 1e-5)); // the corner: half a width
     RayScene preview;
     preview.build(lines);
     CHECK_THAT(preview.closest({{5, 0, 5}, {0, 0, -1}}), WithinAbs(4.6, 1e-5));

@@ -132,14 +132,37 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
     out.layer_extrusions.reserve(preview.layers.size() + 1);
     out.layer_travels.reserve(preview.layers.size() + 1);
     bool first = true;
+    // The bead goes on from the move before into this one: it ends where this
+    // one starts, with no travel between, and turns by no more than
+    // kPreviewJoinTurn. Both then end on the plane halfway between their
+    // directions, so the corner closes with no ends sticking out and no faces
+    // laid over each other.
+    const float min_cos = std::cos(kPreviewJoinTurn * 3.14159265f / 180.0f);
+    const auto join = [&](PreviewInstance& before, PreviewInstance& after) {
+        if (before.x1 != after.x0 || before.y1 != after.y0 || before.z1 != after.z0)
+            return;
+        float ax = before.x1 - before.x0, ay = before.y1 - before.y0;
+        float bx = after.x1 - after.x0, by = after.y1 - after.y0;
+        const float la = std::hypot(ax, ay), lb = std::hypot(bx, by);
+        if (!(la > 1e-6f) || !(lb > 1e-6f))
+            return;
+        ax /= la, ay /= la, bx /= lb, by /= lb;
+        if (ax * bx + ay * by < min_cos)
+            return;
+        const float nx = ax + bx, ny = ay + by, ln = std::hypot(nx, ny);
+        before.join1_x = after.join0_x = nx / ln;
+        before.join1_y = after.join0_y = ny / ln;
+    };
     for (const PreviewLayer& layer : preview.layers) {
         out.layer_extrusions.push_back(out.extrusions.size());
         out.layer_travels.push_back(out.travels.size());
+        bool joinable = false; // the last instance is the move just before this one
         for (std::size_t i = layer.first; i < layer.first + layer.count; ++i) {
             const PreviewMove& m = preview.moves[i];
             if (m.kind == LineKind::Travel) {
                 out.travels.push_back({m.x0, m.y0, m.z0, travel_argb});
                 out.travels.push_back({m.x1, m.y1, m.z1, travel_argb});
+                joinable = false;
                 continue;
             }
             PreviewInstance p;
@@ -147,7 +170,10 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
             p.x1 = m.x1, p.y1 = m.y1, p.z1 = m.z1;
             p.width = m.width, p.height = m.height, p.feed = m.feed;
             p.kind_layer = static_cast<std::uint32_t>(m.kind) | (m.layer << 8);
+            if (joinable)
+                join(out.extrusions.back(), p);
             out.extrusions.push_back(p);
+            joinable = true;
             out.min_feed = first ? m.feed : std::min(out.min_feed, m.feed);
             out.max_feed = first ? m.feed : std::max(out.max_feed, m.feed);
             out.min_width = first ? m.width : std::min(out.min_width, m.width);

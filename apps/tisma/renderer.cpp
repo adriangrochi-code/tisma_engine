@@ -213,15 +213,35 @@ void main() {
 
 // One extrusion per instance, expanded into a prism around the move: the
 // cross-section is a rhombus as wide as the line and as high as the layer,
-// hanging under the nozzle's path, with normals of an ellipse so it shades
-// round; each end grows by half a width so corners close. 36 vertices: four
-// sides of two triangles and two ends of two triangles.
+// hanging under the nozzle's path. Where the bead goes on into the next move
+// (a join, PreviewInstance), the end lies on the plane halfway between the two
+// directions and both moves share its corners (a mitre); a free end grows by
+// half a width, as the bead does past the nozzle, and gets its cap. 36
+// vertices: four sides of two triangles and two ends of two triangles.
+//
+// The rhombus only gives the depth (two neighbours meet along a line, never on
+// a shared face, so nothing flickers); the light follows the profile of a
+// printed bead, found per pixel from where in the cross-section it lies: flat
+// on top and bottom where the bead is pressed, round at the sides with the
+// radius of half its height (the shape of a bead laid at its height, Comminal
+// et al. 2018).
+const std::string kBeadProfile = R"(
+// The bead's normal at a point of the rhombus' outline, c (-1 to 1 across and
+// up), as (across, up), for a bead of size (width, height).
+vec2 bead_normal(vec2 c, vec2 size) {
+    float r = 0.5 * size.y, flat_half = max(0.5 * size.x - r, 0.0);
+    float x = abs(c.x) * 0.5 * size.x;
+    float s = r > 0.0 ? clamp((x - flat_half) / r, 0.0, 1.0) : 1.0;
+    return vec2(sign(c.x) * s, (c.y >= 0.0 ? 1.0 : -1.0) * sqrt(max(1.0 - s * s, 0.0)));
+}
+)";
 const std::string kPreviewVertex = kVersion + R"(
 layout(location = 0) in vec3 a_p0;
 layout(location = 1) in vec3 a_p1;
 layout(location = 2) in vec2 a_size;
 layout(location = 3) in float a_feed;
 layout(location = 4) in uint a_kind_layer;
+layout(location = 5) in vec4 a_join; // the mitre planes' normals at p0 (xy) and p1 (zw); zero at a free end
 uniform mat4 u_view_projection;
 uniform vec3 u_colours[16];
 uniform uint u_kind_mask;
@@ -234,6 +254,7 @@ out vec2 v_section;    // where in the cross-section: -1 to 1 across (side), -1 
 flat out vec3 v_side;
 flat out vec3 v_up;
 flat out vec2 v_size;  // the line's width and height
+flat out float v_cap;  // 1 on the end caps, 0 on the sides
 
 const vec2 kCorner[4] = vec2[4](vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0), vec2(0.0, -1.0));
 const ivec2 kQuad[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));
@@ -260,7 +281,14 @@ void main() {
     v_side = vec3(1.0, 0.0, 0.0);
     v_up = vec3(0.0, 0.0, 1.0);
     v_size = a_size;
-    if ((u_kind_mask & (1u << kind)) == 0u || len <= 0.0) {
+    v_cap = 0.0;
+    bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
+    int id = gl_VertexID;
+    bool hidden = (u_kind_mask & (1u << kind)) == 0u || len <= 0.0;
+    // A joined end has no cap: the next move's side goes on from it.
+    if (id >= 24 && ((id - 24) / 6 == 0 ? joined0 : joined1))
+        hidden = true;
+    if (hidden) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
     }
@@ -269,23 +297,35 @@ void main() {
     side = dot(side, side) > 1e-8 ? normalize(side) : vec3(1.0, 0.0, 0.0);
     vec3 up = cross(side, dir);
     float w = a_size.x, h = a_size.y;
-    vec3 a = a_p0 - dir * (0.5 * w) - up * (0.5 * h);
-    vec3 b = a_p1 + dir * (0.5 * w) - up * (0.5 * h);
 
-    vec3 position, normal;
     vec2 c;
-    int id = gl_VertexID;
+    int end;
+    vec3 normal;
     if (id < 24) {
         ivec2 q = kQuad[id % 6];
         c = kCorner[(id / 6 + q.y) % 4];
-        position = (q.x == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
+        end = q.x;
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
-        int end = (id - 24) / 6;
+        end = (id - 24) / 6;
         c = kCorner[kCap[(id - 24) % 6]];
-        position = (end == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
         normal = end == 0 ? -dir : dir;
+        v_cap = 1.0;
     }
+    // The corner around the end's point, then along the move to its end plane:
+    // the mitre plane at a join, half a width past the point at a free end.
+    vec3 offset = side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h - 0.5 * h);
+    vec3 point = end == 0 ? a_p0 : a_p1;
+    bool joined = end == 0 ? joined0 : joined1;
+    float t;
+    if (joined) {
+        vec3 n = vec3(end == 0 ? a_join.xy : a_join.zw, 0.0);
+        t = -dot(offset, n) / max(dot(dir, n), 1e-3);
+    } else {
+        t = (end == 0 ? -0.5 : 0.5) * w;
+    }
+    vec3 position = point + offset + dir * t;
+
     v_section = c;
     v_side = side;
     v_up = up;
@@ -310,11 +350,11 @@ void main() {
 // a line covers less than two pixels and its facets can no longer be told
 // apart (Nyquist): the lines of a wall or a surface alias into bands. What a
 // pixel then shows is the average of the line's profile as seen from the eye:
-// the normals around the rhombus (the ellipse's), each weighted by how much
-// of it faces the eye, summed. The normal fades to that mean, and the
-// highlight widens as the normals it stands for spread (Toksvig 2005: the
-// exponent from the mean normal's length).
-const std::string kPreviewFragment = kVersion + kLighting + R"(
+// the bead's normals around the outline, each weighted by how much of it
+// faces the eye, summed. The normal fades to that mean, and the highlight
+// widens as the normals it stands for spread (Toksvig 2005: the exponent from
+// the mean normal's length).
+const std::string kPreviewFragment = kVersion + kLighting + kBeadProfile + R"(
 in vec3 v_base;
 in vec3 v_normal;
 in vec3 v_position;
@@ -322,9 +362,14 @@ in vec2 v_section;
 flat in vec3 v_side;
 flat in vec3 v_up;
 flat in vec2 v_size;
+flat in float v_cap;
 uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
+    if (v_cap < 0.5) {
+        vec2 b = bead_normal(v_section, v_size);
+        n = normalize(v_side * b.x + v_up * b.y);
+    }
     float shininess = 40.0, specular = 0.35;
     if (u_moire != 0) {
         vec2 footprint = fwidth(v_section);
@@ -337,7 +382,8 @@ void main() {
                 float a = (float(i) + 0.5) / 16.0 * 6.2831853;
                 vec2 c = vec2(cos(a), sin(a));
                 c /= abs(c.x) + abs(c.y); // on the rhombus
-                vec3 m = normalize(v_side * (c.x * v_size.y) + v_up * (c.y * v_size.x));
+                vec2 b = bead_normal(c, v_size);
+                vec3 m = normalize(v_side * b.x + v_up * b.y);
                 float facing = max(dot(m, v), 0.0);
                 sum += m * facing;
                 weight += facing;
@@ -1085,7 +1131,9 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, feed)));
         glEnableVertexAttribArray(4);
         glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, stride, offset(base + offsetof(PreviewInstance, kind_layer)));
-        for (GLuint a = 0; a < 5; ++a)
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, join0_x)));
+        for (GLuint a = 0; a < 6; ++a)
             glVertexAttribDivisor(a, 1);
         glDrawArraysInstanced(GL_TRIANGLES, 0, 36, static_cast<GLsizei>(count));
     }

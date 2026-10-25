@@ -211,6 +211,38 @@ TEST_CASE("ui: preview buffers keep the layers and kinds", "[ui]") {
         CHECK(kind_colour(LineKind(k)) <= 0xFFFFFF);
 }
 
+TEST_CASE("ui: preview beads join where they go on into the next move", "[ui]") {
+    // A square of four moves, a travel, then a line out and back (a 180 degree
+    // turn) and a slight bend.
+    const GcodePreview p = read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2 F600\n;TYPE:External perimeter\n;WIDTH:0.45\n"
+        "G1 X10 E1 F1200\nG1 Y10 E2\nG1 X0 E3\nG1 Y0 E4\n"
+        "G1 X20 Y20 F6000\n;TYPE:Internal infill\nG1 X30 E5\nG1 X20 E6\nG1 X10 Y21 E7\n");
+    const PreviewBuffers b = preview_buffers(p);
+    REQUIRE(b.extrusions.size() == 7);
+    const auto joined = [](float x, float y) { return x * x + y * y > 0.25f; };
+    const PreviewInstance* e = b.extrusions.data();
+    // The square: free at its start and end (the seam), mitred at its three
+    // corners, both moves on the same plane.
+    CHECK_FALSE(joined(e[0].join0_x, e[0].join0_y));
+    for (int k = 0; k < 3; ++k) {
+        INFO("corner " << k);
+        REQUIRE(joined(e[k].join1_x, e[k].join1_y));
+        CHECK(e[k].join1_x == e[k + 1].join0_x);
+        CHECK(e[k].join1_y == e[k + 1].join0_y);
+        CHECK_THAT(std::hypot(e[k].join1_x, e[k].join1_y), Catch::Matchers::WithinAbs(1.0, 1e-6));
+    }
+    CHECK_THAT(e[0].join1_x, Catch::Matchers::WithinAbs(std::sqrt(0.5), 1e-6)); // halfway between +X and +Y
+    CHECK_THAT(e[0].join1_y, Catch::Matchers::WithinAbs(std::sqrt(0.5), 1e-6));
+    CHECK_FALSE(joined(e[3].join1_x, e[3].join1_y));
+    // After the travel: free; the turn back is too sharp to join; the bend joins.
+    CHECK_FALSE(joined(e[4].join0_x, e[4].join0_y));
+    CHECK_FALSE(joined(e[4].join1_x, e[4].join1_y));
+    CHECK_FALSE(joined(e[5].join0_x, e[5].join0_y));
+    CHECK(joined(e[5].join1_x, e[5].join1_y));
+    CHECK(joined(e[6].join0_x, e[6].join0_y));
+}
+
 TEST_CASE("ui: PNG files are valid", "[ui]") {
     const std::uint8_t check[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
     CHECK(crc32(check, 9) == 0xCBF43926u); // the CRC-32 check value

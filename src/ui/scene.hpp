@@ -51,15 +51,24 @@ std::vector<float> bed_triangles(const BedPolygon& bed);
 
 // One extrusion of the preview, as the 3D view's shader reads it: the move's
 // two ends, its width and height, its feed, and its kind and layer packed in
-// one integer (kind in the low 8 bits).
+// one integer (kind in the low 8 bits). Where the bead goes on into the next
+// or previous move, the join is the unit normal (in XY) of the plane both
+// beads end on, halfway between their directions; (0, 0) at a free end.
 struct PreviewInstance {
     float x0 = 0, y0 = 0, z0 = 0;
     float x1 = 0, y1 = 0, z1 = 0;
     float width = 0, height = 0;
     float feed = 0;
     std::uint32_t kind_layer = 0;
+    float join0_x = 0, join0_y = 0; // at (x0, y0, z0)
+    float join1_x = 0, join1_y = 0; // at (x1, y1, z1)
 };
-static_assert(sizeof(PreviewInstance) == 40);
+static_assert(sizeof(PreviewInstance) == 56);
+
+// Two moves in a row join when the bead turns by at most this (degrees): past
+// it the mitre would reach more than twice the bead's half width out, and the
+// ends stay free, as at a zigzag's turn.
+inline constexpr float kPreviewJoinTurn = 120.0f;
 
 struct PreviewBuffers {
     std::vector<PreviewInstance> extrusions; // in layer order
