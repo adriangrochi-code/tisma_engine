@@ -61,6 +61,13 @@
    más largo que el recto más `travel.max_detour`, el viaje va recto (prueba R7).
 9. **Sentido:** los lazos de perímetro van en sentido antihorario, también los de los agujeros. Con `walls.clockwise`,
    todos en sentido horario (prueba R8).
+10. **Valores del material:** el material puede traer su propio valor para cada ajuste de retracción y de viaje de esta
+    ficha y de `SETTINGS_V1.md` (largo, velocidad, vuelta, salto en Z y sus alturas, viaje mínimo, cambio de capa,
+    barrido, rampa). En el material se guardan como `material.retraction.<ajuste>` y `material.travel.<ajuste>`:
+    - un valor puesto en el material reemplaza al de la impresora para todo lo que imprime ese material, aunque sea 0:
+      un salto de 0 en el material anula el salto de 0,4 de la impresora;
+    - un valor vacío deja el de la impresora;
+    - con varios extrusores, cada uno usa los valores de su material; esto no se midió (pruebas R9 a R11, con uno).
 
 ## Pruebas
 
@@ -79,3 +86,6 @@ agujero de 5.
 | R6 | Cubo, `retraction.lift` 0,4 | `retraction.firmware` | 151 `G10` y 150 `G11`, sin E; el salto en Z con `G1 Z`. Con `retraction.wipe`: error de configuración, no lamina |
 | R7 | Tubo, relleno al 20 %, capa 10 | `travel.avoid_crossing_walls`; `travel.max_detour` | Sin el ajuste: 8 viajes, 33,5 mm, 3 cruces de perímetros externos. Con el ajuste: viajes curvos de 90 tramos, 39,0 mm, 1 cruce. Con `travel.max_detour` 1 mm: 32 tramos, 34,1 mm. Con 200 %: igual que sin límite |
 | R8 | Tubo, capa 10 | `walls.clockwise` no / sí | No: los cuatro lazos (dos alrededor del agujero, dos afuera) con área con signo positiva (antihorario). Sí: los cuatro negativos (horario) |
+| R9 | Cilindro, E relativa, `retraction.on_layer_change` | Material: largo 0,8; velocidad 25 y vuelta a 10; extra 0,4; largo 0 | 0,8: 26 retracciones de `E-.8` y vueltas `E.8`. Velocidad: `E-2` a F1500 y vuelta a F600. Extra: vuelta `E2.4`. Largo 0: ninguna retracción. Largo vacío: `E-2`, el de la impresora |
+| R10 | Cubo | Impresora: salto 0 / 0,4. Material: salto vacío / 0,3 / 0 | Impresora 0, material vacío: 51 movimientos en Z (solo cambios de capa). Material 0,3: 350, saltos a Z+0,3. Impresora 0,4 y material vacío: 350, saltos a Z+0,4. Impresora 0,4 y material 0: 51, sin saltos |
+| R11 | Cubo | Material: viaje mínimo 20; barrido sí | Viaje mínimo 20: 2 retracciones en lugar de 151. Barrido: 150 barridos con la retracción durante el barrido |

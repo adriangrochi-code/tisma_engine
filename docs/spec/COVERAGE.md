@@ -145,7 +145,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Anchos de paredes, externa, primera capa, relleno, sólido, arriba | `perimeters.md`, `surfaces_infill.md` | ✔ |
-| Ancho del soporte; anchos automáticos | — | ✘ → `supports_more.md` y `speeds_accels.md` |
+| Ancho del soporte; anchos automáticos | `supports_more.md` (regla 18) | ◐ los anchos automáticos no cambiaron nada desde la línea de comandos, ni con boquillas distintas por extrusor |
 | Multiplicador de extrusión del filamento | `gcode_motion.md` | ✔ |
 
 ## Filamento
@@ -158,7 +158,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
 | G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
-| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
+| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | `retraction_travel.md` (regla 10) | ✔ |
 | Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | `multi_extruder.md` | ✔ |
 
 ## Impresora y G-code

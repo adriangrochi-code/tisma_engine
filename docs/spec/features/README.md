@@ -41,6 +41,21 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`fragment.md`](fragment.md): dividir un objeto que no entra, con cortes en las secciones chicas y encastres (pernos o espigas) | después de la primera versión | Para revisar |
 | [`interface.md`](interface.md): la ventana en orden (barra superior, grupos de herramientas, panel de la placa, botón principal, vista previa, páginas de ajustes, Más, asistente, panel de Ingeniería), todos los menús con sus atajos, el aspecto (colores claro y oscuro, medidas de cada componente) y 39 capturas en [`interface/`](interface/) | P1 | Para revisar |
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
+| [`walls_extra.md`](walls_extra.md): paredes: ancho fijo o variable, costura, voladizos, paredes extra | después de F2 | Para revisar |
+| [`infill_patterns.md`](infill_patterns.md): patrones de relleno y opciones del relleno que no están en `surfaces_infill.md` | después de F3 | Para revisar |
+| [`retraction_travel.md`](retraction_travel.md): retracción y viajes: vuelta, cambio de capa, barrido, saltos en Z y rampa, viajes por dentro, valores del material | después de F4 | Para revisar |
+| [`speeds_accels.md`](speeds_accels.md): velocidades y aceleraciones por tipo, voladizos, primera capa | después de F4 | Para revisar |
+| [`cooling_more.md`](cooling_more.md): enfriamiento que no está en `cooling.md` | después de F4 | Para revisar |
+| [`fuzzy_skin.md`](fuzzy_skin.md): piel difusa | después de F4 | Para revisar |
+| [`vase_mode.md`](vase_mode.md): una sola pared en espiral | después de F4 | Para revisar |
+| [`gcode_extras.md`](gcode_extras.md): G-code binario, miniaturas, comentarios y otros extras de la salida | después de F4 | Para revisar |
+| [`skirt_brim_raft.md`](skirt_brim_raft.md): falda, borde y balsa más allá de `supports_skirt.md` | F5 | Para revisar |
+| [`supports_more.md`](supports_more.md): soportes: forzados, bloqueadores, separaciones, patrones, interfaz, `snug`, orgánicos, ancho | después de F5 | Para revisar |
+| [`gcode_templates.md`](gcode_templates.md): G-code propio con variables, condiciones y cuentas | después de F6 | Para revisar |
+| [`multi_extruder.md`](multi_extruder.md): varios filamentos: cambio de herramienta, torre de purga, extrusor por función | después de F6 | Para revisar |
+| [`sequential.md`](sequential.md): objeto por objeto, con la holgura de la cabeza | después de F6 | Para revisar |
+| [`devices.md`](devices.md): página Devices y conexión con impresoras por marca, con capturas | F9 | Para revisar |
+| [`presets.md`](presets.md): perfiles del sistema y de la persona: guardar, heredar, compatibilidad, comparar, paquetes, instantáneas, parámetros propios | P3 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
