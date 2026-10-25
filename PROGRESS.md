@@ -3084,3 +3084,24 @@ paredes rectas de la caja en rojo (0,3 mm), el tope de la caja y la pirámide en
 
 **Sigue:** la etapa 4 (medir en el banco contra todo fino y todo grueso); la altura variable por Z de la ficha.
 
+## 2026-10-25 — altura de capa por zona: medida en el banco (etapa 4)
+
+**Hecho:** tres piezas en tres modos (todo a 0,1 mm, todo a 0,3 mm, por zona 0,3/0,1), con el tiempo estimado, el
+material, la parte gruesa y la pared exterior por alto (`docs/LOCAL_LAYERS.md`, «Medido»). Y una optimización del
+recorte que el banco mostró: las aristas de la zona indexadas por franjas de Y.
+
+**Medido** (Release, CPU):
+- Tiempo de impresión por zona contra todo fino: caja y pirámide −39 % (26,4 → 16,1 min), cilindro con cúpula
+  −52 % (113,0 → 54,4 min), esfera de 100 mm −45 % (918,9 → 507,4 min); el material igual (±1 %).
+- La pared exterior va fina en el 60, 62 y 93 % de su largo: las pendientes; gruesa donde es recta.
+- El recorte: 4,1 veces menos instrucciones (callgrind, la cúpula: 2,56 → 0,62 mil millones); el laminado por zona
+  entero, −30 % (10,5 → 7,4 mil millones); el mismo G-code byte a byte. Con el reloj, en esta máquina compartida, la
+  esfera lamina en 2,1–2,5 s por zona contra 1,8–1,9 s todo fino.
+
+**Decidido:** el recorte no va a la GPU (las zonas y el recorte son el 15 % del laminado).
+
+**No probado:** la calidad impresa (el escalón real), que necesita al dueño y una impresora.
+
+**Sigue:** la altura variable por Z de la ficha (`slicing.md`), una lista de (Z, alto) por objeto, que la altura
+por zona generaliza; o lo que el dueño elija.
+

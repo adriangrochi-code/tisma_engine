@@ -86,4 +86,26 @@ pared en capas de `H`, la cúpula en capas de `h`.
    detalle** (y, cuando no es 0, **Escalón aceptado** y **Margen del detalle**), con su ayuda al pasar el puntero. En
    la vista previa, **Color por → Alto de capa** pinta cada cordón por su alto (azul lo fino, rojo lo grueso), y
    `--color kind|speed|width|height` lo elige en las capturas.
-4. **Medir**: tiempo y escalón en el banco, contra todo fino y todo grueso; si conviene, recortar en la GPU.
+4. ~~**Medir**~~: hecho (2026-10-25), abajo.
+
+## Medido
+
+En el banco (Release, CPU, 4 núcleos), capas de 0,3 mm con detalle de 0,1 mm, contra todo a 0,1 mm (con las pieles
+en los mismos milímetros) y todo a 0,3 mm. El tiempo es el estimado del G-code; «grueso» es la parte del material
+que sale en capas de 0,3 mm.
+
+| Pieza | Todo 0,1 mm | Todo 0,3 mm | Por zona | Material grueso | Pared exterior fina |
+|---|---|---|---|---|---|
+| Caja y pirámide lado a lado | 26,4 min | 9,5 min | **16,1 min (−39 %)** | 81 % | 60 % |
+| Cilindro de 40 mm con cúpula | 113,0 min | 38,6 min | **54,4 min (−52 %)** | 86 % | 62 % |
+| Esfera de 100 mm (`bench/gen_sphere.py`) | 918,9 min | 306,5 min | **507,4 min (−45 %)** | 81 % | 93 % |
+
+- El material es el mismo en los tres modos (±1 %).
+- La pared exterior —lo que se ve— va fina donde tiene pendiente (la pirámide, la cúpula, casi toda la esfera) y
+  gruesa donde es recta (las paredes de la caja, el cilindro, la franja del ecuador de la esfera, donde el escalón
+  de 0,3 mm queda por debajo de 0,05 mm). Por construcción, una zona gruesa nunca se aparta de las secciones finas
+  más que el escalón aceptado.
+- **Laminar** por zona cuesta más que todo fino (la misma pila, más las zonas y el recorte). El recorte miraba todas
+  las aristas de la zona por cada tramo; con las aristas indexadas por franjas de Y, su costo bajó 4,1 veces (callgrind,
+  la cúpula: de 2,56 a 0,62 mil millones de instrucciones) y el laminado entero un 30 % (de 10,5 a 7,4 mil millones),
+  con el mismo G-code byte a byte. Las zonas y el recorte quedan en el 15 % del laminado: no vale la pena la GPU.

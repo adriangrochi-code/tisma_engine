@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <utility>
 
 namespace tisma {
 namespace {
@@ -14,11 +16,16 @@ struct Edge {
     double ax, ay, bx, by;
 };
 
-// The zone's edges in millimetres, and its box.
+// The zone's edges in millimetres, its box, and the edges each band of Y
+// meets, so a test looks only at the edges of its bands.
 struct Zone {
     std::vector<Edge> edges;
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     bool empty = true;
+    std::vector<std::vector<std::uint32_t>> bands;
+    double band_height = 1.0;
+    mutable std::vector<std::uint32_t> seen; // per edge: the last query that looked at it
+    mutable std::uint32_t query = 0;
 
     explicit Zone(const Polygons& polygons) {
         for (const Polygon& poly : polygons)
@@ -33,14 +40,34 @@ struct Zone {
                     x0 = std::min(x0, x), x1 = std::max(x1, x), y0 = std::min(y0, y), y1 = std::max(y1, y);
                 }
             }
+        if (empty)
+            return;
+        const std::size_t count = std::clamp<std::size_t>(edges.size() / 4, 1, 1024);
+        band_height = std::max((y1 - y0) / double(count), 1e-9);
+        bands.resize(count);
+        for (std::size_t e = 0; e < edges.size(); ++e) {
+            const auto [lo, hi] = band_range(std::min(edges[e].ay, edges[e].by), std::max(edges[e].ay, edges[e].by));
+            for (std::size_t b = lo; b <= hi; ++b)
+                bands[b].push_back(std::uint32_t(e));
+        }
+        seen.assign(edges.size(), 0);
     }
 
-    // Inside by the non-zero winding rule of the region.
+    std::pair<std::size_t, std::size_t> band_range(double ya, double yb) const {
+        const auto band = [&](double y) {
+            return std::size_t(std::clamp((y - y0) / band_height, 0.0, double(bands.size() - 1)));
+        };
+        return {band(ya), band(yb)};
+    }
+
+    // Inside by the non-zero winding rule of the region: the edges of y's band
+    // hold every edge a ray along x at y can meet.
     bool contains(double x, double y) const {
         if (empty || x < x0 || x > x1 || y < y0 || y > y1)
             return false;
         int winding = 0;
-        for (const Edge& e : edges) {
+        for (const std::uint32_t i : bands[band_range(y, y).first]) {
+            const Edge& e = edges[i];
             if (e.ay <= y) {
                 if (e.by > y && (e.bx - e.ax) * (y - e.ay) - (x - e.ax) * (e.by - e.ay) > 0.0)
                     ++winding;
@@ -58,19 +85,29 @@ struct Zone {
             std::min(p.y, q.y) > y1)
             return;
         const double dx = q.x - p.x, dy = q.y - p.y;
-        for (const Edge& e : edges) {
-            if (std::max(e.ax, e.bx) < std::min(p.x, q.x) || std::min(e.ax, e.bx) > std::max(p.x, q.x) ||
-                std::max(e.ay, e.by) < std::min(p.y, q.y) || std::min(e.ay, e.by) > std::max(p.y, q.y))
-                continue;
-            const double ex = e.bx - e.ax, ey = e.by - e.ay;
-            const double den = dx * ey - dy * ex;
-            if (den == 0.0)
-                continue; // parallel: no single crossing
-            const double t = ((e.ax - p.x) * ey - (e.ay - p.y) * ex) / den;
-            const double u = ((e.ax - p.x) * dy - (e.ay - p.y) * dx) / den;
-            if (t > 0.0 && t < 1.0 && u >= 0.0 && u <= 1.0)
-                out.push_back(t);
+        const auto [lo, hi] = band_range(std::min(p.y, q.y), std::max(p.y, q.y));
+        if (++query == 0) { // wrapped: start the marks again
+            std::fill(seen.begin(), seen.end(), 0u);
+            query = 1;
         }
+        for (std::size_t b = lo; b <= hi; ++b)
+            for (const std::uint32_t i : bands[b]) {
+                if (seen[i] == query)
+                    continue;
+                seen[i] = query;
+                const Edge& e = edges[i];
+                if (std::max(e.ax, e.bx) < std::min(p.x, q.x) || std::min(e.ax, e.bx) > std::max(p.x, q.x) ||
+                    std::max(e.ay, e.by) < std::min(p.y, q.y) || std::min(e.ay, e.by) > std::max(p.y, q.y))
+                    continue;
+                const double ex = e.bx - e.ax, ey = e.by - e.ay;
+                const double den = dx * ey - dy * ex;
+                if (den == 0.0)
+                    continue; // parallel: no single crossing
+                const double s = ((e.ax - p.x) * ey - (e.ay - p.y) * ex) / den;
+                const double u = ((e.ax - p.x) * dy - (e.ay - p.y) * dx) / den;
+                if (s > 0.0 && s < 1.0 && u >= 0.0 && u <= 1.0)
+                    out.push_back(s);
+            }
         std::sort(out.begin(), out.end());
     }
 };
