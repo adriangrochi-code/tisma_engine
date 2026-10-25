@@ -164,7 +164,7 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
         for (const Vec3f& v : mesh.vertices)
             min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
-        p.layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+        p.layers = plan_layer_stack(mesh, min_z, max_z, settings).layers;
     }
     if (p.layers.empty())
         throw AnalysisError("the model has no layers to analyse");
@@ -201,7 +201,7 @@ std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settin
     for (const Vec3f& v : mesh.vertices)
         min_z = std::min(min_z, double(v.z)), max_z = std::max(max_z, double(v.z));
     // The same plan slice_model makes, so the same layers.
-    const std::vector<Layer> layers = plan_layers(min_z, max_z, {settings.first_layer_height, settings.layer_height});
+    const std::vector<Layer> layers = plan_layer_stack(mesh, min_z, max_z, settings).layers;
     return static_cast<std::size_t>(grid_count(mesh, voxel, rows, layers.size()));
 }
 

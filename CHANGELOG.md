@@ -95,6 +95,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **El análisis «como impresa» ignoraba las capas gruesas:** la zona gruesa de la altura por zona y el relleno
+  combinado no se veían. Con altura por zona, el análisis veía el 3 % de los vóxeles impresos en vez del 53 %. Ahora
+  cada capa gruesa llena todas las capas que abarca. La estimación de vóxeles y el modelo macizo usan las capas del
+  laminado, también con altura variable.
 - **Contornos con zigzags de 1 nm:** quedaban en las esquinas tras un desplazamiento XY de una fracción de micrómetro y
   hacían fallar el diagrama de Voronoi de los perímetros. Ahora se limpian antes. Antes el laminado terminaba sin
   mensaje; ahora sale bien, y el G-code de las piezas comunes no cambia.

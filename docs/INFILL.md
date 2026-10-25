@@ -109,3 +109,52 @@ Se combina con combinar capas, porque la capa densa sale de la corrida antes de 
 - el cúbico tiene las mismas tres direcciones; sus líneas cambian de una capa a otra, y a un período `s·√2` de
   altura vuelve el mismo largo;
 - el fuzz sortea los dos patrones y el relleno denso.
+
+## Resistencia y rapidez, medidas (2026-10-25)
+
+**Cómo:**
+- con el análisis estructural del motor, modelo «como impresa» (`docs/ANALYSIS.md`), PLA Bambu Basic, calidad
+  normal (vóxeles de medio ancho de línea, los huecos del relleno vacíos);
+- **cubo** de 20 mm comprimido con 500 N (apoyado abajo, la carga arriba);
+- **barra** de 60 × 10 × 10 mm en voladizo, con 20 N hacia abajo en la punta;
+- ajustes por defecto (3 paredes, 3 capas sólidas) y capas de 0,2 mm, salvo donde se dice;
+- «rigidez/cm³» es 1 / (desplazamiento × material): más es mejor.
+
+| Pieza | Relleno | Tiempo | Material | Desplazamiento | Rigidez/cm³ | Seguridad |
+|---|---|---|---|---|---|---|
+| cubo | rectilíneo 20 % | 17,5 min | 3,52 cm³ | 0,180 mm | 1,58 | 1,38 |
+| cubo | grilla 20 % | 19,8 min | 3,29 cm³ | **0,057 mm** | **5,29** | **3,18** |
+| cubo | giroide 20 % | 17,2 min | 3,31 cm³ | 0,097 mm | 3,11 | 2,23 |
+| cubo | triángulos 20 % | 18,9 min | 3,35 cm³ | 0,064 mm | 4,65 | 2,51 |
+| cubo | cúbico 20 % | 18,0 min | 3,29 cm³ | 0,148 mm | 2,05 | 2,28 |
+| cubo | cúbico 20 %, combinar 2 | 14,6 min | 3,29 cm³ | 0,157 mm | 1,94 | 1,86 |
+| cubo | cúbico 12 % + denso bajo el techo | 15,8 min | 2,84 cm³ | 0,456 mm | 0,77 | 0,74 |
+| cubo | cúbico 20 %, por zona 0,3 / 0,1 | **13,2 min** | 3,49 cm³ | 0,119 mm | 2,40 | 2,16 |
+| barra | rectilíneo 20 % | 15,7 min | 3,06 cm³ | 1,348 mm | 0,242 | 1,80 |
+| barra | grilla 20 % | 16,3 min | 2,88 cm³ | 1,401 mm | 0,248 | 1,79 |
+| barra | giroide 20 % | 14,6 min | 2,94 cm³ | 1,351 mm | 0,252 | 1,81 |
+| barra | triángulos 20 % | 16,2 min | 2,87 cm³ | 1,355 mm | 0,257 | 1,85 |
+| barra | cúbico 20 % | 16,2 min | 2,87 cm³ | 1,344 mm | 0,259 | 1,84 |
+| barra | cúbico 20 %, combinar 2 | 13,6 min | 2,87 cm³ | 1,353 mm | 0,257 | 1,83 |
+| barra | cúbico 12 % + denso bajo el techo | 14,6 min | 2,60 cm³ | 1,384 mm | 0,278 | 1,71 |
+| barra | cúbico 20 %, por zona 0,3 / 0,1 | **12,1 min** | 3,12 cm³ | **1,134 mm** | **0,282** | **2,02** |
+
+**Lo que dicen las medidas:**
+- **Compresión en Z:** ganan los patrones que forman paredes verticales en todas las capas: grilla (3,1 veces más
+  rígida por material que el rectilíneo) y triángulos. El rectilíneo alterna la dirección y es el más blando. El
+  cúbico y el giroide reparten la rigidez en las tres direcciones.
+- **Flexión:** la cargan sobre todo las paredes y las pieles. Todos los patrones quedan a menos de un 4 %, así que
+  conviene el más rápido o el más liviano. El cúbico al 12 % con denso bajo el techo da la mejor rigidez por material
+  en capas de 0,2 mm.
+- **Combinar 2 capas** ahorra un 16–19 % del tiempo y pierde menos de un 6 % de rigidez.
+- **La altura por zona** (0,3 mm donde la pieza no cambia, 0,1 en el detalle) es la más rápida y la más rígida en
+  flexión: menos capas, cordones más gruesos y más paredes por milímetro.
+
+**Para elegir:**
+- **Cargas en Z** (columnas, soportes): grilla o triángulos.
+- **Cargas en varias direcciones:** cúbico o giroide.
+- **Rapidez:** combinar capas o altura por zona.
+- **Material:** relleno liviano con denso bajo el techo.
+
+**No medido:** probetas impresas. El análisis es lineal y elástico, y no ve la adhesión real entre capas ni entre
+cordones.

@@ -1,6 +1,8 @@
 #include "infill/combine.hpp"
 #include "infill/rectilinear.hpp"
 
+#include "config/analysis_case.hpp"
+#include "fea/analysis.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
@@ -263,4 +265,25 @@ TEST_CASE("dense infill under the top surfaces (D1), sliced to checked G-code", 
     // Four times the lines across (spacing 1 mm instead of 4).
     CHECK_THAT(double(sparse.at(9400).long_lines) / sparse.at(9000).long_lines, WithinAbs(4.0, 0.6));
     CHECK(sparse.at(5000).long_lines == sparse.at(9000).long_lines); // the others alike
+}
+
+TEST_CASE("the as-printed analysis sees the infill printed in thick layers", "[combine]") {
+    // A combined infill prints at the top of its run but fills every layer of it.
+    const IndexedMesh m = cube(10.0f);
+    const AnalysisCase c = parse_analysis_case(
+        R"({"model": "as_printed", "quality": "normal", "resolution_check": false,
+            "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -100]}]})");
+    Settings one = base();
+    Settings two = base();
+    two.infill_combine_layers = 2;
+    const AnalysisEstimate a = estimate_analysis(m, one, c);
+    const AnalysisEstimate b = estimate_analysis(m, two, c);
+    REQUIRE(a.printed_voxels > 0);
+    CHECK_THAT(double(b.printed_voxels) / double(a.printed_voxels), WithinAbs(1.0, 0.05));
+    // And layer heights by zone, whose thick zone holds the walls and the infill.
+    Settings zones = base();
+    zones.layer_height = 0.3;
+    zones.detail_height = 0.1;
+    const AnalysisEstimate z = estimate_analysis(m, zones, c);
+    CHECK_THAT(double(z.printed_voxels) / double(z.part_voxels), WithinAbs(double(a.printed_voxels) / double(a.part_voxels), 0.08));
 }

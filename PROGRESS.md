@@ -3277,3 +3277,33 @@ Va en un commit aparte, con los números en `docs/INFILL.md`.
 **Sigue:** cúbico adaptativo (más chico cerca de las superficies), con la respuesta de la sesión de fichas sobre el
 tamaño de los cubos; después, el relleno guiado por tensiones.
 
+## 2026-10-25 — el análisis «como impresa» lee las capas gruesas
+
+**Encontrado** midiendo la rigidez del relleno: el análisis pintaba los vóxeles con las paredes y los rellenos de
+cada capa, pero no con las capas gruesas (`SlicedModel::thick`): la zona gruesa de la altura por zona y el relleno
+combinado.
+- En un cubo de 10 mm, con altura por zona el análisis veía el 3 % de los vóxeles impresos, en vez del 53 %.
+- Con relleno combinado veía el 71 % de los de la misma pieza sin combinar.
+- La pieza parecía hasta 26 veces más blanda.
+
+**Arreglado:**
+- cada capa gruesa llena todas las capas que abarca;
+- la estimación de vóxeles y el modelo macizo usan las capas del laminado (`plan_layer_stack`), también con altura
+  variable;
+- prueba nueva: con relleno combinado, los vóxeles impresos quedan a ±5 % de los de sin combinar; con altura por
+  zona, la parte impresa queda a ±8 %. Falla sin el arreglo (71 % y 3 %).
+
+**Medido** (`docs/INFILL.md`, «Resistencia y rapidez, medidas»): la rigidez de cada patrón con el análisis, en un
+cubo comprimido con 500 N y una barra en voladizo con 20 N.
+- **Compresión:** la grilla, 3,1 veces más rígida por material que el rectilíneo; los triángulos, 2,9.
+- **Flexión:** todos los patrones dentro del 4 %.
+- **Combinar 2 capas:** −16 a −19 % de tiempo con menos de un 6 % de pérdida de rigidez.
+- **La altura por zona** (0,3 / 0,1): la barra en 12,1 min contra 16,2, con un 16 % menos de flecha.
+- **No probado:** probetas impresas.
+
+**Sigue:**
+1. el cúbico adaptativo, con la ficha que respondió la sesión de fichas (PR #15, espera la fusión a `main`);
+2. el relleno guiado por tensiones (A2);
+3. el tiempo de impresión más preciso (ficha `print_time.md`, en el mismo PR);
+4. el panel por niveles (ficha `settings_levels.md`).
+
