@@ -370,7 +370,10 @@ TEST_CASE("device: a lost ok is recovered, and no line runs twice", "[device]") 
 
 TEST_CASE("device: a pause or cancel left over is not for the next job", "[device]") {
     auto [host_end, printer_end] = make_pipe();
-    SimulatedPrinter printer(printer_end);
+    // Moves take time, so the long job is still printing when it is paused.
+    SimulatorOptions options;
+    options.move_time = std::chrono::milliseconds(2);
+    SimulatedPrinter printer(printer_end, options);
     GcodeHost host(host_end);
     REQUIRE(host.connect());
     REQUIRE(within(5000ms, [&] { return host.status().state == PrinterState::Idle; }));
