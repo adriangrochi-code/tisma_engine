@@ -269,7 +269,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | `presets.md` | ◐ falta medir la actualización de los perfiles del sistema y volver a una instantánea |
 | Plantillas de filamento | `interface.md` (menú del filamento) | ◐ falta medir cómo se instalan y se usan (no entraron en `presets.md`) |
 | Buscar un ajuste | `interface.md` | ✔ |
-| Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta la lista completa de ajustes de Advanced contra Expert |
+| Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta el comienzo de tres páginas de impresión en Expert y las páginas de material e impresora en Expert |
 | Asistente de primer uso | `interface.md` | ✔ |
 | Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
 

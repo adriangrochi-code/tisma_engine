@@ -41,8 +41,23 @@ Esta ficha dice cómo lo hace Tisma Slicer, medido en su interfaz, y qué toma e
    - el grupo «Quality (slower slicing)»: Z anti-aliasing, asegurar el espesor vertical, detectar paredes finas,
      puentes gruesos, detectar perímetros en puente;
    - en «Advanced»: separación de la costura, costuras internas alternadas y la ubicación de la unión en bisel.
-   La lista completa por ajuste entre Advanced y Expert no se midió (hace falta recorrer todas las páginas en los
-   dos niveles).
+   **Expert suma** a Advanced, en las páginas de impresión (medido página por página en los dos niveles):
+
+| Página | Solo en Expert |
+|---|---|
+| Layers and perimeters | Perímetros extra si hacen falta; perímetros extra en voladizos; voladizos en arco (con su distancia máxima y su solape); perímetros escalonados; espesor mínimo del Z anti-aliasing; evitar cruzar voladizos curvados; evitar cruzar perímetros (con su desvío máximo); perímetros externos primero; el grupo «Only one perimeter» (un solo perímetro arriba, un solo perímetro en la primera capa) |
+| Infill | Flujo y separación del planchado; capa sólida cada n capas; área mínima para relleno sólido; retraer solo al cruzar perímetros; relleno antes que perímetros |
+| Skirt and brim | Largo mínimo de filamento de la falda |
+| Support material | Forzar soporte en las primeras capas, con su densidad y su expansión; expansión de la balsa; funda alrededor del soporte; ángulo del patrón; vueltas de interfaz; flujo y separación del planchado de la interfaz; sincronizar con las capas de la pieza |
+| Speed | Velocidades por voladizo (dinámicas); aceleraciones por tipo de línea; velocidad máxima automática y caudal máximo; igualador de presión |
+| Non-planar | Nada |
+| Multiple Extruders | Prevención de goteo (con la variación de temperatura); separación de las líneas de purga y flujo extra de purga de la torre; cáscaras de interfaz; ancho máximo y profundidad de entrelazado de una región segmentada |
+| Advanced | Solape relleno-perímetros; resolución del corte y del G-code; compensación de tamaño XY y de agujeros; el grupo del generador de perímetros variable (6 ajustes); parámetros propios (`presets.md`, regla 20) |
+| Output options | G-code detallado; formato del nombre del archivo; sustituciones en el G-code; scripts de posprocesado |
+
+   No se midió en Expert: el comienzo de las páginas Infill, Speed y Advanced (las capturas empiezan desplazadas)
+   y las páginas Notes y Dependencies (la interfaz se cerró al desplazarlas). Los voladizos en arco son de Expert
+   pero están en la lista de fábrica de Quick settings (regla 8).
 6. **Aviso del nivel Simple:** abajo de la lista de páginas: «Beginner mode: only the most common settings are shown.
    Speed, non-planar layers and the other settings are in the Normal and Expert modes.» y el botón «Show all settings».
    El aviso dice «Normal» donde el menú dice «Advanced»: el motor usa un solo nombre por nivel.
@@ -121,3 +136,4 @@ Esta ficha dice cómo lo hace Tisma Slicer, medido en su interfaz, y qué toma e
 | NV5 | Clic derecho sobre un cubo en Simple y en Expert | Simple: sin «Add part», «Add modifier» ni «Add settings». Expert: con todos, más «Infill», «Layers and Perimeters», «Support material» |
 | NV6 | Expert, «Infill» en el menú de la pieza | En Objects, la fila hija «Infill»; abajo, «Fill density» y «Fill pattern» con su cruz |
 | NV7 | «+ Add» en Quick settings | El diálogo de la regla 9 con todos los ajustes como «Página › Ajuste» |
+| NV8 | Las páginas de impresión en Advanced y en Expert | Expert suma los ajustes de la tabla de la regla 5; Non-planar es igual en los dos |
