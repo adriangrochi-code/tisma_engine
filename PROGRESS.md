@@ -3163,3 +3163,58 @@ y que no dependa de dos objetos: que sirva en una pieza compleja.
    - el tiempo de impresión más preciso;
    - el panel izquierdo por niveles con Impresora, Filamento y Objetos.
 
+## 2026-10-25 — Z anti-aliasing, y el perfil Máxima calidad
+
+**Pedido del dueño:** «altura variable por Z y Z anti-aliasing, así las combinamos para máxima calidad», en una pieza
+compleja.
+
+**Hecho** (`docs/ZAA.md`):
+- `src/slice/zaa.*`:
+  - las caras que miran hacia arriba en una grilla de XY;
+  - cada punto visible (paredes, relleno de arriba, relleno de huecos, también de las capas gruesas por zona) va a
+    la superficie si esta corta su capa, con el piso de `zaa.min_thickness`;
+  - con `zaa.raise` (Song et al. 2017), también sube hasta media capa;
+  - los tramos se parten cada 0,2 mm donde salen del tope.
+- **El punto del camino** lleva su `dz`, el primer paso hacia los caminos 3D de la visión.
+- **El escritor:**
+  - Z por punto, redondeada como se escribe;
+  - el material del espesor que queda;
+  - los viajes vuelven al tope, o pasan por encima de lo subido;
+  - los caminos más bajos primero, y la pared externa antes que las internas cuando salen del tope.
+- **El chequeo y la vista previa** entienden el espesor que queda.
+- **Ajustes:** `zaa.enabled`, `zaa.min_thickness` y `zaa.raise`, en el perfil de impresión y en el panel.
+- **Perfil de fábrica Máxima calidad:** 0,3 mm, detalle de 0,1 mm, escalón de 0,05 mm y ZAA con subida.
+- **Pruebas:** 4 casos nuevos.
+  - La regla Z1 de la ficha en techos de 5°, 10° y 15°: la Z con error de 0,0006 mm y el material con error de
+    0,03.
+  - Z2.
+  - Con subida, altura por zona y por pendiente.
+  - La vista previa.
+- **El fuzz** sortea ZAA: 1200 corridas en 4 semillas, 0 fallas.
+- **Con ZAA apagado,** el G-code no cambia: comparado en la cúpula y la esfera, en 4 modos. Solo cambian las 3
+  líneas de los ajustes al final.
+
+**Medido** (error entre el tope de cada cordón visible y la superficie exacta, en los cordones de arriba):
+
+| Pieza | Modo | Error medio | p95 | Tiempo |
+|---|---|---|---|---|
+| esfera | plano 0,2 mm | 0,048 | 0,094 | 447 min |
+| esfera | ZAA solo hacia abajo | 0,043 | 0,094 | 447 min |
+| esfera | ZAA con subida | 0,0026 | 0,005 | 448 min |
+| esfera | zona + pendiente + ZAA | 0,0011 | 0,002 | 526 min |
+| esfera | plano 0,05 mm | 0,014 | 0,024 | 1788 min |
+| cúpula | Máxima calidad | 0,004 | 0,006 | 56 min |
+| cúpula | plano 0,05 mm | 0,013 | 0,024 | 218 min |
+
+Laminar cuesta un 8–9 % más.
+
+**No probado:**
+- una impresión real;
+- el daño de la boquilla a cordones vecinos más altos: el orden simplificado lo reduce, pero el del artículo
+  (subcaminos y grafo de alturas) queda pendiente.
+
+**Sigue,** en la cola del dueño:
+1. el relleno por resistencia y rapidez;
+2. el tiempo de impresión más preciso;
+3. el panel izquierdo por niveles, con Impresora, Filamento y Objetos.
+

@@ -44,6 +44,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
   En Impresión se agregan **Escalón en pendientes** y **Alturas por Z**; en Impresora, **Capa mínima** y **Capa
   máxima**.
+- **Z anti-aliasing** (`docs/ZAA.md`, ficha `z_antialiasing.md`, pedido del dueño): con `zaa.enabled`, las paredes,
+  el relleno de arriba y el de huecos bajan hasta la superficie donde esta corta su capa, con el material del espesor
+  que queda (nunca menos que `zaa.min_thickness`). Con `zaa.raise` también suben hasta media capa, como en Song et al.
+  2017.
+  - El G-code lleva X, Y y Z en el mismo movimiento.
+  - El chequeo y la vista previa lo entienden.
+  - En la esfera del banco, el error de la superficie de arriba baja de 0,048 a 0,003 mm en el mismo tiempo.
+
+  Nuevo perfil de impresión **Máxima calidad**: capas de 0,3 mm, subcapas de 0,1 mm en las pendientes y ZAA con
+  subida. En la esfera deja 0,001 mm de error en 526 min, contra 0,014 mm en 1788 min de todo a 0,05 mm.
 - **La capa de dispositivos** (`docs/DEVICE.md`, el comienzo de P2): la interfaz `Printer`, el puerto serie
   (Linux y Windows) y el host de G-code por USB —líneas numeradas con suma de verificación, reenvíos, temperaturas,
   trabajos con pausa y cancelación, controles— con una impresora simulada para las pruebas.

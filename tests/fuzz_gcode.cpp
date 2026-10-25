@@ -143,6 +143,12 @@ int main(int argc, char** argv) {
             s.min_layer_height = uni(0.04, 0.12);
         if (pick(4) == 0)
             s.max_layer_height = uni(0.12, 0.5);
+        // Z anti-aliasing (docs/ZAA.md).
+        if (pick(3) == 0) {
+            s.zaa = true;
+            s.zaa_min_thickness = uni(10, 90);
+            s.zaa_raise = pick(2) == 0;
+        }
         // The machine's capabilities and the firmware's commands (docs/CATALOG.md, "Capacidades").
         s.flavor = std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
@@ -189,8 +195,9 @@ int main(int argc, char** argv) {
                             c.problems[0].line, c.problems[0].message.c_str());
                 std::printf("  layer %.3f first %.3f walls %d width %.3f infill %.1f pattern %d support %d brim %.2f skirt %d retract %.2f lift %.2f relE %d seam %d minlt %.1f fil %.2f xyoff %.3f shrink %.3f maxv %.0f travel %.0f\n",
                             s.layer_height, s.first_layer_height, s.wall_count, s.wall_width, s.infill_density, int(s.infill_pattern), int(s.support), s.brim_width, s.skirt_loops, s.retract_length, s.retract_lift, int(s.relative_extrusion), int(s.seam), s.min_layer_time, s.filament_diameter, s.xy_offset, s.first_layer_shrink, s.max_speed, s.travel_speed);
-                std::printf("  detail %.3f tol %.3f margin %.2f cusp %.3f layers %.3f-%.3f steps", s.detail_height,
-                            s.detail_tolerance, s.detail_margin, s.cusp_height, s.min_layer_height, s.max_layer_height);
+                std::printf("  zaa %d min %.0f raise %d detail %.3f tol %.3f margin %.2f cusp %.3f layers %.3f-%.3f steps",
+                            int(s.zaa), s.zaa_min_thickness, int(s.zaa_raise), s.detail_height, s.detail_tolerance,
+                            s.detail_margin, s.cusp_height, s.min_layer_height, s.max_layer_height);
                 for (const auto& step : s.layer_heights)
                     std::printf(" %.3f:%.3f", step[0], step[1]);
                 std::printf("\n");

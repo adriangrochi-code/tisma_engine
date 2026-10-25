@@ -81,6 +81,7 @@ La interfaz trae perfiles genéricos (`src/ui/presets.*`), para tener de dónde 
 | Impresión **0.20 mm** | Los valores por defecto del motor |
 | Impresión **0.12 mm** | Capas de 0,12 mm, 5 capas superiores y 4 inferiores |
 | Impresión **0.28 mm** | Capas de 0,28 mm (también la primera), 2 paredes, relleno al 15 % |
+| Impresión **Máxima calidad** | Capas gruesas de 0,3 mm con subcapas de 0,1 mm solo en las pendientes (escalón máximo 0,05 mm, `docs/VARIABLE_LAYERS.md`) y Z anti-aliasing con subida (`docs/ZAA.md`): la mejor terminación por tiempo de impresión del banco |
 
 Son valores comunes de la impresión 3D, elegidos acá; no salen de los perfiles de ningún otro programa.
 

@@ -527,8 +527,8 @@ bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* 
     return changed;
 }
 
-bool row(T label, bool& v) {
-    label_cell(label);
+bool row(T label, bool& v, const char* tip = nullptr) {
+    label_cell(label, tip);
     ImGui::PushID(&v);
     const bool changed = ImGui::Checkbox("##v", &v);
     ImGui::PopID();
@@ -1807,6 +1807,11 @@ void App::settings_panel() {
         }
         changed |= row(T::CuspHeight, s.cusp_height, 0.0, 1.0, "%.3f mm", 0.001f, tr(T::CuspHeightTip));
         changed |= height_steps_rows(s.layer_heights, s.layer_height);
+        changed |= row(T::Zaa, s.zaa, tr(T::ZaaTip));
+        if (s.zaa) {
+            changed |= row(T::ZaaMinThickness, s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::ZaaMinThicknessTip));
+            changed |= row(T::ZaaRaise, s.zaa_raise, tr(T::ZaaRaiseTip));
+        }
         changed |= row(T::Walls, s.wall_count, 0, 50);
         changed |= row(T::LineWidth, s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
         changed |= row(T::Seam, s.seam,

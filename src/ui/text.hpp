@@ -27,6 +27,12 @@
     X(MinLayerHeight, "Capa mínima", "Thinnest layer")                                                                \
     X(MaxLayerHeight, "Capa máxima", "Thickest layer")                                                                \
     X(LayerLimitTip, "La altura de capa variable se queda entre estas dos y nunca pasa el diámetro de la boquilla. 0: 0,04 mm y la boquilla.", "Variable layer heights keep between these two and never exceed the nozzle diameter. 0: 0.04 mm and the nozzle.") \
+    X(Zaa, "Z anti-aliasing", "Z anti-aliasing")                                                                                                                                                                                                                 \
+    X(ZaaTip, "Las extrusiones que se ven arriba bajan hasta la superficie dentro de su capa, con el material justo: los techos inclinados salen sin escalones. Ver docs/ZAA.md.", "The extrusions seen on top go down to the surface within their layer, with just the material it needs: sloping tops come out without steps. See docs/ZAA.md.") \
+    X(ZaaMinThickness, "Espesor mínimo", "Thinnest bead")                                                                                                                                                                                                        \
+    X(ZaaMinThicknessTip, "Hasta dónde puede bajar una extrusión: nunca queda más fina que esta parte de la capa.", "How far an extrusion may go down: it never gets thinner than this share of the layer.")                                                     \
+    X(ZaaRaise, "Subir a la superficie", "Raise to the surface")                                                                                                                                                                                                 \
+    X(ZaaRaiseTip, "También sube hasta la superficie que queda por encima de la capa, hasta media capa (Song et al. 2017): menos escalón, cordones más gruesos.", "Also goes up to the surface above the layer, half a layer at most (Song et al. 2017): smaller steps, thicker beads.") \
     X(Nozzle, "Boquilla", "Nozzle")                                                                                   \
     X(Flavor, "Dialecto de G-code", "G-code flavor")                                                                  \
     X(RelativeE, "Extrusión relativa (M83)", "Relative extrusion (M83)")                                             \

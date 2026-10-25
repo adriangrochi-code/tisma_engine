@@ -238,16 +238,28 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("extrudes while the filament is retracted");
-            if (layer_z_ && known_[2] && std::abs(position_[2] - *layer_z_) > kPositionSlack)
-                problem("extrudes at Z" + text(position_[2]) + ", not at the layer's Z" + text(*layer_z_));
+            const bool at_layer = layer_z_ && known_[2];
+            if (at_layer) {
+                const double h = height_.value_or(0.0);
+                const double low = *layer_z_ - limits_.zaa_below * h - kPositionSlack;
+                const double high = *layer_z_ + limits_.zaa_above * h + kPositionSlack;
+                for (const double z : {position_[2], to[2]})
+                    if (z < low || z > high) {
+                        problem("extrudes at Z" + text(z) + ", not at the layer's Z" + text(*layer_z_));
+                        break;
+                    }
+            }
             if (!width_ || !height_) {
                 problem("extrudes before any ;WIDTH and ;HEIGHT");
             } else if (known_[0] && known_[1]) {
-                const double per_mm = *width_ * *height_ / limits_.filament_area * flow_;
+                // Off the layer's Z (Z anti-aliasing), the bead is what is left down to its bottom.
+                const double thickness =
+                    *height_ + (at_layer ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
+                const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + 2e-5)
                     problem("extrudes " + text(de) + " mm of filament over " + text(length) + " mm, where width " +
-                            text(*width_) + " and height " + text(*height_) + " ask for " + text(expected));
+                            text(*width_) + " and height " + text(thickness) + " ask for " + text(expected));
             }
         } else if (moves && de < -1e-9) {
             problem("pulls the filament back during a move");
@@ -316,6 +328,17 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     }
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + s.retract_lift;
+    if (s.zaa) {
+        limits.zaa_below = 1.0 - s.zaa_min_thickness / 100.0;
+        limits.zaa_above = s.zaa_raise ? 0.5 : 0.0;
+        // Raised beads, and the travels over them, go up to half a layer higher.
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        for (const ThickLayer& t : model.thick)
+            thickest = std::max(thickest, t.height);
+        limits.max_z += limits.zaa_above * thickest;
+    }
     double speed_factor = 1.0, retract_speed = s.retract_speed;
     for (const HeightChange& c : s.changes) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);

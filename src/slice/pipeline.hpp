@@ -8,6 +8,7 @@
 #include "slice/layers.hpp"
 #include "slice/local_layers.hpp"
 #include "slice/variable_layers.hpp"
+#include "slice/zaa.hpp"
 
 #include <vector>
 
@@ -34,6 +35,7 @@ struct SlicedModel {
     // fine ones; each group of them prints its thick zone once, at its top.
     std::vector<LayerGroup> groups;
     std::vector<ThickLayer> thick; // one per layer, empty but at a group's top
+    std::size_t zaa_points = 0;    // points Z anti-aliasing moved off their layer's top (docs/ZAA.md)
 };
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by

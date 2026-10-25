@@ -148,6 +148,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             group_heights.push_back(out.layers[g.last].top - out.layers[g.first].bottom);
         out.thick = split_thick_zones(out.groups, out.walls, out.fills, group_heights, 0.25 * settings.wall_width);
     }
+    if (settings.zaa) {
+        ZaaParams zp;
+        zp.min_thickness = settings.zaa_min_thickness / 100.0;
+        zp.raise = settings.zaa_raise;
+        zp.step = std::min(0.2, 0.5 * settings.wall_width);
+        out.zaa_points = antialias_layers(out.layers, out.walls, out.fills, out.groups, out.thick, SurfaceIndex(mesh), zp);
+    }
     return out;
 }
 

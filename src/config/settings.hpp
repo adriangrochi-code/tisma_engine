@@ -79,6 +79,10 @@ struct Settings {
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     GpuMode gpu = GpuMode::Auto;
+    // Z anti-aliasing (docs/ZAA.md, docs/spec/features/z_antialiasing.md).
+    bool zaa = false;
+    double zaa_min_thickness = 25.0; // percent of the layer height an extrusion keeps at least
+    bool zaa_raise = false;          // also up to the surface above the top, half a layer at most
 
     // machine
     double nozzle_diameter = 0.4;   // mm

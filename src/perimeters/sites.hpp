@@ -52,6 +52,7 @@ std::vector<Site> medial_sites(const MedialGraph& graph, const std::vector<HalfB
 struct ToolpathPoint {
     Point2d p;
     double width;
+    double dz = 0.0; // mm from the layer's top: Z anti-aliasing moves the nozzle to the surface (docs/ZAA.md)
 };
 struct Toolpath {
     std::vector<ToolpathPoint> points;

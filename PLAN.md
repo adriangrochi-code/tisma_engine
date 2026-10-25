@@ -450,8 +450,11 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
 - [x] La altura variable por Z de la ficha (`slicing.md`): la lista de (Z, alto), la altura por pendiente (escalón
   máximo) y las dos combinadas con la altura por zona, dentro de una misma pieza (`docs/VARIABLE_LAYERS.md`). La
   lista vale para toda la cama: el motor lamina los objetos en una sola pila
-- [ ] Z anti-aliasing (`docs/spec/features/z_antialiasing.md`; Song, Ray, Sokolov y Lefebvre 2017): las extrusiones
-  de arriba siguen la superficie dentro de la capa, para la máxima calidad junto con lo anterior
+- [x] Z anti-aliasing (`docs/spec/features/z_antialiasing.md`; Song, Ray, Sokolov y Lefebvre 2017): las extrusiones
+  de arriba siguen la superficie dentro de la capa, hacia abajo (la ficha) y hacia arriba (el artículo), y el perfil
+  Máxima calidad las combina con la altura por zona y por pendiente (`docs/ZAA.md`)
+- [ ] ZAA: el orden completo del artículo (subcaminos, grafo de alturas, menos costuras) y medir el daño de la
+  boquilla en una impresión real
 - [ ] Pedidos del dueño en cola (2026-10-25):
   - relleno optimizado para resistencia y rapidez;
   - el tiempo de impresión estimado lo más preciso posible;

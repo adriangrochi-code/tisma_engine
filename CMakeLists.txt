@@ -172,6 +172,7 @@ add_library(tisma_core
   src/slice/layers.cpp
   src/slice/local_layers.cpp
   src/slice/variable_layers.cpp
+  src/slice/zaa.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp

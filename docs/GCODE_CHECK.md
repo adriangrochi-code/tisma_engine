@@ -33,8 +33,8 @@ G28. Todo lo demás lo escribió el motor y se verifica:
 | Lectura | Cada línea es un comando (`G`, `M` o `T` con un número entero) con parámetros de una letra y un número. Nada de NaN, infinitos ni texto suelto |
 | Lugar | Cada X e Y queda dentro de la pieza agrandada por la falda, el borde, dos anchos de línea y 1 mm de holgura para los viajes; con `machine.bed`, además dentro de la cama. Z queda entre 0 y la capa más alta más el alzado de los viajes; las alturas cuentan desde la base de la pieza, que se imprime apoyada en la cama |
 | Velocidad | Ningún F supera la mayor de `speed.travel`, `speed.max` y `retraction.speed` |
-| Capas | Cada `;LAYER_CHANGE` trae un `;Z:` más alto que el anterior y una altura positiva. Cada extrusión ocurre a la Z de su capa: el alzado de un viaje se deshace antes de extruir |
-| Extrusión | El filamento de cada movimiento que extruye coincide con ancho × alto × largo / área del filamento, con un 2 % de margen más el filamento de 5 µm de recorrido (los tramos demasiado cortos para escribirse se suman al siguiente) |
+| Capas | Cada `;LAYER_CHANGE` trae un `;Z:` más alto que el anterior y una altura positiva. Cada extrusión ocurre a la Z de su capa: el alzado de un viaje se deshace antes de extruir. Con Z anti-aliasing (`docs/ZAA.md`), hasta `(1 − zaa.min_thickness) · alto` por debajo y, con `zaa.raise`, hasta medio alto por encima |
+| Extrusión | El filamento de cada movimiento que extruye coincide con ancho × alto × largo / área del filamento (fuera de la Z de la capa, el alto es lo que queda hasta la base, promedio de los dos extremos), con un 2 % de margen más el filamento de 5 µm de recorrido (los tramos demasiado cortos para escribirse se suman al siguiente) |
 | Retracción | Cada retracción mide `retraction.length`, no se retrae dos veces seguidas y se deshace por completo antes de volver a extruir. No se empuja filamento sin una retracción que deshacer, ni se tira hacia atrás en medio de un movimiento |
 | Ventilador | `M106 S` entre 0 y 255 |
 | G0 | Nunca mueve el extrusor |

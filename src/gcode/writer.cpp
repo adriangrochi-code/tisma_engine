@@ -178,6 +178,10 @@ public:
         height_ = height;
     }
 
+    // Above the layer's top the nozzle travels this high (Z anti-aliasing that
+    // raises paths, docs/ZAA.md), so it clears them.
+    void set_clearance(double clearance) { clearance_ = clearance; }
+
     void new_layer(double z, double height, double travel_feed) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
@@ -190,6 +194,8 @@ public:
         move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
         height_ = height;
         z_value_ = z;
+        z_now_ = written(z);
+        clearance_ = 0.0;
     }
 
     void type(const char* t) {
@@ -218,14 +224,21 @@ public:
             retracted_amount_ = retract_;
             other_time_ += retract_ / retract_feed_;
         }
+        // Off the layer's top (Z anti-aliasing): back up, and over what was raised.
+        const double cruise = written(z_value_ + clearance_);
+        if (z_now_ != cruise) {
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, feed);
+            z_now_ = cruise;
+        }
         const bool lift = retract && lift_ > 0.0;
+        const double level = clearance_ > 0.0 ? cruise : z_value_;
         other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / feed : 0.0);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, z_value_ + lift_, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, feed);
         for (const Point2d& q : plan.points)
             move("G1", q.x, q.y, std::nullopt, std::nullopt, feed);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, z_value_, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, level, std::nullopt, feed);
         x_value_ = p.x, y_value_ = p.y;
     }
 
@@ -246,15 +259,23 @@ public:
             width_.assign(width_text);
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
-        const double e = width * height_ * length / filament_area_ * flow_;
-        if (forced_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+        // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
+        // as thick as what is left down to the layer's bottom, by the Z written.
+        const double z_layer = written(z_value_), z_from = written(z_value_ + from.dz), z_to = written(z_value_ + to.dz);
+        if (z_now_ != z_from) {
+            move("G1", std::nullopt, std::nullopt, z_from, std::nullopt, feed);
+            z_now_ = z_from;
+        }
+        const double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
+        const double e = width * height * length / filament_area_ * flow_;
+        if (forced_flow_ > 0.0 && width * height * flow_ > 0.0) {
             // A flow tower: exactly this flow, past every cap (it looks for the
             // limit), as far as the machine moves.
-            feed = std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height_ * flow_) * 60.0)) / 60.0);
-        } else if (max_flow_ > 0.0 && width * height_ * flow_ > 0.0) {
+            feed = std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height * flow_) * 60.0)) / 60.0);
+        } else if (max_flow_ > 0.0 && width * height * flow_ > 0.0) {
             // No faster than the hot end and the filament can melt: the feed is
             // capped at the volumetric limit, rounded down to whole mm/min.
-            const double cap = max_flow_ / (width * height_ * flow_);
+            const double cap = max_flow_ / (width * height * flow_);
             if (feed > cap)
                 feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
         }
@@ -272,13 +293,17 @@ public:
         // A slowed-down feed is rounded down to whole mm/min (as F is written), so
         // the layer lasts at least the minimum time.
         const double paced = pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed) * 60.0)) / 60.0;
-        move("G1", to.p.x, to.p.y, std::nullopt, e_, paced);
+        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
+        z_now_ = z_to;
     }
 
     double total_e() const { return total_e_; }
 
 private:
+    // A Z as the G-code writes it (three decimals), to compare and to measure with.
+    static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
+
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
               std::optional<double> e, double feed) {
         const std::size_t start = text_.size();
@@ -338,6 +363,8 @@ private:
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
+    double z_now_ = 0.0;     // the nozzle's Z as written: off the layer's top with Z anti-aliasing
+    double clearance_ = 0.0; // mm above the layer's top that travels keep
     bool known_ = false;     // the position is known (after the first move in XY)
     bool retracted_ = false;
     std::string x_, y_, z_, e_text_, width_;
@@ -511,10 +538,39 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 g.extrude(t.points.back(), t.points.front(), feed);
         };
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
+        // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
+        // lower ones first, so the nozzle never runs beside a higher bead it
+        // has just laid (Song et al. 2017, Section 4), in bands of 0.02 mm.
+        auto band = [](const Toolpath& t) {
+            double sum = 0.0;
+            for (const ToolpathPoint& p : t.points)
+                sum += p.dz;
+            return std::floor(sum / double(std::max<std::size_t>(t.points.size(), 1)) / 0.02);
+        };
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
-            for (const Toolpath& t : order_paths(paths, cursor, seam, seed, seams))
+            std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams);
+            if (s.zaa)
+                std::stable_sort(ordered.begin(), ordered.end(),
+                                 [&](const Toolpath& lhs, const Toolpath& rhs) { return band(lhs) < band(rhs); });
+            for (const Toolpath& t : ordered)
                 lay(t, type, feed);
         };
+        if (s.zaa && s.zaa_raise) {
+            // Travels keep above the highest raised bead of the layer.
+            double highest = 0.0;
+            auto scan = [&](const std::vector<Toolpath>& paths) {
+                for (const Toolpath& t : paths)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            };
+            if (l < model.walls.size())
+                scan(model.walls[l].toolpaths);
+            if (l < model.fills.size())
+                scan(model.fills[l].top), scan(model.fills[l].gaps);
+            if (l < model.thick.size())
+                scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
+            g.set_clearance(highest);
+        }
         // Skirt, then brim, before the part, at the first layer's speed.
         if (l < std::size_t(std::max(s.skirt_layers, 0)))
             group(model.skirt, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed) * a.speed, SeamMode::Nearest);
@@ -578,11 +634,24 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 break;
             done[next] = true;
             const Island& i = islands[next];
-            for (const auto& [index, paths] : i.walls) {
+            auto walls = [&](int index, const std::vector<Toolpath>& paths) {
                 const bool outer = index == 0;
                 group(paths, outer ? "External perimeter" : "Perimeter",
                       speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
-            }
+            };
+            // Walls off the layer's top (Z anti-aliasing): the outer one, the
+            // lowest, first.
+            bool off_top = false;
+            for (const auto& [index, paths] : i.walls)
+                for (const Toolpath& t : paths)
+                    for (const ToolpathPoint& p : t.points)
+                        off_top = off_top || p.dz != 0.0;
+            if (off_top)
+                for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
+                    walls(w->first, w->second);
+            else
+                for (const auto& [index, paths] : i.walls)
+                    walls(index, paths);
             for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
         }

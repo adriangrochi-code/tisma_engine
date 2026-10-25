@@ -76,7 +76,7 @@ Settings parse_settings(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -399,6 +399,18 @@ Settings parse_settings(std::string_view text) {
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
+    read_group(root, "zaa", {"enabled", "min_thickness", "raise"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "min_thickness") {
+            const double v = number(g, n, k);
+            if (v < 1.0 || v > 100.0)
+                fail(k, "must be from 1 to 100 percent");
+            s.zaa_min_thickness = v;
+            return;
+        }
+        if (!g.at(n).is_boolean())
+            fail(k, "must be true or false");
+        (n == "enabled" ? s.zaa : s.zaa_raise) = g.at(n).get<bool>();
+    });
     read_group(root, "compensation", {"scale_x", "scale_y", "scale_z", "hole_offset"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
@@ -598,6 +610,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_max", num(s.fan_max)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
+        {"zaa.enabled", s.zaa ? "true" : "false"},
+        {"zaa.min_thickness", num(s.zaa_min_thickness)},
+        {"zaa.raise", s.zaa_raise ? "true" : "false"},
         {"compensation.scale_x", num(s.scale_x)},
         {"compensation.scale_y", num(s.scale_y)},
         {"compensation.scale_z", num(s.scale_z)},
@@ -734,6 +749,7 @@ std::string settings_json(const Settings& s) {
           {"fan_max", s.fan_max},
           {"fan_off_layers", s.fan_off_layers}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+        {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"extrusion",

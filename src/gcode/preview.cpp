@@ -236,7 +236,10 @@ private:
         mv.layer = static_cast<std::uint32_t>(out_.layers.size() - 1);
         PreviewLayer& layer = out_.layers.back();
         if (extrudes) {
-            const double height = layer.height > 0.0 ? layer.height : height_ > 0.0 ? height_ : std::max(z, 0.0);
+            double height = layer.height > 0.0 ? layer.height : height_ > 0.0 ? height_ : std::max(z, 0.0);
+            // Off the layer's Z (Z anti-aliasing, docs/ZAA.md): what is left down to its bottom.
+            if (layer_comments_ && layer.height > 0.0)
+                height = std::max(0.0, height + ((z_ - layer.z) + (z - layer.z)) / 2.0);
             double width = width_;
             if (!width_comments_ && height > 0.0)
                 width = de * filament_area_ / (length * height);

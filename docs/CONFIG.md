@@ -169,6 +169,17 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
 |---|---|---|---|---|
 | `gpu` | texto | `"auto"` | `auto`, `off` | `auto` usa la GPU si hay una (Vulkan); `off` usa solo la CPU |
 
+### `zaa`
+
+Z anti-aliasing (`docs/ZAA.md`, ficha `docs/spec/features/z_antialiasing.md`): las extrusiones que se ven arriba
+siguen la superficie dentro de su capa.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | sí/no | `false` | | Activa el Z anti-aliasing: paredes, relleno de arriba y relleno de huecos bajan hasta la superficie donde esta corta la capa, con el material del espesor que queda |
+| `min_thickness` | número | 25 | 1 a 100 | Hasta dónde puede bajar una extrusión, en % de la altura de la capa: nunca queda más fina que esto |
+| `raise` | sí/no | `false` | | También sube hasta la superficie que queda por encima de la capa, hasta media capa (Song et al. 2017). La ficha solo baja |
+
 ### `compensation`
 
 Compensación geométrica de la impresora (`docs/CALIBRATION.md`). La pestaña Calibración la calcula desde las medidas

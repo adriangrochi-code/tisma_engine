@@ -207,6 +207,8 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
   calibración, y cada malla como STL binario, en partes con etiqueta (`docs/PROJECT.md`).
 - **`slice/local_layers.*`:** la altura de capa por zona (`docs/LOCAL_LAYERS.md`): los grupos de subcapas, sus zonas
   gruesas y el recorte de los caminos.
+- **`slice/zaa.*`:** Z anti-aliasing (`docs/ZAA.md`): el índice de las caras que miran hacia arriba y el corte de
+  los caminos visibles, con la altura de cada punto (`ToolpathPoint::dz`) que escribe el G-code.
 - **`slice/variable_layers.*`:** la altura variable por Z (`docs/VARIABLE_LAYERS.md`): planea la pila de capas con
   la lista de tramos, la pendiente (escalón máximo) y las subcapas de la altura por zona, y cuenta las pieles en capas
   gruesas.
