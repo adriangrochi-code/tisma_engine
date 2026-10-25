@@ -149,6 +149,9 @@ perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y ca
   byte a byte: los números se escriben por un camino propio que da lo mismo que `std::to_chars`.
 - El G-code escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…`, o
   `SET_VELOCITY_LIMIT ACCEL=…` en Klipper), así la impresora corre a la aceleración con la que se estima el tiempo.
+- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
+  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
+  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
 
 ### Corregido
 
@@ -247,12 +250,6 @@ negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_
 - **Un cambio por altura (`changes`) a menos de 0,0005 mm del tope de una capa:** se aplicaba en esa capa en el
   verificador y en la siguiente en el escritor, y el G-code se rechazaba. Ahora los dos usan el tope tal como se
   escribe.
-
-### Arreglado
-
-- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
-  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
-  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
 
 ## [0.7.0-alpha.1] - 2026-10-24
 

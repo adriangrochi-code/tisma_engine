@@ -3900,5 +3900,12 @@ El G-code sale idéntico byte a byte. La elección de islas con cajas también d
 **Medido:** la placa de 12 islas pasa de 69 750 a 111 570 mm extruidos (+60 %) y de 34 min 50 s a 52 min 49 s; la
 esfera de 50 mm, +0,07 % (sus casquetes). El cilindro de 20 mm de diámetro no cambia.
 
+**Medido por el equipo de fichas** (caja negra sobre 7f745d8, Release):
+- ThreadSanitizer: 0 avisos en 14 laminados y 3 análisis.
+- 400 cilindros: de 44,8 a 38,6 s en total; la verificación, de 6,96 a 3,77 s; la memoria, de 2283 a 2016 MB; el
+  G-code, de 386 a 229 MB.
+- Ningún tramo que extruye mide menos de 0,0125 mm, y ninguno mide cero.
+- La verificación sigue creciendo más que lineal (×32 de 25 a 400 cilindros).
+
 **Sigue:** lo que queda de la revisión en `PLAN.md` (verificación con muchas islas, `info`, gyroid por franjas,
 streaming del G-code).
