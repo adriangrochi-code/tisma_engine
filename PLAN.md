@@ -544,6 +544,15 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
+  - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
+    - [ ] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
+      duplican vértices, el gyroid escribe el triple de tramos y quedan tramos de un micrón que extruyen
+    - [ ] el gyroid por franjas, sin la grilla entera en memoria; el orden monótono sin costo cuadrático
+    - [ ] escribir y verificar el G-code por capas, sin tenerlo entero en memoria
+    - [ ] el Voronoi propio más rápido en capas con miles de sitios (hoy es lo más lento con muchas islas)
+    - [ ] el verificador con un mapa de alturas de lo ya impreso (ningún movimiento por debajo)
+    - [ ] `infill.solid_below_area` de la ficha `surfaces_infill.md` (zonas chicas sólidas)
+    - [ ] `info` cuenta contornos de área cero en mallas con triángulos degenerados
   - el tiempo de impresión estimado lo más preciso posible;
   - el panel izquierdo con niveles simple, medio y avanzado más uno personalizado, y tres menús grandes (impresora,
     filamento, objetos) en el mismo panel

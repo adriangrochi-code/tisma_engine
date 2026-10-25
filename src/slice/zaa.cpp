@@ -96,7 +96,7 @@ namespace {
 // layer, never below the thinnest share; up to it above the top (raise).
 double drop_at(const SurfaceIndex& surface, double x, double y, double bottom, double top, const ZaaParams& params) {
     const double h = top - bottom;
-    const double ceiling = params.raise ? top + 0.5 * h : top;
+    const double ceiling = params.raise ? top + (params.above >= 0.0 ? params.above : 0.5 * h) : top;
     const double z = surface.surface(x, y, bottom, ceiling, top);
     if (std::isnan(z))
         return 0.0;
@@ -155,10 +155,18 @@ std::size_t antialias_layers(const std::vector<Layer>& layers, std::vector<Layer
     for (const LayerGroup& g : groups)
         if (g.last < layers.size())
             thick_bottom[g.last] = layers[g.first].bottom;
-    const auto paths = [&](std::vector<Toolpath>& list, double bottom, double top) {
+    // The raise stops at the next layer's slice plane, half its height above
+    // this top: past it, the next layer prints the same surface again (a thin
+    // layer after a thick one, the fine layers after a thick zone).
+    const auto next_height = [&](std::size_t l, double own) {
+        return l + 1 < layers.size() ? layers[l + 1].top - layers[l + 1].bottom : own;
+    };
+    const auto paths = [&](std::vector<Toolpath>& list, double bottom, double top, double above) {
+        ZaaParams capped = params;
+        capped.above = above;
         std::size_t count = 0;
         for (Toolpath& t : list) {
-            t = antialias_path(t, surface, bottom, top, params);
+            t = antialias_path(t, surface, bottom, top, capped);
             for (const ToolpathPoint& p : t.points)
                 count += p.dz != 0.0;
         }
@@ -166,18 +174,20 @@ std::size_t antialias_layers(const std::vector<Layer>& layers, std::vector<Layer
     };
     tbb::parallel_for(std::size_t(0), layers.size(), [&](std::size_t l) {
         const double bottom = layers[l].bottom, top = layers[l].top;
+        const double above = 0.5 * std::min(top - bottom, next_height(l, top - bottom));
         std::size_t count = 0;
         if (l < walls.size())
-            count += paths(walls[l].toolpaths, bottom, top);
+            count += paths(walls[l].toolpaths, bottom, top, above);
         if (l < fills.size()) {
-            count += paths(fills[l].top, bottom, top);
-            count += paths(fills[l].gaps, bottom, top);
+            count += paths(fills[l].top, bottom, top, above);
+            count += paths(fills[l].gaps, bottom, top, above);
         }
         if (l < thick.size() && !thick[l].empty()) {
             ThickLayer& t = thick[l];
-            count += paths(t.walls, thick_bottom[l], top);
-            count += paths(t.fill.top, thick_bottom[l], top);
-            count += paths(t.fill.gaps, thick_bottom[l], top);
+            const double thick_above = 0.5 * std::min(top - thick_bottom[l], next_height(l, top - thick_bottom[l]));
+            count += paths(t.walls, thick_bottom[l], top, thick_above);
+            count += paths(t.fill.top, thick_bottom[l], top, thick_above);
+            count += paths(t.fill.gaps, thick_bottom[l], top, thick_above);
         }
         moved += count;
     });

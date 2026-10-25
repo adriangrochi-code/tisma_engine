@@ -67,13 +67,6 @@ const std::map<std::string, InfillPattern>& infill_patterns() {
     return names;
 }
 
-const char* infill_pattern_name(InfillPattern pattern) {
-    for (const auto& [name, value] : infill_patterns())
-        if (value == pattern)
-            return name.c_str();
-    return "rectilinear";
-}
-
 // Calls read(name, key) for every member of the group; rejects unknown names.
 template <typename Read>
 void read_group(const json& root, const std::string& group_name, const std::vector<std::string>& known, Read read) {
@@ -93,6 +86,13 @@ void read_group(const json& root, const std::string& group_name, const std::vect
 Settings parse_checked(std::string_view text);
 
 } // namespace
+
+const char* infill_pattern_name(InfillPattern pattern) {
+    for (const auto& [name, value] : infill_patterns())
+        if (value == pattern)
+            return name.c_str();
+    return "rectilinear";
+}
 
 bool json_depth_ok(std::string_view text, int max_depth) {
     int depth = 0;

@@ -164,6 +164,10 @@ static Project read_project_checked(std::string_view data) {
         const ordered_json& models = root.at("models");
         if (!models.is_array())
             fail("models: must be a list");
+        // Each model has its own MESH chunk (write_project): one chunk named
+        // by many models multiplied its memory (300 references to a 20 000
+        // triangle chunk took 200 MB from a 3 kB larger file).
+        std::vector<bool> used(meshes.size(), false);
         for (std::size_t i = 0; i < models.size(); ++i) {
             const ordered_json& m = models[i];
             const std::string what = "models[" + std::to_string(i) + "]";
@@ -172,6 +176,9 @@ static Project read_project_checked(std::string_view data) {
             const auto index = m.at("mesh").get<std::size_t>();
             if (index >= meshes.size())
                 fail(what + ".mesh: there is no MESH chunk " + std::to_string(index));
+            if (used[index])
+                fail(what + ".mesh: MESH chunk " + std::to_string(index) + " belongs to another model");
+            used[index] = true;
             ProjectModel model;
             model.name = m.value("name", std::string());
             try {

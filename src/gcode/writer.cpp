@@ -6,6 +6,7 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/travel.hpp"
+#include "infill/nonplanar.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -281,7 +282,11 @@ public:
 
     // The part-cooling fan in percent: M106 S0-255, or M107 when off.
     void fan(double percent) {
-        const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
+        long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
+        // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
+        // there. S2 is the same breeze (0.8 %) on every firmware.
+        if (value == 1)
+            value = 2;
         if (value == fan_)
             return;
         if (value == 0) {
@@ -305,7 +310,7 @@ public:
     // Lines written as they are (a temperature, the user's G-code of a change),
     // as user G-code; then the type before comes back, so the engine's own
     // moves that follow (a travel that retracts) are not taken for the user's.
-    void custom(const std::string& lines) {
+    void custom(const std::string& lines, bool user = false) {
         if (lines.empty())
             return;
         const char* before = type_;
@@ -313,8 +318,28 @@ public:
         text_ += lines;
         if (lines.back() != '\n')
             text_ += '\n';
+        if (user)
+            resync();
         if (before && std::string_view(before) != "Custom")
             type(before);
+    }
+
+    // After a change's own G-code (a pause that parks the head, a relative
+    // move): the engine no longer knows where the head is, nor the modes or
+    // the extruder's position. The modes and E are set again, and the next
+    // travel retracts and writes X, Y, Z and F in full.
+    void resync() {
+        text_ += "G90\n";
+        text_ += relative_ ? "M83\n" : "M82\n";
+        if (!relative_) {
+            char buffer[kNumberCapacity];
+            text_ += "G92 E";
+            text_.append(buffer, format_fixed(buffer, e_, 5));
+            text_ += '\n';
+        }
+        x_.clear(), y_.clear(), z_.clear(), e_text_.clear();
+        f_ = std::numeric_limits<long>::min();
+        resync_ = true;
     }
 
     // Another bead height within the layer (a thick zone, docs/LOCAL_LAYERS.md).
@@ -373,6 +398,26 @@ public:
     // A travel along the planner's route. It retracts first (and lifts Z by
     // lift) when it leaves the part or is longer than min_travel.
     void travel(const Point2d& p, double feed, const TravelPlanner& planner) {
+        if (resync_ && known_) {
+            // From wherever the change's G-code left the head: retracted, up at
+            // the cruise height, then straight over, every axis written.
+            if (retract_ > 0.0 && !retracted_) {
+                e_ = relative_ ? -retract_ : e_ - retract_;
+                move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+                retracted_ = true;
+                retracted_amount_ = retract_;
+                other_time_ += retract_ / retract_feed_;
+            }
+            const double cruise = written(z_value_ + clearance_);
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, feed);
+            z_now_ = cruise;
+            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+            other_time_ += std::hypot(p.x - x_value_, p.y - y_value_) / feed;
+            x_value_ = p.x, y_value_ = p.y;
+            resync_ = false;
+            return;
+        }
+        resync_ = false;
         if (!known_) {
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
             x_value_ = p.x, y_value_ = p.y, known_ = true;
@@ -540,6 +585,7 @@ private:
     bool nonplanar_ = false; // in a wavy path: ;HEIGHT is each move's own
     std::string shown_height_;
     bool known_ = false;     // the position is known (after the first move in XY)
+    bool resync_ = false;    // after a change's own G-code: the next travel writes everything
     bool retracted_ = false;
     std::string x_, y_, z_, e_text_, width_;
     long f_ = std::numeric_limits<long>::min(); // none written yet
@@ -631,6 +677,15 @@ std::vector<Warning> capability_warnings(const Settings& s) {
                       0.6 * d, 2.5 * d);
         add("line_width", text, w);
     }
+    // Wavy infill asked, with an infill whose lines move from layer to layer
+    // or sit too close: it stays flat, and says so.
+    if (s.infill_nonplanar && s.infill_density > 0.0 && !wave_params(s))
+        add("nonplanar_ignored",
+            std::string("wavy infill needs an infill that repeats layer to layer (aligned_rectilinear, grid, "
+                        "triangles, stars, honeycomb, concentric, hilbert, archimedean, octagram) with its lines far "
+                        "enough apart; ") +
+                infill_pattern_name(s.infill_pattern) + " at this density stays flat",
+            0.0);
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp <= 0.0) {
         std::snprintf(text, sizeof text, "the filament wants a chamber at %.0f C; the printer does not heat one",
                       s.chamber_temperature);
@@ -697,6 +752,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         double volumetric_flow = 0.0; // mm3/s forced on every extrusion; 0: none
         std::optional<double> fan;
         std::string lines; // what this layer writes first: temperatures and the changes' own G-code
+        bool user = false; // the lines hold a change's own G-code
     };
     Active active;
     active.retract_length = s.retract_length;
@@ -710,7 +766,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     auto emit_layer = [&](std::size_t l, double fan, const Active& a) {
         const Layer& layer = model.layers[l];
         g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
-        g.custom(a.lines);
+        g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
         g.set_forced_flow(a.volumetric_flow);
@@ -835,11 +891,34 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         };
         const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
         std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
+        // Each island's box: the point-in-polygon tests run only where the box
+        // holds the point (hundreds of islands made every path test them all).
+        std::vector<std::array<std::int64_t, 4>> piece_box(pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
+        for (std::size_t k = 0; k < pieces.size(); ++k)
+            for (const auto& q : pieces[k].front()) {
+                auto& b = piece_box[k];
+                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
+            }
         auto island = [&](const Toolpath& t) -> Island& {
             if (pieces.size() <= 1)
                 return islands.front();
-            const int k = island_of(pieces, t.points.front().p);
-            return islands[k < 0 ? pieces.size() : std::size_t(k)];
+            // As island_of: the first island whose outline holds the point and
+            // none of whose holes do.
+            const Point2d p = t.points.front().p;
+            const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+            for (std::size_t k = 0; k < pieces.size(); ++k) {
+                const auto& b = piece_box[k];
+                if (q.x < b[0] || q.x > b[2] || q.y < b[1] || q.y > b[3])
+                    continue;
+                if (Clipper2Lib::PointInPolygon(q, pieces[k].front()) == Clipper2Lib::PointInPolygonResult::IsOutside)
+                    continue;
+                bool in_hole = false;
+                for (std::size_t h = 1; h < pieces[k].size() && !in_hole; ++h)
+                    in_hole = Clipper2Lib::PointInPolygon(q, pieces[k][h]) == Clipper2Lib::PointInPolygonResult::IsInside;
+                if (!in_hole)
+                    return islands[k];
+            }
+            return islands[pieces.size()];
         };
         auto add = [&](Island& i, const Toolpath& t) {
             i.ends.push_back(t.points.front().p);
@@ -872,13 +951,47 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                       s.solid_infill_speed, s.infill_speed,          s.support_speed,
                                       s.support_speed};
         std::vector<bool> done(islands.size(), false);
+        // The boxes of the islands' path ends bound how near each island can be,
+        // so most are not looked at: the same pick as looking at every end
+        // (the nearest, and among equals the first island), without the
+        // islands-squared cost.
+        std::vector<std::array<double, 4>> end_box(islands.size());
+        for (std::size_t k = 0; k < islands.size(); ++k) {
+            auto& b = end_box[k];
+            b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                 std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+            for (const Point2d& p : islands[k].ends)
+                b[0] = std::min(b[0], p.x), b[1] = std::min(b[1], p.y), b[2] = std::max(b[2], p.x), b[3] = std::max(b[3], p.y);
+        }
+        const auto box_distance = [&](std::size_t k) {
+            const auto& b = end_box[k];
+            const double dx = std::max({b[0] - cursor.x, 0.0, cursor.x - b[2]});
+            const double dy = std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]});
+            return std::hypot(dx, dy);
+        };
         for (;;) {
             std::size_t next = islands.size();
             double nearest = std::numeric_limits<double>::max();
+            const auto look = [&](std::size_t k) {
+                for (const Point2d& p : islands[k].ends) {
+                    const double d = std::hypot(p.x - cursor.x, p.y - cursor.y);
+                    if (d < nearest || (d == nearest && k < next))
+                        nearest = d, next = k;
+                }
+            };
+            // The island whose box is nearest first, for a tight bound; then the
+            // others whose box could hold something as near.
+            std::size_t first_look = islands.size();
+            double seed_distance = std::numeric_limits<double>::max();
             for (std::size_t k = 0; k < islands.size(); ++k)
-                for (const Point2d& p : islands[k].ends)
-                    if (!done[k] && std::hypot(p.x - cursor.x, p.y - cursor.y) < nearest)
-                        nearest = std::hypot(p.x - cursor.x, p.y - cursor.y), next = k;
+                if (!done[k] && !islands[k].ends.empty() && box_distance(k) < seed_distance)
+                    seed_distance = box_distance(k), first_look = k;
+            if (first_look == islands.size())
+                break;
+            look(first_look);
+            for (std::size_t k = 0; k < islands.size(); ++k)
+                if (k != first_look && !done[k] && !islands[k].ends.empty() && box_distance(k) <= nearest)
+                    look(k);
             if (next == islands.size())
                 break;
             done[next] = true;
@@ -934,6 +1047,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // Changes below this layer's top take effect now: its top as ;Z: writes
         // it, so a reader of the G-code (the check) takes them at the same layer.
         active.lines.clear();
+        active.user = false;
         const double written_top = std::strtod(fixed(model.layers[l].top - base, 3).c_str(), nullptr);
         while (next_change < s.changes.size() && s.changes[next_change].z < written_top - 1e-6) {
             const HeightChange& c = s.changes[next_change++];
@@ -947,8 +1061,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 active.lines += acceleration_gcode(s.flavor, *c.acceleration, s.travel_acceleration) + "\n";
             if (c.volumetric_flow)
                 active.volumetric_flow = *c.volumetric_flow;
-            if (!c.gcode.empty())
+            if (!c.gcode.empty()) {
                 active.lines += substitute_variables(c.gcode, s.variables) + "\n";
+                active.user = true;
+            }
             if (c.retract_length)
                 active.retract_length = *c.retract_length;
             if (c.retract_speed)

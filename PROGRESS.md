@@ -3823,3 +3823,27 @@ con el código anterior.
   - las uniones del zigzag son cuadráticas;
   - el G-code ocupa la memoria entera;
 - **otros:** aviso de `infill.nonplanar` ignorado; `infill.solid_below_area` de la ficha.
+
+## 2026-10-25 — revisión profunda de errores (segunda tanda)
+
+**Arreglado,** cada uno con su prueba, que falla con el código anterior donde se pudo comprobar:
+- **Z anti-aliasing con «raise»:** la subida llega como mucho a la mitad de la capa siguiente. Antes, con una capa
+  siguiente más fina, las dos imprimían la misma superficie: en una placa de 0,42 mm con primera capa de 0,3 mm, la
+  primera capa subía a 0,42 y la segunda pasaba por encima (+29 % de material);
+- **orientación:** `orient_consistently` da la misma orientación a toda la malla y vuelve la pieza hacia afuera si
+  hizo falta reparar algo. Una cara invertida borraba el cubo de 20 mm de la prueba del revisor;
+- **escritor:** después del G-code de un cambio por altura vuelve a fijar los modos y E, retrae y escribe los ejes
+  completos;
+- **otros:** ventilador `S1` en RepRapFirmware, líneas sólidas ajustadas por isla, mallas repetidas en un proyecto,
+  mensajes de pieza vacía, y aviso del relleno ondulado ignorado.
+
+**Medido** (196 cilindros de 4 mm, 100 capas, 4 núcleos):
+
+| Fase | Antes | Ahora | Por qué |
+|---|---|---|---|
+| Escritura | 19,6 s | 8,4 s | El 77 % era la costura alineada: cada esquina de cada lazo contra todas las costuras de abajo. Ahora busca en una grilla |
+| Laminado | 14,1 s | 10,0 s | Las uniones del zigzag miraban todo el borde por cada extremo; ahora usan una grilla |
+
+El G-code sale idéntico byte a byte. La elección de islas con cajas también da el mismo resultado; no era lo lento.
+
+**Sigue:** lo que quedó en `PLAN.md`, con la resolución del G-code primero. Después, la release 0.8.0-alpha.1.

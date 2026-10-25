@@ -120,9 +120,66 @@ private:
 } // namespace
 
 void SeamMemory::next_layer() {
-    for (auto& [index, seams] : current)
+    for (auto& [index, seams] : current) {
         below[index] = std::move(seams);
+        grids_.erase(index);
+    }
     current.clear();
+}
+
+double SeamMemory::nearest_below(int index, const Point2d& p) const {
+    const auto it = below.find(index);
+    if (it == below.end() || it->second.empty())
+        return std::numeric_limits<double>::infinity();
+    const std::vector<Point2d>& seams = it->second;
+    double best = std::numeric_limits<double>::infinity();
+    if (seams.size() <= 32) {
+        for (const Point2d& s : seams)
+            best = std::min(best, distance(p, s));
+        return best;
+    }
+    auto [at, built] = grids_.try_emplace(index);
+    Grid& g = at->second;
+    if (built) {
+        double xmin = seams.front().x, xmax = xmin, ymin = seams.front().y, ymax = ymin;
+        for (const Point2d& s : seams)
+            xmin = std::min(xmin, s.x), xmax = std::max(xmax, s.x), ymin = std::min(ymin, s.y), ymax = std::max(ymax, s.y);
+        const double w = xmax - xmin, h = ymax - ymin;
+        g.cell = std::max({std::sqrt(w * h / double(seams.size())), std::max(w, h) / 1024.0, 1e-3});
+        g.x0 = xmin, g.y0 = ymin;
+        g.nx = long(w / g.cell) + 1, g.ny = long(h / g.cell) + 1;
+        g.cells.assign(std::size_t(g.nx) * std::size_t(g.ny), {});
+        for (std::size_t k = 0; k < seams.size(); ++k) {
+            const long cx = std::min(g.nx - 1, long((seams[k].x - g.x0) / g.cell));
+            const long cy = std::min(g.ny - 1, long((seams[k].y - g.y0) / g.cell));
+            g.cells[std::size_t(cy) * std::size_t(g.nx) + std::size_t(cx)].push_back(std::uint32_t(k));
+        }
+    }
+    // Rings of cells around p's cell (p may lie outside the grid): every seam
+    // in ring r + 1 or beyond is at least r cells away.
+    const long cx = long(std::floor((p.x - g.x0) / g.cell)), cy = long(std::floor((p.y - g.y0) / g.cell));
+    const long far = std::max({std::labs(cx), std::labs(cx - g.nx), std::labs(cy), std::labs(cy - g.ny)}) + 1;
+    const auto visit = [&](long x, long y) {
+        if (x < 0 || y < 0 || x >= g.nx || y >= g.ny)
+            return;
+        for (const std::uint32_t k : g.cells[std::size_t(y) * std::size_t(g.nx) + std::size_t(x)])
+            best = std::min(best, distance(p, seams[k]));
+    };
+    for (long r = 0; r <= far; ++r) {
+        for (long x = cx - r; x <= cx + r; ++x) {
+            visit(x, cy - r);
+            if (r > 0)
+                visit(x, cy + r);
+        }
+        for (long y = cy - r + 1; y <= cy + r - 1; ++y) {
+            visit(cx - r, y);
+            if (r > 0)
+                visit(cx + r, y);
+        }
+        if (best <= double(r) * g.cell)
+            break;
+    }
+    return best;
 }
 
 std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
@@ -185,9 +242,8 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
         std::size_t best = candidates.front();
         double nearest = std::numeric_limits<double>::max();
         for (std::size_t i : candidates)
-            for (const Point2d& seam : it->second)
-                if (const double d = distance(loop.points[i].p, seam); d < nearest)
-                    nearest = d, best = i;
+            if (const double d = memory.nearest_below(loop.index, loop.points[i].p); d < nearest)
+                nearest = d, best = i;
         return best;
     }
     }

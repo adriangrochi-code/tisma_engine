@@ -177,6 +177,25 @@ negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_
   - unas preferencias ilegibles se perdían enteras y se pisaban al salir: ahora se guardan aparte, y los ajustes y
     preferencias se escriben aparte y se mueven encima;
   - un archivo soltado con el explorador abierto cambiaba el modelo bajo la exportación pendiente.
+- **Segunda tanda de la revisión:**
+  - **Z anti-aliasing con «raise»:** con una capa siguiente más fina (la primera capa más gruesa, la altura por
+    zona, los tramos de altura), la capa subía hasta donde la siguiente volvía a imprimir la misma superficie: la
+    boquilla pasaba dentro del cordón fresco y el material salía dos veces. Ahora sube como mucho hasta la mitad de la
+    capa siguiente.
+  - **Una cara con la orientación invertida** hacía desaparecer la pieza entera; ahora la malla se orienta pareja
+    antes de laminar.
+  - **Después del G-code de un cambio por altura** (una pausa que estaciona el cabezal), el motor vuelve a fijar los
+    modos y E, retrae y escribe X, Y, Z y F completos. Antes seguía desde donde creía que estaba, o el verificador
+    rechazaba la exportación.
+  - **Ventilador mínimo:** `M106 S1` es el ventilador al máximo en RepRapFirmware; ahora sale `S2`.
+  - **Líneas sólidas por isla:** se ajustan a cada isla, no a la capa entera (quedaba sin cubrir una franja del borde
+    de las otras islas).
+  - **Proyectos:** una malla nombrada por muchos modelos multiplicaba la memoria; ahora cada malla es de un modelo.
+  - **Mensajes:** una pieza que queda vacía dice si fue `slicing.xy_offset` o una malla con agujeros, y el relleno
+    ondulado ignorado por el patrón avisa.
+  - **Rendimiento con muchas islas** (pedido del equipo de fichas): las costuras alineadas buscan la costura de
+    abajo en una grilla, las uniones del zigzag buscan el borde en una grilla, y las islas se eligen con cajas, con el
+    mismo G-code byte a byte. 196 cilindros: escritura de 19,6 a 8,4 s, laminado de 14,1 a 10,0 s.
 - **El relleno Hilbert desaparecía lejos del origen:** la grilla de la curva cubría 2 m alrededor del origen. Girada
   por el ángulo del relleno, una pieza en una esquina de una cama de 1 m quedaba afuera y salía sin relleno. Ahora
   cubre 16 m, y crece si hace falta.

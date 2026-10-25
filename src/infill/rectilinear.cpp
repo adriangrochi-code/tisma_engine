@@ -98,29 +98,62 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
         turned.push_back(std::move(t));
     }
     const double step = spacing * kUnitsPerMm;
-    Polygons lines;
+    const auto clip = [](const Polygons& lines, const Polygons& to, Polygons& open) {
+        Clipper2Lib::Clipper64 clipper;
+        clipper.AddOpenSubject(lines);
+        clipper.AddClip(to);
+        Polygons closed, pieces;
+        clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, pieces);
+        open.insert(open.end(), pieces.begin(), pieces.end());
+    };
+    Polygons open;
     if (fit) {
-        // As many lines as fit across, centred: the outer ones run along the shrunk boundary.
-        const double across = double(ymax - ymin) - 20.0; // without the slack
-        const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
-        const double first = double(ymin) + 10.0 + (across - double(count - 1) * step) / 2.0;
-        for (std::int64_t k = 0; k < count; ++k) {
-            const std::int64_t y = std::llround(first + double(k) * step);
-            lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
+        // Each connected piece on its own (an outer contour and its holes): as
+        // many lines as fit across it, centred, so its outer ones run along
+        // its shrunk boundary. Fitted to the whole layer, a second island off
+        // the first's spacing kept a strip of its edge bare (the review of
+        // 2026-10-25).
+        Clipper2Lib::Clipper64 joined;
+        joined.AddSubject(turned);
+        Clipper2Lib::PolyTree64 tree;
+        joined.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+        std::vector<const Clipper2Lib::PolyPath64*> outers;
+        for (const auto& outer : tree)
+            outers.push_back(outer.get());
+        for (std::size_t o = 0; o < outers.size(); ++o) {
+            Polygons piece{outers[o]->Polygon()};
+            for (const auto& hole : *outers[o]) {
+                piece.push_back(hole->Polygon());
+                for (const auto& island : *hole)
+                    outers.push_back(island.get());
+            }
+            std::int64_t lo = INT64_MAX, hi = INT64_MIN, left = INT64_MAX, right = INT64_MIN;
+            for (const Point64& q : piece.front()) {
+                lo = std::min(lo, q.y), hi = std::max(hi, q.y);
+                left = std::min(left, q.x), right = std::max(right, q.x);
+            }
+            const double across = double(hi - lo) - 20.0; // without the slack
+            if (across < 0.0)
+                continue;
+            const auto count = static_cast<std::int64_t>(std::floor(across / step + 1e-9)) + 1;
+            const double first = double(lo) + 10.0 + (across - double(count - 1) * step) / 2.0;
+            Polygons lines;
+            for (std::int64_t k = 0; k < count; ++k) {
+                const std::int64_t y = std::llround(first + double(k) * step);
+                lines.push_back({{left - 1, y}, {right + 1, y}});
+            }
+            clip(lines, piece, open);
         }
     } else {
+        Polygons lines;
         const double base = shift * kUnitsPerMm;
         for (auto k = static_cast<std::int64_t>(std::ceil((double(ymin) - base) / step));
              double(k) * step + base <= double(ymax); ++k) {
             const std::int64_t y = std::llround(double(k) * step + base);
             lines.push_back({{xmin - 1, y}, {xmax + 1, y}});
         }
+        clip(lines, turned, open);
     }
-    Clipper2Lib::Clipper64 clipper;
-    clipper.AddOpenSubject(lines);
-    clipper.AddClip(turned);
-    Polygons closed, open;
-    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, closed, open);
     // Order across the lines, then along them, left to right.
     for (Polygon& piece : open)
         if (piece.size() >= 2 && piece.front().x > piece.back().x)

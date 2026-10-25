@@ -20,9 +20,9 @@ struct DepthField;
 // other along the boundary, at most kMaxJoin spacings apart along it, are
 // joined by that stretch of boundary into zig-zag polylines: the line ends are
 // anchored and part of the edge band is filled, without entering the walls.
-// With `fit`, the lines are not on the grid: as many as fit across the region
-// (per connected piece of the whole region, measured across its extent), centred,
-// so the outer ones run along the shrunk boundary; for solid surfaces.
+// With `fit`, the lines are not on the grid: as many as fit across each
+// connected piece of the region (measured across its extent), centred, so the
+// outer ones run along its shrunk boundary; for solid surfaces.
 // With `monotonic` (instead of `connect`), the pieces all run the same way and
 // each comes after every piece of the line below that touches it; among those
 // that may come next, the one starting nearest to the last one's end.

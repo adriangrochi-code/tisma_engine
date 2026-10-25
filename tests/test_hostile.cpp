@@ -6,11 +6,13 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "geom/medial_axis.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "perimeters/walls.hpp"
 #include "project/project.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/printable.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -199,4 +201,102 @@ TEST_CASE("hostile input: regions the own Voronoi diagram got wrong still get wa
         const LayerWalls walls = layer_walls(*region, bp);
         CHECK(!walls.toolpaths.empty());
     }
+}
+
+TEST_CASE("hostile input: one facet wound the wrong way does not drop the part", "[hostile]") {
+    // Every loop through the turned facet split into two open chains whose
+    // ends were too far apart to close: every layer came out empty.
+    IndexedMesh m = cube(10.0f);
+    std::swap(m.triangles[6][1], m.triangles[6][2]); // a side facet, turned
+    Settings s;
+    s.gpu = GpuMode::Off;
+    const SlicedModel sliced = slice_model(m, s);
+    REQUIRE(!sliced.regions.empty());
+    for (const Polygons& region : sliced.regions)
+        CHECK(!region.empty());
+    // The repair itself: one triangle turned back; a sound mesh untouched.
+    IndexedMesh sound = cube(10.0f);
+    CHECK(orient_consistently(sound) == 0);
+    CHECK(orient_consistently(m) == 1);
+}
+
+TEST_CASE("hostile input: after a change's own G-code the writer takes nothing for granted", "[hostile]") {
+    // A pause that lifts the head and does not come back, and one that parks
+    // it and comes back: the engine went on from where it thought the head
+    // was, without F or a retraction, or the check refused the export.
+    for (const char* gcode : {"G91\nG1 Z5 F600\nG90\nM0", "G91\nG1 Z5 F300\nG90\nG1 X-60 Y-60 F3000\nM0\nG91\nG1 Z-5 F300\nG90"}) {
+        INFO(gcode);
+        Settings s;
+        s.gpu = GpuMode::Off;
+        HeightChange pause;
+        pause.z = 2.0;
+        pause.gcode = gcode;
+        s.changes.push_back(pause);
+        const SlicedModel m = slice_model(cube(10.0f), s);
+        std::ostringstream g;
+        write_gcode(g, m, s);
+        const std::string text = g.str();
+        const GcodeCheck check = check_gcode(text, gcode_limits(m, s));
+        INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+        CHECK(check.ok());
+        // The modes and E set again, a retraction, and a move that writes Z
+        // and then X and Y.
+        const std::size_t at = text.find("M0\n");
+        REQUIRE(at != std::string::npos);
+        const std::string after = text.substr(at, 400);
+        CHECK(after.find("G90\nM82\nG92 E") != std::string::npos);
+        const std::size_t z = after.find("\nG1 Z");
+        const std::size_t xy = after.find("\nG1 X", z);
+        CHECK(z != std::string::npos);
+        CHECK(xy != std::string::npos);
+        CHECK(after.find(" Y", xy) != std::string::npos);
+    }
+}
+
+TEST_CASE("hostile input: a whisper of fan is never S1, a full fan on RepRapFirmware", "[hostile]") {
+    Settings s;
+    s.gpu = GpuMode::Off;
+    s.fan_min = 0.4;
+    s.fan_max = 0.4;
+    const SlicedModel m = slice_model(cube(5.0f), s);
+    std::ostringstream g;
+    write_gcode(g, m, s);
+    CHECK(g.str().find("M106 S1\n") == std::string::npos);
+    CHECK(g.str().find("M106 S2\n") != std::string::npos);
+}
+
+TEST_CASE("hostile input: a project cannot name one mesh for many models", "[hostile]") {
+    Project p;
+    TriangleMesh mesh;
+    const IndexedMesh c = cube(5.0f);
+    for (const auto& t : c.triangles)
+        mesh.add_triangle(c.vertices[t[0]], c.vertices[t[1]], c.vertices[t[2]]);
+    p.models.push_back({"a", mesh, {0.0, 0.0, 0.0}});
+    p.models.push_back({"b", mesh, {10.0, 0.0, 0.0}});
+    std::string bytes = write_project(p);
+    CHECK(read_project(bytes).models.size() == 2);
+    // The second model made to name the first one's chunk (same length).
+    const std::size_t at = bytes.find("\"mesh\": 1");
+    REQUIRE(at != std::string::npos);
+    bytes[at + 8] = '0';
+    CHECK_THROWS_AS(read_project(bytes), ProjectError);
+}
+
+TEST_CASE("hostile input: an empty slice says why, and ignored wavy infill is told", "[hostile]") {
+    Settings s;
+    s.gpu = GpuMode::Off;
+    s.xy_offset = -6.0; // a 10 mm cube shrunk away
+    const SlicedModel gone = slice_model(cube(10.0f), s);
+    CHECK(unprintable_reason(gone, s).find("slicing.xy_offset") != std::string::npos);
+    // Wavy infill with an infill that moves from layer to layer.
+    Settings wavy;
+    wavy.infill_nonplanar = true;
+    wavy.infill_pattern = InfillPattern::Rectilinear;
+    bool told = false;
+    for (const Warning& w : capability_warnings(wavy))
+        told = told || w.kind == "nonplanar_ignored";
+    CHECK(told);
+    wavy.infill_pattern = InfillPattern::Grid;
+    for (const Warning& w : capability_warnings(wavy))
+        CHECK(w.kind != "nonplanar_ignored");
 }

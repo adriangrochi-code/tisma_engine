@@ -7,6 +7,7 @@
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
 #include "infill/nonplanar.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
@@ -42,7 +43,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     SlicedModel out;
     if (input.vertices.empty())
         return out;
-    const IndexedMesh mesh = compensated(input, settings);
+    IndexedMesh mesh = compensated(input, settings);
+    orient_consistently(mesh); // a facet wound the wrong way dropped whole loops
     float min_z = mesh.vertices.front().z, max_z = min_z;
     float min_x = mesh.vertices.front().x, max_x = min_x, min_y = mesh.vertices.front().y, max_y = min_y;
     for (const Vec3f& v : mesh.vertices) {

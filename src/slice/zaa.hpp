@@ -42,6 +42,11 @@ struct ZaaParams {
     double min_thickness = 0.25; // share of the layer height an extrusion keeps at least
     double step = 0.2;           // mm: paths are split this fine where they leave the layer's top
     bool raise = false;          // also up to the surface above the top (Song et al. 2017), up to half a layer
+    // How far above the top the raise may go, mm; below 0, half the layer's
+    // own height. antialias_layers sets it to half the thinner of this layer
+    // and the next: past the next layer's slice plane, that layer prints the
+    // same surface again.
+    double above = -1.0;
 };
 
 // The heights of a path's points for a layer from bottom to top: each point's

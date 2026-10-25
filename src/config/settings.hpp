@@ -202,6 +202,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& settin
 // engine ignored are not written.
 std::string settings_json(const Settings& settings);
 
+// The name of an infill pattern in the settings ("rectilinear", "grid"...).
+const char* infill_pattern_name(InfillPattern pattern);
+
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 

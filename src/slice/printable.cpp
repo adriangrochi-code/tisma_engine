@@ -74,8 +74,21 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
 
 std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     const bool any = std::any_of(model.regions.begin(), model.regions.end(), [](const Polygons& r) { return !r.empty(); });
-    if (!any)
-        return "no layer of the model encloses any area (is the mesh flat or open?)";
+    if (!any) {
+        // Say what emptied it: a shrinking setting, or holes in the mesh.
+        std::string reason = "no layer of the model encloses any area";
+        if (s.xy_offset < 0.0) {
+            char text[120];
+            std::snprintf(text, sizeof text, ": slicing.xy_offset (%.3g mm) may have shrunk it away", s.xy_offset);
+            reason += text;
+        }
+        else if (model.open_contours > 0)
+            reason += ": " + std::to_string(model.open_contours) +
+                      " open contours were dropped, so the mesh has holes; repair it";
+        else
+            reason += " (is the mesh flat or open?)";
+        return reason;
+    }
     // The skirt and the brim go around the model: they must fit on the bed too.
     if (!s.bed.empty())
         for (const auto* paths : {&model.skirt, &model.brim})

@@ -655,3 +655,23 @@ TEST_CASE("infill patterns: the spirals never jump straight from their centre to
             }
     }
 }
+
+TEST_CASE("infill patterns: fitted solid lines fit each island, not the whole layer", "[combine]") {
+    // Two 10 mm islands, the second 0.1 mm off the first across the lines:
+    // fitted to the layer, its first line sat 0.55 mm from its edge instead
+    // of half a bead, and a strip stayed bare (the review of 2026-10-25).
+    const auto u = [](double v) { return to_units(v); };
+    const Polygons two = {{{u(0), u(0)}, {u(10), u(0)}, {u(10), u(10)}, {u(0), u(10)}},
+                          {{u(20), u(0.1)}, {u(30), u(0.1)}, {u(30), u(10.1)}, {u(20), u(10.1)}}};
+    const std::vector<Toolpath> lines = rectilinear_fill(two, 0.4, 0.0, 0.4, false, true);
+    // In each island, the lowest and highest lines half a bead from its edges.
+    for (const double x0 : {0.0, 20.0}) {
+        const double bottom = x0 == 0.0 ? 0.0 : 0.1;
+        double lo = 1e9, hi = -1e9;
+        for (const Toolpath& t : lines)
+            if (t.points.front().p.x >= x0 - 1.0 && t.points.front().p.x <= x0 + 11.0)
+                lo = std::min(lo, t.points.front().p.y), hi = std::max(hi, t.points.front().p.y);
+        CHECK_THAT(lo - bottom, WithinAbs(0.2, 0.01));
+        CHECK_THAT(bottom + 10.0 - hi, WithinAbs(0.2, 0.01));
+    }
+}

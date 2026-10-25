@@ -319,3 +319,31 @@ TEST_CASE("Z anti-aliasing: the check allows for both roundings of Z", "[zaa]") 
     INFO((check.problems.empty() ? std::string() : check.problems.front().message));
     CHECK(check.ok());
 }
+
+TEST_CASE("Z anti-aliasing: a raise never reaches a thinner next layer's plane", "[zaa]") {
+    // A plate 0.42 mm thick, a 0.3 mm first layer and 0.1 mm layers after
+    // it: raised by half its own height, the first layer reached Z 0.42, and
+    // the next one (slice plane at 0.35) laid the same surface again, the
+    // nozzle inside the fresh bead (the review of 2026-10-25).
+    IndexedMesh plate;
+    plate.vertices = {{90, 90, 0}, {110, 90, 0}, {110, 110, 0}, {90, 110, 0},
+                      {90, 90, 0.42f}, {110, 90, 0.42f}, {110, 110, 0.42f}, {90, 110, 0.42f}};
+    quad(plate, 0, 3, 2, 1);
+    quad(plate, 4, 5, 6, 7);
+    for (std::uint32_t i = 0; i < 4; ++i)
+        quad(plate, i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    Settings s = base();
+    s.zaa = true;
+    s.zaa_raise = true;
+    s.first_layer_height = 0.3;
+    s.layer_height = 0.1;
+    const SlicedModel sliced = slice_model(plate, s);
+    std::ostringstream gcode;
+    write_gcode(gcode, sliced, s);
+    const GcodeCheck check = check_gcode(gcode.str(), gcode_limits(sliced, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    for (const Extrusion& x : extrusions(gcode.str(), s.filament_diameter))
+        if (std::abs(x.layer_z - 0.3) < 1e-9)
+            CHECK(x.z <= 0.35 + 6e-4); // half of the next layer's 0.1 mm, not of its own 0.3
+}
