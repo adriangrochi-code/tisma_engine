@@ -62,7 +62,9 @@ Con `θ` el ángulo del relleno (`infill.angle`) y la separación elegida para q
    - más abajo baja de a poco: cerca de la mitad entre 16 y 32 mm de profundidad, y entre el 6 y el 20 % cerca de la
      cama. Nunca llega a cero;
    - a más densidad, la parte completa es más corta: al 40 % ya baja al 67 % entre 8 y 12 mm;
-   - en total, 50 % del largo de `adaptive_cubic` al 20 % y 41 % al 40 %.
+   - en total, 50 % del largo de `adaptive_cubic` al 20 % y 41 % al 40 %;
+   - las paredes no cuentan, solo las superficies de arriba: entre Z 10 y 20, al 20 %, la franja de 5 mm junto a las
+     paredes (44 % del área) lleva el 11 % del largo de `support_cubic` (el 22 % en `adaptive_cubic`).
    Una pieza baja o con superficies de arriba en todas las alturas da casi lo mismo que `adaptive_cubic`: un cubo de
    20 mm (prueba P6) y un bloque de 40 × 40 × 10 mm con una columna de 20 × 20 mm hasta los 30 mm (prueba P6d).
    El motor lo hace como un octree con cubos que crecen hacia abajo, empezando por el tamaño de la regla 7 debajo de
