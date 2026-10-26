@@ -65,6 +65,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`settings_levels.md`](settings_levels.md): niveles de ajustes, lista propia (Quick settings), ajustes por objeto, con capturas | P1 | Para revisar |
 | [`model_tools.md`](model_tools.md): partes, volúmenes negativos, modificadores, rangos de alturas, ajustes por objeto y por parte, y cuál gana; escalar, girar, cortar y separar | F3, P4 | Para revisar |
 | [`preview.md`](preview.md): vista previa: las 13 vistas, leyenda con tiempos y material, escala de colores, deslizadores, con capturas | P1 | Para revisar |
+| [`settings_panel.md`](settings_panel.md): el panel de ajustes en secciones (Calidad, Resistencia, Velocidad…) con apartados finos plegables, niveles Básico, Normal y Avanzado, vista Personalizada, tarjeta de impresora, cama y boquilla con dibujos, configuración de la impresora aparte con su calibración, conexión por red desde un ícono, boquilla con un clic y ventana de la cámara | P1 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
