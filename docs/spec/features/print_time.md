@@ -75,6 +75,61 @@ Cada límite tiene **dos valores**: el normal y el silencioso (para el modo sile
 **Pares medidos con impresoras reales:** no hay. Este entorno no tiene impresoras; Tisma Slicer tampoco guarda la
 duración real de las impresiones. Quedan para cuando el dueño imprima las piezas de abajo (prueba PT6).
 
+## Lo que hace el motor hoy
+
+Medido el 26-10-2026, motor de `dev` en `5b0bdbd`, cubo de 20 × 20 × 10 mm con los valores por defecto: 11 min 10 s.
+
+| Cambio | Estimación del motor | Lo que hace la impresora |
+|---|---|---|
+| `machine.flavor` `marlin`, `klipper` o `reprap` | 11 min 10 s en los tres | Cada firmware pasa las esquinas de otra forma (regla 12) |
+| `machine.acceleration` y `travel_acceleration` 500 | 12 min 17 s | Igual: lo cuenta |
+| Retracción de 5 mm | 11 min 56 s | Igual: lo cuenta |
+| `machine.corner_speed` 2 / 20 | 11 min 37 s / 10 min 45 s | Igual: lo cuenta |
+| `G4 S60` en el G-code de inicio | Sin cambio | 60 s más |
+| `M190 S60` y `M109 S200` en el inicio | Sin cambio | El calentamiento: minutos |
+| `G28` y `G29` en el inicio | Sin cambio | Ir al origen y medir la cama: de 1 a 15 min según la impresora |
+| `M204 S500` en el inicio (Marlin) | Sin cambio | Lo mismo que bajar la aceleración: unos 67 s más |
+| `SET_VELOCITY_LIMIT ACCEL=500` en el inicio (Klipper) | Sin cambio | Ídem |
+
+El motor tampoco escribe el tiempo de la primera capa ni separa el tiempo del inicio del de la impresión.
+
+## Para que diga una hora y sea una hora
+
+Pedido del dueño (26-10-2026): que la estimación coincida con la realidad; hoy otros programas se equivocan por varios
+minutos o más (dice una hora y tarda una hora y media).
+
+12. **Esquinas como cada firmware** (fórmulas publicadas por cada proyecto):
+    - Marlin con desviación de unión (`M205 J`): la velocidad en la esquina sale de la aceleración, la desviación y el
+      ángulo entre los dos movimientos ([Marlin, M205](https://marlinfw.org/docs/gcode/M205.html));
+    - Marlin o RepRapFirmware con tirón: el cambio de velocidad permitido por eje;
+    - Klipper: `square_corner_velocity` y `minimum_cruise_ratio`; este último baja la aceleración efectiva de los
+      movimientos cortos ([Klipper, Kinematics](https://www.klipper3d.org/Kinematics.html));
+    - cada uno con su anticipación: el firmware frena antes de una esquina mirando los movimientos que vienen.
+13. **Todo lo que cambia el movimiento, en cualquier parte del G-code:** `M201`, `M203`, `M204`, `M205`, `M220`
+    (porcentaje de velocidad) y `SET_VELOCITY_LIMIT`, incluso los que escriben las plantillas de cambio de capa o de
+    filamento (regla 8).
+14. **El inicio y las esperas, contados y mostrados aparte:**
+    - `G4` (regla 9);
+    - calentamiento: con las temperaturas de partida (de ambiente, o las de la impresión anterior si el programa
+      está conectado a la impresora) y la velocidad de calentamiento de la cama y la boquilla del perfil (regla 10);
+    - `G28`, `G29` y las rutinas de calibración del inicio (las de cada marca, por ejemplo la nivelación y la
+      vibración de las Bambu Lab): un tiempo por comando en el perfil de la impresora, medido;
+    - cambios de filamento y de herramienta: el tiempo de su plantilla más la purga;
+    - la salida dice, por ejemplo, «1 h 4 min (impresión 58 min, preparación 6 min)».
+15. **Aprender de cada impresora** (amplía la regla 11):
+    - con la impresora conectada (`devices.md`), cada impresión terminada guarda la estimación por partes (primera
+      capa, paredes, rellenos, viajes, preparación) y el tiempo real que informa la impresora;
+    - con 3 o más impresiones, el motor ajusta un factor por parte para esa impresora (mínimos cuadrados) y usa el
+      ajustado;
+    - muestra el error típico: «1 h ± 2 min (ajustado con 8 impresiones)»; sin datos, «1 h (sin ajustar)»;
+    - sin conexión, la persona puede escribir el tiempo real al terminar.
+16. **Durante la impresión:** el tiempo restante (`M73`, `gcode_firmware.md`) se recalcula con el avance real: si la
+    impresora va más lenta que lo estimado, el resto se corrige en la misma proporción.
+
+**Metas** (con la impresora real del dueño, prueba PT6):
+- sin ajustar: error de 5 % o menos en el cubo, el cilindro y la pieza de 2 h, en Marlin y en Klipper;
+- ajustada con 5 impresiones: error de 2 % o menos (en 1 h, menos de 1 min 12 s).
+
 ## Pruebas
 
 Medidas en Tisma Slicer (25-10-2026) con los ajustes base de `walls_extra.md`, relleno al 20 %, 3 capas sólidas
@@ -88,3 +143,6 @@ arriba y abajo y E absoluta. **Cubo:** 20 × 20 × 10 mm.
 | PT4 | `marlin`, G-code de inicio `M204 P500 T500` / `M201 X500 Y500` / `M203 X50 Y50` / `M205 X2 Y2`; `klipper` con `M204 S500` / `SET_VELOCITY_LIMIT ACCEL=500` | Marlin: 12 min 4 s, 11 min 55 s, 11 min 29 s y 11 min 2 s en el normal; el silencioso queda en 10 min 59 s. Klipper: 12 min 4 s con `M204`; 10 min 38 s (sin cambio) con `SET_VELOCITY_LIMIT` |
 | PT5 | `marlin`: retracción 0 / 5 mm a 10 mm/s; salto en Z 2 mm; tiempo mínimo de capa 30 s; `G4 S60` en el inicio; `G4 S1` antes de cada cambio de capa; `M109 S200` en el inicio | 10 min 18 s; 12 min 51 s; 11 min 34 s; 27 min 11 s; 10 min 38 s; 10 min 39 s (49 esperas sin contar); 10 min 38 s |
 | PT6 | Pendiente con una impresora real: el cubo, un cilindro de 20 × 40 mm y una pieza de 2 h, en Marlin y en Klipper | Estimación del motor contra el tiempo del firmware; se anotan aquí |
+| PT7 | Motor: `G4 S60`, `M109`/`M190`, `G28`/`G29` y `M204 S500` en el inicio (26-10-2026) | Hoy no cambian la estimación; deben sumar su tiempo (reglas 13 y 14) |
+| PT8 | Motor: el mismo G-code con `marlin`, `klipper` y `reprap`, en una pieza con muchas curvas | Hoy da lo mismo; debe dar el tiempo de cada firmware (regla 12) |
+| PT9 | Cinco impresiones reales en la misma impresora | El error ajustado baja a 2 % o menos (regla 15) |

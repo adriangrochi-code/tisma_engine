@@ -61,7 +61,7 @@ se explican en `PROGRESS.md`.
 
 ## Metas de tiempo del motor (aprobadas por el dueño, 26-10-2026)
 
-Salen de las propuestas V7 a V11 del informe `qa/2026-10-26-velocidad.md`. Se miden en un equipo de 4 núcleos, con la
+Salen de las propuestas V7 a V14 del informe `qa/2026-10-26-velocidad.md`. Se miden en un equipo de 4 núcleos, con la
 mediana de 3 corridas, contra el motor de `dev` en `1ffbdeb` (Benchy en 6,15 s). Cada una es una prueba que tiene que
 pasar el motor; cómo se logra lo decide el equipo del motor.
 
@@ -73,7 +73,23 @@ pasar el motor; cómo se logra lo decide el equipo del motor.
 | RV4 | V10 | Cilindro de Ø 60 mm con 32 768 lados, de 40 y de 80 mm de alto (200 y 400 capas iguales) | 2,2 s a 40 mm | El de 80 mm tarda como mucho un 25 % más que el de 40 mm |
 | RV5 | V11 | Benchy laminado; se cambia solo `speed.infill` y se lamina de nuevo en el mismo programa | Se lamina todo: 6 s | 0,5 s o menos |
 | RV6 | Todas | El G-code de los casos de esta página antes y después de cada cambio | — | Igual byte a byte, o la diferencia se explica en `PROGRESS.md` (por ejemplo, V9 puede mover vértices menos que `simplify_tolerance`) |
+| RV7 | V7, V12 | Conejo al 150 % con `infill.density` 0 y con `walls.count` 1 | 187,4 s y 50,9 s | Como mucho 1,25 veces el tiempo con los valores por defecto |
+| RV8 | V5, V13 | Conejo al 150 %: el armado del G-code | 3,2 s | 1 s o menos |
+| RV9 | V14 | Benchy con 4 núcleos contra 1 núcleo | 1,38 veces | 2,5 veces o más |
+| RV10 | Costura en la GPU (`perimeters.md`, regla 8) | Conejo al 150 % con `walls.seam` `aligned` contra `nearest`, con GPU y con `compute.gpu` en `off` | 3,3 s contra 1,28 s (2,6 veces) | Como mucho 1,2 veces, y el mismo G-code con GPU y sin ella |
+| RT1 | Recorrido (`features/toolpath_time.md`) | Benchy: viajes de menos de 1 mm | 4 392 | 2 100 o menos |
+| RT2 | Recorrido, regla 1 | Benchy: viajes entre líneas de superficie de arriba y de puente | 807 | 100 o menos |
+| RT3 | Recorrido, reglas 2 y 6 | Conejo al 150 %: largo de los viajes | 243,6 m | 190 m o menos |
+| RT4 | Recorrido, todas | Benchy: tiempo estimado con el mismo perfil | 1 h 12 m 28 s | Al menos 8 % menos |
+| RT5 | Recorrido, regla 8 (retraer mientras viaja) | Benchy: tiempo estimado con el mismo perfil, después de RT4 | — | Al menos 5 % menos que con RT4 |
+| RE1 | Tiempo estimado (`features/print_time.md`, reglas 12 a 14) | Cubo, cilindro de 20 × 40 mm y pieza de 2 h, en Marlin y en Klipper, contra el tiempo real de la impresora (prueba PT6) | Sin pares medidos | Error de 5 % o menos sin ajustar |
+| RE2 | Tiempo estimado ajustado (regla 15) | Las mismas piezas después de 5 impresiones en la misma impresora | Sin pares medidos | Error de 2 % o menos |
 
+- Todas están aprobadas por el dueño: RV1 a RV6 y RV10 el 26-10-2026, y RV7 a RV9 el mismo día, después de medirlas.
+  RT1 a RT4 salen de su pedido del mismo día (bajar el tiempo de impresión solo con el recorrido, sin tocar el
+  perfil) y el dueño las aprobó ese día. Se miden contra el motor de `dev` en `5b0bdbd`. RT5, RE1 y RE2 también
+  están aprobadas (26-10-2026): el dueño pide que el tiempo estimado sea lo más exacto posible, porque otros
+  laminadores se equivocan por varios minutos o más.
 - RV5 compara además el G-code del relaminado por etapas con el de un laminado completo con los mismos ajustes: tienen
   que ser iguales byte a byte.
 - Las metas no bajan la calidad: los casos de `GCODE_OUTPUT.md` y las pruebas de las fichas siguen pasando.
