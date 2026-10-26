@@ -119,52 +119,96 @@ desde el teléfono sin pagar.
     - **Lo que se pide seguido:** cuando un modelo se pidió 10 veces para la misma impresora, boquilla y material
       (con los perfiles del servidor y sin cambios) en los últimos 30 días, el servidor deja ese laminado guardado.
       Desde ahí, los pedidos siguientes no gastan cómputo;
-    - **Los más bajados:** para los modelos más bajados de la biblioteca, el servidor prepara el laminado para las
-      impresoras más usadas por las cuentas (las de los puentes, por ejemplo las Bambu Lab más comunes), con el perfil
-      del paquete y el material más usado en cada una;
+    - **Los 1000 más bajados, nada más:** para los 1000 modelos más bajados de la biblioteca, el servidor prepara el
+      laminado para las impresoras más usadas por las cuentas (las de los puentes, por ejemplo las Bambu Lab más
+      comunes), con el perfil del paquete y el material más usado en cada una. El resto de los modelos solo se prepara
+      por la regla anterior;
+    - **Lo que ya se laminó se guarda:** todo laminado que el servidor hace con perfiles del servidor (gratis o pagado
+      con las horas de un plan) queda guardado para los pedidos iguales siguientes. Quien pagó usa sus horas una vez, y
+      ese cómputo sirve después para todos. Un laminado con un perfil propio (regla 12) se guarda solo para esa cuenta:
+      sus ajustes no se comparten;
     - lo prepara con el cómputo que sobra: solo cuando los nodos no tienen trabajos pagos ni gratis esperando, con la
       prioridad más baja. No gasta el 10 % reservado ni frena a nadie;
     - al cambiar la versión del modelo o del motor, lo preparado viejo se borra y se vuelve a preparar.
-16. **Cuántos laminados entran en el 10 %** (estimación, a confirmar midiendo el motor en los nodos):
+16. **Guardar G-code ocupando poco:**
+    - **comprimido:** cada G-code se guarda comprimido. Medido el 26-10-2026 (tabla de abajo): con xz (nivel 6) un
+      G-code de texto queda en el 18 % al 28 % de su tamaño, y se descomprime en 0,05 s a 0,4 s. El G-code binario
+      (`gcode_extras.md`) ya viene comprimido, pero menos: el Benchy pesa 0,90 MB en binario y 0,52 MB en texto con xz;
+    - **rápido primero, chico después:** al terminar un laminado se guarda con una compresión rápida (gzip: 0,16 s
+      para el Benchy, al 31 %). Con el cómputo que sobra, lo que se va a quedar se vuelve a comprimir con xz (1,5 s,
+      al 23 %);
+    - **una sola copia:** cada G-code se guarda por su huella (el resumen criptográfico del contenido). Dos pedidos que
+      dan el mismo archivo ocupan un lugar;
+    - **la receta, no solo el archivo:** junto a cada G-code se guarda con qué se hizo: versión del modelo, perfiles,
+      ajustes y versión del motor. El motor da el mismo G-code con la misma receta (medido: dos laminados del Benchy con
+      el motor dan el mismo archivo byte a byte), así que un G-code borrado se puede volver a hacer;
+    - **un tope de espacio:** la biblioteca tiene un espacio máximo para G-code. Al llenarse, se borra primero lo que
+      hace más tiempo que nadie pide. Nunca se borra el laminado del autor (no tiene receta) ni lo preparado de los
+      1000 más bajados;
+    - **el envío también va comprimido:** al puente o a la app se manda comprimido, y se descomprime al llegar.
+
+| G-code (medido) | Texto | gzip 9 | xz 9e | Binario |
+|---|---|---|---|---|
+| Benchy, Tisma Slicer | 2,29 MB | 0,71 MB | 0,52 MB | 0,90 MB |
+| Benchy al doble con gyroid, Tisma Slicer | 11,92 MB | 3,80 MB | 2,68 MB | — |
+| Benchy con soportes, Tisma Slicer | 3,74 MB | 1,08 MB | 0,76 MB | — |
+| Benchy, motor (`dev` d3e814a) | 7,57 MB | 2,09 MB | 1,34 MB | — |
+| Benchy al doble con gyroid, motor | 22,67 MB | 6,95 MB | 4,13 MB | — |
+
+    - **cuánto espacio hace falta:** si cada uno de los 1000 más bajados se prepara para unas 20 combinaciones de
+      impresora, boquilla y material, son unos 20 000 G-code. A 0,5 MB a 1,5 MB cada uno con xz, son de 10 GB a 30 GB.
+      Lo laminado por pedido entra en el tope de espacio.
+    - el motor hoy escribe un G-code tres veces más grande que Tisma Slicer para la misma pieza (7,57 MB contra
+      2,29 MB). Se le pasa al equipo del motor para revisar si sobran comentarios o decimales.
+17. **Cuántos laminados entran en el 10 %** (medido el 26-10-2026 en un contenedor Linux de 4 núcleos, mediana de 3;
+    los nodos reales son otros equipos, pero la relación se mantiene):
+
+| Pieza | Tisma Slicer (hoy en el servidor) | Motor (`dev` d3e814a) |
+|---|---|---|
+| Benchy (225 102 triángulos) | 3,3 s | 7,0 s |
+| Benchy al doble con gyroid 15 % | 5,8 s | 17,8 s |
+| Benchy con soportes | 5,5 s | 6,1 s |
+| Conejo al 150 % | 1,9 s | 3,4 s |
+| Tornillo M3 al 400 % | 1,0 s | 0,3 s |
+
+    - los ajustes no son iguales en los dos (cada uno usa sus valores por defecto). Sirve como orden de magnitud;
     - la capacidad estimada del servidor es de unas 1 300 horas de cómputo por mes (documentación del servidor de Tisma
-      Cloud, «Capacidad estimada», del 20-10-2026, sin medir todavía en todos los equipos);
-    - el 10 % son unas 130 horas, es decir, unos 470 000 s;
-    - un Benchy grande tarda de 6 a 13 s en un nodo; una pieza chica, menos de 1 s (medido en el servidor de Tisma
-      Cloud, «Capacidad»);
-    - entran del orden de **40 000 a 80 000 laminados de piezas medianas por mes**. Con 2 por día por cuenta (unos 60
-      por mes), alcanza para unas 700 a 1 300 cuentas que usen todos sus laminados todos los días. Como la mayoría no
-      los usa todos, y lo reutilizado y lo preparado no gasta, entran muchas más cuentas;
+      Cloud, «Capacidad estimada», del 20-10-2026). El 10 % son unas 130 horas, es decir, unos 470 000 s;
+    - con piezas como el Benchy: unos **140 000 laminados por mes con Tisma Slicer** y unos **65 000 con el motor
+      como está hoy**. Con 2 por día por cuenta (unos 60 por mes), alcanza para unas 1 100 a 2 300 cuentas que usen
+      todos sus laminados todos los días. Como la mayoría no los usa todos, y lo reutilizado y lo preparado no gasta,
+      entran muchas más;
     - si el uso real se acerca al 10 %, primero crece lo preparado de antemano (regla 15), que baja el cómputo, y
       después se revisa el número.
 
     El número real se publica en la página cuando el motor esté medido en los nodos.
-17. **Planes pagos:**
+18. **Planes pagos:**
     - laminados sin límite, con un tope de trabajos a la vez para que una cuenta no llene la cola;
     - perfiles propios (regla 12) y análisis nuevos con las horas del plan, como hoy;
     - prioridad sobre la cola gratis, en el 90 % restante.
-18. **A la vista:** antes de mandar, la pantalla «Imprimir» dice «Listo, sin laminar» (laminado del autor, hecho o
+19. **A la vista:** antes de mandar, la pantalla «Imprimir» dice «Listo, sin laminar» (laminado del autor, hecho o
     preparado), «Laminado gratis: te quedan N hoy» o «Usa tu plan», y, si hay cola, el tiempo estimado.
     Siempre está «Abrir en Tisma» para laminar en la computadora, que es gratis y sin cola.
 
 ## La página, el programa y la app
 
-19. **La misma biblioteca en los tres lugares:**
+20. **La misma biblioteca en los tres lugares:**
     - **página web** de Tisma Cloud: buscar, ver la ficha con el visor 3D y el mapa de Ingeniería, bajar, imprimir;
     - **programa:** Más › Tisma Cloud › Biblioteca, con la misma ficha; «Abrir en Tisma» abre el proyecto en la placa,
       con sus perfiles y su análisis;
     - **app** (`mobile_app.md`): la pestaña Biblioteca; «Imprimir» es el uso principal.
-20. **Buscar:** por texto, etiqueta, impresora con perfil probado, material y «con análisis». Orden: populares,
+21. **Buscar:** por texto, etiqueta, impresora con perfil probado, material y «con análisis». Orden: populares,
     nuevos, más impresos.
-21. **Después de imprimir:** la persona puede marcar «La imprimí» con una foto. Eso suma al contador «más impresos» y,
+22. **Después de imprimir:** la persona puede marcar «La imprimí» con una foto. Eso suma al contador «más impresos» y,
     si usó un perfil probado, a la confianza de ese perfil.
 
 ## El contrato con el motor
 
-22. **Lo que el motor ya tiene que poder hacer** (fichas existentes):
+23. **Lo que el motor ya tiene que poder hacer** (fichas existentes):
     - laminar un 3MF completo sin interfaz (`cloud.md`, regla 18);
     - guardar y abrir el análisis dentro del proyecto (`formats.md`, `structural_analysis.md`);
     - decir qué ajustes cambian la resistencia (regla 3): el motor da la lista y el servidor compara.
-23. **Lo nuevo del motor:**
+24. **Lo nuevo del motor:**
     - el resumen de un análisis en JSON (veredicto, carga, factor de seguridad, deformación, material y los ajustes de
       la regla 2), para mostrarlo sin el motor;
     - el mapa de colores exportado como malla con colores (por ejemplo, 3MF con colores o glTF), para el visor de la
@@ -177,6 +221,7 @@ Es el programa del dueño (`cloud.md`). Se anota para que el contrato quede clar
 - revisa las subidas;
 - lamina al publicar y cuando se pide;
 - reutiliza laminados iguales y prepara de antemano lo que más se pide (reglas 14 y 15);
+- guarda los G-code comprimidos, una copia por contenido, con su receta y un tope de espacio (regla 16);
 - reserva el 10 % del cómputo para el laminado gratis, con su cola y sus topes (regla 13);
 - guarda los perfiles propios que suben las personas (regla 12);
 - manda el G-code a los puentes como hoy.
@@ -205,3 +250,6 @@ Es el programa del dueño (`cloud.md`). Se anota para que el contrato quede clar
 | BI10 | «Abrir en Tisma» desde la página | El programa abre el proyecto con sus perfiles y su análisis |
 | BI11 | Subir un 3MF con un programa adentro | Rechazado, como cualquier subida peligrosa |
 | BI12 | Nueva versión del motor y un laminado hecho viejo | Se lamina de nuevo al pedirlo, con un perfil del servidor: entra en el laminado gratis |
+| BI21 | Dos pedidos distintos que dan el mismo G-code | Se guarda una sola copia |
+| BI22 | Se llena el tope de espacio | Se borra lo que hace más que no se pide; el laminado del autor y lo preparado de los 1000 quedan |
+| BI23 | Pedir un G-code borrado | Se vuelve a hacer con su receta, igual byte a byte |
