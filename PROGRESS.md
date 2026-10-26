@@ -4215,3 +4215,66 @@ GPU y los dibujos indirectos) y en una placa de video real.
 - mejorar la oclusión y el color, con las imágenes del lanzamiento de PrusaSlicer 3.0 como referencia de caja negra;
 - V3 (la oclusión y los rayos en Vulkan), y entonces el modo automático pasa a Vulkan;
 - greedy meshing en V4.
+
+## 2026-10-26 — oclusión y color de la vista previa; velocidad de las capas de abajo
+
+**Pedidos:**
+- **Del dueño:** mejorar la oclusión ambiental y el color «como lo hace Prusa 3.0», con los videos y las imágenes
+  del lanzamiento como referencia. Los miré como caja negra: miniaturas de los videos e imágenes del blog, nunca
+  código.
+- **Del equipo de specs, medición de caja negra** (`docs/spec/qa/2026-10-26-velocidad.md`, metas RV1 a RV6 en
+  `docs/spec/BENCHMARKS.md`, aprobadas por el dueño): las capas de abajo se llevaban unos 5 de los 6 s del Benchy.
+
+**Lo que muestra la referencia (caja negra):**
+- cada capa de una pared se ve como un tubo, con una ranura oscura y fina contra la de arriba;
+- colores saturados;
+- la sombra suave de la pieza sobre la cama;
+- oscuro donde la pared toca la cama.
+
+**Hecho, la vista** (OpenGL y Vulkan, siguen iguales imagen contra imagen):
+- **Ranuras entre capas.** Cada cordón calcula, en su sección, cuánto cielo y cuánta luz principal le dejan el
+  cordón de arriba y el de abajo: la oclusión por horizontes (Bavoil, Sainz y Dimitrov 2008) resuelta exacta para dos
+  cordones que se tocan, con la luz principal de unos 35° de ancho, para que entre con penumbra. Solo entre los tipos
+  que se apilan y dentro de las capas mostradas; de lejos se promedia como las normales del filtro de moiré. Con ray
+  tracing no se aplica.
+  - La primera versión ponía la cara de arriba del rombo como «techo plano», tapado por el cordón de arriba, y las
+    paredes salían casi negras. Ahora la ranura sube por el costado según la altura en la sección: lo que se ve de
+    costado.
+- **Curva de tono sobre el canal más brillante:** los colores saturados no se lavan; los grises, igual que antes.
+- **Falta, el paso siguiente:** la sombra de la pieza sobre la cama (un mapa de sombras desde la luz principal, en
+  la pasada de oclusión).
+
+**Hecho, la velocidad** (`PLAN.md`, «Velocidad del laminado»):
+- Era la detección de puentes: el área de los cordones de la capa de abajo unía un disco de 64 lados por punto. Las
+  paredes del Benchy cambian de ancho casi en todos lados, así que la primera mejora (un offset por tramo de un mismo
+  ancho) no alcanzaba. Ahora:
+  - cada recorrido es un offset variable de Clipper2 (el medio ancho de cada punto);
+  - lo impreso abajo se calcula solo en una ventana tres anchos más grande que la superficie inferior, simplificado
+    a 1 µm;
+  - el apoyo de los anclajes se calcula solo alrededor del puente.
+
+**Medido** (contenedor de 4 núcleos, mediana de 5 corridas, Benchy, antes 1ffbdeb y después):
+
+| Meta | Caso | Antes | Ahora | Meta |
+|---|---|---|---|---|
+| RV1 | Benchy con los ajustes por defecto | 6,3 s | 1,39 s | 1,5 s |
+| RV2 | Lo que suman las capas de abajo, tolerancia 0 | 7,5 → 200 s | 8,2 → 8,9 s (8 %) | 25 % |
+| RV2 | Ídem, tolerancia 0,005 | 8,4 s más | 1,34 → 1,65 s (22 %) | 25 % |
+| RV3 | Ídem, de 1 a 6 paredes | 1,7 a 6,7 s | 0,17 a 0,25 s | 0,3 s |
+
+La parte de RV2 con tolerancia 0 es una sola corrida.
+
+**RV6, el G-code:**
+- Sin capas de abajo, el Benchy da el mismo G-code byte a byte.
+- Con capas de abajo cambia una sola capa (Z 0,6, la del puente del casco sobre la primera): 767 líneas de 336 538.
+  Hay la misma cantidad de puentes, de zonas sólidas y de relleno, 4 movimientos menos y el filamento casi igual.
+  El borde de lo impreso abajo se movió a lo sumo 1 µm (la simplificación y los arcos del offset, que ahora empiezan
+  en la normal de cada unión). Así cambian unas micras los bordes de esa zona sólida y del puente, y con eso el
+  orden de sus líneas.
+
+**No probado:** RV4 (V10, reusar capas iguales) y RV5 (V11, relaminar por etapas) siguen pendientes.
+
+**Sigue:**
+- la sombra sobre la cama;
+- greedy meshing;
+- V3/V4 del informe (`;WIDTH` solo cuando cambia y menos movimientos).

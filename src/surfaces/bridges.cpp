@@ -77,12 +77,18 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
             printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, *p), FillRule::NonZero);
         if (sparse_printed)
             printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, below.sparse), FillRule::NonZero);
+        // To a micrometre: the beads' fine arcs cost most of what follows.
+        printed = Clipper2Lib::SimplifyPaths(printed, 0.001 * kUnitsPerMm);
         Polygons raw = Clipper2Lib::Difference(surfaces[i].bottom, printed, FillRule::NonZero);
         raw = open(raw); // nothing narrower than a bead
         if (raw.empty())
             return;
         bridges[i] = Clipper2Lib::Intersect(surfaces[i].bottom, offset(raw, 2.0 * width), FillRule::NonZero);
-        angles[i] = best_angle(bridges[i], offset(printed, width), width);
+        // The anchors are the bridge's line ends: the support only matters
+        // around the bridge, in the same kind of window.
+        Clipper2Lib::Rect64 around = Clipper2Lib::GetBounds(bridges[i]);
+        around.left -= margin, around.top -= margin, around.right += margin, around.bottom += margin;
+        angles[i] = best_angle(bridges[i], offset(Clipper2Lib::RectClip(around, printed), width), width);
     });
     for (std::size_t i = 1; i < surfaces.size(); ++i) {
         if (bridges[i].empty())

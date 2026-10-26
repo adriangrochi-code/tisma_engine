@@ -10,8 +10,9 @@ namespace tisma {
 // The area a set of variable-width toolpaths covers, as polygons: each piece
 // between two points is the quadrilateral of half widths w0/2 and w1/2 across
 // it, and each point adds a disc of radius w/2 (round joins and caps), as a
-// polygon of kCoverageDiscSides sides. A run of pieces of one width is its
-// round offset (a stroke), the same shape with arcs of as many steps.
+// polygon of kCoverageDiscSides sides. It is computed as the round offset of
+// each toolpath with its points' half widths (a stroke), the same shape with
+// arcs of at least as many steps.
 inline constexpr int kCoverageDiscSides = 64;
 Polygons bead_area(const std::vector<Toolpath>& toolpaths);
 // The same inside `window` (in Clipper units): only the pieces of the
