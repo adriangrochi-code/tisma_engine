@@ -8,7 +8,8 @@
 - arriba del panel, solo la impresora, la cama y la boquilla, cada una con un dibujo; la configuración de la
   impresora, con su calibración, va en una página aparte;
 - cambia la boquilla con un clic, debajo de la impresora;
-- muestra la cámara de la impresora desde la placa, sin ir a Dispositivos.
+- muestra la cámara de la impresora desde la placa, sin ir a Dispositivos;
+- conecta la impresora por red desde un ícono en su tarjeta, con la búsqueda en la red activada de entrada.
 
 **Fase:** P1 (interfaz).
 
@@ -320,8 +321,8 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
     - La lista de cama solo aparece en impresoras con camas intercambiables (`profiles.md`, regla 3). Sin ella, la
       impresora usa todo el ancho.
     - Con varios extrusores, una fila de boquilla por extrusor (regla 25).
-    - A la derecha de la impresora, el engranaje abre la configuración de la impresora (regla 37) y, si tiene, el
-      botón de cámara (regla 27).
+    - A la derecha de la impresora, el ícono de conexión (regla 42), el engranaje, que abre la configuración de la
+      impresora (regla 37), y, si tiene, el botón de cámara (regla 27).
     - La pestaña Impresora del panel deja de existir: el panel tiene Impresión y Material.
     - El dibujo mide 3 em de alto en la tarjeta y 2 em en las listas desplegadas, en violeta de una sola tinta sobre
       el fondo violeta suave (`interface.md`, «Aspecto»), en tema claro y oscuro.
@@ -388,6 +389,40 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
 40. **El nivel también vale aquí:** la configuración de la impresora usa el nivel o la vista propia de las reglas 9 a
     20, con la pestaña Impresora en el diálogo de la regla 16.
 
+### Conexión desde la tarjeta
+
+Pedido del dueño (26-10-2026): la conexión por Wi-Fi tiene que venir activada, y la impresora se tiene que poder
+conectar desde un ícono chico en la tarjeta de la impresora que abre el menú de conexión.
+
+41. **Conexión por red activada de entrada:** el programa busca impresoras en la red local desde que arranca, sin que
+    la persona tenga que encender nada.
+    - Usa los anuncios en la red que publique cada fabricante o programa de impresoras; cuáles, y cómo se leen, los
+      agrega `printer_connections.md` con su fuente oficial. Mientras esa ficha no defina uno para una marca, esas
+      impresoras se agregan a mano (dirección y datos), como hoy.
+    - Una preferencia «Buscar impresoras en la red» (encendida por defecto) en Preferences › General la apaga.
+    - Encontrar una impresora no la conecta: conectar siempre lo pide la persona (regla 43), y los códigos de acceso se
+      guardan como secretos (`printer_connections.md`, regla 8 de la parte de Bambu Lab).
+42. **Ícono de conexión** en la tarjeta de la impresora, a la derecha del nombre, antes del engranaje y la cámara:
+
+| Estado | Ícono | Al pasar el puntero |
+|---|---|---|
+| Sin conexión configurada | Ondas de Wi-Fi en gris con un «+» | «Conectar esta impresora» |
+| Encontrada en la red, sin conectar | Ondas en violeta con un punto | «Se encontró en la red: conectar» |
+| Conectando | Ondas que se llenan, en violeta | «Conectando…» |
+| Conectada | Ondas en verde | «Conectada por red» (o «por USB», con el ícono USB) |
+| Error | Ondas en rojo con «!» | El error, por ejemplo «Código de acceso incorrecto» |
+
+43. **El ícono abre el menú de conexión,** un panel chico debajo del ícono:
+    - arriba, la impresora elegida y su estado;
+    - las impresoras de ese modelo encontradas en la red, cada una con su nombre y su dirección, y el botón
+      **Conectar**; si la conexión pide un código o una clave, se pide ahí mismo;
+    - «Agregar a mano…» (dirección y tipo de conexión) y las impresoras USB conectadas;
+    - si ya está conectada: **Desconectar** y «Abrir en Dispositivos», que lleva a la página de la impresora
+      (`interface.md`, «Devices»);
+    - la conexión elegida se guarda con la impresora y vuelve sola al abrir el programa.
+44. **Al conectar** se habilitan las salidas del botón principal (Send, Print via USB, `interface.md`) y, si tiene,
+    el botón de cámara (regla 27).
+
 ## Pruebas
 
 | # | Escenario | Resultado esperado |
@@ -423,3 +458,7 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
 | SP28 | Engranaje de la tarjeta | Se abre la configuración aparte con Máquina, Boquilla y extrusor, Límites, G-code, Calibración, Conexión y Notas; Escape vuelve a la placa |
 | SP29 | Aplicar un resultado de flujo y abrir Calibración | Flujo «Calibrado el» con la fecha, la boquilla y el filamento; las demás «Sin calibrar»; arriba «1 de N calibradas» |
 | SP30 | Después de SP29, cambiar a la boquilla de 0,6 | Flujo pasa a «Calibrado con otra boquilla» |
+| SP31 | Primer arranque, con una impresora simulada que se anuncia en la red | Sin tocar nada, el ícono de conexión pasa a violeta con punto («Se encontró en la red») |
+| SP32 | Tocar el ícono y Conectar, con el código correcto | El ícono pasa a verde; el botón principal ofrece Send; al reabrir el programa se conecta sola |
+| SP33 | Lo mismo con un código incorrecto | Ícono rojo con «!» y el error al pasar el puntero; el código no aparece en el registro |
+| SP34 | Apagar «Buscar impresoras en la red» | No se busca; el ícono queda gris con «+» y el menú ofrece «Agregar a mano…» |
