@@ -35,7 +35,8 @@ struct SliceResult {
     bool ok = false;
     std::string error;  // why not, from the engine (in English, as the command line says it)
     Settings settings;  // what it was sliced with
-    SlicedModel model;
+    std::shared_ptr<const SlicedModel> model; // shared with the Slicer, which may make G-code from it again
+    bool staged = false; // only the G-code was made again: the last run's cut served (Slicer::run)
     std::string gcode;  // the G-code, as export_gcode would write it
     GcodeCheck check;   // the check of that text
     GcodePreview preview;
@@ -44,11 +45,22 @@ struct SliceResult {
     double slice_seconds = 0.0, gcode_seconds = 0.0, check_seconds = 0.0, preview_seconds = 0.0;
 };
 
+// The settings with every one that only the G-code stage reads put back to its
+// default: the speeds, the motion limits, the cooling and the fan, the
+// retraction, the temperatures, the flow and the printer's G-code. Two
+// settings with the same result here cut the same model (the speed report's
+// V11, docs/spec/qa/2026-10-26-velocidad.md).
+Settings without_gcode_settings(Settings settings);
+
 // Runs `tisma-engine slice` without writing a file: the printability checks of
 // the mesh, the slicing (on the GPU when settings.gpu allows one, on the CPU if
 // it fails), the checks of the sliced model, the G-code in memory, its check
 // and the preview. Never throws: a failure comes back in `error`. One run at a
 // time per Slicer; the GPU context is created on the first run and kept.
+// Staged: the last run's cut is kept, and a run on the same mesh, painting and
+// settings but those only the G-code reads (without_gcode_settings) makes
+// only the G-code, its check and its preview again, the same bytes as a whole
+// slice.
 class Slicer {
 public:
     Slicer();
@@ -60,8 +72,14 @@ public:
                     const Painting* painting = nullptr);
 
 private:
+    struct Cut;
+    // The slicing stage: the checks of the mesh, the cut and the model's
+    // warnings (into out); null with out.error on a refusal.
+    std::shared_ptr<const SlicedModel> cut(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
+                                           const Painting* painting, SliceResult& out);
     std::unique_ptr<gpu::Context> gpu_;
     bool gpu_tried_ = false;
+    std::shared_ptr<const Cut> last_; // the last run's cut and what it was made from
 };
 
 struct VoxelCount {

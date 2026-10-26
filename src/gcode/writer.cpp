@@ -9,6 +9,8 @@
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
 
+#include <oneapi/tbb/parallel_for.h>
+
 #include <algorithm>
 #include <charconv>
 #include <array>
@@ -812,6 +814,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
 
+    // Every layer's travel planner first, in parallel: each depends on its
+    // layer's region alone, and the layers are written one after another.
+    std::vector<std::optional<TravelPlanner>> planners(model.layers.size());
+    tbb::parallel_for(std::size_t(0), planners.size(), [&](std::size_t l) {
+        planners[l].emplace(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
+    });
+
     auto emit_layer = [&](std::size_t l, const Active& a) {
         const Layer& layer = model.layers[l];
         g.open_layer_fan();
@@ -821,7 +830,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.set_flow(a.flow);
         g.set_forced_flow(a.volumetric_flow);
         seams.next_layer();
-        const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
+        const TravelPlanner& planner = *planners[l];
         const bool first = l == 0;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {

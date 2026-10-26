@@ -103,7 +103,10 @@ Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
   barra de estado muestra lo que tarda la GPU en dibujar la vista y los FPS que permite; `--bench-frames N` lo mide
   para las capturas.
 
-El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
+El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos. Va por etapas (2026-10-26): si desde el
+último laminado cambiaron solo ajustes que lee el G-code (velocidades, límites de movimiento, enfriamiento y
+ventilador, retracción, temperaturas, flujo, el G-code de la impresora), se rehace solo el G-code, su verificación y la
+vista previa, con el mismo resultado byte a byte; la barra de estado dice «G-code rehecho». Pasos:
 - las comprobaciones de la malla y de la pieza laminada;
 - el G-code en memoria;
 - su verificación (`docs/GCODE_CHECK.md`).

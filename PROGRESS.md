@@ -4283,3 +4283,41 @@ La parte de RV2 con tolerancia 0 es una sola corrida.
 pasada de oclusión; `docs/UI.md`). Probé que la pieza también la recibiera, pero los escalones entre capas, del
 tamaño de un texel del mapa, se sombreaban entre sí y dibujaban anillos en una esfera. Por ahora solo la recibe la
 cama. El dueño pidió dejar la vista para después y priorizar V7 a V11 de velocidad.
+
+## 2026-10-26 — velocidad: V11, relaminar por etapas
+
+**Pedido del dueño:** dejar la vista para después y priorizar las optimizaciones V7 a V11 del informe de velocidad
+(`docs/spec/qa/2026-10-26-velocidad.md`, metas en `docs/spec/BENCHMARKS.md`).
+
+**Estado de V7 a V11:**
+- **V7:** hecho en el bloque anterior; RV1 a RV3 se cumplen.
+- **V8:** no hace falta; las fichas piden el resultado y ya se cumple.
+- **V11:** hecho ahora.
+- **V10 y V9:** siguen.
+
+**Hecho:**
+- **El `Slicer` de la interfaz guarda el último corte** (`src/ui/slicing.*`). Si la malla, la pintura y los ajustes
+  del corte son los mismos, rehace solo el G-code, su verificación y la vista previa. Los ajustes del corte son todos
+  menos los que solo lee el G-code (`without_gcode_settings`):
+  - velocidades, límites de movimiento y aceleraciones;
+  - enfriamiento y ventilador, retracción;
+  - temperaturas y las variables de la impresora, flujo y avance de presión;
+  - los topes de flujo y de temperatura, la resolución del G-code, el sabor y la extrusión relativa;
+  - el G-code de inicio y de fin.
+- **La lista se armó buscando qué ajustes lee el laminado,** y una prueba la confirma de punta a punta. Una pieza con
+  un puente: para cada ajuste de la lista, el G-code por etapas es igual byte a byte al de un laminado entero. Un
+  ajuste del corte, otra malla u otra pintura cortan de nuevo.
+- **Un corte con el caso de carga del relleno guiado por esfuerzos no sirve a otra corrida.** Lo encontró una prueba
+  vieja.
+- **Los planificadores de viajes de cada capa se arman antes, en paralelo,** y la verificación y la vista previa a la
+  vez. El G-code no cambia.
+- **La barra de estado dice «G-code rehecho en X s»** cuando fue por etapas.
+
+**Medido** (Benchy, 4 núcleos):
+- **RV5:** relaminar después de cambiar `speed.infill` tarda de 0,41 a 0,46 s, con mediana 0,41 s (meta 0,5 s).
+  Un laminado entero tarda 1,35 s; el G-code es el mismo byte a byte.
+- **Con los planificadores en paralelo:** el Benchy con capas de abajo tarda 1,34 s (antes 1,39 s) y sin ellas
+  1,05 s, con el mismo G-code.
+
+**Sigue:** V10 (reusar capas iguales, RV4) y medir V9.
+
