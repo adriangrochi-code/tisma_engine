@@ -119,6 +119,9 @@
     X(InfillPattern, "Patrón de relleno", "Infill pattern")                                                           \
     X(InfillAngle, "Ángulo de relleno", "Infill angle")                                                               \
     X(Supports, "Soportes", "Supports")                                                                               \
+    X(SupportAutomatic, "Soporte automático", "Automatic support")                                                     \
+    X(SupportAutomaticTip, "Apagado, solo hay soporte bajo las caras pintadas con Pintar > Soportes",                   \
+      "When off, support goes only under the faces painted with Paint > Supports")                                    \
     X(SupportAngle, "Ángulo de voladizo (0: automático)", "Overhang angle (0: automatic)")                           \
     X(SkirtLoops, "Vueltas de falda", "Skirt loops")                                                                  \
     X(SkirtDistance, "Distancia de la falda", "Skirt distance")                                                       \
@@ -153,6 +156,21 @@
     X(ToolRotateTip, "Rotar (R): ángulos en X, Y y Z", "Rotate (R): angles about X, Y and Z")                         \
     X(ToolScaleTip, "Escalar (S): en % o en mm", "Scale (S): in % or in mm")                                          \
     X(ToolLayFlatTip, "Apoyar en una cara (F): hacé clic en la cara que va contra la cama", "Lay on face (F): click the face that goes on the bed") \
+    X(ToolPaint, "Pintar", "Paint")                                                                                    \
+    X(ToolPaintTip, "Pintar las caras: dónde va o no va el soporte, y la costura (P)",                                \
+      "Paint the faces: where support goes or not, and the seam (P)")                                                 \
+    X(PaintSupports, "Soportes", "Supports")                                                                          \
+    X(PaintSeam, "Costura", "Seam")                                                                                   \
+    X(PaintFuzzy, "Piel difusa", "Fuzzy skin")                                                                        \
+    X(PaintColors, "Colores", "Colors")                                                                               \
+    X(PaintLater, "Llega cuando el motor tenga la piel difusa y varios extrusores",                                  \
+      "Comes when the engine has fuzzy skin and several extruders")                                                   \
+    X(PaintEnforce, "Forzar", "Enforce")                                                                              \
+    X(PaintBlock, "Bloquear", "Block")                                                                                \
+    X(BrushSize, "Pincel", "Brush")                                                                                   \
+    X(PaintClear, "Borrar todo", "Clear all")                                                                         \
+    X(PaintHint, "Clic izquierdo y arrastrar sobre el modelo para pintar; con Shift, borra. Arrastrar fuera del modelo gira la vista.", \
+      "Left click and drag on the model to paint; with Shift, erase. Dragging off the model turns the view.")        \
     X(ToolArrangeTip, "Organizar (A): todos los modelos en una grilla, centrada en la cama", "Arrange (A): every model in a grid, centred on the bed") \
     X(ToolMoveHint, "El centro de su caja en la cama", "The centre of its box on the bed")                            \
     X(ToolLayFlatHint, "Hacé clic en una cara del modelo: queda apoyada en la cama.", "Click a face of the model: it goes down on the bed.") \

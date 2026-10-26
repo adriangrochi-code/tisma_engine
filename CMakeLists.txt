@@ -167,6 +167,7 @@ add_custom_command(
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
+  src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
   src/slice/layers.cpp
@@ -176,6 +177,7 @@ add_library(tisma_core
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
+  src/slice/painted.cpp
   src/slice/pipeline.cpp
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp

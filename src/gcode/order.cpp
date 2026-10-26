@@ -182,26 +182,24 @@ double SeamMemory::nearest_below(int index, const Point2d& p) const {
     return best;
 }
 
-std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
-                       const SeamMemory& memory) {
+namespace {
+
+// seam_point among some of the loop's points only (never none).
+std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& allowed, SeamMode mode,
+                       const Point2d& from, std::uint64_t seed, const SeamMemory& memory) {
     const std::size_t n = loop.points.size();
-    if (n == 0)
-        return 0;
-    std::vector<std::size_t> all(n);
-    for (std::size_t i = 0; i < n; ++i)
-        all[i] = i;
     switch (mode) {
     case SeamMode::Nearest: {
-        std::size_t best = 0;
-        for (std::size_t i = 1; i < n; ++i)
+        std::size_t best = allowed.front();
+        for (std::size_t i : allowed)
             if (distance(loop.points[i].p, from) < distance(loop.points[best].p, from))
                 best = i;
         return best;
     }
     case SeamMode::Rear:
-        return rear_point(loop, all);
+        return rear_point(loop, allowed);
     case SeamMode::Random:
-        return static_cast<std::size_t>(mix(seed) % n);
+        return allowed[static_cast<std::size_t>(mix(seed) % allowed.size())];
     case SeamMode::Aligned: {
         double area = 0.0;
         for (std::size_t i = 0; i < n; ++i) {
@@ -210,6 +208,9 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
             area += a.x * b.y - b.x * a.y;
         }
         const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
+        std::vector<char> offered(n, 0);
+        for (std::size_t i : allowed)
+            offered[i] = 1;
         std::vector<std::size_t> corners;
         // The turn at a point, measured to the points at least kSeamSpan away
         // on each side: zig-zags much smaller than a bead are not corners.
@@ -232,10 +233,10 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
             if (lu == 0.0 || lv == 0.0)
                 continue;
             const double turn = (ux * vy - uy * vx) / (lu * lv); // sine of the turn, + to the left
-            if (turn * (area > 0.0 ? -1.0 : 1.0) > limit)
+            if (offered[i] && turn * (area > 0.0 ? -1.0 : 1.0) > limit)
                 corners.push_back(i); // turns against the loop's direction: a concave corner
         }
-        const std::vector<std::size_t>& candidates = corners.empty() ? all : corners;
+        const std::vector<std::size_t>& candidates = corners.empty() ? allowed : corners;
         const auto it = memory.below.find(loop.index);
         if (it == memory.below.end() || it->second.empty())
             return rear_point(loop, candidates);
@@ -250,16 +251,177 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
     return 0;
 }
 
+// Whether p is in the area (non-zero rule: outer contours counter-clockwise,
+// holes clockwise); on its edge counts as in.
+bool inside(const Polygons& area, const Point2d& p) {
+    const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+    int winding = 0;
+    for (const Polygon& poly : area) {
+        const Clipper2Lib::PointInPolygonResult r = Clipper2Lib::PointInPolygon(q, poly);
+        if (r == Clipper2Lib::PointInPolygonResult::IsOn)
+            return true;
+        if (r == Clipper2Lib::PointInPolygonResult::IsInside)
+            winding += Clipper2Lib::IsPositive(poly) ? 1 : -1;
+    }
+    return winding != 0;
+}
+
+bool overlaps(const Clipper2Lib::Rect64& a, const Polygons* area) {
+    if (!area || area->empty())
+        return false;
+    const Clipper2Lib::Rect64 b = Clipper2Lib::GetBounds(*area);
+    return a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
+}
+
+// A loop the painted seams touch: its points with more every kSeamPaintStep
+// between them, and the ones offered as its seam.
+struct PaintedLoop {
+    Toolpath dense;
+    std::vector<std::size_t> origin; // the loop's point each dense point follows (or is)
+    std::vector<char> own;           // whether it is one of the loop's own points
+    std::vector<std::size_t> offered;
+    std::optional<std::size_t> middle; // the middle of the longest enforced run
+};
+
+std::optional<PaintedLoop> painted_loop(const Toolpath& loop, const SeamPaint& paint) {
+    const std::size_t n = loop.points.size();
+    Clipper2Lib::Rect64 bounds(std::numeric_limits<std::int64_t>::max(), std::numeric_limits<std::int64_t>::max(),
+                               std::numeric_limits<std::int64_t>::lowest(), std::numeric_limits<std::int64_t>::lowest());
+    for (const ToolpathPoint& q : loop.points) {
+        const std::int64_t x = to_units(q.p.x), y = to_units(q.p.y);
+        bounds.left = std::min(bounds.left, x), bounds.right = std::max(bounds.right, x);
+        bounds.top = std::min(bounds.top, y), bounds.bottom = std::max(bounds.bottom, y);
+    }
+    const bool enforce = overlaps(bounds, paint.enforce), block = overlaps(bounds, paint.block);
+    if (!enforce && !block)
+        return std::nullopt;
+    PaintedLoop out;
+    out.dense.closed = true;
+    out.dense.index = loop.index;
+    out.dense.wavy = loop.wavy;
+    for (std::size_t i = 0; i < n; ++i) {
+        const ToolpathPoint& a = loop.points[i];
+        const ToolpathPoint& b = loop.points[(i + 1) % n];
+        out.dense.points.push_back(a);
+        out.origin.push_back(i);
+        out.own.push_back(1);
+        const int steps = int(distance(a.p, b.p) / kSeamPaintStep);
+        for (int k = 1; k < steps; ++k) {
+            const double t = double(k) / double(steps);
+            const auto lerp = [t](double u, double v) { return u + t * (v - u); };
+            out.dense.points.push_back({{lerp(a.p.x, b.p.x), lerp(a.p.y, b.p.y)}, lerp(a.width, b.width),
+                                        lerp(a.dz, b.dz), lerp(a.below, b.below)});
+            out.origin.push_back(i);
+            out.own.push_back(0);
+        }
+    }
+    std::vector<std::size_t> in, clear;
+    bool blocked = false;
+    for (std::size_t i = 0; i < out.dense.points.size(); ++i) {
+        const Point2d& p = out.dense.points[i].p;
+        if (enforce && inside(*paint.enforce, p))
+            in.push_back(i);
+        else if (block && inside(*paint.block, p))
+            blocked = true;
+        else
+            clear.push_back(i);
+    }
+    if (!in.empty()) {
+        // The runs of enforced points along the loop; the middle of the
+        // longest one by length, where a painted line wants its seam.
+        const std::size_t m = out.dense.points.size();
+        std::vector<char> enforced(m, 0);
+        for (std::size_t i : in)
+            enforced[i] = 1;
+        std::size_t start = 0; // a run's start: an enforced point after one that is not
+        while (start < m && enforced[(start + m - 1) % m])
+            ++start;
+        if (start == m) { // the whole loop: its rear point stands
+            out.offered = std::move(in);
+            return out;
+        }
+        double longest = -1.0;
+        for (std::size_t k = 0; k < m; ++k) {
+            const std::size_t first = (start + k) % m;
+            if (!enforced[first] || enforced[(first + m - 1) % m])
+                continue;
+            std::vector<std::size_t> run{first};
+            double length = 0.0;
+            for (std::size_t j = (first + 1) % m; enforced[j] && j != first; j = (j + 1) % m) {
+                length += distance(out.dense.points[run.back()].p, out.dense.points[j].p);
+                run.push_back(j);
+            }
+            if (length > longest) {
+                longest = length;
+                double walked = 0.0;
+                out.middle = run.front();
+                for (std::size_t r = 1; r < run.size() && walked < 0.5 * length; ++r) {
+                    walked += distance(out.dense.points[run[r - 1]].p, out.dense.points[run[r]].p);
+                    out.middle = run[r];
+                }
+            }
+        }
+        out.offered = std::move(in);
+    } else if (blocked && !clear.empty())
+        out.offered = std::move(clear);
+    else
+        return std::nullopt;
+    return out;
+}
+
+// The seam picked on the dense loop as an index of the loop itself, adding the
+// point when it lies between two of the loop's own.
+std::size_t settle(Toolpath& loop, const PaintedLoop& painted, std::size_t seam) {
+    if (painted.own[seam])
+        return painted.origin[seam];
+    const std::size_t at = painted.origin[seam] + 1;
+    loop.points.insert(loop.points.begin() + std::ptrdiff_t(at), painted.dense.points[seam]);
+    return at;
+}
+
+} // namespace
+
+std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
+                       const SeamMemory& memory) {
+    const std::size_t n = loop.points.size();
+    if (n == 0)
+        return 0;
+    std::vector<std::size_t> all(n);
+    for (std::size_t i = 0; i < n; ++i)
+        all[i] = i;
+    return seam_among(loop, all, mode, from, seed, memory);
+}
+
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
-                                  SeamMemory& memory) {
+                                  SeamMemory& memory, const SeamPaint* paint) {
     std::vector<Toolpath> out;
     out.reserve(paths.size());
     std::vector<bool> done(paths.size(), false);
     std::vector<std::size_t> seams(paths.size(), 0);
+    // The loops painted seams touch pick their seam on their dense copy.
+    std::vector<std::optional<PaintedLoop>> painted(paths.size());
+    if (paint && !paint->empty())
+        for (std::size_t i = 0; i < paths.size(); ++i)
+            if (paths[i].closed && paths[i].points.size() > 2)
+                painted[i] = painted_loop(paths[i], *paint);
+    // An enforced seam goes to the middle of its painted run in the aligned
+    // and rear modes; nearest and random choose among the painted points.
+    const auto seam_of = [&](std::size_t i) {
+        if (!painted[i])
+            return seam_point(paths[i], mode, cursor, seed + i, memory);
+        if (painted[i]->middle && (mode == SeamMode::Aligned || mode == SeamMode::Rear))
+            return *painted[i]->middle;
+        return seam_among(painted[i]->dense, painted[i]->offered, mode, cursor, seed + i, memory);
+    };
     // A loop's seam does not depend on the cursor except in nearest mode.
     for (std::size_t i = 0; i < paths.size(); ++i)
-        if (paths[i].closed && mode != SeamMode::Nearest)
-            seams[i] = seam_point(paths[i], mode, cursor, seed + i, memory);
+        if (paths[i].closed && mode != SeamMode::Nearest) {
+            seams[i] = seam_of(i);
+            if (painted[i]) {
+                seams[i] = settle(paths[i], *painted[i], seams[i]);
+                painted[i].reset();
+            }
+        }
     // The ends a path may start at stay put unless a loop's seam follows the
     // cursor; then every path is looked at each time, else the ends are
     // filed in a grid. Both pick the same: the nearest start, and between
@@ -286,8 +448,8 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
                 const Toolpath& t = paths[i];
                 if (t.closed) {
                     if (mode == SeamMode::Nearest)
-                        seams[i] = seam_point(t, mode, cursor, seed + i, memory);
-                    consider(i, false, distance(cursor, t.points[seams[i]].p));
+                        seams[i] = seam_of(i);
+                    consider(i, false, distance(cursor, (painted[i] ? painted[i]->dense : t).points[seams[i]].p));
                 } else {
                     consider(i, false, distance(cursor, t.points.front().p));
                     consider(i, true, distance(cursor, t.points.back().p));
@@ -298,6 +460,8 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
             break;
         done[best] = true;
         Toolpath t = std::move(paths[best]);
+        if (t.closed && painted[best])
+            seams[best] = settle(t, *painted[best], seams[best]);
         if (t.closed) {
             std::rotate(t.points.begin(), t.points.begin() + std::ptrdiff_t(seams[best]), t.points.end());
             memory.current[t.index].push_back(t.points.front().p);

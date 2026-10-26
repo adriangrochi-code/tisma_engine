@@ -22,7 +22,8 @@ constexpr const char* kUsage =
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
-    "                                   [--tool move|rotate|scale|lay]\n"
+    "                                   [--tool move|rotate|scale|lay|paint]\n"
+    "                                   [--paint support|seam,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
@@ -77,10 +78,27 @@ int main(int argc, char** argv) {
             options.layer = std::atoi(value());
         } else if (arg == "--tool") {
             options.tool = value();
-            if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale or lay\n");
+            if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
+                options.tool != "paint") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
                 return 2;
             }
+        } else if (arg == "--paint") {
+            // channel,mark,x,y,z,radius: support or seam, enforce or block, mm.
+            std::string text = value();
+            for (char& c : text)
+                c = c == ',' ? ' ' : c;
+            std::istringstream in(text);
+            tisma::ui::AppOptions::Stroke stroke;
+            std::string mark;
+            if (!(in >> stroke.channel >> mark >> stroke.x >> stroke.y >> stroke.z >> stroke.radius) ||
+                (stroke.channel != "support" && stroke.channel != "seam") || (mark != "enforce" && mark != "block") ||
+                !(stroke.radius > 0.0f)) {
+                std::fprintf(stderr, "error: --paint must be support|seam,enforce|block,X,Y,Z,RADIUS\n");
+                return 2;
+            }
+            stroke.block = mark == "block";
+            options.strokes.push_back(stroke);
         } else if (arg == "--look") {
             std::string text = value();
             for (char& c : text)

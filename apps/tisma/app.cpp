@@ -68,7 +68,7 @@ constexpr const char* kIcons[] = {
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
-    "tool_lay_flat",    "tool_arrange",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".tisma", ".gcode", ".gco", ".g", ".json"};
@@ -89,6 +89,7 @@ struct Theme {
     std::uint32_t view_top, view_bottom, plate, model;
     std::uint32_t sky, ground; // the ambient light from above and from below
     std::uint32_t grid_minor, grid_major;
+    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's marks
 };
 
 Theme dark_theme() {
@@ -237,7 +238,7 @@ enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
 enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
-enum class PlateTool { Select, Move, Rotate, Scale, LayFlat };
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint };
 
 class App {
 public:
@@ -266,6 +267,9 @@ private:
     void plate_changed();
     void arrange_plate();
     void plate_tools();
+    void paint_card(ImVec2 at);
+    void brush_stroke(std::size_t object);
+    void update_paint_view();
     Vec3 mouse_ray() const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
@@ -356,6 +360,15 @@ private:
     Vec3 drag_anchor_{};       // the point on the bed plane the drag holds
     bool dragged_ = false;
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
+    // The Paint tool (docs/PAINTING.md): what it paints, with which mark and
+    // how wide; the model a stroke started on; where the brush is now.
+    PaintChannel paint_channel_ = PaintChannel::Support;
+    std::uint8_t paint_mark_ = kPaintEnforce;
+    float brush_radius_ = 2.0f;
+    int painting_object_ = -1;
+    bool painted_ = false;     // the stroke changed something
+    bool paint_dirty_ = true;  // the view's copy of the paint is out of date
+    std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     std::optional<TriangleMesh> mesh_;
     std::filesystem::path model_path_;
     Vec3 offset_{};
@@ -829,7 +842,23 @@ bool App::init(std::string& error) {
     }
     if (!options_.tool.empty())
         tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
-              : options_.tool == "scale" ? PlateTool::Scale : PlateTool::LayFlat;
+              : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
+                                                                                         : PlateTool::LayFlat;
+    // Brush strokes asked on the command line, for screenshots and tests.
+    for (const AppOptions::Stroke& b : options_.strokes) {
+        const PaintChannel channel = b.channel == "seam" ? PaintChannel::Seam : PaintChannel::Support;
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+            Brush brush;
+            brush.centre = {b.x, b.y, b.z};
+            brush.radius = b.radius;
+            brush.detail = std::max(0.05, b.radius / 8.0);
+            brush.mark = b.block ? kPaintBlock : kPaintEnforce;
+            paint(objects_[i].painting, channel, placed_meshes_[i], brush);
+        }
+        paint_channel_ = channel;
+        paint_dirty_ = true;
+        ++revision_.model;
+    }
     for (const std::string& choice : options_.profiles) {
         const std::size_t eq = choice.find('=');
         const auto kind = profile_kind_from_name(choice.substr(0, eq));
@@ -1009,7 +1038,7 @@ void App::load_model(const std::filesystem::path& path) {
 void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab) {
     ++revision_.model;
     objects_.clear();
-    objects_.push_back({utf8(name.filename()), std::move(mesh), {}});
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
     selected_ = 0;
     tool_ = PlateTool::Select;
     model_path_ = name;
@@ -1062,6 +1091,7 @@ void App::rebuild_plate() {
         vertices += 3 * placed_meshes_.back().triangle_count();
     }
     object_vertices_.push_back(vertices);
+    paint_dirty_ = true;
     offset_ = {};
     if (objects_.empty()) {
         mesh_.reset();
@@ -1107,7 +1137,7 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         use_mesh(std::move(mesh), name, Tab::Prepare);
         return;
     }
-    objects_.push_back({utf8(name.filename()), std::move(mesh), {}});
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
     frame_all();
@@ -1219,7 +1249,8 @@ void App::open_project(const std::filesystem::path& path) {
         // Each model as the project placed it (its mesh moved by its offset).
         std::vector<PlateObject> objects;
         for (ProjectModel& m : p.models) {
-            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {}};
+            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
+                          std::move(m.painting)};
             const BoundingBox box = o.mesh.bounding_box();
             o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
             o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
@@ -1273,7 +1304,7 @@ void App::save_project_to(const std::filesystem::path& path) {
     p.profiles = chosen_profile_;
     // Each model as placed on the bed, its turn and scale applied.
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
-        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}});
+        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting});
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     try {
@@ -1739,10 +1770,12 @@ void App::start_slice() {
     }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
+    Painting painting = plate_painting(objects_);
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
-    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_]() {
-        return slicer_.run(placed, settings, load ? &*load : nullptr);
+    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
+                      painting = std::move(painting)]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting);
     });
 }
 
@@ -2102,8 +2135,10 @@ void App::settings_panel() {
             }
         }
         changed |= row(T::Supports, s.support);
-        if (s.support)
+        if (s.support) {
+            changed |= row(T::SupportAutomatic, s.support_automatic, tr(T::SupportAutomaticTip));
             changed |= row(T::SupportAngle, s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
+        }
         changed |= row(T::SkirtLoops, s.skirt_loops, 0, 20);
         changed |= row(T::SkirtDistance, s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
         changed |= row(T::BrimWidth, s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
@@ -2295,7 +2330,39 @@ void App::viewport() {
             return std::nullopt;
         return e + d * t;
     };
-    if (editing && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    // The Paint tool: the brush follows the face under the mouse, and a
+    // stroke paints the model it started on.
+    const bool painting = editing && tool_ == PlateTool::Paint;
+    brush_depth_.reset();
+    if (painting && ImGui::IsItemHovered())
+        if (const auto hit = pick(placed_meshes_, camera_.eye(), mouse_ray()))
+            brush_depth_ = float(hit->distance) * dot(mouse_ray(), camera_.forward());
+    if (painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        painting_object_ = -1;
+        painted_ = false;
+        if (const auto hit = pick(placed_meshes_, camera_.eye(), mouse_ray())) {
+            selected_ = int(hit->object);
+            painting_object_ = int(hit->object);
+            brush_stroke(hit->object);
+        }
+    } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+               (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
+        brush_stroke(std::size_t(painting_object_));
+    }
+    if (painting && ImGui::IsItemDeactivated()) {
+        if (painted_) { // the slice no longer matches the paint
+            ++revision_.model;
+            if (result_ && !viewer_)
+                stale_ = true;
+        }
+        painting_object_ = -1;
+        painted_ = false;
+    }
+    if (brush_depth_ && view_size_.y > 0.0f) {
+        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.fov)) * 0.5f * view_size_.y;
+        ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
+    }
+    if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
@@ -2321,7 +2388,7 @@ void App::viewport() {
                 dragged_ = true;
                 rebuild_plate();
             }
-        } else if (pressed_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
         }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
@@ -2330,7 +2397,8 @@ void App::viewport() {
     if (ImGui::IsItemDeactivated() && editing) {
         if (dragged_)
             plate_changed(); // the move is over: now the slice is out of date
-        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
+                 ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
             selected_ = -1; // a click on the empty bed
         pressed_object_ = -1;
@@ -2491,6 +2559,9 @@ void App::plate_tools() {
     ImGui::Separator();
     if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size))
         arrange_plate();
+    ImGui::Separator();
+    if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
+        tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -2507,6 +2578,8 @@ void App::plate_tools() {
             tool_ = PlateTool::Scale;
         if (ImGui::IsKeyPressed(ImGuiKey_F, false))
             tool_ = PlateTool::LayFlat;
+        if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Paint;
         if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl)
             arrange_plate();
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
@@ -2520,6 +2593,10 @@ void App::plate_tools() {
             }
             plate_changed();
         }
+    }
+    if (tool_ == PlateTool::Paint) {
+        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+        return;
     }
     if (tool_ == PlateTool::Select || !chosen)
         return;
@@ -2620,6 +2697,93 @@ void App::plate_tools() {
     ImGui::PopStyleVar(2);
     if (changed)
         plate_changed();
+}
+
+// The Paint tool's card: what to paint, the mark, the brush's size.
+void App::paint_card(ImVec2 at) {
+    ImGui::SetNextWindowPos(at);
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##paint_tool", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ToolPaint));
+    // Fuzzy skin and colours come with the engine's fuzzy skin and extruders.
+    const struct {
+        T label;
+        PaintChannel channel;
+        bool ready;
+    } channels[] = {{T::PaintSupports, PaintChannel::Support, true},
+                    {T::PaintSeam, PaintChannel::Seam, true},
+                    {T::PaintFuzzy, PaintChannel::Fuzzy, false},
+                    {T::PaintColors, PaintChannel::Color, false}};
+    for (const auto& c : channels) {
+        ImGui::BeginDisabled(!c.ready);
+        if (ImGui::RadioButton(tr(c.label), paint_channel_ == c.channel)) {
+            paint_channel_ = c.channel;
+            paint_dirty_ = true;
+        }
+        ImGui::EndDisabled();
+        if (!c.ready)
+            ImGui::SetItemTooltip("%s", tr(T::PaintLater));
+    }
+    ImGui::Separator();
+    if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
+        paint_mark_ = kPaintEnforce;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
+        paint_mark_ = kPaintBlock;
+    ImGui::SetNextItemWidth(170.0f * scale_);
+    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, "%.1f mm", ImGuiSliderFlags_Logarithmic);
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+    ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
+    if (ImGui::Button(tr(T::PaintClear))) {
+        objects_[std::size_t(selected_)].painting.clear(paint_channel_);
+        paint_dirty_ = true;
+        ++revision_.model;
+        if (result_ && !viewer_)
+            stale_ = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+    ImGui::TextDisabled("%s", tr(T::PaintHint));
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// Paints the face under the mouse, on this model only; Shift erases.
+void App::brush_stroke(std::size_t object) {
+    const Vec3 d = mouse_ray(), e = camera_.eye();
+    const auto hit = pick(placed_meshes_, e, d);
+    if (!hit || hit->object != object)
+        return;
+    Brush brush;
+    const Vec3 c = e + d * float(hit->distance);
+    brush.centre = {c.x, c.y, c.z};
+    brush.radius = brush_radius_;
+    brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
+    brush.view = {d.x, d.y, d.z};
+    brush.mark = ImGui::GetIO().KeyShift ? kPaintNone : paint_mark_;
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush) > 0) {
+        painted_ = true;
+        paint_dirty_ = true;
+    }
+}
+
+// The view's copy of the painted pieces of the channel in use.
+void App::update_paint_view() {
+    if (!paint_dirty_)
+        return;
+    paint_dirty_ = false;
+    const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
+    std::vector<Renderer::PaintGroup> groups;
+    for (const PaintMesh::Group& g : m.groups)
+        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
+    renderer_.set_paint(m.vertices, groups);
 }
 
 void App::empty_hint() {
@@ -3405,6 +3569,9 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
     f.show_model = mesh_.has_value() && !preview;
+    f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
+    if (f.show_paint)
+        update_paint_view();
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);

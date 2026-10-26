@@ -10,6 +10,7 @@
 #include "slice/variable_layers.hpp"
 #include "slice/zaa.hpp"
 #include "infill/stress_density.hpp"
+#include "mesh/paint.hpp"
 
 #include <vector>
 
@@ -29,6 +30,8 @@ struct SlicedModel {
     std::vector<Toolpath> skirt; // around the first layer, on the first adhesion.skirt_layers layers
     std::vector<Toolpath> brim;  // around the first layer, on the first layer
     std::vector<Polygons> support_areas; // one per layer (empty unless support.enabled): where support goes
+    // Painted seams (docs/PAINTING.md), one area per layer; empty when none was painted.
+    std::vector<Polygons> seam_enforce, seam_block;
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
     std::vector<std::size_t> open_by_layer; // the same per layer
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
@@ -52,8 +55,10 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
 // layers in parallel). The mesh is compensated first, and the holes of every
 // region offset by compensation.hole_offset. Uses the GPU when gpu is not null.
 // With a stress field (infill.stress_density, docs/INFILL.md), the sparse
-// infill goes denser where the part works hardest.
+// infill goes denser where the part works hardest. With a painting (its
+// triangle t on the mesh's triangle t; docs/PAINTING.md), the support follows
+// the painted enforcers and blockers and the seams their painted areas.
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
-                        const StressField* stress = nullptr);
+                        const StressField* stress = nullptr, const Painting* painting = nullptr);
 
 } // namespace tisma

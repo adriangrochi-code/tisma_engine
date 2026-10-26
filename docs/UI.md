@@ -53,7 +53,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Capas de la vista previa | Flechas arriba y abajo, Re Pág y Av Pág, Inicio y Fin, o la rueda sobre la barra de capas |
 | Elegir un modelo de la placa | Clic sobre él; clic en la cama vacía: ninguno |
 | Mover un modelo | Arrastrarlo con el botón izquierdo |
-| Herramientas de la placa | M mover, R rotar, S escalar, F apoyar en una cara, A organizar, Supr quitar, Esc ninguna |
+| Herramientas de la placa | M mover, R rotar, S escalar, F apoyar en una cara, A organizar, P pintar, Supr quitar, Esc ninguna |
 
 ### Preparar
 
@@ -74,11 +74,11 @@ izquierda de la vista 3D, una columna con:
 | **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original** |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
 | **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
+| **Pintar** (P) | Soportes o costura, Forzar o Bloquear, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Piel difusa y Colores aparecen apagados hasta que el motor los tenga |
 
 Cada modelo queda siempre apoyado en la cama. El elegido se ve más claro. La lógica está en `src/ui/plate.*`, sin
 OpenGL, con sus pruebas (`tests/test_plate.cpp`). Un proyecto guarda cada modelo ya ubicado (con su giro y su escala
-aplicados), así se abre igual; ya no se queda solo con el primero. Pintar (soportes, costura, colores) viene después:
-necesita que el motor lea lo pintado.
+aplicados) y su pintura, así se abre igual; ya no se queda solo con el primero.
 
 El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
 - las comprobaciones de la malla y de la pieza laminada;
@@ -251,6 +251,8 @@ sombras en lugar de la luz, para revisarlas.
     exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos;
   - `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: lo mismo con una placa de dos cubos, ordenada, con la
     herramienta Escalar abierta.
+  - `ui_paint_save`, `ui_paint_reopen` y `ui_paint_same_gcode`: una costura pintada en un cubo (`--paint`), exportada,
+    guardada en el proyecto y vuelta a abrir, da el mismo G-code.
 
 ## Cómo está hecha
 

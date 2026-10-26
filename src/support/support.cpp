@@ -9,6 +9,14 @@
 
 namespace tisma {
 
+namespace {
+
+// mm past the layer below that an enforced face needs to get support: less is
+// a wall that only looks slanted by rounding.
+constexpr double kAnyReach = 0.01;
+
+} // namespace
+
 std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                 const SupportParams& params) {
     std::vector<Polygons> out(regions.size());
@@ -25,8 +33,24 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
 
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
-    const std::vector<Polygons> over = overhangs(regions, heights, params);
     const std::size_t n = regions.size();
+    std::vector<Polygons> over = params.automatic ? overhangs(regions, heights, params) : std::vector<Polygons>(n);
+    if (params.enforce || params.block) {
+        const auto at = [&](const std::vector<Polygons>* areas, std::size_t l) -> const Polygons* {
+            return areas && l < areas->size() && !(*areas)[l].empty() ? &(*areas)[l] : nullptr;
+        };
+        tbb::parallel_for(std::size_t(1), std::max<std::size_t>(n, 1), [&](std::size_t l) {
+            if (const Polygons* enforce = at(params.enforce, l)) {
+                // Any reach at all: a slope too steep for the automatic support.
+                const Polygons reach = Clipper2Lib::Difference(regions[l], offset(regions[l - 1], kAnyReach),
+                                                               Clipper2Lib::FillRule::NonZero);
+                over[l] = Clipper2Lib::Union(over[l], Clipper2Lib::Intersect(reach, *enforce, Clipper2Lib::FillRule::NonZero),
+                                             Clipper2Lib::FillRule::NonZero);
+            }
+            if (const Polygons* block = at(params.block, l))
+                over[l] = Clipper2Lib::Difference(over[l], *block, Clipper2Lib::FillRule::NonZero);
+        });
+    }
     std::vector<Polygons> out(n);
     // From the top down: a column grows with every overhang (gap layers lower)
     // and loses what the part occupies, where it stands on the part.

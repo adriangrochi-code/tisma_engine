@@ -159,6 +159,7 @@ struct Settings {
 
     // support (docs/spec/BEHAVIOR.md, "Soportes")
     bool support = false;
+    bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
     double support_xy_gap = 0.6; // mm between the support and the part beside it

@@ -128,6 +128,46 @@ TriangleMesh plate_mesh(const std::vector<TriangleMesh>& placed) {
     return out;
 }
 
+Painting plate_painting(const std::vector<PlateObject>& objects) {
+    Painting out;
+    std::size_t triangles = 0;
+    for (const PlateObject& o : objects) {
+        out.append(o.painting, triangles);
+        triangles += o.mesh.triangle_count();
+    }
+    return out;
+}
+
+PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<TriangleMesh>& placed,
+                     PaintChannel channel) {
+    // The pieces of each mark apart first, then one after the other.
+    std::vector<std::vector<float>> by_mark(kPaintMaxMark + 1);
+    for (std::size_t i = 0; i < objects.size() && i < placed.size(); ++i) {
+        const Painting& p = objects[i].painting;
+        const TriangleMesh& m = placed[i];
+        const std::size_t count = std::min(p.size(channel), m.triangle_count());
+        for (std::size_t t = 0; t < count; ++t) {
+            if (p.tree(channel, t).empty())
+                continue;
+            const Vec3 n = triangle_normal(m, t);
+            for_each_painted(p, channel, t, m.corner(t, 0), m.corner(t, 1), m.corner(t, 2),
+                             [&](const Vec3f& a, const Vec3f& b, const Vec3f& c, std::uint8_t mark) {
+                                 std::vector<float>& v = by_mark[std::min<std::size_t>(mark, kPaintMaxMark)];
+                                 for (const Vec3f* q : {&a, &b, &c})
+                                     v.insert(v.end(), {q->x, q->y, q->z, n.x, n.y, n.z});
+                             });
+        }
+    }
+    PaintMesh out;
+    for (std::size_t mark = 1; mark < by_mark.size(); ++mark) {
+        if (by_mark[mark].empty())
+            continue;
+        out.groups.push_back({std::uint8_t(mark), out.vertices.size() / 6, by_mark[mark].size() / 6});
+        out.vertices.insert(out.vertices.end(), by_mark[mark].begin(), by_mark[mark].end());
+    }
+    return out;
+}
+
 std::array<double, 3> placed_size(const PlateObject& object) {
     const std::vector<Vec3f> p = turned(object);
     if (p.empty())

@@ -42,6 +42,7 @@ add_executable(tisma_tests
   test_cooling.cpp
   test_print_time.cpp
   test_adhesion.cpp
+  test_paint.cpp
   test_support.cpp
   test_voronoi.cpp
   test_fea.cpp
@@ -137,6 +138,31 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_plate_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.gcode)
+    # A seam painted down one side of a cube, sliced; its project keeps the
+    # paint and opens to the same G-code.
+    set(TISMA_PAINT_STROKES)
+    foreach(z 0.5 1.5 2.5 3.5 4.5 5.5 6.5 7.5 8.5 9.5)
+      list(APPEND TISMA_PAINT_STROKES --paint seam,enforce,133,131,${z},1)
+    endforeach()
+    add_test(NAME ui_paint_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool paint
+              ${TISMA_PAINT_STROKES}
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_paint.tisma
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.png)
+    add_test(NAME ui_paint_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_paint.tisma --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.png)
+    add_test(NAME ui_paint_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode)
+    set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
+    set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
+    set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")
+    set_tests_properties(ui_paint_save ui_paint_reopen PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     set_tests_properties(ui_plate_save PROPERTIES FIXTURES_SETUP ui_plate)
     set_tests_properties(ui_plate_reopen PROPERTIES FIXTURES_REQUIRED ui_plate FIXTURES_SETUP ui_plate_b)
     set_tests_properties(ui_plate_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_plate;ui_plate_b")

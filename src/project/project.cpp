@@ -71,9 +71,12 @@ std::string write_project(const Project& project) {
         if (const std::string& name = project.profiles[std::size_t(kind)]; !name.empty())
             profiles[std::string(profile_kind_name(kind))] = name;
     ordered_json models = ordered_json::array();
+    std::size_t paintings = 0;
     for (std::size_t i = 0; i < project.models.size(); ++i) {
         const ProjectModel& m = project.models[i];
         models.push_back({{"name", m.name}, {"mesh", i}, {"offset", m.offset}});
+        if (!m.painting.empty())
+            models.back()["painting"] = paintings++;
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -95,6 +98,9 @@ std::string write_project(const Project& project) {
     put_chunk(out, "JSON", root.dump(2));
     for (const ProjectModel& m : project.models)
         put_chunk(out, "MESH", stl_binary(m.mesh, m.name));
+    for (const ProjectModel& m : project.models)
+        if (!m.painting.empty())
+            put_chunk(out, "PNT ", painting_to_bytes(m.painting));
     return out;
 }
 
@@ -107,7 +113,7 @@ static Project read_project_checked(std::string_view data) {
 
     std::string_view json_text;
     bool has_json = false;
-    std::vector<std::string_view> meshes;
+    std::vector<std::string_view> meshes, paintings;
     for (std::size_t at = kMagic.size() + 4; at < data.size();) {
         if (data.size() - at < 12)
             fail("cut short in a chunk header");
@@ -127,6 +133,8 @@ static Project read_project_checked(std::string_view data) {
             has_json = true;
         } else if (tag == "MESH") {
             meshes.push_back(bytes);
+        } else if (tag == "PNT ") {
+            paintings.push_back(bytes);
         }
     }
     if (!has_json)
@@ -167,7 +175,7 @@ static Project read_project_checked(std::string_view data) {
         // Each model has its own MESH chunk (write_project): one chunk named
         // by many models multiplied its memory (300 references to a 20 000
         // triangle chunk took 200 MB from a 3 kB larger file).
-        std::vector<bool> used(meshes.size(), false);
+        std::vector<bool> used(meshes.size(), false), painted(paintings.size(), false);
         for (std::size_t i = 0; i < models.size(); ++i) {
             const ordered_json& m = models[i];
             const std::string what = "models[" + std::to_string(i) + "]";
@@ -192,6 +200,19 @@ static Project read_project_checked(std::string_view data) {
                     fail(what + ".offset: must be [x, y, z]");
                 for (std::size_t k = 0; k < 3; ++k)
                     model.offset[k] = number(o[k], what + ".offset");
+            }
+            if (m.contains("painting")) {
+                if (!m.at("painting").is_number_unsigned() || m.at("painting").get<std::size_t>() >= paintings.size())
+                    fail(what + ".painting: must be the number of a PNT chunk");
+                const auto k = m.at("painting").get<std::size_t>();
+                if (painted[k])
+                    fail(what + ".painting: PNT chunk " + std::to_string(k) + " belongs to another model");
+                painted[k] = true;
+                try {
+                    model.painting = painting_from_bytes(paintings[k], model.mesh.triangle_count());
+                } catch (const std::invalid_argument& e) {
+                    fail(what + ".painting: " + e.what());
+                }
             }
             p.models.push_back(std::move(model));
         }

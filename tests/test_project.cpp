@@ -35,8 +35,8 @@ Project sample() {
     p.settings.changes.push_back(change);
     p.profiles[std::size_t(ProfileKind::Filament)] = "PLA";
     p.profiles[std::size_t(ProfileKind::Print)] = "0.16 mm — fino";
-    p.models.push_back({"pieza.stl", tetrahedron(10.0f), {128.0, 128.0, 0.0}});
-    p.models.push_back({"otra.stl", tetrahedron(2.5f), {10.0, -3.5, 0.25}});
+    p.models.push_back({"pieza.stl", tetrahedron(10.0f), {128.0, 128.0, 0.0}, {}});
+    p.models.push_back({"otra.stl", tetrahedron(2.5f), {10.0, -3.5, 0.25}, {}});
     p.calibration = ProjectCalibration{"temperature", "C", {{0.0, 10.0, 215.0}, {10.0, 20.0, 205.0}}};
     return p;
 }
@@ -92,6 +92,18 @@ TEST_CASE("a project reads back as it was written", "[project]") {
     CHECK(settings_json(load_project(path).settings) == settings_json(p.settings));
     std::filesystem::remove(path);
 
+    // Painted faces come back with their model; an older reader skips them.
+    Project painted = p;
+    painted.models[1].painting.set_tree(PaintChannel::Seam, 2, {Painting::kSplit, 0, 1, 2, 1});
+    painted.models[1].painting.set_tree(PaintChannel::Color, 0, {3});
+    const Project again = read_project(write_project(painted));
+    CHECK(again.models[0].painting.empty());
+    CHECK(again.models[1].painting == painted.models[1].painting);
+    // A painting of more triangles than the mesh has is refused.
+    Project wrong = p;
+    wrong.models[0].painting.set_tree(PaintChannel::Support, 4, {kPaintBlock}); // a tetrahedron has 4
+    CHECK_THROWS_WITH(read_project(write_project(wrong)), Catch::Matchers::ContainsSubstring("does not have"));
+
     // An empty project is a valid one.
     const Project empty = read_project(write_project(Project{}));
     CHECK(empty.models.empty());
@@ -102,7 +114,7 @@ TEST_CASE("a calibration tower's project keeps the tower", "[project]") {
     const CalibrationPrint tower = temperature_tower(220.0, 200.0, 10.0);
     Project p;
     p.settings.changes = tower.changes;
-    p.models.push_back({"tisma_calibration_temperature.stl", tower.mesh, {}});
+    p.models.push_back({"tisma_calibration_temperature.stl", tower.mesh, {}, {}});
     p.calibration = ProjectCalibration{tower.kind, tower.unit, tower.segments};
     const Project back = read_project(write_project(p));
     same_mesh(back.models[0].mesh, tower.mesh);

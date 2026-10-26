@@ -31,6 +31,7 @@ Binario, little-endian, por partes (*chunks*):
 |---|---|---|
 | `JSON` | Una, la primera | Los ajustes, los perfiles, las piezas y la calibración (abajo) |
 | `MESH` | Una por pieza, en orden | La malla de la pieza como STL binario (la especificación pública del formato) |
+| `PNT ` | Una por pieza pintada, en orden | Sus caras pintadas (`docs/PAINTING.md`): por canal, la cantidad de triángulos pintados, y de cada uno su número, el largo de su árbol y el árbol (números de 32 bits, little-endian) |
 | Otras | — | Se saltean: así una versión nueva puede agregar partes (por ejemplo, una miniatura) sin romper a las viejas |
 
 El JSON:
@@ -47,6 +48,8 @@ El JSON:
 ```
 
 - `models[i].mesh` es el número de la parte `MESH` (contando desde 0).
+- `models[i].painting`, solo en una pieza pintada, es el número de su parte `PNT `. Un árbol roto, una marca fuera de
+  rango o un triángulo que la malla no tiene se rechazan.
 - `offset` es dónde estaba la pieza en la cama, en mm. Hoy la interfaz siempre centra la pieza; el dato queda para
   cuando se pueda mover.
 - `calibration` está solo si se guardó una torre. Cada segmento es `[z0, z1, valor]`.

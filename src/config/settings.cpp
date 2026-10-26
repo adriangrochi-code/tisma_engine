@@ -513,12 +513,12 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
-    read_group(root, "support", {"enabled", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers"},
+    read_group(root, "support", {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "enabled") {
+                   if (n == "enabled" || n == "automatic") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       s.support = g.at(n).get<bool>();
+                       (n == "enabled" ? s.support : s.support_automatic) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "interface_layers") {
@@ -794,6 +794,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
         {"adhesion.brim_width", num(s.brim_width)},
         {"support.enabled", flag(s.support)},
+        {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
         {"support.xy_gap", num(s.support_xy_gap)},
@@ -947,6 +948,7 @@ std::string settings_json(const Settings& s) {
           {"brim_width", s.brim_width}}},
         {"support",
          {{"enabled", s.support},
+          {"automatic", s.support_automatic},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
           {"xy_gap", s.support_xy_gap},

@@ -279,8 +279,8 @@ TEST_CASE("hostile input: a project cannot name one mesh for many models", "[hos
     const IndexedMesh c = cube(5.0f);
     for (const auto& t : c.triangles)
         mesh.add_triangle(c.vertices[t[0]], c.vertices[t[1]], c.vertices[t[2]]);
-    p.models.push_back({"a", mesh, {0.0, 0.0, 0.0}});
-    p.models.push_back({"b", mesh, {10.0, 0.0, 0.0}});
+    p.models.push_back({"a", mesh, {0.0, 0.0, 0.0}, {}});
+    p.models.push_back({"b", mesh, {10.0, 0.0, 0.0}, {}});
     std::string bytes = write_project(p);
     CHECK(read_project(bytes).models.size() == 2);
     // The second model made to name the first one's chunk (same length).
@@ -288,6 +288,19 @@ TEST_CASE("hostile input: a project cannot name one mesh for many models", "[hos
     REQUIRE(at != std::string::npos);
     bytes[at + 8] = '0';
     CHECK_THROWS_AS(read_project(bytes), ProjectError);
+
+    // Paint on a triangle four billion places past the mesh: refused before
+    // anything is made for it.
+    Project painted;
+    painted.models.push_back({"a", mesh, {0.0, 0.0, 0.0}, {}});
+    painted.models[0].painting.set_tree(PaintChannel::Support, 0, {kPaintBlock});
+    bytes = write_project(painted);
+    CHECK(read_project(bytes).models[0].painting == painted.models[0].painting);
+    const std::size_t chunk = bytes.find("PNT ");
+    REQUIRE(chunk != std::string::npos);
+    for (std::size_t k = 0; k < 4; ++k) // the support channel's first triangle number
+        bytes[chunk + 12 + 4 + k] = char(0xF0);
+    CHECK_THROWS_WITH(read_project(bytes), Catch::Matchers::ContainsSubstring("does not have"));
 }
 
 TEST_CASE("hostile input: an empty slice says why, and ignored wavy infill is told", "[hostile]") {

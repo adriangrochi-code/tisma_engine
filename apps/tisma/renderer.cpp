@@ -999,7 +999,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &paint_, &extrusions_, &travels_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -1041,6 +1041,16 @@ void Renderer::set_model(const std::vector<float>& vertices) {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     model_.count = static_cast<int>(vertices.size() / 6);
     ray_signature_.clear();
+}
+
+void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups) {
+    upload(paint_.vao, paint_.vbo, vertices.data(), vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    paint_.count = static_cast<int>(vertices.size() / 6);
+    paint_groups_ = groups;
 }
 
 void Renderer::set_preview(const PreviewBuffers& p) {
@@ -1158,6 +1168,20 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         if (chosen > 0) {
             uniform(p_.mesh, "u_colour", f.model_selected);
             glDrawArrays(GL_TRIANGLES, first, chosen);
+        }
+        // The paint on the same faces, pulled towards the eye in depth so it
+        // wins over them.
+        if (f.show_paint && paint_.count > 0) {
+            glBindVertexArray(paint_.vao);
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -4.0f);
+            for (const PaintGroup& g : paint_groups_) {
+                if (g.first + g.count > std::size_t(paint_.count))
+                    continue;
+                uniform(p_.mesh, "u_colour", g.colour);
+                glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
+            }
+            glDisable(GL_POLYGON_OFFSET_FILL);
         }
     }
     if (f.show_preview)

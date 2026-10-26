@@ -1,10 +1,12 @@
 #pragma once
 
 #include "mesh/mesh.hpp"
+#include "mesh/paint.hpp"
 #include "ui/math.hpp"
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -32,6 +34,7 @@ struct PlateObject {
     std::string name;
     TriangleMesh mesh; // as its file has it
     Placement place;
+    Painting painting; // by triangle of the mesh: it follows the model however it is placed
 };
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
@@ -51,6 +54,24 @@ TriangleMesh placed_mesh(const PlateObject& object);
 
 // Every placed mesh in one, as the slicer takes the plate.
 TriangleMesh plate_mesh(const std::vector<TriangleMesh>& placed);
+
+// Every model's painting in one, in the order plate_mesh joins the meshes.
+Painting plate_painting(const std::vector<PlateObject>& objects);
+
+// One channel's painted pieces as triangles for the 3D view (position and
+// normal, six floats per corner, as mesh_vertices), each mark's together:
+// groups[k] holds `count` corners from `first`. `placed[i]` is objects[i]'s
+// placed mesh.
+struct PaintMesh {
+    struct Group {
+        std::uint8_t mark = 0;
+        std::size_t first = 0, count = 0;
+    };
+    std::vector<float> vertices;
+    std::vector<Group> groups;
+};
+PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<TriangleMesh>& placed,
+                     PaintChannel channel);
 
 // The size of the box of the model, scaled and turned (mm).
 std::array<double, 3> placed_size(const PlateObject& object);

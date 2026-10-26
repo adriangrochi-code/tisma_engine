@@ -3950,3 +3950,33 @@ el mismo tiempo total (6 min).
 
 **Sigue:** pintar (soportes y costura, con el motor), esperar lejos de la pieza cuando frenar lo de adentro no
 alcanza.
+
+## 2026-10-26 — pintar sobre el modelo: soportes y costura
+
+Pedido del dueño: las herramientas de todos los slicers, también pintar.
+
+**Hecho:**
+- **Motor** (`docs/PAINTING.md`):
+  - `src/mesh/paint.*`: un árbol de marcas por triángulo y canal (soportes, costura, piel difusa, colores). Un
+    triángulo se corta en cuatro donde pasa el borde del pincel, sin tocar la malla. Pincel esférico que no pinta las
+    caras de atrás.
+  - `src/slice/painted.*`: lo pintado de cada capa, proyectado y agrandado.
+  - Soportes forzados y bloqueados (ficha `supports_more.md`, reglas 3 a 5) y el ajuste `support.automatic`.
+  - Costura forzada (en el medio del tramo pintado con la costura alineada o atrás) y bloqueada.
+  - Parte `PNT ` en el proyecto; un número de triángulo fuera de la malla se rechaza antes de reservar memoria.
+- **Interfaz:** herramienta Pintar (P): canal, Forzar o Bloquear, tamaño del pincel y Borrar todo. Las marcas se ven
+  sobre el modelo (verde y rojo). `--paint` pinta al abrir, para capturas y pruebas.
+- **Pruebas:** `tests/test_paint.cpp` (7 casos: pincel, bytes, capas, soportes, costura en los cuatro modos, un cubo
+  con estante y un G-code real), una de la placa, una del proyecto, una hostil y `ui_paint_save`, `ui_paint_reopen`,
+  `ui_paint_same_gcode`.
+
+**Medido:** cubo de 10 mm con una franja de costura pintada en una cara: las 50 paredes externas empiezan en la franja
+(sin pintar, en la esquina de atrás); el proyecto guardado y vuelto a abrir da el mismo G-code. El pincel en una
+esfera de 1 002 528 triángulos (Release, un hilo): 13 a 18 ms por paso, porque mira todos los triángulos; recorrer lo
+pintado para dibujarlo, 6 ms.
+
+**No probado:** pintar con el mouse una persona (solo capturas y pruebas automáticas); el clic que busca la cara bajo
+el mouse en esa esfera (también mira todos los triángulos).
+
+**Sigue:** la piel difusa del motor y su pincel; colores con varios extrusores; volúmenes bloqueadores; el rendimiento
+con modelos grandes; la decisión del dueño sobre los perfiles abiertos.

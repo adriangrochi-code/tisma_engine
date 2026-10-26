@@ -48,11 +48,25 @@ inline constexpr double kSeamSpan = 0.1;    // mm: a corner's turn is measured t
 std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
                        const SeamMemory& memory);
 
+// The seams painted on a layer (docs/PAINTING.md): a loop that crosses an
+// enforced area starts in it, in the aligned and rear modes at the middle of
+// the longest stretch of the loop inside (a painted line keeps the seam on
+// it), in the others where the mode chooses among the points inside; one that
+// crosses a blocked area starts outside it if any of the loop is. Points every
+// kSeamPaintStep along the loop count, so a spot between two corners is found.
+struct SeamPaint {
+    const Polygons* enforce = nullptr;
+    const Polygons* block = nullptr;
+    bool empty() const { return (!enforce || enforce->empty()) && (!block || block->empty()); }
+};
+inline constexpr double kSeamPaintStep = 0.25; // mm
+
 // Orders paths greedily: from `cursor`, the path whose start is nearest next.
 // An open path may run either way; a closed loop starts at its seam (rotated
-// so). Moves `cursor` to the end of the last path and records the seams.
+// so). Moves `cursor` to the end of the last path and records the seams. A
+// seam painted between two points of a loop is added to it.
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
-                                  SeamMemory& memory);
+                                  SeamMemory& memory, const SeamPaint* paint = nullptr);
 
 // The islands of a layer region: its connected pieces, each an outer contour
 // (counter-clockwise) with its holes (clockwise). An island inside another's

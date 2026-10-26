@@ -9,6 +9,7 @@
 #include "infill/lightning.hpp"
 #include "infill/nonplanar.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "slice/painted.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
 
@@ -40,11 +41,20 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
 }
 
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
-                        const StressField* stress) {
+                        const StressField* stress, const Painting* painting) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
     IndexedMesh mesh = compensated(input, settings);
+    // The painted pieces before any triangle is turned: a tree follows the
+    // order of its triangle's corners.
+    std::array<std::vector<PaintedPiece>, 4> painted; // support enforce, block, seam enforce, block
+    if (painting && !painting->empty()) {
+        painted[0] = painted_pieces(mesh, *painting, PaintChannel::Support, kPaintEnforce);
+        painted[1] = painted_pieces(mesh, *painting, PaintChannel::Support, kPaintBlock);
+        painted[2] = painted_pieces(mesh, *painting, PaintChannel::Seam, kPaintEnforce);
+        painted[3] = painted_pieces(mesh, *painting, PaintChannel::Seam, kPaintBlock);
+    }
     orient_consistently(mesh); // a facet wound the wrong way dropped whole loops
     float min_z = mesh.vertices.front().z, max_z = min_z;
     float min_x = mesh.vertices.front().x, max_x = min_x, min_y = mesh.vertices.front().y, max_y = min_y;
@@ -251,6 +261,12 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     // The stress bands and the dense infill hold up loads and skins all
     // through: with lightning, they are cubic.
     const InfillPattern banded_pattern = lightning ? InfillPattern::Cubic : settings.infill_pattern;
+    // The outer wall lies half a bead inside the surface: a painted strip of
+    // the surface, grown by a bead, holds it.
+    if (!painted[2].empty())
+        out.seam_enforce = painted_areas(painted[2], out.layers, settings.wall_width);
+    if (!painted[3].empty())
+        out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
     out.support_areas.resize(out.layers.size());
     if (settings.support) {
         std::vector<double> thickness;
@@ -261,6 +277,14 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
         sp.xy_gap = settings.support_xy_gap;
         sp.bead = settings.wall_width;
+        sp.automatic = settings.support_automatic;
+        // A painted face's own layer, a little wider: its overhang lies under it.
+        const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
+        const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
+        if (!painted[0].empty())
+            sp.enforce = &enforce;
+        if (!painted[1].empty())
+            sp.block = &block;
         out.support_areas = support_areas(out.regions, thickness, sp);
     }
     if (!out.regions.empty()) {

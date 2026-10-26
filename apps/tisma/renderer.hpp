@@ -31,6 +31,7 @@ struct ViewFrame {
     Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     bool show_model = true;
+    bool show_paint = false; // the painted faces (set_paint) over the model
     bool show_preview = false;
     bool show_travels = false;
     std::size_t first_layer = 0, last_layer = 0; // the preview's layers drawn, inclusive
@@ -70,6 +71,13 @@ public:
 
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices); // mesh_vertices
+    // The painted pieces over the model (PaintMesh::vertices), drawn in groups
+    // of `count` corners from `first`, each in its colour.
+    struct PaintGroup {
+        std::size_t first = 0, count = 0;
+        Vec3 colour;
+    };
+    void set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups);
     void set_preview(const PreviewBuffers& preview);
     void clear_preview();
 
@@ -108,7 +116,8 @@ private:
 
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
-    Buffer plate_, grid_, model_, extrusions_, travels_;
+    Buffer plate_, grid_, model_, paint_, extrusions_, travels_;
+    std::vector<PaintGroup> paint_groups_;
     int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;

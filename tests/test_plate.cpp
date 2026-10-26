@@ -40,7 +40,7 @@ bool near(const Rotation& a, const Rotation& b) {
 
 TEST_CASE("plate: a model is scaled, turned and set on the bed where it is asked", "[plate]") {
     // A 10 x 20 x 30 box anywhere in its file.
-    PlateObject o{"box", box(-50, 7, 40, 10, 20, 30), {}};
+    PlateObject o{"box", box(-50, 7, 40, 10, 20, 30), {}, {}};
     o.place.x = 100, o.place.y = 120;
     BoundingBox b = placed_mesh(o).bounding_box();
     CHECK_THAT(b.min.x, WithinAbs(95, 1e-4));
@@ -79,7 +79,7 @@ TEST_CASE("plate: angles for the panel give the same rotation back", "[plate]") 
 }
 
 TEST_CASE("plate: lay on face turns the chosen face down", "[plate]") {
-    PlateObject o{"box", box(0, 0, 0, 10, 20, 30), {}};
+    PlateObject o{"box", box(0, 0, 0, 10, 20, 30), {}, {}};
     o.place.x = 50, o.place.y = 50;
     // Its +X face (normal +X), then a slanted normal, then the top (half a turn).
     for (const Vec3 n : {Vec3{1, 0, 0}, normalize(Vec3{1, 1, 1}), Vec3{0, 0, 1}, Vec3{0, 0, -1}}) {
@@ -137,4 +137,39 @@ TEST_CASE("plate: a click picks the nearest model and its face", "[plate]") {
     const TriangleMesh both = plate_mesh(placed);
     CHECK(both.triangle_count() == 24);
     CHECK_THAT(both.signed_volume(), WithinAbs(3000.0, 1e-3));
+}
+
+TEST_CASE("plate: the paint follows each model, and the plate joins it in order", "[plate][paint]") {
+    std::vector<PlateObject> objects = {{"a", box(0, 0, 0, 10, 10, 10), {}, {}}, {"b", box(0, 0, 0, 20, 10, 5), {}, {}}};
+    objects[0].place.x = 50, objects[0].place.y = 50;
+    objects[1].place.x = 100, objects[1].place.y = 50;
+    objects[1].place.rotation = rotated(kNoRotation, 2, 90.0);
+    // The top of the second model, painted where it is on the bed.
+    std::vector<TriangleMesh> placed = {placed_mesh(objects[0]), placed_mesh(objects[1])};
+    Brush brush;
+    brush.centre = {100, 50, 5};
+    brush.radius = 3.0;
+    brush.view = {0, 0, -1};
+    REQUIRE(paint(objects[1].painting, PaintChannel::Seam, placed[1], brush) > 0);
+    // Moved and turned, the paint is still on its top, around its middle.
+    objects[1].place.x = 30;
+    objects[1].place.rotation = kNoRotation;
+    placed[1] = placed_mesh(objects[1]);
+    const PaintMesh mesh = paint_mesh(objects, placed, PaintChannel::Seam);
+    REQUIRE(mesh.groups.size() == 1);
+    CHECK(mesh.groups[0].mark == kPaintEnforce);
+    CHECK(mesh.groups[0].count == mesh.vertices.size() / 6);
+    for (std::size_t k = 0; k < mesh.vertices.size(); k += 6) {
+        // The pieces on the brush's edge go past it by up to a piece's size.
+        CHECK(std::hypot(mesh.vertices[k] - 30.0f, mesh.vertices[k + 1] - 50.0f) < 3.0 + brush.detail);
+        CHECK_THAT(mesh.vertices[k + 2], WithinAbs(5.0, 1e-4));
+        CHECK_THAT(mesh.vertices[k + 5], WithinAbs(1.0, 1e-6)); // facing up
+    }
+    CHECK(paint_mesh(objects, placed, PaintChannel::Support).vertices.empty());
+    // Joined after the first model's 12 triangles.
+    const Painting plate = plate_painting(objects);
+    for (std::size_t t = 0; t < 12; ++t) {
+        CHECK(plate.tree(PaintChannel::Seam, t).empty());
+        CHECK(plate.tree(PaintChannel::Seam, 12 + t) == objects[1].painting.tree(PaintChannel::Seam, t));
+    }
 }

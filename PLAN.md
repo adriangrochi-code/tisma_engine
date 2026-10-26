@@ -621,9 +621,11 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
 - [x] Mover, girar y escalar el modelo; varias piezas en la cama (pedido del dueño, 2026-10-25): Agregar, Quitar,
   Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)
-- [ ] Pintar en el modelo (pedido del dueño): soportes forzados y prohibidos, costura y colores; el motor tiene que
-  leer lo pintado (fichas `supports_more.md`, `multimaterial.md`); después Cortar, Partir y Medir de la ficha
-  `interface.md`
+- [x] Pintar en el modelo (pedido del dueño): soportes forzados y bloqueados, costura forzada y bloqueada; el motor lee
+  lo pintado (`docs/PAINTING.md`, ficha `supports_more.md`)
+- [ ] Pintar la piel difusa (con la piel difusa de `fuzzy_skin.md`) y los colores (con `multi_extruder.md`); volúmenes
+  bloqueadores y forzadores (SM12); relleno inteligente de una cara y deshacer
+- [ ] Cortar, Partir y Medir de la ficha `interface.md`
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 

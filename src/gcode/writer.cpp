@@ -819,8 +819,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         };
         std::vector<Pending> pending;
         bool deferring = false;
-        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
-            std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams);
+        // The seams painted on this layer, for its walls.
+        SeamPaint painted;
+        if (l < model.seam_enforce.size())
+            painted.enforce = &model.seam_enforce[l];
+        if (l < model.seam_block.size())
+            painted.block = &model.seam_block[l];
+        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam,
+                         bool walls = false) {
+            std::vector<Toolpath> ordered =
+                order_paths(paths, cursor, seam, seed, seams, walls && !painted.empty() ? &painted : nullptr);
             if (deferring) {
                 for (const Toolpath& t : ordered) {
                     if (t.wavy) { // its waves are its own: not cut by height
@@ -1008,7 +1016,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             auto walls = [&](int index, const std::vector<Toolpath>& paths) {
                 const bool outer = index == 0;
                 group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
             };
             if (s.zaa) {
                 for (const auto& [index, paths] : i.walls)
@@ -1033,7 +1041,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (const auto& [index, paths] : by_index) {
                 const bool outer = index == 0;
                 group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
             }
             const std::vector<Toolpath>* kinds[5] = {&t.fill.solid, &t.fill.top, &t.fill.bridge, &t.fill.gaps,
                                                      &t.fill.sparse};
