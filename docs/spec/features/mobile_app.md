@@ -57,7 +57,7 @@ táctil:
    - los niveles Básico, Normal, Avanzado y la vista Personalizada;
    - en el teléfono, una sección por pantalla, y cada apartado como tarjeta.
 8. **Impresora:** la configuración aparte de `settings_panel.md` (regla 37), con Conexión y Calibración.
-9. **Más:** cuenta de Tisma Cloud, ayuda (`assistant.md`), informar un problema (`cloud.md`, regla 11, con `app`
+9. **Más:** cuenta de Tisma Cloud, la biblioteca de modelos (`model_library.md`; «Imprimir» en dos toques), ayuda (`assistant.md`), informar un problema (`cloud.md`, regla 11, con `app`
    `android`), preferencias y créditos (`credits.md`).
 
 ## Funciones

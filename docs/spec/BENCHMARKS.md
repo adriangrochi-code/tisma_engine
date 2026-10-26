@@ -58,3 +58,23 @@ Lecciones para el diseño:
 
 El motor no tiene que dar los mismos números. Las diferencias de filamento o de tiempo de más de unos pocos por ciento
 se explican en `PROGRESS.md`.
+
+## Metas de tiempo del motor (aprobadas por el dueño, 26-10-2026)
+
+Salen de las propuestas V7 a V11 del informe `qa/2026-10-26-velocidad.md`. Se miden en un equipo de 4 núcleos, con la
+mediana de 3 corridas, contra el motor de `dev` en `1ffbdeb` (Benchy en 6,15 s). Cada una es una prueba que tiene que
+pasar el motor; cómo se logra lo decide el equipo del motor.
+
+| # | Propuesta | Caso | Hoy | Meta |
+|---|---|---|---|---|
+| RV1 | V7, V8, V9 | Benchy con los ajustes por defecto | 6,15 s | 1,5 s o menos |
+| RV2 | V7 | Benchy con `slicing.simplify_tolerance` 0 y 0,005: lo que suman las capas de abajo (`bottom_layers` 3 contra 0) | 200 s y 8,4 s | No más del 25 % del tiempo con `bottom_layers` 0 |
+| RV3 | V8, V9 | Benchy con `walls.count` de 1 a 6: lo que suman las capas de abajo | De 1,7 a 6,7 s, crece con las paredes | No más de 0,3 s con cualquier cantidad de paredes |
+| RV4 | V10 | Cilindro de Ø 60 mm con 32 768 lados, de 40 y de 80 mm de alto (200 y 400 capas iguales) | 2,2 s a 40 mm | El de 80 mm tarda como mucho un 25 % más que el de 40 mm |
+| RV5 | V11 | Benchy laminado; se cambia solo `speed.infill` y se lamina de nuevo en el mismo programa | Se lamina todo: 6 s | 0,5 s o menos |
+| RV6 | Todas | El G-code de los casos de esta página antes y después de cada cambio | — | Igual byte a byte, o la diferencia se explica en `PROGRESS.md` (por ejemplo, V9 puede mover vértices menos que `simplify_tolerance`) |
+
+- RV5 compara además el G-code del relaminado por etapas con el de un laminado completo con los mismos ajustes: tienen
+  que ser iguales byte a byte.
+- Las metas no bajan la calidad: los casos de `GCODE_OUTPUT.md` y las pruebas de las fichas siguen pasando.
+

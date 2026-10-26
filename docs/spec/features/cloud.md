@@ -142,6 +142,11 @@ Los nodos corren el motor como programa aparte para cada trabajo. El contrato es
 21. **El lado del servidor ya está hecho:** con `tisma_engine` en la configuración de un nodo, el nodo corre los
     trabajos con este contrato. Sin esa opción, sigue con los programas de Tisma Slicer.
 
+## Biblioteca de modelos
+
+23. La biblioteca de Tisma Cloud (modelos con perfiles probados, laminados hechos y análisis, e «Imprimir» en dos
+    toques) va en `model_library.md`. Usa los trabajos, los puentes y los planes de esta ficha.
+
 ## Thingiverse por el servidor
 
 22. **Paso a la API de Thingiverse:** `GET /v1/thingiverse/<ruta>`, con o sin sesión. El servidor agrega el token de
