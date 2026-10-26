@@ -83,8 +83,8 @@ pasar el motor; cómo se logra lo decide el equipo del motor.
 | RT4 | Recorrido, todas | Benchy: tiempo estimado con el mismo perfil | 1 h 12 m 28 s | Al menos 8 % menos |
 
 - Todas están aprobadas por el dueño: RV1 a RV6 y RV10 el 26-10-2026, y RV7 a RV9 el mismo día, después de medirlas.
-  RT1 a RT4 salen de su pedido del mismo día: bajar el tiempo de impresión solo con el recorrido, sin tocar el
-  perfil. Se miden contra el motor de `dev` en `5b0bdbd`.
+  RT1 a RT4 salen de su pedido del mismo día (bajar el tiempo de impresión solo con el recorrido, sin tocar el
+  perfil) y el dueño las aprobó ese día. Se miden contra el motor de `dev` en `5b0bdbd`.
 - RV5 compara además el G-code del relaminado por etapas con el de un laminado completo con los mismos ajustes: tienen
   que ser iguales byte a byte.
 - Las metas no bajan la calidad: los casos de `GCODE_OUTPUT.md` y las pruebas de las fichas siguen pasando.
