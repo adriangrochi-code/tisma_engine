@@ -48,6 +48,8 @@
 
 ### Mezcla de colores
 
+Qué capas van con cada filamento, los degradés y el archivo del proyecto: `color_mixing.md`.
+
 6. **Cómo:** una zona con un color mezclado se imprime alternando capas de los filamentos de la mezcla.
 7. **Proporciones:**
    - son por bloques enteros de capas: 1:1, 1:3, 3:1, o 1:1:1 con tres colores;

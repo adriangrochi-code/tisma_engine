@@ -43,6 +43,9 @@ Las velocidades se dan en mm/s y las esperas en s. El archivo GOO guarda las vel
 | `resin.light_pwm`, `resin.bottom_light_pwm` | 0 a 255 | 255 | Potencia de la luz |
 | `resin.antialiasing` | — | 8 | Nivel de suavizado que se anota en el archivo |
 | `resin.density` | g/ml | 1 | Para el peso de la cabecera |
+| `resin.gamma` | — | 1 | Curva de los grises del borde: 1 deja el suavizado como sale, más alto oscurece el borde, 0 lo quita (solo blanco y negro) |
+| `resin.z_correction_layers` | capas | 0 | Capas sin exponer debajo de lo que cuelga, porque la luz de las capas de arriba las cura igual |
+| `resin.absolute_correction` | mm | 0 | Agranda (+) o achica (−) cada sección en XY |
 
 Los valores por defecto son los de la Elegoo Mars 5 con la resina estándar genérica:
 - la pantalla y la altura salen de las especificaciones publicadas por Elegoo;
@@ -153,6 +156,14 @@ Los valores por defecto son los de la Elegoo Mars 5 con la resina estándar gen�
     - bloque de 30 × 30 × 10 mm;
     - con X, Y y Z medidos, la nueva corrección es `resin.scale_x` × medida deseada / medida impresa, y lo mismo en Y
       y en Z.
+20. **Gamma:** cada gris del borde suavizado pasa por la curva `resin.gamma`. Con 0, cada píxel queda blanco o negro
+    según cubra la mitad o no: la sección pierde el suavizado y la columna del borde de cada lado (prueba RE8).
+21. **Corrección de Z:** en la parte de una sección que no tiene nada debajo (lo que cuelga), las primeras
+    `resin.z_correction_layers` capas quedan sin exponer; la parte apoyada se expone como siempre. La luz de las capas
+    siguientes atraviesa la resina y cura esa zona, y así lo que cuelga no sale más grueso (prueba RE9).
+22. **Corrección absoluta:** desde la línea de comandos, `resin.absolute_correction` de −0,5 a 0,5 mm no cambió la
+    imagen (prueba RE10). El motor la aplica como un desplazamiento del contorno de cada sección; falta medir si Tisma
+    Slicer la usa desde la interfaz.
 
 ## Pruebas
 
@@ -182,3 +193,6 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra.
 | VE7 | El vaso de VE1 dado vuelta (abierto hacia la plataforma) | Elevado | Sin ventosa |
 | VE8 | Piso de 20 × 20 mm y 10 capas con un hueco de 1 × 1 mm | Sobre la plataforma | Sin aviso: menos de 4 mm² |
 | VE9 | Vaso de revolución: radio 10, alto 10 mm, piso de 2 mm, capas de 0,1 mm | Sobre la plataforma, y sobre soportes con pad | Aviso de ventosa en los dos casos. Un cilindro macizo del mismo tamaño no da aviso |
+| RE8 | Cubo de RE1, sin pata de elefante, capa 100 | `resin.gamma` 1 / 2 / 0 | 1: columnas 1763 a 2335, 7 grises; en la fila del medio, borde izquierdo 73 y derecho 37. 2: los mismos píxeles, borde 21 y 5. 0: columnas 1764 a 2334, solo 0 y 255; 326 612 píxeles con luz en vez de 327 756 |
+| RE9 | Voladizo de `supports_more.md` (losa de Z 8 a 10), sin soportes | `resin.z_correction_layers` 0 / 3 | 0: desde Z 8,05 la capa ilumina la losa entera (327 756 píxeles, columnas 1763 a 2335). 3: en Z 8,05, 8,10 y 8,15 solo la columna (164 164 píxeles, columnas 2049 a 2335); desde Z 8,20, la losa entera |
+| RE10 | Cubo de RE1, capa 100 | `resin.absolute_correction` 0,1 / −0,1 / 0,5 / −0,5 | Igual que sin corrección: 327 756 píxeles, columnas 1763 a 2335 |
