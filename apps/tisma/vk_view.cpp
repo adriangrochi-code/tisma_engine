@@ -889,6 +889,8 @@ struct VulkanView::Impl {
                                  : f.color_mode == ColorMode::Height ? &min_height
                                                                      : &min_width;
             draw.range[0] = range[0], draw.range[1] = range[1];
+            draw.range[2] = f.mode == RenderMode::RayTraced ? 0.0f : 1.0f;
+            draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
             for (const PreviewRange& r : preview_ranges(order, lo, hi, f.kind_mask))

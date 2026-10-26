@@ -143,12 +143,14 @@ bool gbuffer(vec3 n) {
     return true;
 }
 
-vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+// seen: how much of the ambient (x) and of the key light (y) the surface's
+// own neighbours leave (the bead's grooves); 1 elsewhere.
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen) {
     vec4 vis = texture(u_visibility, gl_FragCoord.xy / u_target);
     if (u_debug != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
-    float direct = vis.r;
-    float ambient = mix(1.0, vis.g, u_ao_strength);
+    float direct = vis.r * seen.y;
+    float ambient = mix(1.0, vis.g, u_ao_strength) * seen.x;
     vec3 v = normalize(u_eye - p);
     if (dot(n, v) < 0.0)
         n = -n;
@@ -161,8 +163,17 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
            + (base * 0.95 + vec3(highlight)) * ndl * direct
            + base * max(dot(n, u_fill), 0.0) * 0.18 * ambient
            + to_linear(u_sky) * pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.06 * ambient;
-    c = vec3(1.0) - exp(-c * 1.25);
+    // The exponential tone curve on the brightest channel, the others scaled
+    // with it: a bright saturated colour keeps its hue and saturation instead
+    // of washing out towards white; greys come out as before.
+    float m = max(max(c.r, c.g), c.b);
+    if (m > 0.0)
+        c *= (1.0 - exp(-m * 1.25)) / m;
     return pow(c, vec3(1.0 / 2.2));
+}
+
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+    return shade(base, n, p, shininess, specular, vec2(1.0));
 }
 )";
 
@@ -235,6 +246,40 @@ vec2 bead_normal(vec2 c, vec2 size) {
     float s = r > 0.0 ? clamp((x - flat_half) / r, 0.0, 1.0) : 1.0;
     return vec2(sign(c.x) * s, (c.y >= 0.0 ? 1.0 : -1.0) * sqrt(max(1.0 - s * s, 0.0)));
 }
+
+// How much of the sky (x) and of the key light (y) a point of the bead sees
+// past the beads of the layers above and below it, where there are
+// (neighbours: x above, y below): in the cross-section, the horizons to the
+// touching neighbours of the same profile, the beads taken as endless along
+// the move; the sky cosine-weighted between them, as horizon-based ambient
+// occlusion does (Bavoil, Sainz and Dimitrov 2008), here exact for this
+// shape. It darkens the grooves between the layers of a wall, as on a
+// printed part.
+vec2 bead_seen(vec2 c, vec2 size, vec3 side, vec3 up, vec3 key, vec2 neighbours) {
+    float r = 0.5 * size.y, flat_half = max(0.5 * size.x - r, 0.0);
+    if (r <= 0.0 || neighbours.x + neighbours.y < 0.5)
+        return vec2(1.0);
+    // Up the round side by the height in the section: what a wall shows from
+    // the side. (Its flat top is under the bead above, never seen.)
+    float phi = asin(clamp(c.y, -1.0, 1.0));       // the normal's angle
+    vec2 p = vec2(flat_half + r * cos(phi), r * sin(phi)); // from the bead's middle, outwards and up
+    float hi = phi + 1.5707963, lo = phi - 1.5707963;
+    if (neighbours.x > 0.5) {                      // the bead above: its round side's centre
+        vec2 d = vec2(flat_half, 2.0 * r) - p;
+        hi = min(hi, atan(d.y, d.x) - asin(clamp(r / max(length(d), 1e-9), 0.0, 1.0)));
+    }
+    if (neighbours.y > 0.5) {                      // and the one below
+        vec2 d = vec2(flat_half, -2.0 * r) - p;
+        lo = max(lo, atan(d.y, d.x) + asin(clamp(r / max(length(d), 1e-9), 0.0, 1.0)));
+    }
+    float sky = hi > lo ? clamp(0.5 * (sin(hi - phi) - sin(lo - phi)), 0.0, 1.0) : 0.0;
+    // The key light, in the cross-section: a soft light some 35 degrees
+    // across, so a neighbour's shadow comes in over a penumbra.
+    vec3 outwards = side * (c.x >= 0.0 ? 1.0 : -1.0);
+    float a = atan(dot(key, up), dot(key, outwards));
+    float light = smoothstep(lo - 0.3, lo + 0.3, a) * (1.0 - smoothstep(hi - 0.3, hi + 0.3, a));
+    return vec2(sky, light);
+}
 )";
 const std::string kPreviewVertex = kVersion + R"(
 layout(location = 0) in vec3 a_p0;
@@ -248,6 +293,8 @@ uniform vec3 u_colours[16];
 uniform uint u_kind_mask;
 uniform int u_colour_mode;
 uniform vec2 u_range;
+uniform uvec2 u_layers; // the first and the last layer shown
+uniform int u_grooves;  // the beads' grooves (not with ray tracing, whose rays see the neighbours)
 out vec3 v_base;
 out vec3 v_normal;
 out vec3 v_position;
@@ -256,6 +303,13 @@ flat out vec3 v_side;
 flat out vec3 v_up;
 flat out vec2 v_size;  // the line's width and height
 flat out float v_cap;  // 1 on the end caps, 0 on the sides
+flat out vec2 v_neighbours; // 1 where a bead of the layer above (x) and below (y) touches this one
+
+// The kinds that usually have a bead of the layer above on them, and those
+// that lie on one of the layer below (not the top surface, a bridge or an
+// overhang): the grooves come only between them, inside the layers shown.
+const uint kAbove = 0x39BEu; // walls, overhang walls, infill, bridges, gap fill, support, its interface, wipe tower
+const uint kBelow = 0x3F76u; // walls, infill, top surface, gap fill, ironing, skirt, support, its interface, wipe tower
 
 const vec2 kCorner[4] = vec2[4](vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0), vec2(0.0, -1.0));
 const ivec2 kQuad[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));
@@ -343,6 +397,10 @@ void main() {
     v_base = pow(base, vec3(2.2));
     v_normal = normal;
     v_position = position;
+    uint layer = a_kind_layer >> 8;
+    bool grooves = u_grooves != 0 && v_cap < 0.5;
+    v_neighbours = vec2(grooves && layer < u_layers.y && (kAbove & (1u << kind)) != 0u ? 1.0 : 0.0,
+                        grooves && layer > u_layers.x && (kBelow & (1u << kind)) != 0u ? 1.0 : 0.0);
     gl_Position = u_view_projection * vec4(position, 1.0);
 }
 )";
@@ -364,12 +422,15 @@ flat in vec3 v_side;
 flat in vec3 v_up;
 flat in vec2 v_size;
 flat in float v_cap;
+flat in vec2 v_neighbours;
 uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
+    vec2 seen = vec2(1.0);
     if (v_cap < 0.5) {
         vec2 b = bead_normal(v_section, v_size);
         n = normalize(v_side * b.x + v_up * b.y);
+        seen = bead_seen(v_section, v_size, v_side, v_up, u_key, v_neighbours);
     }
     float shininess = 40.0, specular = 0.35;
     if (u_moire != 0) {
@@ -378,6 +439,7 @@ void main() {
         if (k > 0.0) {
             vec3 v = normalize(u_eye - v_position);
             vec3 sum = vec3(0.0);
+            vec2 seen_sum = vec2(0.0);
             float weight = 0.0;
             for (int i = 0; i < 16; ++i) {
                 float a = (float(i) + 0.5) / 16.0 * 6.2831853;
@@ -387,8 +449,11 @@ void main() {
                 vec3 m = normalize(v_side * b.x + v_up * b.y);
                 float facing = max(dot(m, v), 0.0);
                 sum += m * facing;
+                seen_sum += bead_seen(c, v_size, v_side, v_up, u_key, v_neighbours) * facing;
                 weight += facing;
             }
+            if (weight > 0.0)
+                seen = mix(seen, seen_sum / weight, k); // the grooves, averaged as the normals
             if (weight > 0.0 && dot(sum, sum) > 1e-8) {
                 float mean_length = mix(1.0, length(sum) / weight, k);
                 n = normalize(mix(n, sum / length(sum), k));
@@ -400,7 +465,7 @@ void main() {
     }
     if (gbuffer(n))
         return;
-    colour = vec4(shade(v_base, n, v_position, shininess, specular), 1.0);
+    colour = vec4(shade(v_base, n, v_position, shininess, specular, seen), 1.0);
 }
 )";
 
@@ -1231,6 +1296,8 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glUniform1ui(at(p, "u_kind_mask"), f.kind_mask);
         uniform(p, "u_colour_mode", static_cast<int>(f.color_mode));
         uniform(p, "u_moire", f.moire_filter ? 1 : 0);
+        uniform(p, "u_grooves", f.mode == RenderMode::RayTraced ? 0 : 1);
+        glUniform2ui(at(p, "u_layers"), static_cast<GLuint>(lo), static_cast<GLuint>(hi));
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
         else if (f.color_mode == ColorMode::Height)

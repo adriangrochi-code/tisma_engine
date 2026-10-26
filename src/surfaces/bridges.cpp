@@ -63,18 +63,32 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
         auto open = [&](const Polygons& p) { return offset(offset(p, -width / 2.0), width / 2.0); };
         if (sparse_printed && open(Clipper2Lib::Difference(surfaces[i].bottom, regions[i - 1], FillRule::NonZero)).empty())
             return; // all over the region below, which is printed but for slits
+        // What is printed below, only near the bottom surface: the bridge
+        // comes out of the surface, and its anchors (within the bottom
+        // surface's box) look at most twice the width away (the mitred offset
+        // below), so a window three widths wider changes nothing. A whole
+        // layer's walls cost the most on detailed parts.
+        Clipper2Lib::Rect64 window = Clipper2Lib::GetBounds(surfaces[i].bottom);
+        const std::int64_t margin = to_units(3.0 * width);
+        window.left -= margin, window.top -= margin, window.right += margin, window.bottom += margin;
         const LayerSurfaces& below = surfaces[i - 1];
-        Polygons printed = bead_area(walls[i - 1].toolpaths);
+        Polygons printed = bead_area(walls[i - 1].toolpaths, window);
         for (const Polygons* p : {&below.top, &below.bottom, &below.bridge})
-            printed = Clipper2Lib::Union(printed, *p, FillRule::NonZero);
+            printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, *p), FillRule::NonZero);
         if (sparse_printed)
-            printed = Clipper2Lib::Union(printed, below.sparse, FillRule::NonZero);
+            printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, below.sparse), FillRule::NonZero);
+        // To a micrometre: the beads' fine arcs cost most of what follows.
+        printed = Clipper2Lib::SimplifyPaths(printed, 0.001 * kUnitsPerMm);
         Polygons raw = Clipper2Lib::Difference(surfaces[i].bottom, printed, FillRule::NonZero);
         raw = open(raw); // nothing narrower than a bead
         if (raw.empty())
             return;
         bridges[i] = Clipper2Lib::Intersect(surfaces[i].bottom, offset(raw, 2.0 * width), FillRule::NonZero);
-        angles[i] = best_angle(bridges[i], offset(printed, width), width);
+        // The anchors are the bridge's line ends: the support only matters
+        // around the bridge, in the same kind of window.
+        Clipper2Lib::Rect64 around = Clipper2Lib::GetBounds(bridges[i]);
+        around.left -= margin, around.top -= margin, around.right += margin, around.bottom += margin;
+        angles[i] = best_angle(bridges[i], offset(Clipper2Lib::RectClip(around, printed), width), width);
     });
     for (std::size_t i = 1; i < surfaces.size(); ++i) {
         if (bridges[i].empty())

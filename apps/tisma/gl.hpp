@@ -242,6 +242,7 @@ using GLuint64 = unsigned long long;
     X(void, glUniform1i, (GLint location, GLint v0))                                                                 \
     X(void, glUniform1ui, (GLint location, GLuint v0))                                                               \
     X(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1))                                                   \
+    X(void, glUniform2ui, (GLint location, GLuint v0, GLuint v1))                                                    \
     X(void, glUniform3f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2))                                       \
     X(void, glUniform3fv, (GLint location, GLsizei count, const GLfloat* value))                                     \
     X(void, glUniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3))                           \
@@ -347,6 +348,7 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glUniform1i tisma_glUniform1i
 #define glUniform1ui tisma_glUniform1ui
 #define glUniform2f tisma_glUniform2f
+#define glUniform2ui tisma_glUniform2ui
 #define glUniform3f tisma_glUniform3f
 #define glUniform3fv tisma_glUniform3fv
 #define glUniform4f tisma_glUniform4f
