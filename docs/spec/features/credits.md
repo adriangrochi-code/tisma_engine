@@ -44,8 +44,8 @@ interfaz con «Basado en…», y una página de créditos las junta todas.
 | Función | Ficha | Basado en | Autor | Licencia o tipo |
 |---|---|---|---|---|
 | Aletas de soporte | `support_fins.md` | Support Fins, `https://github.com/gittrahan/support-fins` | gittrahan (idea de Slant3D) | MIT |
-| Asistente y tutoriales | `assistant.md` (PR #17) | Guías de impresión 3D, `https://www.rafabarajas.com` | Rafa Barajas | Guías; texto propio |
-| Perfiles de resina del paquete | `profile_pack.md` (PR #17) | UVtools, `https://github.com/sn4k3/UVtools` | sn4k3 | AGPL-3.0 (datos, en el repositorio de perfiles) |
+| Asistente y tutoriales | `assistant.md` | Guías de impresión 3D, `https://www.rafabarajas.com` | Rafa Barajas | Guías; texto propio |
+| Perfiles de resina del paquete | `profile_pack.md` | UVtools, `https://github.com/sn4k3/UVtools` | sn4k3 | AGPL-3.0 (datos, en el repositorio de perfiles) |
 | Paredes de ancho variable | `perimeters.md` | Kuipers et al. 2020, Computer-Aided Design 128:102907 | Kuipers, Doubrovski, Wu y Wang | Artículo |
 | Capas curvas en 3 ejes | `nonplanar_modes.md` | CurviSlicer, SIGGRAPH 2019 | Etienne et al. | Artículo |
 | Capas según las tensiones | `nonplanar_modes.md` | S³-Slicer, SIGGRAPH Asia 2022 | Zhang et al. | Artículo |

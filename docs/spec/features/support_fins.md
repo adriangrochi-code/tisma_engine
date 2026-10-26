@@ -174,7 +174,7 @@ un programa aparte no puede hacer.
 21. **Con la orientación** (`orientation.md`): la orientación automática puede contar las aletas como soporte que no
     marca la superficie, y sugerir la orientación más fuerte (regla 14); la persona elige.
 22. **Con los soportes del laminador:** una pieza usa aletas o soportes comunes. Se elige en la sección Soportes
-    (`settings_panel.md`, PR #19) con chips: Sin soporte, Soporte, Aletas.
+    (`settings_panel.md`) con chips: Sin soporte, Soporte, Aletas.
 23. **Mejoras para medir** (diseño, se confirman con piezas impresas antes de dejarlas por defecto):
     - dientes que siguen el contorno de la capa en lugar de una recta, para agarrar curvas;
     - largo del diente según la fuerza que pide la estabilidad, no solo por la cantidad de capas.

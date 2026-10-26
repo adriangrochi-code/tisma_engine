@@ -22,10 +22,10 @@
 
 **Relación con otras fichas:**
 - `interface.md`: la ventana, el panel de la placa (tarjeta Printer con Nozzle y Bed type) y las páginas de ajustes.
-- `settings_levels.md` (PR #15): cómo reparte los ajustes por nivel Tisma Slicer, medido. Esta ficha fija los nombres
+- `settings_levels.md`: cómo reparte los ajustes por nivel Tisma Slicer, medido. Esta ficha fija los nombres
   y el comportamiento del motor: donde las dos difieren, manda esta, que es el pedido más nuevo.
 - `printer_connections.md`: la cámara de cada impresora y la cámara USB de la computadora.
-- `profile_pack.md` (PR #17): los modelos y sus variantes de boquilla en el paquete de perfiles.
+- `profile_pack.md`: los modelos y sus variantes de boquilla en el paquete de perfiles.
 
 **Diseño:** del dueño. Las reglas marcadas «(diseño)» no existen en Tisma Slicer; las demás siguen lo que hacía.
 
@@ -277,8 +277,8 @@ El motor toma de los dos:
     - con «Slice automatically», lamina de nuevo.
 23. **Modelo con una sola boquilla:** la lista muestra el diámetro y la opción «Otra…», que pide un diámetro y crea una
     impresora del usuario a partir del modelo con ese `machine.nozzle_diameter`, sin guardar (con su asterisco).
-24. **Cambios sin guardar** en el perfil de la impresora: el mismo diálogo que al cambiar de perfil (`presets.md`,
-    PR #13): llevar los cambios a la boquilla nueva, descartarlos o cancelar.
+24. **Cambios sin guardar** en el perfil de la impresora: el mismo diálogo que al cambiar de perfil (`presets.md`):
+    llevar los cambios a la boquilla nueva, descartarlos o cancelar.
 25. **Varios extrusores:** una lista por extrusor, como en `multi_extruder.md`.
 26. **La boquilla de la impresora conectada** (diseño): si la conexión informa el diámetro de la boquilla instalada
     (solo las conexiones de `printer_connections.md` que lo dan) y no coincide con la elegida, la tarjeta Printer
@@ -334,7 +334,7 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
 | Tipo | Cuándo |
 |---|---|
 | Resina | Impresora de resina (`resin.md`) |
-| Pellets | Impresora de pellets (`pellets.md`, PR #18) |
+| Pellets | Impresora de pellets (`pellets.md`) |
 | Cinta | Impresora de cinta (`belt_printer.md`) |
 | Delta | Cama redonda (`machine.bed` con forma de círculo) |
 | Cerrada | `machine.enclosed` sí |
@@ -383,9 +383,9 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
       hicieron.
     La fecha y la boquilla se guardan cuando se aplica un resultado desde «Apply a calibration result…» (`interface.md`,
     Más › Calibration). Arriba de la sección, el resumen «5 de 9 calibradas» y un botón «Calibrar en orden», que abre
-    la primera sin calibrar en el orden del tutorial `new_material` (`assistant.md`, PR #17).
+    la primera sin calibrar en el orden del tutorial `new_material` (`assistant.md`).
 39. **Volver a la placa:** la página tiene arriba «‹ Placa»; Escape también vuelve. Los cambios sin guardar quedan con
-    su asterisco, como en `presets.md` (PR #13).
+    su asterisco, como en `presets.md`.
 40. **El nivel también vale aquí:** la configuración de la impresora usa el nivel o la vista propia de las reglas 9 a
     20, con la pestaña Impresora en el diálogo de la regla 16.
 

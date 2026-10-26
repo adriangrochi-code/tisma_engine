@@ -125,8 +125,8 @@ implementar».
 9. **Ajustes del complemento:** el motor los dibuja, el complemento no dibuja nada.
    - Tipos: `booleano`, `entero`, `numero` (con unidad, mínimo, máximo y paso), `lista` (opciones con su nombre) y
      `texto`.
-   - Cada uno con su nivel (`basic`, `normal`, `advanced`) para los niveles y la vista propia (`settings_panel.md`,
-     PR #19).
+   - Cada uno con su nivel (`basic`, `normal`, `advanced`) para los niveles y la vista propia
+     (`settings_panel.md`).
    - Van en un apartado propio con el nombre del complemento, dentro de la sección que pide `section`, o en Otros.
    - Se guardan en el perfil y en el proyecto como `plugins.<id>.<clave>`.
    - Un perfil con ajustes de un complemento que no está instalado los conserva sin usarlos y lo avisa al abrirlo.
