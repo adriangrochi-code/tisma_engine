@@ -235,34 +235,184 @@ Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t t) {
     return normalize(cross(Vec3{b.x - a.x, b.y - a.y, b.z - a.z}, Vec3{c.x - a.x, c.y - a.y, c.z - a.z}));
 }
 
+namespace {
+
+// How far along the ray it meets triangle t, or -1.
+double ray_triangle(const TriangleMesh& m, std::size_t t, Vec3 origin, Vec3 direction) {
+    const double ox = origin.x, oy = origin.y, oz = origin.z, dx = direction.x, dy = direction.y, dz = direction.z;
+    const Vec3f& a = m.corner(t, 0);
+    const Vec3f& b = m.corner(t, 1);
+    const Vec3f& c = m.corner(t, 2);
+    const double e1x = double(b.x) - a.x, e1y = double(b.y) - a.y, e1z = double(b.z) - a.z;
+    const double e2x = double(c.x) - a.x, e2y = double(c.y) - a.y, e2z = double(c.z) - a.z;
+    const double px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
+    const double det = e1x * px + e1y * py + e1z * pz;
+    if (std::fabs(det) < 1e-12)
+        return -1.0;
+    const double inv = 1.0 / det;
+    const double tx = ox - a.x, ty = oy - a.y, tz = oz - a.z;
+    const double u = (tx * px + ty * py + tz * pz) * inv;
+    if (u < 0.0 || u > 1.0)
+        return -1.0;
+    const double qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
+    const double v = (dx * qx + dy * qy + dz * qz) * inv;
+    if (v < 0.0 || u + v > 1.0)
+        return -1.0;
+    const double distance = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    return distance > 0.0 ? distance : -1.0;
+}
+
+// Where the ray enters the box (0 if it starts inside), or -1: the slab
+// method (Kay and Kajiya 1986).
+double ray_box(Vec3f lo, Vec3f hi, Vec3 origin, Vec3 direction) {
+    double near = 0.0, far = std::numeric_limits<double>::max();
+    const double o[3] = {origin.x, origin.y, origin.z}, d[3] = {direction.x, direction.y, direction.z};
+    const double l[3] = {lo.x, lo.y, lo.z}, h[3] = {hi.x, hi.y, hi.z};
+    for (int k = 0; k < 3; ++k) {
+        if (std::fabs(d[k]) < 1e-30) {
+            if (o[k] < l[k] || o[k] > h[k])
+                return -1.0;
+            continue;
+        }
+        double t0 = (l[k] - o[k]) / d[k], t1 = (h[k] - o[k]) / d[k];
+        if (t0 > t1)
+            std::swap(t0, t1);
+        near = std::max(near, t0), far = std::min(far, t1);
+        if (near > far)
+            return -1.0;
+    }
+    return near;
+}
+
+constexpr std::uint32_t kLeafTriangles = 8;
+
+} // namespace
+
 std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, Vec3 origin, Vec3 direction) {
     std::optional<PlateHit> best;
-    const double ox = origin.x, oy = origin.y, oz = origin.z, dx = direction.x, dy = direction.y, dz = direction.z;
-    for (std::size_t o = 0; o < placed.size(); ++o) {
-        const TriangleMesh& m = placed[o];
-        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
-            const Vec3f& a = m.corner(t, 0);
-            const Vec3f& b = m.corner(t, 1);
-            const Vec3f& c = m.corner(t, 2);
-            const double e1x = double(b.x) - a.x, e1y = double(b.y) - a.y, e1z = double(b.z) - a.z;
-            const double e2x = double(c.x) - a.x, e2y = double(c.y) - a.y, e2z = double(c.z) - a.z;
-            const double px = dy * e2z - dz * e2y, py = dz * e2x - dx * e2z, pz = dx * e2y - dy * e2x;
-            const double det = e1x * px + e1y * py + e1z * pz;
-            if (std::fabs(det) < 1e-12)
-                continue;
-            const double inv = 1.0 / det;
-            const double tx = ox - a.x, ty = oy - a.y, tz = oz - a.z;
-            const double u = (tx * px + ty * py + tz * pz) * inv;
-            if (u < 0.0 || u > 1.0)
-                continue;
-            const double qx = ty * e1z - tz * e1y, qy = tz * e1x - tx * e1z, qz = tx * e1y - ty * e1x;
-            const double v = (dx * qx + dy * qy + dz * qz) * inv;
-            if (v < 0.0 || u + v > 1.0)
-                continue;
-            const double distance = (e2x * qx + e2y * qy + e2z * qz) * inv;
-            if (distance > 0.0 && (!best || distance < best->distance))
-                best = PlateHit{o, t, distance};
+    for (std::size_t o = 0; o < placed.size(); ++o)
+        for (std::size_t t = 0; t < placed[o].triangle_count(); ++t)
+            if (const double d = ray_triangle(placed[o], t, origin, direction); d > 0.0 && (!best || d < best->distance))
+                best = PlateHit{o, t, d};
+    return best;
+}
+
+TriangleIndex::TriangleIndex(const TriangleMesh& mesh) {
+    const std::size_t n = mesh.triangle_count();
+    if (n == 0)
+        return;
+    std::vector<Vec3f> lo(n), hi(n), centre(n);
+    for (std::size_t t = 0; t < n; ++t) {
+        const Vec3f& a = mesh.corner(t, 0);
+        const Vec3f& b = mesh.corner(t, 1);
+        const Vec3f& c = mesh.corner(t, 2);
+        lo[t] = {std::min({a.x, b.x, c.x}), std::min({a.y, b.y, c.y}), std::min({a.z, b.z, c.z})};
+        hi[t] = {std::max({a.x, b.x, c.x}), std::max({a.y, b.y, c.y}), std::max({a.z, b.z, c.z})};
+        centre[t] = {0.5f * (lo[t].x + hi[t].x), 0.5f * (lo[t].y + hi[t].y), 0.5f * (lo[t].z + hi[t].z)};
+    }
+    order_.resize(n);
+    std::iota(order_.begin(), order_.end(), std::uint32_t(0));
+    nodes_.reserve(2 * (n / kLeafTriangles + 1));
+    struct Task {
+        std::uint32_t node, first, count;
+    };
+    std::vector<Task> stack{{0, 0, std::uint32_t(n)}};
+    nodes_.emplace_back();
+    while (!stack.empty()) {
+        const Task task = stack.back();
+        stack.pop_back();
+        Node& node = nodes_[task.node];
+        node.lo = lo[order_[task.first]], node.hi = hi[order_[task.first]];
+        Vec3f clo = centre[order_[task.first]], chi = clo;
+        for (std::uint32_t i = task.first; i < task.first + task.count; ++i) {
+            const std::uint32_t t = order_[i];
+            node.lo = {std::min(node.lo.x, lo[t].x), std::min(node.lo.y, lo[t].y), std::min(node.lo.z, lo[t].z)};
+            node.hi = {std::max(node.hi.x, hi[t].x), std::max(node.hi.y, hi[t].y), std::max(node.hi.z, hi[t].z)};
+            clo = {std::min(clo.x, centre[t].x), std::min(clo.y, centre[t].y), std::min(clo.z, centre[t].z)};
+            chi = {std::max(chi.x, centre[t].x), std::max(chi.y, centre[t].y), std::max(chi.z, centre[t].z)};
         }
+        const float ex = chi.x - clo.x, ey = chi.y - clo.y, ez = chi.z - clo.z;
+        if (task.count <= kLeafTriangles || std::max({ex, ey, ez}) <= 0.0f) {
+            node.first = task.first, node.count = task.count;
+            continue;
+        }
+        const int axis = ex >= ey && ex >= ez ? 0 : ey >= ez ? 1 : 2;
+        const auto key = [&](std::uint32_t t) { return axis == 0 ? centre[t].x : axis == 1 ? centre[t].y : centre[t].z; };
+        const std::uint32_t half = task.count / 2;
+        std::nth_element(order_.begin() + task.first, order_.begin() + task.first + half,
+                         order_.begin() + task.first + task.count,
+                         [&](std::uint32_t a, std::uint32_t b) { return key(a) < key(b); });
+        const auto left = std::uint32_t(nodes_.size());
+        nodes_.emplace_back();
+        const auto right = std::uint32_t(nodes_.size());
+        nodes_.emplace_back();
+        nodes_[task.node].first = left;
+        nodes_[task.node].second = right;
+        stack.push_back({right, task.first + half, task.count - half});
+        stack.push_back({left, task.first, half});
+    }
+}
+
+std::optional<std::pair<std::size_t, double>> TriangleIndex::hit(const TriangleMesh& mesh, Vec3 origin,
+                                                                 Vec3 direction) const {
+    std::optional<std::pair<std::size_t, double>> best;
+    if (nodes_.empty())
+        return best;
+    std::vector<std::uint32_t> stack{0};
+    while (!stack.empty()) {
+        const Node& node = nodes_[stack.back()];
+        stack.pop_back();
+        const double enter = ray_box(node.lo, node.hi, origin, direction);
+        if (enter < 0.0 || (best && enter > best->second))
+            continue;
+        if (node.count > 0) {
+            for (std::uint32_t i = node.first; i < node.first + node.count; ++i)
+                if (const double d = ray_triangle(mesh, order_[i], origin, direction);
+                    d > 0.0 && (!best || d < best->second || (d == best->second && order_[i] < best->first)))
+                    best = std::pair<std::size_t, double>{order_[i], d};
+            continue;
+        }
+        stack.push_back(node.second);
+        stack.push_back(node.first);
+    }
+    return best;
+}
+
+std::vector<std::uint32_t> TriangleIndex::near(Vec3f lo, Vec3f hi) const {
+    std::vector<std::uint32_t> out;
+    if (nodes_.empty())
+        return out;
+    std::vector<std::uint32_t> stack{0};
+    while (!stack.empty()) {
+        const Node& node = nodes_[stack.back()];
+        stack.pop_back();
+        if (node.lo.x > hi.x || node.hi.x < lo.x || node.lo.y > hi.y || node.hi.y < lo.y || node.lo.z > hi.z ||
+            node.hi.z < lo.z)
+            continue;
+        if (node.count > 0) {
+            out.insert(out.end(), order_.begin() + node.first, order_.begin() + node.first + node.count);
+            continue;
+        }
+        stack.push_back(node.second);
+        stack.push_back(node.first);
+    }
+    return out;
+}
+
+std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std::vector<TriangleIndex>& indexes,
+                             Vec3 origin, Vec3 direction) {
+    std::optional<PlateHit> best;
+    for (std::size_t o = 0; o < placed.size(); ++o) {
+        std::optional<std::pair<std::size_t, double>> h;
+        if (o < indexes.size() && !indexes[o].empty()) {
+            h = indexes[o].hit(placed[o], origin, direction);
+        } else {
+            const auto one = pick({placed[o]}, origin, direction);
+            if (one)
+                h = std::pair<std::size_t, double>{one->triangle, one->distance};
+        }
+        if (h && (!best || h->second < best->distance))
+            best = PlateHit{o, h->first, h->second};
     }
     return best;
 }

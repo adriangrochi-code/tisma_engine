@@ -92,4 +92,6 @@ abrir, para las capturas y las pruebas.
 - Volúmenes bloqueadores y forzadores (prueba SM12 de `supports_more.md`): piezas que se agregan, no caras.
 - La piel difusa y los colores, con sus partes del motor.
 - Pintar con relleno inteligente (toda una cara plana de un clic) y deshacer.
-- Buscar los triángulos del pincel con una grilla: hoy se miran todos en cada paso del mouse.
+
+El pincel no mira todos los triángulos: el árbol de cajas del modelo (`TriangleIndex`, `docs/UI.md`, «Modelos
+grandes») le da los que están cerca. En una esfera de un millón de triángulos, un paso tarda 2 ms.

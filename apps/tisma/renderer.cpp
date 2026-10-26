@@ -191,12 +191,13 @@ const std::string kMeshVertex = kVersion + R"(
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 uniform mat4 u_view_projection;
+uniform vec3 u_offset;
 out vec3 v_position;
 out vec3 v_normal;
 void main() {
-    v_position = a_position;
+    v_position = a_position + u_offset;
     v_normal = a_normal;
-    gl_Position = u_view_projection * vec4(a_position, 1.0);
+    gl_Position = u_view_projection * vec4(v_position, 1.0);
 }
 )";
 const std::string kMeshFragment = kVersion + kLighting + R"(
@@ -1161,13 +1162,16 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         const GLint first = GLint(std::min<std::size_t>(f.selected_first, std::size_t(count)));
         const GLint chosen = GLint(std::min<std::size_t>(f.selected_count, std::size_t(count - first)));
         uniform(p_.mesh, "u_colour", f.model);
+        uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         if (first > 0)
             glDrawArrays(GL_TRIANGLES, 0, first);
         if (first + chosen < count)
             glDrawArrays(GL_TRIANGLES, first + chosen, count - first - chosen);
         if (chosen > 0) {
             uniform(p_.mesh, "u_colour", f.model_selected);
+            uniform(p_.mesh, "u_offset", f.selected_offset);
             glDrawArrays(GL_TRIANGLES, first, chosen);
+            uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         }
         // The paint on the same faces, pulled towards the eye in depth so it
         // wins over them.

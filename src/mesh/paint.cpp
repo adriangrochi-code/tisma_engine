@@ -228,14 +228,19 @@ void for_each_painted(const Painting& painting, PaintChannel channel, std::size_
     walk(tree, pos, to_p(a), to_p(b), to_p(c), piece);
 }
 
-std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush) {
+std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
+                  const std::vector<std::uint32_t>* near) {
     if (!(brush.radius > 0.0) || brush.mark > kPaintMaxMark)
         return 0;
     const Painter painter(brush);
     const P centre = to_p(brush.centre), view = to_p(brush.view);
     const double r = brush.radius;
     std::size_t changed = 0;
-    for (std::size_t t = 0; t < mesh.triangle_count(); ++t) {
+    const std::size_t count = near ? near->size() : mesh.triangle_count();
+    for (std::size_t k = 0; k < count; ++k) {
+        const std::size_t t = near ? std::size_t((*near)[k]) : k;
+        if (t >= mesh.triangle_count())
+            continue;
         const P a = to_p(mesh.corner(t, 0)), b = to_p(mesh.corner(t, 1)), c = to_p(mesh.corner(t, 2));
         // Far from the brush, or facing away from the eye.
         if (std::min({a.x, b.x, c.x}) > centre.x + r || std::max({a.x, b.x, c.x}) < centre.x - r ||

@@ -33,6 +33,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Modelos grandes más fluidos** (pedido del dueño; `docs/UI.md`, «Modelos grandes»): con un modelo de un millón de
+  triángulos, arrastrarlo ya no rehace la malla en cada cuadro (antes, 5 cuadros por segundo), y el clic y el pincel
+  buscan en un árbol de cajas: un clic pasa de 57 ms a 3 µs.
 - **Brillo parejo** (pedido del dueño; `docs/GLOSS.md`): para llegar al tiempo mínimo de capa, ahora se frena primero
   todo lo que no es pared externa, y la pared externa sigue a su velocidad (`cooling.keep_outer_speed`, encendido por
   defecto). Una pared que se frena sale de una boquilla más caliente y brilla distinto: las capas cortas dejaban bandas.

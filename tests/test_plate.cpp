@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -172,4 +173,55 @@ TEST_CASE("plate: the paint follows each model, and the plate joins it in order"
         CHECK(plate.tree(PaintChannel::Seam, t).empty());
         CHECK(plate.tree(PaintChannel::Seam, 12 + t) == objects[1].painting.tree(PaintChannel::Seam, t));
     }
+}
+
+TEST_CASE("plate: the triangle index finds what looking at every triangle finds", "[plate]") {
+    // A sphere of 20 000 triangles and a box beside it, as one mesh.
+    TriangleMesh m = box(30, 0, 0, 10, 10, 10);
+    const int n = 100;
+    const auto at = [&](int i, int j) {
+        const double th = 3.14159265358979 * i / n, ph = 2 * 3.14159265358979 * j / n;
+        return Vec3f{float(10 * std::sin(th) * std::cos(ph)), float(10 * std::sin(th) * std::sin(ph)),
+                     float(10 + 10 * std::cos(th))};
+    };
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j) {
+            m.add_triangle(at(i, j), at(i + 1, j), at(i + 1, j + 1));
+            m.add_triangle(at(i, j), at(i + 1, j + 1), at(i, j + 1));
+        }
+    const TriangleIndex index(m);
+    const std::vector<TriangleIndex> indexes{TriangleIndex(m)};
+    int hits = 0;
+    for (int k = 0; k < 400; ++k) {
+        const float x = -15.0f + 0.15f * float(k % 20) * 3.7f, y = -12.0f + 0.13f * float(k / 20) * 9.1f;
+        const Vec3 origin{x, y, 60.0f};
+        const Vec3 direction = normalize(Vec3{0.1f * float(k % 7) - 0.3f, 0.05f * float(k % 5) - 0.1f, -1.0f});
+        const auto slow = pick({m}, origin, direction);
+        const auto fast = pick({m}, indexes, origin, direction);
+        REQUIRE(slow.has_value() == fast.has_value());
+        if (!slow)
+            continue;
+        ++hits;
+        CHECK(fast->triangle == slow->triangle);
+        CHECK(fast->distance == slow->distance);
+    }
+    CHECK(hits > 100);
+    // Near a box: every triangle whose box meets it, and nothing far.
+    const Vec3f lo{8, -2, 8}, hi{12, 2, 12};
+    std::vector<std::uint32_t> near = index.near(lo, hi);
+    std::sort(near.begin(), near.end());
+    for (std::size_t t = 0; t < m.triangle_count(); ++t) {
+        float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f, y1 = -1e9f, z0 = 1e9f, z1 = -1e9f;
+        for (int c = 0; c < 3; ++c) {
+            const Vec3f& v = m.corner(t, c);
+            x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
+            z0 = std::min(z0, v.z), z1 = std::max(z1, v.z);
+        }
+        const bool meets = x0 <= hi.x && x1 >= lo.x && y0 <= hi.y && y1 >= lo.y && z0 <= hi.z && z1 >= lo.z;
+        if (meets)
+            CHECK(std::binary_search(near.begin(), near.end(), std::uint32_t(t)));
+    }
+    CHECK(near.size() < m.triangle_count() / 20);
+    CHECK(TriangleIndex().near(lo, hi).empty());
+    CHECK_FALSE(TriangleIndex().hit(m, {0, 0, 50}, {0, 0, -1}));
 }

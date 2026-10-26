@@ -3980,3 +3980,25 @@ el mouse en esa esfera (también mira todos los triángulos).
 
 **Sigue:** la piel difusa del motor y su pincel; colores con varios extrusores; volúmenes bloqueadores; el rendimiento
 con modelos grandes; la decisión del dueño sobre los perfiles abiertos.
+
+## 2026-10-26 — modelos grandes en la interfaz
+
+Pedido del dueño: mejorar el rendimiento con modelos grandes.
+
+**Medido** con una esfera de 1 002 528 triángulos (Release):
+- el motor no es el problema: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificar 0,04 s, vista previa 0,06 s;
+- en la interfaz, arrastrar el modelo rehacía en cada cuadro la malla ubicada (75–89 ms), la de la placa (69–75 ms) y
+  la copia de la vista (45 ms): 5 cuadros por segundo;
+- cada clic y cada cuadro del pincel miraban todos los triángulos: 57 ms.
+
+**Hecho:**
+- Arrastrar corre el modelo con un desplazamiento en el shader; la malla se rehace una vez, al soltarlo.
+- `TriangleIndex` (`src/ui/plate.*`): un árbol de cajas por modelo, armado cuando hace falta (250 ms). Un clic pasa de
+  57 ms a 3 µs; un paso del pincel, de 13–18 ms a 2 ms (`paint` recibe los triángulos cercanos). Prueba nueva: el árbol
+  da el mismo triángulo y la misma distancia que mirarlos todos, en 400 rayos.
+
+**No probado:** cuadros por segundo reales con una GPU (en la sesión solo hay llvmpipe, donde dibujar la vista previa
+de esa esfera con MSAA 4 tarda más que todo lo anterior).
+
+**Sigue:** armar el árbol y la malla de la placa en segundo plano; los campos de giro y escala sin rehacer toda la
+placa.

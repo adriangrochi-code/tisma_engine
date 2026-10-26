@@ -30,6 +30,7 @@ struct ViewFrame {
     Vec3 model{0.62f, 0.37f, 0.86f};
     Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
+    Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
     bool show_model = true;
     bool show_paint = false; // the painted faces (set_paint) over the model
     bool show_preview = false;

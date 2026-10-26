@@ -91,6 +91,34 @@ struct PlateHit {
 };
 std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, Vec3 origin, Vec3 direction);
 
+// A bounding volume hierarchy over one mesh's triangles, so that a click or a
+// brush on a model of a million triangles looks at a few dozen of them: each
+// box is split at the median of its triangles' centres along its longest side,
+// down to a few triangles a leaf. Own design.
+class TriangleIndex {
+public:
+    TriangleIndex() = default;
+    explicit TriangleIndex(const TriangleMesh& mesh);
+    bool empty() const { return nodes_.empty(); }
+    // The nearest triangle the ray hits and how far (direction of unit length).
+    std::optional<std::pair<std::size_t, double>> hit(const TriangleMesh& mesh, Vec3 origin, Vec3 direction) const;
+    // The triangles whose boxes meet the box from lo to hi, in no order.
+    std::vector<std::uint32_t> near(Vec3f lo, Vec3f hi) const;
+
+private:
+    struct Node {
+        Vec3f lo, hi;
+        std::uint32_t first = 0, count = 0; // a leaf's triangles in order_; count 0: an inner node,
+        std::uint32_t second = 0;           // whose children are nodes first and second
+    };
+    std::vector<Node> nodes_;
+    std::vector<std::uint32_t> order_;
+};
+
+// pick with an index for each placed mesh (the same answer, sooner).
+std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std::vector<TriangleIndex>& indexes,
+                             Vec3 origin, Vec3 direction);
+
 // The unit normal of a triangle of a mesh (from its winding).
 Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t triangle);
 

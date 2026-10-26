@@ -80,6 +80,17 @@ Cada modelo queda siempre apoyado en la cama. El elegido se ve más claro. La l�
 OpenGL, con sus pruebas (`tests/test_plate.cpp`). Un proyecto guarda cada modelo ya ubicado (con su giro y su escala
 aplicados) y su pintura, así se abre igual; ya no se queda solo con el primero.
 
+#### Modelos grandes
+
+Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
+- **Arrastrar:** antes, cada cuadro rehacía la malla ubicada, la de la placa y la copia de la vista (unos 200 ms sin contar
+  la subida a la GPU: 5 cuadros por segundo). Ahora la vista corre el modelo con un desplazamiento en el shader y la malla se rehace una vez,
+  al soltarlo.
+- **Clic y pincel:** cada modelo ubicado tiene un árbol de cajas (`TriangleIndex`, `src/ui/plate.*`), armado la primera
+  vez que hace falta después de un cambio (250 ms). Un clic pasa de 57 ms a 3 µs, y un paso del pincel, de 13–18 ms
+  a 2 ms.
+- **El motor**, para comparar: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificarlo 0,04 s y la vista previa 0,06 s.
+
 El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
 - las comprobaciones de la malla y de la pieza laminada;
 - el G-code en memoria;

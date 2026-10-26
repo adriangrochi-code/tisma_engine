@@ -359,6 +359,9 @@ private:
     int pressed_object_ = -1;  // the model the left button went down on
     Vec3 drag_anchor_{};       // the point on the bed plane the drag holds
     bool dragged_ = false;
+    Vec3 drag_offset_{};       // how far the dragged model moved since its mesh was made (the view shifts it)
+    std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
+    const std::vector<TriangleIndex>& plate_indexes();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
     // The Paint tool (docs/PAINTING.md): what it paints, with which mark and
     // how wide; the model a stroke started on; where the brush is now.
@@ -1092,6 +1095,8 @@ void App::rebuild_plate() {
     }
     object_vertices_.push_back(vertices);
     paint_dirty_ = true;
+    drag_offset_ = {};
+    indexes_.clear();
     offset_ = {};
     if (objects_.empty()) {
         mesh_.reset();
@@ -1162,6 +1167,15 @@ void App::arrange_plate() {
     for (std::size_t i = 0; i < objects_.size(); ++i)
         objects_[i].place.x = at[i][0], objects_[i].place.y = at[i][1];
     plate_changed();
+}
+
+const std::vector<TriangleIndex>& App::plate_indexes() {
+    if (indexes_.size() != placed_meshes_.size()) {
+        indexes_.clear();
+        for (const TriangleMesh& m : placed_meshes_)
+            indexes_.emplace_back(m);
+    }
+    return indexes_;
 }
 
 // The ray from the eye through the mouse, in the view.
@@ -2335,12 +2349,12 @@ void App::viewport() {
     const bool painting = editing && tool_ == PlateTool::Paint;
     brush_depth_.reset();
     if (painting && ImGui::IsItemHovered())
-        if (const auto hit = pick(placed_meshes_, camera_.eye(), mouse_ray()))
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
             brush_depth_ = float(hit->distance) * dot(mouse_ray(), camera_.forward());
     if (painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         painting_object_ = -1;
         painted_ = false;
-        if (const auto hit = pick(placed_meshes_, camera_.eye(), mouse_ray())) {
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             brush_stroke(hit->object);
@@ -2366,7 +2380,7 @@ void App::viewport() {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
-        if (const auto hit = pick(placed_meshes_, e, d)) {
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
             selected_ = int(hit->object);
             if (tool_ == PlateTool::LayFlat) {
                 PlateObject& o = objects_[hit->object];
@@ -2381,12 +2395,15 @@ void App::viewport() {
     if (ImGui::IsItemActive()) {
         if (pressed_object_ >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
             if (const auto p = bed_point(drag_anchor_.z)) {
+                // The view shifts the model; its mesh is made again once, when
+                // the drag ends (a million triangles took 200 ms a frame).
                 PlateObject& o = objects_[std::size_t(pressed_object_)];
                 o.place.x += double(p->x - drag_anchor_.x);
                 o.place.y += double(p->y - drag_anchor_.y);
+                drag_offset_.x += p->x - drag_anchor_.x;
+                drag_offset_.y += p->y - drag_anchor_.y;
                 drag_anchor_ = *p;
                 dragged_ = true;
-                rebuild_plate();
             }
         } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
@@ -2758,7 +2775,7 @@ void App::paint_card(ImVec2 at) {
 // Paints the face under the mouse, on this model only; Shift erases.
 void App::brush_stroke(std::size_t object) {
     const Vec3 d = mouse_ray(), e = camera_.eye();
-    const auto hit = pick(placed_meshes_, e, d);
+    const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
     if (!hit || hit->object != object)
         return;
     Brush brush;
@@ -2768,7 +2785,10 @@ void App::brush_stroke(std::size_t object) {
     brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
     brush.view = {d.x, d.y, d.z};
     brush.mark = ImGui::GetIO().KeyShift ? kPaintNone : paint_mark_;
-    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush) > 0) {
+    const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
+    const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
+    const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
         painted_ = true;
         paint_dirty_ = true;
     }
@@ -3564,6 +3584,14 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     } else if (tab_ == Tab::Prepare && objects_.size() == 1 && selected_ == 0 && tool_ != PlateTool::Select) {
         f.selected_first = 0;
         f.selected_count = object_vertices_.size() > 1 ? object_vertices_[1] : 0;
+    }
+    if (dragged_ && pressed_object_ >= 0 && std::size_t(pressed_object_) + 1 < object_vertices_.size()) {
+        if (f.selected_count == 0) { // nothing is highlighted: the dragged model keeps its colour
+            f.selected_first = object_vertices_[std::size_t(pressed_object_)];
+            f.selected_count = object_vertices_[std::size_t(pressed_object_) + 1] - f.selected_first;
+            f.model_selected = f.model;
+        }
+        f.selected_offset = drag_offset_;
     }
     // The calibration tab shows its sliced part, up to the chosen segment.
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;

@@ -626,6 +626,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Pintar la piel difusa (con la piel difusa de `fuzzy_skin.md`) y los colores (con `multi_extruder.md`); volúmenes
   bloqueadores y forzadores (SM12); relleno inteligente de una cara y deshacer
 - [ ] Cortar, Partir y Medir de la ficha `interface.md`
+- [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
+  clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
+- [ ] Modelos grandes, lo que sigue: armar el árbol de cajas y la malla de la placa en segundo plano; los campos de
+  giro y escala sin rehacer toda la placa en cada cambio
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 

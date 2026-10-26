@@ -81,8 +81,10 @@ struct Brush {
     Vec3f view{0.0f, 0.0f, 0.0f};
     std::uint8_t mark = kPaintEnforce;
 };
-// Returns how many triangles changed.
-std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush);
+// Returns how many triangles changed. With `near`, only those triangles are
+// looked at (the ones a search found near the brush; the rest are too far).
+std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
+                  const std::vector<std::uint32_t>* near = nullptr);
 
 // The painting as bytes for the project file, and back: for each channel the
 // number of painted triangles, then each one's index, the length of its tree
