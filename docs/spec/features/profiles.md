@@ -51,7 +51,12 @@ que la persona elija la impresora por su modelo y, aparte, la boquilla y la cama
 6. **Materiales al instalar una impresora:** se instalan sin preguntar los materiales recomendados para ella. Agregar
    un material después no vuelve a pedir la impresora.
 7. **Perfiles propios:** la persona puede guardar, renombrar, borrar y comparar perfiles. Uno propio parte de uno del
-   sistema.
+   sistema. El comportamiento completo está en `presets.md`.
+8. **Tipo, soluble y abrasivo** del material: en Tisma Slicer no cambian el laminado (prueba PF8):
+   - el tipo llega a las plantillas de G-code como variable;
+   - abrasivo, según la ayuda del programa, lo usa la impresora para comprobar que la boquilla sea endurecida;
+   - soluble no cambió nada medible.
+   El motor puede usarlos más (por ejemplo, soporte soluble sin separación), pero eso sería nuevo.
 
 ## De dónde salen los datos
 
@@ -60,9 +65,11 @@ que la persona elija la impresora por su modelo y, aparte, la boquilla y la cama
   `resin.md` toman la pantalla de las especificaciones de Elegoo.
 - **Materiales:** temperaturas, densidad y velocidad de la ficha técnica (TDS) del fabricante del material.
 - **Sin dato oficial:** se usa un valor genérico de la familia del material (PLA, PETG…), marcado como genérico.
-- **Nunca** se copian perfiles de otros laminadores (PrusaSlicer, OrcaSlicer, Bambu Studio, Cura, Creality Print…),
-  ni siquiera los números: sus repositorios de perfiles tienen licencias (AGPL, LGPL) que el motor no acepta, y
-  `CLEANROOM.md` no permite leerlos.
+- **Dentro del motor nunca** se copian perfiles de otros laminadores (PrusaSlicer, OrcaSlicer, Bambu Studio, Cura,
+  Creality Print…), ni siquiera los números: sus repositorios de perfiles tienen licencias (AGPL, LGPL) que el motor no
+  acepta, y `CLEANROOM.md` no permite leerlos.
+- **Aparte, el paquete libre:** desde el 26-10-2026 (decisión del dueño), esos perfiles llegan convertidos en un
+  repositorio aparte, de uso libre, que el motor descarga y lee como datos (`profile_pack.md`).
 - Un valor que da el fabricante, aunque otro laminador también lo use, se toma del fabricante y se cita el
   fabricante.
 
@@ -86,3 +93,4 @@ Escenarios de aceptación de la organización, como funcionan en Tisma Slicer.
 | PF5 | Cambiar a otra impresora | Vuelve la cama por defecto de la nueva impresora |
 | PF6 | Instalar solo impresoras de 1,75 mm | La lista de materiales no ofrece materiales de 2,85 mm |
 | PF7 | Perfil con una temperatura de PLA de 320 °C | La revisión avisa: fuera del rango de la familia |
+| PF8 | Voladizo con soporte, interfaz con el extrusor 2, torre de purga | Material 2 soluble / material 1 soluble / ninguno | Igual en los tres: separación de 0,2 mm y la última capa de interfaz en Z 7,8 |
