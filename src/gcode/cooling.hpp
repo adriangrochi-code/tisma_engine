@@ -47,4 +47,10 @@ double layer_time(const std::map<double, double>& length_by_feed, double other_t
 double layer_time(const std::map<double, double>& length_by_feed, const std::map<double, double>& outer_by_feed,
                   double other_time, const Slowdown& slowdown);
 
+// The part-cooling fan, in percent, of a layer that takes t seconds and was
+// not slowed down (docs/spec/features/cooling.md, rule 3): fan_max at
+// min_time or less, then straight down to fan_min at below_time, and off from
+// there, or fan_min when always.
+double layer_fan(double t, double min_time, double below_time, double fan_min, double fan_max, bool always);
+
 } // namespace tisma

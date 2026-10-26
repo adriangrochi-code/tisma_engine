@@ -1,6 +1,8 @@
 #include "support/support.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <cmath>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 using namespace tisma;
@@ -26,7 +28,8 @@ TEST_CASE("support: a T's cap is held up from the bed, outside the stem", "[supp
     const std::vector<Polygons> over = overhangs(regions, heights, p);
     CHECK(over[0].empty());
     CHECK(over[5].empty());
-    CHECK_THAT(area_mm2(over[10]), WithinAbs(100.0 - 2.4 * 2.4, 1e-6)); // the stem grown by 0.2 holds the rest
+    // The stem grown by 0.2 holds the rest (and 1 um more: a step of exactly half a bead is held).
+    CHECK_THAT(area_mm2(over[10]), WithinAbs(100.0 - 2.402 * 2.402, 1e-6));
     CHECK(over[11].empty());
     const std::vector<Polygons> support = support_areas(regions, heights, p);
     for (int l = 0; l <= 8; ++l)
@@ -51,6 +54,27 @@ TEST_CASE("support: the threshold angle decides whether a 45 degree slope needs 
     const std::vector<Polygons> over = overhangs(regions, heights, flat);
     CHECK(area_mm2(over[5]) > 0.1);
     CHECK(area_mm2(support_areas(regions, heights, flat)[0]) > 1.0);
+}
+
+TEST_CASE("support: automatic, a 40 degree wedge is held and a 45 degree one is not (supports_skirt.md, S1)", "[support]") {
+    // Layers 0.2 high and beads 0.4 wide: a face may reach out half a bead a
+    // layer, so the limit is 45 degrees, and overhanging means MORE than that.
+    const std::vector<double> heights(20, 0.2);
+    SupportParams automatic; // threshold 0: half a bead
+    for (const double degrees : {20.0, 30.0, 40.0, 45.0, 50.0, 60.0}) {
+        CAPTURE(degrees);
+        const double step = 0.2 / std::tan(degrees * 3.14159265358979 / 180.0);
+        std::vector<Polygons> regions;
+        for (int l = 0; l < 20; ++l)
+            regions.push_back(square(0.0, 0.0, 10.0 + step * l, 10.0));
+        double held = 0.0;
+        for (const Polygons& a : support_areas(regions, heights, automatic))
+            held += area_mm2(a);
+        if (degrees < 45.0)
+            CHECK(held > 0.1);
+        else
+            CHECK(held == 0.0);
+    }
 }
 
 TEST_CASE("support: a part standing on another stops the column there", "[support]") {

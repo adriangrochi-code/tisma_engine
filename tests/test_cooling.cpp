@@ -69,3 +69,22 @@ TEST_CASE("sparing the outer walls: the rest slows down first (docs/GLOSS.md)", 
     CHECK(none.stage == plain.stage);
     CHECK(none.scale == plain.scale);
 }
+
+TEST_CASE("the fan by layer time (cooling.md, rule 3 and K1)", "[cooling]") {
+    // K1's layers, with the defaults: 5 s, 60 s, 35 to 100 %. The test table
+    // shows whole percentages, cut down.
+    auto fan = [](double t, bool always = false) { return layer_fan(t, 5.0, 60.0, 35.0, 100.0, always); };
+    CHECK(int(fan(6.6)) == 98);
+    CHECK(int(fan(10.3)) == 93);
+    CHECK(int(fan(16.8)) == 86);
+    CHECK(int(fan(46.7)) == 50);
+    CHECK(fan(67.9) == 0.0);
+    CHECK(fan(67.9, true) == 35.0); // never below fan_min
+    CHECK(fan(4.0) == 100.0);       // the minimum time or less: fan_max
+    CHECK(fan(5.0) == 100.0);
+    CHECK(fan(60.0) == 0.0);
+    CHECK_THAT(fan(32.5), WithinRel(67.5, 1e-12)); // half way: half way
+    // fan_below_time at or under the minimum time: nothing in between.
+    CHECK(layer_fan(5.0, 5.0, 5.0, 35.0, 100.0, false) == 100.0);
+    CHECK(layer_fan(5.1, 5.0, 3.0, 35.0, 100.0, false) == 0.0);
+}
