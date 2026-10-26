@@ -145,7 +145,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Anchos de paredes, externa, primera capa, relleno, sólido, arriba | `perimeters.md`, `surfaces_infill.md` | ✔ |
-| Ancho del soporte; anchos automáticos | — | ✘ → `supports_more.md` y `speeds_accels.md` |
+| Ancho del soporte; anchos automáticos | `supports_more.md` (regla 18) | ◐ los anchos automáticos no cambiaron nada desde la línea de comandos, ni con boquillas distintas por extrusor |
 | Multiplicador de extrusión del filamento | `gcode_motion.md` | ✔ |
 
 ## Filamento
@@ -155,10 +155,10 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Color, diámetro, temperaturas de boquilla y cama (primera capa y resto), cama por tipo de cama | `profiles.md`, `gcode_motion.md` | ✔ |
 | Densidad, costo, peso del carrete: peso y costo de la impresión | `interface.md` (los muestra), `gcode_extras.md` | ✔ |
 | Temperatura de la cámara y mínima de la cámara | `gcode_extras.md` | ✔ |
-| Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
+| Tipo, soluble, abrasivo | `profiles.md` (regla 8, prueba PF8) | ✔ no cambian el laminado |
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
 | G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
-| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
+| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | `retraction_travel.md` (regla 10) | ✔ |
 | Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | `multi_extruder.md` | ✔ |
 
 ## Impresora y G-code
@@ -209,8 +209,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Pantalla, exposición, capas iniciales, movimientos, GOO | `resin.md` | ✔ |
-| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar) |
-| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` | ◐ faltan absoluta, gamma y Z → `resin.md` (actualizar) |
+| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar): solo para impresoras con tanque que se inclina; el formato GOO no lo guarda |
+| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` (reglas 20 a 22) | ◐ la absoluta no cambió nada desde la línea de comandos; falta medirla desde la interfaz |
 | Formatos de salida además de GOO, y su precisión | `resin.md` | ◐ → `formats.md` |
 | Soportes, base y vaciado | `resin_supports.md` | ◐ faltan tipo de árbol, solo forzados, y las opciones finas de cabeza, pilar, uniones y base → `resin_supports.md` (actualizar) |
 | Costo del frasco, volumen, peso, densidad: costo de la impresión | `gcode_extras.md` | ✔ |
@@ -235,7 +235,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Galería de formas | — | ✘ → `model_tools.md` |
 | Orientación automática (Tisma) | `orientation.md` | ✔ |
 | Dividir para que entre (Tisma) | `fragment.md` | ✔ |
-| Reparar la malla | `slicing.md` (mallas sucias) | ◐ falta la reparación al importar → `formats.md` |
+| Reparar la malla | `slicing.md` (mallas sucias), `formats.md` (regla 4) | ✔ |
 
 ## Vista previa
 
@@ -251,10 +251,10 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | — | ✘ → `formats.md` |
-| Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | — | ✘ → `formats.md` |
-| Abrir proyectos de Bambu Studio y OrcaSlicer | — | ✘ → `formats.md` |
-| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | — | ✘ → `formats.md` |
+| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | `formats.md` | ◐ falta el ZIP: solo lo abre la interfaz |
+| Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | `formats.md` | ◐ medidos el paquete, las mallas, las partes y los ajustes; falta lo que se guarda desde la interfaz (regla 10) |
+| Abrir proyectos de Bambu Studio y OrcaSlicer | — | ✘ → `formats.md` (falta medirlo) |
+| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | `formats.md` | ◐ faltan con soportes y las trayectorias |
 | Archivos de resina: importar, exportar | `resin.md` | ◐ → `formats.md` |
 | Exportar a una tarjeta o memoria y expulsarla | — | ✘ → `formats.md` |
 
