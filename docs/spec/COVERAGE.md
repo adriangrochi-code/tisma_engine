@@ -194,6 +194,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Boquillas de distinto diámetro y mezcla de colores por capas (Tisma) | `multimaterial.md` | ✔ |
+| Mezcla de colores: ciclo de capas de cada proporción, degradés, costo de purga, archivo del proyecto | `color_mixing.md` | ✔ |
 | Extrusor por tipo (paredes, relleno, sólido, soporte, interfaz, torre) y para la temperatura de la cama | `multi_extruder.md` | ✔ |
 | Prevención de goteo (bajar la temperatura de los que esperan) | `multi_extruder.md` | ✔ |
 | Torre de purga: ancho, borde, puentes, cono, separación, flujo extra, sin capas ralas, cebado | `multi_extruder.md` | ✔ (el cono y el cebado, sin medir) |
