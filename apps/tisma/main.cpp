@@ -25,6 +25,7 @@ constexpr const char* kUsage =
     "                                   [--tool move|rotate|scale|lay|paint]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
+    "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
@@ -95,6 +96,14 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--info") {
             options.info = value();
+        } else if (arg == "--level") {
+            options.level = value();
+            if (options.level != "basic" && options.level != "normal" && options.level != "advanced") {
+                std::fprintf(stderr, "error: --level must be basic, normal or advanced\n");
+                return 2;
+            }
+        } else if (arg == "--section") {
+            options.section = value(); // print/quality, material/cooling, printer/machine...
         } else if (arg == "--tips") {
             options.tips = true;
         } else if (arg == "--tour") {

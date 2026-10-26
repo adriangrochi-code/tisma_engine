@@ -63,6 +63,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Panel de ajustes nuevo** (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
+  los ajustes del motor, también los que no tenían lugar (bufanda, compensación, corte, soportes, ventilador, límites
+  de la máquina), en pestañas Impresión, Material e Impresora; cada una con sus secciones en una columna de íconos
+  (Calidad, Resistencia, Velocidad, Soportes, Adhesión, Otros…) y tarjetas plegables que, cerradas, dicen lo
+  importante en una línea. Tres niveles: Básico, Normal y Avanzado (Ctrl+Alt+1, 2 y 3). Lo cambiado respecto del
+  perfil se marca en violeta y ningún nivel lo esconde. El nivel no cambia el G-code.
 - **Costura alineada más rápida:** en piezas de superficie curva con muchos puntos por pared, armar el G-code con la
   costura alineada (la de siempre) tardaba tres veces más que con `nearest`; ahora tarda lo mismo. Una gota de 172 080
   triángulos lamina en 2,7 s en vez de 3,8 s, y el cráneo escaneado en 4,7 s en vez de 4,9 s, con el mismo G-code.

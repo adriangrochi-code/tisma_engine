@@ -617,7 +617,202 @@
       "More than the analysis's maximum (%s voxels): it would not run at this quality")                               \
     X(AnalysisNeedsModel, "Abrí un modelo para ver sus vóxeles", "Open a model to see its voxels")                    \
     X(AnalysisCli, "El análisis completo, con apoyos y cargas, corre por ahora con «tisma-engine analyze» (docs/ANALYSIS.md).", \
-      "The full analysis, with supports and loads, runs for now with \"tisma-engine analyze\" (docs/ANALYSIS.md).")
+      "The full analysis, with supports and loads, runs for now with \"tisma-engine analyze\" (docs/ANALYSIS.md).") \
+    X(SecQuality, "Calidad", "Quality") \
+    X(SecStrength, "Resistencia", "Strength") \
+    X(SecSpeed, "Velocidad", "Speed") \
+    X(SecSupport, "Soportes", "Support") \
+    X(SecAdhesion, "Adhesión", "Adhesion") \
+    X(SecOther, "Otros", "Others") \
+    X(SecTemperature, "Temperaturas", "Temperatures") \
+    X(SecCooling, "Enfriamiento", "Cooling") \
+    X(SecFlow, "Flujo", "Flow") \
+    X(SecRetraction, "Retracción", "Retraction") \
+    X(SecNeeds, "Necesidades", "Requirements") \
+    X(SecMachine, "Máquina", "Machine") \
+    X(SecNozzle, "Boquilla y extrusor", "Nozzle and extruder") \
+    X(SecLimits, "Límites", "Limits") \
+    X(SecGcode, "G-code", "G-code") \
+    X(SubLayerHeight, "Altura de capa", "Layer height") \
+    X(SubVariableHeight, "Altura variable", "Variable height") \
+    X(SubFineDetail, "Detalle fino", "Fine detail") \
+    X(SubLineWidth, "Ancho de línea", "Line width") \
+    X(SubSeam, "Costura", "Seam") \
+    X(SubPrecision, "Precisión", "Precision") \
+    X(SubSlopes, "Superficies inclinadas", "Sloping surfaces") \
+    X(SubWalls, "Paredes", "Walls") \
+    X(SubTopBottom, "Arriba y abajo", "Top and bottom") \
+    X(SubInfill, "Relleno", "Infill") \
+    X(SubInfillMore, "Relleno avanzado", "Advanced infill") \
+    X(SubCombine, "Combinar relleno", "Combined infill") \
+    X(SubWavy, "Relleno ondulado", "Wavy infill") \
+    X(SubFirstLayerSpeed, "Primera capa", "First layer") \
+    X(SubWallSpeed, "Paredes y superficies", "Walls and surfaces") \
+    X(SubInfillSpeed, "Relleno y soporte", "Infill and support") \
+    X(SubTravelSpeed, "Viajes", "Travel") \
+    X(SubSpeedCap, "Topes", "Limits") \
+    X(SubSupport, "Soporte", "Support") \
+    X(SubSupportGap, "Separación", "Gaps") \
+    X(SubSupportInterface, "Interfaz", "Interface") \
+    X(SubSupportPattern, "Patrón", "Pattern") \
+    X(SubSkirt, "Falda", "Skirt") \
+    X(SubBrim, "Borde", "Brim") \
+    X(SubSpecialModes, "Modos especiales", "Special modes") \
+    X(SubFuzzy, "Piel difusa", "Fuzzy skin") \
+    X(SubGcodeOut, "Salida G-code", "G-code output") \
+    X(SubSlicing, "Corte", "Slicing") \
+    X(SubNozzleTemp, "Boquilla", "Nozzle") \
+    X(SubBedTemp, "Cama", "Bed") \
+    X(SubChamber, "Cabina", "Chamber") \
+    X(SubFan, "Ventilador", "Fan") \
+    X(SubShortLayers, "Capas cortas", "Short layers") \
+    X(SubFlow, "Flujo", "Flow") \
+    X(SubPressure, "Presión", "Pressure") \
+    X(SubMaxFlow, "Flujo máximo", "Maximum flow") \
+    X(SubRetract, "Retracción", "Retraction") \
+    X(SubRetractTravel, "Viajes", "Travel") \
+    X(SubNeeds, "Necesidades", "Requirements") \
+    X(SubBedVolume, "Cama y volumen", "Bed and volume") \
+    X(SubEnclosure, "Cabina", "Enclosure") \
+    X(SubNozzle, "Boquilla", "Nozzle") \
+    X(SubExtruder, "Extrusor", "Extruder") \
+    X(SubSpeedLimits, "Velocidades", "Speeds") \
+    X(SubAccel, "Aceleraciones", "Accelerations") \
+    X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
+    X(SubFirmware, "Firmware", "Firmware") \
+    X(SubStartEnd, "Inicio y fin", "Start and end") \
+    X(SubVariables, "Variables", "Variables") \
+    X(LevelBasic, "Básico", "Basic") \
+    X(LevelNormal, "Normal", "Normal") \
+    X(LevelAdvanced, "Avanzado", "Advanced") \
+    X(LevelCustom, "Personalizado", "Custom") \
+    X(LevelBasicTip, "Lo que casi toda impresión necesita", "What almost every print needs") \
+    X(LevelNormalTip, "Más ajustes para afinar", "More settings to fine-tune") \
+    X(LevelAdvancedTip, "Todos los ajustes", "All the settings") \
+    X(LevelCustomTip, "Los ajustes que elegís vos", "The settings you choose") \
+    X(LevelTip, "Cuántos ajustes se ven (Ctrl+Alt+1 a 4). El G-code no cambia con el nivel.", "How many settings show (Ctrl+Alt+1 to 4). The G-code does not change with the level.") \
+    X(ChangesCount, "%d cambios", "%d changes") \
+    X(OneChangeCount, "1 cambio", "1 change") \
+    X(MoreSettings, "%d ajustes más en Normal y Avanzado", "%d more settings in Normal and Advanced") \
+    X(MoreSettingsAdvanced, "%d ajustes más en Avanzado", "%d more settings in Advanced") \
+    X(ShowAll, "Mostrar todos", "Show all") \
+    X(SeeAllTogether, "Ver todo junto", "See all together") \
+    X(SeeBySection, "Ver por secciones", "See by section") \
+    X(ResetCard, "Restablecer", "Reset") \
+    X(ResetCardTip, "Vuelve los ajustes de este apartado a los del perfil guardado", "Takes this part's settings back to the saved profile") \
+    X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
+    X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
+    X(NoSpecialModes, "Por ahora, ninguno: el modo vaso llega pronto", "None yet: vase mode comes soon") \
+    X(SumLayer, "%s mm · primera %s mm", "%s mm · first %s mm") \
+    X(SumSameHeight, "Igual en toda la pieza", "The same all over the part") \
+    X(SumHeightSteps, "%d tramos por Z", "%d steps by Z") \
+    X(SumAdaptive, "Según la pendiente", "By the slope") \
+    X(SumOff, "Apagado", "Off") \
+    X(SumMm, "%s mm", "%s mm") \
+    X(SumScarf, "%s · en bufanda", "%s · scarf") \
+    X(SumNoCorrections, "Sin correcciones", "No corrections") \
+    X(SumCorrections, "Con correcciones", "With corrections") \
+    X(SumZaaOff, "Z anti-aliasing apagado", "Z anti-aliasing off") \
+    X(SumZaaOn, "Z anti-aliasing, mínimo %s %%", "Z anti-aliasing, at least %s %%") \
+    X(SumWalls, "%d paredes", "%d walls") \
+    X(SumOneWall, "1 pared", "1 wall") \
+    X(SumNoWalls, "Sin paredes", "No walls") \
+    X(SumTopBottom, "%d arriba · %d abajo", "%d top · %d bottom") \
+    X(SumInfill, "%s %% · %s", "%s %% · %s") \
+    X(SumNoChanges, "Sin cambios", "No changes") \
+    X(SumCombine, "Cada %d capas", "Every %d layers") \
+    X(SumCombineAuto, "Lo más posible", "As much as fits") \
+    X(SumNotCombined, "Cada capa la suya", "Each layer its own") \
+    X(SumSpeed, "%s mm/s", "%s mm/s") \
+    X(SumWallSpeed, "%s · externa %s", "%s · outer %s") \
+    X(SumTwoSpeeds, "%s · %s mm/s", "%s · %s mm/s") \
+    X(SumNoSupport, "Sin soportes", "No supports") \
+    X(SumAutoSupport, "Automáticos, %s°", "Automatic, %s°") \
+    X(SumPaintedSupport, "Solo lo pintado", "Painted only") \
+    X(SumGaps, "Z %s · XY %s mm", "Z %s · XY %s mm") \
+    X(SumLayersN, "%d capas", "%d layers") \
+    X(SumSkirt, "%d vueltas a %s mm", "%d loops at %s mm") \
+    X(SumNoSkirt, "Sin falda", "No skirt") \
+    X(SumNoBrim, "Sin borde", "No brim") \
+    X(SumNormalPrint, "Normal", "Normal") \
+    X(SumResolution, "Resolución %s mm", "Resolution %s mm") \
+    X(SumTemp, "%d °C", "%d °C") \
+    X(SumNoChamber, "Sin cabina", "No chamber") \
+    X(SumFan, "%s–%s %%", "%s–%s %%") \
+    X(SumMinLayer, "Mínimo %s s", "At least %s s") \
+    X(SumPercent, "%s %%", "%s %%") \
+    X(SumNoPa, "Sin avance de presión", "No pressure advance") \
+    X(SumPa, "Avance %s", "Advance %s") \
+    X(SumNoCap, "Sin tope", "No limit") \
+    X(SumCap, "%s mm³/s", "%s mm³/s") \
+    X(SumRetract, "%s mm a %s mm/s", "%s mm at %s mm/s") \
+    X(SumNoRetract, "Sin retracción", "No retraction") \
+    X(SumNoHop, "Sin salto en Z", "No Z hop") \
+    X(SumHop, "Salto de %s mm", "Z hop of %s mm") \
+    X(SumNoNeeds, "Sin requisitos", "No requirements") \
+    X(SumNeeds, "Con requisitos", "With requirements") \
+    X(SumBed, "%s × %s × %s mm", "%s × %s × %s mm") \
+    X(SumOpen, "Abierta", "Open") \
+    X(SumClosed, "Cerrada", "Enclosed") \
+    X(SumHardened, "%s mm · acero endurecido", "%s mm · hardened steel") \
+    X(SumFeeds, "%s mm/s en X e Y", "%s mm/s in X and Y") \
+    X(SumAccel, "%s mm/s²", "%s mm/s²") \
+    X(SumMaxTemps, "%s °C · %s °C", "%s °C · %s °C") \
+    X(SumLines, "%d líneas · %d líneas", "%d lines · %d lines") \
+    X(SumVariables, "%d variables", "%d variables") \
+    X(ScarfMode, "Costura en bufanda", "Scarf seam") \
+    X(ScarfNowhere, "No", "No") \
+    X(ScarfContours, "Contornos", "Contours") \
+    X(ScarfEverywhere, "También agujeros", "Holes too") \
+    X(ScarfLength, "Largo de la rampa", "Ramp length") \
+    X(ScarfEntire, "Rampa en toda la vuelta", "Ramp all the way round") \
+    X(ScarfStart, "Altura inicial", "Start height") \
+    X(ScarfSegment, "Tramo máximo", "Longest piece") \
+    X(ScarfSmooth, "Solo lazos lisos", "Smooth loops only") \
+    X(ScarfInner, "También paredes internas", "Inner walls too") \
+    X(ScarfTip, "La pared empieza en una rampa desde la capa de abajo y termina pasando sobre ella: casi no deja costura. Ver walls_extra.md.", "The wall starts on a ramp up from the layer below and ends over it: the seam hardly shows. See walls_extra.md.") \
+    X(ScaleXRow, "Escala en X", "Scale in X") \
+    X(ScaleYRow, "Escala en Y", "Scale in Y") \
+    X(ScaleZRow, "Escala en Z", "Scale in Z") \
+    X(XyOffset, "Corrección XY", "XY offset") \
+    X(FillModeRow, "Modo de llenado", "Fill mode") \
+    X(FillUnion, "Unión", "Union") \
+    X(FillEvenOdd, "Par e impar", "Even-odd") \
+    X(FillHoles, "Llenar agujeros", "Fill holes") \
+    X(GapClosing, "Cerrar huecos de hasta", "Close gaps up to") \
+    X(SimplifyTolerance, "Simplificar contornos", "Simplify outlines") \
+    X(WallOverlap, "Solapamiento con paredes", "Overlap with walls") \
+    X(CombineMaxHeight, "Alto máximo combinado", "Thickest combined") \
+    X(SupportZGap, "Separación en Z", "Z gap") \
+    X(SupportXyGap, "Separación en XY", "XY gap") \
+    X(SupportSpacing, "Espaciado", "Spacing") \
+    X(SupportInterface, "Capas de interfaz", "Interface layers") \
+    X(SkirtLayers, "Capas de falda", "Skirt layers") \
+    X(HeightChanges, "Cambios por altura", "Changes by height") \
+    X(ChamberTemp, "Temperatura de cabina", "Chamber temperature") \
+    X(FanBelowTime, "Capa con ventilador", "Fan below") \
+    X(FanAlways, "Ventilador siempre", "Fan always on") \
+    X(FanBridges, "Ventilador en puentes", "Fan on bridges") \
+    X(FanOffLayers, "Capas sin ventilador", "Layers without fan") \
+    X(MinSpeed, "Velocidad mínima", "Minimum speed") \
+    X(PressureAdvance, "Avance de presión", "Pressure advance") \
+    X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
+    X(RetractMinTravel, "Viaje mínimo para retraer", "Shortest travel to retract") \
+    X(Abrasive, "Abrasivo", "Abrasive") \
+    X(MaxChamberTemp, "Cabina máxima", "Chamber maximum") \
+    X(MachineMaxFlow, "Flujo máximo del cabezal", "Hot end maximum flow") \
+    X(MaxFeedX, "Velocidad máxima en X", "Maximum speed in X") \
+    X(MaxFeedY, "Velocidad máxima en Y", "Maximum speed in Y") \
+    X(MaxFeedZ, "Velocidad máxima en Z", "Maximum speed in Z") \
+    X(MaxFeedE, "Velocidad máxima del extrusor", "Maximum extruder speed") \
+    X(CornerSpeed, "Velocidad en esquinas", "Corner speed") \
+    X(AccelerationRow, "Aceleración", "Acceleration") \
+    X(TravelAcceleration, "Aceleración en viajes", "Travel acceleration") \
+    X(MaxNozzleTemp, "Boquilla máxima", "Nozzle maximum") \
+    X(MaxBedTemp, "Cama máxima", "Bed maximum") \
+    X(VariablesRow, "Variables del G-code", "G-code variables") \
+    X(ListCount, "%d en la lista", "%d in the list") \
+    X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
 
 namespace tisma::ui {
 

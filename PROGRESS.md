@@ -4610,3 +4610,35 @@ opción de la vuelta entera.
 **Sigue:** el panel de ajustes con todo lo agregado (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de
 información). Más adelante, si el dueño quiere, una pared externa en espiral continua entre capas (como el modo vaso,
 pero con paredes internas y relleno): la pared externa primero en cada capa, subiendo una capa por vuelta.
+
+## 2026-10-26 — panel de ajustes por secciones y niveles
+
+**Pedido del dueño:** poner en la interfaz todo lo agregado (perfiles, modos especiales, los ajustes nuevos), ordenado
+como el menú de ajustes de Cura y con el estilo de OrcaSlicer, «un híbrido», simple, fácil e intuitivo, sin cargar de
+información. La ficha `settings_panel.md` ya lo describe: de OrcaSlicer, pocas secciones grandes con apartados finos;
+de Cura, los apartados plegables y los ajustes dependientes debajo de su interruptor (comparación de caja negra de la
+ficha; el motor no miró el código de ninguno).
+
+**Hecho:**
+- **`src/ui/settings_layout.*`:** dónde va cada ajuste (pestaña, sección, apartado) y su nivel, y el resumen de cada
+  apartado. Pruebas: toda clave que escribe el motor tiene lugar (salvo `compute.*`, una preferencia), ningún apartado
+  pasa de 8 ajustes, cada clave aparece una vez, Básico es exactamente la lista de la regla 10, y los resúmenes en
+  castellano y en inglés.
+- **El panel** (`apps/tisma/app.cpp`): pestañas Impresión, Material e Impresora con su perfil; el nivel a la derecha;
+  la columna de secciones con íconos propios (`assets/icons/section_*.svg`); las tarjetas plegables con su resumen y
+  «N cambios»; los dependientes ocultos con su interruptor apagado; un ajuste cambiado se ve en cualquier nivel con su
+  etiqueta gris; «N ajustes más…» con **Mostrar todos**; nivel, secciones y tarjetas recordados en `interface.json`.
+- **Todos los ajustes tienen fila**, también los que no la tenían: la bufanda, la compensación, el corte, la
+  separación, interfaz y patrón de los soportes, las capas de falda, el ventilador entero, la velocidad mínima, el
+  avance de presión, el flujo máximo, el viaje mínimo para retraer, las necesidades del material y los límites de la
+  máquina. Las listas (`changes`, `machine.variables`) muestran cuántas hay; se editan en el perfil.
+- `--level` y `--section` en la línea de comandos de la interfaz, para las capturas.
+
+**Capturas** (cubo de 20 mm, Xvfb 1600 × 1000): Calidad en Normal; Resistencia; Material › Enfriamiento en Avanzado;
+Básico, que esconde Velocidad y Otros; y un perfil con relleno al 40 % y costura atrás en bufanda: «1 cambio» en
+Relleno, «2 cambios» en Costura, el punto en las secciones.
+
+**Falta** (de la ficha): Personalizado y su diálogo, «Ver todo junto», la búsqueda que abre la tarjeta, Restablecer por
+tarjeta, la tarjeta de la impresora (boquilla, cama, cámara, conexión) y su configuración aparte; hoy la impresora es
+una pestaña más. Los modos especiales (`vase_mode.md`) llegan con el modo vaso, que el motor todavía no tiene: la tarjeta
+aparece cuando haya algo que mostrar (regla 7).

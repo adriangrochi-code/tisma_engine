@@ -40,6 +40,8 @@ struct AppOptions {
     bool tips = false; // with screenshot: show the first-use tips (docs/UI.md, «Ayuda»)
     int tour = -1;     // the assistant's step to show at start (0 to 6); -1: none, or the first run's
     std::string info;  // with screenshot: the setting ("group.key") whose info card opens
+    std::string level;   // the settings panel's level: basic, normal or advanced; empty: the remembered one
+    std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

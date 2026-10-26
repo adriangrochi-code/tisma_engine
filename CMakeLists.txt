@@ -267,6 +267,7 @@ if(TISMA_BUILD_UI)
     src/ui/files.cpp
     src/ui/slicing.cpp
     src/ui/presets.cpp
+    src/ui/settings_layout.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
     src/ui/help.cpp
