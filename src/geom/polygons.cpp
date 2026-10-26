@@ -101,6 +101,19 @@ double area_mm2(const Polygons& region) {
     return Clipper2Lib::Area(region) / (kUnitsPerMm * kUnitsPerMm);
 }
 
+bool region_contains(const Polygons& region, double x, double y) {
+    const Clipper2Lib::Point64 q{to_units(x), to_units(y)};
+    int winding = 0;
+    for (const Polygon& poly : region) {
+        const Clipper2Lib::PointInPolygonResult r = Clipper2Lib::PointInPolygon(q, poly);
+        if (r == Clipper2Lib::PointInPolygonResult::IsOn)
+            return true;
+        if (r == Clipper2Lib::PointInPolygonResult::IsInside)
+            winding += Clipper2Lib::IsPositive(poly) ? 1 : -1;
+    }
+    return winding != 0;
+}
+
 Polygons cell_region(const std::vector<char>& mask, int nx, int ny, double x0, double y0, double hx, double hy) {
     Polygons boxes;
     for (int j = 0; j < ny; ++j) {

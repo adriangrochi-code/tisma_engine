@@ -251,21 +251,6 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
     return 0;
 }
 
-// Whether p is in the area (non-zero rule: outer contours counter-clockwise,
-// holes clockwise); on its edge counts as in.
-bool inside(const Polygons& area, const Point2d& p) {
-    const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
-    int winding = 0;
-    for (const Polygon& poly : area) {
-        const Clipper2Lib::PointInPolygonResult r = Clipper2Lib::PointInPolygon(q, poly);
-        if (r == Clipper2Lib::PointInPolygonResult::IsOn)
-            return true;
-        if (r == Clipper2Lib::PointInPolygonResult::IsInside)
-            winding += Clipper2Lib::IsPositive(poly) ? 1 : -1;
-    }
-    return winding != 0;
-}
-
 bool overlaps(const Clipper2Lib::Rect64& a, const Polygons* area) {
     if (!area || area->empty())
         return false;
@@ -319,9 +304,9 @@ std::optional<PaintedLoop> painted_loop(const Toolpath& loop, const SeamPaint& p
     bool blocked = false;
     for (std::size_t i = 0; i < out.dense.points.size(); ++i) {
         const Point2d& p = out.dense.points[i].p;
-        if (enforce && inside(*paint.enforce, p))
+        if (enforce && region_contains(*paint.enforce, p.x, p.y))
             in.push_back(i);
-        else if (block && inside(*paint.block, p))
+        else if (block && region_contains(*paint.block, p.x, p.y))
             blocked = true;
         else
             clear.push_back(i);

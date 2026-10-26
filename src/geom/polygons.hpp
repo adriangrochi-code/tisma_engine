@@ -59,6 +59,10 @@ std::vector<Polygons> layer_regions(const std::vector<std::vector<Contour>>& lay
 // Enclosed area in mm2: counter-clockwise polygons count positive, holes negative.
 double area_mm2(const Polygons& region);
 
+// Whether the point (mm) is in the region, by the non-zero rule (outer
+// contours counter-clockwise, holes clockwise); on its edge counts as in.
+bool region_contains(const Polygons& region, double x, double y);
+
 // The region of the set cells of a grid of nx by ny cells, hx by hy mm from
 // (x0, y0), row by row (cell (i, j) is mask[j * nx + i]): each row's runs of
 // set cells as rectangles, joined, and closed over by half a cell so that

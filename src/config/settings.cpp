@@ -18,6 +18,10 @@ using nlohmann::json;
 
 const std::vector<std::string> kPlannedGroups = {"material"};
 
+const char* fuzzy_mode_name(FuzzyMode m) {
+    return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
+}
+
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
     throw SettingsError("settings: " + key + ": " + message);
 }
@@ -145,7 +149,8 @@ Settings parse_checked(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
+            group == "fuzzy")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -590,6 +595,24 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be true or false");
         (n == "enabled" ? s.zaa : s.zaa_raise) = g.at(n).get<bool>();
     });
+    read_group(root, "fuzzy", {"mode", "thickness", "point_distance"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "mode") {
+                       s.fuzzy_mode = choice<FuzzyMode>(
+                           g, n, k, {{"none", FuzzyMode::None}, {"external", FuzzyMode::External}, {"all", FuzzyMode::All}});
+                       return;
+                   }
+                   const double v = number(g, n, k);
+                   if (n == "thickness") {
+                       if (v < 0.0 || v > 5.0)
+                           fail(k, "must be from 0 to 5 mm");
+                       s.fuzzy_thickness = v;
+                       return;
+                   }
+                   if (v < 0.1 || v > 20.0)
+                       fail(k, "must be from 0.1 to 20 mm");
+                   s.fuzzy_point_distance = v;
+               });
     read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
         if (v < 0.0 || v > 1.0)
@@ -738,6 +761,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.width", num(s.wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
+        {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
+        {"fuzzy.thickness", num(s.fuzzy_thickness)},
+        {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
@@ -963,6 +989,10 @@ std::string settings_json(const Settings& s) {
           {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
+        {"fuzzy",
+         {{"mode", fuzzy_mode_name(s.fuzzy_mode)},
+          {"thickness", s.fuzzy_thickness},
+          {"point_distance", s.fuzzy_point_distance}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"extrusion",

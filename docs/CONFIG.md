@@ -57,6 +57,18 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `width` | número | 0.4 | 0,05 a 10 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
 | `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 
+### `fuzzy`
+
+Piel difusa, ficha `docs/spec/features/fuzzy_skin.md`: la pared externa pasa por puntos nuevos, a distancias al azar
+y corridos al azar hacia afuera o hacia adentro, y la superficie queda rugosa. Las paredes internas no cambian. Donde
+se pintó piel difusa (`docs/PAINTING.md`) se aplica con estos ajustes aunque `mode` sea `"none"`.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `mode` | texto | `"none"` | `none`, `external`, `all` | `external`: la pared externa de los contornos de afuera; `all`: también la de los agujeros |
+| `thickness` | número | 0.3 | 0 a 5 | Cuánto se aparta cada punto de la línea, como máximo, para cada lado, en mm |
+| `point_distance` | número | 0.8 | 0,1 a 20 | Distancia media entre los puntos nuevos, en mm: cada una, al azar entre la mitad y una vez y media |
+
 ### `surfaces`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

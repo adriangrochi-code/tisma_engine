@@ -849,7 +849,9 @@ bool App::init(std::string& error) {
                                                                                          : PlateTool::LayFlat;
     // Brush strokes asked on the command line, for screenshots and tests.
     for (const AppOptions::Stroke& b : options_.strokes) {
-        const PaintChannel channel = b.channel == "seam" ? PaintChannel::Seam : PaintChannel::Support;
+        const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
+                                     : b.channel == "fuzzy" ? PaintChannel::Fuzzy
+                                                            : PaintChannel::Support;
         for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
@@ -2103,6 +2105,17 @@ void App::settings_panel() {
                         {SeamMode::Nearest, tr(T::SeamNearest)},
                         {SeamMode::Random, tr(T::SeamRandom)},
                         {SeamMode::Rear, tr(T::SeamRear)}});
+        changed |= row(T::FuzzySkin, s.fuzzy_mode,
+                       {{FuzzyMode::None, tr(T::FuzzyNone)},
+                        {FuzzyMode::External, tr(T::FuzzyExternal)},
+                        {FuzzyMode::All, tr(T::FuzzyAll)}});
+        // Painted fuzzy skin uses them too.
+        if (s.fuzzy_mode != FuzzyMode::None ||
+            std::any_of(objects_.begin(), objects_.end(),
+                        [](const PlateObject& o) { return !o.painting.empty(PaintChannel::Fuzzy); })) {
+            changed |= row(T::FuzzyThickness, s.fuzzy_thickness, 0.0, 2.0, "%.2f mm", 0.005f);
+            changed |= row(T::FuzzyDistance, s.fuzzy_point_distance, 0.1, 5.0, "%.2f mm", 0.01f);
+        }
         changed |= row(T::TopLayers, s.top_layers, 0, 100);
         changed |= row(T::BottomLayers, s.bottom_layers, 0, 100);
         changed |= row(T::TopMinThickness, s.top_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
@@ -2734,7 +2747,7 @@ void App::paint_card(ImVec2 at) {
         bool ready;
     } channels[] = {{T::PaintSupports, PaintChannel::Support, true},
                     {T::PaintSeam, PaintChannel::Seam, true},
-                    {T::PaintFuzzy, PaintChannel::Fuzzy, false},
+                    {T::PaintFuzzy, PaintChannel::Fuzzy, true},
                     {T::PaintColors, PaintChannel::Color, false}};
     for (const auto& c : channels) {
         ImGui::BeginDisabled(!c.ready);
@@ -2747,11 +2760,13 @@ void App::paint_card(ImVec2 at) {
             ImGui::SetItemTooltip("%s", tr(T::PaintLater));
     }
     ImGui::Separator();
-    if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
-        paint_mark_ = kPaintEnforce;
-    ImGui::SameLine();
-    if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
-        paint_mark_ = kPaintBlock;
+    if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
+        if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
+            paint_mark_ = kPaintEnforce;
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
+            paint_mark_ = kPaintBlock;
+    }
     ImGui::SetNextItemWidth(170.0f * scale_);
     ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, "%.1f mm", ImGuiSliderFlags_Logarithmic);
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
@@ -2784,7 +2799,9 @@ void App::brush_stroke(std::size_t object) {
     brush.radius = brush_radius_;
     brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
     brush.view = {d.x, d.y, d.z};
-    brush.mark = ImGui::GetIO().KeyShift ? kPaintNone : paint_mark_;
+    brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
+                 : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
+                                                         : paint_mark_;
     const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
     const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
     const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);

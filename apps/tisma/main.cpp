@@ -23,7 +23,7 @@ constexpr const char* kUsage =
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
     "                                   [--tool move|rotate|scale|lay|paint]\n"
-    "                                   [--paint support|seam,enforce|block,X,Y,Z,RADIUS]...\n"
+    "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
@@ -92,9 +92,10 @@ int main(int argc, char** argv) {
             tisma::ui::AppOptions::Stroke stroke;
             std::string mark;
             if (!(in >> stroke.channel >> mark >> stroke.x >> stroke.y >> stroke.z >> stroke.radius) ||
-                (stroke.channel != "support" && stroke.channel != "seam") || (mark != "enforce" && mark != "block") ||
+                (stroke.channel != "support" && stroke.channel != "seam" && stroke.channel != "fuzzy") ||
+                (mark != "enforce" && mark != "block") ||
                 !(stroke.radius > 0.0f)) {
-                std::fprintf(stderr, "error: --paint must be support|seam,enforce|block,X,Y,Z,RADIUS\n");
+                std::fprintf(stderr, "error: --paint must be support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS\n");
                 return 2;
             }
             stroke.block = mark == "block";

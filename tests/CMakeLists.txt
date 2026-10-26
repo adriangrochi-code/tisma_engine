@@ -42,6 +42,7 @@ add_executable(tisma_tests
   test_cooling.cpp
   test_print_time.cpp
   test_adhesion.cpp
+  test_fuzzy.cpp
   test_paint.cpp
   test_support.cpp
   test_voronoi.cpp

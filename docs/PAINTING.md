@@ -11,7 +11,7 @@ bloqueadores y forzadores), `fuzzy_skin.md` (regla 4) y `multi_extruder.md` (reg
 |---|---|---|---|
 | Soportes | Forzar, Bloquear | Lo que cuelga sobre una cara forzada lleva soporte, aunque la pendiente no lo pida; sobre una bloqueada, nunca. Con `support.automatic` en `false`, solo hay soporte bajo las forzadas. Hace falta `support.enabled` (ficha `supports_more.md`, reglas 3 a 5) | Hecho |
 | Costura | Forzar, Bloquear | Un lazo que cruza una zona forzada empieza en ella; uno que cruza una bloqueada empieza afuera, si le queda algo afuera | Hecho |
-| Piel difusa | Pintar | — | Cuando el motor tenga la piel difusa (`fuzzy_skin.md`) |
+| Piel difusa | Pintar | Donde se pintó, la pared externa sale rugosa con `fuzzy.thickness` y `fuzzy.point_distance`, aunque `fuzzy.mode` sea `none` (ficha `fuzzy_skin.md`, regla 4) | Hecho |
 | Colores | Extrusor 1 a 16 | — | Cuando el motor tenga varios extrusores (`multi_extruder.md`) |
 
 ## Cómo se guarda
@@ -50,7 +50,7 @@ esquinas), se juntan las piezas pintadas de cada marca. Para cada capa:
 
 Cuánto se agranda:
 - soportes, medio cordón: la zona que cuelga queda justo debajo de la cara;
-- costura, un cordón: la pared externa va medio cordón hacia adentro de la superficie.
+- costura y piel difusa, un cordón: la pared externa va medio cordón hacia adentro de la superficie.
 
 ## Soportes
 
@@ -79,8 +79,8 @@ pintada, guardada en el proyecto y vuelta a abrir, da el mismo G-code.
 ## En la interfaz
 
 Herramienta **Pintar** (P) en la columna de la placa (`docs/UI.md`):
-- canal: Soportes, Costura; Piel difusa y Colores aparecen apagados hasta que el motor los tenga;
-- marca: Forzar o Bloquear;
+- canal: Soportes, Costura, Piel difusa; Colores aparece apagado hasta que el motor tenga varios extrusores;
+- marca: Forzar o Bloquear (la piel difusa se pinta o no);
 - tamaño del pincel; **Borrar todo** quita el canal del modelo elegido.
 
 Clic izquierdo y arrastrar sobre el modelo pinta; con Shift, borra. Arrastrar fuera del modelo gira la vista. Las
@@ -90,7 +90,7 @@ abrir, para las capturas y las pruebas.
 ## Lo que falta
 
 - Volúmenes bloqueadores y forzadores (prueba SM12 de `supports_more.md`): piezas que se agregan, no caras.
-- La piel difusa y los colores, con sus partes del motor.
+- Los colores, con varios extrusores.
 - Pintar con relleno inteligente (toda una cara plana de un clic) y deshacer.
 
 El pincel no mira todos los triángulos: el árbol de cajas del modelo (`TriangleIndex`, `docs/UI.md`, «Modelos

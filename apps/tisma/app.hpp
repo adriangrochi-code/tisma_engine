@@ -32,7 +32,7 @@ struct AppOptions {
     std::string tool; // the plate tool chosen at start: move, rotate, scale, lay or paint (for screenshots)
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
-        std::string channel; // support or seam
+        std::string channel; // support, seam or fuzzy
         bool block = false;  // the mark: block, else enforce
         float x = 0, y = 0, z = 0, radius = 1;
     };

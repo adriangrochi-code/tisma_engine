@@ -623,8 +623,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)
 - [x] Pintar en el modelo (pedido del dueño): soportes forzados y bloqueados, costura forzada y bloqueada; el motor lee
   lo pintado (`docs/PAINTING.md`, ficha `supports_more.md`)
-- [ ] Pintar la piel difusa (con la piel difusa de `fuzzy_skin.md`) y los colores (con `multi_extruder.md`); volúmenes
-  bloqueadores y forzadores (SM12); relleno inteligente de una cara y deshacer
+- [x] Piel difusa (ficha `fuzzy_skin.md`, reglas 1, 2 y 4) y su pincel; falta la regla 3 (lo que sale de la capa de
+  abajo como voladizo, con los voladizos de `walls_extra.md`) y las paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`
+- [ ] Pintar los colores (con `multi_extruder.md`); volúmenes bloqueadores y forzadores (SM12); relleno inteligente de
+  una cara y deshacer
 - [ ] Cortar, Partir y Medir de la ficha `interface.md`
 - [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)

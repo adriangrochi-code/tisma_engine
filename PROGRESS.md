@@ -4002,3 +4002,27 @@ de esa esfera con MSAA 4 tarda más que todo lo anterior).
 
 **Sigue:** armar el árbol y la malla de la placa en segundo plano; los campos de giro y escala sin rehacer toda la
 placa.
+
+## 2026-10-26 — piel difusa
+
+Para que el pincel de Pintar tenga su tercer canal, y la ficha `fuzzy_skin.md`.
+
+**Hecho:**
+- `src/perimeters/fuzzy.*`: la pared externa pasa por puntos nuevos cada 0,5 a 1,5 veces `fuzzy.point_distance`,
+  corridos al azar hasta `fuzzy.thickness` hacia afuera o hacia adentro (splitmix64: el mismo G-code en todos los
+  compiladores). `external` deja lisos los agujeros, `all` no. Las paredes internas no cambian.
+- Pintada: donde se pintó, aunque `fuzzy.mode` sea `none` (regla 4); el resto del lazo queda con sus puntos.
+- Ajustes `fuzzy.mode`, `fuzzy.thickness`, `fuzzy.point_distance` (perfil de impresión), filas en la interfaz bajo
+  Costura, y el canal Piel difusa de Pintar habilitado (`--paint fuzzy,...`).
+- `region_contains` en `src/geom/polygons.*`, que ahora comparten la costura pintada y la piel difusa.
+- Pruebas (`tests/test_fuzzy.cpp`): F1 en un cilindro, F2 en un tubo, y la pintada en una mancha.
+
+**Medido:** cilindro de 20 mm, capa 10, `external`, 0,3 y 0,8: la pared externa de 9,51 a 10,08 mm del centro (la
+línea a 9,8; F1 de la ficha: de 9,49 a 10,08), tramos de 0,92 mm en promedio y 1,92 como máximo (F1: 0,85 y 1,8); las
+internas siguen a 9,0 y 9,4. G-code verificado sin problemas.
+
+**No probado:** la regla 3 (lo que sale de la capa de abajo como voladizo: falta el voladizo de `walls_extra.md`) y las
+paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`, que todavía no se hacen rugosas.
+
+**Sigue:** el tutorial de cada función la primera vez que se usa y el botón de información al lado de cada ajuste
+(pedido del dueño).

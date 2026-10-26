@@ -80,6 +80,12 @@
     X(Walls, "Paredes", "Walls")                                                                                      \
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \
+    X(FuzzySkin, "Piel difusa", "Fuzzy skin")                                                                         \
+    X(FuzzyNone, "No", "None")                                                                                        \
+    X(FuzzyExternal, "Por fuera", "Outside")                                                                          \
+    X(FuzzyAll, "Por fuera y agujeros", "Outside and holes")                                                          \
+    X(FuzzyThickness, "Espesor de la piel", "Skin thickness")                                                         \
+    X(FuzzyDistance, "Distancia entre puntos", "Point distance")                                                      \
     X(SeamAligned, "Alineada", "Aligned")                                                                             \
     X(SeamNearest, "Más cercana", "Nearest")                                                                          \
     X(SeamRandom, "Aleatoria", "Random")                                                                              \
@@ -157,14 +163,13 @@
     X(ToolScaleTip, "Escalar (S): en % o en mm", "Scale (S): in % or in mm")                                          \
     X(ToolLayFlatTip, "Apoyar en una cara (F): hacé clic en la cara que va contra la cama", "Lay on face (F): click the face that goes on the bed") \
     X(ToolPaint, "Pintar", "Paint")                                                                                    \
-    X(ToolPaintTip, "Pintar las caras: dónde va o no va el soporte, y la costura (P)",                                \
-      "Paint the faces: where support goes or not, and the seam (P)")                                                 \
+    X(ToolPaintTip, "Pintar las caras: el soporte, la costura y la piel difusa (P)",                                  \
+      "Paint the faces: support, seam and fuzzy skin (P)")                                                            \
     X(PaintSupports, "Soportes", "Supports")                                                                          \
     X(PaintSeam, "Costura", "Seam")                                                                                   \
     X(PaintFuzzy, "Piel difusa", "Fuzzy skin")                                                                        \
     X(PaintColors, "Colores", "Colors")                                                                               \
-    X(PaintLater, "Llega cuando el motor tenga la piel difusa y varios extrusores",                                  \
-      "Comes when the engine has fuzzy skin and several extruders")                                                   \
+    X(PaintLater, "Llega cuando el motor tenga varios extrusores", "Comes when the engine has several extruders")   \
     X(PaintEnforce, "Forzar", "Enforce")                                                                              \
     X(PaintBlock, "Bloquear", "Block")                                                                                \
     X(BrushSize, "Pincel", "Brush")                                                                                   \

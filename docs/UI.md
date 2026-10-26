@@ -74,7 +74,7 @@ izquierda de la vista 3D, una columna con:
 | **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original** |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
 | **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
-| **Pintar** (P) | Soportes o costura, Forzar o Bloquear, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Piel difusa y Colores aparecen apagados hasta que el motor los tenga |
+| **Pintar** (P) | Soportes, costura (Forzar o Bloquear) o piel difusa, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Colores aparece apagado hasta que el motor tenga varios extrusores |
 
 Cada modelo queda siempre apoyado en la cama. El elegido se ve más claro. La lógica está en `src/ui/plate.*`, sin
 OpenGL, con sus pruebas (`tests/test_plate.cpp`). Un proyecto guarda cada modelo ya ubicado (con su giro y su escala

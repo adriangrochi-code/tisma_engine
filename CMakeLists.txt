@@ -182,6 +182,7 @@ add_library(tisma_core
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
   src/perimeters/beading.cpp
+  src/perimeters/fuzzy.cpp
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
   src/perimeters/walls.cpp
