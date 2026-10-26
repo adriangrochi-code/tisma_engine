@@ -712,6 +712,25 @@ Con el PR #24 (2026-10-26):
   teselar), `problem_reports.md` (informar un problema) y `thingiverse.md` (el sitio dentro del programa; su API
   espera rutas confirmadas, regla 20)
 
+### Velocidad del laminado (medición de caja negra del equipo de specs, 2026-10-26)
+
+El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs midió el motor como caja negra
+(`docs/spec/qa/2026-10-26-velocidad.md`, PR #24 y #25): el Benchy con capas sólidas de abajo tardaba unos 6 s, contra
+0,9 s sin ellas; el costo crecía mucho más rápido que el detalle del contorno y con la cantidad de paredes.
+- [x] El paso de las superficies de abajo (hecho 2026-10-26): era la detección de puentes. El área de los cordones de
+  la capa de abajo unía un disco de 64 lados por punto; ahora cada recorrido es un offset variable de Clipper2, y lo
+  impreso se calcula solo en una ventana alrededor de la superficie inferior, simplificado a 1 µm. Metas de
+  `docs/spec/BENCHMARKS.md` medidas en el contenedor (4 núcleos, mediana de 5): RV1 Benchy 6,3 → 1,39 s (meta 1,5 s);
+  RV2 las capas de abajo suman 8 % con tolerancia 0 (antes 200 s contra 7,5 s) y 22 % con 0,005 (meta 25 %); RV3
+  suman de 0,17 a 0,25 s con 1 a 6 paredes (meta 0,3 s). RV6: el G-code cambia en una sola capa del Benchy (ver
+  `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
+- [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
+- [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
+- [ ] V5: armar el G-code de cada capa en paralelo y unirlo en orden
+- [ ] V7–V11 del informe: superficies de abajo en el contorno crudo y recortadas una vez, simplificar después de cada
+  pared, reusar una capa igual a la de abajo, y en el programa relaminar por etapas (un cambio de velocidad,
+  temperatura o ventilador solo rehace el G-code)
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

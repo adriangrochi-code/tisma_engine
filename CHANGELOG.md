@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Ranuras entre capas en la vista previa** (pedido del dueño): cada capa de una pared se ve como un tubo, con su
+  ranura oscura contra la de arriba, calculada sobre el perfil del cordón; y los colores saturados ya no se lavan hacia
+  el blanco.
+
 - **Ventana y vista 3D con Vulkan** (decisión del dueño; `PLAN.md`, «Vista con Vulkan»): `--graphics
   auto|vulkan|opengl` elige qué dibuja la ventana. Con Vulkan, los paneles y la vista 3D (cama, modelo, pintura, vista
   previa, MSAA y FXAA) los dibuja Vulkan, igual que OpenGL imagen contra imagen, con la luz rápida. La oclusión
@@ -97,6 +101,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Ray tracing con el filamento continuo** (pedido del dueño): los rayos chocan con los mismos cordones que dibuja la
   vista, unidos en inglete, en vez de una caja por tramo. Las sombras y la oclusión de una pared ya no tienen muescas
   oscuras entre tramos.
+- **Laminar con capas sólidas de abajo es mucho más rápido:** el Benchy pasa de 6,3 s a 1,4 s. La detección de puentes
+  calculaba el área de las paredes de la capa de abajo con un disco por punto; ahora es un trazo por recorrido y solo
+  cerca de la superficie de abajo. El G-code cambia micras en el borde de algunos puentes.
 
 ### Corregido
 

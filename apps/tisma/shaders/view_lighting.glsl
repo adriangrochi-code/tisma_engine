@@ -20,12 +20,14 @@ bool gbuffer(vec3 n) {
     return true;
 }
 
-vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+// seen: how much of the ambient (x) and of the key light (y) the surface's
+// own neighbours leave (the bead's grooves); 1 elsewhere.
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen) {
     vec4 vis = texture(visibility, gl_FragCoord.xy / frame.target.xy);
     if (frame.flags.y != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
-    float direct = vis.r;
-    float ambient = mix(1.0, vis.g, frame.target.z);
+    float direct = vis.r * seen.y;
+    float ambient = mix(1.0, vis.g, frame.target.z) * seen.x;
     vec3 v = normalize(frame.eye.xyz - p);
     if (dot(n, v) < 0.0)
         n = -n;
@@ -40,6 +42,15 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
            + (base * 0.95 + vec3(highlight)) * ndl * direct
            + base * max(dot(n, frame.fill.xyz), 0.0) * 0.18 * ambient
            + sky * pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.06 * ambient;
-    c = vec3(1.0) - exp(-c * 1.25);
+    // The exponential tone curve on the brightest channel, the others scaled
+    // with it: a bright saturated colour keeps its hue and saturation instead
+    // of washing out towards white; greys come out as before.
+    float m = max(max(c.r, c.g), c.b);
+    if (m > 0.0)
+        c *= (1.0 - exp(-m * 1.25)) / m;
     return pow(c, vec3(1.0 / 2.2));
+}
+
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+    return shade(base, n, p, shininess, specular, vec2(1.0));
 }
