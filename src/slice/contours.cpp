@@ -35,18 +35,23 @@ private:
 
 } // namespace
 
-std::vector<Contour> join_segments(std::span<const LevelSegment> segments) {
+std::vector<Contour> join_segments(std::span<const LevelSegment> segments, std::vector<std::vector<EdgeKey>>* edges) {
     const EdgeIndex by_from(segments, &LevelSegment::edge_from);
     const EdgeIndex by_to(segments, &LevelSegment::edge_to);
     std::vector<bool> used(segments.size(), false);
     std::vector<Contour> out;
 
+    if (edges)
+        edges->clear();
     auto walk = [&](std::uint32_t first) {
         Contour c;
+        std::vector<EdgeKey> on;
         std::uint32_t s = first;
         while (true) {
             used[s] = true;
             c.points.push_back(segments[s].from);
+            if (edges)
+                on.push_back(segments[s].edge_from);
             const std::uint32_t next = by_from.find(segments[s].edge_to);
             if (next == first) {
                 c.closed = true;
@@ -54,11 +59,15 @@ std::vector<Contour> join_segments(std::span<const LevelSegment> segments) {
             }
             if (next == kNone || used[next]) {
                 c.points.push_back(segments[s].to);
+                if (edges)
+                    on.push_back(segments[s].edge_to);
                 break;
             }
             s = next;
         }
         out.push_back(std::move(c));
+        if (edges)
+            edges->push_back(std::move(on));
     };
 
     // Open chains first, from their heads: segments that no segment leads into.

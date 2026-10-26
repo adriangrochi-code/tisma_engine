@@ -98,6 +98,10 @@ void level_set_segments(const IndexedMesh& mesh, std::span<const float> values, 
         triangle_segment(mesh, values, iso, t, out);
 }
 
+Vec3f edge_crossing(const IndexedMesh& mesh, std::span<const float> values, float iso, EdgeKey edge) {
+    return crossing(mesh, values, iso, static_cast<std::uint32_t>(edge >> 32), static_cast<std::uint32_t>(edge));
+}
+
 std::vector<float> height_field(const IndexedMesh& mesh) {
     std::vector<float> z(mesh.vertices.size());
     for (std::size_t i = 0; i < z.size(); ++i)

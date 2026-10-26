@@ -4321,3 +4321,51 @@ cama. El dueño pidió dejar la vista para después y priorizar V7 a V11 de velo
 
 **Sigue:** V10 (reusar capas iguales, RV4) y medir V9.
 
+## 2026-10-26 — velocidad: V10, capas repetidas
+
+**Pedido del dueño:** priorizar V7 a V11 del informe de velocidad. Queda V10 (RV4: el cilindro de 80 mm debe tardar
+como mucho un 25 % más que el de 40 mm) y medir V9.
+
+**Hecho:**
+- **El corte por tandas** (`src/slice/layers.*`). Un nivel sin ningún vértice entre él y el de abajo cruza las mismas
+  aristas, unidas en el mismo orden (`same_crossings`). Solo se corta el primero de cada tanda; los demás calculan sus
+  puntos sobre las aristas de ese, iguales bit a bit a un corte nuevo (lo prueba un test en una pirámide y un prisma).
+  Sirve también para conos, pirámides y campos curvos.
+- **La misma sección.** Si además toda arista cruzada es vertical, o está solo en triángulos verticales (los lados de
+  un prisma partidos por diagonales), la sección en x e y es la misma (`same_sections`). El corte deja esos niveles
+  vacíos y el laminado copia la región y las paredes de la capa de abajo; no los de la primera capa con su achique,
+  ni con piel difusa (cada capa la dibuja de nuevo). Con un borde abierto en la malla corta todo, porque el extremo de
+  un contorno abierto se movería.
+- **Copias que dan el mismo resultado byte a byte:**
+  - las superficies de una capa, si su región de relleno y las regiones que miran son las de la capa de abajo;
+  - el relleno, si las superficies son las de la capa a un período del patrón (`fill_period`: 2, o 6 en panal; nada
+    en giroide, cúbico y adaptativos, que se mueven con la altura); una prueba lo confirma para cada patrón;
+  - el planificador de viajes y las islas del G-code, si la región es la de la capa de abajo.
+- **El G-code en serie, más liviano:** la costura alineada y la simplificación de los recorridos comparan distancias
+  al cuadrado y solo sacan la raíz cuando quedan a un pelo del límite (`hypot` era 9 millones de llamadas en el
+  cilindro de 80 mm). La respuesta es la misma.
+
+**Medido** (4 núcleos, mediana de 3, ajustes por defecto):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 2,69 s | 0,36 s |
+| Cilindro de 32 768 lados, 80 mm | 5,33 s | 0,63 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,98 | 1,75 |
+| Benchy | 1,35 s | 1,35 s |
+
+- **RV4 no se cumple todavía.** Lo que crece con las capas es la parte en serie del G-code. Por cada 200 capas del
+  cilindro: el orden y las costuras unos 50 ms, la simplificación 22 ms, el texto unos 35 ms y su verificación 35 ms.
+  El corte y el laminado ya casi no crecen (+10 ms). Hace falta V5: armar el texto de cada capa en paralelo y
+  verificar en paralelo.
+- **RV6:** el G-code del Benchy (con y sin giroide), la esfera, la esfera con soportes, el tubo, las islas, las cajas,
+  el cubo con piel difusa y la pieza torcida sale igual byte a byte. En los cilindros (128 y 32 768 lados) cambia:
+  antes cada capa simplificaba otros puntos de las diagonales de los lados, y ahora todas repiten la sección de la
+  primera. Las paredes nuevas quedan a menos de 0,018 mm de las de antes (dos simplificaciones del mismo círculo,
+  cada una dentro de `slicing.simplify_tolerance` y `gcode.resolution`).
+- **Pruebas:** 395 de 395 pasan en Release. Nuevas: los niveles con las mismas aristas, la misma sección del prisma
+  (con un lado abierto y con una pirámide como contraejemplo), un prisma laminado que repite región, paredes y
+  relleno, el escalón de superficies y el período de cada patrón.
+
+**Sigue:** V5 (el G-code en paralelo) para llegar a RV4; después medir V9.
+

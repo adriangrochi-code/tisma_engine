@@ -77,8 +77,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     for (const Layer& l : out.layers)
         heights.push_back(float(l.slice_z()));
 
+    // Levels with the section of the level below come back empty
+    // (same_sections; the speed report's V10).
+    std::vector<char> same_section;
     const std::vector<std::vector<Contour>> contours =
-        slice_levels(mesh, height_field(mesh), heights, settings.gap_closing_radius, gpu);
+        slice_levels(mesh, height_field(mesh), heights, settings.gap_closing_radius, gpu, &same_section);
 
     out.regions.resize(out.layers.size());
     out.walls.resize(out.layers.size());
@@ -100,12 +103,28 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     fuzzy.thickness = settings.fuzzy_thickness;
     fuzzy.point_distance = settings.fuzzy_point_distance;
     const std::vector<Polygons> fuzzy_painted = painted_areas(painted[4], out.layers, settings.wall_width);
+    // A level the cut left empty takes the contours of the nearest level below
+    // that has them, and, when the layer's shrink and fuzz are the level
+    // below's too, its region and walls.
+    const auto shrink_at = [&](std::size_t l) { return l == 0 ? settings.first_layer_shrink : 0.0; };
+    const auto fuzzed = [&](std::size_t l) {
+        return fuzzy.mode != FuzzyMode::None || (l < fuzzy_painted.size() && !fuzzy_painted[l].empty());
+    };
+    std::vector<std::size_t> source(out.layers.size());
+    std::vector<char> copied(out.layers.size(), 0);
+    for (std::size_t l = 0; l < out.layers.size(); ++l) {
+        const bool same = l > 0 && same_section[l];
+        source[l] = same ? source[l - 1] : l;
+        copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1);
+    }
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
-        for (const Contour& c : contours[l])
+        if (copied[l])
+            return;
+        for (const Contour& c : contours[source[l]])
             open[l] += c.closed ? 0 : 1;
-        Polygons region =
-            layer_region(simplify(to_polygons(contours[l]), settings.simplify_tolerance), settings.fill_mode);
-        const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
+        Polygons region = layer_region(simplify(to_polygons(contours[source[l]]), settings.simplify_tolerance),
+                                       settings.fill_mode);
+        const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
         // What an opening by the thinnest bead removes is too thin to print.
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
@@ -117,6 +136,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         } else
             out.walls[l].infill = out.regions[l];
     });
+    for (std::size_t l = 1; l < out.layers.size(); ++l)
+        if (copied[l]) {
+            open[l] = open[l - 1];
+            out.regions[l] = out.regions[l - 1];
+            out.thin_area[l] = out.thin_area[l - 1];
+            out.walls[l] = out.walls[l - 1];
+        }
     for (std::size_t n : open)
         out.open_contours += n;
     out.open_by_layer = std::move(open);
@@ -306,8 +332,27 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                 settings.skirt_distance, settings.wall_width, first);
     }
     out.fills.resize(out.layers.size());
+    // A layer with nothing but its surfaces to fill, the same as the layer a
+    // fill period below (fill_period), has its fill (prismatic parts; the
+    // speed report's V10).
+    const std::size_t period = fill_period(fill);
+    const auto plain = [&](std::size_t l) {
+        return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
+                                                                         [](const Polygons& b) { return b.empty(); })) &&
+               dense_region[l].empty() && out.support_areas[l].empty();
+    };
+    std::vector<char> repeats(out.layers.size(), 0);
+    if (period > 0)
+        tbb::parallel_for(period, out.layers.size(), [&](std::size_t l) {
+            const LayerSurfaces &a = out.surfaces[l], &b = out.surfaces[l - period];
+            repeats[l] = plain(l) && plain(l - period) && a.bridge_angle == b.bridge_angle && a.top == b.top &&
+                         a.top_under == b.top_under && a.bottom == b.bottom && a.sparse == b.sparse &&
+                         a.bridge == b.bridge;
+        });
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
+                          if (repeats[l])
+                              return;
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
@@ -350,6 +395,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
                       });
+    for (std::size_t l = period; l < out.layers.size(); ++l)
+        if (repeats[l])
+            out.fills[l] = out.fills[l - period];
     // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
     // beads stack, in patterns that repeat layer to layer, and not with thick
     // layers or stress bands.

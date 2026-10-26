@@ -14,17 +14,22 @@ namespace tisma {
 
 namespace {
 
-// How far point p strays from the move a to b, as a multiple of what is
-// allowed: above 1, the point stays.
-double stray(const ToolpathPoint& a, const ToolpathPoint& b, const ToolpathPoint& p, double tolerance) {
+// Whether point p strays from the move a to b by more than is allowed: then
+// the point stays.
+bool strays(const ToolpathPoint& a, const ToolpathPoint& b, const ToolpathPoint& p, double tolerance) {
     const double dx = b.p.x - a.p.x, dy = b.p.y - a.p.y;
     const double len2 = dx * dx + dy * dy;
     const double t = len2 > 0.0 ? std::clamp(((p.p.x - a.p.x) * dx + (p.p.y - a.p.y) * dy) / len2, 0.0, 1.0) : 0.0;
-    const double off = std::hypot(p.p.x - (a.p.x + t * dx), p.p.y - (a.p.y + t * dy)) / tolerance;
+    const double ex = p.p.x - (a.p.x + t * dx), ey = p.p.y - (a.p.y + t * dy);
+    // Off the line by more than the tolerance: the same answer without the
+    // square root unless the squares come within a hair of each other.
+    const double squared = ex * ex + ey * ey, limit = tolerance * tolerance;
+    const bool off = squared > limit * (1.0 + 1e-9) ||
+                     (squared >= limit * (1.0 - 1e-9) && std::hypot(ex, ey) / tolerance > 1.0);
     const auto along = [&](double va, double vb, double vp) {
-        return std::fabs(vp - (va + t * (vb - va))) / kResolutionAttribute;
+        return std::fabs(vp - (va + t * (vb - va))) / kResolutionAttribute > 1.0;
     };
-    return std::max({off, along(a.width, b.width, p.width), along(a.dz, b.dz, p.dz), along(a.below, b.below, p.below)});
+    return off || along(a.width, b.width, p.width) || along(a.dz, b.dz, p.dz) || along(a.below, b.below, p.below);
 }
 
 } // namespace
@@ -39,7 +44,7 @@ Toolpath simplify_toolpath(const Toolpath& path, double tolerance) {
     const std::size_t n = pts.size();
     const auto fits = [&](std::size_t from, std::size_t to) {
         for (std::size_t k = from + 1; k < to; ++k)
-            if (stray(pts[from], pts[to], pts[k], tolerance) > 1.0)
+            if (strays(pts[from], pts[to], pts[k], tolerance))
                 return false;
         return true;
     };

@@ -814,11 +814,40 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
 
-    // Every layer's travel planner first, in parallel: each depends on its
-    // layer's region alone, and the layers are written one after another.
-    std::vector<std::optional<TravelPlanner>> planners(model.layers.size());
-    tbb::parallel_for(std::size_t(0), planners.size(), [&](std::size_t l) {
-        planners[l].emplace(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
+    // Every layer's travel planner and islands first, in parallel: they
+    // depend on the layer's region alone, and the layers are written one after
+    // another. A layer with the region of the layer below shares them
+    // (prismatic parts; the speed report's V10).
+    struct RegionPlan {
+        std::optional<TravelPlanner> planner;
+        std::vector<Polygons> pieces;
+        std::vector<std::array<std::int64_t, 4>> boxes; // each piece's box
+    };
+    std::vector<std::size_t> plan_of(model.layers.size(), 0);
+    {
+        std::vector<char> same(model.layers.size(), 0);
+        tbb::parallel_for(std::size_t(1), std::min(model.layers.size(), model.regions.size()),
+                          [&](std::size_t l) { same[l] = model.regions[l] == model.regions[l - 1]; });
+        for (std::size_t l = 0; l < plan_of.size(); ++l)
+            plan_of[l] = same[l] ? plan_of[l - 1] : l;
+    }
+    std::vector<RegionPlan> plans(model.layers.size());
+    const Polygons none;
+    tbb::parallel_for(std::size_t(0), plans.size(), [&](std::size_t l) {
+        if (plan_of[l] != l)
+            return;
+        const Polygons& region = l < model.regions.size() ? model.regions[l] : none;
+        RegionPlan& p = plans[l];
+        p.planner.emplace(region, s.wall_width);
+        p.pieces = split_islands(region);
+        // The point-in-polygon tests run only where a box holds the point
+        // (hundreds of islands made every path test them all).
+        p.boxes.assign(p.pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
+        for (std::size_t k = 0; k < p.pieces.size(); ++k)
+            for (const auto& q : p.pieces[k].front()) {
+                auto& b = p.boxes[k];
+                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
+            }
     });
 
     auto emit_layer = [&](std::size_t l, const Active& a) {
@@ -830,7 +859,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.set_flow(a.flow);
         g.set_forced_flow(a.volumetric_flow);
         seams.next_layer();
-        const TravelPlanner& planner = *planners[l];
+        const RegionPlan& plan = plans[plan_of[l]];
+        const TravelPlanner& planner = *plan.planner;
         const bool first = l == 0;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
@@ -956,16 +986,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Point2d> ends;                  // where its paths start or end
         };
-        const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
+        const std::vector<Polygons>& pieces = plan.pieces;
         std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
-        // Each island's box: the point-in-polygon tests run only where the box
-        // holds the point (hundreds of islands made every path test them all).
-        std::vector<std::array<std::int64_t, 4>> piece_box(pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
-        for (std::size_t k = 0; k < pieces.size(); ++k)
-            for (const auto& q : pieces[k].front()) {
-                auto& b = piece_box[k];
-                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
-            }
+        const std::vector<std::array<std::int64_t, 4>>& piece_box = plan.boxes;
         auto island = [&](const Toolpath& t) -> Island& {
             if (pieces.size() <= 1)
                 return islands.front();

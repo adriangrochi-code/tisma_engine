@@ -91,4 +91,10 @@ struct FillParams {
 //    above's (lightning_layers).
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z = 0.0);
 
+// Every how many layers fill_layer gives the same toolpaths for the same
+// surfaces: the directions turn with the layer number alone (2, or 6 with
+// honeycomb's three). 0 when the pattern moves with the height or follows the
+// depth field (gyroid, cubic, adaptive and support cubic).
+std::size_t fill_period(const FillParams& params);
+
 } // namespace tisma

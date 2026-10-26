@@ -51,6 +51,22 @@ TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
         CHECK_THAT(area_mm2(l.sparse), WithinAbs(100.0, 1e-9));
 }
 
+TEST_CASE("classify_surfaces on a step: the repeated layers end where the regions change", "[surfaces]") {
+    // A 10 mm square for ten layers, then a 6 mm one in its corner for ten.
+    std::vector<Polygons> regions(10, square(0, 0, 10));
+    regions.resize(20, square(0, 0, 6));
+    const std::vector<LayerSurfaces> s = classify_surfaces(regions, regions, 3, 2);
+    for (std::size_t i = 0; i < 20; ++i) {
+        INFO("layer " << i);
+        const double area = i < 10 ? 100.0 : 36.0;
+        const double top = i >= 17 ? 36.0 : (i >= 7 && i < 10 ? 64.0 : 0.0);
+        const double bottom = i < 2 ? 100.0 : 0.0; // the small square stands on the big one
+        CHECK_THAT(area_mm2(s[i].top), WithinAbs(top, 1e-9));
+        CHECK_THAT(area_mm2(s[i].bottom), WithinAbs(bottom, 1e-9));
+        CHECK_THAT(area_mm2(s[i].sparse), WithinAbs(area - top - bottom, 1e-9));
+    }
+}
+
 TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfaces]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings settings; // 3 walls, 3 top and 3 bottom layers

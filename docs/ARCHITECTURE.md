@@ -111,6 +111,11 @@ archivos truncados y números no finitos. `stl_binary` escribe una malla como ST
   en el futuro: cualquier campo escalar sirve.
 - `slice_levels` saca los segmentos de cada nivel visitando cada triángulo solo para los niveles que cruza, y
   `join_segments` los une en contornos por la clave de arista.
+- Los niveles sin vértices entre uno y otro cruzan las mismas aristas (`same_crossings`): solo se corta el primero de
+  la tanda, y los demás calculan sus puntos con `edge_crossing` sobre esas aristas. Si la sección en x e y es la misma
+  (`same_sections`, los lados de un prisma), el corte deja el nivel vacío y `pipeline.cpp` copia la región y las
+  paredes de la capa de abajo. Las superficies, el relleno y los planes de viaje del G-code se reusan igual cuando
+  sus entradas son iguales a las de otra capa.
 - `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir.
 
 ### `geom/`: geometría
