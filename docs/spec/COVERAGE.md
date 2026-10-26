@@ -55,7 +55,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Relleno de huecos (activar o no) | `perimeters.md`, `walls_extra.md` | ✔ |
 | Un solo perímetro en la capa de arriba (en todas o solo en la de más arriba) y en la primera capa | `walls_extra.md` | ✔ |
 | Perímetros escalonados (Tisma) | `staggered_perimeters.md` | ✔ |
-| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | `fuzzy_skin.md` | ◐ falta la herramienta para pintarla → `model_tools.md` |
+| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | `fuzzy_skin.md`, `model_tools.md` (regla 27) | ✔ |
 | Z anti-aliasing (Tisma) | `z_antialiasing.md` | ✔ |
 | Arcos en voladizos (Tisma) | `arc_overhangs.md` | ✔ |
 
@@ -101,7 +101,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Separación Z de abajo, capas de interfaz de abajo | `supports_more.md` | ✔ |
 | Patrón del soporte (rectilíneo, grilla, panal) y de la interfaz (automático, rectilíneo, concéntrico), separación de la interfaz, lazos de contacto | `supports_skirt.md`, `supports_more.md` | ✔ |
 | Vaina alrededor del soporte, radio de cierre | `supports_more.md` | ✔ |
-| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md` | ◐ falta la herramienta para pintarlos y agregarlos → `model_tools.md` |
+| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md`, `model_tools.md` (regla 27) | ✔ |
 | Sincronizar las capas del soporte con las de la pieza (multimaterial) | `multi_extruder.md` | ✔ |
 
 ### Velocidades y aceleraciones
@@ -215,25 +215,25 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Formatos de salida además de GOO, y su precisión | `resin.md` | ◐ → `formats.md` |
 | Soportes, base y vaciado | `resin_supports.md` | ◐ faltan tipo de árbol, solo forzados, y las opciones finas de cabeza, pilar, uniones y base → `resin_supports.md` (actualizar) |
 | Costo del frasco, volumen, peso, densidad: costo de la impresión | `gcode_extras.md` | ✔ |
-| Agujeros de drenaje y puntos de soporte a mano | `resin_supports.md` | ◐ falta la herramienta → `model_tools.md` |
+| Agujeros de drenaje y puntos de soporte a mano | `resin_supports.md`, `model_tools.md` (regla 28) | ✔ |
 
 ## Herramientas sobre los modelos
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Mover, rotar, escalar (también por medidas), espejar | `model_tools.md` (reglas 11 y 12) | ◐ falta espejar y escalar por medidas en un solo eje |
+| Mover, rotar, escalar (también por medidas), espejar | `model_tools.md` (reglas 11, 12, 16 y 17) | ✔ |
 | Apoyar sobre una cara | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `model_tools.md` (regla 13) | ◐ falta el corte con conectores, solo en la interfaz |
-| Separar en objetos y en partes | `model_tools.md` (regla 14) | ◐ falta separar en partes, solo en la interfaz |
-| Medir (distancias, ángulos, diámetros) | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Simplificar la malla | `slicing.md` (contornos) | ◐ falta la de la malla → `model_tools.md` |
-| Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
-| Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `model_tools.md` (reglas 13 y 18) | ✔ |
+| Separar en objetos y en partes | `model_tools.md` (reglas 14 y 19) | ✔ |
+| Medir (distancias, ángulos, diámetros) | `model_tools.md` (regla 20) | ✔ |
+| Simplificar la malla | `slicing.md` (contornos), `model_tools.md` (regla 21) | ✔ |
+| Texto en relieve y SVG en relieve | `model_tools.md` (reglas 22 y 23) | ✔ |
+| Pintar soportes, costura, piel difusa y colores | `model_tools.md` (regla 27) | ✔ |
 | Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | `model_tools.md`, `supports_more.md` (bloqueadores y forzadores) | ✔ |
 | Ajustes por objeto, por parte y por rango de alturas | `model_tools.md` (reglas 5 a 7), `settings_levels.md` (reglas 10 y 11) | ✔ |
-| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias), `model_tools.md` (reglas 11 y 15) | ◐ falta llenar la cama, convertir unidades, reemplazar y recargar |
-| Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
-| Galería de formas | — | ✘ → `model_tools.md` |
+| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias), `model_tools.md` (reglas 11, 15, 25 y 30) | ✔ |
+| Ordenar (con rotación, separación y alineación) y varias camas | `placement.md`, `model_tools.md` (regla 26) | ✔ |
+| Galería de formas | `model_tools.md` (regla 24) | ✔ |
 | Orientación automática (Tisma) | `orientation.md` | ✔ |
 | Dividir para que entre (Tisma) | `fragment.md` | ✔ |
 | Reparar la malla | `slicing.md` (mallas sucias), `formats.md` (regla 4) | ✔ |
@@ -315,7 +315,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 |---|---|---|
 | Ventana, menús, aspecto, asistente, Ingeniería | `interface.md` | ✔ |
 | Controles de la vista 3D: girar, mover, acercar, vistas, perspectiva u ortogonal | — | ✘ → `preview.md` |
-| Deshacer y rehacer | `interface.md` (atajos) | ◐ → `model_tools.md` |
+| Deshacer y rehacer | `model_tools.md` (regla 29) | ✔ |
 | Idiomas (inglés y español) | `interface.md` (principio 2) | ✔ |
 
 ## Migración
