@@ -78,8 +78,7 @@ pasar el motor; cómo se logra lo decide el equipo del motor.
 | RV9 | V14 | Benchy con 4 núcleos contra 1 núcleo | 1,38 veces | 2,5 veces o más |
 | RV10 | Costura en la GPU (`perimeters.md`, regla 8) | Conejo al 150 % con `walls.seam` `aligned` contra `nearest`, con GPU y con `compute.gpu` en `off` | 3,3 s contra 1,28 s (2,6 veces) | Como mucho 1,2 veces, y el mismo G-code con GPU y sin ella |
 
-- RV7 a RV9 son propuestas del 26-10-2026 y esperan la aprobación del dueño; RV1 a RV6 y RV10 (pedida por el dueño)
-  ya están aprobadas.
+- Todas están aprobadas por el dueño: RV1 a RV6 y RV10 el 26-10-2026, y RV7 a RV9 el mismo día, después de medirlas.
 - RV5 compara además el G-code del relaminado por etapas con el de un laminado completo con los mismos ajustes: tienen
   que ser iguales byte a byte.
 - Las metas no bajan la calidad: los casos de `GCODE_OUTPUT.md` y las pruebas de las fichas siguen pasando.
