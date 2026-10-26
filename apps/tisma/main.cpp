@@ -27,7 +27,9 @@ constexpr const char* kUsage =
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
+    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl]\n"
+    "                                   [--compare-view other.png]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -36,7 +38,14 @@ constexpr const char* kUsage =
     "the picture. --browse shows the file browser. --profile chooses a profile.\n"
     "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
     "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
-    "shadow rays with the CPU's and exits with 1 if they differ).\n";
+    "shadow rays with the CPU's and exits with 1 if they differ). --bench-frames\n"
+    "draws the ready 3D view N more times and prints the time per frame.\n"
+    "--graphics chooses what draws the window: auto (the default) finds whether\n"
+    "this machine has Vulkan and takes OpenGL if not; vulkan asks for it (in\n"
+    "progress: the view without its ambient occlusion and ray tracing yet, so auto\n"
+    "takes OpenGL for now). --compare-view compares the 3D view with the one in\n"
+    "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
+    "than 0.5% of its pixels differ by more than 24 levels.\n";
 
 } // namespace
 
@@ -174,6 +183,16 @@ int main(int argc, char** argv) {
             options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
+        } else if (arg == "--graphics") {
+            options.graphics = value();
+            if (options.graphics != "auto" && options.graphics != "vulkan" && options.graphics != "opengl") {
+                std::fprintf(stderr, "error: --graphics must be auto, vulkan or opengl\n");
+                return 2;
+            }
+        } else if (arg == "--bench-frames") {
+            options.bench_frames = std::max(1, std::atoi(value()));
+        } else if (arg == "--compare-view") {
+            options.compare_view = value();
         } else if (arg == "--ray-check") {
             options.ray_check = true;
         } else if (arg == "--moire-check") {
@@ -215,9 +234,10 @@ int main(int argc, char** argv) {
         }
     }
     if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check ||
-         options.moire_check) &&
+         options.moire_check || !options.compare_view.empty()) &&
         options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check and --moire-check go with --screenshot\n");
+        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check, --moire-check and --compare-view go "
+                             "with --screenshot\n");
         return 2;
     }
     if (options.device_print && (options.device.empty() || options.screenshot.empty())) {

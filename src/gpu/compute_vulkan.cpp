@@ -7,6 +7,9 @@
 #include "gpu/shaders/generated/level_ranges.spv.h"
 #include "gpu/shaders/generated/level_segments.spv.h"
 
+// The device functions only through the context's own table (Functions):
+// volk's global ones belong to the interface's window.
+#define VOLK_NO_DEVICE_PROTOTYPES
 #include <volk.h>
 
 #include <algorithm>
@@ -36,9 +39,99 @@ int device_rank(VkPhysicalDeviceType type) {
 
 static_assert(sizeof(std::array<std::uint32_t, 3>) == 12, "triangles are copied to the GPU as packed uint32 triples");
 
+// The Vulkan functions the context calls, loaded for its own instance and
+// device. volk's global pointers are not used: the interface's window
+// (apps/tisma/vk_window.*) loads them for its instance and device, maybe on
+// another GPU, and draws with them while a slice runs here on another thread.
+#define TISMA_VK_INSTANCE_FUNCTIONS(X)                                                                                 \
+    X(vkDestroyInstance)                                                                                               \
+    X(vkEnumeratePhysicalDevices)                                                                                      \
+    X(vkGetPhysicalDeviceProperties)                                                                                   \
+    X(vkGetPhysicalDeviceQueueFamilyProperties)                                                                        \
+    X(vkGetPhysicalDeviceMemoryProperties)                                                                             \
+    X(vkCreateDevice)                                                                                                  \
+    X(vkGetDeviceProcAddr)
+#define TISMA_VK_DEVICE_FUNCTIONS(X)                                                                                   \
+    X(vkDestroyDevice)                                                                                                 \
+    X(vkGetDeviceQueue)                                                                                                \
+    X(vkDeviceWaitIdle)                                                                                                \
+    X(vkCreateCommandPool)                                                                                             \
+    X(vkDestroyCommandPool)                                                                                            \
+    X(vkAllocateCommandBuffers)                                                                                        \
+    X(vkFreeCommandBuffers)                                                                                            \
+    X(vkBeginCommandBuffer)                                                                                            \
+    X(vkEndCommandBuffer)                                                                                              \
+    X(vkCreateBuffer)                                                                                                  \
+    X(vkDestroyBuffer)                                                                                                 \
+    X(vkGetBufferMemoryRequirements)                                                                                   \
+    X(vkAllocateMemory)                                                                                                \
+    X(vkFreeMemory)                                                                                                    \
+    X(vkBindBufferMemory)                                                                                              \
+    X(vkMapMemory)                                                                                                     \
+    X(vkCreateDescriptorSetLayout)                                                                                     \
+    X(vkDestroyDescriptorSetLayout)                                                                                    \
+    X(vkCreatePipelineLayout)                                                                                          \
+    X(vkDestroyPipelineLayout)                                                                                         \
+    X(vkCreateShaderModule)                                                                                            \
+    X(vkDestroyShaderModule)                                                                                           \
+    X(vkCreateComputePipelines)                                                                                        \
+    X(vkDestroyPipeline)                                                                                               \
+    X(vkCreateDescriptorPool)                                                                                          \
+    X(vkDestroyDescriptorPool)                                                                                         \
+    X(vkAllocateDescriptorSets)                                                                                        \
+    X(vkUpdateDescriptorSets)                                                                                          \
+    X(vkCmdBindPipeline)                                                                                               \
+    X(vkCmdBindDescriptorSets)                                                                                         \
+    X(vkCmdPushConstants)                                                                                              \
+    X(vkCmdDispatch)                                                                                                   \
+    X(vkCmdPipelineBarrier)                                                                                            \
+    X(vkCreateFence)                                                                                                   \
+    X(vkDestroyFence)                                                                                                  \
+    X(vkQueueSubmit)                                                                                                   \
+    X(vkWaitForFences)
+
+struct Functions {
+#define TISMA_VK_DECLARE(name) PFN_##name name = nullptr;
+    TISMA_VK_INSTANCE_FUNCTIONS(TISMA_VK_DECLARE)
+    TISMA_VK_DEVICE_FUNCTIONS(TISMA_VK_DECLARE)
+#undef TISMA_VK_DECLARE
+
+    // False if the instance lacks one.
+    bool load(VkInstance instance) {
+        bool all = true;
+#define TISMA_VK_LOAD(name)                                                                                            \
+    name = reinterpret_cast<PFN_##name>(vkGetInstanceProcAddr(instance, #name));                                      \
+    all = all && name;
+        TISMA_VK_INSTANCE_FUNCTIONS(TISMA_VK_LOAD)
+#undef TISMA_VK_LOAD
+        return all;
+    }
+
+    // False if the device lacks one.
+    bool load(VkDevice device) {
+        bool all = true;
+#define TISMA_VK_LOAD(name)                                                                                            \
+    name = reinterpret_cast<PFN_##name>(vkGetDeviceProcAddr(device, #name));                                          \
+    all = all && name;
+        TISMA_VK_DEVICE_FUNCTIONS(TISMA_VK_LOAD)
+#undef TISMA_VK_LOAD
+        return all;
+    }
+};
+
 } // namespace
 
+bool load_vulkan() {
+    // Once for the program, from whichever thread comes first (C++11 static
+    // initialisation is thread-safe). volkInitialize sets only the loader's
+    // global functions (vkGetInstanceProcAddr, vkCreateInstance and the
+    // enumerations), which nothing changes afterwards.
+    static const bool loaded = volkInitialize() == VK_SUCCESS;
+    return loaded;
+}
+
 struct Context::Impl {
+    Functions vk;
     VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
@@ -65,21 +158,22 @@ struct Context::Impl {
             if (!owner)
                 return;
             if (memory)
-                vkFreeMemory(owner->device, memory, nullptr);
+                owner->vk.vkFreeMemory(owner->device, memory, nullptr);
             if (buffer)
-                vkDestroyBuffer(owner->device, buffer, nullptr);
+                owner->vk.vkDestroyBuffer(owner->device, buffer, nullptr);
         }
     };
 
     ~Impl() {
-        if (device) {
-            vkDeviceWaitIdle(device);
-            if (command_pool)
-                vkDestroyCommandPool(device, command_pool, nullptr);
-            vkDestroyDevice(device, nullptr);
+        if (device && vk.vkDestroyDevice) {
+            if (vk.vkDeviceWaitIdle)
+                vk.vkDeviceWaitIdle(device);
+            if (command_pool && vk.vkDestroyCommandPool)
+                vk.vkDestroyCommandPool(device, command_pool, nullptr);
+            vk.vkDestroyDevice(device, nullptr);
         }
-        if (instance)
-            vkDestroyInstance(instance, nullptr);
+        if (instance && vk.vkDestroyInstance)
+            vk.vkDestroyInstance(instance, nullptr);
     }
 
     void make_buffer(Buffer& b, VkDeviceSize size) {
@@ -90,9 +184,9 @@ struct Context::Impl {
         info.size = b.size;
         info.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        check(vkCreateBuffer(device, &info, nullptr, &b.buffer), "vkCreateBuffer");
+        check(vk.vkCreateBuffer(device, &info, nullptr, &b.buffer), "vkCreateBuffer");
         VkMemoryRequirements req;
-        vkGetBufferMemoryRequirements(device, b.buffer, &req);
+        vk.vkGetBufferMemoryRequirements(device, b.buffer, &req);
         const VkMemoryPropertyFlags want = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         std::uint32_t type = UINT32_MAX;
         for (std::uint32_t i = 0; i < memory.memoryTypeCount; ++i)
@@ -106,9 +200,9 @@ struct Context::Impl {
         alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         alloc.allocationSize = req.size;
         alloc.memoryTypeIndex = type;
-        check(vkAllocateMemory(device, &alloc, nullptr, &b.memory), "vkAllocateMemory");
-        check(vkBindBufferMemory(device, b.buffer, b.memory, 0), "vkBindBufferMemory");
-        check(vkMapMemory(device, b.memory, 0, VK_WHOLE_SIZE, 0, &b.mapped), "vkMapMemory");
+        check(vk.vkAllocateMemory(device, &alloc, nullptr, &b.memory), "vkAllocateMemory");
+        check(vk.vkBindBufferMemory(device, b.buffer, b.memory, 0), "vkBindBufferMemory");
+        check(vk.vkMapMemory(device, b.memory, 0, VK_WHOLE_SIZE, 0, &b.mapped), "vkMapMemory");
     }
 
     // Runs one compute shader over `groups` workgroups with the given storage
@@ -128,26 +222,26 @@ struct Context::Impl {
         VkCommandBuffer cmd = VK_NULL_HANDLE;
         auto cleanup = [&] {
             if (cmd)
-                vkFreeCommandBuffers(device, command_pool, 1, &cmd);
+                vk.vkFreeCommandBuffers(device, command_pool, 1, &cmd);
             if (fence)
-                vkDestroyFence(device, fence, nullptr);
+                vk.vkDestroyFence(device, fence, nullptr);
             if (pool)
-                vkDestroyDescriptorPool(device, pool, nullptr);
+                vk.vkDestroyDescriptorPool(device, pool, nullptr);
             if (pipeline)
-                vkDestroyPipeline(device, pipeline, nullptr);
+                vk.vkDestroyPipeline(device, pipeline, nullptr);
             if (module)
-                vkDestroyShaderModule(device, module, nullptr);
+                vk.vkDestroyShaderModule(device, module, nullptr);
             if (pipeline_layout)
-                vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
+                vk.vkDestroyPipelineLayout(device, pipeline_layout, nullptr);
             if (set_layout)
-                vkDestroyDescriptorSetLayout(device, set_layout, nullptr);
+                vk.vkDestroyDescriptorSetLayout(device, set_layout, nullptr);
         };
         try {
             VkDescriptorSetLayoutCreateInfo dsl{};
             dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
             dsl.bindingCount = static_cast<std::uint32_t>(bindings.size());
             dsl.pBindings = bindings.data();
-            check(vkCreateDescriptorSetLayout(device, &dsl, nullptr, &set_layout), "vkCreateDescriptorSetLayout");
+            check(vk.vkCreateDescriptorSetLayout(device, &dsl, nullptr, &set_layout), "vkCreateDescriptorSetLayout");
 
             VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, push_size};
             VkPipelineLayoutCreateInfo pl{};
@@ -156,14 +250,14 @@ struct Context::Impl {
             pl.pSetLayouts = &set_layout;
             pl.pushConstantRangeCount = push_size ? 1 : 0;
             pl.pPushConstantRanges = &range;
-            check(vkCreatePipelineLayout(device, &pl, nullptr, &pipeline_layout), "vkCreatePipelineLayout");
+            check(vk.vkCreatePipelineLayout(device, &pl, nullptr, &pipeline_layout), "vkCreatePipelineLayout");
 
             VkShaderModuleCreateInfo sm{};
 
             sm.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             sm.codeSize = spirv.size_bytes();
             sm.pCode = spirv.data();
-            check(vkCreateShaderModule(device, &sm, nullptr, &module), "vkCreateShaderModule");
+            check(vk.vkCreateShaderModule(device, &sm, nullptr, &module), "vkCreateShaderModule");
 
             VkComputePipelineCreateInfo cp{};
 
@@ -173,7 +267,7 @@ struct Context::Impl {
             cp.stage.module = module;
             cp.stage.pName = "main";
             cp.layout = pipeline_layout;
-            check(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cp, nullptr, &pipeline),
+            check(vk.vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &cp, nullptr, &pipeline),
                   "vkCreateComputePipelines");
 
             VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, static_cast<std::uint32_t>(buffers.size())};
@@ -182,7 +276,7 @@ struct Context::Impl {
             dp.maxSets = 1;
             dp.poolSizeCount = 1;
             dp.pPoolSizes = &pool_size;
-            check(vkCreateDescriptorPool(device, &dp, nullptr, &pool), "vkCreateDescriptorPool");
+            check(vk.vkCreateDescriptorPool(device, &dp, nullptr, &pool), "vkCreateDescriptorPool");
 
             VkDescriptorSet set = VK_NULL_HANDLE;
             VkDescriptorSetAllocateInfo ds{};
@@ -190,7 +284,7 @@ struct Context::Impl {
             ds.descriptorPool = pool;
             ds.descriptorSetCount = 1;
             ds.pSetLayouts = &set_layout;
-            check(vkAllocateDescriptorSets(device, &ds, &set), "vkAllocateDescriptorSets");
+            check(vk.vkAllocateDescriptorSets(device, &ds, &set), "vkAllocateDescriptorSets");
 
             std::vector<VkDescriptorBufferInfo> infos(buffers.size());
             std::vector<VkWriteDescriptorSet> writes(buffers.size());
@@ -204,7 +298,7 @@ struct Context::Impl {
                 writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
                 writes[i].pBufferInfo = &infos[i];
             }
-            vkUpdateDescriptorSets(device, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
+            vk.vkUpdateDescriptorSets(device, static_cast<std::uint32_t>(writes.size()), writes.data(), 0, nullptr);
 
             VkCommandBufferAllocateInfo cba{};
 
@@ -212,37 +306,37 @@ struct Context::Impl {
             cba.commandPool = command_pool;
             cba.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             cba.commandBufferCount = 1;
-            check(vkAllocateCommandBuffers(device, &cba, &cmd), "vkAllocateCommandBuffers");
+            check(vk.vkAllocateCommandBuffers(device, &cba, &cmd), "vkAllocateCommandBuffers");
 
             VkCommandBufferBeginInfo begin{};
 
             begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-            check(vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer");
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, nullptr);
+            check(vk.vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer");
+            vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+            vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, nullptr);
             if (push_size)
-                vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push_size, push);
-            vkCmdDispatch(cmd, groups, 1, 1);
+                vk.vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push_size, push);
+            vk.vkCmdDispatch(cmd, groups, 1, 1);
             // Make the shader writes visible to the host before it reads the mapped memory.
             VkMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
             barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
-            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &barrier, 0,
+            vk.vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &barrier, 0,
                                  nullptr, 0, nullptr);
-            check(vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
+            check(vk.vkEndCommandBuffer(cmd), "vkEndCommandBuffer");
 
             VkFenceCreateInfo fi{};
 
             fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            check(vkCreateFence(device, &fi, nullptr, &fence), "vkCreateFence");
+            check(vk.vkCreateFence(device, &fi, nullptr, &fence), "vkCreateFence");
             VkSubmitInfo submit{};
             submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             submit.commandBufferCount = 1;
             submit.pCommandBuffers = &cmd;
-            check(vkQueueSubmit(queue, 1, &submit, fence), "vkQueueSubmit");
-            check(vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
+            check(vk.vkQueueSubmit(queue, 1, &submit, fence), "vkQueueSubmit");
+            check(vk.vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
         } catch (...) {
             cleanup();
             throw;
@@ -254,7 +348,7 @@ struct Context::Impl {
 std::unique_ptr<Context> Context::create(const ContextOptions& options) {
     if (const char* env = std::getenv("TISMA_GPU"); env && std::strcmp(env, "0") == 0)
         return nullptr;
-    if (volkInitialize() != VK_SUCCESS)
+    if (!load_vulkan())
         return nullptr; // no Vulkan loader on this machine
     auto impl = std::make_unique<Impl>();
     try {
@@ -267,25 +361,26 @@ std::unique_ptr<Context> Context::create(const ContextOptions& options) {
         ici.pApplicationInfo = &app;
         if (vkCreateInstance(&ici, nullptr, &impl->instance) != VK_SUCCESS)
             return nullptr;
-        volkLoadInstanceOnly(impl->instance);
+        if (!impl->vk.load(impl->instance))
+            return nullptr;
 
         std::uint32_t count = 0;
-        vkEnumeratePhysicalDevices(impl->instance, &count, nullptr);
+        impl->vk.vkEnumeratePhysicalDevices(impl->instance, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
-        vkEnumeratePhysicalDevices(impl->instance, &count, devices.data());
+        impl->vk.vkEnumeratePhysicalDevices(impl->instance, &count, devices.data());
         int best_rank = 0;
         for (VkPhysicalDevice d : devices) {
             VkPhysicalDeviceProperties props;
-            vkGetPhysicalDeviceProperties(d, &props);
+            impl->vk.vkGetPhysicalDeviceProperties(d, &props);
             if (props.apiVersion < VK_API_VERSION_1_1)
                 continue;
             const int rank = device_rank(props.deviceType);
             if (rank == 0 || (rank == 1 && !options.allow_cpu_device) || rank <= best_rank)
                 continue;
             std::uint32_t families = 0;
-            vkGetPhysicalDeviceQueueFamilyProperties(d, &families, nullptr);
+            impl->vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &families, nullptr);
             std::vector<VkQueueFamilyProperties> fam(families);
-            vkGetPhysicalDeviceQueueFamilyProperties(d, &families, fam.data());
+            impl->vk.vkGetPhysicalDeviceQueueFamilyProperties(d, &families, fam.data());
             for (std::uint32_t f = 0; f < families; ++f)
                 if (fam[f].queueFlags & VK_QUEUE_COMPUTE_BIT) {
                     best_rank = rank;
@@ -297,7 +392,7 @@ std::unique_ptr<Context> Context::create(const ContextOptions& options) {
         }
         if (!impl->physical)
             return nullptr;
-        vkGetPhysicalDeviceMemoryProperties(impl->physical, &impl->memory);
+        impl->vk.vkGetPhysicalDeviceMemoryProperties(impl->physical, &impl->memory);
 
         const float priority = 1.0f;
         VkDeviceQueueCreateInfo qci{};
@@ -309,17 +404,18 @@ std::unique_ptr<Context> Context::create(const ContextOptions& options) {
         dci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         dci.queueCreateInfoCount = 1;
         dci.pQueueCreateInfos = &qci;
-        if (vkCreateDevice(impl->physical, &dci, nullptr, &impl->device) != VK_SUCCESS)
+        if (impl->vk.vkCreateDevice(impl->physical, &dci, nullptr, &impl->device) != VK_SUCCESS)
             return nullptr;
-        volkLoadDevice(impl->device);
-        vkGetDeviceQueue(impl->device, impl->queue_family, 0, &impl->queue);
+        if (!impl->vk.load(impl->device))
+            return nullptr;
+        impl->vk.vkGetDeviceQueue(impl->device, impl->queue_family, 0, &impl->queue);
 
         VkCommandPoolCreateInfo cpi{};
 
         cpi.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         cpi.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         cpi.queueFamilyIndex = impl->queue_family;
-        if (vkCreateCommandPool(impl->device, &cpi, nullptr, &impl->command_pool) != VK_SUCCESS)
+        if (impl->vk.vkCreateCommandPool(impl->device, &cpi, nullptr, &impl->command_pool) != VK_SUCCESS)
             return nullptr;
     } catch (...) {
         return nullptr;

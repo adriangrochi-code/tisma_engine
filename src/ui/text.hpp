@@ -483,6 +483,11 @@
     X(Ready, "Listo", "Ready")                                                                                        \
     X(Slicing, "Laminando…", "Slicing…")                                                                              \
     X(SlicedIn, "Laminado en %.2f s", "Sliced in %.2f s")                                                             \
+    X(ViewTime, "Vista %.1f ms · %.0f FPS", "View %.1f ms · %.0f FPS")                                                \
+    X(ViewTimeTip, "Lo que tarda la GPU en dibujar la vista 3D en cada cuadro, y los cuadros por segundo que eso "     \
+      "permite (docs/LARGE_MODELS.md)",                                                                               \
+      "What the GPU takes to draw the 3D view each frame, and the frames per second that allows "                     \
+      "(docs/LARGE_MODELS.md)")                                                                                       \
     X(Stale, "El modelo o los ajustes cambiaron: volvé a laminar", "The model or the settings changed: slice again")  \
     X(GcodeOk, "G-code verificado: %s líneas, sin problemas", "G-code checked: %s lines, no problems")                \
     X(GcodeBad, "El G-code no pasó la verificación (%d problemas)", "The G-code failed its check (%d problems)")      \

@@ -669,12 +669,48 @@ Con el PR #23 (2026-10-26):
   tiempo de capa), QA6 (`speed.top_solid_infill` 15 mm/s) y QA7 (la última capa con la primera más gruesa). Faltan:
   - QA8: la revisión de estabilidad (`print_review.md`, `stability.md`, claves `review.*`);
   - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
-  - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): solo la capa de arriba de todo es «Top solid infill» (regla
-    2; hoy lo son las tres de arriba), y la primera capa sólida sobre el relleno ralo es un puente (regla 6);
+  - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): la primera capa sólida sobre el relleno ralo es un puente
+    (regla 6). Hecho (2026-10-26): solo la capa de arriba de todo es «Top solid infill» (regla 2);
   - `cooling.enabled`
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
+- [ ] Medición del equipo de fichas (2026-10-26, `dev` d3e814a contra Tisma Slicer, caja negra, cada uno con sus
+  ajustes): en las piezas grandes el motor tarda 2 a 3 veces más (Benchy 7,0 s contra 3,3 s; Benchy al doble con
+  gyroid 17,8 contra 5,8 s) y su G-code pesa hasta 3,3 veces más (Benchy 7,57 MB contra 2,29 MB). Cuenta para el
+  servidor (`model_library.md`, reglas 16 y 17). Para un bloque de mantenimiento: perfilar el laminado del Benchy y
+  ver qué sobra en el G-code (comentarios `;WIDTH`/`;HEIGHT`, decimales de E, puntos casi en línea). Lo que está
+  bien: dos laminados iguales dan el mismo archivo byte a byte
+
+### Vista con Vulkan (decisión del dueño, 2026-10-26)
+
+Pedido: más FPS con modelos grandes (LOD, «tipo raycaster»), hasta 60 FPS, y «la idea es que el motor funcione en
+Vulkan». Lo estudiado y medido, en `docs/LARGE_MODELS.md`. Hecho con OpenGL (2026-10-26): no dibujar lo que la pieza
+tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
+- [x] V1: la ventana, la cadena de imágenes (swapchain) y Dear ImGui con Vulkan (volk y GLFW, como el cómputo);
+  OpenGL queda de respaldo donde no hay Vulkan 1.1 (hecho 2026-10-26: `--graphics`, `apps/tisma/vk_window.*`, la
+  prueba `ui_vulkan_window`). Cuando la vista Vulkan haga todo lo que hace la de OpenGL (V3: la oclusión ambiental es
+  el modo por defecto), `kVulkanViewReady` pasa a verdadero y el modo automático elige Vulkan primero (pedido del
+  dueño: detectar solo si hay Vulkan y si no ir a OpenGL)
+- [x] V2: la vista 3D en Vulkan (cama, modelo, pintura, cordones instanciados, MSAA, FXAA, capturas), comparada
+  imagen contra imagen con la de OpenGL en la CI (lavapipe y llvmpipe). Hecho 2026-10-26: `apps/tisma/vk_view.*`,
+  los shaders en `apps/tisma/shaders/`, `--compare-view` y las pruebas `ui_view_*`; el tiempo de la GPU por marcas
+  de tiempo en la barra de estado y `--bench-frames`. Con la luz rápida: la oclusión y los rayos vienen en V3
+- [ ] V3: oclusión ambiental y ray tracing con la escena en buffers (sin el tope de 4 millones de primitivas). Antes,
+  mejorar la oclusión y el color de la vista previa (pedido del dueño, 2026-10-26: «como lo hace Prusa 3.0»; la
+  referencia son los videos y las imágenes del lanzamiento, mirados como caja negra, nunca su código)
+- [ ] V4: el recorte en la GPU: un shader de cómputo por cuadro elige por capa lo que se ve (cámara, lo tapado, capas
+  juntas de lejos) y dibuja con `vkCmdDrawIndirect`; menos vértices por cordón
+- [ ] V5: rayos primarios para la vista previa («tipo raycaster»), en cómputo
+- [ ] V6: malla simplificada del modelo mientras se mueve (Garland y Heckbert 1997)
+- [ ] Greedy meshing en la vista previa (pedido del dueño, 2026-10-26): juntar los cordones vecinos del mismo tipo en
+  menos instancias, como el mallado voraz junta las caras de los vóxeles (`docs/LARGE_MODELS.md`)
+- [ ] Armar los datos de la vista previa en el hilo del laminado (hoy, 120 a 180 ms en el de la interfaz)
+
+Con el PR #24 (2026-10-26):
+- [ ] `step_faces.md` (STEP con caras: calidad al abrir, la cara de cada triángulo, pintar y cargas por cara, volver a
+  teselar), `problem_reports.md` (informar un problema) y `thingiverse.md` (el sitio dentro del programa; su API
+  espera rutas confirmadas, regla 20)
 
 ## Avance
 

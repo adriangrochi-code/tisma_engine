@@ -7,6 +7,8 @@
 #include "file_browser.hpp"
 #include "gl.hpp"
 #include "renderer.hpp"
+#include "vk_view.hpp"
+#include "vk_window.hpp"
 
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -34,6 +36,9 @@
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#ifdef TISMA_VULKAN_WINDOW
+#include <imgui_impl_vulkan.h>
+#endif
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <misc/cpp/imgui_stdlib.h>
@@ -41,6 +46,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -51,6 +57,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <utility>
 
 namespace tisma::ui {
@@ -296,6 +303,7 @@ private:
     void show_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
+    void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
@@ -345,8 +353,13 @@ private:
     float scale_ = 1.0f;
     Theme theme_ = dark_theme();
     ImFont* font_ = nullptr;
-    std::map<std::string, unsigned> icons_;
-    unsigned logo_ = 0;
+    std::map<std::string, ImTextureID> icons_;
+    ImTextureID logo_ = 0;
+    // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
+    // panels and the 3D view drawn by it. The view goes first at shutdown.
+    VulkanWindow vk_;
+    VulkanView vk_view_;
+    bool vulkan_ = false;
     ImVec2 view_pos_{0, 0}, view_size_{1, 1};
 
     Tab tab_ = Tab::Prepare;
@@ -513,11 +526,17 @@ private:
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
     bool failed_ = false; // the screenshot or its export failed
+    bool benched_ = false; // --bench-frames done
+    unsigned view_queries_[3] = {}; // timer queries of the 3D view, in turn
+    bool view_timing_[3] = {};      // a query is out, its result not read yet
+    int view_query_ = 0;
+    double view_ms_ = 0.0; // the 3D view's GPU time per frame, smoothed
+    double preview_ms_ = 0.0; // building the last preview's buffers
 };
 
 ImTextureRef App::icon(const char* name) const {
     const auto it = icons_.find(name);
-    return ImTextureRef(static_cast<ImTextureID>(it == icons_.end() ? 0 : it->second));
+    return ImTextureRef(it == icons_.end() ? ImTextureID(0) : it->second);
 }
 
 // A button with an icon and a label, drawn by hand so it can carry the brand's
@@ -829,23 +848,59 @@ bool App::init(std::string& error) {
         error = "cannot start GLFW (is there a display?)";
         return false;
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_SCALE_TO_MONITOR, options_.screenshot.empty() ? GLFW_TRUE : GLFW_FALSE);
-    window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
-    if (!window_) {
-        error = "cannot open a window with OpenGL 3.3";
-        return false;
+    const auto open_window = [&](bool vulkan) {
+        glfwDefaultWindowHints();
+        if (vulkan) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        } else {
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+        }
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, options_.screenshot.empty() ? GLFW_TRUE : GLFW_FALSE);
+        window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
+    };
+    // Vulkan when this machine has it (found by starting it: the loader, a
+    // Vulkan 1.1 device, a surface for this window, the 3D view's shaders
+    // and targets); else, and as the fallback, OpenGL 3.3. Automatically
+    // only once the Vulkan view does all the OpenGL one does (PLAN.md «Vista
+    // con Vulkan»): until then «auto» is OpenGL.
+    constexpr bool kVulkanViewReady = false;
+    if (options_.graphics == "vulkan" || (options_.graphics == "auto" && kVulkanViewReady)) {
+        std::string why = "cannot open a window for Vulkan";
+        open_window(true);
+        vulkan_ = window_ && vk_.init(window_, true, why) && vk_view_.init(*vk_.device(), why);
+        if (!vulkan_) {
+            vk_view_.shutdown();
+            vk_.shutdown();
+            // Vulkan asked for in the CI, which has a device and sets
+            // TISMA_REQUIRE_GPU=1: there a fallback is a failure.
+            if (const char* require = std::getenv("TISMA_REQUIRE_GPU");
+                options_.graphics == "vulkan" && require && std::string_view(require) == "1") {
+                error = "vulkan: " + why;
+                return false;
+            }
+            std::fprintf(stderr, "vulkan: %s; the window stays with OpenGL\n", why.c_str());
+            if (window_)
+                glfwDestroyWindow(window_);
+            window_ = nullptr;
+        }
     }
-    glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1);
-    if (const char* missing = load_gl(glfwGetProcAddress)) {
-        error = std::string("the OpenGL driver lacks ") + missing;
-        return false;
+    if (!vulkan_) {
+        open_window(false);
+        if (!window_) {
+            error = "cannot open a window with OpenGL 3.3";
+            return false;
+        }
+        glfwMakeContextCurrent(window_);
+        glfwSwapInterval(1);
+        if (const char* missing = load_gl(glfwGetProcAddress)) {
+            error = std::string("the OpenGL driver lacks ") + missing;
+            return false;
+        }
+        gl_loaded_ = true;
     }
-    gl_loaded_ = true;
     glfwSetWindowUserPointer(window_, this);
     glfwSetDropCallback(window_, [](GLFWwindow* w, int count, const char** paths) {
         auto* app = static_cast<App*>(glfwGetWindowUserPointer(w));
@@ -882,11 +937,35 @@ bool App::init(std::string& error) {
     }
     if (!font_)
         font_ = io.Fonts->AddFontDefault();
-    ImGui_ImplGlfw_InitForOpenGL(window_, true);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
-
-    if (!renderer_.init(error))
-        return false;
+    if (vulkan_) {
+        ImGui_ImplGlfw_InitForVulkan(window_, true);
+        if (!vk_.init_imgui(error))
+            return false;
+    } else {
+        ImGui_ImplGlfw_InitForOpenGL(window_, true);
+        ImGui_ImplOpenGL3_Init("#version 330 core");
+        if (!renderer_.init(error))
+            return false;
+    }
+    // A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
+    const auto texture = [&](const Image& image, bool clamp) -> ImTextureID {
+        if (vulkan_)
+            return vk_.add_texture(image.rgba.data(), image.width, image.height);
+        unsigned tex = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        if (clamp) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     image.rgba.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return ImTextureID(tex);
+    };
 
     // Icons drawn white at twice their size; the buttons tint them.
     const int icon_pixels = int(std::lround(48.0f * scale_));
@@ -894,27 +973,11 @@ bool App::init(std::string& error) {
         const Image image = rasterize_svg(embedded(std::string(name) + ".svg"), icon_pixels, 0xFFFFFF);
         if (image.rgba.empty())
             continue;
-        unsigned tex = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        icons_[name] = tex;
+        icons_[name] = texture(image, true);
     }
     const Image logo = rasterize_svg(embedded("tisma.svg"), int(std::lround(96.0f * scale_)));
-    if (!logo.rgba.empty()) {
-        glGenTextures(1, &logo_);
-        glBindTexture(GL_TEXTURE_2D, logo_);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, logo.width, logo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, logo.rgba.data());
-    }
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (!logo.rgba.empty())
+        logo_ = texture(logo, false);
 
     if (options_.screenshot.empty())
         load_preferences();
@@ -1029,26 +1092,38 @@ void App::apply_theme() {
     look.major = theme_.grid_major;
     look.outline = 0xFF000000u | theme_.accent_hover;
     renderer_.set_bed(settings_.bed, look);
+    vk_view_.set_bed(settings_.bed, look);
 }
 
 void App::shutdown() {
     slice_job_.wait();
     voxel_job_.wait();
     device_disconnect();
-    if (options_.screenshot.empty() && gl_loaded_)
+    if (options_.screenshot.empty() && (gl_loaded_ || vulkan_))
         save_preferences();
     if (gl_loaded_) {
-        for (const auto& [name, tex] : icons_)
-            glDeleteTextures(1, &tex);
-        if (logo_)
-            glDeleteTextures(1, &logo_);
+        for (const auto& [name, tex] : icons_) {
+            const auto id = unsigned(tex);
+            glDeleteTextures(1, &id);
+        }
+        if (logo_) {
+            const auto id = unsigned(logo_);
+            glDeleteTextures(1, &id);
+        }
+        if (view_queries_[0])
+            glDeleteQueries(3, view_queries_);
         renderer_.shutdown();
     }
+    vk_view_.shutdown(); // its picture is an ImGui texture: before the backend
     if (ImGui::GetCurrentContext()) {
-        ImGui_ImplOpenGL3_Shutdown();
+        if (vulkan_)
+            vk_.shutdown(); // ImGui's Vulkan backend and the textures with it
+        else
+            ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
     }
+    vk_.shutdown();
     if (window_)
         glfwDestroyWindow(window_);
     glfwTerminate();
@@ -1187,6 +1262,7 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     viewer_ = false;
     result_.reset();
     renderer_.clear_preview();
+    vk_view_.clear_preview();
     place_model();
     voxels_.reset();
     voxels_stale_ = true;
@@ -1241,10 +1317,13 @@ void App::rebuild_plate() {
         mesh_.reset();
         placed_ = {};
         renderer_.set_model({});
+        vk_view_.set_model({});
     } else {
         mesh_ = plate_mesh(placed_meshes_);
         placed_ = mesh_->bounding_box();
-        renderer_.set_model(mesh_vertices(*mesh_, offset_));
+        const std::vector<float> model = mesh_vertices(*mesh_, offset_);
+        renderer_.set_model(model);
+        vk_view_.set_model(model);
     }
     if (selected_ >= int(objects_.size()))
         selected_ = int(objects_.size()) - 1;
@@ -2010,13 +2089,16 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
+    const auto start = std::chrono::steady_clock::now();
     preview_buffers_ = preview_buffers(result_->preview);
+    preview_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     const PreviewBuffers& buffers = preview_buffers_;
     ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
+    vk_view_.set_preview(buffers);
     top_layer_ = int(result_->preview.layers.size()) - 1;
     bottom_layer_ = 0;
 }
@@ -2121,7 +2203,7 @@ void App::top_bar() {
     const float logo = height - 16.0f * scale_;
     ImGui::SetCursorPos(ImVec2(12.0f * scale_, (height - logo) * 0.5f));
     if (logo_)
-        ImGui::Image(ImTextureRef(static_cast<ImTextureID>(logo_)), ImVec2(logo, logo));
+        ImGui::Image(ImTextureRef(logo_), ImVec2(logo, logo));
     ImGui::SameLine(0, 10.0f * scale_);
     ImGui::PushFont(nullptr, kTitleSize);
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
@@ -2494,10 +2576,17 @@ void App::status_bar() {
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }
-    if (result_ && !viewer_) {
-        const std::string device = result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu;
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(device.c_str()).x - 12.0f * scale_);
-        ImGui::TextDisabled("%s", device.c_str());
+    // On the right: the 3D view's time per frame on the GPU, and what sliced.
+    std::string right;
+    if (view_ms_ > 0.0)
+        right = format(tr(T::ViewTime), view_ms_, 1000.0 / std::max(view_ms_, 0.01));
+    if (result_ && !viewer_)
+        right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
+    if (!right.empty()) {
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
+        ImGui::TextDisabled("%s", right.c_str());
+        if (view_ms_ > 0.0 && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::ViewTimeTip));
     }
     ImGui::End();
     ImGui::PopStyleVar();
@@ -2741,6 +2830,7 @@ void App::plate_tools() {
         if (objects_.empty()) {
             result_.reset();
             renderer_.clear_preview();
+            vk_view_.clear_preview();
         }
         plate_changed();
     }
@@ -2800,6 +2890,7 @@ void App::plate_tools() {
             if (objects_.empty()) {
                 result_.reset();
                 renderer_.clear_preview();
+                vk_view_.clear_preview();
             }
             plate_changed();
         }
@@ -3001,6 +3092,7 @@ void App::update_paint_view() {
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
     renderer_.set_paint(m.vertices, groups);
+    vk_view_.set_paint(m.vertices, groups);
 }
 
 namespace {
@@ -3792,7 +3884,7 @@ void App::dialogs() {
     const std::string about = std::string(tr(T::About)) + "###about";
     if (ImGui::BeginPopupModal(about.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (logo_)
-            ImGui::Image(ImTextureRef(static_cast<ImTextureID>(logo_)), ImVec2(72.0f * scale_, 72.0f * scale_));
+            ImGui::Image(ImTextureRef(logo_), ImVec2(72.0f * scale_, 72.0f * scale_));
         ImGui::SameLine();
         ImGui::BeginGroup();
         ImGui::PushFont(nullptr, kTitleSize);
@@ -4390,6 +4482,31 @@ void App::check_moire(int fb_w, int fb_h) {
     }
 }
 
+// --compare-view: the 3D view against another screenshot's, drawn by the
+// other graphics (OpenGL against Vulkan, PLAN.md «Vista con Vulkan»). The
+// drivers rasterize the edges of lines and triangles a little differently,
+// so a few pixels along them may differ; the surfaces must not.
+void App::compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h) {
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> other;
+    if (!read_png(from_utf8(options_.compare_view), w, h, other) || w != fb_w || h != fb_h) {
+        std::fprintf(stderr, "error: cannot read %s as a %dx%d screenshot\n", options_.compare_view.c_str(), fb_w, fb_h);
+        failed_ = true;
+        return;
+    }
+    const ImGuiIO& io = ImGui::GetIO();
+    const float sx = io.DisplayFramebufferScale.x, sy = io.DisplayFramebufferScale.y;
+    const PictureDifference d =
+        compare_pictures(picture.data(), other.data(), w, h, int(view_pos_.x * sx), int(view_pos_.y * sy),
+                         int(view_size_.x * sx), int(view_size_.y * sy), 24);
+    std::printf("view compare (%s): %zu of %zu pixels differ, %zu by more than 24 levels, at most by %d\n",
+                vulkan_ ? "Vulkan" : "OpenGL", d.differing, d.pixels, d.over, d.largest);
+    if (d.pixels == 0 || d.over * 200 > d.pixels) {
+        std::fprintf(stderr, "error: the 3D view differs from %s\n", options_.compare_view.c_str());
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
@@ -4414,34 +4531,99 @@ void App::frame() {
     poll_jobs();
     device_poll();
 
-    ImGui_ImplOpenGL3_NewFrame();
+#ifdef TISMA_VULKAN_WINDOW
+    if (vulkan_)
+        ImGui_ImplVulkan_NewFrame();
+    else
+#endif
+        ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     layout();
+    // With Vulkan the 3D view is a picture under the panels, drawn below
+    // (vk_view.*) before them.
+    if (vulkan_ && vk_view_.texture())
+        ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
+                                                 ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     ImGui::Render();
     if (frame_pending_ && view_size_.x > 10.0f && view_size_.y > 10.0f)
         frame_now();
 
     int fb_w = 0, fb_h = 0;
     glfwGetFramebufferSize(window_, &fb_w, &fb_h);
-    glViewport(0, 0, fb_w, fb_h);
     const Vec3 clear = vec(theme_.window);
-    glClearColor(clear.x, clear.y, clear.z, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // The 3D view, under the panels.
-    update_ray_scene();
     ViewFrame f = view_frame(fb_w, fb_h);
-    const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
-                           renderer_.has_ray_scene() && ray_scene_;
-    if (check_now)
-        f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
-    renderer_.draw(f);
-    if (check_now && renderer_.ray_samples() == 1)
-        check_rays(f);
+    if (vulkan_) {
+        // The 3D view first, into its picture, then the window and the panels.
+        const float colour[3] = {clear.x, clear.y, clear.z};
+        vk_.frame(ImGui::GetDrawData(), colour, !options_.screenshot.empty(),
+                  [&](void* commands, int in_flight) { vk_view_.record(commands, in_flight, f); });
+        if (double ms = 0.0; vk_view_.take_time(ms))
+            view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+        if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2) {
+            const double ms = vk_view_.bench(f, options_.bench_frames);
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, Vulkan); preview buffers %.0f ms\n",
+                        ms, options_.bench_frames, vk_view_.drawn_extrusions(), preview_ms_);
+            std::fflush(stdout);
+            benched_ = true;
+        }
+    } else {
+        glViewport(0, 0, fb_w, fb_h);
+        glClearColor(clear.x, clear.y, clear.z, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glViewport(0, 0, fb_w, fb_h);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // The 3D view, under the panels.
+        update_ray_scene();
+        const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
+                               renderer_.has_ray_scene() && ray_scene_;
+        if (check_now)
+            f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
+        // The view's time on the GPU (a timer query), read two frames later so
+        // nothing waits for it; for the status bar.
+        if (!view_queries_[0])
+            glGenQueries(3, view_queries_);
+        const bool timed = !view_timing_[view_query_ % 3];
+        if (timed)
+            glBeginQuery(GL_TIME_ELAPSED, view_queries_[view_query_ % 3]);
+        renderer_.draw(f);
+        if (timed) {
+            glEndQuery(GL_TIME_ELAPSED);
+            view_timing_[view_query_ % 3] = true;
+        }
+        view_query_ = (view_query_ + 1) % 3;
+        for (int q = 0; q < 3; ++q) {
+            GLint ready = 0;
+            if (!view_timing_[q])
+                continue;
+            glGetQueryObjectiv(view_queries_[q], GL_QUERY_RESULT_AVAILABLE, &ready);
+            if (!ready)
+                continue;
+            GLuint64 ns = 0;
+            glGetQueryObjectui64v(view_queries_[q], GL_QUERY_RESULT, &ns);
+            view_timing_[q] = false;
+            const double ms = double(ns) / 1e6;
+            view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+        }
+        // --bench-frames: the ready view drawn that many times more, timed to the
+        // end of the GPU's work (docs/UI.md, «Modelos grandes»).
+        if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2 && f.mode != RenderMode::RayTraced) {
+            glFinish();
+            const auto start = std::chrono::steady_clock::now();
+            for (int i = 0; i < options_.bench_frames; ++i)
+                renderer_.draw(f);
+            glFinish();
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn); preview buffers %.0f ms\n",
+                        ms / options_.bench_frames, options_.bench_frames, renderer_.drawn_extrusions(), preview_ms_);
+            std::fflush(stdout);
+            benched_ = true;
+        }
+        if (check_now && renderer_.ray_samples() == 1)
+            check_rays(f);
+
+        glViewport(0, 0, fb_w, fb_h);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
     if (!options_.screenshot.empty()) {
@@ -4492,8 +4674,15 @@ void App::frame() {
             if (!options_.save_project.empty())
                 save_project_to(from_utf8(options_.save_project));
             std::vector<std::uint8_t> pixels(std::size_t(fb_w) * std::size_t(fb_h) * 4);
-            glPixelStorei(GL_PACK_ALIGNMENT, 1);
-            glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            if (vulkan_) {
+                int w = 0, h = 0;
+                std::vector<std::uint8_t> kept = vk_.read_back(w, h);
+                if (w == fb_w && h == fb_h)
+                    pixels = std::move(kept);
+            } else {
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            }
             // OpenGL's rows go up from the bottom; the PNG's go down.
             std::vector<std::uint8_t> flipped(pixels.size());
             const std::size_t row = std::size_t(fb_w) * 4;
@@ -4506,6 +4695,8 @@ void App::frame() {
                 std::fprintf(stderr, "error: cannot write %s\n", options_.screenshot.c_str());
                 failed_ = true;
             }
+            if (!options_.compare_view.empty())
+                compare_view(flipped, fb_w, fb_h);
             if (!error_title_.empty())
                 std::fprintf(stderr, "%s: %s\n", error_title_.c_str(), error_message_.c_str());
             quit_ = true;
@@ -4515,7 +4706,8 @@ void App::frame() {
             failed_ = quit_ = true;
         }
     }
-    glfwSwapBuffers(window_);
+    if (!vulkan_)
+        glfwSwapBuffers(window_);
 }
 
 int App::run() {

@@ -4124,3 +4124,94 @@ a 180 mm/s.
 **Para el equipo de fichas:** la ficha `gcode_motion.md` y otras dan velocidades por defecto medidas en Tisma Slicer;
 con esta decisión el motor no tiene velocidades por defecto. QA6 (`speed.top_solid_infill` 15 mm/s) queda sin efecto:
 esa velocidad es la que dé el perfil de la impresora.
+
+## 2026-10-26 — vista previa de modelos grandes, primer paso
+
+**Pedido del dueño:** técnicas como LOD y otras formas de dibujar para más FPS con modelos grandes, «tipo raycaster»;
+se traba según cuántas capas se muestran; llegar por lo menos a 60 FPS; y «la idea es que el motor funcione en
+Vulkan».
+
+**Hecho** (`docs/LARGE_MODELS.md`):
+- Estudio de técnicas con sus fuentes (recorte, LOD, simplificación por cuádricas, rayos primarios contra el BVH,
+  oclusión jerárquica) y un plan; el paso a Vulkan queda en `PLAN.md`, «Vista con Vulkan».
+- Medir: `--bench-frames N` para las capturas, y el tiempo de la vista en la barra de estado («Vista 8,3 ms · 120
+  FPS», consulta de tiempo de la GPU) para muestrear en cada máquina.
+- No dibujar lo que la pieza tapa (`hidden_inside`): paredes internas y relleno cubiertos por la capa de abajo, la de
+  arriba y la pared externa, lejos de los escalones. La primera versión, sin lo de los escalones, dejaba puntitos en
+  la cúpula de una esfera (vistos al comparar las imágenes); ahora la imagen es la misma píxel por píxel.
+- Regla 2 de `surfaces_infill.md` (de la prueba de caja negra): solo la capa de arriba de todo es la superficie de
+  arriba; las otras capas sólidas de arriba van como relleno sólido.
+
+**Medido** (GPU por software del contenedor, 1200 × 800, pieza entera; sirve para comparar, no son FPS reales):
+cilindro de 60 × 80 mm, 181 384 cordones → 52 499 dibujados, 2 330 → 633 ms por cuadro con oclusión ambiental;
+esfera de 80 mm (peor caso), 188 664 → 157 196, 3 400 → 2 231 ms. Armar los datos: 121 y 181 ms.
+
+**No probado:** FPS en una placa de video real (no hay en el contenedor): para eso está el número de la barra de
+estado.
+
+**Sigue:** V1 de «Vista con Vulkan».
+
+## 2026-10-26 — vista con Vulkan, paso V1
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan», y «que detecte automáticamente si soporta Vulkan;
+si no lo hace, que vaya a OpenGL».
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_window.*`: la ventana con Vulkan, desde la especificación (instancia, dispositivo, swapchain, un render
+  pass que limpia y dibuja Dear ImGui, dos cuadros en vuelo, texturas para los íconos y el logo, y la imagen copiada
+  a memoria para las capturas). Vulkan con volk y la superficie con GLFW, como el cómputo del motor; los paneles con
+  el backend de Vulkan de Dear ImGui (MIT, anotado en `THIRD_PARTY.md`).
+- `--graphics auto|vulkan|opengl`. La detección es arrancar Vulkan: sin cargador, sin dispositivo 1.1 o sin superficie
+  para la ventana, avisa y sigue con OpenGL. Probado con lavapipe (Vulkan) y sin controlador (vuelve a OpenGL).
+- El renderizador de OpenGL no hace nada si no se inició (ventana de Vulkan).
+- Prueba `ui_vulkan_window`: la ventana con Vulkan y su captura; en la CI (`TISMA_REQUIRE_GPU=1`), volver a OpenGL
+  es una falla.
+
+**Falta:** la vista 3D en Vulkan (V2). Hasta entonces el modo automático usa OpenGL, para no perder la vista 3D.
+
+## 2026-10-26 — vista con Vulkan, paso V2
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan». En el camino pidió también greedy meshing para los
+cordones y mejorar la oclusión ambiental y el color «como lo hace Prusa 3.0», con los videos del lanzamiento de
+referencia (quedan en `PLAN.md`).
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_view.*`: la vista 3D con Vulkan. Dibuja la cama, la grilla, el modelo con el elegido y su
+  desplazamiento, la pintura y la vista previa instanciada (con lo tapado afuera, como en OpenGL), con MSAA y luego
+  FXAA en una textura que ImGui muestra bajo los paneles. Los shaders son los de OpenGL en GLSL 450
+  (`apps/tisma/shaders/`, compilados a SPIR-V por `tools/compile_shaders.py`).
+- El orden de dibujo de la vista previa (lo que se ve y lo tapado, por capa) pasó a `src/ui/scene.*`, compartido por
+  las dos vistas.
+- El tiempo de la GPU con marcas de tiempo de Vulkan (la barra de estado) y `--bench-frames` con Vulkan.
+- `--compare-view otra.png` y las pruebas `ui_view_prepare_*` y `ui_view_preview_*`: la misma escena con OpenGL y con
+  Vulkan, imagen contra imagen; pasa si menos del 0,5 % de los píxeles de la vista difiere en más de 24 niveles.
+- `src/ui/png.*` lee las capturas que escribe y compara dos imágenes (con su prueba).
+
+**Errores encontrados y corregidos:**
+- El cómputo del motor cargaba sus funciones en los punteros globales de volk, los mismos de la ventana: después de
+  laminar, la ventana Vulkan llamaba funciones del otro dispositivo y se caía al cerrar (`vkDestroySurfaceKHR` nulo).
+  Ahora el cómputo tiene su propia tabla de funciones y el cargador se arranca una sola vez (`load_vulkan`).
+- La validación de sincronización de Khronos encontró dos carreras, ya corregidas:
+  - el cuadro siguiente reescribía la profundidad y el color sin esperar al anterior;
+  - la copia de la captura escribía el mismo buffer en dos cuadros en vuelo.
+  Con la capa de validación, ahora no hay errores.
+- lavapipe dibuja cortadas y gruesas las líneas que salen muy lejos de la pantalla o pasan detrás del ojo: la grilla
+  de Vulkan va en tramos de 5 mm.
+
+**Medido** (CPU del contenedor: llvmpipe para OpenGL, lavapipe para Vulkan; 1200 × 800, luz rápida; sirve para
+comparar, no son FPS reales):
+
+| Pieza | Cordones dibujados | OpenGL | Vulkan |
+|---|---|---|---|
+| Cilindro de 60 × 80 mm | 52 499 | 657 ms | 672 ms |
+| Esfera de 80 mm | 241 612 | 3 838 ms | 3 787 ms |
+
+Iguales, porque las dos usan el mismo rasterizador de Mesa por CPU. Lo que gana Vulkan viene con V4 (el recorte en la
+GPU y los dibujos indirectos) y en una placa de video real.
+
+**No probado:** una placa de video real y Windows con Vulkan.
+
+**Sigue:**
+- mejorar la oclusión y el color, con las imágenes del lanzamiento de PrusaSlicer 3.0 como referencia de caja negra;
+- V3 (la oclusión y los rayos en Vulkan), y entonces el modo automático pasa a Vulkan;
+- greedy meshing en V4.

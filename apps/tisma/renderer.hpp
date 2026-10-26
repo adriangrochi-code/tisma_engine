@@ -66,7 +66,8 @@ struct RayReadback {
 class Renderer {
 public:
     // Compiles the shaders and makes the buffers; false with a message if the
-    // driver refuses them.
+    // driver refuses them. Before it, or after it fails, the other methods do
+    // nothing (the window may be Vulkan's, PLAN.md «Vista con Vulkan»).
     bool init(std::string& error);
     void shutdown();
 
@@ -98,6 +99,9 @@ public:
     // After a frame: the lit scene before FXAA, RGBA rows from the bottom.
     std::vector<std::uint8_t> read_colour();
 
+    // The preview's extrusions the last frame drew (lit pass).
+    std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;
@@ -115,6 +119,7 @@ private:
     unsigned ambient_pass(const ViewFrame& f);
     unsigned ray_pass(const ViewFrame& f);
 
+    bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
     Buffer plate_, grid_, model_, paint_, extrusions_, travels_;
@@ -123,6 +128,8 @@ private:
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
+    PreviewDrawOrder order_; // the extrusions in drawing order (docs/LARGE_MODELS.md); its instances moved to the GPU
+    std::size_t drawn_extrusions_ = 0;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;
 

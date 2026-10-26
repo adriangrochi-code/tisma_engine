@@ -78,9 +78,47 @@ struct PreviewBuffers {
     float min_feed = 0, max_feed = 0;          // of the extrusions, mm/s
     float min_width = 0, max_width = 0;        // of the extrusions, mm
     float min_height = 0, max_height = 0;      // of the extrusions, mm (layer heights by zone vary them)
+    // Per extrusion, 1 when the part hides it from every side as long as all
+    // of it is drawn (hidden_inside): the view leaves those out then.
+    std::vector<std::uint8_t> hidden;
 };
 
 PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF);
+
+// Which extrusions the part itself hides from every side when all of it is
+// drawn (docs/LARGE_MODELS.md): the inner walls and the sparse infill that
+// lie, a cell to spare, inside what the outer walls enclose both in the layer
+// below and in the layer above (those layers cover them from under and over,
+// and their own layer's outer wall from the sides), and are not within two
+// bead widths of a step: where the next or the last layer's outer wall lies
+// more than 0.05 mm from this one's, the groove between their beads opens
+// onto the beads inside. Never in the first or the last layer. The areas are
+// rasters of cells of `cell` mm (0: a size from the part's extent, at least
+// 0.2 mm), filled by the even-odd rule along each row; a row the outer walls
+// cross an odd number of times (a wall not closed) counts as outside. When in
+// doubt, an extrusion is not hidden. Layers in parallel (oneTBB).
+std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& preview, double cell = 0.0);
+
+// The extrusions in drawing order (docs/LARGE_MODELS.md): first, layer by
+// layer, those that can show; then, layer by layer, those the whole part hides
+// (PreviewBuffers::hidden). Layer l's are [layer_shown[l], layer_shown[l + 1])
+// and [layer_hidden[l], layer_hidden[l + 1]).
+struct PreviewDrawOrder {
+    std::vector<PreviewInstance> instances;
+    std::vector<std::size_t> layer_shown, layer_hidden;
+    std::uint32_t hidden_kinds = 0; // bit k: some extrusion of LineKind k is hidden
+};
+PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
+
+// What a view draws of it for layers lo to hi with the kinds of kind_mask:
+// the shown range and the hidden one, which is empty when all of the part is
+// drawn (from its first layer to its last, every kind but the hidden ones and
+// the travels shown). Each as (first instance, count).
+struct PreviewRange {
+    std::size_t first = 0, count = 0;
+};
+std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                           std::uint32_t kind_mask);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

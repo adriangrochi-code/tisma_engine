@@ -41,8 +41,14 @@ struct AppOptions {
     int tour = -1;     // the assistant's step to show at start (0 to 6); -1: none, or the first run's
     std::string info;  // with screenshot: the setting ("group.key") whose info card opens
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    // What draws the window: "auto" (Vulkan when this machine has it and the
+    // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)
+    // or "opengl" (PLAN.md «Vista con Vulkan»).
+    std::string graphics = "auto";
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    std::string compare_view;       // with screenshot: compare the 3D view with this screenshot's (the other graphics')
     std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
     bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish
     bool language_given = false;

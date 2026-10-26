@@ -11,6 +11,12 @@
 
 namespace tisma::gpu {
 
+// Finds the Vulkan loader, once for the whole program and from any thread;
+// false if this machine has none (or the build has no GPU backend). The
+// compute context and the interface's window both start from it, then each
+// loads its own functions, so neither changes the other's.
+bool load_vulkan();
+
 struct ContextOptions {
     // Software devices (such as Mesa's lavapipe) run on the CPU and are slower
     // than the engine's own CPU path, so they are skipped unless allowed. The

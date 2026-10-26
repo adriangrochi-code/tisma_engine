@@ -64,7 +64,15 @@ TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfa
         CHECK_THAT(area_mm2(s.top), WithinAbs(i >= 47 ? infill : 0.0, 1e-6));
         CHECK_THAT(area_mm2(s.bottom), WithinAbs(i < 3 ? infill : 0.0, 1e-6));
         CHECK_THAT(area_mm2(s.sparse), WithinAbs(i >= 3 && i < 47 ? infill : 0.0, 1e-6));
+        // Only the last layer is the top surface; the two under it are solid
+        // infill (surfaces_infill.md, rule 2 and I1).
+        CHECK_THAT(area_mm2(s.top_under), WithinAbs(i == 47 || i == 48 ? infill : 0.0, 1e-6));
     }
+    CHECK(sliced.fills[47].top.empty());
+    CHECK(sliced.fills[48].top.empty());
+    CHECK_FALSE(sliced.fills[48].solid.empty());
+    CHECK_FALSE(sliced.fills[49].top.empty());
+    CHECK(sliced.fills[49].solid.empty());
 }
 
 TEST_CASE("a step: the lower box's top around the upper box is solid, the upper box's bottom is not", "[surfaces]") {
@@ -82,6 +90,8 @@ TEST_CASE("a step: the lower box's top around the upper box is solid, the upper 
         // Solid where the upper box does not cover it: the infill minus the 10 mm square.
         CHECK_THAT(area_mm2(sliced.surfaces[i].top), WithinAbs(lower_infill - 100.0, 1e-6));
         CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(100.0, 1e-6));
+        // Layer 24's ring is under the air: the top surface; 22 and 23 are under it.
+        CHECK_THAT(area_mm2(sliced.surfaces[i].top_under), WithinAbs(i < 24 ? lower_infill - 100.0 : 0.0, 1e-6));
     }
     CHECK_THAT(area_mm2(sliced.surfaces[21].top), WithinAbs(0.0, 1e-6));
     for (std::size_t i : {25u, 26u, 27u}) {

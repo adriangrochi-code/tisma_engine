@@ -5,7 +5,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <fstream>
+#include <iterator>
+#include <string>
 
 namespace tisma::ui {
 namespace {
@@ -101,6 +104,106 @@ bool write_png(const std::filesystem::path& path, int width, int height, const s
     std::ofstream file(path, std::ios::binary);
     file.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
     return static_cast<bool>(file);
+}
+
+namespace {
+
+std::uint32_t get32(const std::vector<std::uint8_t>& in, std::size_t at) {
+    return (std::uint32_t(in[at]) << 24) | (std::uint32_t(in[at + 1]) << 16) | (std::uint32_t(in[at + 2]) << 8) |
+           std::uint32_t(in[at + 3]);
+}
+
+} // namespace
+
+bool decode_png(const std::vector<std::uint8_t>& png, int& width, int& height, std::vector<std::uint8_t>& rgba) {
+    static const std::uint8_t kSignature[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    if (png.size() < 8 || !std::equal(kSignature, kSignature + 8, png.begin()))
+        return false;
+    std::vector<std::uint8_t> z;
+    std::uint32_t w = 0, h = 0;
+    bool header = false, end = false;
+    for (std::size_t at = 8; !end;) {
+        if (at + 12 > png.size())
+            return false;
+        const std::uint32_t n = get32(png, at);
+        if (n > png.size() - at - 12)
+            return false;
+        if (crc32(&png[at + 4], std::size_t(n) + 4) != get32(png, at + 8 + n))
+            return false;
+        const std::string type(reinterpret_cast<const char*>(&png[at + 4]), 4);
+        const std::size_t data = at + 8;
+        if (type == "IHDR") {
+            // 8 bits, RGBA, deflate, adaptive filters, no interlace.
+            if (n != 13 || png[data + 8] != 8 || png[data + 9] != 6 || png[data + 10] != 0 || png[data + 11] != 0 ||
+                png[data + 12] != 0)
+                return false;
+            w = get32(png, data);
+            h = get32(png, data + 4);
+            header = true;
+        } else if (type == "IDAT") {
+            z.insert(z.end(), png.begin() + std::ptrdiff_t(data), png.begin() + std::ptrdiff_t(data + n));
+        } else if (type == "IEND") {
+            end = true;
+        }
+        at += 12 + std::size_t(n);
+    }
+    if (!header || w == 0 || h == 0 || w > 1u << 15 || h > 1u << 15 || z.size() < 6 || (z[0] * 256 + z[1]) % 31 != 0 ||
+        (z[0] & 0x0F) != 8)
+        return false;
+    // The stored blocks, one after the other.
+    std::vector<std::uint8_t> raw;
+    std::size_t at = 2;
+    for (bool last = false; !last;) {
+        if (at + 5 > z.size() || (z[at] & 0x06) != 0) // BTYPE 00 only
+            return false;
+        last = z[at] & 1;
+        const std::size_t len = std::size_t(z[at + 1]) | (std::size_t(z[at + 2]) << 8);
+        const std::size_t nlen = std::size_t(z[at + 3]) | (std::size_t(z[at + 4]) << 8);
+        if ((len ^ 0xFFFF) != nlen || at + 5 + len > z.size())
+            return false;
+        raw.insert(raw.end(), z.begin() + std::ptrdiff_t(at + 5), z.begin() + std::ptrdiff_t(at + 5 + len));
+        at += 5 + len;
+    }
+    if (at + 4 > z.size() || adler32(raw.data(), raw.size()) != get32(z, at))
+        return false;
+    const std::size_t row = 4 * std::size_t(w);
+    if (raw.size() != std::size_t(h) * (row + 1))
+        return false;
+    rgba.resize(std::size_t(h) * row);
+    for (std::size_t y = 0; y < h; ++y) {
+        if (raw[y * (row + 1)] != 0) // filter type 0 only
+            return false;
+        std::copy_n(raw.begin() + std::ptrdiff_t(y * (row + 1) + 1), row, rgba.begin() + std::ptrdiff_t(y * row));
+    }
+    width = int(w), height = int(h);
+    return true;
+}
+
+bool read_png(const std::filesystem::path& path, int& width, int& height, std::vector<std::uint8_t>& rgba) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+        return false;
+    const std::vector<std::uint8_t> png((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return decode_png(png, width, height, rgba);
+}
+
+PictureDifference compare_pictures(const std::uint8_t* a, const std::uint8_t* b, int width, int height, int x, int y,
+                                   int w, int h, int tolerance) {
+    PictureDifference d;
+    const int x0 = std::clamp(x, 0, width), x1 = std::clamp(x + w, 0, width);
+    const int y0 = std::clamp(y, 0, height), y1 = std::clamp(y + h, 0, height);
+    for (int yy = y0; yy < y1; ++yy)
+        for (int xx = x0; xx < x1; ++xx) {
+            const std::size_t i = (std::size_t(yy) * std::size_t(width) + std::size_t(xx)) * 4;
+            int most = 0;
+            for (std::size_t c = 0; c < 3; ++c)
+                most = std::max(most, std::abs(int(a[i + c]) - int(b[i + c])));
+            ++d.pixels;
+            d.differing += most > 0;
+            d.over += most > tolerance;
+            d.largest = std::max(d.largest, most);
+        }
+    return d;
 }
 
 } // namespace tisma::ui
