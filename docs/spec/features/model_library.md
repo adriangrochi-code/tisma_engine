@@ -13,8 +13,8 @@ hay un laminado hecho para esa impresora, el servidor lo lamina.
 **Fase:** más adelante, después de `cloud.md` y `mobile_app.md`.
 
 **Pedido del dueño (26-10-2026):** una página de Tisma Cloud como Thingiverse, con descargas ya laminadas con perfiles
-y los datos de FEA o CFD de la pieza; laminar gratis una pieza ya hecha y sin límite en los planes pagos; mandar a imprimir con la
-comodidad de una app de impresora en el teléfono.
+y los datos de FEA o CFD de la pieza; laminar gratis una pieza ya hecha y sin límite en los planes pagos; mandar a
+imprimir con la comodidad de una app de impresora en el teléfono.
 
 **Relación con otras fichas:**
 - `cloud.md`: cuenta, trabajos en la nube, puentes de impresoras. Esta ficha usa lo mismo.
@@ -30,7 +30,8 @@ comodidad de una app de impresora en el teléfono.
 | Modelo | El proyecto 3MF del autor: piezas, posición en la cama, pintura y ajustes por objeto (`formats.md`) | Sí |
 | Datos | Nombre, autor, descripción, fotos, etiquetas y licencia | Sí |
 | Perfiles probados | Por cada impresora y boquilla en que el autor lo imprimió: los perfiles de impresión y de material, y una foto de la pieza impresa si quiere | No |
-| Laminados hechos | G-code por perfil probado, hecho por el servidor (regla 7) | No: se hacen al publicar |
+| Laminado del autor | El G-code con que el autor lo imprimió, con su perfil (regla 5) | No, pero se pide al publicar |
+| Laminados hechos | G-code por perfil probado, hecho por el servidor (regla 7) o preparado de antemano (regla 15) | No: se hacen al publicar o cuando se piden mucho |
 | Ingeniería | El análisis guardado en el proyecto: material, apoyos, cargas, resultado (`.tea`) y su resumen | No |
 
 2. **El resumen de Ingeniería**, a la vista en la ficha, sin abrir nada:
@@ -53,8 +54,13 @@ comodidad de una app de impresora en el teléfono.
 5. **Desde el programa:** Más › Tisma Cloud › «Publicar en la biblioteca» con un proyecto abierto.
    - El programa manda el 3MF con los perfiles en uso y, si hay, el análisis.
    - La persona marca en qué impresoras lo imprimió («perfil probado»), agrega fotos y elige la licencia.
+   - **El laminado del autor:** el programa ofrece subir también el G-code con que lo imprimió, el último exportado
+     para ese proyecto. También se puede subir a mano un G-code (texto o binario) de otro laminador. Queda en la ficha
+     como «Laminado del autor», con su impresora, su perfil y el programa que lo hizo, y se baja o se manda a la
+     impresora sin gastar cómputo.
 6. **Revisión:** el servidor revisa el 3MF como cualquier subida (`cloud.md`; archivos peligrosos) y que el análisis
-   corresponda a la pieza.
+   corresponda a la pieza. El laminado del autor se revisa como el G-code que se manda a imprimir a distancia (sin
+   órdenes que cambien la impresora en lugar de imprimir) y que su impresora sea la del perfil que dice.
 7. **Laminados hechos:** al publicar, el servidor lamina una vez cada perfil probado con el motor (`cloud.md`,
    regla 18) y guarda el G-code con su resumen (tiempo, filamento y capas). Si el motor cambia de versión, se vuelven a
    laminar cuando alguien los pide (regla 14).
@@ -83,7 +89,8 @@ desde el teléfono sin pagar.
     - los perfiles del paquete libre (`profile_pack.md`) para la impresora, la boquilla y el material elegidos;
     - con los cambios de los ajustes rápidos (`settings_panel.md`) encima de esos perfiles.
 
-    Gratis no tiene un número por persona: lo limita el 10 % reservado (regla 13).
+    **Cada cuenta tiene al menos 2 laminados gratis por día** que gastan cómputo. Lo que no gasta cómputo (regla 14)
+    no cuenta y no tiene límite. Todo sale del 10 % reservado (regla 13).
 12. **Un perfil propio:** el que la persona armó en su computadora no está en el servidor. Para usarlo:
     - el programa lo sube a la cuenta («Guardar en Tisma Cloud», una vez; después se actualiza solo si cambia);
     - laminar con un perfil propio usa las horas del plan, como cualquier trabajo de `cloud.md` (a decidir por el
@@ -95,53 +102,69 @@ desde el teléfono sin pagar.
       lugar en la cola y el tiempo estimado;
     - (a decidir por el dueño) si los nodos están libres, el laminado gratis puede usar más que el 10 %, y lo devuelve
       apenas llega un trabajo pago;
-    - para que una sola cuenta no llene la cola gratis: un laminado gratis a la vez por cuenta, y un tope por día (por
-      ejemplo 50) que solo frena el abuso, no el uso normal.
+    - para que una sola cuenta no llene la cola gratis: un laminado gratis a la vez por cuenta y los 2 por día de la
+      regla 11. Si en el día el 10 % sobra, el servidor puede dar más a quien los pida (a decidir por el dueño).
 14. **Lo que no gasta cómputo** (y por eso no cuenta en el 10 %):
 
 | Caso | Qué hace el servidor |
 |---|---|
 | Hay un laminado hecho para esa impresora, boquilla, material y ajustes | Lo manda tal cual |
 | Otra persona ya pidió exactamente lo mismo (misma versión del modelo, perfiles, ajustes y versión del motor) | Manda el que ya hizo |
+| La persona elige el laminado del autor (regla 5) | Lo manda tal cual |
+| Hay un laminado preparado de antemano (regla 15) | Lo manda tal cual |
 
     Los modelos populares casi no gastan: el servidor guarda cada laminado de la biblioteca mientras se siga pidiendo
     (por ejemplo, 90 días sin pedidos lo borran).
-15. **Cuántos laminados entran en el 10 %** (estimación, a confirmar midiendo el motor en los nodos):
+15. **Preparar de antemano:** el servidor lamina una sola vez lo que muchos van a pedir, para no gastar cómputo después.
+    - **Lo que se pide seguido:** cuando un modelo se pidió 10 veces para la misma impresora, boquilla y material
+      (con los perfiles del servidor y sin cambios) en los últimos 30 días, el servidor deja ese laminado guardado.
+      Desde ahí, los pedidos siguientes no gastan cómputo;
+    - **Los más bajados:** para los modelos más bajados de la biblioteca, el servidor prepara el laminado para las
+      impresoras más usadas por las cuentas (las de los puentes, por ejemplo las Bambu Lab más comunes), con el perfil
+      del paquete y el material más usado en cada una;
+    - lo prepara con el cómputo que sobra: solo cuando los nodos no tienen trabajos pagos ni gratis esperando, con la
+      prioridad más baja. No gasta el 10 % reservado ni frena a nadie;
+    - al cambiar la versión del modelo o del motor, lo preparado viejo se borra y se vuelve a preparar.
+16. **Cuántos laminados entran en el 10 %** (estimación, a confirmar midiendo el motor en los nodos):
     - la capacidad estimada del servidor es de unas 1 300 horas de cómputo por mes (documentación del servidor de Tisma
       Cloud, «Capacidad estimada», del 20-10-2026, sin medir todavía en todos los equipos);
     - el 10 % son unas 130 horas, es decir, unos 470 000 s;
     - un Benchy grande tarda de 6 a 13 s en un nodo; una pieza chica, menos de 1 s (medido en el servidor de Tisma
       Cloud, «Capacidad»);
-    - entran del orden de **40 000 a 80 000 laminados de piezas medianas por mes**, más todos los que se reutilizan
-      (regla 14).
+    - entran del orden de **40 000 a 80 000 laminados de piezas medianas por mes**. Con 2 por día por cuenta (unos 60
+      por mes), alcanza para unas 700 a 1 300 cuentas que usen todos sus laminados todos los días. Como la mayoría no
+      los usa todos, y lo reutilizado y lo preparado no gasta, entran muchas más cuentas;
+    - si el uso real se acerca al 10 %, primero crece lo preparado de antemano (regla 15), que baja el cómputo, y
+      después se revisa el número.
 
     El número real se publica en la página cuando el motor esté medido en los nodos.
-16. **Planes pagos:**
+17. **Planes pagos:**
     - laminados sin límite, con un tope de trabajos a la vez para que una cuenta no llene la cola;
     - perfiles propios (regla 12) y análisis nuevos con las horas del plan, como hoy;
     - prioridad sobre la cola gratis, en el 90 % restante.
-17. **A la vista:** antes de mandar, la pantalla «Imprimir» dice «Laminado gratis» o «Usa tu plan», y, si hay cola, el
-    tiempo estimado. Siempre está «Abrir en Tisma» para laminar en la computadora, que es gratis y sin cola.
+18. **A la vista:** antes de mandar, la pantalla «Imprimir» dice «Listo, sin laminar» (laminado del autor, hecho o
+    preparado), «Laminado gratis: te quedan N hoy» o «Usa tu plan», y, si hay cola, el tiempo estimado.
+    Siempre está «Abrir en Tisma» para laminar en la computadora, que es gratis y sin cola.
 
 ## La página, el programa y la app
 
-18. **La misma biblioteca en los tres lugares:**
+19. **La misma biblioteca en los tres lugares:**
     - **página web** de Tisma Cloud: buscar, ver la ficha con el visor 3D y el mapa de Ingeniería, bajar, imprimir;
     - **programa:** Más › Tisma Cloud › Biblioteca, con la misma ficha; «Abrir en Tisma» abre el proyecto en la placa,
       con sus perfiles y su análisis;
     - **app** (`mobile_app.md`): la pestaña Biblioteca; «Imprimir» es el uso principal.
-19. **Buscar:** por texto, etiqueta, impresora con perfil probado, material y «con análisis». Orden: populares,
+20. **Buscar:** por texto, etiqueta, impresora con perfil probado, material y «con análisis». Orden: populares,
     nuevos, más impresos.
-20. **Después de imprimir:** la persona puede marcar «La imprimí» con una foto. Eso suma al contador «más impresos» y,
+21. **Después de imprimir:** la persona puede marcar «La imprimí» con una foto. Eso suma al contador «más impresos» y,
     si usó un perfil probado, a la confianza de ese perfil.
 
 ## El contrato con el motor
 
-21. **Lo que el motor ya tiene que poder hacer** (fichas existentes):
+22. **Lo que el motor ya tiene que poder hacer** (fichas existentes):
     - laminar un 3MF completo sin interfaz (`cloud.md`, regla 18);
     - guardar y abrir el análisis dentro del proyecto (`formats.md`, `structural_analysis.md`);
     - decir qué ajustes cambian la resistencia (regla 3): el motor da la lista y el servidor compara.
-22. **Lo nuevo del motor:**
+23. **Lo nuevo del motor:**
     - el resumen de un análisis en JSON (veredicto, carga, factor de seguridad, deformación, material y los ajustes de
       la regla 2), para mostrarlo sin el motor;
     - el mapa de colores exportado como malla con colores (por ejemplo, 3MF con colores o glTF), para el visor de la
@@ -153,7 +176,7 @@ Es el programa del dueño (`cloud.md`). Se anota para que el contrato quede clar
 - guarda los modelos, versiones, fotos, perfiles probados, laminados y análisis;
 - revisa las subidas;
 - lamina al publicar y cuando se pide;
-- reutiliza laminados iguales (regla 14);
+- reutiliza laminados iguales y prepara de antemano lo que más se pide (reglas 14 y 15);
 - reserva el 10 % del cómputo para el laminado gratis, con su cola y sus topes (regla 13);
 - guarda los perfiles propios que suben las personas (regla 12);
 - manda el G-code a los puentes como hoy.
@@ -174,6 +197,11 @@ Es el programa del dueño (`cloud.md`). Se anota para que el contrato quede clar
 | BI13 | Laminar con un perfil propio | Pide guardarlo en Tisma Cloud; el laminado usa las horas del plan |
 | BI14 | Trabajos pagos llenan los nodos | El 10 % sigue atendiendo la cola gratis |
 | BI15 | Una cuenta gratis manda dos laminados seguidos | El segundo espera a que termine el primero |
+| BI16 | Una cuenta gratis pide un tercer laminado que gasta cómputo en el mismo día | Ofrece lo que no gasta (laminado del autor, preparado), un plan o «Abrir en Tisma» |
+| BI17 | Publicar con el G-code del autor | La ficha muestra «Laminado del autor» con su impresora y su perfil; mandarlo no gasta cómputo |
+| BI18 | Laminado del autor con una orden que actualiza el firmware | Rechazado al publicar |
+| BI19 | El décimo pedido igual en 30 días | Queda guardado; el undécimo se manda sin cómputo |
+| BI20 | Nodos sin trabajos | El servidor prepara laminados de los modelos más bajados; se detiene apenas llega un trabajo |
 | BI10 | «Abrir en Tisma» desde la página | El programa abre el proyecto con sus perfiles y su análisis |
 | BI11 | Subir un 3MF con un programa adentro | Rechazado, como cualquier subida peligrosa |
 | BI12 | Nueva versión del motor y un laminado hecho viejo | Se lamina de nuevo al pedirlo, con un perfil del servidor: entra en el laminado gratis |
