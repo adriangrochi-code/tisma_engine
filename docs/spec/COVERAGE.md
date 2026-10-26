@@ -180,7 +180,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | G-code de inicio y fin, con variables | `GCODE_OUTPUT.md`, `gcode_templates.md` | ✔ |
 | G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md`, `multi_extruder.md` | ✔ |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
-| Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md` | ◐ falta ponerlos desde la vista previa → `preview.md` |
+| Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md`, `preview.md` (regla 12) | ✔ |
 | Parámetros propios del perfil para usar en el G-code | `presets.md` (reglas 20 a 22), `gcode_templates.md` | ✔ |
 | Comentarios detallados en el G-code | `gcode_extras.md` | ✔ |
 | Formato del nombre del archivo de salida, con variables | `gcode_templates.md` | ✔ |
@@ -244,8 +244,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 |---|---|---|
 | Leyenda por tipo, deslizadores, tiempos | `interface.md` | ✔ |
 | Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | `preview.md` | ✔ |
-| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos), `preview.md` (regla 5) | ◐ falta qué hace cada ícono |
-| Visor de G-code aparte | `interface.md` (Más) | ◐ → `preview.md` |
+| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos), `preview.md` (reglas 5 y 11) | ✔ |
+| Visor de G-code aparte | `interface.md` (Más), `preview.md` (regla 13) | ✔ |
 | Estimación de tiempo normal y silenciosa, filamento por tipo | `interface.md` | ✔ |
 
 ## Archivos
@@ -314,7 +314,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Ventana, menús, aspecto, asistente, Ingeniería | `interface.md` | ✔ |
-| Controles de la vista 3D: girar, mover, acercar, vistas, perspectiva u ortogonal | — | ✘ → `preview.md` |
+| Controles de la vista 3D: girar, mover, acercar, vistas, perspectiva u ortogonal | `preview.md` (regla 10) | ✔ |
 | Deshacer y rehacer | `model_tools.md` (regla 29) | ✔ |
 | Idiomas (inglés y español) | `interface.md` (principio 2) | ✔ |
 
