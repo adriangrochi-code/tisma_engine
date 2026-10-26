@@ -436,7 +436,10 @@ void main() {
     if (u_moire != 0) {
         vec2 footprint = fwidth(v_section);
         float k = smoothstep(0.3, 0.8, max(footprint.x, footprint.y));
-        if (k > 0.0) {
+        // The grooves are a thin part of the bead: they average sooner, by
+        // some five pixels a bead.
+        float kg = smoothstep(0.1, 0.4, max(footprint.x, footprint.y));
+        if (kg > 0.0) {
             vec3 v = normalize(u_eye - v_position);
             vec3 sum = vec3(0.0);
             vec2 seen_sum = vec2(0.0);
@@ -453,7 +456,7 @@ void main() {
                 weight += facing;
             }
             if (weight > 0.0)
-                seen = mix(seen, seen_sum / weight, k); // the grooves, averaged as the normals
+                seen = mix(seen, seen_sum / weight, kg); // the grooves, averaged as the normals
             if (weight > 0.0 && dot(sum, sum) > 1e-8) {
                 float mean_length = mix(1.0, length(sum) / weight, k);
                 n = normalize(mix(n, sum / length(sum), k));
@@ -491,8 +494,39 @@ vec3 view_position(ivec2 p) {
 const std::string kAmbientFragment = kVersion + kViewPosition + R"(
 uniform sampler2D u_normal;
 uniform float u_radius;
+uniform sampler2D u_shadow; // the key light's depth map
+uniform mat4 u_light;       // world to the light's clip space
+uniform mat4 u_world;       // view to world
+uniform int u_shadowed;
+uniform float u_texel;      // mm a texel of the map covers
+uniform float u_bias;       // the map's depth of 0.6 mm: no shadow of a layer's step on the next
 out vec4 colour;
 const int kSamples = 16;
+// The key light at a surface point: its shadow map compared over a disc of a
+// few texels around the point (percentage-closer filtering, Reeves, Salesin
+// and Cook 1987), so the shadow's edge comes soft; the point moved out along
+// its normal by two texels, and compared 0.6 mm nearer the light: the steps
+// between layers (a fraction of a millimetre, about a texel of the map) would
+// shadow each other and alias into rings, and the beads' grooves are worked
+// out exactly where they are drawn. The part's shadow on the bed, and under
+// overhangs, stays.
+const vec2 kDisc[12] = vec2[12](vec2(0.0, 0.0), vec2(0.53, 0.0), vec2(-0.27, 0.46), vec2(-0.27, -0.46),
+                                vec2(1.0, 0.0), vec2(0.5, 0.87), vec2(-0.5, 0.87), vec2(-1.0, 0.0),
+                                vec2(-0.5, -0.87), vec2(0.5, -0.87), vec2(0.0, 0.76), vec2(0.0, -0.76));
+float key_light(vec3 c, vec3 n) {
+    vec3 p = (u_world * vec4(c, 1.0)).xyz;
+    if (u_shadowed == 0 || p.z > 0.05)
+        return 1.0; // only the bed takes it, for now: the part's steps shadowed each other into rings
+    p += normalize(mat3(u_world) * n) * u_texel * 2.0;
+    vec3 s = (u_light * vec4(p, 1.0)).xyz * 0.5 + 0.5;
+    if (s.x <= 0.0 || s.y <= 0.0 || s.x >= 1.0 || s.y >= 1.0 || s.z >= 1.0)
+        return 1.0;
+    vec2 texel = 1.0 / vec2(textureSize(u_shadow, 0));
+    float lit = 0.0;
+    for (int i = 0; i < 12; ++i)
+        lit += s.z - u_bias <= texture(u_shadow, s.xy + kDisc[i] * 2.5 * texel).r ? 1.0 : 0.0;
+    return lit / 12.0;
+}
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     if (texelFetch(u_depth, p, 0).r >= 1.0) {
@@ -501,9 +535,10 @@ void main() {
     }
     vec3 c = view_position(p);
     vec3 n = normalize(texelFetch(u_normal, p, 0).xyz * 2.0 - 1.0);
+    float key = key_light(c, n);
     float pixels = min(u_radius * u_projection.y * 0.5 * u_size.y / -c.z, 80.0);
     if (pixels < 1.5) {
-        colour = vec4(1.0);
+        colour = vec4(1.0, key, 0.0, 1.0);
         return;
     }
     float turn = fract(sin(dot(vec2(p), vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
@@ -520,14 +555,19 @@ void main() {
         if (vv > r2 || vv < 1e-8)
             continue;
         float rise = dot(v, n) * inversesqrt(vv) - 0.05;
-        sum += max(rise, 0.0) * (1.0 - vv / r2);
+        // Nothing nearer than a couple of layers: the steps between printed
+        // layers would alias into rings, and the beads' own grooves are
+        // worked out exactly where they are drawn.
+        float near = smoothstep(0.15, 0.45, sqrt(vv));
+        sum += max(rise, 0.0) * (1.0 - vv / r2) * near;
     }
-    colour = vec4(vec3(clamp(1.0 - 2.0 * sum / float(kSamples), 0.0, 1.0)), 1.0);
+    colour = vec4(clamp(1.0 - 2.0 * sum / float(kSamples), 0.0, 1.0), key, 0.0, 1.0);
 }
 )";
 
-// A bilateral blur of the occlusion along one axis: neighbours at another
-// depth (across an edge) do not count.
+// A bilateral blur of the occlusion (r) and the key light (g) along one axis:
+// neighbours at another depth (across an edge) do not count. The last pass
+// writes the visibility: r the key light, g the ambient.
 const std::string kBlurFragment = kVersion + kViewPosition + R"(
 uniform sampler2D u_source;
 uniform ivec2 u_step;
@@ -536,16 +576,17 @@ out vec4 colour;
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     float z = view_position(p).z;
-    float sum = 0.0, weight = 0.0;
+    vec2 sum = vec2(0.0);
+    float weight = 0.0;
     for (int i = -4; i <= 4; ++i) {
         ivec2 q = clamp(p + u_step * i, ivec2(0), ivec2(u_size) - 1);
         float zq = view_position(q).z;
         float w = exp(-float(i * i) / 8.0) * max(0.0, 1.0 - abs(zq - z) / (0.02 * abs(z) + 0.01));
-        sum += texelFetch(u_source, q, 0).r * w;
+        sum += texelFetch(u_source, q, 0).rg * w;
         weight += w;
     }
-    float ao = weight > 0.0 ? sum / weight : 1.0;
-    colour = u_final != 0 ? vec4(1.0, ao, 0.0, 1.0) : vec4(vec3(ao), 1.0);
+    vec2 v = weight > 0.0 ? sum / weight : vec2(1.0);
+    colour = u_final != 0 ? vec4(v.g, v.r, 0.0, 1.0) : vec4(v, 0.0, 1.0);
 }
 )";
 
@@ -994,6 +1035,13 @@ bool Renderer::init(std::string& error) {
     glGetIntegerv(GL_MAX_SAMPLES, &max_samples_);
     max_samples_ = std::max(max_samples_, 1);
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_);
+    shadow_size_ = std::min(kShadowMapSize, max_texture_);
+    shadow_depth_ =
+        make_texture(GL_DEPTH_COMPONENT24, shadow_size_, shadow_size_, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
+    shadow_fbo_ = make_framebuffer(0, shadow_depth_);
+    glDrawBuffer(GL_NONE); // depth only
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     ready_ = true;
     return true;
 }
@@ -1032,7 +1080,7 @@ void Renderer::resize(int width, int height, int samples) {
     g_depth_ = make_texture(GL_DEPTH_COMPONENT24, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
     g_fbo_ = make_framebuffer(g_normal_, g_depth_);
     for (int i = 0; i < 3; ++i) {
-        ao_tex_[i] = i < 2 ? make_texture(GL_R8, width, height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST)
+        ao_tex_[i] = i < 2 ? make_texture(GL_RG8, width, height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST)
                            : make_texture(GL_RGBA8, width, height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST);
         ao_fbo_[i] = make_framebuffer(ao_tex_[i]);
     }
@@ -1079,7 +1127,11 @@ void Renderer::shutdown() {
         glDeleteVertexArrays(1, &empty_vao_);
     if (white_)
         glDeleteTextures(1, &white_);
-    empty_vao_ = white_ = 0;
+    if (shadow_depth_)
+        glDeleteTextures(1, &shadow_depth_);
+    if (shadow_fbo_)
+        glDeleteFramebuffers(1, &shadow_fbo_);
+    empty_vao_ = white_ = shadow_depth_ = shadow_fbo_ = 0;
     ready_ = false;
 }
 
@@ -1114,6 +1166,14 @@ void Renderer::set_model(const std::vector<float>& vertices) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     model_.count = static_cast<int>(vertices.size() / 6);
+    model_box_ = model_.count > 0;
+    model_lo_ = Vec3{1e30f, 1e30f, 1e30f}, model_hi_ = Vec3{-1e30f, -1e30f, -1e30f};
+    for (std::size_t i = 0; i + 5 < vertices.size(); i += 6) {
+        model_lo_ = Vec3{std::min(model_lo_.x, vertices[i]), std::min(model_lo_.y, vertices[i + 1]),
+                         std::min(model_lo_.z, vertices[i + 2])};
+        model_hi_ = Vec3{std::max(model_hi_.x, vertices[i]), std::max(model_hi_.y, vertices[i + 1]),
+                         std::max(model_hi_.z, vertices[i + 2])};
+    }
     ray_signature_.clear();
 }
 
@@ -1136,6 +1196,15 @@ void Renderer::set_preview(const PreviewBuffers& p) {
     // part hides when all of it is drawn.
     order_ = preview_draw_order(p);
     std::vector<PreviewInstance>& ordered = order_.instances;
+    preview_box_ = !ordered.empty();
+    preview_lo_ = Vec3{1e30f, 1e30f, 1e30f}, preview_hi_ = Vec3{-1e30f, -1e30f, -1e30f};
+    for (const PreviewInstance& e : ordered) {
+        const float r = std::max(e.width, e.height);
+        preview_lo_ = Vec3{std::min({preview_lo_.x, e.x0 - r, e.x1 - r}), std::min({preview_lo_.y, e.y0 - r, e.y1 - r}),
+                           std::min({preview_lo_.z, e.z0 - r, e.z1 - r})};
+        preview_hi_ = Vec3{std::max({preview_hi_.x, e.x0 + r, e.x1 + r}), std::max({preview_hi_.y, e.y0 + r, e.y1 + r}),
+                           std::max({preview_hi_.z, e.z0 + r, e.z1 + r})};
+    }
     upload(extrusions_.vao, extrusions_.vbo, ordered.data(), ordered.size() * sizeof(PreviewInstance));
     extrusions_.count = static_cast<int>(ordered.size());
     ordered = {}; // on the GPU now
@@ -1204,11 +1273,11 @@ void Renderer::lit_uniforms(unsigned p, const ViewFrame& f, const Mat4& vp, bool
     bind_texture(kVisibilityUnit, visibility);
 }
 
-void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
+void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility, bool casters) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
-    if (plate_.count > 0) {
+    if (plate_.count > 0 && !casters) {
         // Pushed back a little so the grid, and the first layer, draw over it.
         glEnable(GL_POLYGON_OFFSET_FILL);
         glPolygonOffset(1.0f, 1.0f);
@@ -1338,6 +1407,33 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     }
 }
 
+// The key light's shadow map (Williams 1978): the model and the preview seen
+// from the light, an orthographic camera around what is shown down to the bed.
+void Renderer::shadow_pass(const ViewFrame& f) {
+    shadowed_ = false;
+    const bool model = f.show_model && model_box_, preview = f.show_preview && preview_box_;
+    if (!shadow_fbo_ || (!model && !preview))
+        return;
+    Vec3 lo = model ? model_lo_ : preview_lo_, hi = model ? model_hi_ : preview_hi_;
+    if (model && preview) {
+        lo = Vec3{std::min(lo.x, preview_lo_.x), std::min(lo.y, preview_lo_.y), std::min(lo.z, preview_lo_.z)};
+        hi = Vec3{std::max(hi.x, preview_hi_.x), std::max(hi.y, preview_hi_.y), std::max(hi.z, preview_hi_.z)};
+    }
+    lo.z = std::min(lo.z, 0.0f); // down to the bed, which takes the shadow
+    // A margin around the box, so the soft edges' samples stay in the map.
+    const float margin = 0.05f * std::max({hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, 1.0f});
+    lo = lo - Vec3{margin, margin, margin}, hi = hi + Vec3{margin, margin, margin};
+    shadow_vp_ = shadow_view_projection(f.key, lo, hi);
+    shadow_texel_ = 2.0f * length(hi - lo) / float(std::max(shadow_size_, 1));
+    shadow_bias_ = 0.6f / std::max(length(hi - lo), 1.0f); // the box's depth is at most its diagonal
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
+    glViewport(0, 0, shadow_size_, shadow_size_);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    draw_scene(f, shadow_vp_, true, white_, true);
+    glViewport(0, 0, width_, height_);
+    shadowed_ = true;
+}
+
 unsigned Renderer::ambient_pass(const ViewFrame& f) {
     const Mat4& m = f.projection;
     const auto common = [&](unsigned p) {
@@ -1353,6 +1449,13 @@ unsigned Renderer::ambient_pass(const ViewFrame& f) {
     common(p_.ao);
     uniform(p_.ao, "u_normal", 1);
     uniform(p_.ao, "u_radius", f.ao_radius);
+    bind_texture(3, shadow_depth_);
+    uniform(p_.ao, "u_shadow", 3);
+    uniform(p_.ao, "u_shadowed", shadowed_ ? 1 : 0);
+    uniform(p_.ao, "u_light", shadow_vp_);
+    uniform(p_.ao, "u_world", rigid_inverse(f.view));
+    uniform(p_.ao, "u_texel", shadow_texel_);
+    uniform(p_.ao, "u_bias", shadow_bias_);
     screen_pass(empty_vao_);
     for (int pass = 0; pass < 2; ++pass) {
         glBindFramebuffer(GL_FRAMEBUFFER, ao_fbo_[pass + 1]);
@@ -1437,10 +1540,13 @@ void Renderer::draw(const ViewFrame& f) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         draw_scene(f, vp, true, white_);
     }
-    if (ray)
+    if (ray) {
         visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
-    else if (ambient)
+    } else if (ambient) {
+        if (refresh)
+            shadow_pass(f);
         visibility = refresh ? ambient_pass(f) : ao_tex_[2];
+    }
 
     // The lit scene.
     glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);

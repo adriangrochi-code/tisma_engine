@@ -727,9 +727,15 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
 - [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
 - [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
 - [ ] V5: armar el G-code de cada capa en paralelo y unirlo en orden
-- [ ] V7–V11 del informe: superficies de abajo en el contorno crudo y recortadas una vez, simplificar después de cada
-  pared, reusar una capa igual a la de abajo, y en el programa relaminar por etapas (un cambio de velocidad,
-  temperatura o ventilador solo rehace el G-code)
+- [x] V7 (hecho con lo de arriba: el paso de las capas de abajo ya no crece más que los vértices; RV2 se cumple). V8
+  no hace falta: las fichas piden el resultado, no el algoritmo, y RV1 a RV3 se cumplen
+- [x] V11, relaminar por etapas (hecho 2026-10-26): el programa guarda el último corte; si solo cambian ajustes que
+  lee el G-code (velocidades, límites de movimiento, enfriamiento y ventilador, retracción, temperaturas, flujo, el
+  G-code de la impresora), rehace solo el G-code, su verificación y la vista previa. Una prueba compara byte a byte,
+  ajuste por ajuste, contra un laminado entero (RV5). Benchy: 0,41 s contra 1,35 s entero (meta 0,5 s). Para
+  llegar, los planificadores de viajes de cada capa se arman en paralelo, y la verificación y la vista previa a la vez
+- [ ] V10: reusar una capa igual a la de abajo (RV4)
+- [ ] V9: simplificar después de cada pared (medir antes: RV1 ya se cumple)
 
 ## Avance
 

@@ -1988,12 +1988,12 @@ void App::add_catalog_profile(const Profile& catalog) {
 void App::export_gcode_to(const std::filesystem::path& path) {
     // The result can go while the dialog is open: say so instead of writing
     // nothing, or an old result, without a word.
-    if (!result_ || !result_->ok || viewer_ || stale_) {
+    if (!result_ || !result_->ok || !result_->model || viewer_ || stale_) {
         fail(T::ExportFailed, tr(T::Stale));
         return;
     }
     std::vector<Warning> warnings;
-    const GcodeExport e = export_gcode(path, result_->model, result_->settings, &warnings);
+    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings);
     if (!e.written) {
         std::vector<std::string> details;
         for (const GcodeProblem& p : e.check.problems)
@@ -2551,7 +2551,7 @@ void App::status_bar() {
         ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::Stale));
     } else if (result_) {
         const double total = result_->slice_seconds + result_->gcode_seconds + result_->check_seconds;
-        ImGui::Text("%s", format(tr(T::SlicedIn), total).c_str());
+        ImGui::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
         ImGui::SameLine(0, 16.0f * scale_);
         if (result_->check.ok())
             ImGui::TextColored(rgb(0x3FBF7F), "%s",

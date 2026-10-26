@@ -103,7 +103,10 @@ Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
   barra de estado muestra lo que tarda la GPU en dibujar la vista y los FPS que permite; `--bench-frames N` lo mide
   para las capturas.
 
-El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
+El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos. Va por etapas (2026-10-26): si desde el
+último laminado cambiaron solo ajustes que lee el G-code (velocidades, límites de movimiento, enfriamiento y
+ventilador, retracción, temperaturas, flujo, el G-code de la impresora), se rehace solo el G-code, su verificación y la
+vista previa, con el mismo resultado byte a byte; la barra de estado dice «G-code rehecho». Pasos:
 - las comprobaciones de la malla y de la pieza laminada;
 - el G-code en memoria;
 - su verificación (`docs/GCODE_CHECK.md`).
@@ -219,6 +222,11 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   superficie de arriba, el borde y la última capa mostrada no tienen nada encima. La luz principal es suave (unos 35°),
   así la sombra del cordón de arriba entra con penumbra. De lejos la ranura se promedia con el resto del perfil, como
   las normales del filtro de moiré. Con ray tracing no se aplica: los rayos ya ven a los vecinos.
+- **Sombra sobre la cama** (modo de oclusión ambiental, mismo pedido): un mapa de profundidad desde la luz principal
+  (Williams 1978), rehecho solo cuando cambia la imagen, como la oclusión, y leído con filtrado de porcentaje cercano
+  (Reeves, Salesin y Cook 1987), así el borde sale suave. Por ahora solo la cama recibe la sombra: sobre la pieza, los
+  escalones entre capas (del tamaño de un texel del mapa) se sombreaban entre sí en anillos. La oclusión en pantalla
+  ya no cuenta lo que está a menos de unas dos capas: eso lo hacen las ranuras.
 - **Color:** la curva de tono se aplica al canal más brillante y los otros se escalan con él, así un color saturado
   brillante no se lava hacia el blanco; los grises quedan como antes.
 - **Intensidad de la oclusión:** se elige entre 0 y 1,5.

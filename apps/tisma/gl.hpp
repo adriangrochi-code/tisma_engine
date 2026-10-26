@@ -127,7 +127,9 @@ using GLuint64 = unsigned long long;
 #define GL_RED 0x1903
 #define GL_RGBA8 0x8058
 #define GL_DEPTH_COMPONENT24 0x81A6
+#define GL_NONE 0
 #define GL_RG 0x8227
+#define GL_RG8 0x822B
 #define GL_R8 0x8229
 #define GL_RG16F 0x822F
 #define GL_RGBA32F 0x8814
@@ -193,6 +195,8 @@ using GLuint64 = unsigned long long;
     X(void, glDepthMask, (GLboolean flag))                                                                           \
     X(void, glDetachShader, (GLuint program, GLuint shader))                                                         \
     X(void, glDisable, (GLenum capability))                                                                          \
+    X(void, glDrawBuffer, (GLenum buffer))                                                                           \
+    X(void, glReadBuffer, (GLenum buffer))                                                                           \
     X(void, glDisableVertexAttribArray, (GLuint index))                                                              \
     X(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))                                                 \
     X(void, glDrawArraysInstanced, (GLenum mode, GLint first, GLsizei count, GLsizei instances))                    \
@@ -302,6 +306,8 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glDepthFunc tisma_glDepthFunc
 #define glDepthMask tisma_glDepthMask
 #define glDetachShader tisma_glDetachShader
+#define glDrawBuffer tisma_glDrawBuffer
+#define glReadBuffer tisma_glReadBuffer
 #define glDisable tisma_glDisable
 #define glDisableVertexAttribArray tisma_glDisableVertexAttribArray
 #define glDrawArrays tisma_glDrawArrays

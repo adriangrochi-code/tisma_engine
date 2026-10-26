@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <numbers>
 #include <string>
@@ -382,6 +383,27 @@ TEST_CASE("ui: PNG files are valid", "[ui]") {
     }
 }
 
+TEST_CASE("ui: the shadow map's camera holds the box, nearest the light at -1", "[ui]") {
+    const Vec3 lo{10, 20, 0}, hi{50, 40, 30};
+    for (Vec3 towards : {normalize(Vec3{-0.45f, 0.45f, 0.8f}), Vec3{0, 0, 1}, normalize(Vec3{1, 0, 0.2f})}) {
+        const Mat4 m = shadow_view_projection(towards, lo, hi);
+        float zmin = 2, zmax = -2;
+        for (int k = 0; k < 8; ++k) {
+            const Vec3 p{(k & 1) ? hi.x : lo.x, (k & 2) ? hi.y : lo.y, (k & 4) ? hi.z : lo.z};
+            const Vec3 q = transform_point(m, p);
+            CHECK(std::fabs(q.x) <= 1.0001f);
+            CHECK(std::fabs(q.y) <= 1.0001f);
+            CHECK(std::fabs(q.z) <= 1.0001f);
+            zmin = std::min(zmin, q.z), zmax = std::max(zmax, q.z);
+        }
+        CHECK_THAT(zmin, WithinAbs(-1.0, 1e-4));
+        CHECK_THAT(zmax, WithinAbs(1.0, 1e-4));
+        // A point further towards the light is nearer.
+        const Vec3 c = (lo + hi) * 0.5f;
+        CHECK(transform_point(m, c + towards * 5.0f).z < transform_point(m, c).z);
+    }
+}
+
 TEST_CASE("ui: screenshots read back and compare", "[ui]") {
     // A 300 x 300 picture (several stored blocks) reads back as it was.
     const int size = 300;
@@ -496,6 +518,99 @@ TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the same bytes", "[ui]") {
+    // Two posts and a plate over them: walls, solid and sparse infill, a
+    // bridge, travels, slow short layers and the fan all show.
+    const auto box = [](TriangleMesh& m, float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto p = [&](int i, int j, int k) { return Vec3f{i ? x1 : x0, j ? y1 : y0, k ? z1 : z0}; };
+        const int faces[12][3][3] = {
+            {{0, 0, 0}, {0, 1, 0}, {1, 1, 0}}, {{0, 0, 0}, {1, 1, 0}, {1, 0, 0}}, {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}},
+            {{0, 0, 1}, {1, 1, 1}, {0, 1, 1}}, {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}}, {{0, 0, 0}, {1, 0, 1}, {0, 0, 1}},
+            {{0, 1, 0}, {0, 1, 1}, {1, 1, 1}}, {{0, 1, 0}, {1, 1, 1}, {1, 1, 0}}, {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}},
+            {{0, 0, 0}, {0, 1, 1}, {0, 1, 0}}, {{1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, {{1, 0, 0}, {1, 1, 1}, {1, 0, 1}}};
+        for (const auto& f : faces)
+            m.add_triangle(p(f[0][0], f[0][1], f[0][2]), p(f[1][0], f[1][1], f[1][2]), p(f[2][0], f[2][1], f[2][2]));
+    };
+    TriangleMesh table;
+    box(table, 0, 0, 0, 4, 6, 4);
+    box(table, 12, 0, 0, 16, 6, 4);
+    box(table, 0, 0, 4, 16, 6, 5.6f);
+    Settings base = default_settings();
+    base.gpu = GpuMode::Off;
+    const TriangleMesh placed = translated(table, centre_on_bed(table.bounding_box(), base.bed));
+
+    Slicer staged;
+    const SliceResult first = staged.run(placed, base);
+    REQUIRE(first.ok);
+    CHECK_FALSE(first.staged);
+    CHECK_THAT(first.gcode, ContainsSubstring(";TYPE:Bridge infill"));
+    const SliceResult same = staged.run(placed, base);
+    CHECK(same.staged);
+    CHECK(same.model == first.model);
+    CHECK(same.gcode == first.gcode);
+
+    const std::vector<std::pair<const char*, std::function<void(Settings&)>>> changes = {
+        {"speed.walls", [](Settings& s) { s.wall_speed *= 1.5; }},
+        {"speed.outer_wall", [](Settings& s) { s.outer_wall_speed = Speed{50.0, true}; }},
+        {"speed.infill", [](Settings& s) { s.infill_speed *= 1.5; }},
+        {"speed.solid_infill", [](Settings& s) { s.solid_infill_speed *= 0.7; }},
+        {"speed.top_solid_infill", [](Settings& s) { s.top_solid_infill_speed *= 0.7; }},
+        {"speed.support", [](Settings& s) { s.support_speed *= 0.7; }},
+        {"speed.travel", [](Settings& s) { s.travel_speed *= 0.5; }},
+        {"speed.first_layer", [](Settings& s) { s.first_layer_speed *= 0.5; }},
+        {"speed.max", [](Settings& s) { s.max_speed = 35.0; }},
+        {"machine.corner_speed", [](Settings& s) { s.corner_speed = 4.0; }},
+        {"machine.acceleration", [](Settings& s) { s.acceleration = 3000.0, s.travel_acceleration = 4000.0; }},
+        {"machine.max_feed", [](Settings& s) { s.max_feed_x = s.max_feed_y = 150.0, s.max_feed_z = 4.0, s.max_feed_e = 30.0; }},
+        {"retraction.length", [](Settings& s) { s.retract_length = 0.8; }},
+        {"retraction.speed", [](Settings& s) { s.retract_speed = 45.0; }},
+        {"retraction.lift", [](Settings& s) { s.retract_lift = 0.4; }},
+        {"retraction.min_travel", [](Settings& s) { s.retract_min_travel = 0.5; }},
+        {"cooling.min_layer_time", [](Settings& s) { s.min_layer_time = 15.0; }},
+        {"cooling.min_speed", [](Settings& s) { s.min_print_speed = 15.0; }},
+        {"cooling.keep_outer_speed", [](Settings& s) { s.keep_outer_speed = !s.keep_outer_speed; }},
+        {"cooling.fan", [](Settings& s) { s.fan_min = 20.0, s.fan_max = 80.0, s.fan_below_time = 30.0; }},
+        {"cooling.fan_always", [](Settings& s) { s.fan_always = !s.fan_always; }},
+        {"cooling.fan_bridges", [](Settings& s) { s.fan_bridges = 60.0; }},
+        {"cooling.fan_off_layers", [](Settings& s) { s.fan_off_layers = 1; }},
+        {"machine.start_gcode", [](Settings& s) { s.start_gcode += "; staged\n"; }},
+        {"machine.end_gcode", [](Settings& s) { s.end_gcode += "; staged\n"; }},
+        {"temperature", [](Settings& s) { s.variables["temperature"] = {"215"}, s.variables["bed_temperature"] = {"55"}; }},
+        {"extrusion.flow", [](Settings& s) { s.flow = 95.0; }},
+        {"extrusion.pressure_advance", [](Settings& s) { s.pressure_advance = 0.05; }},
+        {"extrusion.max_flow", [](Settings& s) { s.filament_max_flow = 2.0, s.machine_max_flow = 3.0; }},
+        {"machine.max_temps", [](Settings& s) { s.max_nozzle_temp = 300.0, s.max_bed_temp = 110.0; }},
+        {"extrusion.chamber_temperature", [](Settings& s) { s.chamber_temperature = 40.0, s.max_chamber_temp = 60.0; }},
+        {"gcode.resolution", [](Settings& s) { s.gcode_resolution = 0.05; }},
+        {"machine.relative_extrusion", [](Settings& s) { s.relative_extrusion = !s.relative_extrusion; }},
+        {"machine.flavor", [](Settings& s) { s.flavor = GcodeFlavor::Klipper; }},
+    };
+    for (const auto& [name, change] : changes) {
+        INFO(name);
+        Settings changed = base;
+        change(changed);
+        CHECK(without_gcode_settings(changed).wall_speed == without_gcode_settings(base).wall_speed);
+        const SliceResult again = staged.run(placed, changed);
+        Slicer fresh;
+        const SliceResult whole = fresh.run(placed, changed);
+        REQUIRE(again.ok == whole.ok);
+        CHECK(again.staged);
+        CHECK(again.gcode == whole.gcode);
+        CHECK(again.check.ok() == whole.check.ok());
+        CHECK(again.preview.estimated_seconds == whole.preview.estimated_seconds);
+    }
+
+    // A setting of the cut, another mesh or another painting: cut anew.
+    Settings thinner = base;
+    thinner.layer_height = 0.15;
+    CHECK_FALSE(staged.run(placed, thinner).staged);
+    CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner).staged);
+    Painting seam;
+    seam.set_tree(PaintChannel::Seam, 0, {kPaintEnforce});
+    CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+    CHECK(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+}
+
 TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     Settings settings = default_settings();
     settings.gpu = GpuMode::Off;
@@ -511,14 +626,14 @@ TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     CHECK(r.error.empty());
     CHECK(r.check.ok());
     CHECK(r.gpu.empty());
-    CHECK(r.preview.layers.size() == r.model.layers.size());
+    CHECK(r.preview.layers.size() == r.model->layers.size());
     CHECK(r.preview.estimated_seconds > 0.0);
     // The start G-code's variables are filled in.
     CHECK_THAT(r.gcode, ContainsSubstring("M104 S210"));
     CHECK_THAT(r.gcode, ContainsSubstring("M140 S60"));
     // The same G-code export_gcode would write.
     std::ostringstream again;
-    write_gcode(again, r.model, settings);
+    write_gcode(again, *r.model, settings);
     CHECK(again.str() == r.gcode);
 
     // Off the bed: refused, with the engine's reason.
@@ -610,7 +725,7 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
             "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
     auto held_over_free = [](const SliceResult& r) {
         double held = 0.0, free = 0.0;
-        for (const LayerFill& f : r.model.fills)
+        for (const LayerFill& f : r.model->fills)
             for (const Toolpath& t : f.sparse)
                 for (std::size_t i = 1; i < t.points.size(); ++i) {
                     const double mx = 0.5 * (t.points[i].p.x + t.points[i - 1].p.x);
@@ -631,6 +746,7 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
     // Without a case the infill stays even; with one that holds nothing, too, with a warning.
     const SliceResult even = slicer.run(bar, s);
     REQUIRE(even.ok);
+    CHECK_FALSE(even.staged); // the guided cut does not serve a run without its case
     CHECK_THAT(held_over_free(even), Catch::Matchers::WithinAbs(1.0, 0.15));
     const AnalysisCase loose = parse_analysis_case(R"({"model": "solid", "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
     const SliceResult unheld = slicer.run(bar, s, &loose);

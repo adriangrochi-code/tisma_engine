@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Relaminar por etapas:** si después de laminar se cambia solo una velocidad, una temperatura, el ventilador, la
+  retracción u otro ajuste que solo afecta al G-code, el programa no vuelve a cortar la pieza: rehace solo el G-code.
+  En el Benchy, 0,4 s en vez de 1,4 s, con el mismo G-code byte a byte. La barra de estado dice «G-code rehecho».
+- **Sombra de la pieza sobre la cama** en el modo de oclusión ambiental.
 - **Ranuras entre capas en la vista previa** (pedido del dueño): cada capa de una pared se ve como un tubo, con su
   ranura oscura contra la de arriba, calculada sobre el perfil del cordón; y los colores saturados ya no se lavan hacia
   el blanco.

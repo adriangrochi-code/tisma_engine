@@ -70,7 +70,10 @@ void main() {
     if (frame.flags.z != 0) {
         vec2 footprint = fwidth(v_section);
         float k = smoothstep(0.3, 0.8, max(footprint.x, footprint.y));
-        if (k > 0.0) {
+        // The grooves are a thin part of the bead: they average sooner, by
+        // some five pixels a bead.
+        float kg = smoothstep(0.1, 0.4, max(footprint.x, footprint.y));
+        if (kg > 0.0) {
             vec3 v = normalize(frame.eye.xyz - v_position);
             vec3 sum = vec3(0.0);
             vec2 seen_sum = vec2(0.0);
@@ -87,7 +90,7 @@ void main() {
                 weight += facing;
             }
             if (weight > 0.0)
-                seen = mix(seen, seen_sum / weight, k); // the grooves, averaged as the normals
+                seen = mix(seen, seen_sum / weight, kg); // the grooves, averaged as the normals
             if (weight > 0.0 && dot(sum, sum) > 1e-8) {
                 float mean_length = mix(1.0, length(sum) / weight, k);
                 n = normalize(mix(n, sum / length(sum), k));

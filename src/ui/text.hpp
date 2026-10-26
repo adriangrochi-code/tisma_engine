@@ -483,6 +483,7 @@
     X(Ready, "Listo", "Ready")                                                                                        \
     X(Slicing, "Laminando…", "Slicing…")                                                                              \
     X(SlicedIn, "Laminado en %.2f s", "Sliced in %.2f s")                                                             \
+    X(GcodeAgainIn, "G-code rehecho en %.2f s (el corte no cambió)", "G-code made again in %.2f s (the cut did not change)") \
     X(ViewTime, "Vista %.1f ms · %.0f FPS", "View %.1f ms · %.0f FPS")                                                \
     X(ViewTimeTip, "Lo que tarda la GPU en dibujar la vista 3D en cada cuadro, y los cuadros por segundo que eso "     \
       "permite (docs/LARGE_MODELS.md)",                                                                               \
