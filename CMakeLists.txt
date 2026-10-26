@@ -182,6 +182,7 @@ add_library(tisma_core
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
   src/perimeters/beading.cpp
+  src/perimeters/fuzzy.cpp
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
   src/perimeters/walls.cpp
@@ -266,6 +267,7 @@ if(TISMA_BUILD_UI)
     src/ui/presets.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
+    src/ui/help.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)

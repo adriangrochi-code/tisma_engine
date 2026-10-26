@@ -623,8 +623,14 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)
 - [x] Pintar en el modelo (pedido del dueño): soportes forzados y bloqueados, costura forzada y bloqueada; el motor lee
   lo pintado (`docs/PAINTING.md`, ficha `supports_more.md`)
-- [ ] Pintar la piel difusa (con la piel difusa de `fuzzy_skin.md`) y los colores (con `multi_extruder.md`); volúmenes
-  bloqueadores y forzadores (SM12); relleno inteligente de una cara y deshacer
+- [x] Piel difusa (ficha `fuzzy_skin.md`, reglas 1, 2 y 4) y su pincel; falta la regla 3 (lo que sale de la capa de
+  abajo como voladizo, con los voladizos de `walls_extra.md`) y las paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`
+- [ ] Pintar los colores (con `multi_extruder.md`); volúmenes bloqueadores y forzadores (SM12); relleno inteligente de
+  una cara y deshacer
+- [x] Ayuda (pedido del dueño, 2026-10-26): asistente, consejos de la primera vez y botón (i) en cada ajuste
+  (`docs/UI.md`, «Ayuda»)
+- [ ] Ayuda, lo que sigue: el texto de los ajustes en inglés; señalar en la pantalla lo que cada paso del asistente
+  nombra
 - [ ] Cortar, Partir y Medir de la ficha `interface.md`
 - [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
@@ -632,6 +638,28 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   giro y escala sin rehacer toda la placa en cada cambio
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
+
+## Fichas nuevas (2026-10-26)
+
+Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pasa sobre ella.
+
+- [ ] `assistant.md` (P1): el panel de ayuda (F1) con Problemas, Procedimientos, Glosario y Tutoriales, sacado de
+  `knowledge.tar.xz` del paquete libre; aplicar un ajuste desde la ayuda con deshacer; ficha y avisos del material;
+  tutoriales con anclas, eventos y progreso guardado. Primer paso hecho (2026-10-26): el asistente de siete pasos, los
+  consejos de la primera vez y el botón (i) de cada ajuste (`docs/UI.md`, «Ayuda»); el (i) mostrará también la
+  definición del glosario (regla 12)
+- [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas
+- [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…)
+- [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
+- [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
+- [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
+  escalar a medida, cortar, separar y copias en grilla
+- [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4
+- [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios
+- [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
+  `walls.width` (40 mm); falta `machine.feedstock` y el resto de la ficha
+- [ ] `devices.md` (F9; sus pantallas en P1)
+- [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 
 ## Avance
 

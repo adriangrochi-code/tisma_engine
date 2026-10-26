@@ -22,6 +22,7 @@ enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+enum class FuzzyMode { None, External, All };
 
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
 // "changes"): each set value takes effect from the first layer whose top is
@@ -71,6 +72,10 @@ struct Settings {
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
     SeamMode seam = SeamMode::Aligned;
+    // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
+    FuzzyMode fuzzy_mode = FuzzyMode::None;
+    double fuzzy_thickness = 0.3;      // mm off the line, either way
+    double fuzzy_point_distance = 0.8; // mm between points, on average
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)

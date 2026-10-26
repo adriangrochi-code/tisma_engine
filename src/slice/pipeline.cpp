@@ -9,6 +9,7 @@
 #include "infill/lightning.hpp"
 #include "infill/nonplanar.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "perimeters/fuzzy.hpp"
 #include "slice/painted.hpp"
 #include "support/support.hpp"
 #include "surfaces/bridges.hpp"
@@ -48,12 +49,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     IndexedMesh mesh = compensated(input, settings);
     // The painted pieces before any triangle is turned: a tree follows the
     // order of its triangle's corners.
-    std::array<std::vector<PaintedPiece>, 4> painted; // support enforce, block, seam enforce, block
+    std::array<std::vector<PaintedPiece>, 5> painted; // support enforce, block, seam enforce, block, fuzzy skin
     if (painting && !painting->empty()) {
         painted[0] = painted_pieces(mesh, *painting, PaintChannel::Support, kPaintEnforce);
         painted[1] = painted_pieces(mesh, *painting, PaintChannel::Support, kPaintBlock);
         painted[2] = painted_pieces(mesh, *painting, PaintChannel::Seam, kPaintEnforce);
         painted[3] = painted_pieces(mesh, *painting, PaintChannel::Seam, kPaintBlock);
+        painted[4] = painted_pieces(mesh, *painting, PaintChannel::Fuzzy, kPaintEnforce);
     }
     orient_consistently(mesh); // a facet wound the wrong way dropped whole loops
     float min_z = mesh.vertices.front().z, max_z = min_z;
@@ -90,6 +92,14 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     for (int i = 0; i < 40; ++i)
         (bead_count(beading, (lo + hi) / 2.0) > 0 ? hi : lo) = (lo + hi) / 2.0;
     const double thinnest = hi;
+    // Fuzzy skin (fuzzy_skin.md): on the outer walls the mode chooses, and
+    // where it was painted (a band a bead wide each side of the surface holds
+    // the outer wall).
+    FuzzyParams fuzzy;
+    fuzzy.mode = settings.fuzzy_mode;
+    fuzzy.thickness = settings.fuzzy_thickness;
+    fuzzy.point_distance = settings.fuzzy_point_distance;
+    const std::vector<Polygons> fuzzy_painted = painted_areas(painted[4], out.layers, settings.wall_width);
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         for (const Contour& c : contours[l])
             open[l] += c.closed ? 0 : 1;
@@ -100,9 +110,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         // What an opening by the thinnest bead removes is too thin to print.
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
-        if (settings.wall_count > 0)
+        if (settings.wall_count > 0) {
             out.walls[l] = layer_walls(out.regions[l], beading);
-        else
+            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
+                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
+        } else
             out.walls[l].infill = out.regions[l];
     });
     for (std::size_t n : open)

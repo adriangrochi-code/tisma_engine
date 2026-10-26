@@ -23,7 +23,8 @@ constexpr const char* kUsage =
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
     "                                   [--tool move|rotate|scale|lay|paint]\n"
-    "                                   [--paint support|seam,enforce|block,X,Y,Z,RADIUS]...\n"
+    "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
+    "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
@@ -83,6 +84,17 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
                 return 2;
             }
+        } else if (arg == "--info") {
+            options.info = value();
+        } else if (arg == "--tips") {
+            options.tips = true;
+        } else if (arg == "--tour") {
+            const std::string text = value();
+            options.tour = text.size() == 1 && text[0] >= '0' && text[0] <= '6' ? text[0] - '0' : -2;
+            if (options.tour < 0) {
+                std::fprintf(stderr, "error: --tour must be a step from 0 to 6\n");
+                return 2;
+            }
         } else if (arg == "--paint") {
             // channel,mark,x,y,z,radius: support or seam, enforce or block, mm.
             std::string text = value();
@@ -92,9 +104,10 @@ int main(int argc, char** argv) {
             tisma::ui::AppOptions::Stroke stroke;
             std::string mark;
             if (!(in >> stroke.channel >> mark >> stroke.x >> stroke.y >> stroke.z >> stroke.radius) ||
-                (stroke.channel != "support" && stroke.channel != "seam") || (mark != "enforce" && mark != "block") ||
+                (stroke.channel != "support" && stroke.channel != "seam" && stroke.channel != "fuzzy") ||
+                (mark != "enforce" && mark != "block") ||
                 !(stroke.radius > 0.0f)) {
-                std::fprintf(stderr, "error: --paint must be support|seam,enforce|block,X,Y,Z,RADIUS\n");
+                std::fprintf(stderr, "error: --paint must be support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS\n");
                 return 2;
             }
             stroke.block = mark == "block";

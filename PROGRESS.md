@@ -4002,3 +4002,54 @@ de esa esfera con MSAA 4 tarda más que todo lo anterior).
 
 **Sigue:** armar el árbol y la malla de la placa en segundo plano; los campos de giro y escala sin rehacer toda la
 placa.
+
+## 2026-10-26 — piel difusa
+
+Para que el pincel de Pintar tenga su tercer canal, y la ficha `fuzzy_skin.md`.
+
+**Hecho:**
+- `src/perimeters/fuzzy.*`: la pared externa pasa por puntos nuevos cada 0,5 a 1,5 veces `fuzzy.point_distance`,
+  corridos al azar hasta `fuzzy.thickness` hacia afuera o hacia adentro (splitmix64: el mismo G-code en todos los
+  compiladores). `external` deja lisos los agujeros, `all` no. Las paredes internas no cambian.
+- Pintada: donde se pintó, aunque `fuzzy.mode` sea `none` (regla 4); el resto del lazo queda con sus puntos.
+- Ajustes `fuzzy.mode`, `fuzzy.thickness`, `fuzzy.point_distance` (perfil de impresión), filas en la interfaz bajo
+  Costura, y el canal Piel difusa de Pintar habilitado (`--paint fuzzy,...`).
+- `region_contains` en `src/geom/polygons.*`, que ahora comparten la costura pintada y la piel difusa.
+- Pruebas (`tests/test_fuzzy.cpp`): F1 en un cilindro, F2 en un tubo, y la pintada en una mancha.
+
+**Medido:** cilindro de 20 mm, capa 10, `external`, 0,3 y 0,8: la pared externa de 9,51 a 10,08 mm del centro (la
+línea a 9,8; F1 de la ficha: de 9,49 a 10,08), tramos de 0,92 mm en promedio y 1,92 como máximo (F1: 0,85 y 1,8); las
+internas siguen a 9,0 y 9,4. G-code verificado sin problemas.
+
+**No probado:** la regla 3 (lo que sale de la capa de abajo como voladizo: falta el voladizo de `walls_extra.md`) y las
+paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`, que todavía no se hacen rugosas.
+
+**Sigue:** el tutorial de cada función la primera vez que se usa y el botón de información al lado de cada ajuste
+(pedido del dueño).
+
+## 2026-10-26 — ayuda en la interfaz y mantenimiento
+
+**Ayuda** (pedido del dueño: un asistente, un tutorial de cada función la primera vez y un botón de información al
+lado de cada ajuste; `docs/UI.md`, «Ayuda»):
+- asistente de siete pasos la primera vez (sin preferencias guardadas) y desde **Más > Tutorial**;
+- consejos la primera vez que se usa cada herramienta de la placa, Pintar, el laminado y cada pestaña; se apagan, y
+  lo visto se guarda (`tips`, `tips_seen`);
+- botón (i) al lado de cada ajuste: qué hace, clave, valor por defecto y rango, leídos de `docs/CONFIG.md`, que el
+  programa lleva adentro (`src/ui/help.*`). La prueba nueva falla si un ajuste del motor no tiene su fila.
+- `--tips`, `--tour` e `--info` para las capturas; `ui_help_tour` y `ui_help_tip_and_info`.
+
+Llegó la ficha `assistant.md` (con el PR #22): pide además un panel de ayuda con datos del paquete libre. Lo hecho es
+el primer paso; lo que falta está en `PLAN.md`, «Fichas nuevas».
+
+**Mantenimiento** (bloque de las 8 horas):
+- fusionado `origin/dev` (PR #22, fichas nuevas) sin rebase;
+- `tisma_fuzz_gcode 2000` con la semilla 20261026: 2000 corridas, 2 rechazadas por no imprimibles, ninguna falla
+  (194 s);
+- encontrado por el equipo de fichas (2317 impresoras del paquete libre): las impresoras de pellets fallaban porque
+  `layers.height` no pasaba de 2 mm. Arreglado según `pellets.md`: capas hasta 10 mm y cordones hasta 40 mm, con los
+  topes de la boquilla de siempre; prueba nueva con boquilla de 8 mm y capas de 4 mm;
+- la CI de Linux corre más de 30 minutos con ASan (las dos pruebas del relleno por esfuerzos tardan 18 min cada una
+  con ASan): el aviso de tiempo cortó una corrida; esas dos se corrieron aparte y pasaron.
+
+**Sigue:** el resto de `assistant.md` (panel de ayuda con los datos del paquete), `settings_levels.md` y
+`settings_panel.md`, y el tiempo de impresión (`print_time.md`).

@@ -80,6 +80,12 @@
     X(Walls, "Paredes", "Walls")                                                                                      \
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \
+    X(FuzzySkin, "Piel difusa", "Fuzzy skin")                                                                         \
+    X(FuzzyNone, "No", "None")                                                                                        \
+    X(FuzzyExternal, "Por fuera", "Outside")                                                                          \
+    X(FuzzyAll, "Por fuera y agujeros", "Outside and holes")                                                          \
+    X(FuzzyThickness, "Espesor de la piel", "Skin thickness")                                                         \
+    X(FuzzyDistance, "Distancia entre puntos", "Point distance")                                                      \
     X(SeamAligned, "Alineada", "Aligned")                                                                             \
     X(SeamNearest, "Más cercana", "Nearest")                                                                          \
     X(SeamRandom, "Aleatoria", "Random")                                                                              \
@@ -156,15 +162,116 @@
     X(ToolRotateTip, "Rotar (R): ángulos en X, Y y Z", "Rotate (R): angles about X, Y and Z")                         \
     X(ToolScaleTip, "Escalar (S): en % o en mm", "Scale (S): in % or in mm")                                          \
     X(ToolLayFlatTip, "Apoyar en una cara (F): hacé clic en la cara que va contra la cama", "Lay on face (F): click the face that goes on the bed") \
+    X(Info, "Qué hace",\
+      "What it does")\
+    X(InfoKey, "Clave",\
+      "Key")\
+    X(InfoDefault, "Por defecto",\
+      "Default")\
+    X(InfoRange, "Rango",\
+      "Range")\
+    X(InfoSpanish, "Texto de docs/CONFIG.md",\
+      "Text from docs/CONFIG.md, in Spanish")\
+    X(InfoTemperatures, "La temperatura que el G-code de inicio pide para la boquilla o la cama: es la variable [temperature] o [bed_temperature] de machine.variables.",\
+      "The temperature the start G-code asks for the nozzle or the bed: the [temperature] or [bed_temperature] variable of machine.variables.")\
+    X(Tutorial, "Tutorial",\
+      "Tutorial")\
+    X(TipsAgain, "Ver los consejos de nuevo",\
+      "Show the tips again")\
+    X(TipsOn, "Consejos al usar cada función",\
+      "Tips when using each function")\
+    X(GotIt, "Entendido",\
+      "Got it")\
+    X(NoMoreTips, "No mostrar más consejos",\
+      "No more tips")\
+    X(Next, "Siguiente",\
+      "Next")\
+    X(Back, "Atrás",\
+      "Back")\
+    X(Finish, "Terminar",\
+      "Finish")\
+    X(SkipTour, "Saltar",\
+      "Skip")\
+    X(Tour0Title, "Bienvenido a Tisma",\
+      "Welcome to Tisma")\
+    X(Tour0, "En un minuto te muestro cómo pasar de un modelo a una pieza impresa. Podés volver a ver esto desde el menú de los tres puntos > Tutorial.",\
+      "In a minute, how to go from a model to a printed part. You can see this again from the three-dot menu > Tutorial.")\
+    X(Tour1Title, "1. Abrí un modelo",\
+      "1. Open a model")\
+    X(Tour1, "Arrastrá un STL a la ventana o usá Abrir. El modelo queda centrado y apoyado en la cama. Con Agregar sumás más modelos a la placa.",\
+      "Drop an STL on the window or use Open. The model sits centred on the bed. Add puts more models on the plate.")\
+    X(Tour2Title, "2. Elegí impresora, filamento y perfil",\
+      "2. Choose printer, filament and profile")\
+    X(Tour2, "Arriba del panel de la izquierda: la impresora, el filamento y el perfil de impresión. El catálogo trae los de muchas marcas.",\
+      "At the top of the left panel: the printer, the filament and the print profile. The catalog has those of many brands.")\
+    X(Tour3Title, "3. Ajustá lo que necesites",\
+      "3. Adjust what you need")\
+    X(Tour3, "Cada ajuste tiene un botón (i) al lado de su nombre: dice qué hace, su valor por defecto y su rango.",\
+      "Each setting has an (i) button beside its name: what it does, its default and its range.")\
+    X(Tour4Title, "4. Ubicá y prepará la pieza",\
+      "4. Place and prepare the part")\
+    X(Tour4, "La columna a la izquierda de la vista mueve, gira, escala, apoya, ordena y pinta los modelos. Cada herramienta explica cómo se usa la primera vez.",\
+      "The column at the left of the view moves, turns, scales, lays flat, arranges and paints the models. Each tool explains itself the first time.")\
+    X(Tour5Title, "5. Laminá y revisá",\
+      "5. Slice and check")\
+    X(Tour5, "Laminar arma el G-code y lo verifica. Vista previa muestra cada capa tal como se va a imprimir.",\
+      "Slice makes the G-code and checks it. Preview shows every layer as it will print.")\
+    X(Tour6Title, "6. Imprimí",\
+      "6. Print")\
+    X(Tour6, "Exportar G-code lo guarda en un archivo; Impresora lo manda por USB y muestra cómo va.",\
+      "Export G-code saves it to a file; Printer sends it over USB and shows how it goes.")\
+    X(TipMoveTitle, "Mover",\
+      "Move")\
+    X(TipMove, "Arrastrá el modelo sobre la cama, o escribí X e Y en la tarjeta. Atajo: M.",\
+      "Drag the model on the bed, or type X and Y in the card. Shortcut: M.")\
+    X(TipRotateTitle, "Rotar",\
+      "Rotate")\
+    X(TipRotate, "Escribí los ángulos en X, Y y Z o usá los giros de 90°. «Sin giro» lo deja como venía. Atajo: R.",\
+      "Type the angles about X, Y and Z or use the 90° turns. «No rotation» puts it back. Shortcut: R.")\
+    X(TipScaleTitle, "Escalar",\
+      "Scale")\
+    X(TipScale, "En % o en mm, los tres ejes juntos o cada uno por su lado. Atajo: S.",\
+      "In % or in mm, all three axes together or each one apart. Shortcut: S.")\
+    X(TipLayTitle, "Apoyar en una cara",\
+      "Lay on face")\
+    X(TipLay, "Hacé clic en la cara que querés contra la cama: el modelo gira para apoyarla. Atajo: F.",\
+      "Click the face you want on the bed: the model turns to lay it down. Shortcut: F.")\
+    X(TipArrangeTitle, "Organizar",\
+      "Arrange")\
+    X(TipArrange, "Ordena todos los modelos en una grilla compacta, centrada en la cama, con 6 mm entre ellos. No los gira. Atajo: A.",\
+      "Puts every model in a compact grid, centred on the bed, 6 mm apart. Nothing is turned. Shortcut: A.")\
+    X(TipPaintTitle, "Pintar",\
+      "Paint")\
+    X(TipPaint, "Elegí qué pintar (soportes, costura o piel difusa), Forzar o Bloquear y el tamaño del pincel. Arrastrá sobre el modelo; con Shift, borrás. Atajo: P.",\
+      "Choose what to paint (supports, seam or fuzzy skin), Enforce or Block and the brush size. Drag on the model; with Shift, erase. Shortcut: P.")\
+    X(TipSliceTitle, "Laminado listo",\
+      "Sliced")\
+    X(TipSlice, "El motor cortó la pieza en capas, armó el G-code y lo verificó: abajo dice si encontró problemas. Mirá la Vista previa antes de imprimir.",\
+      "The engine cut the part into layers, made the G-code and checked it: the bar below says whether it found problems. Look at the Preview before printing.")\
+    X(TipPreviewTitle, "Vista previa",\
+      "Preview")\
+    X(TipPreview, "La barra de la derecha elige hasta qué capa ver. Abajo a la izquierda, los colores por tipo de línea, el tiempo y el filamento.",\
+      "The bar at the right chooses the last layer shown. At the bottom left, the colours by kind of line, the time and the filament.")\
+    X(TipAnalysisTitle, "Análisis",\
+      "Analysis")\
+    X(TipAnalysis, "Calcula cómo trabaja la pieza bajo una carga, tal como se imprime: dónde están los esfuerzos y qué tan segura es.",\
+      "Works out how the part, as printed, takes a load: where the stresses are and how safe it is.")\
+    X(TipCalibrationTitle, "Calibración",\
+      "Calibration")\
+    X(TipCalibration, "Pruebas para ajustar la impresora y el filamento: torres de temperatura y retracción, flujo y más. Imprimí la prueba, elegí el mejor tramo y aplicá el resultado.",\
+      "Tests to tune the printer and the filament: temperature and retraction towers, flow and more. Print the test, pick the best segment and apply the result.")\
+    X(TipDeviceTitle, "Impresora",\
+      "Printer")\
+    X(TipDevice, "Conectá la impresora por USB para ver su estado e imprimir, pausar o cancelar desde acá.",\
+      "Connect the printer over USB to see its state and print, pause or cancel from here.")\
     X(ToolPaint, "Pintar", "Paint")                                                                                    \
-    X(ToolPaintTip, "Pintar las caras: dónde va o no va el soporte, y la costura (P)",                                \
-      "Paint the faces: where support goes or not, and the seam (P)")                                                 \
+    X(ToolPaintTip, "Pintar las caras: el soporte, la costura y la piel difusa (P)",                                  \
+      "Paint the faces: support, seam and fuzzy skin (P)")                                                            \
     X(PaintSupports, "Soportes", "Supports")                                                                          \
     X(PaintSeam, "Costura", "Seam")                                                                                   \
     X(PaintFuzzy, "Piel difusa", "Fuzzy skin")                                                                        \
     X(PaintColors, "Colores", "Colors")                                                                               \
-    X(PaintLater, "Llega cuando el motor tenga la piel difusa y varios extrusores",                                  \
-      "Comes when the engine has fuzzy skin and several extruders")                                                   \
+    X(PaintLater, "Llega cuando el motor tenga varios extrusores", "Comes when the engine has several extruders")   \
     X(PaintEnforce, "Forzar", "Enforce")                                                                              \
     X(PaintBlock, "Bloquear", "Block")                                                                                \
     X(BrushSize, "Pincel", "Brush")                                                                                   \

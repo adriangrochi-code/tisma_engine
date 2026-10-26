@@ -21,6 +21,7 @@ target_link_libraries(tisma_imgui PUBLIC glfw)
 # The icons and the font travel inside the program.
 set(TISMA_EMBEDDED
   ${PROJECT_SOURCE_DIR}/assets/brand/app/tisma.svg
+  ${PROJECT_SOURCE_DIR}/docs/CONFIG.md
   ${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf
 )
 file(GLOB TISMA_ICONS ${PROJECT_SOURCE_DIR}/assets/brand/icons/*.svg ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)

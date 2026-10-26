@@ -1,6 +1,7 @@
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "io/stl.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -77,13 +78,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"layer": {}})"), ContainsSubstring("layer: unknown group"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"hieght": 0.2}})"), ContainsSubstring("layers.hieght: unknown setting"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"height": "0.2"}})"), ContainsSubstring("layers.height: must be a number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"layers": {"first_height": 0}})"), ContainsSubstring("from 0.01 to 2 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"layers": {"first_height": 0}})"), ContainsSubstring("from 0.01 to 10 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"first_layer_shrink": -1}})"), ContainsSubstring("not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"fill_mode": "xor"}})"), ContainsSubstring("must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": 3})"), ContainsSubstring("must be an object"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 10 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 40 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
@@ -291,4 +292,34 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("changes[0].acceleration"));
     CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1, "volumetric_flow": 0}]})"),
                       ContainsSubstring("changes[0].volumetric_flow"));
+}
+
+TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker than it", "[settings]") {
+    // An 8 mm nozzle laying 4 mm layers 9 mm wide (pellets.md: the profile pack's pellet printers).
+    const Settings s = parse_settings(
+        R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 4, "first_height": 4}, "walls": {"width": 9, "count": 2}})");
+    CHECK(s.layer_height == 4.0);
+    CHECK(s.wall_width == 9.0);
+    CHECK_NOTHROW(check_settings(s));
+    // A 100 x 100 x 40 mm box: ten layers, each with its walls.
+    TriangleMesh m;
+    const Vec3f v[8] = {{0, 0, 0}, {100, 0, 0}, {100, 100, 0}, {0, 100, 0}, {0, 0, 40}, {100, 0, 40}, {100, 100, 40}, {0, 100, 40}};
+    const auto quad = [&](int a, int b, int c, int d) {
+        m.add_triangle(v[a], v[b], v[c]);
+        m.add_triangle(v[a], v[c], v[d]);
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    for (int i = 0; i < 4; ++i)
+        quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    Settings cpu = s;
+    cpu.gpu = GpuMode::Off;
+    const SlicedModel sliced = slice_model(weld_exact(m), cpu);
+    REQUIRE(sliced.layers.size() == 10);
+    for (const LayerWalls& w : sliced.walls)
+        CHECK_FALSE(w.toolpaths.empty());
+    // Thicker than the nozzle is refused when the whole set is checked.
+    CHECK_THROWS_WITH(
+        check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
+        ContainsSubstring("thicker than 8 mm"));
 }
