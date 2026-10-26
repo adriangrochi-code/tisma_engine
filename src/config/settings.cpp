@@ -615,8 +615,32 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
-    read_group(root, "support", {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers"},
+    read_group(root, "support",
+               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers", "style",
+                "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
+                "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "style") {
+                       s.support_style = choice<SupportStyle>(g, n, k, {{"grid", SupportStyle::Grid}, {"organic", SupportStyle::Organic}});
+                       return;
+                   }
+                   if (n.starts_with("tree_")) {
+                       const double d = number(g, n, k);
+                       const bool angle = n == "tree_angle" || n == "tree_angle_preferred" || n == "tree_branch_diameter_angle";
+                       if (angle ? !(d >= 0.0 && d <= 85.0) : n == "tree_top_rate" ? !(d > 0.0 && d <= 100.0)
+                                   : n == "tree_double_wall_diameter" ? !(d >= 0.0 && d <= 100.0) : !(d > 0.0 && d <= 100.0))
+                           fail(k, angle ? "must be from 0 to 85 degrees" : n == "tree_top_rate" ? "must be more than 0 and at most 100 %"
+                                                                                                 : "must be more than 0 and at most 100");
+                       (n == "tree_angle"                   ? s.tree_angle
+                        : n == "tree_angle_preferred"       ? s.tree_angle_preferred
+                        : n == "tree_branch_diameter"       ? s.tree_branch_diameter
+                        : n == "tree_branch_diameter_angle" ? s.tree_branch_diameter_angle
+                        : n == "tree_double_wall_diameter"  ? s.tree_double_wall_diameter
+                        : n == "tree_branch_distance"       ? s.tree_branch_distance
+                        : n == "tree_tip_diameter"          ? s.tree_tip_diameter
+                                                            : s.tree_top_rate) = d;
+                       return;
+                   }
                    if (n == "enabled" || n == "automatic") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
@@ -983,6 +1007,15 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.xy_gap", num(s.support_xy_gap)},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
+        {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+        {"support.tree_angle", num(s.tree_angle)},
+        {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
+        {"support.tree_branch_diameter", num(s.tree_branch_diameter)},
+        {"support.tree_branch_diameter_angle", num(s.tree_branch_diameter_angle)},
+        {"support.tree_double_wall_diameter", num(s.tree_double_wall_diameter)},
+        {"support.tree_branch_distance", num(s.tree_branch_distance)},
+        {"support.tree_tip_diameter", num(s.tree_tip_diameter)},
+        {"support.tree_top_rate", num(s.tree_top_rate)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
         {"cooling.min_speed", speed(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},
@@ -1153,7 +1186,16 @@ std::string settings_json(const Settings& s) {
           {"z_gap", s.support_z_gap},
           {"xy_gap", s.support_xy_gap},
           {"spacing", s.support_spacing},
-          {"interface_layers", s.support_interface_layers}}},
+          {"interface_layers", s.support_interface_layers},
+          {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+          {"tree_angle", s.tree_angle},
+          {"tree_angle_preferred", s.tree_angle_preferred},
+          {"tree_branch_diameter", s.tree_branch_diameter},
+          {"tree_branch_diameter_angle", s.tree_branch_diameter_angle},
+          {"tree_double_wall_diameter", s.tree_double_wall_diameter},
+          {"tree_branch_distance", s.tree_branch_distance},
+          {"tree_tip_diameter", s.tree_tip_diameter},
+          {"tree_top_rate", s.tree_top_rate}}},
         {"cooling",
          {{"min_layer_time", s.min_layer_time},
           {"min_speed", speed(s.min_print_speed)},

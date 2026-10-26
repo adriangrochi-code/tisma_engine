@@ -64,7 +64,17 @@ const std::vector<SectionLayout>& print_layout() {
           {"travel", T::SubTravelSpeed, {{"speed.travel", N}}},
           {"limits", T::SubSpeedCap, {{"speed.max", N}}}}},
         {"support", T::SecSupport, "section_support.svg",
-         {{"support", T::SubSupport, {{"support.enabled", B}, {"support.automatic", B}, {"support.threshold_angle", N}}},
+         {{"support", T::SubSupport,
+           {{"support.enabled", B}, {"support.automatic", B}, {"support.style", N}, {"support.threshold_angle", N}}},
+          {"tree", T::SubSupportTree,
+           {{"support.tree_branch_diameter", N},
+            {"support.tree_tip_diameter", N},
+            {"support.tree_top_rate", N},
+            {"support.tree_branch_distance", A},
+            {"support.tree_angle_preferred", A},
+            {"support.tree_angle", A},
+            {"support.tree_branch_diameter_angle", A},
+            {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface, {{"support.interface_layers", N}}},
           {"pattern", T::SubSupportPattern, {{"support.spacing", N}}}}},
@@ -333,6 +343,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return !s.support                ? tr(T::SumNoSupport)
                : !s.support_automatic    ? tr(T::SumPaintedSupport)
                                          : format(T::SumAutoSupport, number(s.support_angle, 0).c_str());
+    if (id == "tree")
+        return format(T::SumTree, number(s.tree_branch_diameter).c_str(), number(s.tree_tip_diameter).c_str());
     if (id == "gap")
         return format(T::SumGaps, number(s.support_z_gap).c_str(), number(s.support_xy_gap).c_str());
     if (id == "interface")

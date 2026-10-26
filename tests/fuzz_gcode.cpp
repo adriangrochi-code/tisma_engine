@@ -119,6 +119,17 @@ int main(int argc, char** argv) {
         s.monotonic_top = pick(2) == 0;
         s.support = pick(3) == 0;
         s.support_angle = pick(2) == 0 ? 0.0 : uni(20, 70);
+        if (pick(2) == 0) { // organic supports
+            s.support_style = SupportStyle::Organic;
+            s.tree_angle = uni(0, 85);
+            s.tree_angle_preferred = uni(0, 85);
+            s.tree_branch_diameter = uni(0.5, 8);
+            s.tree_branch_diameter_angle = uni(0, 15);
+            s.tree_double_wall_diameter = pick(3) == 0 ? 0.0 : uni(1, 10);
+            s.tree_branch_distance = uni(0.3, 4);
+            s.tree_tip_diameter = uni(0.2, 3);
+            s.tree_top_rate = uni(1, 100);
+        }
         s.brim_width = pick(3) == 0 ? uni(0, 8) : 0.0;
         s.skirt_loops = pick(4);
         s.skirt_distance = uni(1, 6);

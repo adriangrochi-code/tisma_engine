@@ -210,6 +210,7 @@ TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][
         {"grid", [](Settings& s) { s.infill_pattern = InfillPattern::Grid; }},
         {"relative E", [](Settings& s) { s.relative_extrusion = true; }},
         {"supports", [](Settings& s) { s.support = true; }},
+        {"organic supports", [](Settings& s) { s.support = true; s.support_style = SupportStyle::Organic; }},
         {"brim, no skirt", [](Settings& s) { s.brim_width = 4.0; s.skirt_loops = 0; }},
         {"thick first layer, thin layers", [](Settings& s) { s.first_layer_height = 0.3; s.layer_height = 0.12; }},
         {"lift on travel", [](Settings& s) { s.retract_lift = 0.4; }},

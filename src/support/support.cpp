@@ -46,8 +46,8 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
     return out;
 }
 
-std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
-                                    const SupportParams& params) {
+std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
+                                          const SupportParams& params) {
     const std::size_t n = regions.size();
     std::vector<Polygons> over = params.automatic ? overhangs(regions, heights, params) : std::vector<Polygons>(n);
     if (params.enforce || params.block) {
@@ -66,6 +66,13 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
                 over[l] = Clipper2Lib::Difference(over[l], *block, Clipper2Lib::FillRule::NonZero);
         });
     }
+    return over;
+}
+
+std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
+                                    const SupportParams& params) {
+    const std::size_t n = regions.size();
+    const std::vector<Polygons> over = supported_overhangs(regions, heights, params);
     std::vector<Polygons> out(n);
     // The column on a grid of an eighth of a bead (bitgrid.hpp): closing it
     // by polygon offsets cost as much as every overlapping speck of a

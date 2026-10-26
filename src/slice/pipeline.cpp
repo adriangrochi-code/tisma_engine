@@ -12,6 +12,7 @@
 #include "perimeters/fuzzy.hpp"
 #include "slice/painted.hpp"
 #include "support/support.hpp"
+#include "support/tree.hpp"
 #include "surfaces/bridges.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -339,7 +340,22 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             sp.enforce = &enforce;
         if (!painted[1].empty())
             sp.block = &block;
-        out.support_areas = support_areas(out.regions, thickness, sp);
+        if (settings.support_style == SupportStyle::Organic) {
+            TreeParams tp;
+            tp.angle = settings.tree_angle;
+            tp.angle_preferred = settings.tree_angle_preferred;
+            tp.tip_diameter = settings.tree_tip_diameter;
+            tp.branch_diameter = settings.tree_branch_diameter;
+            tp.widen_angle = settings.tree_branch_diameter_angle;
+            tp.tip_spacing = tree_tip_spacing(settings.tree_tip_diameter, settings.tree_top_rate, settings.tree_branch_distance);
+            tp.xy_gap = settings.support_xy_gap;
+            tp.z_gap_layers = sp.z_gap_layers;
+            tp.interface_layers = settings.support_interface_layers;
+            const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
+            out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
+        } else {
+            out.support_areas = support_areas(out.regions, thickness, sp);
+        }
     }
     if (!out.regions.empty()) {
         const double first = out.layers.front().top - out.layers.front().bottom;
@@ -407,6 +423,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const double angle = (l % 2 == 0) ? 0.0 : 90.0;
+                          if (settings.support_style == SupportStyle::Organic) {
+                              TreeFill tf = tree_fill(out.support_areas[l], above, settings.wall_width, settings.support_spacing,
+                                                      settings.tree_double_wall_diameter, angle);
+                              out.fills[l].support = std::move(tf.support);
+                              out.fills[l].support_interface = std::move(tf.interface);
+                              return;
+                          }
                           out.fills[l].support = rectilinear_fill(base, settings.support_spacing, angle, settings.wall_width, true);
                           out.fills[l].support_interface =
                               rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);

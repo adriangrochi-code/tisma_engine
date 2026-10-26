@@ -83,6 +83,7 @@ TEST_CASE("settings panel: the closed cards' summaries (SP2, SP3)", "[ui][layout
     CHECK(subsection_summary("support", s) == "Sin soportes");
     s.scarf = ScarfMode::Contours;
     CHECK(subsection_summary("seam", s) == "Alineada · en bufanda");
+    CHECK(subsection_summary("tree", s) == "Ramas de 2 mm · puntas de 0,8 mm");
     set_language(Language::English);
     CHECK(subsection_summary("layer_height", s) == "0.2 mm · first 0.2 mm");
     set_language(Language::Spanish);

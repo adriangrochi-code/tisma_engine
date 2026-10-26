@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Soportes en árbol** (pedido del dueño; ficha `supports_more.md`, reglas 15 a 17): `support.style` en `organic`,
+  en Soportes › Soporte del panel, con sus ajustes en la tarjeta Árbol. Bajo lo que cuelga va una interfaz densa
+  entera, y debajo puntas redondas que bajan como ramas, se juntan entre ellas y engordan hasta troncos sobre la cama;
+  esquivan la pieza inclinándose, y donde no pueden se apoyan en ella. Tocan la pieza en menos lugares que la grilla y
+  se sacan más fácil.
 - **Modo vaso** (pedido del dueño de una pared en espiral; ficha `vase_mode.md`): `vase.enabled`, en Otros › Modos
   especiales del panel. La pieza sale como una sola pared que sube en espiral, sin costura, sobre capas de abajo
   planas (la última, superficie de arriba). Cada vuelta empieza donde terminó la anterior, sin viaje ni retracción, y

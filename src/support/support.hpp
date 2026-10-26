@@ -35,6 +35,11 @@ struct SupportParams {
 std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                 const SupportParams& params);
 
+// What each layer needs support under: the overhangs the automatic support
+// finds (with automatic on), plus the enforced ones, less the blocked ones.
+std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
+                                          const SupportParams& params);
+
 // The support area of every layer: the overhangs above it (those the
 // automatic support finds, plus the enforced ones, less the blocked ones)
 // projected straight down, starting z_gap_layers below the overhang and ending at the bed or where

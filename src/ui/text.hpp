@@ -654,6 +654,7 @@
     X(SubSupport, "Soporte", "Support") \
     X(SubSupportGap, "Separación", "Gaps") \
     X(SubSupportInterface, "Interfaz", "Interface") \
+    X(SubSupportTree, "Árbol", "Tree") \
     X(SubSupportPattern, "Patrón", "Pattern") \
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \
@@ -789,6 +790,22 @@
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportInterface, "Capas de interfaz", "Interface layers") \
+    X(SupportStyle, "Estilo", "Style") \
+    X(SupportGrid, "Grilla", "Grid") \
+    X(SupportOrganic, "Árbol (orgánico)", "Tree (organic)") \
+    X(SupportStyleTip, "Árbol: ramas redondas que se juntan hacia la cama; menos marcas en la pieza y se quitan fácil", \
+      "Tree: round branches that join on their way to the bed; fewer marks on the part, easy to remove") \
+    X(TreeAngle, "Inclinación para esquivar", "Angle to avoid the part") \
+    X(TreeAnglePreferred, "Inclinación para juntarse", "Angle to join") \
+    X(TreeBranchDiameter, "Diámetro de las ramas", "Branch diameter") \
+    X(TreeBranchAngle, "Engorde hacia abajo", "Widening downwards") \
+    X(TreeDoubleWall, "Dos paredes desde", "Two walls from") \
+    X(TreeDoubleWallTip, "Las ramas más gruesas que esto llevan dos paredes; 0: nunca", \
+      "Branches thicker than this get two walls; 0: never") \
+    X(TreeBranchDistance, "Distancia entre puntas", "Tip distance") \
+    X(TreeTipDiameter, "Diámetro de las puntas", "Tip diameter") \
+    X(TreeTopRate, "Densidad de puntas", "Tip density") \
+    X(SumTree, "Ramas de %s mm · puntas de %s mm", "%s mm branches · %s mm tips") \
     X(SkirtLayers, "Capas de falda", "Skirt layers") \
     X(HeightChanges, "Cambios por altura", "Changes by height") \
     X(ChamberTemp, "Temperatura de cabina", "Chamber temperature") \

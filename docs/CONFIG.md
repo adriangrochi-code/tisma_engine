@@ -220,6 +220,15 @@ Soportes según `docs/spec/BEHAVIOR.md` («Soportes»): base en líneas e interf
 | `xy_gap` | número | 0.6 | ≥ 0 | Separación horizontal entre el soporte y la pieza, en mm |
 | `spacing` | número | 2.5 | > 0 | Separación de las líneas del soporte, en mm (valor de banco); líneas en zigzag sobre una grilla fija al origen, a 0° y 90° en capas alternas |
 | `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va con las líneas a un cordón, a 45° de la base |
+| `style` | texto | `"grid"` | `grid`, `organic` | `grid`: columnas rectas bajo lo que cuelga. `organic`: soportes en árbol (ficha `supports_more.md`, reglas 15 a 17): bajo lo que cuelga, `interface_layers` capas de interfaz enteras; debajo, puntas redondas que bajan como ramas, se juntan y engordan hasta troncos sobre la cama, y esquivan la pieza; donde no pueden esquivarla, se apoyan en ella, con la separación en Z. Cada rama lleva una pared (dos si es gruesa) y el relleno del soporte adentro |
+| `tree_angle` | número | 40 | 0 a 85 | Inclinación máxima de una rama, en grados desde la vertical, para esquivar la pieza |
+| `tree_angle_preferred` | número | 25 | 0 a 85 | Inclinación de una rama para juntarse con otra |
+| `tree_branch_diameter` | número | 2 | más de 0, hasta 100 | Diámetro de las ramas más finas, en mm |
+| `tree_branch_diameter_angle` | número | 5 | 0 a 85 | Cuánto engordan las ramas al bajar, en grados (0: el mismo grosor) |
+| `tree_double_wall_diameter` | número | 3 | 0 a 100 | Una rama más gruesa que un círculo de este diámetro, en mm, lleva dos paredes; 0: nunca |
+| `tree_branch_distance` | número | 1 | más de 0, hasta 100 | Cuánto se separan las puntas: 2 las separa el doble |
+| `tree_tip_diameter` | número | 0.8 | más de 0, hasta 100 | Diámetro de las puntas, en mm |
+| `tree_top_rate` | número | 15 | más de 0, hasta 100 | Qué tan juntas van las puntas bajo la pieza, en % |
 
 ### `cooling`
 

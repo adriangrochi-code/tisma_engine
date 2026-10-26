@@ -48,6 +48,7 @@ add_executable(tisma_tests
   test_fuzzy.cpp
   test_paint.cpp
   test_support.cpp
+  test_tree_support.cpp
   test_bitgrid.cpp
   test_voronoi.cpp
   test_fea.cpp

@@ -23,6 +23,7 @@ enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, Adaptive
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
+enum class SupportStyle { Grid, Organic };
 enum class FuzzyMode { None, External, All };
 
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
@@ -184,6 +185,17 @@ struct Settings {
     double support_z_gap = 0.2;  // mm between the support and the part above it
     double support_xy_gap = 0.6; // mm between the support and the part beside it
     double support_spacing = 2.5;    // mm between support lines
+    // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15
+    // to 17): round branches that join on their way down to the bed.
+    SupportStyle support_style = SupportStyle::Grid;
+    double tree_angle = 40.0;               // degrees, the steepest a branch leans to keep off the part
+    double tree_angle_preferred = 25.0;     // degrees, how a branch leans to join another
+    double tree_branch_diameter = 2.0;      // mm, the thinnest branch
+    double tree_branch_diameter_angle = 5.0; // degrees the branches widen by on their way down
+    double tree_double_wall_diameter = 3.0; // mm: a branch wider than this gets two walls; 0: never
+    double tree_branch_distance = 1.0;      // how far apart the tips are, as a factor
+    double tree_tip_diameter = 0.8;         // mm
+    double tree_top_rate = 15.0;            // percent: how close the tips are under the part
     int support_interface_layers = 3; // dense layers right under the part
 
     // cooling

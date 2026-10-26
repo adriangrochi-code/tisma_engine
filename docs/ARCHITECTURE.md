@@ -47,6 +47,7 @@ regiones por capa ── en paralelo por capa (oneTBB) ────────�
 classify_surfaces, find_bridges       surfaces/         superiores, inferiores, ralas y puentes (necesita ver   │
   │                                                     las capas vecinas, por eso va fuera del paso paralelo) │
   │ support_areas                     support/          voladizos y su proyección hacia abajo                  │
+  │ tree_nodes, tree_support_areas    support/tree      o las ramas del soporte en árbol, de arriba abajo       │
   │ brim_loops, skirt_loops           adhesion/         borde y falda alrededor de la primera capa             │
   ▼                                                                                                        │
 fill_layer ── en paralelo por capa ───────────────────────────────────────────────────────────────────────┘
@@ -150,6 +151,10 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
   - relleno de huecos;
   - soportes con su interfaz.
 - **`support_areas`:** proyecta los voladizos hacia abajo.
+- **`tree_nodes`, `tree_support_areas`, `tree_fill` (`support/tree.*`):** el soporte en árbol. Una simulación de
+  arriba hacia abajo, en orden (cada capa depende de la de arriba): las puntas bajo la interfaz, y por capa cada rama
+  se inclina hacia su vecina, se junta con las que toca, engorda y se aparta de la pieza. Las áreas (unión de discos
+  más la interfaz) y sus trayectorias (paredes por rama y relleno adentro) van en paralelo por capa.
 - **`skirt_loops` y `brim_loops`:** la falda y el borde.
 
 ### `gcode/`: escritura y verificación

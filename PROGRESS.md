@@ -4680,3 +4680,79 @@ del perfil de la impresora (decisión del dueño). Hoy el panel sigue las tablas
 **Sigue:** una pared externa en espiral continua en piezas con relleno (la idea del dueño, más allá del modo vaso:
 la pared externa primero en cada capa, subiendo una capa por vuelta, y las internas y el relleno planos), si el dueño
 la quiere después de ver el modo vaso y la bufanda.
+
+## 2026-10-26 — caza de errores
+
+**Por qué:** pedido del dueño, buscar errores de impresión y del sistema mientras se armaba el panel.
+
+**Hecho y medido:**
+- **Fuzzer con ASan:** 400 corridas, 0 fallas. **Sin ASan:** tandas de 3000 corridas, limpias después de los
+  arreglos de la bufanda y el vaso (el redondeo de `;HEIGHT`, la altura 0 en bloques no planares, el caudal forzado con
+  bufanda; están en sus entradas).
+- **La interfaz con ASan:** 36 estados de la interfaz, ningún error de memoria; las únicas fugas son 112 bytes dentro
+  del controlador GL de Mesa.
+- **Calidad del G-code** (script propio sobre el Benchy y la calavera): ninguna extrusión repetida en la misma Z,
+  ningún viaje por debajo de la capa. Viajes sin retracción
+  que cruzan una pared externa: 18 en el Benchy y 6 en la calavera; quedan para RT1 a RT5 (`toolpath_time.md`, reglas
+  4 y 5, y «los viajes no cruzan perímetros si pueden ir por dentro» de `BEHAVIOR.md`).
+- Las primeras capas de la calavera a 1,1 mm/s son correctas: 22 mm de recorrido por capa con 20 s de tiempo mínimo.
+
+**Sigue:** los viajes que cruzan paredes, con RT1 a RT5.
+
+## 2026-10-26 — soportes en árbol
+
+**Por qué:** pedido del dueño («hay que agregar tree support»); ficha `supports_more.md`, reglas 15 a 17 y prueba SM13.
+Ítem S3 de `PLAN.md`.
+
+**Hecho:**
+- `support.style` (`grid` u `organic`) y los ocho `support.tree_*` de la ficha, con sus límites, en el perfil de
+  impresión y en `docs/CONFIG.md`.
+- **`src/support/tree.*`** (diseño propio sobre la idea de Vanek et al. 2014; `PROVENANCE.md`):
+  - bajo lo que cuelga, la interfaz entera, `support.interface_layers` capas sin el margen de la grilla, con líneas a
+    45° y 135° en capas alternas y sin pared (regla 17);
+  - debajo, las puntas, repartidas sobre el contorno y adentro, a la separación que dan la tasa, el diámetro de punta
+    y la distancia entre ramas (ajustada a las cantidades de SM13);
+  - al bajar, cada rama se inclina hacia su vecina más cercana hasta `tree_angle_preferred`, se junta con la que toca
+    (con el área de las dos), engorda (la punta a 45° hasta el diámetro de rama, después según
+    `tree_branch_diameter_angle`) y se aparta de la pieza hasta `tree_angle`; donde no puede, se apoya en la pieza
+    con la separación en Z;
+  - cada rama lleva una pared, dos donde cabe un disco de `tree_double_wall_diameter`, y el relleno del soporte
+    adentro.
+- `supported_overhangs` en `src/support/support.*`: lo que necesita soporte (automático, forzado y bloqueado), igual
+  para los dos estilos, así que lo pintado vale también con árboles.
+- **Panel:** el estilo en Soportes › Soporte (Normal); la tarjeta Árbol con los ocho ajustes, visible con el estilo en
+  árbol, resumen «Ramas de 2 mm · puntas de 0,8 mm».
+- **Verificador:** la zona permitida incluye el soporte (las ramas se apartan de la pieza más allá de su caja; el
+  fuzzer lo encontró).
+
+**Medido** (SM13: columna de 10 × 20 × 10 con una losa de 20 × 20 × 2 de Z 8 a 10; capas de 0,2):
+
+| | Ficha (Tisma Slicer) | Motor |
+|---|---|---|
+| Puntas en Z 7,2 | 22, de 0,92 mm | 21, de 0,8 mm |
+| `tree_tip_diameter` 1,5 | 18 | 18 |
+| `tree_top_rate` 30 % | 32 | 33 |
+| Interfaz | Z 7,4 a 7,8, a 45°, 135° y 45°; 524,5 mm por capa, X 99,4 a 109,8 | Igual en Z y ángulos; 465 mm, X 100,6 a 110 (el borde de los cordones) |
+| Piezas en Z 7,0 / 6,2 / 5,2 / 4,2 / 2,2 / 0,4 | 13 / 11 / 9 / 7 / 4 / 1 | 21 / 19 / 15 / 8 / 7 / 3 |
+
+Las ramas del motor se juntan más abajo que en la ficha (allá, una capa bajo las puntas ya se tocan muchas: engordan
+más rápido). La interfaz de la ficha empieza 0,6 mm dentro de la columna (X 99,4 con la columna hasta X 100); el motor
+la deja a `support.xy_gap` de ella. Pregunta para el equipo de fichas.
+
+Benchy (filamento, mm; sin soportes 4049): con grilla 4576, con árboles 5396. Los árboles sostienen el ala del casco
+que la grilla casi no toca (la separación XY se come su columna) y bajan troncos hasta la cama: en los primeros 10 mm,
+20 m de recorrido contra 1 m. Esfera de 50 mm: sin soportes 8153, grilla 8502, árboles 8719. El G-code verificado en
+los tres.
+
+Tiempo de laminado (4 núcleos, mediana de 3): Benchy sin soportes 743 ms, grilla 1103, árboles 1155; esfera, grilla
+540, árboles 716. La simulación de las ramas va en orden, capa por capa (cada una depende de la de arriba); las áreas y
+las trayectorias, en paralelo.
+
+**Pruebas:** `test_tree_support.cpp` (separación de las puntas; SM13: puntas bajo la interfaz, cantidad y distancia
+entre ellas, menos y más gruesas hacia la cama, siempre a la separación de la pieza, interfaz y hueco; menos puntas con
+punta de 1,5 y más con 30 %; el estante: ramas apoyadas en la base con la capa de separación vacía; las trayectorias de
+una rama, de un tronco y de la interfaz). La matriz de G-code con «organic supports». Fuzzer: árboles al azar con sus
+ocho ajustes.
+
+**Sigue:** que las ramas engorden y se junten antes, como en la ficha (y con menos material); la base del soporte que
+apoya en la pieza (`support.bottom_*`); después, RT1 a RT5.

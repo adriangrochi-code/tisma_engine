@@ -375,13 +375,15 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     GcodeLimits limits;
     double lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
     double hi[2] = {-lo[0], -lo[1]};
-    for (const Polygons& region : model.regions)
-        for (const Polygon& polygon : region)
-            for (const auto& p : polygon) {
-                lo[0] = std::min(lo[0], to_mm(p.x)), hi[0] = std::max(hi[0], to_mm(p.x));
-                lo[1] = std::min(lo[1], to_mm(p.y)), hi[1] = std::max(hi[1], to_mm(p.y));
-            }
-    // Around the part: the brim, the skirt beyond it, and slack for half a bead
+    // The part and its support (tree supports lean out past the part).
+    for (const std::vector<Polygons>* areas : {&model.regions, &model.support_areas})
+        for (const Polygons& region : *areas)
+            for (const Polygon& polygon : region)
+                for (const auto& p : polygon) {
+                    lo[0] = std::min(lo[0], to_mm(p.x)), hi[0] = std::max(hi[0], to_mm(p.x));
+                    lo[1] = std::min(lo[1], to_mm(p.y)), hi[1] = std::max(hi[1], to_mm(p.y));
+                }
+    // Around them: the brim, the skirt beyond it, and slack for half a bead
     // and the travels that go round the outside.
     // The brim and skirt are mitred offsets (offset(), miter limit 2): at a
     // sharp corner they reach out up to twice their distance.

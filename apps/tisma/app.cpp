@@ -666,6 +666,12 @@ const char* row_key(T label) {
         {T::WallOverlap, "infill.wall_overlap"}, {T::CombineMaxHeight, "infill.combine_max_height"},
         {T::SupportZGap, "support.z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
+        {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
+        {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
+        {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
+        {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
+        {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
+        {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
@@ -802,8 +808,8 @@ bool row(T label, bool& v, const char* tip = nullptr) {
 }
 
 template <class Enum>
-bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options) {
-    label_cell(label);
+bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options, const char* tip = nullptr) {
+    label_cell(label, tip);
     const char* current = "";
     for (const auto& [value, name] : options)
         if (value == v)
@@ -2399,6 +2405,8 @@ void App::top_bar() {
 // that hang on a switch hide while it is off (settings_panel.md, rule 6).
 bool App::setting_applies(std::string_view key) const {
     const Settings& s = settings_;
+    if (key.starts_with("support.tree_"))
+        return s.support && s.support_style == SupportStyle::Organic;
     if (key.starts_with("support.") && key != "support.enabled")
         return s.support;
     if (key.starts_with("zaa.") && key != "zaa.enabled")
@@ -2888,7 +2896,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "support") {
         flag(T::Supports, "support.enabled", s.support);
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
+        if (shown("support.style"))
+            changed |= row(T::SupportStyle, s.support_style,
+                           {{SupportStyle::Grid, tr(T::SupportGrid)}, {SupportStyle::Organic, tr(T::SupportOrganic)}},
+                           tr(T::SupportStyleTip));
         mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
+    } else if (id == "tree") {
+        mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
+        mm(T::TreeTipDiameter, "support.tree_tip_diameter", s.tree_tip_diameter, 0.1, 100.0, "%.2f mm", 0.01f);
+        mm(T::TreeTopRate, "support.tree_top_rate", s.tree_top_rate, 1.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::TreeBranchDistance, "support.tree_branch_distance", s.tree_branch_distance, 0.1, 100.0, "%.2f", 0.01f);
+        mm(T::TreeAnglePreferred, "support.tree_angle_preferred", s.tree_angle_preferred, 0.0, 85.0, "%.0f°", 0.5f);
+        mm(T::TreeAngle, "support.tree_angle", s.tree_angle, 0.0, 85.0, "%.0f°", 0.5f);
+        mm(T::TreeBranchAngle, "support.tree_branch_diameter_angle", s.tree_branch_diameter_angle, 0.0, 85.0, "%.1f°",
+           0.1f);
+        mm(T::TreeDoubleWall, "support.tree_double_wall_diameter", s.tree_double_wall_diameter, 0.0, 100.0, "%.1f mm",
+           0.05f, tr(T::TreeDoubleWallTip));
     } else if (id == "gap") {
         mm(T::SupportZGap, "support.z_gap", s.support_z_gap, 0.0, 5.0, "%.2f mm", 0.01f);
         mm(T::SupportXyGap, "support.xy_gap", s.support_xy_gap, 0.0, 10.0, "%.2f mm", 0.01f);

@@ -521,7 +521,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md`
     - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
       abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
-    - [ ] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17)
+    - [x] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17): `support.style` `organic` (2026-10-26)
     - [ ] S4: laminado cónico como campo (con F7)
     - [ ] S5: interfaz de otro material (con MM1)
   - simulación del enfriamiento para los detalles chicos que la capa entera no ve (`docs/COOLING_SIMULATION.md`):
