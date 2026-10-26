@@ -19,6 +19,12 @@ using BedPolygon = std::vector<std::array<double, 2>>;
 // sets its bottom on z = 0. With no bed, it centres on the origin.
 Vec3 centre_on_bed(const BoundingBox& box, const BedPolygon& bed);
 
+// The key light's camera for a shadow map (Williams 1978, "Casting curved
+// shadows on curved surfaces"): orthographic, looking against `towards` (the
+// direction to the light), holding the box [lo, hi] exactly in -1..1 on every
+// axis, depth -1 nearest the light. OpenGL's clip space, column-major.
+Mat4 shadow_view_projection(Vec3 towards, Vec3 lo, Vec3 hi);
+
 // The mesh moved by offset.
 TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 

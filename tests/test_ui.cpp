@@ -382,6 +382,27 @@ TEST_CASE("ui: PNG files are valid", "[ui]") {
     }
 }
 
+TEST_CASE("ui: the shadow map's camera holds the box, nearest the light at -1", "[ui]") {
+    const Vec3 lo{10, 20, 0}, hi{50, 40, 30};
+    for (Vec3 towards : {normalize(Vec3{-0.45f, 0.45f, 0.8f}), Vec3{0, 0, 1}, normalize(Vec3{1, 0, 0.2f})}) {
+        const Mat4 m = shadow_view_projection(towards, lo, hi);
+        float zmin = 2, zmax = -2;
+        for (int k = 0; k < 8; ++k) {
+            const Vec3 p{(k & 1) ? hi.x : lo.x, (k & 2) ? hi.y : lo.y, (k & 4) ? hi.z : lo.z};
+            const Vec3 q = transform_point(m, p);
+            CHECK(std::fabs(q.x) <= 1.0001f);
+            CHECK(std::fabs(q.y) <= 1.0001f);
+            CHECK(std::fabs(q.z) <= 1.0001f);
+            zmin = std::min(zmin, q.z), zmax = std::max(zmax, q.z);
+        }
+        CHECK_THAT(zmin, WithinAbs(-1.0, 1e-4));
+        CHECK_THAT(zmax, WithinAbs(1.0, 1e-4));
+        // A point further towards the light is nearer.
+        const Vec3 c = (lo + hi) * 0.5f;
+        CHECK(transform_point(m, c + towards * 5.0f).z < transform_point(m, c).z);
+    }
+}
+
 TEST_CASE("ui: screenshots read back and compare", "[ui]") {
     // A 300 x 300 picture (several stored blocks) reads back as it was.
     const int size = 300;

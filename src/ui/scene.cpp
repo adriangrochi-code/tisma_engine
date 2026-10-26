@@ -51,6 +51,32 @@ void add_line(std::vector<LineVertex>& out, float x0, float y0, float x1, float 
 
 } // namespace
 
+Mat4 shadow_view_projection(Vec3 towards, Vec3 lo, Vec3 hi) {
+    const Vec3 f = normalize(towards * -1.0f); // the light looks this way
+    const Vec3 up = std::fabs(f.z) < 0.99f ? Vec3{0, 0, 1} : Vec3{0, 1, 0};
+    const Vec3 r = normalize(cross(f, up)), u = cross(r, f);
+    float x0 = 1e30f, x1 = -1e30f, y0 = 1e30f, y1 = -1e30f, d0 = 1e30f, d1 = -1e30f;
+    for (int k = 0; k < 8; ++k) {
+        const Vec3 p{(k & 1) ? hi.x : lo.x, (k & 2) ? hi.y : lo.y, (k & 4) ? hi.z : lo.z};
+        x0 = std::min(x0, dot(r, p)), x1 = std::max(x1, dot(r, p));
+        y0 = std::min(y0, dot(u, p)), y1 = std::max(y1, dot(u, p));
+        d0 = std::min(d0, dot(f, p)), d1 = std::max(d1, dot(f, p));
+    }
+    const float sx = 2.0f / std::max(x1 - x0, 1e-6f), sy = 2.0f / std::max(y1 - y0, 1e-6f);
+    const float sd = 2.0f / std::max(d1 - d0, 1e-6f);
+    Mat4 m{};
+    const Vec3 rows[3] = {r * sx, u * sy, f * sd};
+    const float offsets[3] = {-(x1 + x0) * sx / 2.0f, -(y1 + y0) * sy / 2.0f, -(d1 + d0) * sd / 2.0f};
+    for (std::size_t row = 0; row < 3; ++row) {
+        m[0 * 4 + row] = rows[row].x;
+        m[1 * 4 + row] = rows[row].y;
+        m[2 * 4 + row] = rows[row].z;
+        m[3 * 4 + row] = offsets[row];
+    }
+    m[15] = 1.0f;
+    return m;
+}
+
 Vec3 centre_on_bed(const BoundingBox& box, const BedPolygon& bed) {
     if (box.empty)
         return {};

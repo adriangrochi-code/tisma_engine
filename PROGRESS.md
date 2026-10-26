@@ -4278,3 +4278,8 @@ La parte de RV2 con tolerancia 0 es una sola corrida.
 - la sombra sobre la cama;
 - greedy meshing;
 - V3/V4 del informe (`;WIDTH` solo cuando cambia y menos movimientos).
+
+**Agregado después, mismo día:** la sombra de la pieza sobre la cama (mapa de sombras desde la luz principal, en la
+pasada de oclusión; `docs/UI.md`). Probé que la pieza también la recibiera, pero los escalones entre capas, del
+tamaño de un texel del mapa, se sombreaban entre sí y dibujaban anillos en una esfera. Por ahora solo la recibe la
+cama. El dueño pidió dejar la vista para después y priorizar V7 a V11 de velocidad.

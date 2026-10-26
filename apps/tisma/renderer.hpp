@@ -113,10 +113,12 @@ private:
     };
     void resize(int width, int height, int samples);
     void release_targets();
-    void draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
+    // casters: only what casts a shadow (not the bed), for the shadow map.
+    void draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility, bool casters = false);
     void lit_uniforms(unsigned program, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
     void draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
     unsigned ambient_pass(const ViewFrame& f);
+    void shadow_pass(const ViewFrame& f);
     unsigned ray_pass(const ViewFrame& f);
 
     bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
@@ -140,6 +142,19 @@ private:
     unsigned ray_fbo_[2] = {}, ray_tex_[2] = {};                // ray traced visibility, ping-pong
     unsigned msaa_fbo_ = 0, msaa_colour_ = 0, msaa_depth_ = 0;  // the lit scene, multisampled
     unsigned colour_fbo_ = 0, colour_ = 0, colour_depth_ = 0;   // the lit scene, resolved
+
+    // The key light's shadow map (the ambient occlusion mode): the depth of
+    // the model and the preview seen from the light, drawn when the occlusion
+    // is; the box they fill, for the light's camera.
+    static constexpr int kShadowMapSize = 2048;
+    unsigned shadow_fbo_ = 0, shadow_depth_ = 0;
+    int shadow_size_ = 0;
+    Mat4 shadow_vp_ = identity();
+    float shadow_texel_ = 0.0f; // mm a texel of the map covers
+    float shadow_bias_ = 0.0f;  // 0.6 mm in the map's depth
+    bool shadowed_ = false;
+    Vec3 model_lo_, model_hi_, preview_lo_, preview_hi_;
+    bool model_box_ = false, preview_box_ = false;
 
     unsigned ray_nodes_ = 0, ray_prims_ = 0;
     int ray_samples_ = 0, ray_current_ = 0;
