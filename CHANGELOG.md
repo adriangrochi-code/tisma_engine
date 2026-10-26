@@ -12,6 +12,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **OBJ y 3MF** (ficha `formats.md`): la línea de comandos y la interfaz abren modelos OBJ y 3MF además de STL. Del
+  3MF se toman los objetos de la placa con su ubicación, sus partes, la unidad del archivo (un 3MF en pulgadas sale
+  25,4 veces más grande) y las mallas guardadas en otros archivos del paquete, como los de Bambu Studio y OrcaSlicer;
+  los modificadores de un proyecto de laminador no se imprimen. `info` dice cuántos objetos y partes trae.
+- **La pieza en el centro de la cama** (ficha `placement.md`): con una cama definida, la línea de comandos centra la
+  pieza en ella, o en `placement.center`, venga donde venga en el archivo; `placement.arrange` en `false` la deja
+  donde está.
 - **Soportes en árbol** (pedido del dueño; ficha `supports_more.md`, reglas 15 a 17): `support.style` en `organic`,
   en Soportes › Soporte del panel, con sus ajustes en la tarjeta Árbol. Bajo lo que cuelga va una interfaz densa
   entera, y debajo puntas redondas que bajan como ramas, se juntan entre ellas y engordan hasta troncos sobre la cama;

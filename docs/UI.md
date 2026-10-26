@@ -67,7 +67,7 @@ izquierda de la vista 3D, una columna con:
 
 | Herramienta | Qué hace |
 |---|---|
-| **Agregar** | Suma un STL a la placa y la ordena. Soltar un STL sobre una placa con modelos también lo suma; **Abrir** empieza una placa nueva |
+| **Agregar** | Suma un modelo (STL, OBJ o 3MF) a la placa y la ordena. Soltar uno sobre una placa con modelos también lo suma; **Abrir** empieza una placa nueva |
 | **Quitar**, **Duplicar** | El modelo elegido |
 | **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta |
 | **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |

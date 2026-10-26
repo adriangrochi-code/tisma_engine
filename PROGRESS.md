@@ -4788,3 +4788,37 @@ ondas hay que confirmarlos en el artículo, que es de acceso abierto.
 **Sigue:** según el orden aprobado por el dueño (`docs/spec/qa/2026-10-26-cobertura.md`): formatos de entrada (3MF y
 OBJ en la línea de comandos) y centrar la pieza en la cama; después QA10 a QA13 del soporte en grilla.
 
+## 2026-10-26 — OBJ, 3MF y la pieza en el centro de la cama
+
+**Por qué:** el primer punto del orden aprobado por el dueño (`docs/spec/qa/2026-10-26-cobertura.md`): el motor leía
+solo STL («binary STL is truncated» con el 3MF del cráneo) y no centraba una pieza que viene fuera del centro.
+
+**Hecho** (todo propio, desde las especificaciones públicas; ninguna biblioteca nueva):
+- `src/io/zip.*`: el ZIP de PKWARE (directorio central, ZIP64) y DEFLATE de la RFC 1951, con el CRC de cada entrada.
+- `src/io/xml.*`: un lector de XML de a una etiqueta.
+- `src/io/model.*` y `src/io/threemf.*`: OBJ (caras de cualquier cantidad de vértices, índices negativos) y 3MF
+  (objetos de la placa con sus transformaciones, componentes anidados, mallas en otros archivos del paquete, unidades,
+  espejos con las caras hacia afuera, sin objetos de soporte ni ítems no imprimibles, sin los modificadores de un
+  proyecto de laminador). `read_model` elige por el contenido y la extensión.
+- `src/io/checksum.*`: el CRC-32 y el Adler-32 que estaban en la interfaz, ahora en el núcleo.
+- `placement.arrange` y `placement.center` (`src/slice/placement.*`): con cama, la línea de comandos centra la pieza.
+- La interfaz abre, suma y recibe soltados OBJ y 3MF.
+
+**Medido:** el 3MF del cráneo del dueño (9,4 MB, 45,9 MB de XML, 546 684 triángulos) se lee en 0,62 a 0,68 s; antes
+fallaba. Laminado con una cama de 250 × 210: sin soportes 5,07 s, con grilla 7,53 s, con árboles 7,91 s (G-code
+verificado en los tres; filamento 5943, 8357 y 10 231 mm).
+
+**Pruebas:** `test_formats.cpp`: los flujos DEFLATE de cada tipo de bloque (dinámico, fijo, guardado, por tramos, una
+copia 23 000 bytes atrás, vacío) contra los datos que el test arma otra vez, cortados y con un tope menor; OBJ (FM2) y
+sus errores; los 3MF de la caja (FM3 en pulgadas, FM9 en dos partes, guardado, con un soporte, con un modificador, con
+la malla en otro archivo y en espejo); 400 paquetes con bytes cambiados al azar, que se leen o se rechazan sin
+romperse; el XML; y la ubicación (PL1, PL2, PL3, PL6). En la línea de comandos: `info` y `slice` con OBJ y 3MF, y el
+cubo en una cama lejana, centrado (y con `placement.arrange` en `false`, el error de antes). Los archivos los arma un
+guion propio, `tests/data/formats/make.py`.
+
+**No probado:** ZIP64 (sin un archivo de más de 4 GB ni de más de 65 535 entradas a mano); proyectos reales de Bambu
+Studio y OrcaSlicer (la ficha pide muestras con permiso).
+
+**Sigue:** QA10 a QA13 del soporte en grilla; después, del mismo orden, velocidades y aceleraciones por tipo, relleno
+de huecos, planchado, balsa y los extras de G-code.
+

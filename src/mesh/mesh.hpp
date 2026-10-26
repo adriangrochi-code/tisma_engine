@@ -32,6 +32,12 @@ public:
         corners_.push_back(c);
     }
 
+    // Every corner moved by (dx, dy, dz).
+    void translate(float dx, float dy, float dz) {
+        for (Vec3f& v : corners_)
+            v.x += dx, v.y += dy, v.z += dz;
+    }
+
     std::size_t triangle_count() const { return corners_.size() / 3; }
     bool empty() const { return corners_.empty(); }
 

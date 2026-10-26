@@ -190,7 +190,7 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase")
+            group == "fuzzy" || group == "vase" || group == "placement")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -322,6 +322,22 @@ Settings parse_checked(std::string_view text) {
         if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
+    });
+    read_group(root, "placement", {"arrange", "center"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "arrange") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.placement_arrange = v.get<bool>();
+            return;
+        }
+        if (v.is_null()) {
+            s.placement_center.reset();
+            return;
+        }
+        if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
+            fail(k, "must be null (the centre of the bed) or [x, y] in mm");
+        s.placement_center = std::array<double, 2>{v[0].get<double>(), v[1].get<double>()};
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -940,6 +956,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.scarf_max_segment", num(s.scarf_max_segment)},
         {"walls.scarf_inner", flag(s.scarf_inner)},
         {"vase.enabled", flag(s.vase)},
+        {"placement.arrange", flag(s.placement_arrange)},
+        {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
         {"fuzzy.thickness", num(s.fuzzy_thickness)},
         {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
@@ -1110,6 +1128,8 @@ std::string settings_json(const Settings& s) {
           {"scarf_max_segment", s.scarf_max_segment},
           {"scarf_inner", s.scarf_inner}}},
         {"vase", {{"enabled", s.vase}}},
+        {"placement",
+         {{"arrange", s.placement_arrange}, {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},

@@ -136,6 +136,12 @@ struct Settings {
     double acceleration = 1000.0;        // mm/s2, moves that extrude
     double travel_acceleration = 1250.0; // mm/s2, travels and retractions
     double corner_speed = 0.0;           // mm/s through a sharp corner, from the printer's profile; 0: not set
+    // Where the command line puts the model (docs/spec/features/placement.md,
+    // rules 2 and 4): with a bed, the centre of its box goes to `center`, or
+    // to the centre of the bed's box; without one, it stays where it is. The
+    // interface places objects itself and does not use these.
+    bool placement_arrange = true;
+    std::optional<std::array<double, 2>> placement_center;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;

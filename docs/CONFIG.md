@@ -246,6 +246,16 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 | `fan_off_layers` | entero | 3 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
 | `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (como la primera etapa, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, se frena todo como en las dos etapas. `false`: las dos etapas de siempre, como Tisma Slicer |
 
+### `placement`
+
+Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 y 4). La interfaz ubica
+las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su panel.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `arrange` | booleano | `true` | — | Con una cama (`machine.bed`), el centro de la caja de la pieza va a `center`; `false` la deja donde viene en X e Y. Sin cama no se mueve nada. En Z la pieza siempre se apoya en la cama |
+| `center` | `[x, y]` o `null` | `null` | mm | Dónde queda el centro de la pieza; `null` es el centro de la caja de la cama |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

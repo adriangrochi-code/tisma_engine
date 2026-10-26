@@ -1,5 +1,7 @@
 #pragma once
 
+#include "io/checksum.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -35,8 +37,9 @@ struct PictureDifference {
 PictureDifference compare_pictures(const std::uint8_t* a, const std::uint8_t* b, int width, int height, int x, int y,
                                    int w, int h, int tolerance);
 
-// CRC-32 of the PNG specification (ISO 3309), and Adler-32 of RFC 1950.
-std::uint32_t crc32(const std::uint8_t* data, std::size_t size, std::uint32_t crc = 0);
-std::uint32_t adler32(const std::uint8_t* data, std::size_t size, std::uint32_t adler = 1);
+// CRC-32 of the PNG specification (ISO 3309), and Adler-32 of RFC 1950
+// (io/checksum.hpp).
+using tisma::adler32;
+using tisma::crc32;
 
 } // namespace tisma::ui

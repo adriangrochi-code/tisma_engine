@@ -13,7 +13,7 @@
 namespace {
 
 constexpr const char* kUsage =
-    "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
+    "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"

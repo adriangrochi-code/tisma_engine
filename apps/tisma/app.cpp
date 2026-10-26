@@ -21,6 +21,7 @@
 #include "fea/analysis.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
+#include "io/model.hpp"
 #include "io/stl.hpp"
 #include "project/project.hpp"
 #include "ui/camera.hpp"
@@ -84,7 +85,13 @@ constexpr const char* kIcons[] = {
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf"};
+
+bool is_model(const std::filesystem::path& path) {
+    const std::string ext = lower_extension(path);
+    return std::find(kModelExtensions.begin(), kModelExtensions.end(), ext) != kModelExtensions.end();
+}
 
 ImVec4 rgb(std::uint32_t c, float alpha = 1.0f) {
     return ImVec4(float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f, alpha);
@@ -1083,11 +1090,11 @@ bool App::init(std::string& error) {
     bool first_model = true;
     for (const std::string& file : options_.files) {
         const std::filesystem::path path = from_utf8(file);
-        if (lower_extension(path) == ".stl" && !first_model)
+        if (is_model(path) && !first_model)
             add_model(path);
         else
             open_path(path);
-        first_model = first_model && lower_extension(path) != ".stl";
+        first_model = first_model && !is_model(path);
     }
     if (!options_.tool.empty())
         tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
@@ -1293,7 +1300,7 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
 void App::open_path(const std::filesystem::path& path) {
     const std::string ext = lower_extension(path);
     last_folder_ = path.parent_path();
-    if (ext == ".stl")
+    if (is_model(path))
         load_model(path);
     else if (ext == ".tisma")
         open_project(path);
@@ -1302,12 +1309,12 @@ void App::open_path(const std::filesystem::path& path) {
     else if (ext == ".json")
         load_settings_file(path);
     else
-        fail(T::CannotOpen, utf8(path) + ": only .stl, .tisma, .gcode and .json files");
+        fail(T::CannotOpen, utf8(path) + ": only .stl, .obj, .3mf, .tisma, .gcode and .json files");
 }
 
 void App::load_model(const std::filesystem::path& path) {
     try {
-        StlFile stl = read_stl(path);
+        ModelFile stl = read_model(path);
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
@@ -1415,7 +1422,7 @@ void App::plate_changed() {
 
 void App::add_model(const std::filesystem::path& path) {
     try {
-        StlFile stl = read_stl(path);
+        ModelFile stl = read_model(path);
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
@@ -3357,7 +3364,7 @@ void App::plate_tools() {
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
     if (button("##add", "tool_add", nullptr, false, false, true, tr(T::ToolAddTip), size)) {
         purpose_ = Purpose::AddModel;
-        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), {".stl"}, last_folder_);
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
     }
     if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size)) {
         objects_.erase(objects_.begin() + selected_);
@@ -5058,7 +5065,7 @@ void App::frame() {
     if (!browser_.is_open())
         for (const std::filesystem::path& path : std::exchange(dropped_, {})) {
             // A model dropped on a plate joins it, as Add does.
-            if (lower_extension(path) == ".stl" && !objects_.empty() && !calibration_ && !viewer_)
+            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_)
                 add_model(path);
             else
                 open_path(path);

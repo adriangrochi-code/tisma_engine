@@ -211,6 +211,7 @@ add_library(tisma_core
   src/gcode/print_time.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
+  src/slice/placement.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
   src/support/tree.cpp
@@ -228,6 +229,11 @@ add_library(tisma_core
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/io/checksum.cpp
+  src/io/zip.cpp
+  src/io/xml.cpp
+  src/io/model.cpp
+  src/io/threemf.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp

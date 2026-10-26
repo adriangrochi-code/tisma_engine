@@ -24,8 +24,10 @@ El laminado entero es una llamada, `slice_model` (`src/slice/pipeline.hpp`). Tom
 un `SlicedModel` con todo lo que se va a imprimir, capa por capa. Después, `export_gcode` lo escribe y lo verifica.
 
 ```
-archivo .stl
-  │ read_stl                          io/stl            binario o ASCII, detectado por el contenido
+archivo .stl, .obj o .3mf
+  │ read_model                        io/model          STL binario o ASCII, OBJ o 3MF (io/threemf sobre io/zip
+  │                                                     e io/xml), detectado por el contenido y la extensión
+  │ place_on_bed                      slice/placement   la línea de comandos centra la pieza en la cama
   ▼
 TriangleMesh ─ weld_exact ─────────▶ IndexedMesh       mesh/            vértices compartidos por igualdad exacta
   │
@@ -101,8 +103,13 @@ radianes. Las fuerzas del análisis van en N y las tensiones en MPa.
 
 ### `io/`, `mesh/`: entrada
 
-`read_stl` acepta STL binario y ASCII. Un binario cuya cabecera empieza con `solid` sigue siendo binario. Rechaza
-archivos truncados y números no finitos. `stl_binary` escribe una malla como STL binario (para los proyectos).
+`read_model` lee STL, OBJ y 3MF (`docs/spec/features/formats.md`): un ZIP es un 3MF; si no, la extensión `.obj`
+dice OBJ; si no, STL. `read_stl` acepta STL binario y ASCII. Un binario cuya cabecera empieza con `solid` sigue
+siendo binario. Rechaza archivos truncados y números no finitos. `stl_binary` escribe una malla como STL binario
+(para los proyectos). El 3MF se lee con piezas propias: `zip.*` (el directorio central de PKWARE, ZIP64 incluido, y
+un inflado DEFLATE de la RFC 1951 con tabla de 10 bits), `xml.*` (etiquetas y atributos, sin árbol) y `threemf.*`
+(objetos de la placa con sus transformaciones, componentes anidados o en otros archivos del paquete, unidades, y los
+volúmenes que un proyecto marca como modificadores, fuera).
 `weld_exact` une los vértices iguales bit a bit con una tabla hash abierta.
 
 ### `slice/`: capas y contornos
