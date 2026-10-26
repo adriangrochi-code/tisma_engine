@@ -21,6 +21,13 @@
 #include <cmath>
 
 namespace tisma {
+namespace {
+
+// mm the grid support reaches past what overhangs (supports_skirt.md, rule 2:
+// about 1.6 in test S4).
+constexpr double kSupportMargin = 1.6;
+
+} // namespace
 
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
     if (mesh.vertices.empty() || (settings.scale_x == 100.0 && settings.scale_y == 100.0 && settings.scale_z == 100.0))
@@ -329,7 +336,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         SupportParams sp;
         sp.threshold_angle = settings.support_angle;
         sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
-        sp.xy_gap = settings.support_xy_gap;
+        sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        sp.margin = kSupportMargin;
         sp.bead = settings.wall_width;
         sp.automatic = settings.support_automatic;
         sp.gpu = gpu;
@@ -348,7 +356,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             tp.branch_diameter = settings.tree_branch_diameter;
             tp.widen_angle = settings.tree_branch_diameter_angle;
             tp.tip_spacing = tree_tip_spacing(settings.tree_tip_diameter, settings.tree_top_rate, settings.tree_branch_distance);
-            tp.xy_gap = settings.support_xy_gap;
+            tp.xy_gap = sp.xy_gap;
             tp.z_gap_layers = sp.z_gap_layers;
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
@@ -422,17 +430,22 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                   above = Clipper2Lib::Union(above, out.regions[a], Clipper2Lib::FillRule::NonZero);
                           const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
-                          const double angle = (l % 2 == 0) ? 0.0 : 90.0;
                           if (settings.support_style == SupportStyle::Organic) {
+                              // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
                               TreeFill tf = tree_fill(out.support_areas[l], above, settings.wall_width, settings.support_spacing,
-                                                      settings.tree_double_wall_diameter, angle);
+                                                      settings.tree_double_wall_diameter, (l % 2 == 0) ? 0.0 : 90.0);
                               out.fills[l].support = std::move(tf.support);
                               out.fills[l].support_interface = std::move(tf.interface);
                               return;
                           }
-                          out.fills[l].support = rectilinear_fill(base, settings.support_spacing, angle, settings.wall_width, true);
+                          // The base in lines along support.line_angle, support.spacing
+                          // of free space apart; the interface across them, a
+                          // bead's spacing apart (supports_skirt.md, rules 5 and 6).
+                          const double bead = loop_spacing(settings.wall_width, out.layers[l].top - out.layers[l].bottom);
+                          out.fills[l].support = rectilinear_fill(base, settings.support_spacing + bead, settings.support_line_angle,
+                                                                  settings.wall_width, true);
                           out.fills[l].support_interface =
-                              rectilinear_fill(interface, settings.wall_width, angle + 45.0, settings.wall_width, true);
+                              rectilinear_fill(interface, bead, settings.support_line_angle + 90.0, settings.wall_width, true);
                       });
     for (std::size_t l = period; l < out.layers.size(); ++l)
         if (repeats[l])

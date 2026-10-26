@@ -4822,3 +4822,30 @@ Studio y OrcaSlicer (la ficha pide muestras con permiso).
 **Sigue:** QA10 a QA13 del soporte en grilla; después, del mismo orden, velocidades y aceleraciones por tipo, relleno
 de huecos, planchado, balsa y los extras de G-code.
 
+## 2026-10-26 — soporte en grilla según la ficha (QA10 a QA12)
+
+**Por qué:** la segunda prueba de caja negra del equipo de fichas (`docs/spec/qa/2026-10-26-segunda-prueba.md`): el
+soporte no tenía el margen de la regla 2 y en el cráneo salía en 96 pedazos sueltos; la separación XY, las líneas y la
+interfaz no seguían las reglas 2, 5 y 6.
+
+**Hecho:**
+- **QA10:** cada voladizo se agranda 1,6 mm antes de sumarse a la columna (`SupportParams::margin`; la grilla de bits
+  crece lo mismo).
+- **QA11:** `support.xy_gap` acepta mm o un porcentaje del ancho de las paredes; por defecto, 50 %.
+- **QA12:** `support.line_angle` (nuevo, 0°): la base en líneas en esa dirección en todas las capas, a
+  `support.spacing` más la separación de un cordón (2,857 mm); la interfaz a 90°, a la separación de los cordones
+  (0,357 mm). Los árboles siguen con la interfaz a 45° y 135° (`supports_more.md`, regla 17).
+
+**Medido** (la pieza de S4, capas de 0,2, cordones de 0,4): la zona de Y 88,4 a 111,6 y hasta X 111,6 (la ficha: 1,6
+mm más allá de la tabla en +X, +Y y −Y); filas de la base cada 2,857 mm en las capas 10, 11 y 37; interfaz en columnas
+cada 0,357 mm, 516,4 mm por capa (la ficha: 524,5); el borde de las líneas junto a la columna a 0,4 mm de su cara (la
+ficha, 0,425 con un perímetro de 0,45: la separación es la mitad del ancho).
+
+**Pruebas:** la del soporte bajo la «T» (zona con el margen, separación de la columna, filas en una dirección cada
+`spacing` más un cordón, interfaz cruzada y densa), la de la pintura (el forzador más el margen), y la lectura de
+`support.xy_gap` y `support.line_angle`.
+
+**Falta:** QA13, la primera capa de la pieza sobre el soporte con la altura de una capa más la separación y sus
+perímetros como `;TYPE:Overhang perimeter`: necesita alturas y tipos por tramo en el escritor. Y el ancho del soporte
+(`supports_more.md`, regla 18: el diámetro de la boquilla, no el de las paredes).
+

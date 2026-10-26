@@ -77,7 +77,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface, {{"support.interface_layers", N}}},
-          {"pattern", T::SubSupportPattern, {{"support.spacing", N}}}}},
+          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",
          {{"skirt", T::SubSkirt, {{"adhesion.skirt_loops", B}, {"adhesion.skirt_distance", B}, {"adhesion.skirt_layers", N}}},
           {"brim", T::SubBrim, {{"adhesion.brim_width", B}}}}},
@@ -346,7 +346,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "tree")
         return format(T::SumTree, number(s.tree_branch_diameter).c_str(), number(s.tree_tip_diameter).c_str());
     if (id == "gap")
-        return format(T::SumGaps, number(s.support_z_gap).c_str(), number(s.support_xy_gap).c_str());
+        return format(T::SumGaps, number(s.support_z_gap).c_str(),
+                      s.support_xy_gap.percent ? (number(s.support_xy_gap.value, 0) + " %").c_str()
+                                               : (number(s.support_xy_gap.value) + " mm").c_str());
     if (id == "interface")
         return format(T::SumLayersN, s.support_interface_layers);
     if (id == "pattern")

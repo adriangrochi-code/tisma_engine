@@ -632,7 +632,7 @@ Settings parse_checked(std::string_view text) {
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
     read_group(root, "support",
-               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers", "style",
+               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "line_angle", "interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -670,7 +670,22 @@ Settings parse_checked(std::string_view text) {
                        s.support_interface_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
+                   if (n == "xy_gap" && g.at(n).is_string()) {
+                       const std::string t = g.at(n).get<std::string>();
+                       char* end = nullptr;
+                       const double p = std::strtod(t.c_str(), &end);
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                           fail(k, "must be a number of mm or a percentage of the wall width like \"50%\"");
+                       s.support_xy_gap = {p, true};
+                       return;
+                   }
                    const double d = number(g, n, k);
+                   if (n == "line_angle") {
+                       if (!(d >= -360.0 && d <= 360.0))
+                           fail(k, "must be from -360 to 360 degrees");
+                       s.support_line_angle = d;
+                       return;
+                   }
                    if (n == "spacing") {
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
@@ -685,7 +700,10 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (d < 0.0)
                        fail(k, "must not be negative");
-                   (n == "z_gap" ? s.support_z_gap : s.support_xy_gap) = d;
+                   if (n == "z_gap")
+                       s.support_z_gap = d;
+                   else
+                       s.support_xy_gap = {d, false};
                });
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
@@ -1022,7 +1040,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
-        {"support.xy_gap", num(s.support_xy_gap)},
+        {"support.xy_gap", s.support_xy_gap.percent ? num(s.support_xy_gap.value) + "%" : num(s.support_xy_gap.value)},
+        {"support.line_angle", num(s.support_line_angle)},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
         {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
@@ -1204,7 +1223,9 @@ std::string settings_json(const Settings& s) {
           {"automatic", s.support_automatic},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
-          {"xy_gap", s.support_xy_gap},
+          {"xy_gap", s.support_xy_gap.percent ? ordered_json(json(s.support_xy_gap.value).dump() + "%")
+                                              : ordered_json(s.support_xy_gap.value)},
+          {"line_angle", s.support_line_angle},
           {"spacing", s.support_spacing},
           {"interface_layers", s.support_interface_layers},
           {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},

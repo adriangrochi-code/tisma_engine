@@ -732,7 +732,7 @@
     X(SumNoSupport, "Sin soportes", "No supports") \
     X(SumAutoSupport, "Automáticos, %s°", "Automatic, %s°") \
     X(SumPaintedSupport, "Solo lo pintado", "Painted only") \
-    X(SumGaps, "Z %s · XY %s mm", "Z %s · XY %s mm") \
+    X(SumGaps, "Z %s mm · XY %s", "Z %s mm · XY %s") \
     X(SumLayersN, "%d capas", "%d layers") \
     X(SumSkirt, "%d vueltas a %s mm", "%d loops at %s mm") \
     X(SumNoSkirt, "Sin falda", "No skirt") \
@@ -789,6 +789,7 @@
     X(SupportZGap, "Separación en Z", "Z gap") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
+    X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
     X(SupportInterface, "Capas de interfaz", "Interface layers") \
     X(SupportStyle, "Estilo", "Style") \
     X(SupportGrid, "Grilla", "Grid") \

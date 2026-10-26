@@ -77,8 +77,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     // The column on a grid of an eighth of a bead (bitgrid.hpp): closing it
     // by polygon offsets cost as much as every overlapping speck of a
     // detailed part, and the grid is what the GPU takes. The column never
-    // leaves the overhangs' bounds (closing fills in, it does not grow), so
-    // the grid holds them, with room around for the closing.
+    // leaves the overhangs' bounds grown by the margin (closing fills in, it
+    // does not grow), so the grid holds them, with room around for both.
     Clipper2Lib::Rect64 bounds(INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN);
     std::size_t highest = 0; // above the highest layer that takes an overhang, no column
     for (std::size_t l = 0; l < n; ++l)
@@ -92,7 +92,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
         return out;
     const std::int64_t pixel = std::max<std::int64_t>(to_units(params.bead / double(kPixelsPerBead)), 1);
     const int radius = kPixelsPerBead; // the closing: one bead
-    const int margin = 2 * radius + 2; // the overhangs grow a pixel, then the closing
+    // The overhangs grow by the support's margin and a pixel, then the closing.
+    const int margin = 2 * radius + 2 + int(std::ceil(params.margin / to_mm(pixel)));
     const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;
     const int width = int((bounds.right - bounds.left) / pixel) + 2 * margin + 1;
     const int height = int((bounds.bottom - bounds.top) / pixel) + 2 * margin + 1;
@@ -117,11 +118,11 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             BitGrid& a = add[l - bottom];
             a = BitGrid();
             if (adds(l)) {
-                // Grown by a pixel's half-diagonal first: an overhang thinner
-                // than a pixel (a slope just past the threshold) still sets
-                // the pixels it crosses.
+                // Grown by the margin, and by a pixel's half-diagonal: an
+                // overhang thinner than a pixel (a slope just past the
+                // threshold) still sets the pixels it crosses.
                 a = BitGrid(x0, y0, pixel, width, height);
-                a.fill(offset(over[above_of(l)], 0.75 * to_mm(pixel)));
+                a.fill(offset(over[above_of(l)], params.margin + 0.75 * to_mm(pixel)));
             }
         });
         const std::size_t count = top - bottom;

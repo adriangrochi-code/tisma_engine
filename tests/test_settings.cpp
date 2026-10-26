@@ -179,8 +179,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(sup.support);
     CHECK(sup.support_angle == 50.0);
     CHECK(sup.support_z_gap == 0.3);
-    CHECK(sup.support_xy_gap == 1.0);
+    CHECK(sup.support_xy_gap == Speed{1.0, false});
     CHECK_FALSE(Settings{}.support);
+    // The XY gap is half the wall width by default (supports_skirt.md, rule 2).
+    CHECK(Settings{}.support_xy_gap == Speed{50.0, true});
+    CHECK(parse_settings(R"({"support": {"xy_gap": "75%"}})").support_xy_gap == Speed{75.0, true});
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"xy_gap": "75"}})"), ContainsSubstring("support.xy_gap: must be"));
+    CHECK(parse_settings(R"({"support": {"line_angle": 45}})").support_line_angle == 45.0);
     const Settings sl = parse_settings(R"({"support": {"spacing": 3, "interface_layers": 2}, "speed": {"support": 60}})");
     CHECK(sl.support_spacing == 3.0);
     CHECK(sl.support_interface_layers == 2);

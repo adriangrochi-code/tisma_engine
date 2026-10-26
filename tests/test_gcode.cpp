@@ -629,11 +629,19 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
     s.support = true;
     const SlicedModel model = slice_model(m, s);
     REQUIRE(model.layers.size() == 15);
-    // Base on layers 0-5, interface on 6-8 (3 layers under the 1-layer gap), nothing from 9 up.
+    // Base on layers 0-5, interface on 6-8 (3 layers under the 1-layer gap),
+    // with the base's margin round it, nothing from 9 up.
     for (std::size_t l = 0; l < 15; ++l) {
-        CHECK(model.fills[l].support.empty() == (l > 5));
+        CHECK(model.fills[l].support.empty() == (l > 8));
         CHECK(model.fills[l].support_interface.empty() == (l < 6 || l > 8));
     }
+    // The zone: the cap's overhang and 1.6 mm round it (supports_skirt.md,
+    // rule 2), half a bead off the stem.
+    CHECK(region_contains(model.support_areas[0], -1.5, 5.0));
+    CHECK(region_contains(model.support_areas[0], 11.5, 5.0));
+    CHECK_FALSE(region_contains(model.support_areas[0], -1.7, 5.0));
+    CHECK(region_contains(model.support_areas[0], 3.75, 5.0));
+    CHECK_FALSE(region_contains(model.support_areas[0], 3.85, 5.0));
     auto length = [](const std::vector<Toolpath>& paths) {
         double sum = 0.0;
         for (const Toolpath& t : paths)
@@ -641,17 +649,32 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
                 sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
         return sum;
     };
-    // Lines 2.5 mm apart on layer 0 (along X): rows at multiples of 2.5 in Y.
-    std::set<long> rows;
-    for (const Toolpath& t : model.fills[0].support)
-        for (const ToolpathPoint& p : t.points)
-            rows.insert(std::lround(p.p.y * 100.0));
-    for (long y : rows)
-        CHECK(y % 250 == 0);
-    // Material per area: about 1 / spacing for the base, 1 / bead for the interface.
+    // Lines along X on every layer (support.line_angle 0), 2.5 mm of free
+    // space apart: rows at multiples of 2.5 plus a bead's spacing in Y (rule 6).
+    const double row = 2.5 + (s.wall_width - (1.0 - std::numbers::pi / 4.0) * 0.2);
+    for (const std::size_t l : {std::size_t(0), std::size_t(3)}) {
+        std::set<long> rows;
+        for (const Toolpath& t : model.fills[l].support)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                if (std::fabs(t.points[i].p.y - t.points[i - 1].p.y) < 1e-6) // along a line, not a zigzag joint
+                    rows.insert(std::lround(t.points[i].p.y / row * 1000.0));
+        CHECK(rows.size() >= 3);
+        for (long y : rows)
+            CHECK(y % 1000 == 0);
+    }
+    // The interface across them (along Y), a bead's spacing apart (rule 5).
+    double along_y = 0.0, along_x = 0.0;
+    for (const Toolpath& t : model.fills[7].support_interface)
+        for (std::size_t i = 1; i < t.points.size(); ++i) {
+            along_y += std::fabs(t.points[i].p.y - t.points[i - 1].p.y);
+            along_x += std::fabs(t.points[i].p.x - t.points[i - 1].p.x);
+        }
+    CHECK(along_y > 5.0 * along_x);
+    // Material per area: about 1 / spacing for the base, 1 / bead's spacing for the interface.
     const double area = area_mm2(model.support_areas[0]);
     CHECK(length(model.fills[0].support) / area < 0.7);
-    CHECK(length(model.fills[7].support_interface) / area_mm2(model.support_areas[7]) > 1.8);
+    const double under = area_mm2(Clipper2Lib::Intersect(model.support_areas[7], model.regions[12], Clipper2Lib::FillRule::NonZero));
+    CHECK(length(model.fills[7].support_interface) / under > 2.3);
     std::ostringstream out;
     write_gcode(out, model, s);
     CHECK(out.str().find(";TYPE:Support material\n") != std::string::npos);

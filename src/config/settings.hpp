@@ -49,6 +49,7 @@ struct Speed {
     double value = 0.0;
     bool percent = false;
     double of(double base) const { return percent ? base * value / 100.0 : value; }
+    friend bool operator==(const Speed&, const Speed&) = default;
 };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
@@ -189,8 +190,11 @@ struct Settings {
     bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
-    double support_xy_gap = 0.6; // mm between the support and the part beside it
-    double support_spacing = 2.5;    // mm between support lines
+    // Between the support and the part beside it: mm, or percent of the
+    // wall width (supports_skirt.md, rule 2: 50 %).
+    Speed support_xy_gap{50.0, true};
+    double support_spacing = 2.5;    // mm of free space between the base's lines (a bead's spacing more between centres)
+    double support_line_angle = 0.0; // degrees, the base's lines; the interface's at 90 to them
     // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15
     // to 17): round branches that join on their way down to the bed.
     SupportStyle support_style = SupportStyle::Grid;

@@ -10,6 +10,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Cambiado
+
+- **Soporte en grilla como pide la ficha `supports_skirt.md`** (segunda prueba de caja negra, QA10 a QA12): la zona
+  llega 1,6 mm más allá de lo que cuelga, así los pedazos chicos de una pieza orgánica se juntan en una zona firme; la
+  separación con la pieza es por defecto la mitad del ancho de las paredes (`support.xy_gap` acepta mm o un
+  porcentaje); la base va en líneas en una sola dirección (`support.line_angle`, nuevo) a `support.spacing` más un
+  cordón, y la interfaz cruzada a 90°, a la separación de los cordones.
+
 ### Agregado
 
 - **OBJ y 3MF** (ficha `formats.md`): la línea de comandos y la interfaz abren modelos OBJ y 3MF además de STL. Del

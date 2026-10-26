@@ -208,8 +208,10 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 
 ### `support`
 
-Soportes según `docs/spec/BEHAVIOR.md` («Soportes»): base en líneas e interfaz densa bajo la pieza, como tipos
-`Support material` y `Support material interface` del G-code. Los puentes cortos sin soporte vienen después.
+Soportes según `docs/spec/BEHAVIOR.md` («Soportes») y la ficha `supports_skirt.md`: base en líneas e interfaz densa
+bajo la pieza, como tipos `Support material` y `Support material interface` del G-code. La zona del soporte en grilla
+es la proyección de lo que cuelga más un margen de 1,6 mm alrededor (regla 2), apartada `xy_gap` de la pieza. Los
+puentes cortos sin soporte vienen después.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
@@ -217,9 +219,10 @@ Soportes según `docs/spec/BEHAVIOR.md` («Soportes»): base en líneas e interf
 | `automatic` | booleano | true | | false: solo hay soporte bajo las caras pintadas para tenerlo (`docs/PAINTING.md`; ficha `supports_more.md`, regla 3). Las caras pintadas para no tenerlo nunca lo llevan |
 | `threshold_angle` | número | 0 | 0 a menos de 90 | Una cara más tendida que este ángulo, medido desde la horizontal, lleva soporte; 0 es automático: cada capa puede salir medio cordón más afuera que la de abajo |
 | `z_gap` | número | 0.2 | ≥ 0 | Separación en Z entre el soporte y la pieza de arriba, en mm (se redondea a capas enteras; valor de banco) |
-| `xy_gap` | número | 0.6 | ≥ 0 | Separación horizontal entre el soporte y la pieza, en mm |
-| `spacing` | número | 2.5 | > 0 | Separación de las líneas del soporte, en mm (valor de banco); líneas en zigzag sobre una grilla fija al origen, a 0° y 90° en capas alternas |
-| `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va con las líneas a un cordón, a 45° de la base |
+| `xy_gap` | número o texto | `"50%"` | ≥ 0 | Separación horizontal entre el soporte y la pieza: en mm, o un porcentaje del ancho de las paredes (`walls.width`) como `"50%"` (ficha `supports_skirt.md`, regla 2) |
+| `spacing` | número | 2.5 | > 0 | Espacio libre entre las líneas de la base, en mm: entre los centros hay además la separación de un cordón (2,857 mm con cordones de 0,4 y capas de 0,2; ficha `supports_skirt.md`, regla 6). Líneas en zigzag sobre una grilla fija al origen; la interfaz va a 90° de ellas, a la separación de los cordones |
+| `line_angle` | número | 0 | −360 a 360 | Dirección de las líneas de la base, en grados, la misma en todas las capas |
+| `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va en líneas a la separación de los cordones, a 90° de la base (con `style` `organic`, a 45° y 135° en capas alternas) |
 | `style` | texto | `"grid"` | `grid`, `organic` | `grid`: columnas rectas bajo lo que cuelga. `organic`: soportes en árbol (ficha `supports_more.md`, reglas 15 a 17): bajo lo que cuelga, `interface_layers` capas de interfaz enteras; debajo, puntas redondas que bajan como ramas, se juntan y engordan hasta troncos sobre la cama, y esquivan la pieza; donde no pueden esquivarla, se apoyan en ella, con la separación en Z. Cada rama lleva una pared (dos si es gruesa) y el relleno del soporte adentro |
 | `tree_angle` | número | 40 | 0 a 85 | Inclinación máxima de una rama, en grados desde la vertical, para esquivar la pieza |
 | `tree_angle_preferred` | número | 25 | 0 a 85 | Inclinación de una rama para juntarse con otra |
