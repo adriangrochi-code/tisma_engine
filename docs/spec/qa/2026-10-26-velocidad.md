@@ -181,6 +181,54 @@ la diferencia se explica.
    y los otros dos las suyas) ni el filamento (el motor no lo escribe en el G-code).
 5. Con las metas RV1 a RV6 (`BENCHMARKS.md`), esta tabla se repite con el motor nuevo.
 
+## Cuarta medición: núcleos, memoria, casos extremos y robustez
+
+**Cómo:** motor de `dev` en `1ffbdeb`, mismo equipo; con `taskset` para limitar los núcleos; una corrida por caso.
+
+1. **Mismo resultado siempre:** el G-code de las 5 piezas es idéntico byte a byte con 1, 2 y 4 núcleos.
+2. **Memoria máxima:** Benchy 130 MB, Benchy al doble 281 MB, Benchy con soportes 133 MB, conejo al 150 % 224 MB,
+   tornillo 68 MB. El 1 GB por trabajo que reserva el servidor alcanza con margen.
+3. **Núcleos:** el motor casi no gana con más núcleos.
+
+| Pieza | 1 núcleo | 2 núcleos | 4 núcleos | 4 contra 1 |
+|---|---|---|---|---|
+| Benchy | 8,14 s | 6,31 s | 5,90 s | 1,38 veces |
+| Benchy al doble, gyroid | 23,84 s | 18,64 s | 18,95 s | 1,26 veces |
+| Benchy con soportes | 7,79 s | 7,05 s | 6,61 s | 1,18 veces |
+| Conejo al 150 % | 5,27 s | 4,06 s | 3,87 s | 1,36 veces |
+| Tornillo al 400 % | 0,63 s | 0,36 s | 0,25 s | 2,52 veces |
+
+   Sin capas de abajo, el Benchy va de 1,89 s a 0,91 s (2,1 veces) y el Benchy al doble de 6,31 s a 2,61 s (2,4 veces).
+4. **El Benchy al doble con gyroid no es por el gyroid:** con rectilíneo tarda 17,9 s y con gyroid 18,9 s; sin capas de
+   abajo, 3,0 s, la mitad que Tisma Slicer (7,6 s). Es el mismo paso de la segunda medición.
+5. **Casos que se disparan,** siempre por las capas de abajo:
+
+| Conejo al 150 % | Tiempo | Con `bottom_layers` 0 |
+|---|---|---|
+| Por defecto | 3,4 s | 3,0 s |
+| `infill.density` 0 | 187,4 s (165 s en el paso de corte) | 3,3 s |
+| `walls.count` 1 | 50,9 s | 1,7 s |
+| `infill.density` 5 | 3,1 s | — |
+
+   Una pieza hueca, sin relleno, tarda 55 veces más. Es el caso más grave encontrado.
+6. **El armado del G-code** se lleva 3,2 s de los 3,4 s del conejo (`write_ms`), en un solo núcleo, para 241 122 líneas
+   (V5).
+7. **Robustez:** 21 casos sin un solo cierre inesperado ni cuelgue.
+   - archivo vacío, malla abierta, binario cortado, vértice NaN y basura: terminan con un error claro (códigos 2 y 4);
+   - caras invertidas, triángulos sin área, dos cubos que se cruzan, STL en texto, una columna de 400 mm y una pieza por
+     debajo de la cama: se laminan bien (la pieza baja a la cama);
+   - pieza más grande que la cama o lejos de ella, pieza más fina que el cordón: error claro;
+   - capas de 0,01 mm, 1000 paredes, relleno gyroid al 100 % y cama vacía: se laminan; JSON roto, boquilla de 0,1 con
+     capas de 0,2 y capas de 5 mm: error claro.
+
+## Qué hacer, tercera parte
+
+| # | Qué | Por qué | Meta |
+|---|---|---|---|
+| V12 | Que una pieza hueca o con una sola pared no dispare el paso de las capas de abajo (parte de V7) | 187 s y 51 s en el conejo (regla 5) | RV7 |
+| V13 | Armar el G-code en paralelo por capa y unirlo en orden (V5, ahora medido) | 3,2 s de 3,4 s en el conejo (regla 6) | RV8 |
+| V14 | Repartir entre núcleos lo que hoy va en uno, después de V7 | 4 núcleos rinden 1,2 a 1,4 veces lo de 1 (regla 3) | RV9 |
+
 ## Para repetir la medición
 
 La misma tabla con el motor nuevo, en el mismo equipo. El laminado tiene que dar el mismo G-code antes y después de
