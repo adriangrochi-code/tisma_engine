@@ -140,6 +140,47 @@ impresoras.
 Las fichas no piden un algoritmo: piden el resultado. El G-code tiene que salir igual antes y después de cada cambio, o
 la diferencia se explica.
 
+## Tercera medición: PrusaSlicer, Tisma Slicer y el motor
+
+**Cómo:**
+- PrusaSlicer 2.9.6 compilado desde su etiqueta `version_2.9.6`, sin cambios en el código: solo el ajuste de
+  compilación para usar las librerías del sistema, el mismo que usa Tisma Slicer;
+- Tisma Slicer de su rama de trabajo del 26-10-2026;
+- el motor de `dev` en `1ffbdeb`;
+- el mismo equipo de 4 núcleos, mediana de 3 corridas, capas de 0,2 mm y boquilla de 0,4 mm;
+- PrusaSlicer y Tisma Slicer desde la línea de comandos con sus valores por defecto; el motor con los ajustes de la
+  primera medición.
+
+**Tiempo de laminado:**
+
+| Pieza | PrusaSlicer 2.9.6 | Tisma Slicer | Motor |
+|---|---|---|---|
+| Benchy | 6,68 s | 3,73 s | 5,82 s |
+| Benchy al doble, gyroid 15 % | 8,25 s | 7,56 s | 17,97 s |
+| Benchy con soportes | 9,82 s | 6,65 s | 6,78 s |
+| Conejo al 150 % | 2,01 s | 2,32 s | 3,60 s |
+| Tornillo M3 al 400 %, relleno 40 % | 1,07 s | 1,07 s | 0,27 s |
+
+**Tamaño del G-code y movimientos `G1`:**
+
+| Pieza | PrusaSlicer 2.9.6 | Tisma Slicer | Motor |
+|---|---|---|---|
+| Benchy | 3,08 MB, 99 501 | 3,08 MB, 99 480 | 7,59 MB, 202 907 |
+| Benchy al doble, gyroid 15 % | 16,46 MB, 556 626 | 16,46 MB, 556 625 | 22,78 MB, 750 848 |
+| Benchy con soportes | 4,23 MB, 140 652 | 4,23 MB, 140 631 | 7,88 MB, 213 962 |
+| Conejo al 150 % | 7,21 MB, 246 355 | 7,21 MB, 246 355 | 6,86 MB, 228 856 |
+| Tornillo M3 al 400 % | 1,66 MB, 57 267 | 1,66 MB, 57 267 | 1,64 MB, 54 270 |
+
+1. **Tisma Slicer contra PrusaSlicer:** 1,8 veces más rápido en el Benchy y 1,5 veces con soportes; un 15 % más lento
+   en el conejo; igual en el tornillo. Con los valores por defecto, el G-code es casi el mismo.
+2. **El motor:** el más rápido en el tornillo (4 veces) y parejo con Tisma Slicer en el Benchy con soportes. Más lento
+   en el Benchy (1,6 veces), en el Benchy al doble con gyroid (2,4 veces) y en el conejo (1,6 veces).
+3. **El G-code del motor** es hasta 2,5 veces más grande en los Benchy (reglas 6 de la primera medición, V3 y V4) y
+   un poco más chico en el conejo y el tornillo.
+4. **No se comparan** el tiempo estimado de impresión (el motor usa velocidades de respaldo sin perfil de impresora,
+   y los otros dos las suyas) ni el filamento (el motor no lo escribe en el G-code).
+5. Con las metas RV1 a RV6 (`BENCHMARKS.md`), esta tabla se repite con el motor nuevo.
+
 ## Para repetir la medición
 
 La misma tabla con el motor nuevo, en el mismo equipo. El laminado tiene que dar el mismo G-code antes y después de
