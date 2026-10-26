@@ -9,7 +9,6 @@
 #include <chrono>
 #include <exception>
 #include <fstream>
-#include <iterator>
 #include <system_error>
 
 namespace tisma {
@@ -59,12 +58,18 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
     const auto check_start = std::chrono::steady_clock::now();
     std::string text;
     {
-        std::ifstream file(part, std::ios::binary);
-        if (!file) {
+        // In one read: character by character took a tenth of the export.
+        std::ifstream file(part, std::ios::binary | std::ios::ate);
+        const std::streamoff size = file ? std::streamoff(file.tellg()) : -1;
+        if (size >= 0) {
+            text.resize(std::size_t(size));
+            file.seekg(0);
+            file.read(text.data(), size);
+        }
+        if (!file || size < 0) {
             out.error = "cannot read back '" + part.string() + "'";
             return out;
         }
-        text.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
     out.bytes = text.size();
     out.check = check_gcode(text, gcode_limits(model, settings));

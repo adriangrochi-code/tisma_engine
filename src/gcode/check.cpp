@@ -9,8 +9,12 @@
 #include "geom/polygons.hpp"
 #include "slice/pipeline.hpp"
 
+#include <oneapi/tbb/parallel_pipeline.h>
+
 #include <algorithm>
 #include <charconv>
+#include <cstdint>
+#include <memory>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -46,41 +50,92 @@ std::optional<double> number(std::string_view t) {
     return v;
 }
 
+// A line read apart from what came before it, so that many lines are read at
+// once (the speed report's V5); the checker then takes them in order.
+struct ParsedLine {
+    std::string_view comment; // after the ';'
+    bool has_comment = false;
+    bool too_many = false;       // more words than a G-code command has
+    std::string_view head;       // the command word; empty: no words
+    bool readable = false;       // G, M or T with a whole number
+    char kind = 0;
+    int code = 0;
+    std::string_view unreadable; // the first parameter that is not a letter and a number
+    std::uint32_t first = 0, count = 0; // the parameters, in the chunk's list
+};
+
+struct Parameter {
+    char letter;
+    double value;
+};
+
+void parse_line(std::string_view raw, ParsedLine& out, std::vector<Parameter>& parameters) {
+    const std::size_t semicolon = raw.find(';');
+    if (semicolon != std::string_view::npos) {
+        out.comment = raw.substr(semicolon + 1);
+        out.has_comment = true;
+        raw = raw.substr(0, semicolon);
+    }
+    // Words separated by spaces or tabs.
+    std::string_view words[16];
+    std::size_t count = 0;
+    std::size_t i = 0;
+    while (i < raw.size()) {
+        while (i < raw.size() && (raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\r'))
+            ++i;
+        const std::size_t start = i;
+        while (i < raw.size() && raw[i] != ' ' && raw[i] != '\t' && raw[i] != '\r')
+            ++i;
+        if (i > start) {
+            if (count == std::size(words)) {
+                out.too_many = true;
+                return;
+            }
+            words[count++] = raw.substr(start, i - start);
+        }
+    }
+    if (count == 0)
+        return;
+    out.head = words[0];
+    out.kind = out.head.front();
+    const std::optional<double> code = out.head.size() > 1 ? number(out.head.substr(1)) : std::nullopt;
+    out.readable = (out.kind == 'G' || out.kind == 'M' || out.kind == 'T') && code && *code == std::floor(*code);
+    if (!out.readable)
+        return;
+    out.code = int(*code);
+    // Parameters: a letter and a number each.
+    out.first = std::uint32_t(parameters.size());
+    for (std::size_t k = 1; k < count; ++k) {
+        const std::string_view w = words[k];
+        const char letter = w.front();
+        const std::optional<double> v = letter >= 'A' && letter <= 'Z' ? number(w.substr(1)) : std::nullopt;
+        if (!v) {
+            out.unreadable = w;
+            break;
+        }
+        parameters.push_back({letter, *v});
+    }
+    out.count = std::uint32_t(parameters.size()) - out.first;
+}
+
 class Checker {
 public:
     explicit Checker(const GcodeLimits& limits)
         : limits_(limits), retract_length_(limits.retract_length), flow_(limits.flow) {}
 
-    void line(std::string_view raw) {
+    void line(const ParsedLine& p, std::span<const Parameter> parameters) {
         ++line_;
         ++out_.stats.lines;
-        const std::size_t semicolon = raw.find(';');
-        if (semicolon != std::string_view::npos) {
-            comment(raw.substr(semicolon + 1));
-            raw = raw.substr(0, semicolon);
-        }
-        // Words separated by spaces or tabs.
-        std::string_view words[16];
-        std::size_t count = 0;
-        std::size_t i = 0;
-        while (i < raw.size()) {
-            while (i < raw.size() && (raw[i] == ' ' || raw[i] == '\t' || raw[i] == '\r'))
-                ++i;
-            const std::size_t start = i;
-            while (i < raw.size() && raw[i] != ' ' && raw[i] != '\t' && raw[i] != '\r')
-                ++i;
-            if (i > start) {
-                if (count == std::size(words)) {
-                    if (!custom_)
-                        problem("more words than a G-code command has");
-                    return;
-                }
-                words[count++] = raw.substr(start, i - start);
-            }
-        }
-        if (count == 0)
+        if (p.has_comment)
+            comment(p.comment);
+        if (p.too_many) {
+            if (!custom_)
+                problem("more words than a G-code command has");
             return;
-        command(std::span(words, count));
+        }
+        if (p.head.empty())
+            return;
+        command(p, parameters.subspan(p.first, p.count));
     }
 
     GcodeCheck finish(bool ends_with_newline, bool has_summary) {
@@ -146,29 +201,22 @@ private:
         }
     }
 
-    void command(std::span<const std::string_view> words) {
-        const std::string_view head = words.front();
-        const char kind = head.front();
-        const std::optional<double> code = head.size() > 1 ? number(head.substr(1)) : std::nullopt;
-        if ((kind != 'G' && kind != 'M' && kind != 'T') || !code || *code != std::floor(*code)) {
+    void command(const ParsedLine& p, std::span<const Parameter> parameters) {
+        const char kind = p.kind;
+        if (!p.readable) {
             if (!custom_)
-                problem("unreadable command '" + std::string(head) + "'");
+                problem("unreadable command '" + std::string(p.head) + "'");
             return; // the user's own G-code may hold anything
         }
-        // Parameters: a letter and a number each.
-        std::optional<double> param[26];
-        for (std::size_t i = 1; i < words.size(); ++i) {
-            const std::string_view w = words[i];
-            const char letter = w.front();
-            const std::optional<double> v = letter >= 'A' && letter <= 'Z' ? number(w.substr(1)) : std::nullopt;
-            if (!v) {
-                if (!custom_)
-                    problem("unreadable parameter '" + std::string(w) + "'");
-                return;
-            }
-            param[letter - 'A'] = v;
+        if (!p.unreadable.empty()) {
+            if (!custom_)
+                problem("unreadable parameter '" + std::string(p.unreadable) + "'");
+            return;
         }
-        const int n = int(*code);
+        std::optional<double> param[26];
+        for (const Parameter& q : parameters)
+            param[q.letter - 'A'] = q.value;
+        const int n = p.code;
         if (kind == 'G' && (n == 0 || n == 1))
             move(n, param);
         else if (kind == 'G' && n == 90)
@@ -400,16 +448,57 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
 GcodeCheck check_gcode(std::string_view text, const GcodeLimits& limits) {
     Checker checker(limits);
     bool summary = false;
+    // In chunks of whole lines: read in parallel, checked in order, a few
+    // chunks in flight at a time.
+    struct Chunk {
+        std::string_view text;
+        std::vector<ParsedLine> lines;
+        std::vector<Parameter> parameters;
+        bool summary = false;
+    };
+    constexpr std::size_t kChunk = 256 * 1024;
     std::size_t start = 0;
-    while (start < text.size()) {
-        std::size_t end = text.find('\n', start);
-        if (end == std::string_view::npos)
-            end = text.size();
-        const std::string_view line = text.substr(start, end - start);
-        summary = summary || line.starts_with("; estimated printing time = ");
-        checker.line(line);
-        start = end + 1;
-    }
+    tbb::parallel_pipeline(
+        16,
+        tbb::make_filter<void, std::shared_ptr<Chunk>>(
+            tbb::filter_mode::serial_in_order,
+            [&](tbb::flow_control& control) -> std::shared_ptr<Chunk> {
+                if (start >= text.size()) {
+                    control.stop();
+                    return nullptr;
+                }
+                std::size_t end = std::min(start + kChunk, text.size());
+                if (end < text.size()) {
+                    const std::size_t newline = text.find('\n', end);
+                    end = newline == std::string_view::npos ? text.size() : newline + 1;
+                }
+                auto chunk = std::make_shared<Chunk>();
+                chunk->text = text.substr(start, end - start);
+                start = end;
+                return chunk;
+            }) &
+            tbb::make_filter<std::shared_ptr<Chunk>, std::shared_ptr<Chunk>>(
+                tbb::filter_mode::parallel,
+                [](std::shared_ptr<Chunk> chunk) {
+                    const std::string_view piece = chunk->text;
+                    std::size_t at = 0;
+                    while (at < piece.size()) {
+                        std::size_t end = piece.find('\n', at);
+                        if (end == std::string_view::npos)
+                            end = piece.size();
+                        const std::string_view line = piece.substr(at, end - at);
+                        chunk->summary = chunk->summary || line.starts_with("; estimated printing time = ");
+                        parse_line(line, chunk->lines.emplace_back(), chunk->parameters);
+                        at = end + 1;
+                    }
+                    return chunk;
+                }) &
+            tbb::make_filter<std::shared_ptr<Chunk>, void>(tbb::filter_mode::serial_in_order,
+                                                          [&](std::shared_ptr<Chunk> chunk) {
+                                                              summary = summary || chunk->summary;
+                                                              for (const ParsedLine& p : chunk->lines)
+                                                                  checker.line(p, chunk->parameters);
+                                                          }));
     return checker.finish(!text.empty() && text.back() == '\n', summary);
 }
 

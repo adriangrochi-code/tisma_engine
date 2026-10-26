@@ -726,9 +726,11 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
 - [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
 - [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
-- [ ] V5: armar el G-code de cada capa en paralelo y unirlo en orden. Primer paso (2026-10-26): las costuras y la
-  simplificación de los recorridos comparan distancias al cuadrado y solo sacan la raíz cuando quedan a un pelo del
-  límite (la misma respuesta); el texto del G-code y su verificación siguen en serie. Es lo que falta para RV4
+- [x] V5: armar el G-code de cada capa en paralelo y unirlo en orden (hecho 2026-10-26). Cada capa se planea (orden y
+  costuras, que siguen de la capa de abajo) y se escribe por separado, en un pipeline de oneTBB: mientras se escribe
+  una capa se planean las siguientes, y los recorridos se simplifican en paralelo. La verificación lee el texto en
+  bloques en paralelo. Las costuras y la simplificación sacan la raíz solo cuando hace falta, y X, Y y el ancho se
+  formatean una vez. El G-code es el mismo byte a byte en todas las piezas de medición
 - [x] V7 (hecho con lo de arriba: el paso de las capas de abajo ya no crece más que los vértices; RV2 se cumple). V8
   no hace falta: las fichas piden el resultado, no el algoritmo, y RV1 a RV3 se cumplen
 - [x] V11, relaminar por etapas (hecho 2026-10-26): el programa guarda el último corte; si solo cambian ajustes que
