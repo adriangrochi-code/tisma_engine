@@ -38,6 +38,21 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 | Han, Wu, Liu, Song, Cui. *Research on a Support-Free Five-Degree-of-Freedom Additive Manufacturing Method.* Micromachines, 2024. [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11279049/) | 5 ejes con cama que gira (MA5) |
 | Andersons, Sanchez, Vaneker. *Wave-inspired path-planning strategy for support-free horizontal overhangs in FDM.* Additive Manufacturing Letters, 2026 | Voladizos horizontales con caminos en ondas (G1) |
 
+## Color, piezas grandes, estabilidad y ahorro de material (`qa/2026-10-26-papers-mas.md`)
+
+| Fuente | Para qué |
+|---|---|
+| Hergel, Lefebvre. *Clean Color: Improving Multi-filament 3D Prints.* Computer Graphics Forum 33(2), 2014 | Goteo con varias boquillas (C1) |
+| Song, Martínez, Bedell, Vennin, Lefebvre. *Colored Fused Filament Fabrication.* ACM TOG 38(5), 2019. [arXiv](https://arxiv.org/abs/1709.09689) | Color por franjas dentro de la capa (C2) |
+| Kuipers, Elkhuizen, Verlinden, Doubrovski. *Hatching for 3D prints.* Computers & Graphics 74, 2018. [arXiv](https://arxiv.org/abs/1805.01375) | Medios tonos con líneas y dos filamentos (C3) |
+| Luo, Baran, Rusinkiewicz, Matusik. *Chopper.* ACM TOG 31(6), 2012 | Partir piezas grandes (F1) |
+| Song, Fu, Liu, Fu. *Printing 3D objects with interlocking parts.* Computer Aided Geometric Design 35–36, 2015 | Partes que se traban (F2) |
+| Chen y otros. *Dapper: Decompose-and-Pack for 3D Printing.* ACM TOG 34(6), 2015 | Partir y acomodar juntos (F3) |
+| Prévost, Whiting, Lefebvre, Sorkine-Hornung. *Make It Stand.* ACM TOG 32(4), 2013 | Que la pieza se pare sola (E1) |
+| Stava, Vanek, Benes, Carr, Měch. *Stress Relief.* ACM TOG 31(4), 2012 | Corregir zonas débiles (E2) |
+| Wang y otros. *Cost-effective Printing of 3D Objects with Skin-Frame Structures.* ACM TOG 32(6), 2013 | Cáscara con armazón interno (E3) |
+| Mueller y otros. *WirePrint: 3D Printed Previews for Fast Prototyping.* UIST 2014 | Vista previa en alambre (W1) |
+
 ## Estabilidad durante la impresión
 
 | Fuente | Para qué |
