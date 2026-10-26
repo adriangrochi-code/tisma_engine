@@ -32,6 +32,11 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 | Zhang et al., *S³-Slicer*, SIGGRAPH Asia 2022. [ACM SIGGRAPH](https://history.siggraph.org/?p=216073) | Laminado curvo con varios objetivos |
 | Zhang et al., *Support Generation for Robot-Assisted 3D Printing with Curved Layers*, ICRA 2023. [arXiv](https://arxiv.org/pdf/2302.05510) | Soportes para capas curvas |
 | Estudio de acabado con capas curvas (ScienceDirect, 2025). [Artículo](https://www.sciencedirect.com/science/article/pii/S2590123025043178) | Las capas curvas mejoran el acabado hasta unos 55° de inclinación |
+| Ottonello, Hugron, Parmiggiani, Lefebvre. *QuickCurve: revisiting slightly non-planar 3D printing.* arXiv 2406.03966, 2024. [arXiv](https://arxiv.org/abs/2406.03966) | Superficie de corte curva por mínimos cuadrados, sin choques (`qa/2026-10-26-papers-calidad.md`, NP1) |
+| Xu, Li, Chen, Tang. *Curved layer based process planning for multi-axis volume printing of freeform parts.* Computer-Aided Design 114 (2019) 51–63 | Capas curvas por distancia geodésica (MA2) |
+| Zhang, Chen, Fang, Tian, Wang. *Singularity-Aware Motion Planning for Multi-Axis Additive Manufacturing.* IEEE RA-L 6(4), 2021. [arXiv](https://arxiv.org/abs/2103.00273) | Singularidades y choques en 5 ejes (MA3) |
+| Han, Wu, Liu, Song, Cui. *Research on a Support-Free Five-Degree-of-Freedom Additive Manufacturing Method.* Micromachines, 2024. [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11279049/) | 5 ejes con cama que gira (MA5) |
+| Andersons, Sanchez, Vaneker. *Wave-inspired path-planning strategy for support-free horizontal overhangs in FDM.* Additive Manufacturing Letters, 2026 | Voladizos horizontales con caminos en ondas (G1) |
 
 ## Estabilidad durante la impresión
 

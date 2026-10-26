@@ -262,7 +262,8 @@ con un solo offset por trayectoria), mismo equipo, mediana de 3 corridas salvo d
 
   En el conejo, ubicar la costura alineada se lleva unos 2 s de 3,3; crece con las paredes (`walls.count` 6:
   `write_ms` 3938). Con `nearest`, el conejo tarda 1,28 s: menos que Tisma Slicer (2,32 s) y que PrusaSlicer (2,01 s).
-  Propuesta V15: la costura alineada en la GPU (`perimeters.md`, regla 8; meta RV10).
+  Propuesta V15: la costura alineada en la GPU (meta RV10). El dueño la descartó el 26-10-2026: las GPU comunes
+  hacen la precisión que necesita entre 32 y 64 veces más lento, y en los núcleos la meta ya se cumplió (1,02 veces).
 
 ## Sexta medición: las metas en `dev` `5b0bdbd`
 
