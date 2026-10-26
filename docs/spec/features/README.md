@@ -66,6 +66,8 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`model_tools.md`](model_tools.md): partes, volúmenes negativos, modificadores, rangos de alturas, ajustes por objeto y por parte, y cuál gana; escalar, girar, cortar y separar | F3, P4 | Para revisar |
 | [`preview.md`](preview.md): vista previa: las 13 vistas, leyenda con tiempos y material, escala de colores, deslizadores, con capturas | P1 | Para revisar |
 | [`settings_panel.md`](settings_panel.md): el panel de ajustes en secciones (Calidad, Resistencia, Velocidad…) con apartados finos plegables, niveles Básico, Normal y Avanzado, vista Personalizada, tarjeta de impresora, cama y boquilla con dibujos, configuración de la impresora aparte con su calibración, conexión por red desde un ícono, boquilla con un clic y ventana de la cámara | P1 | Para revisar |
+| [`support_fins.md`](support_fins.md): aletas de soporte que se quitan con la mano, unidas con dientes de una capa, con escala por boquilla, bases, contrafuertes y resina (de Support Fins, MIT) | después de la primera versión | Para revisar |
+| [`credits.md`](credits.md): «Basado en…» en cada función que sale de otra fuente y la página Créditos y fuentes, con las licencias de terceros | P1 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
