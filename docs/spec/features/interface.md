@@ -136,6 +136,18 @@ modelos de prueba se ofrecen con el clic derecho sobre la cama.
 
    El menú de la flecha muestra solo las salidas posibles, con la elegida marcada (captura `31_main_button_menu.png`).
 4. Con «Slice automatically», el paso 2 no hace falta.
+5. **Relaminar por etapas** (diseño; Tisma Slicer hace algo parecido; meta RV5 de `BENCHMARKS.md`): un cambio rehace solo lo que depende de
+   ese ajuste, y el resultado es el mismo que el de un laminado completo.
+
+| Etapa | Ajustes que la rehacen | Qué se rehace |
+|---|---|---|
+| Corte | `layers`, `slicing`, `compensation`, la malla, su escala o su giro | Todo |
+| Trayectorias | `walls`, `fuzzy`, `surfaces`, `infill`, `support`, `adhesion`, `zaa` | Paredes, superficies, relleno, soportes y G-code; no se vuelve a cortar |
+| G-code | `speed`, `cooling`, `retraction`, `extrusion`, `gcode`, `changes`, los límites y aceleraciones de `machine` | Solo el G-code y su revisión |
+
+   - mover la pieza en X e Y sobre la cama rehace solo la etapa de G-code: las trayectorias se trasladan;
+   - un ajuste que no está en la tabla rehace todo, hasta que se ubique en una etapa;
+   - mientras se relamina, la vista previa sigue mostrando el resultado anterior.
 
 ### Vista previa (después de laminar)
 

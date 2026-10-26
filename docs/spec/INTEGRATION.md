@@ -56,6 +56,7 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 | Informar un problema | Contrato | `features/cloud.md` (informes), `problem_reports.md` (la pantalla) | Ficha lista |
 | Acceso remoto a impresoras | Contrato | `features/cloud.md` (puentes) | Ficha nueva |
 | App de Android | Ficha (app nueva) | `mobile_app.md` | Decisión del dueño: se hace de cero en el repositorio del motor, sobre su API; la vieja no se usa |
+| Biblioteca de modelos (nueva, pedido del dueño) | Ficha y contrato | `model_library.md`, `cloud.md` (regla 23) | Ficha lista; más adelante |
 | Thingiverse | Ficha y contrato | `thingiverse.md`, `cloud.md` (regla 22) | Ficha lista; la API se confirma con un token antes de programarla; falta el paso por el servidor |
 | Detección de fallas con la cámara (Obico) | Contrato | `features/cloud.md` | Obico es AGPL: va como servicio aparte, nunca dentro del motor |
 | Perfiles | Datos | `profile_pack.md` | Hecho (repositorio de perfiles) |
