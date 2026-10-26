@@ -45,6 +45,9 @@ interfaz con «Basado en…», y una página de créditos las junta todas.
 |---|---|---|---|---|
 | Aletas de soporte | `support_fins.md` | Support Fins, `https://github.com/gittrahan/support-fins` | gittrahan (idea de Slant3D) | MIT |
 | Asistente y tutoriales | `assistant.md` | Guías de impresión 3D, `https://www.rafabarajas.com` | Rafa Barajas | Guías; texto propio |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Wiki de calibración de OrcaSlicer, `https://github.com/SoftFever/OrcaSlicer/wiki/calibration_guide` | Equipo y comunidad de OrcaSlicer | Documentación; texto propio |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Ellis' Print Tuning Guide, `https://ellis3dp.com/Print-Tuning-Guide/` | Andrew Ellis | Guía; texto propio |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Documentación de Klipper: avance de presión y resonancias, `https://www.klipper3d.org/` | Proyecto Klipper | Documentación; texto propio |
 | Perfiles de resina del paquete | `profile_pack.md` | UVtools, `https://github.com/sn4k3/UVtools` | sn4k3 | AGPL-3.0 (datos, en el repositorio de perfiles) |
 | Paredes de ancho variable | `perimeters.md` | Kuipers et al. 2020, Computer-Aided Design 128:102907 | Kuipers, Doubrovski, Wu y Wang | Artículo |
 | Capas curvas en 3 ejes | `nonplanar_modes.md` | CurviSlicer, SIGGRAPH 2019 | Etienne et al. | Artículo |
