@@ -180,7 +180,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md`, `multi_extruder.md` | ✔ |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
 | Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md` | ◐ falta ponerlos desde la vista previa → `preview.md` |
-| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`), `gcode_templates.md` | ◐ falta el prefijo con que se usan: no se resolvieron desde la línea de comandos → `presets.md` |
+| Parámetros propios del perfil para usar en el G-code | `presets.md` (reglas 20 a 22), `gcode_templates.md` | ✔ |
 | Comentarios detallados en el G-code | `gcode_extras.md` | ✔ |
 | Formato del nombre del archivo de salida, con variables | `gcode_templates.md` | ✔ |
 | Scripts de posproceso | `gcode_templates.md` | ✔ |
@@ -263,11 +263,11 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Impresora por modelo, boquilla y cama aparte, datos oficiales | `profiles.md` | ✔ |
-| Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | — | ✘ → `presets.md` |
-| Compatibilidad entre perfiles (condiciones) | — | ✘ → `presets.md` |
+| Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | `presets.md` | ✔ |
+| Compatibilidad entre perfiles (condiciones) | `presets.md` | ✔ |
 | Impresoras físicas (una impresora con su conexión) | `devices.md` | ✔ |
-| Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | — | ✘ → `presets.md` |
-| Plantillas de filamento | `interface.md` (menú del filamento) | ◐ → `presets.md` |
+| Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | `presets.md` | ◐ falta medir la actualización de los perfiles del sistema y volver a una instantánea |
+| Plantillas de filamento | `interface.md` (menú del filamento) | ◐ falta medir cómo se instalan y se usan (no entraron en `presets.md`) |
 | Buscar un ajuste | `interface.md` | ✔ |
 | Asistente de primer uso | `interface.md` | ✔ |
 | Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
