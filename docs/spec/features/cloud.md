@@ -111,17 +111,36 @@ Deja usar desde afuera (la app, la página) las impresoras conectadas a esta com
 
 Los nodos corren el motor como programa aparte para cada trabajo. El contrato es la línea de comandos.
 
-18. **Laminar un proyecto:** el motor lamina un proyecto 3MF completo, con sus perfiles, sus ajustes por objeto y su
-    cama elegida, sin interfaz y sin leer la carpeta de datos del usuario:
-    - entrada: el 3MF; salida: el G-code (texto o binario, como diga el perfil);
-    - progreso por la salida estándar, una línea por cambio: `progress <0 a 100>`;
-    - al terminar, un resumen JSON con el tiempo estimado, el filamento en mm y en g, y la cantidad de capas;
-    - código de salida 0 si salió bien. Si no, otro código y el error en la salida de errores.
-19. **Analizar:** lo mismo con `analyze` (ya existe en el motor) a partir del 3MF y los parámetros de la regla 6.
-20. **Aislado:** cada trabajo corre en su carpeta, sin red, y con un tiempo máximo que pone el nodo. El motor no lee
-    nada fuera de lo que recibe.
-21. **Lo que cambia del lado del servidor:** el nodo pasa a llamar al motor con esta línea de comandos en lugar de los
-    programas de Tisma Slicer. Lo hace el equipo del dueño en el servidor; el motor no ve su código.
+18. **Laminar un proyecto:**
+
+    ```text
+    tisma-engine slice <proyecto.3mf> -o <salida.gcode> --summary <resumen.json> --sandbox [--no-gpu]
+    ```
+
+    - lamina el proyecto 3MF completo (piezas, ajustes por objeto, perfiles y cama elegida), sin interfaz y sin leer
+      la carpeta de datos del usuario. También acepta proyectos de otros laminadores (`formats.md`, regla 18);
+    - el G-code sale de texto o binario, como diga el perfil. El nodo reconoce el binario por sus primeros bytes;
+    - por la salida estándar, una línea por cada cambio de avance: `progress <0 a 100>`;
+    - `<resumen.json>` lleva `print_time` (texto, por ejemplo «1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g`
+      y `layers`;
+    - si falla: código de salida distinto de 0 y `error` en el resumen, con el texto para la persona; si no puede
+      escribir el resumen, el error va a la salida de errores.
+19. **Analizar:**
+
+    ```text
+    tisma-engine analyze <proyecto.3mf> -o <resultado.tea> --summary <resumen.json> --sandbox --mode <modo>
+      --quality <calidad> --object <n> --instance <n> [--solid] [--no-zones] [--ribs] [--no-gpu]
+    ```
+
+    - los apoyos, las cargas y el material van en el proyecto (`formats.md`); los parámetros son los de la regla 6;
+    - el resultado `.tea` es un archivo del motor, que el motor sabe abrir en Ingeniería;
+    - el resumen lleva el veredicto del análisis (`structural_analysis.md`) o `error`. Avance y códigos de salida, como
+      en la regla 18.
+20. **`--sandbox`:** no corre scripts de posproceso (`gcode_templates.md`, regla 16) ni complementos
+    (`plugins.md`), no abre conexiones de red y no lee ni escribe fuera de las rutas que recibe. El tiempo máximo lo
+    pone el nodo, que corta el proceso.
+21. **El lado del servidor ya está hecho:** con `tisma_engine` en la configuración de un nodo, el nodo corre los
+    trabajos con este contrato. Sin esa opción, sigue con los programas de Tisma Slicer.
 
 ## Pruebas
 
@@ -138,4 +157,6 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC7 | Puente con una impresora USB simulada: orden `pause` | La impresora recibe la pausa; el puente contesta `ok` |
 | CC8 | Orden con una acción que no está en la lista | El puente la rechaza y contesta con el error |
 | CC9 | Nadie mira la cámara | El puente no sube imágenes |
-| CC10 | `tisma-engine` laminando un 3MF en modo nodo | Líneas `progress`, G-code y resumen JSON; código 0 |
+| CC10 | `tisma-engine slice` de un 3MF con `--sandbox` | Líneas `progress`, G-code y resumen JSON con las cinco claves; código 0 |
+| CC11 | El mismo proyecto con un script de posproceso en sus ajustes | El script no corre |
+| CC12 | Proyecto con una pieza fuera de la cama | Código distinto de 0 y `error` en el resumen |

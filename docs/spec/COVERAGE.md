@@ -306,7 +306,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Servidor de Tisma Cloud: maestro y nodos, cola con prioridades, cuentas, planes y cobro, seguridad | `cloud.md` (contrato; el servidor es un programa aparte, `INTEGRATION.md`) | ✔ |
 | Informar un problema, con catálogo de errores y recompensa | `interface.md` (qué manda) | ◐ → `problem_reports.md` |
 | Thingiverse dentro del programa | `interface.md` (nombra) | ◐ → `thingiverse.md` |
-| App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | — | ✘ → `mobile_app.md` |
+| App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | `mobile_app.md` (app nueva, de cero, sobre el motor) | ✔ |
 | Acceso remoto a las impresoras y detección de fallas con la cámara | `cloud.md` (reglas 12 a 17) | ◐ falta la detección de fallas (Obico, servicio aparte) |
 
 ## Interfaz

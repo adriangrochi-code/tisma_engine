@@ -52,10 +52,10 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 | Conexiones | Ficha | `printer_connections.md` («Integración en sala limpia»), `devices.md` | USB programado; el resto, sin programar |
 | Análisis estructural, optimización, aerodinámica | Ficha | `structural_analysis.md`, `structural_optimization.md`, `aerodynamics.md` | El motor tiene su propio análisis (A1); faltan optimización y aerodinámica |
 | Orientación automática | Ficha | `orientation.md` | Sin programar |
-| Tisma Cloud: el motor como cliente y como programa de los nodos | Contrato | `features/cloud.md` | Ficha nueva |
+| Tisma Cloud: el motor como cliente y como programa de los nodos | Contrato | `features/cloud.md` | Ficha lista; el servidor ya corre el motor en los nodos que lo configuran |
 | Informar un problema | Contrato | `features/cloud.md` (informes) | Ficha nueva; falta la pantalla en `problem_reports.md` |
 | Acceso remoto a impresoras | Contrato | `features/cloud.md` (puentes) | Ficha nueva |
-| App de Android | Contrato | `mobile_app.md` | Falta: la app pasa a usar el motor en lugar del núcleo de Tisma Slicer |
+| App de Android | Ficha (app nueva) | `mobile_app.md` | Decisión del dueño: se hace de cero en el repositorio del motor, sobre su API; la vieja no se usa |
 | Thingiverse | Contrato | `thingiverse.md` | Falta: su API pública |
 | Detección de fallas con la cámara (Obico) | Contrato | `features/cloud.md` | Obico es AGPL: va como servicio aparte, nunca dentro del motor |
 | Perfiles | Datos | `profile_pack.md` | Hecho (repositorio de perfiles) |
@@ -72,8 +72,7 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 
 ## Siguientes fichas, en orden
 
-1. `mobile_app.md`: qué pantallas tiene la app y qué le pide al motor (la API que el motor tiene que ofrecer).
-2. `step_faces.md`: caras del STEP para pintar, cargas de Ingeniería y volver a convertir en triángulos sin perder lo
+1. `step_faces.md`: caras del STEP para pintar, cargas de Ingeniería y volver a convertir en triángulos sin perder lo
    pintado.
-3. `problem_reports.md`: la pantalla de informar un problema, con lo que manda (`cloud.md`).
-4. `thingiverse.md`: buscar y abrir modelos con la API pública de Thingiverse.
+2. `problem_reports.md`: la pantalla de informar un problema, con lo que manda (`cloud.md`).
+3. `thingiverse.md`: buscar y abrir modelos con la API pública de Thingiverse.
