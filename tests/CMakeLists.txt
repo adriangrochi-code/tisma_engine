@@ -151,6 +151,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1100x700 --tips --tool paint
               --info walls.seam --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_tip.png)
     set_tests_properties(ui_help_tour ui_help_tip_and_info PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The window with Vulkan (PLAN.md «Vista con Vulkan», V1): the panels
+    # drawn by Vulkan and read back from its swapchain for the picture.
+    if(TISMA_GPU)
+      add_test(NAME ui_vulkan_window
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
+      set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endif()
     # A seam painted down one side of a cube, sliced; its project keeps the
     # paint and opens to the same G-code.
     set(TISMA_PAINT_STROKES)

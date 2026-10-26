@@ -687,8 +687,10 @@ Con el PR #23 (2026-10-26):
 Pedido: más FPS con modelos grandes (LOD, «tipo raycaster»), hasta 60 FPS, y «la idea es que el motor funcione en
 Vulkan». Lo estudiado y medido, en `docs/LARGE_MODELS.md`. Hecho con OpenGL (2026-10-26): no dibujar lo que la pieza
 tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
-- [ ] V1: la ventana, la cadena de imágenes (swapchain) y Dear ImGui con Vulkan (volk y GLFW, como el cómputo);
-  OpenGL queda de respaldo donde no hay Vulkan 1.1
+- [x] V1: la ventana, la cadena de imágenes (swapchain) y Dear ImGui con Vulkan (volk y GLFW, como el cómputo);
+  OpenGL queda de respaldo donde no hay Vulkan 1.1 (hecho 2026-10-26: `--graphics`, `apps/tisma/vk_window.*`, la
+  prueba `ui_vulkan_window`). Cuando V2 esté, `kVulkanViewReady` pasa a verdadero y el modo automático elige Vulkan
+  primero (pedido del dueño: detectar solo si hay Vulkan y si no ir a OpenGL)
 - [ ] V2: la vista 3D en Vulkan (cama, modelo, cordones instanciados, MSAA, FXAA, capturas), comparada imagen contra
   imagen con la de OpenGL en la CI (lavapipe y llvmpipe)
 - [ ] V3: oclusión ambiental y ray tracing con la escena en buffers (sin el tope de 4 millones de primitivas)

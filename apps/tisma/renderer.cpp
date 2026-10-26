@@ -929,6 +929,7 @@ bool Renderer::init(std::string& error) {
     glGetIntegerv(GL_MAX_SAMPLES, &max_samples_);
     max_samples_ = std::max(max_samples_, 1);
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_);
+    ready_ = true;
     return true;
 }
 
@@ -992,6 +993,8 @@ void Renderer::resize(int width, int height, int samples) {
 }
 
 void Renderer::shutdown() {
+    if (!ready_)
+        return;
     release_targets();
     clear_ray_scene();
     for (unsigned* p : {&p_.background, &p_.line, &p_.grid, &p_.plate, &p_.mesh, &p_.preview, &p_.ao, &p_.blur,
@@ -1012,9 +1015,12 @@ void Renderer::shutdown() {
     if (white_)
         glDeleteTextures(1, &white_);
     empty_vao_ = white_ = 0;
+    ready_ = false;
 }
 
 void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
+    if (!ready_)
+        return;
     const std::vector<float> plate = bed_triangles(bed);
     upload(plate_.vao, plate_.vbo, plate.data(), plate.size() * sizeof(float));
     glEnableVertexAttribArray(0);
@@ -1035,6 +1041,8 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
 }
 
 void Renderer::set_model(const std::vector<float>& vertices) {
+    if (!ready_)
+        return;
     upload(model_.vao, model_.vbo, vertices.data(), vertices.size() * sizeof(float));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
@@ -1045,6 +1053,8 @@ void Renderer::set_model(const std::vector<float>& vertices) {
 }
 
 void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups) {
+    if (!ready_)
+        return;
     upload(paint_.vao, paint_.vbo, vertices.data(), vertices.size() * sizeof(float));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
@@ -1055,6 +1065,8 @@ void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<P
 }
 
 void Renderer::set_preview(const PreviewBuffers& p) {
+    if (!ready_)
+        return;
     // Drawing order (docs/LARGE_MODELS.md): first, layer by layer, what can
     // show; then, layer by layer, what the part hides when all of it is drawn.
     const std::size_t layers = p.layer_extrusions.empty() ? 0 : p.layer_extrusions.size() - 1;
@@ -1102,6 +1114,8 @@ void Renderer::clear_preview() {
 }
 
 bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<float>& primitives) {
+    if (!ready_)
+        return false;
     clear_ray_scene();
     const std::size_t row = std::size_t(RayScene::kTextureWidth) * 4;
     const int node_rows = int(nodes.size() / row), primitive_rows = int(primitives.size() / row);
@@ -1345,6 +1359,8 @@ unsigned Renderer::ray_pass(const ViewFrame& f) {
 }
 
 void Renderer::draw(const ViewFrame& f) {
+    if (!ready_)
+        return;
     const int samples = std::clamp(f.samples, 1, max_samples_);
     resize(f.width, f.height, samples);
     const Mat4 vp = f.projection * f.view;
@@ -1424,6 +1440,8 @@ void Renderer::draw(const ViewFrame& f) {
 }
 
 std::vector<std::uint8_t> Renderer::read_colour() {
+    if (!ready_)
+        return {};
     std::vector<std::uint8_t> out(std::size_t(width_) * std::size_t(height_) * 4);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glBindFramebuffer(GL_FRAMEBUFFER, colour_fbo_);
@@ -1433,6 +1451,8 @@ std::vector<std::uint8_t> Renderer::read_colour() {
 }
 
 RayReadback Renderer::read_back() {
+    if (!ready_)
+        return {};
     RayReadback r;
     r.width = width_, r.height = height_;
     const std::size_t n = std::size_t(width_) * std::size_t(height_);

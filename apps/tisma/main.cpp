@@ -28,7 +28,7 @@ constexpr const char* kUsage =
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
-    "                                   [--bench-frames N]]\n"
+    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -38,7 +38,10 @@ constexpr const char* kUsage =
     "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
     "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
     "shadow rays with the CPU's and exits with 1 if they differ). --bench-frames\n"
-    "draws the ready 3D view N more times and prints the time per frame.\n";
+    "draws the ready 3D view N more times and prints the time per frame.\n"
+    "--graphics chooses what draws the window: auto (the default) finds whether\n"
+    "this machine has Vulkan and takes OpenGL if not; vulkan asks for it (in\n"
+    "progress: the panels only, no 3D view yet, so auto takes OpenGL for now).\n";
 
 } // namespace
 
@@ -176,6 +179,12 @@ int main(int argc, char** argv) {
             options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
+        } else if (arg == "--graphics") {
+            options.graphics = value();
+            if (options.graphics != "auto" && options.graphics != "vulkan" && options.graphics != "opengl") {
+                std::fprintf(stderr, "error: --graphics must be auto, vulkan or opengl\n");
+                return 2;
+            }
         } else if (arg == "--bench-frames") {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--ray-check") {

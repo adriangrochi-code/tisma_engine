@@ -90,6 +90,10 @@ Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
   vez que hace falta después de un cambio (250 ms). Un clic pasa de 57 ms a 3 µs, y un paso del pincel, de 13–18 ms
   a 2 ms.
 - **El motor**, para comparar: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificarlo 0,04 s y la vista previa 0,06 s.
+- **Vulkan** (2026-10-26, `PLAN.md`, «Vista con Vulkan»): `--graphics auto|vulkan|opengl` elige qué dibuja la
+  ventana. El programa detecta si la máquina tiene Vulkan al intentar arrancarlo (el cargador, un dispositivo Vulkan
+  1.1 y una superficie para la ventana); si no puede, avisa y sigue con OpenGL. Por ahora Vulkan dibuja los paneles y
+  todavía no la vista 3D, así que `auto` usa OpenGL hasta que la vista esté.
 - **Vista previa** (2026-10-26, `docs/LARGE_MODELS.md`): con la pieza entera a la vista, las paredes internas y el
   relleno que la pieza tapa por todos lados no se dibujan; la imagen es la misma. En un cilindro de 60 × 80 mm se
   dibujan 52 499 cordones de 181 384, y el cuadro pasa de 2 330 a 633 ms en la GPU por software del contenedor. La

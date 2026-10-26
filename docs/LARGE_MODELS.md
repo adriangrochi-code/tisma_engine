@@ -31,8 +31,9 @@ la GPU decenas de millones de vértices por cuadro aunque la mayoría estén tap
 
 1. Medir. Hecho: `--bench-frames N` y el tiempo de la vista en la barra de estado (ver abajo).
 2. Ocultar lo de adentro en la vista previa. Hecho (ver abajo).
-3. Pasar la vista a Vulkan (decisión del dueño, 2026-10-26: «la idea es que el motor funcione en Vulkan»). El resto
-   de los pasos se hacen ahí, donde el recorte puede correr en la GPU (`PLAN.md`, «Vista con Vulkan»).
+3. Pasar la vista a Vulkan (decisión del dueño, 2026-10-26: «la idea es que el motor funcione en Vulkan», y que
+   detecte solo si la máquina lo tiene y si no use OpenGL). El resto de los pasos se hacen ahí, donde el recorte puede
+   correr en la GPU (`PLAN.md`, «Vista con Vulkan»). Hecho el primero (V1): la ventana y los paneles con Vulkan.
 4. Rayos primarios para la vista previa, como un modo de la vista.
 5. Capas juntas de lejos, y menos vértices por cordón (solo las caras que miran a la cámara).
 6. Malla simplificada del modelo mientras se mueve.

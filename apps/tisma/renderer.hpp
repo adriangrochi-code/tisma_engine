@@ -66,7 +66,8 @@ struct RayReadback {
 class Renderer {
 public:
     // Compiles the shaders and makes the buffers; false with a message if the
-    // driver refuses them.
+    // driver refuses them. Before it, or after it fails, the other methods do
+    // nothing (the window may be Vulkan's, PLAN.md «Vista con Vulkan»).
     bool init(std::string& error);
     void shutdown();
 
@@ -118,6 +119,7 @@ private:
     unsigned ambient_pass(const ViewFrame& f);
     unsigned ray_pass(const ViewFrame& f);
 
+    bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
     Buffer plate_, grid_, model_, paint_, extrusions_, travels_;

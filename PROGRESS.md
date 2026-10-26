@@ -4150,3 +4150,21 @@ esfera de 80 mm (peor caso), 188 664 → 157 196, 3 400 → 2 231 ms. Armar los 
 estado.
 
 **Sigue:** V1 de «Vista con Vulkan».
+
+## 2026-10-26 — vista con Vulkan, paso V1
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan», y «que detecte automáticamente si soporta Vulkan;
+si no lo hace, que vaya a OpenGL».
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_window.*`: la ventana con Vulkan, desde la especificación (instancia, dispositivo, swapchain, un render
+  pass que limpia y dibuja Dear ImGui, dos cuadros en vuelo, texturas para los íconos y el logo, y la imagen copiada
+  a memoria para las capturas). Vulkan con volk y la superficie con GLFW, como el cómputo del motor; los paneles con
+  el backend de Vulkan de Dear ImGui (MIT, anotado en `THIRD_PARTY.md`).
+- `--graphics auto|vulkan|opengl`. La detección es arrancar Vulkan: sin cargador, sin dispositivo 1.1 o sin superficie
+  para la ventana, avisa y sigue con OpenGL. Probado con lavapipe (Vulkan) y sin controlador (vuelve a OpenGL).
+- El renderizador de OpenGL no hace nada si no se inició (ventana de Vulkan).
+- Prueba `ui_vulkan_window`: la ventana con Vulkan y su captura; en la CI (`TISMA_REQUIRE_GPU=1`), volver a OpenGL
+  es una falla.
+
+**Falta:** la vista 3D en Vulkan (V2). Hasta entonces el modo automático usa OpenGL, para no perder la vista 3D.
