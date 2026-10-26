@@ -172,7 +172,7 @@ Capturas: `41_printer_settings.png`, `42_print_settings.png`, `43_filament_setti
 - **Printer** tiene dos páginas, elegidas con dos chips arriba a la izquierda (Settings y Devices):
   - **Settings:** el perfil de la impresora;
   - **Devices:** impresoras por USB y por red, con su estado, cámara y envío. Cada impresora puede usar una cámara USB
-    de la computadora. Captura `40_devices.png`:
+    de la computadora. El detalle, pantalla por pantalla, está en `devices.md`. Captura `40_devices.png`:
     - a la izquierda, la lista de dispositivos y abajo «+ Add network printer», «Edit printer…» y «Change access
       code…»;
     - a la derecha, el dispositivo elegido: nombre, aviso de cómo conectarlo, cámara, Connection, Active print

@@ -264,7 +264,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Impresora por modelo, boquilla y cama aparte, datos oficiales | `profiles.md` | ✔ |
 | Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | — | ✘ → `presets.md` |
 | Compatibilidad entre perfiles (condiciones) | — | ✘ → `presets.md` |
-| Impresoras físicas (una impresora con su conexión) | `printer_connections.md` | ◐ → `presets.md` |
+| Impresoras físicas (una impresora con su conexión) | `devices.md` | ✔ |
 | Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | — | ✘ → `presets.md` |
 | Plantillas de filamento | `interface.md` (menú del filamento) | ◐ → `presets.md` |
 | Buscar un ajuste | `interface.md` | ✔ |
@@ -276,7 +276,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | USB, Bambu Lab en red local, cámara USB, botón de enviar | `printer_connections.md` | ✔ |
-| PrusaLink, Prusa Connect, OctoPrint, Moonraker, Duet, FlashAir, AstroBox, Repetier, MKS, Flashforge | `printer_connections.md` | ◐ falta el detalle de cada uno → `printer_connections.md` (actualizar) |
+| OctoPrint, Moonraker, Duet, AstroBox, Repetier, Flashforge, Bambu Lab: pantallas, pedidos, errores, por marca | `devices.md` | ✔ |
+| PrusaLink y Prusa Connect con un perfil de Prusa; subir e imprimir en FlashAir y MKS | `devices.md` | ◐ falta medirlos (ver «Lo que falta medir») |
 | Cola de envíos | `interface.md` (Más) | ◐ → `printer_connections.md` |
 | Grabar el firmware de la impresora | `interface.md` (Más) | ◐ → `printer_connections.md` |
 
