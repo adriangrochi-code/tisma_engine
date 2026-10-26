@@ -12,13 +12,14 @@ una versión nueva. Así se tienen miles de impresoras sin que el motor contenga
 - el motor, de uso no comercial, no los incluye ni los copia: los descarga y los lee como datos;
 - el catálogo propio del motor (`docs/CATALOG.md`, solo datos oficiales) sigue igual y es lo que hay sin red.
 
-**Formato:** `docs/FORMAT.md` de ese repositorio (versión 1) describe cada archivo y cada campo. Esta ficha solo
+**Formato:** `docs/FORMAT.md` de ese repositorio (versión 2) describe cada archivo y cada campo. Esta ficha solo
 dice qué hace el motor con él.
 
 **Sala limpia:**
 - quien programa el motor lee `docs/FORMAT.md`, pero no los perfiles del paquete;
 - las pruebas usan un paquete chico que arma el equipo del motor, con datos inventados que sigan el formato;
-- el campo `original` de cada perfil (los valores con los nombres del programa de origen) no se lee ni se muestra.
+- los campos `original` y `original_common` (los valores con los nombres del programa de origen) no se leen ni se
+  muestran.
 
 ## Ajustes
 
@@ -47,8 +48,8 @@ Preferencias de la interfaz, no del laminado:
 
 4. **Comprobación:** cada archivo se compara con el tamaño y el SHA-256 del índice. Si no coincide, se descarta, se
    avisa y queda la versión anterior.
-5. **Descompresión segura:** solo rutas relativas que empiezan por `vendors/<id>/` o `community/`. Una ruta absoluta,
-   con `..`, un enlace o un archivo de más de 50 MB es un error y se descarta el archivo entero.
+5. **Descompresión segura:** solo rutas relativas que empiezan por `vendors/<id>/`, `community/` o `knowledge/`. Una
+   ruta absoluta, con `..`, un enlace o un archivo de más de 50 MB es un error y se descarta el archivo entero.
 6. **Formato:** un índice con `format` distinto de `tisma-profile-pack`, o con una `version` mayor que la que conoce
    el motor, no se carga. Aviso: «El paquete de perfiles es de una versión más nueva: actualizá Tisma».
 7. **Escritura:** se baja a una carpeta temporal y se cambia de una vez, así una descarga cortada no rompe lo
@@ -60,16 +61,21 @@ Preferencias de la interfaz, no del laminado:
 
 9. **Perfiles de fábrica:** los del paquete se muestran como los de fábrica: no se pueden sobrescribir, y
    **Guardar** pide un nombre nuevo, como en `docs/PROFILES.md`.
-10. **Qué se usa:** `profile` de cada archivo, que ya tiene el formato y las claves del motor.
+10. **Qué se usa:** en filamentos, perfiles de impresión y resinas, `profile`, que ya tiene el formato y las claves
+    del motor. En impresoras, el perfil de cada variante se arma con `common.settings` del modelo y, encima, los
+    `settings` de la variante.
     - Una clave que el motor no conoce se ignora con un aviso en el registro: el paquete puede ser más nuevo.
     - Un valor fuera de rango se rechaza como en un perfil propio, y el perfil se marca como «con errores».
-11. **Modelo y boquilla:** cada modelo del índice aparece una sola vez; sus perfiles de impresora son las boquillas o
-    variantes (`profiles.md`, reglas 1 y 2).
+11. **Modelo y boquilla:**
+    - cada modelo es un archivo y aparece una sola vez;
+    - sus variantes son las boquillas (y, si las hay, variantes como alto flujo) de `profiles.md`, reglas 1 y 2;
+    - se elige primero `default_variant`;
+    - una impresora del paquete se nombra `<archivo del modelo>#<variante>`, como en `index.json`.
 12. **Compatibles:**
     - un filamento o un perfil de impresión se ofrecen solo con las impresoras de su conjunto de `compatible.json`;
     - con `compatible` nulo, con todas;
     - los genéricos (`generic`) van después de los del fabricante de la impresora.
-13. **Por defecto:** al elegir una impresora, se eligen el primer filamento de `defaults.filament` y el perfil de
+13. **Por defecto:** al elegir una variante, se eligen el primer filamento de su `defaults.filament` y el perfil de
     `defaults.print` (en resina, `defaults.resin` y `defaults.resin_print`).
 14. **Cama e imágenes:** `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo se dibujan en la vista 3D, en las
     coordenadas de la cama, sin moverlas.
@@ -109,26 +115,31 @@ Preferencias de la interfaz, no del laminado:
     - si un perfil elegido desapareció, queda elegido hasta que la persona cambie, con el aviso «Este perfil ya no
       está en el paquete».
 
+### Conocimiento del asistente
+
+21. **`knowledge.tar.xz`:** trae los datos del asistente y los tutoriales (`assistant.md`). Se baja con el índice en
+    el primer arranque (unos 20 KB) y se actualiza con el paquete.
+
 ### Datos de la comunidad
 
-21. **Qué son:** `community.tar.xz` trae datos por impresora, filamento o resina, cada uno con su fuente y su tipo
+22. **Qué son:** `community.tar.xz` trae datos por impresora, filamento o resina, cada uno con su fuente y su tipo
     (`official`, `measured`, `community`). El formato está en `docs/COMMUNITY.md` del repositorio.
-22. **Dónde se muestran:** en el panel de la impresora o del material, en una sección «Datos publicados», con un
+23. **Dónde se muestran:** en el panel de la impresora o del material, en una sección «Datos publicados», con un
     distintivo por tipo:
     - «Fabricante» para `official`;
     - «Medido» para `measured`;
     - «Sugerido» para `community`.
 
     Cada dato lleva el valor, la unidad, las condiciones y el enlace a la fuente (en un video, con el minuto).
-23. **Llenar ajustes:**
+24. **Llenar ajustes:**
     - un dato `official` cuya clave es un ajuste del motor puede llenar ese ajuste si el perfil no lo trae, con un
       botón **Usar este valor**;
     - los `measured` y `community` nunca cambian un ajuste solos: solo con ese botón y una confirmación.
 
 ## Pruebas
 
-Escenarios de aceptación. El paquete de prueba lo arma el equipo del motor: dos fabricantes, tres impresoras (una de
-resina), cuatro filamentos, dos perfiles de impresión y dos conjuntos de compatibles.
+Escenarios de aceptación. El paquete de prueba lo arma el equipo del motor: dos fabricantes, tres modelos (uno de
+resina, uno con dos boquillas), cuatro filamentos, dos perfiles de impresión y dos conjuntos de compatibles.
 
 | # | Escenario | Resultado esperado |
 |---|---|---|
@@ -136,7 +147,7 @@ resina), cuatro filamentos, dos perfiles de impresión y dos conjuntos de compat
 | PK2 | Primer arranque sin red | Solo el catálogo propio y el aviso de sin conexión; el motor lamina igual |
 | PK3 | Archivo de un fabricante con un byte cambiado | Se descarta (SHA-256 distinto) y se avisa; lo instalado sigue |
 | PK4 | Archivo con una ruta `../x.json` adentro | Se descarta entero; nada se escribe fuera de la carpeta del paquete |
-| PK5 | Índice con `"version": 2` | No se carga; aviso de versión más nueva |
+| PK5 | Índice con `"version": 3` | No se carga; aviso de versión más nueva |
 | PK6 | Elegir una impresora del paquete | Se eligen su primer filamento y su perfil de impresión por defecto; laminar un cubo da código 0 |
 | PK7 | Un filamento cuyo conjunto no tiene la impresora elegida | No aparece en la lista de filamentos de esa impresora |
 | PK8 | Perfil con una clave desconocida | Se carga sin esa clave; un aviso en el registro |
@@ -146,3 +157,4 @@ resina), cuatro filamentos, dos perfiles de impresión y dos conjuntos de compat
 | PK12 | Versión nueva publicada, con un fabricante cambiado | Aviso de perfiles nuevos; al actualizar se baja solo ese fabricante; los perfiles propios no cambian |
 | PK13 | Dato de comunidad `measured` de `machine.max_flow` | Se muestra con el distintivo «Medido» y su fuente; el ajuste no cambia hasta tocar **Usar este valor** y confirmar |
 | PK14 | Descarga cortada a la mitad | Lo instalado sigue entero; el próximo intento baja de nuevo |
+| PK15 | Modelo con boquillas de 0,4 y 0,6 mm que comparten la cama y difieren en `machine.nozzle_diameter` | Una sola fila en la lista; elegir 0,6 da la cama común y la boquilla de 0,6 |
