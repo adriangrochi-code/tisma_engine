@@ -4642,3 +4642,41 @@ Relleno, «2 cambios» en Costura, el punto en las secciones.
 tarjeta, la tarjeta de la impresora (boquilla, cama, cámara, conexión) y su configuración aparte; hoy la impresora es
 una pestaña más. Los modos especiales (`vase_mode.md`) llegan con el modo vaso, que el motor todavía no tiene: la tarjeta
 aparece cuando haya algo que mostrar (regla 7).
+
+## 2026-10-26 — modo vaso
+
+**Por qué:** el pedido del dueño de una pared en espiral, «como el Spiral Vase», y la tarjeta Modos especiales del
+panel nuevo (ficha `vase_mode.md`).
+
+**Hecho:**
+- `vase.enabled` (perfil de impresión). El corte se rehace con una pared, sin relleno ni capas de arriba (regla 1), y
+  deja relleno solo en las capas de abajo; la última de ellas es la superficie de arriba (regla 3).
+- **Las vueltas** (regla 4): desde la capa sobre las de abajo (la segunda, sin ninguna: regla 5), una capa cuya única
+  trayectoria es el lazo de su pared externa es una vuelta. Empieza en el punto más cercano a donde terminó la capa de
+  abajo, y si esa fue una vuelta, exactamente ahí: el cambio de capa no sube Z y no hay viaje ni retracción. La
+  boquilla sube una capa a lo largo del largo recorrido; cada cordón tiene la vuelta de abajo a la misma distancia,
+  así que el caudal es el de siempre, también en la primera y la última vuelta. El tiempo mínimo de capa vale por
+  vuelta (regla 6). Una capa con dos contornos (dos islas, un agujero) se imprime plana y la vuelta siguiente empieza
+  de nuevo.
+- **Lo que no se puede** (regla 2): con soportes, los ajustes se rechazan; con varios objetos en la placa, la interfaz
+  no lamina (el motor recibe una sola malla).
+- **Verificador:** acepta las vueltas hasta la capa de abajo. El fuzzer, con el vaso al azar, encontró además que
+  una torre de flujo (caudal forzado) con bufanda acelera los cordones finísimos de la rampa hasta el tope de la
+  máquina, más de lo que el verificador esperaba: con bufanda o ZAA, el tope es el de la máquina.
+
+**Medido** (cilindro de 10 mm de radio y 5 de alto, 128 lados, capas de 0,2, como VA1 y VA2 de la ficha): capas 0 y 1,
+pared y relleno sólido; capa 2, pared y superficie de arriba; desde la 3, una vuelta: la capa 10 va de Z 2,0 a 2,2,
+mide 61,55 mm y empieza y termina en el mismo punto; desde la capa 4, ningún viaje ni retracción.
+
+**Pruebas:** VA1 a VA4 (cilindro y cubo de la ficha: tipos por capa, Z de cada vuelta, la vuelta que sigue desde donde
+terminó la anterior, caudal constante, cubo sin capas de abajo y con dos, rechazo con soportes). RV6: con el vaso
+apagado, el G-code de los 21 casos es el mismo salvo la línea del ajuste nuevo al pie. Fuzzer: 3000 corridas (semillas
+31 y 32) con vaso y bufanda al azar, 0 fallas.
+
+**Pregunta para el equipo de fichas:** `settings_panel.md` pone las velocidades en Impresión y la retracción en
+Material, pero dice que la pestaña la decide el perfil de la clave; en el motor, las velocidades y la retracción son
+del perfil de la impresora (decisión del dueño). Hoy el panel sigue las tablas de la ficha.
+
+**Sigue:** una pared externa en espiral continua en piezas con relleno (la idea del dueño, más allá del modo vaso:
+la pared externa primero en cada capa, subiendo una capa por vuelta, y las internas y el relleno planos), si el dueño
+la quiere después de ver el modo vaso y la bufanda.

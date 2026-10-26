@@ -646,6 +646,9 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   giro y escala sin rehacer toda la placa en cada cambio
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
+- [x] Modo vaso (`vase_mode.md`, pedido del dueño de una pared en espiral, 2026-10-26): una sola pared que sube en
+  espiral, sobre capas de abajo planas; reglas 1 a 6 (la de varios objetos, en la interfaz: el motor lamina uno por
+  vez). Falta la impresión uno por uno (`sequential.md`)
 
 ## Fichas nuevas (2026-10-26)
 

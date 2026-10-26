@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Modo vaso** (pedido del dueño de una pared en espiral; ficha `vase_mode.md`): `vase.enabled`, en Otros › Modos
+  especiales del panel. La pieza sale como una sola pared que sube en espiral, sin costura, sobre capas de abajo
+  planas (la última, superficie de arriba). Cada vuelta empieza donde terminó la anterior, sin viaje ni retracción, y
+  sube una capa con el caudal de siempre. No se puede con soportes ni con varios objetos.
 - **Costura en bufanda** (pedido del dueño; ficha `walls_extra.md`, regla 4): `walls.scarf` en `contours` o
   `everywhere` hace que la pared externa empiece en una rampa que sube desde la capa de abajo, en vez de un escalón,
   y que al final del lazo pase otra vez sobre la rampa con el cordón cada vez más fino: la costura casi no se ve, con

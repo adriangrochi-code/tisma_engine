@@ -40,6 +40,7 @@ add_executable(tisma_tests
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp
+  test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
   test_print_time.cpp

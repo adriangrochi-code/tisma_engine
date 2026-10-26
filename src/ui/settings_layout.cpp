@@ -72,7 +72,7 @@ const std::vector<SectionLayout>& print_layout() {
          {{"skirt", T::SubSkirt, {{"adhesion.skirt_loops", B}, {"adhesion.skirt_distance", B}, {"adhesion.skirt_layers", N}}},
           {"brim", T::SubBrim, {{"adhesion.brim_width", B}}}}},
         {"other", T::SecOther, "section_other.svg",
-         {{"special_modes", T::SubSpecialModes, {}},
+         {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut, {{"gcode.resolution", A}, {"changes", A}}},
           {"slicing", T::SubSlicing,
@@ -344,7 +344,7 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "brim")
         return s.brim_width > 0.0 ? format(T::SumMm, number(s.brim_width).c_str()) : tr(T::SumNoBrim);
     if (id == "special_modes")
-        return tr(T::SumNormalPrint);
+        return s.vase ? tr(T::VaseMode) : tr(T::SumNormalPrint);
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)

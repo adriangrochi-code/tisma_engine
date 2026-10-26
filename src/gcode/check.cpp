@@ -413,6 +413,8 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     }
     if (s.scarf != ScarfMode::Nowhere)
         limits.scarf = 1.0 - s.scarf_start_height / 100.0;
+    if (s.vase) // a turn starts at the layer below's top
+        limits.scarf = 1.0;
     if (const std::optional<WaveParams> waves = wave_params(s)) {
         // The crests, and the travels over them, go up to half the amplitude higher.
         limits.wave = 0.5 * waves->amplitude;
@@ -437,7 +439,11 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
             height = std::min(height, layer.top - layer.bottom);
         const double narrow = 0.25 * s.wall_width;
         const double machine = std::max(s.max_feed_x, s.max_feed_y); // 0: not known, no cap
-        const double needed = forced / std::max(narrow * height * min_flow, 1e-9);
+        // A scarf ramp's foot or a Z anti-aliased bead is thinner than any
+        // layer: up to what the machine moves.
+        const bool thinner = s.scarf != ScarfMode::Nowhere || s.zaa;
+        const double needed = thinner ? std::numeric_limits<double>::infinity()
+                                      : forced / std::max(narrow * height * min_flow, 1e-9);
         limits.max_feed = std::max(limits.max_feed, machine > 0.0 ? std::min(machine, needed) : needed);
     }
     const double r = s.filament_diameter / 2.0;

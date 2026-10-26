@@ -46,6 +46,17 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
+    // layers, whatever those settings say.
+    if (settings.vase && (settings.wall_count != 1 || settings.infill_density != 0.0 || settings.top_layers != 0 ||
+                          settings.top_min_thickness != 0.0)) {
+        Settings vase = settings;
+        vase.wall_count = 1;
+        vase.infill_density = 0.0;
+        vase.top_layers = 0;
+        vase.top_min_thickness = 0.0;
+        return slice_model(input, vase, gpu, stress, painting);
+    }
     IndexedMesh mesh = compensated(input, settings);
     // The painted pieces before any triangle is turned: a tree follows the
     // order of its triangle's corners.
@@ -441,6 +452,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         for (const LayerGroup& g : out.groups)
             group_heights.push_back(out.layers[g.last].top - out.layers[g.first].bottom);
         out.thick = split_thick_zones(out.groups, out.walls, out.fills, group_heights, 0.25 * settings.wall_width);
+    }
+    // Vase mode (rules 3 and 5): solid only the bottom layers, the last of
+    // them the top surface; above them, only the wall, which the G-code lays
+    // in a spiral.
+    if (settings.vase) {
+        const std::size_t bottom = std::size_t(std::max(settings.bottom_layers, 0));
+        for (std::size_t l = 0; l < out.fills.size(); ++l) {
+            LayerFill& f = out.fills[l];
+            if (l + 1 == bottom) {
+                f.top.insert(f.top.end(), std::make_move_iterator(f.solid.begin()), std::make_move_iterator(f.solid.end()));
+                f.solid.clear();
+            } else if (l >= bottom) {
+                f = LayerFill{};
+            }
+        }
     }
     if (settings.zaa) {
         ZaaParams zp;

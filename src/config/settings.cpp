@@ -190,7 +190,7 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy")
+            group == "fuzzy" || group == "vase")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -322,6 +322,11 @@ Settings parse_checked(std::string_view text) {
         if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
+    });
+    read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (!g.at(n).is_boolean())
+            fail(k, "must be true or false");
+        s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness"},
@@ -910,6 +915,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.scarf_entire_loop", flag(s.scarf_entire_loop)},
         {"walls.scarf_max_segment", num(s.scarf_max_segment)},
         {"walls.scarf_inner", flag(s.scarf_inner)},
+        {"vase.enabled", flag(s.vase)},
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
         {"fuzzy.thickness", num(s.fuzzy_thickness)},
         {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
@@ -1070,6 +1076,7 @@ std::string settings_json(const Settings& s) {
           {"scarf_entire_loop", s.scarf_entire_loop},
           {"scarf_max_segment", s.scarf_max_segment},
           {"scarf_inner", s.scarf_inner}}},
+        {"vase", {{"enabled", s.vase}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
@@ -1214,6 +1221,10 @@ void check_settings(const Settings& s) {
             throw SettingsError(text);
         }
     }
+    // Vase mode lays one wall in a spiral: nothing can stand under it
+    // (vase_mode.md, rule 2).
+    if (s.vase && s.support)
+        throw SettingsError("vase.enabled: vase mode is not compatible with supports (support.enabled)");
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);

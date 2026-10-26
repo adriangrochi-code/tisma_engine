@@ -140,7 +140,8 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
-        group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy")
+        group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
+        group == "vase")
         return ProfileKind::Print;
     return std::nullopt;
 }

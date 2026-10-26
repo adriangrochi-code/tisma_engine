@@ -702,7 +702,9 @@
     X(ResetCardTip, "Vuelve los ajustes de este apartado a los del perfil guardado", "Takes this part's settings back to the saved profile") \
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
-    X(NoSpecialModes, "Por ahora, ninguno: el modo vaso llega pronto", "None yet: vase mode comes soon") \
+    X(VaseMode, "Modo vaso (espiral)", "Vase mode (spiral)") \
+    X(VaseModeTip, "Una sola pared que sube en espiral, sin costura: para vasos, macetas y pantallas. Sin relleno ni techo; las capas de abajo son planas. No se puede con soportes.", "One wall rising in a spiral, without a seam: for vases, pots and lampshades. No infill nor top; the bottom layers are flat. Not with supports.") \
+    X(VaseManyObjects, "En modo vaso se imprime un solo objeto por vez", "Vase mode prints one object at a time") \
     X(SumLayer, "%s mm · primera %s mm", "%s mm · first %s mm") \
     X(SumSameHeight, "Igual en toda la pieza", "The same all over the part") \
     X(SumHeightSteps, "%d tramos por Z", "%d steps by Z") \

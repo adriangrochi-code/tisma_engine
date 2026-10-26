@@ -64,6 +64,15 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `scarf_max_segment` | número | 1 | más de 0, hasta 1000 | El tramo más largo de la rampa y de su segunda pasada, en mm |
 | `scarf_inner` | booleano | `false` | — | También las paredes internas empiezan en rampa |
 
+### `vase`
+
+Modo vaso, ficha `docs/spec/features/vase_mode.md`: la pieza se imprime como una sola pared que sube en espiral, sin
+costura.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | — | Activa el modo vaso: una sola pared, sin relleno ni capas de arriba (se ignoran esos ajustes). Las primeras `surfaces.bottom_layers` capas son planas, con relleno sólido, y la última de ellas es la superficie de arriba; desde ahí cada capa es una vuelta de la pared externa que empieza donde terminó la de abajo, sin viaje ni retracción, y sube la altura de una capa a lo largo de la vuelta, con el caudal de siempre. Sin capas de abajo, la primera capa es una vuelta plana. No se puede con soportes. Una capa con más de un contorno (dos islas, un agujero) se imprime plana |
+
 ### `fuzzy`
 
 Piel difusa, ficha `docs/spec/features/fuzzy_skin.md`: la pared externa pasa por puntos nuevos, a distancias al azar

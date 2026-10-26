@@ -28,9 +28,10 @@ struct GcodeLimits {
     // a ;NONPLANAR block may leave its layer's Z either way; there each
     // move's ;HEIGHT is its bead's own thickness.
     double wave = 0.0;
-    // The scarf seam (docs/spec/features/walls_extra.md, rule 4): how far below
-    // its layer's Z an extrusion in a ;NONPLANAR block may go, as a share of
-    // the layer's height (its ramp starts down at the layer below).
+    // The scarf seam (docs/spec/features/walls_extra.md, rule 4) and vase
+    // mode's turns: how far below its layer's Z an extrusion in a ;NONPLANAR
+    // block may go, as a share of the layer's height (they start down at the
+    // layer below).
     double scarf = 0.0;
     // From the height changes of the settings: the values for the layers whose
     // top is above z, in order of z.

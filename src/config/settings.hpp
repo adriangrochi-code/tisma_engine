@@ -82,6 +82,9 @@ struct Settings {
     bool scarf_entire_loop = false;   // the ramp the whole way round
     double scarf_max_segment = 1.0;   // mm, the longest piece of the ramp
     bool scarf_inner = false;         // the inner walls too
+    // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
+    // spiral, a layer each turn, over flat bottom layers.
+    bool vase = false;
     // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
     FuzzyMode fuzzy_mode = FuzzyMode::None;
     double fuzzy_thickness = 0.3;      // mm off the line, either way

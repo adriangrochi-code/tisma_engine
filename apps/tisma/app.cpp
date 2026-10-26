@@ -680,7 +680,7 @@ const char* row_key(T label) {
         {T::AccelerationRow, "machine.acceleration"}, {T::TravelAcceleration, "machine.travel_acceleration"},
         {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
-        {T::EndGcode, "machine.end_gcode"}};
+        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -2106,6 +2106,11 @@ void App::start_slice() {
         fail(T::CannotSlice, e.what());
         return;
     }
+    // Vase mode prints one object (vase_mode.md, rule 2).
+    if (settings_.vase && objects_.size() > 1) {
+        fail(T::CannotSlice, tr(T::VaseManyObjects));
+        return;
+    }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
     Painting painting = plate_painting(objects_);
@@ -2899,7 +2904,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BrimWidth, "adhesion.brim_width", s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
     }
     // Print: Others.
-    else if (id == "fuzzy") {
+    else if (id == "special_modes") {
+        flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
+    } else if (id == "fuzzy") {
         if (shown("fuzzy.mode"))
             changed |= row(T::FuzzySkin, s.fuzzy_mode,
                            {{FuzzyMode::None, tr(T::FuzzyNone)},

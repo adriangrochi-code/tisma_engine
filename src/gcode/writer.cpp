@@ -399,7 +399,9 @@ public:
         }
     }
 
-    void new_layer(double z, double height, double travel_feed) {
+    // keep_z: a vase's turn goes on from where the turn below ended, at its
+    // height (vase_mode.md, rule 4): no move up to the layer's Z.
+    void new_layer(double z, double height, double travel_feed, bool keep_z = false) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
@@ -408,10 +410,12 @@ public:
             position_[3] = e_;
             e_text_.clear();
         }
-        move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
+        if (!keep_z)
+            move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
         height_ = height;
         z_value_ = z;
-        z_now_ = written(z);
+        if (!keep_z)
+            z_now_ = written(z);
         clearance_ = 0.0;
     }
 
@@ -883,6 +887,67 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // place in the layer's walls), found for many layers at once ahead of
     // the plans, which only pick among them (perimeters.md, rule 8).
     std::vector<std::vector<std::vector<std::size_t>>> loop_candidates(model.layers.size());
+    // Where the last plan ended (simplifying keeps a path's ends).
+    std::optional<Point2d> last_end;
+    // Vase mode (vase_mode.md, rule 4): from the layer over the bottom ones
+    // (the second, without any), a layer whose only path is its outer wall's
+    // loop is one turn of a spiral: it starts at the point nearest to where
+    // the layer below ended, going on from there when that was a turn too,
+    // and rises a layer along its length, every bead a layer thick (on the
+    // turn below). Another layer is laid flat, and the next turn starts anew.
+    std::vector<char> continues(model.layers.size(), 0);
+    bool after_turn = false;
+    const std::size_t spiral_from = std::max<std::size_t>(std::size_t(std::max(s.bottom_layers, 0)), 1);
+    const auto spiral_turn = [&](std::vector<Step>& steps, std::size_t l) {
+        Step* only = nullptr;
+        for (Step& step : steps) {
+            if (!step.type || only) // a thick zone's height, or a second path
+                return false;
+            only = &step;
+        }
+        if (!only || std::strcmp(only->type, "External perimeter") != 0 || !only->path.closed ||
+            only->path.points.size() < 3)
+            return false;
+        Toolpath& loop = only->path;
+        for (const ToolpathPoint& p : loop.points)
+            if (p.dz != 0.0 || p.below != 0.0)
+                return false;
+        if (last_end) {
+            std::size_t nearest = 0;
+            double best = std::numeric_limits<double>::infinity();
+            for (std::size_t i = 0; i < loop.points.size(); ++i) {
+                const double d = std::hypot(loop.points[i].p.x - last_end->x, loop.points[i].p.y - last_end->y);
+                if (d < best)
+                    best = d, nearest = i;
+            }
+            std::rotate(loop.points.begin(), loop.points.begin() + std::ptrdiff_t(nearest), loop.points.end());
+        }
+        std::vector<ToolpathPoint> points;
+        if (after_turn && last_end) {
+            points.push_back(loop.points.front());
+            points.back().p = *last_end;
+        }
+        points.insert(points.end(), loop.points.begin(), loop.points.end());
+        points.push_back(loop.points.front()); // round to where it started
+        double total = 0.0;
+        for (std::size_t i = 1; i < points.size(); ++i)
+            total += std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+        if (!(total > 0.0))
+            return false;
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        double along = 0.0;
+        for (std::size_t i = 0; i < points.size(); ++i) {
+            if (i > 0)
+                along += std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+            points[i].dz = -h * (1.0 - along / total);
+            points[i].below = points[i].dz;
+        }
+        points.back().dz = points.back().below = 0.0;
+        loop.points = std::move(points);
+        loop.closed = false;
+        loop.wavy = true;
+        return true;
+    };
     // The order of a layer's paths and their seams. It goes on from where the
     // layer below ended and from its seams, so the layers are planned one
     // after another; the G-code is written apart (write_layer), so a layer is
@@ -1130,7 +1195,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& steps) {
         const Layer& layer = model.layers[l];
         g.open_layer_fan();
-        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
+        const bool turn = l < continues.size() && continues[l];
+        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn);
         g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -1168,7 +1234,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 continue;
             }
             const Toolpath& t = step.path;
-            g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr);
+            // A vase's turn starts where the one below ended: no travel.
+            if (!turn)
+                g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr);
             g.type(step.type);
             g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)
@@ -1300,7 +1368,6 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // is written again from the same plan. Simplifying keeps a path's ends,
     // so the last plan's end is where the next layer starts from.
     std::vector<std::vector<Step>> planned(model.layers.size());
-    std::optional<Point2d> last_end;
     std::size_t next_layer = 0;
     const std::size_t in_flight = 4 * std::max<std::size_t>(1, std::thread::hardware_concurrency());
     tbb::parallel_pipeline(
@@ -1328,6 +1395,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                                        [&](std::size_t l) {
                                                            planned[l] = plan_layer(l, actives[l]);
                                                            std::vector<std::vector<std::size_t>>().swap(loop_candidates[l]);
+                                                           if (s.vase) {
+                                                               const bool turn = l >= spiral_from && spiral_turn(planned[l], l);
+                                                               continues[l] = turn && after_turn;
+                                                               after_turn = turn;
+                                                           }
                                                            for (Step& step : planned[l])
                                                                if (step.type) {
                                                                    step.from = last_end;
