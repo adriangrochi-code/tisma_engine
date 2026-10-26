@@ -42,6 +42,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`interface.md`](interface.md): la ventana en orden (barra superior, grupos de herramientas, panel de la placa, botón principal, vista previa, páginas de ajustes, Más, asistente, panel de Ingeniería), todos los menús con sus atajos, el aspecto (colores claro y oscuro, medidas de cada componente) y 39 capturas en [`interface/`](interface/) | P1 | Para revisar |
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
 | [`support_fins.md`](support_fins.md): aletas de soporte que se quitan con la mano, unidas con dientes de una capa, con escala por boquilla, bases, contrafuertes y resina (de Support Fins, MIT) | después de la primera versión | Para revisar |
+| [`credits.md`](credits.md): «Basado en…» en cada función que sale de otra fuente y la página Créditos y fuentes, con las licencias de terceros | P1 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.

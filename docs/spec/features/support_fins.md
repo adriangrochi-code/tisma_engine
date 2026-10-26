@@ -9,6 +9,9 @@ así que salen igual con cualquier impresora y material.
 
 **Pedido del dueño (26-10-2026):** «también hay que integrar esto», con el enlace a Support Fins.
 
+**Basado en:** Support Fins, de gittrahan (MIT), `https://github.com/gittrahan/support-fins`. La interfaz lo muestra
+en el panel de la función y en Créditos y fuentes (`credits.md`).
+
 **Fuente:**
 - Support Fins, de gittrahan: `https://github.com/gittrahan/support-fins`, commit `2c5014c` (25-10-2026), sitio
   `printfins.com`.
