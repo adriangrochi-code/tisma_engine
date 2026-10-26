@@ -3,6 +3,7 @@
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -177,7 +178,7 @@ TEST_CASE("resolution: a cylinder's outer wall is one loop of about 64 moves per
     // slicing.simplify_tolerance 0. Every side's two triangles leave a corner
     // in the middle of the side, which broke the walls into open pieces.
     const IndexedMesh m = cylinder(128, 10.0f, 5.0f, 100.0f, 100.0f);
-    Settings s;
+    Settings s = test_printer();
     s.simplify_tolerance = 0.0;
     std::ostringstream fine, coarse;
     write_gcode(coarse, slice_model(m, s), s);

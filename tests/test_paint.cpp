@@ -5,6 +5,7 @@
 #include "slice/painted.hpp"
 #include "slice/pipeline.hpp"
 #include "support/support.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -336,7 +337,7 @@ TEST_CASE("paint: a painted seam starts the loop inside the paint, in every seam
 }
 
 TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
-    Settings s;
+    Settings s = test_printer();
     s.support = true;
     // A 10 mm cube with a 10 x 10 x 2 mm shelf on its +X side, 8 mm up.
     const TriangleMesh part = joined(box(0, 0, 0, 10, 10, 10), box(10, 0, 8, 10, 10, 2));
@@ -378,7 +379,7 @@ TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
         CHECK(a.empty());
 
     // A seam painted down the +X side of a 20 mm cube at Y = 15.
-    Settings c;
+    Settings c = test_printer();
     const TriangleMesh cube = box(0, 0, 0, 20, 20, 20);
     Painting seam;
     for (double z = 0.0; z <= 20.0; z += 0.5) {

@@ -5,6 +5,7 @@
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -218,7 +219,7 @@ TEST_CASE("local layers: a straight box and a pyramid side by side, sliced to ch
     IndexedMesh m;
     add_box(m, 0, 0, 20, 20, 9);
     add_pyramid(m, 30, 0, 20, 9);
-    Settings fine;
+    Settings fine = test_printer();
     fine.gpu = GpuMode::Off;
     fine.relative_extrusion = true;
     fine.layer_height = 0.1;
@@ -231,7 +232,7 @@ TEST_CASE("local layers: a straight box and a pyramid side by side, sliced to ch
     fine.bottom_layers = zones.bottom_layers * 3;
     REQUIRE(detail_ratio(zones) == 3);
     CHECK(detail_ratio(fine) == 1);
-    Settings r;
+    Settings r = test_printer();
     r.layer_height = 0.1, r.detail_height = 0.025; // four of 0.025 would be too thin: two of 0.05
     CHECK(detail_ratio(r) == 2);
     r.layer_height = 0.06, r.detail_height = 0.03; // two of 0.03: too thin, off

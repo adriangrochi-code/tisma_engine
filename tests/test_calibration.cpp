@@ -6,6 +6,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -27,7 +28,7 @@ using Catch::Matchers::WithinRel;
 namespace {
 
 Settings plain() {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.skirt_loops = 0;
     return s;
@@ -115,7 +116,7 @@ TEST_CASE("calibration: compensation scales the part and grows its holes", "[cal
 
 TEST_CASE("calibration: compensation from what was measured", "[calibration]") {
     const DimensionTest t;
-    Settings s;
+    Settings s = test_printer();
     // As designed: nothing changes.
     Compensation c = compensation_from(t, {30.0, 20.0, 15.0, 10.0}, s);
     CHECK(c.scale_x == 100.0);
@@ -248,7 +249,7 @@ TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibr
     const std::vector<Stroke> two = label_strokes("11", 3, 5, 1);
     CHECK(two.back().x0 == 7.0); // the second cell starts at width + gap
 
-    Settings s;
+    Settings s = test_printer();
     s.variables["temperature"] = {"215"};
     CalibrationPrint t = automatic_calibration(CalibrationKind::Temperature, s);
     REQUIRE(!t.segments.empty());
@@ -292,7 +293,7 @@ TEST_CASE("calibration: kinds by name, which are towers, what each applies", "[c
     for (int i = 0; i < kCalibrationKinds; ++i) {
         const auto k = CalibrationKind(i);
         CHECK(calibration_kind_from_name(calibration_kind_name(k)) == k);
-        const CalibrationPrint p = automatic_calibration(k, Settings{});
+        const CalibrationPrint p = automatic_calibration(k, test_printer());
         CHECK(p.kind == calibration_kind_name(k));
         CHECK(!p.mesh.empty());
         CHECK(is_tower(k) == !p.changes.empty());
@@ -307,7 +308,7 @@ TEST_CASE("calibration: kinds by name, which are towers, what each applies", "[c
     }
     CHECK_FALSE(calibration_kind_from_name("pressure"));
 
-    Settings s;
+    Settings s = test_printer();
     s.changes.push_back({});
     REQUIRE(apply_calibration(CalibrationKind::RetractionSpeed, 35.0, s));
     CHECK(s.retract_speed == 35.0);
@@ -445,7 +446,7 @@ TEST_CASE("calibration: first layer squares, fit test, volumetric flow and extru
     CHECK(checks(gcode_of(m, plain_settings), gcode_limits(m, plain_settings)));
 
     // Volumetric flow of the fastest extrusion: 80 mm/s x 0.4 x 0.2 mm.
-    const Settings d;
+    const Settings d = test_printer();
     CHECK_THAT(volumetric_flow(d, 100.0), WithinAbs(6.4, 1e-9));
     CHECK_THAT(volumetric_flow(d, 150.0), WithinAbs(9.6, 1e-9));
 
@@ -455,7 +456,7 @@ TEST_CASE("calibration: first layer squares, fit test, volumetric flow and extru
     CHECK(extruder_steps_from(GcodeFlavor::Marlin, 93.0, 100.0, 0.0) == 93.0);
     CHECK(extruder_steps_text(GcodeFlavor::Marlin, 97.894) == "M92 E97.89\nM500");
     CHECK(extruder_steps_text(GcodeFlavor::Klipper, 7.315) == "rotation_distance: 7.3150");
-    Settings hot;
+    Settings hot = test_printer();
     hot.variables["temperature"] = {"235"};
     const std::string test = extruder_test_gcode(hot);
     CHECK_THAT(test, ContainsSubstring("M109 S235"));
@@ -520,7 +521,7 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     CHECK_THAT(box.max.x - box.min.x, WithinAbs(20.0, 1e-9));
     CHECK_THAT(box.max.z, WithinAbs(6.0, 1e-9));
     CHECK_FALSE(is_tower(CalibrationKind::ElephantFoot));
-    Settings e;
+    Settings e = test_printer();
     CHECK_THAT(elephant_foot_from(20.4, 20.0, e), WithinAbs(0.2, 1e-9));
     e.first_layer_shrink = 0.1;
     CHECK_THAT(elephant_foot_from(20.3, 20.0, e), WithinAbs(0.25, 1e-9));
@@ -529,19 +530,19 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     CHECK_FALSE(apply_calibration(CalibrationKind::ElephantFoot, 0.2, e));
 
     // Using the towers' values, and the automatic ranges.
-    Settings t;
+    Settings t = test_printer();
     REQUIRE(apply_calibration(CalibrationKind::MaxFlow, 14.0, t));
     CHECK(t.machine_max_flow == 14.0);
     REQUIRE(apply_calibration(CalibrationKind::Acceleration, 3000.0, t));
     CHECK(t.acceleration == 3000.0);
     CHECK(t.travel_acceleration == 3000.0); // raised to it
-    CHECK(automatic_calibration(CalibrationKind::MaxFlow, Settings{}).segments.front().value == 4.0);
+    CHECK(automatic_calibration(CalibrationKind::MaxFlow, test_printer()).segments.front().value == 4.0);
     t.machine_max_flow = 20.0;
     const CalibrationPrint around = automatic_calibration(CalibrationKind::MaxFlow, t);
     CHECK(around.segments.front().value == 10.0);
     CHECK(around.segments.back().value == 30.0);
     CHECK(automatic_calibration(CalibrationKind::Acceleration, t).segments.back().value == 6000.0);
-    CHECK(automatic_calibration(CalibrationKind::Acceleration, Settings{}).segments.back().value == 5000.0);
+    CHECK(automatic_calibration(CalibrationKind::Acceleration, test_printer()).segments.back().value == 5000.0);
 }
 
 

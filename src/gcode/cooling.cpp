@@ -91,4 +91,12 @@ double layer_time(const std::map<double, double>& length_by_feed, const std::map
     return layer_time(inner_part(length_by_feed, outer_by_feed), other_time + outer_time(outer_by_feed), slowdown);
 }
 
+double layer_fan(double t, double min_time, double below_time, double fan_min, double fan_max, bool always) {
+    if (t <= min_time)
+        return fan_max;
+    if (t >= below_time)
+        return always ? fan_min : 0.0;
+    return fan_max - (fan_max - fan_min) * (t - min_time) / (below_time - min_time);
+}
+
 } // namespace tisma

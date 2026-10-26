@@ -6,6 +6,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -86,7 +87,7 @@ std::string problems_of(const GcodeCheck& c) {
 } // namespace
 
 TEST_CASE("G-code check: the cube is clean, with plausible numbers", "[gcode][check]") {
-    const Settings s;
+    const Settings s = test_printer();
     const Output o = slice_and_write(cube(), s);
     const GcodeCheck c = check_gcode(o.gcode, o.limits);
     INFO(problems_of(c));
@@ -103,7 +104,7 @@ TEST_CASE("G-code check: the cube is clean, with plausible numbers", "[gcode][ch
 }
 
 TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
-    Settings s;
+    Settings s = test_printer();
     s.start_gcode = "M117 Hola, Tisma\nPRINT_START BED=60 EXTRUDER=215\nG28\nG1 X0 Y-5 Z0.3 F3000\nG1 X60 E9 F1000";
     s.end_gcode = "M104 S0\nG91\nG1 Z10\nG90\nM84";
     const Output o = slice_and_write(cube(), s);
@@ -189,7 +190,7 @@ TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][
     };
     for (const Model& m : models)
         for (const Variant& v : variants) {
-            Settings s;
+            Settings s = test_printer();
             v.apply(s);
             const Output o = slice_and_write(m.mesh, s);
             const GcodeCheck c = check_gcode(o.gcode, o.limits);
@@ -205,12 +206,12 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
     IndexedMesh m;
     add_box(m, 0, 0, 0, 0.3f, 20, 5);
     add_box(m, 5, 0, 0, 5.3f, 20, 5);
-    Settings s;
+    Settings s = test_printer();
     s.wall_count = 0;
     s.wall_width = 0.8;
     const SlicedModel model = slice_model(m, s);
     CHECK_THAT(unprintable_reason(model, s), ContainsSubstring("nothing would be printed"));
-    CHECK(unprintable_reason(slice_model(cube(), Settings{}), Settings{}).empty());
+    CHECK(unprintable_reason(slice_model(cube(), test_printer()), test_printer()).empty());
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {
@@ -221,7 +222,7 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
     rejected += ".rejected";
     std::filesystem::remove(path);
     std::filesystem::remove(rejected);
-    const Settings s;
+    const Settings s = test_printer();
     SlicedModel model = slice_model(cube(), s);
 
     const GcodeExport good = export_gcode(path, model, s);
@@ -253,7 +254,7 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
 TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {
     // The engine does not move parts in X and Y, but a part can only print
     // resting on the bed: Z in the G-code counts from the part's bottom.
-    Settings s;
+    Settings s = test_printer();
     s.changes.push_back([] {
         HeightChange c;
         c.z = 2.0;

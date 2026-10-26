@@ -363,7 +363,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);
         retract_speed = std::max(retract_speed, c.retract_speed.value_or(0.0));
     }
-    limits.max_feed = std::max({s.travel_speed, s.max_speed * speed_factor, retract_speed});
+    limits.max_feed = std::max({s.travel_speed, fastest_extrusion(s) * speed_factor, retract_speed});
     // A forced flow (a flow tower) runs its lines as fast as that flow needs
     // on the narrowest bead and thinnest layer, up to what the machine moves.
     double forced = 0.0, min_flow = s.flow / 100.0;
@@ -376,8 +376,9 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         for (const Layer& layer : model.layers)
             height = std::min(height, layer.top - layer.bottom);
         const double narrow = 0.25 * s.wall_width;
-        limits.max_feed = std::max(limits.max_feed, std::min(std::max(s.max_feed_x, s.max_feed_y),
-                                                             forced / std::max(narrow * height * min_flow, 1e-9)));
+        const double machine = std::max(s.max_feed_x, s.max_feed_y); // 0: not known, no cap
+        const double needed = forced / std::max(narrow * height * min_flow, 1e-9);
+        limits.max_feed = std::max(limits.max_feed, machine > 0.0 ? std::min(machine, needed) : needed);
     }
     const double r = s.filament_diameter / 2.0;
     limits.filament_area = std::numbers::pi * r * r;

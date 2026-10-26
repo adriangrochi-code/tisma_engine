@@ -48,16 +48,18 @@ std::vector<float> slice_heights(const std::vector<Layer>& layers) {
 
 TEST_CASE("layer plan: first layer, then regular layers", "[layers]") {
     const std::vector<Layer> layers = plan_layers(0.0, 10.0, {0.3, 0.2});
-    // 0.3 + 48 x 0.2 = 9.9. A 50th layer (9.9 to 10.1) would have its middle at
-    // 10.0, not below the top of the model, so the printed height rounds to 9.9.
-    REQUIRE(layers.size() == 49);
+    // 0.3 + 48 x 0.2 = 9.9. The 50th layer (9.9 to 10.1) has its middle right
+    // on the model's top, 10.0: it is made (slicing.md, rule 3 and C4).
+    REQUIRE(layers.size() == 50);
     CHECK(layers[0].bottom == 0.0);
     CHECK_THAT(layers[0].top, WithinAbs(0.3, 1e-12));
     CHECK_THAT(layers[1].bottom, WithinAbs(0.3, 1e-12));
     CHECK_THAT(layers[1].top, WithinAbs(0.5, 1e-12));
     for (std::size_t i = 1; i < layers.size(); ++i)
         CHECK_THAT(layers[i].bottom, WithinAbs(layers[i - 1].top, 1e-12));
-    CHECK_THAT(layers.back().top, WithinAbs(9.9, 1e-12));
+    CHECK_THAT(layers.back().top, WithinAbs(10.1, 1e-12));
+    // Just above the top, no more layers.
+    CHECK(plan_layers(0.0, 9.999, {0.3, 0.2}).size() == 49);
 }
 
 TEST_CASE("layer plan starts at the model's lowest point", "[layers]") {

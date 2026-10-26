@@ -27,6 +27,49 @@ TEST_CASE("empty settings give the defaults", "[settings]") {
     CHECK(s.gpu == GpuMode::Auto);
 }
 
+TEST_CASE("speeds come only from the printer's profile, a stock Ender-3's when it has none", "[settings]") {
+    // No speed of the engine's own (owner's decision, 2026-10-26).
+    const Settings none = parse_settings("{}");
+    CHECK(missing_speeds(none) ==
+          std::vector<std::string>{"machine.corner_speed", "speed.walls", "speed.outer_wall", "speed.infill",
+                                   "speed.solid_infill", "speed.top_solid_infill", "speed.support", "speed.travel",
+                                   "speed.first_layer", "retraction.speed", "cooling.min_speed"});
+    CHECK_THROWS_WITH(require_speeds(none), ContainsSubstring("no speed for machine.corner_speed, speed.walls"));
+    CHECK(none.max_speed == 0.0); // no cap
+    CHECK(none.max_feed_x == 0.0); // not known
+    // Not set is null in the JSON, and comes back not set.
+    CHECK_THAT(settings_json(none), ContainsSubstring("\"walls\": null"));
+    CHECK(missing_speeds(parse_settings(settings_json(none))) == missing_speeds(none));
+    CHECK(parse_settings(R"({"speed": {"walls": null, "outer_wall": null}, "retraction": {"speed": null},
+                             "cooling": {"min_speed": null}, "machine": {"corner_speed": null, "max_feed_x": null}})")
+              .wall_speed == 0.0);
+
+    // The fallback fills only what is missing, with Creality's numbers.
+    Settings some = parse_settings(R"({"speed": {"walls": 120, "outer_wall": "50%"}})");
+    const std::vector<std::string> filled = fill_missing_speeds(some);
+    CHECK(filled.size() == 9);
+    CHECK(some.wall_speed == 120.0);           // the printer's stays
+    CHECK(some.outer_wall_speed.of(120.0) == 60.0);
+    CHECK(some.infill_speed == 60.0);
+    CHECK(some.solid_infill_speed == 60.0);
+    CHECK(some.top_solid_infill_speed == 40.0);
+    CHECK(some.support_speed == 40.0);
+    CHECK(some.travel_speed == 180.0);
+    CHECK(some.first_layer_speed == 25.0);
+    CHECK(some.retract_speed == 25.0);
+    CHECK(some.min_print_speed == 10.0);
+    CHECK(some.corner_speed == 10.0);
+    CHECK(some.max_speed == 0.0); // limits are not filled
+    CHECK(some.max_feed_x == 0.0);
+    CHECK(missing_speeds(some).empty());
+    CHECK_NOTHROW(require_speeds(some));
+    CHECK(fill_missing_speeds(some).empty());
+    Settings outer;
+    fill_missing_speeds(outer);
+    CHECK_FALSE(outer.outer_wall_speed.percent);
+    CHECK(outer.outer_wall_speed.value == 30.0);
+}
+
 TEST_CASE("settings are read by group", "[settings]") {
     const Settings s = parse_settings(R"({
         "layers": {"height": 0.3, "first_height": 0.35},
@@ -68,7 +111,7 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.outer_wall_speed.of(s.wall_speed) == 20.0);
     CHECK(s.travel_speed == 150.0);
     CHECK(s.max_speed == 100.0);
-    CHECK(s.infill_speed == 80.0); // default
+    CHECK(s.infill_speed == 0.0); // not set: the printer's profile gives it
     CHECK(s.ignored_groups == std::vector<std::string>{"material"});
 }
 
@@ -107,7 +150,7 @@ TEST_CASE("bad settings name the key", "[settings]") {
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
                                                       "travel_acceleration": 3000, "corner_speed": 0}})");
     CHECK(m.max_feed_x == 300.0);
-    CHECK(m.max_feed_y == 200.0);
+    CHECK(m.max_feed_y == 0.0); // not known
     CHECK(m.max_feed_z == 8.0);
     CHECK(m.acceleration == 2000.0);
     CHECK(m.travel_acceleration == 3000.0);

@@ -521,6 +521,13 @@
     X(NeedsEnclosure, "Necesita impresora cerrada", "Needs an enclosed printer")                                      \
     X(CatalogEmpty, "Sin resultados", "No results")                                                                   \
     X(ProfileAdded, "Agregado a tus perfiles: %s", "Added to your profiles: %s")                                      \
+    X(SpeedFallback, "La impresora no trae velocidades: se usan las de una Ender 3 de fábrica (revisalas en "         \
+      "Impresora › Velocidades)",                                                                                     \
+      "The printer has no speeds of its own: a stock Ender-3's are used (check them under Printer › Speeds)")         \
+    X(CatalogSpeedFallback, "Agregado a tus perfiles: %s. El catálogo no trae sus velocidades: van las de una Ender " \
+      "3 de fábrica, hasta su velocidad máxima (revisalas en Impresora › Velocidades)",                               \
+      "Added to your profiles: %s. The catalog has no speeds for it: a stock Ender-3's, up to its top speed (check "  \
+      "them under Printer › Speeds)")                                                                                 \
     X(Kinematics, "Cinemática", "Kinematics")                                                                         \
     X(MaxFlow, "Flujo máximo", "Maximum flow")                                                                        \
     X(ChamberHeating, "Cámara", "Chamber")                                                                            \

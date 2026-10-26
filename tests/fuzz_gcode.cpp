@@ -12,6 +12,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -99,7 +100,7 @@ int main(int argc, char** argv) {
     shapes.push_back({"cylinder", revolve(128, 8, 5.0f, 7.0f, false, 0, 0)});
     int failures = 0, rejected = 0;
     for (int run = 0; run < runs; ++run) {
-        Settings s;
+        Settings s = test_printer();
         s.layer_height = uni(0.08, 0.32);
         s.first_layer_height = uni(0.1, 0.4);
         s.wall_count = pick(7);

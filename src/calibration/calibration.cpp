@@ -431,9 +431,7 @@ CalibrationPrint fit_test(const std::vector<double>& values) {
 }
 
 double volumetric_flow(const Settings& s, double speed_percent) {
-    const double fastest = std::min(
-        std::max({s.wall_speed, s.infill_speed, s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed}),
-        s.max_speed);
+    const double fastest = fastest_extrusion(s);
     return fastest * speed_percent / 100.0 * s.wall_width * s.layer_height * s.flow / 100.0;
 }
 

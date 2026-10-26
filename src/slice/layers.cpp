@@ -25,7 +25,9 @@ std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& 
             i == 0 ? min_z : min_z + settings.first_layer_height + double(i - 1) * settings.layer_height;
         const double top = min_z + settings.first_layer_height + double(i) * settings.layer_height;
         const Layer layer{bottom, top};
-        if (layer.slice_z() >= max_z)
+        // A layer is added while its slicing plane is inside the part or
+        // right on its top (slicing.md, rule 3).
+        if (layer.slice_z() > max_z + kOnTop)
             break;
         layers.push_back(layer);
     }

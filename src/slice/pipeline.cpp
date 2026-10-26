@@ -300,9 +300,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.support_areas = support_areas(out.regions, thickness, sp);
     }
     if (!out.regions.empty()) {
-        out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width);
+        const double first = out.layers.front().top - out.layers.front().bottom;
+        out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width, first);
         out.skirt = skirt_loops(out.regions.front(), settings.brim_width, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
-                                settings.skirt_distance, settings.wall_width);
+                                settings.skirt_distance, settings.wall_width, first);
     }
     out.fills.resize(out.layers.size());
     tbb::parallel_for(std::size_t(0), out.layers.size(),

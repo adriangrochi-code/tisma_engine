@@ -9,6 +9,7 @@
 #include "gcode/writer.hpp"
 #include "perimeters/coverage.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -46,7 +47,7 @@ IndexedMesh cube(float side) { return block(side, side, side); }
 // The spec's base settings (infill_patterns.md): 0.4 nozzle, 0.2 layers, two
 // walls, three solid layers up and down, rectilinear 20 %, no skirt or brim.
 Settings base() {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.layer_height = 0.2;

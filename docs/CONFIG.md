@@ -109,12 +109,12 @@ se pintó piel difusa (`docs/PAINTING.md`) se aplica con estos ajustes aunque `m
 | `flavor` | texto | `"reprap"` | `marlin`, `klipper`, `reprap` | Dialecto de G-code (cambiará los comandos de ventilador, temperatura y aceleración) |
 | `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin |
 | `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
-| `max_feed_x`, `max_feed_y` | número | 200 | > 0 | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo |
-| `max_feed_z` | número | 12 | > 0 | Ídem para Z |
-| `max_feed_e` | número | 120 | > 0 | Ídem para el extrusor |
+| `max_feed_x`, `max_feed_y` | número | — (del perfil de la impresora) | > 0, o `null` | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo. Sin valor (`null`): no se sabe y no se aplica |
+| `max_feed_z` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para Z |
+| `max_feed_e` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para el extrusor |
 | `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s². Se escribe después del G-code de inicio, con `travel_acceleration`, para que la impresora use lo que supone el tiempo estimado: `M204 P… T…` (Marlin y RepRapFirmware) o `SET_VELOCITY_LIMIT ACCEL=…` (Klipper, un solo valor) |
 | `travel_acceleration` | número | 1250 | > 0 | Aceleración de los viajes y las retracciones, en mm/s² |
-| `corner_speed` | número | 10 | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
+| `corner_speed` | número | — (del perfil de la impresora; respaldo 10) | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
 | `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
@@ -130,24 +130,52 @@ Estas claves las llena el catálogo (`docs/CATALOG.md`, «Capacidades») con los
 
 Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ninguna pasa de `first_layer`.
 
+**Velocidades** (decisión del dueño, 2026-10-26): ninguna velocidad tiene un valor por defecto en el motor. Todas
+salen del perfil de la impresora elegida, porque dependen de la impresora: las de este grupo, `retraction.speed`,
+`cooling.min_speed` y las de `machine` (`max_feed_*`, `corner_speed`). En los archivos, una sin valor se escribe
+`null`. El motor no escribe G-code si falta alguna de las que necesita (todas menos `speed.max` y `machine.max_feed_*`,
+que son topes: sin valor, no topan).
+
+**Velocidades de respaldo:** solo cuando la impresora no trae una velocidad (una impresora creada de cero, una del
+catálogo, que no sabe más que su velocidad máxima, o un archivo de ajustes que no la da), se usa la de una Creality
+Ender-3 de fábrica, la máquina más común y la más segura para cualquier otra. Nunca reemplaza una que la impresora
+trae. La interfaz lo dice al elegir la impresora; `slice` lo avisa (`warning: no speed for…` y el aviso
+`speed_fallback`). Los números salen de lo que publica Creality para la Ender-3 (V2, Pro y S1):
+
+| Clave | Respaldo | De dónde |
+|---|---|---|
+| `speed.walls` | 40 | Paredes: de 30 a 35 o 40 mm/s ([Creality](https://store.creality.com/blogs/all/ender-3-print-speed)) |
+| `speed.outer_wall` | 30 | Los 30 mm/s de paredes de la misma página, para la de afuera |
+| `speed.infill`, `speed.solid_infill` | 60 | Relleno de 40 a 60 mm/s; 60 mm/s, la velocidad de impresión recomendada (misma página) |
+| `speed.top_solid_infill` | 40 | 40 mm/s para los detalles finos (misma página) |
+| `speed.support` | 40 | Soporte de 30 a 40 mm/s (misma página) |
+| `speed.travel` | 180 | Viajes a 180 mm/s (misma página) |
+| `speed.first_layer` | 25 | Primera capa de 20 a 30 mm/s ([Creality, PETG en la Ender-3](https://store.creality.com/blogs/all/petg-print-speed-ender-3)) |
+| `retraction.speed` | 25 | PLA: 25 mm/s ([Creality, filamentos para la Ender-3](https://store.creality.com/blogs/all/best-filament-for-ender-3-v2-pro-s1)) |
+| `cooling.min_speed` | 10 | Valor propio del motor (Creality no da uno) |
+| `machine.corner_speed` | 10 | Valor propio del motor (Creality no da uno) |
+
+`speed.max` y `machine.max_feed_*` no tienen respaldo: sin valor, no topan nada. Una impresora del catálogo con
+velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
+
 | Clave | Tipo | Por defecto | Significado |
 |---|---|---|---|
-| `walls` | número | 60 | Paredes internas |
-| `outer_wall` | número o texto | `"50%"` | Pared externa: mm/s, o un porcentaje de `walls` como `"50%"` |
-| `infill` | número | 80 | Relleno disperso |
-| `solid_infill` | número | 80 | Superficies inferiores, puentes y relleno de huecos |
-| `top_solid_infill` | número | 50 | Superficies superiores |
-| `support` | número | 80 | > 0 | Soporte e interfaz, en mm/s |
-| `travel` | número | 130 | Viajes |
-| `first_layer` | número | 30 | Tope de la primera capa |
-| `max` | número | 80 | Tope de toda extrusión |
+| `walls` | número | — (del perfil de la impresora; respaldo 40) | Paredes internas |
+| `outer_wall` | número o texto | — (del perfil de la impresora; respaldo 30) | Pared externa: mm/s, o un porcentaje de `walls` como `"50%"` |
+| `infill` | número | — (del perfil de la impresora; respaldo 60) | Relleno disperso |
+| `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, puentes y relleno de huecos |
+| `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
+| `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
+| `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
+| `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
+| `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |
 
 ### `retraction`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `length` | número | 2 | 0 a 50 | Cuánto filamento se retrae, en mm; 0 no retrae |
-| `speed` | número | 40 | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
+| `speed` | número | — (del perfil de la impresora; respaldo 25) | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
 | `lift` | número | 0 | 0 a 10 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
 
@@ -158,7 +186,7 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `skirt_loops` | entero | 1 | 0–1000 | Vueltas de falda; 0 no hace falda |
-| `skirt_distance` | número | 3 | ≥ 0 | Distancia en mm entre la pieza (o su borde) y la primera vuelta de falda |
+| `skirt_distance` | número | 6 | ≥ 0 | Distancia en mm entre la pieza (o su borde) y la primera vuelta de falda (ficha `supports_skirt.md`) |
 | `skirt_layers` | entero | 1 | 0–1000 | En cuántas capas se repite la falda |
 | `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde |
 
@@ -179,15 +207,18 @@ Soportes según `docs/spec/BEHAVIOR.md` («Soportes»): base en líneas e interf
 
 ### `cooling`
 
-Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento»).
+Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooling.md`.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `min_layer_time` | número | 5 | ≥ 0 | Tiempo mínimo de capa, en s; una capa más rápida se imprime más lento (valor de banco) |
-| `min_speed` | número | 10 | > 0 | Primera etapa: las extrusiones bajan todas en la misma proporción, pero no por debajo de esto (en mm/s, valor de banco); si no alcanza, la segunda etapa las pone a todas a una misma velocidad, la más alta que llega al tiempo, nunca por debajo de 1 mm/min; las que ya iban más lento no cambian |
-| `fan_min` | número | 35 | 0–100 | Ventilador en las capas normales, en % |
-| `fan_max` | número | 100 | 0–100 | Ventilador en las capas que tuvieron que ir más lento, en % |
-| `fan_off_layers` | entero | 1 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
+| `min_speed` | número | — (del perfil de la impresora; respaldo 10) | > 0 | Primera etapa: las extrusiones bajan todas en la misma proporción, pero no por debajo de esto (en mm/s; es del perfil de la impresora, como toda velocidad); si no alcanza, la segunda etapa las pone a todas a una misma velocidad, la más alta que llega al tiempo, nunca por debajo de 1 mm/min; las que ya iban más lento no cambian |
+| `fan_min` | número | 35 | 0–100 | Ventilador de una capa que tarda casi `fan_below_time`, en %. Entre `min_layer_time` y `fan_below_time` el ventilador baja en línea recta de `fan_max` a `fan_min` según el tiempo de la capa |
+| `fan_max` | número | 100 | 0–100 | Ventilador de una capa que tarda `min_layer_time` o menos, y de toda capa que tuvo que ir más lento, en % |
+| `fan_below_time` | número | 60 | ≥ 0 | Una capa que tarda esto o más va sin ventilador (o con `fan_min`, si `fan_always`), en s |
+| `fan_always` | booleano | false | | El ventilador nunca baja de `fan_min`, ni en las capas largas (sí en las primeras, `fan_off_layers`) |
+| `fan_bridges` | número | 100 | 0–100 | Ventilador mientras se imprime un puente, en %; al terminar el puente vuelve el de la capa |
+| `fan_off_layers` | entero | 3 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
 | `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (como la primera etapa, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, se frena todo como en las dos etapas. `false`: las dos etapas de siempre, como Tisma Slicer |
 
 ### `compute`

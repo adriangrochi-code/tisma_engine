@@ -5,6 +5,7 @@
 #include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -46,7 +47,7 @@ double surface_at(double x, double degrees) { return 3.0 + (x - 90.0) * std::tan
 // The base settings of the spec's tests: 0.4 nozzle, 0.2 layers, two walls,
 // three solid layers, rectilinear 20 %, no skirt or brim, absolute E.
 Settings base() {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.layer_height = 0.2;
@@ -314,6 +315,7 @@ TEST_CASE("Z anti-aliasing: the check allows for both roundings of Z", "[zaa]") 
         "surfaces": {"top_layers": 1, "bottom_layers": 0},
         "infill": {"density": 10.488678555769042, "angle": 10.136240883184465, "pattern": "grid"},
         "machine": {"filament_diameter": 2.85}, "compute": {"gpu": "off"}})");
+    s = test_printer(s);
     const SlicedModel sliced = slice_model(m, s);
     std::ostringstream gcode;
     write_gcode(gcode, sliced, s);

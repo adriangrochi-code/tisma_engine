@@ -24,8 +24,10 @@ struct Layer {
 };
 
 // Layers from min_z upwards: the first one first_layer_height thick, the rest
-// layer_height thick. A layer whose middle would be at or above max_z holds no
-// material and is not created. Throws std::invalid_argument on heights <= 0.
+// layer_height thick. A layer is created while its middle is below max_z or on
+// it, within kOnTop (slicing.md, rule 3: the plane on a flat top slices its
+// outline). Throws std::invalid_argument on heights <= 0.
+inline constexpr double kOnTop = 1e-6; // mm
 std::vector<Layer> plan_layers(double min_z, double max_z, const LayerSettings& settings);
 
 // For each triangle, the levels its value range crosses: [first[t], end[t]).

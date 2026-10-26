@@ -350,12 +350,19 @@ Profile printer_profile(const PrinterModel& p, double nozzle) {
                : p.firmware == "reprap" ? GcodeFlavor::RepRap
                                         : GcodeFlavor::Marlin;
     // Retraction: short for a direct drive, long for a Bowden tube (own
-    // starting values; the retraction towers find the printer's own).
+    // starting lengths; the retraction towers find the printer's own).
     s.retract_length = p.direct_drive ? 0.8 : 4.0;
-    s.retract_speed = p.direct_drive ? 35.0 : 40.0;
     if (p.max_speed) {
         s.max_feed_x = s.max_feed_y = *p.max_speed;
     }
+    // The speeds: the catalog knows none of a model's but its top speed, so
+    // the profile takes a stock Ender-3's (owner's decision, 2026-10-26),
+    // none past the model's top speed.
+    fill_missing_speeds(s);
+    if (p.max_speed)
+        for (double* v : {&s.wall_speed, &s.outer_wall_speed.value, &s.infill_speed, &s.solid_infill_speed,
+                          &s.top_solid_infill_speed, &s.support_speed, &s.travel_speed, &s.first_layer_speed})
+            *v = std::min(*v, *p.max_speed);
     if (p.max_acceleration)
         s.acceleration = s.travel_acceleration = *p.max_acceleration;
     // What it can do: the writer keeps to it, and the checks warn against it.

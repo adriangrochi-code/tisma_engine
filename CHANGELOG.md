@@ -42,6 +42,29 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Ventilador por tiempo de capa** (ficha `cooling.md`; prueba de caja negra del equipo de fichas): el ventilador va
+  al máximo en las capas que tardan `cooling.min_layer_time` o menos y baja en línea recta hasta `cooling.fan_min` en
+  las que tardan `cooling.fan_below_time` (nuevo, 60 s); las más largas van sin ventilador, o con `fan_min` si
+  `cooling.fan_always` (nuevo). Los puentes llevan `cooling.fan_bridges` (nuevo, 100 %) y después vuelve el de la capa.
+  El comando va justo antes del `;LAYER_CHANGE` de su capa. Antes iba fijo en `fan_min`. `cooling.fan_off_layers`
+  pasa de 1 a 3 capas sin ventilador; las que tienen que frenar lo siguen llevando al máximo.
+- **Falda y borde** (ficha `supports_skirt.md`, reglas 8 y 9): la falda rodea la pieza con las esquinas redondeadas y
+  empieza a 6 mm de ella (`adhesion.skirt_distance`, antes 3). Las vueltas del borde van a la separación de los
+  cordones (el ancho menos lo que se encima un cordón de bordes redondos: 0,357 mm con 0,4 × 0,2, antes 0,4) y llegan
+  al ancho pedido: un borde de 5 mm tiene 14 vueltas (antes 12 y 4,8 mm).
+- **Las velocidades son de la impresora** (decisión del dueño): el motor ya no tiene velocidades por defecto. Todas
+  (`speed`, `retraction.speed`, `cooling.min_speed` y las de `machine`) salen del perfil de la impresora elegida, porque
+  dependen de ella; en la interfaz están en **Impresora › Velocidades**. Solo si la impresora no trae una (una creada
+  de cero, una del catálogo, un archivo de ajustes sin ella) se usa la de una Creality Ender-3 de fábrica, con los
+  números que publica Creality (paredes 40, externa 30, relleno 60, arriba 40, soporte 40, viajes 180, primera capa
+  25 y retracción 25 mm/s), y se avisa: la interfaz al elegirla, `slice` con `warning: no speed for…` y el aviso
+  `speed_fallback`. `speed.max` y `machine.max_feed_*` sin valor no topan. En los archivos, una velocidad sin valor se
+  escribe `null`.
+  - **Incompatible:** los perfiles pasan a la versión 2. Un perfil de impresión de la versión 1 se sigue abriendo, pero
+    sin sus velocidades: hay que pasarlas al perfil de la impresora. Lo mismo `cooling.min_speed` de un perfil de
+    filamento.
+  - Un archivo de ajustes para `slice` sin velocidades ya no toma las de banco de antes (60, 80, 130 mm/s…), sino las de
+    respaldo.
 - **Impresoras de pellets** (ficha `pellets.md`): `layers.height` y `layers.first_height` aceptan hasta 10 mm (antes
   2) y `walls.width` hasta 40 mm (antes 10). Como siempre, nunca más gruesas que la boquilla ni más anchas que cuatro
   boquillas. Una impresora con boquilla de 8 mm y capas de 4 mm ya lamina.
@@ -65,6 +88,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - Con `machine.min_layer_height` mayor que `machine.max_layer_height`, el error decía que la capa no entraba; ahora
   dice que los dos límites se contradicen (equipo de fichas).
+- Con la primera capa más gruesa que las demás, faltaba la última capa: un cubo de 10 mm con capas de 0,3 y 0,2 tenía
+  49 capas y terminaba en 9,9 mm; ahora tiene 50 y termina en 10,1 (ficha `slicing.md`, C4).
+- Una pendiente justo en el ángulo límite automático (un escalón de medio cordón por capa, la cuña de 45° con capas de
+  0,2) llevaba soporte; la regla es «más de» (ficha `supports_skirt.md`, S1).
 
 ## [0.8.0-alpha.1] - 2026-10-25
 

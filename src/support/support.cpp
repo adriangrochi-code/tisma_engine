@@ -15,6 +15,9 @@ namespace {
 // a wall that only looks slanted by rounding.
 constexpr double kAnyReach = 0.01;
 
+// mm: a step this much past the allowed reach is still no overhang.
+constexpr double kTouching = 1e-3;
+
 } // namespace
 
 std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
@@ -23,9 +26,13 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
     tbb::parallel_for(std::size_t(1), std::max<std::size_t>(regions.size(), 1), [&](std::size_t l) {
         if (regions[l].empty())
             return;
-        const double reach = params.threshold_angle > 0.0
-                                 ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
-                                 : params.bead / 2.0;
+        // Overhanging means reaching out MORE than this (supports_skirt.md,
+        // rule 1): a 45° face with layers half a bead high is held, and
+        // rounding in the mesh must not make it an overhang.
+        const double reach = (params.threshold_angle > 0.0
+                                  ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
+                                  : params.bead / 2.0) +
+                             kTouching;
         out[l] = Clipper2Lib::Difference(regions[l], offset(regions[l - 1], reach), Clipper2Lib::FillRule::NonZero);
     });
     return out;

@@ -5,6 +5,7 @@
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -132,7 +133,7 @@ TEST_CASE("without comments the preview finds layers by Z and widths by volume",
 
 TEST_CASE("the preview of the engine's G-code matches its check", "[gcode][preview]") {
     const IndexedMesh mesh = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
-    Settings settings;
+    Settings settings = test_printer();
     settings.gpu = GpuMode::Off;
     settings.skirt_loops = 1;
     settings.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
