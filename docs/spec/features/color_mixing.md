@@ -3,7 +3,8 @@
 **Qué hace:** con dos o más filamentos, la persona crea colores nuevos: una mezcla alterna los filamentos capa por
 capa, y a la distancia el ojo ve el color intermedio. Esta ficha dice qué pone la persona y qué hace el G-code. Las
 reglas de la interfaz (cuándo se ofrece, el aviso de costo) están en `multimaterial.md`; el cambio de filamento y la
-torre de purga, en `multi_extruder.md`.
+torre de purga, en `multi_extruder.md`. Lo que suma Full Spectrum (más tipos de mezcla, subcapas, solo superficie,
+imágenes) está en `color_mixing_plus.md`.
 
 **Fase:** después de la primera versión, con `multimaterial.md`.
 
