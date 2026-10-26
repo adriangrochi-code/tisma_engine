@@ -69,14 +69,14 @@ cualquiera pueda compartir sus impresiones.
 | Alero de la tapa | El borde de adelante de la tapa sobresale del frente, como en la real | 3 mm hacia adelante; la cara de abajo en tres tramos a 30°, 45° y 60° de la vertical | Voladizos a distintos ángulos sin soporte |
 | Bandeja de salida | Hueco en la tapa | 30 × 20 mm, 2 mm de hondo, el piso inclinado 5° hacia atrás | Superficie de arriba dentro de un hueco; superficie poco inclinada |
 | Bloque de salida | Bloque más alto atrás a la izquierda, con la ranura de salida hacia adelante | X de 2 a 36, Y de 40 a 54, Z de 36 a 44; ranura de 30 × 3 mm | Puente de 30 mm sobre la ranura |
-| Tope de papel | Arco sobre la tapa, atrás al centro | X de 36 a 52, Y de 44 a 50, Z de 36 a 43; luz de 12 mm | Puente corto; arco |
+| Tope de papel | Arco sobre la tapa, atrás al centro | X de 36 a 52, Y de 44 a 50, Z de 36 a 44; luz de 10 mm | Puente corto; arco |
 | Panel de control | Al frente a la izquierda, inclinado 30° hacia atrás, sobresale 4 mm | X de 4 a 24, Z de 16 a 26 | Superficie inclinada |
 | Pantalla y botones | Pantalla rectangular hundida; botones en dos columnas a su derecha, como los de la real | Pantalla 8 × 5 mm, 0,6 mm de hondo; botones Ø 1, 1,5 y 2 mm, 0,8 mm de hondo | Agujeros chicos, retracción |
 | Manija de la tapa | Hueco arriba del panel | X de 6 a 22, Z de 28 a 32, 2 mm de hondo, techo a 45° | Hueco horizontal sin soporte |
 | Placa del nombre | En el medio del frente, donde la real lleva su marca | «MABEL» en relieve, letras de 3 mm de alto y 0,5 mm de relieve | Texto chico en relieve |
 | Ventanita del nivel de papel | Abajo a la derecha del frente de la bandeja | 2 × 5 mm, pasante | Agujero chico rectangular |
 | Ranuras de ventilación | Arriba a la derecha | 5 ranuras de 0,4, 0,6, 0,8, 1,0 y 1,2 mm de ancho, 10 mm de largo | Separaciones chicas; hilos |
-| Rejilla del costado | Costado derecho, atrás | Y de 42 a 52, Z de 14 a 30; 6 paredes de 0,4, 0,6, 0,8, 1,0, 1,2 y 1,6 mm | Paredes finas; ancho mínimo |
+| Rejilla del costado | Costado derecho, atrás, debajo de la perilla de encendido | Y de 43 a 52, Z de 12 a 23; 6 paredes de 0,4, 0,6, 0,8, 1,0, 1,2 y 1,6 mm | Paredes finas; ancho mínimo |
 | Puertos | Agujeros horizontales atrás de la base | Ø 3 y 5 mm redondos; Ø 5 mm en lágrima | Agujeros horizontales (el techo cae); comparación con la lágrima |
 | Texto de atrás | «TISMA» grabado atrás del cuerpo | Letras de 4 mm de alto, 0,6 mm de hondo | Texto grabado |
 
@@ -96,7 +96,7 @@ cualquiera pueda compartir sus impresiones.
 | Puerta del costado | La puerta grande del costado derecho se abre hacia abajo sobre una bisagra en su borde de abajo (perno a lo largo de Y) y queda horizontal, como la bandeja universal de la real | Y de 8 a 38, Z de 13 a 33, 1,6 mm de espesor; perno Ø 2 mm; holgura 0,3 mm; tope a 90° | Bisagra horizontal; puerta delgada que no se deforma |
 | Guías de papel | Dos guías en la cara de adentro de la puerta, que se deslizan a lo largo de Y en una ranura en T | Guías de 2 × 6 mm; holgura 0,3 mm | Deslizamiento en una ranura; piezas chicas |
 | Palanca de la puerta | La palanca vertical de la esquina de adelante a la derecha gira sobre un perno vertical y traba la puerta cerrada | 2 × 8 mm; perno Ø 1,6 mm; holgura 0,3 mm; gira 30° | Perno vertical chico; traba |
-| Perilla de encendido | Perilla redonda con una barra, sobre una placa cuadrada atrás del costado derecho; gira sobre un perno horizontal (a lo largo de X) | Placa 7 × 7 mm; perilla Ø 5,00 mm; perno Ø 2 mm; holgura 0,3 mm; marcas cada 45° | Redondez de círculos de pie (en Y y Z): escalones de las capas y techo del agujero |
+| Perilla de encendido | Perilla redonda con una barra, sobre una placa cuadrada atrás del costado derecho (Y de 42 a 49, Z de 26 a 33); gira sobre un perno horizontal (a lo largo de X) | Placa 7 × 7 mm; perilla Ø 5,00 mm; perno Ø 2 mm; holgura 0,3 mm; marcas cada 45° | Redondez de círculos de pie (en Y y Z): escalones de las capas y techo del agujero |
 | Rodillos de salida | Tres rodillos a lo ancho de la ranura de salida, que giran con el dedo | Ø 3 mm, 8 mm de largo; eje Ø 1,6 mm; holgura 0,3 mm | Ejes horizontales chicos; giro libre |
 
    - El programa marca cada mecanismo como parte del mismo objeto, para que el orden de impresión y la costura no los
