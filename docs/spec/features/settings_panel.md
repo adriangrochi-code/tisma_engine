@@ -1,8 +1,8 @@
 # Panel de ajustes: secciones, niveles, vista propia, boquilla y cámara
 
 **Qué hace:**
-- parte los ajustes en secciones por lo que hacen (Calidad, Paredes, Relleno…), cada una plegable y con un resumen,
-  en lugar de una sola lista larga;
+- parte los ajustes en secciones por lo que hacen (Calidad, Resistencia, Velocidad…) y cada sección en apartados
+  finos (Altura de capa, Costura, Precisión…), plegables y con un resumen, en lugar de una sola lista larga;
 - tres niveles, **Básico**, **Normal** y **Avanzado**, y un modo **Personalizado** donde la persona elige qué ajustes
   se ven;
 - cambia la boquilla con un clic, al lado de la impresora;
@@ -48,71 +48,142 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
 | `ui.level` | `normal` | `basic`, `normal`, `advanced` o `custom` |
 | `ui.custom_base` | `normal` | El nivel del que partió la vista propia (regla 15) |
 | `ui.custom_visible` | lista vacía | Las claves que se ven en Personalizado, por pestaña (Impresión, Material, Impresora) |
-| `ui.sections_open` | `["quality"]` | Las secciones abiertas, por pestaña |
+| `ui.section` | `quality` | La sección elegida, por pestaña (regla 3) |
+| `ui.sections_open` | el primer apartado de cada sección | Los apartados abiertos, por pestaña (regla 2) |
+| `ui.single_column` | no | «Ver todo junto» (regla 4) |
 | `ui.camera_window` | — | Posición, tamaño y si estaba abierta la ventana de la cámara (regla 27) |
 
 ## Reglas
 
 ### Secciones
 
-1. **Secciones por lo que hacen.** Cada pestaña del panel (Impresión, Material, Impresora) se parte en secciones, en
-   este orden. La sección de un ajuste sale de su grupo en `docs/CONFIG.md`; las excepciones van en la columna
-   «Claves». La pestaña donde aparece la decide el perfil al que pertenece la clave (`docs/PROFILES.md`).
+**Cómo lo hacen otros laminadores** (comparación de caja negra, solo lo que se ve):
+- **OrcaSlicer:** los ajustes de impresión van en seis pestañas, Quality, Strength, Speed, Support, Multimaterial y
+  Others. Cada una se parte en apartados finos. Por ejemplo, Quality tiene Layer height, Line width, Seam, Precision,
+  Ironing, Wall generator, Walls and surfaces, Bridging y Overhangs. Fuente: la wiki oficial,
+  `https://github.com/SoftFever/OrcaSlicer/wiki`, consultada el 26-10-2026.
+- **UltiMaker Cura:** el panel de ajustes propios es una sola columna de categorías plegables: Quality, Walls,
+  Top/Bottom, Infill, Material, Speed, Travel, Cooling, Support, Build Plate Adhesion, Dual Extrusion, Mesh Fixes,
+  Special Modes y Experimental. Un ajuste que depende de otro va sangrado debajo de él. La visibilidad se elige entre
+  Basic, Advanced, Expert, All o una selección propia. Fuente: las categorías y la lista Basic del repositorio
+  oficial, `https://github.com/Ultimaker/Cura`, rama `main`, el 26-10-2026.
 
-| Pestaña | Sección (`id`) | Claves | Resumen cerrada (ejemplo) |
+El motor toma de los dos:
+- de OrcaSlicer, pocas secciones grandes con apartados finos adentro;
+- de Cura, los apartados plegables en una sola columna y los ajustes dependientes sangrados.
+
+1. **Dos niveles: sección y apartado.**
+   - **Sección:** una parte grande de lo que hace la impresión. Las secciones van en una columna de íconos con nombre
+     a la izquierda del panel, o en una fila de chips arriba si el panel tiene menos de 32 em de ancho. Se ve una
+     sección a la vez.
+   - **Apartado:** un tramo chico dentro de la sección, con pocos ajustes (entre 1 y 8). Cada apartado es una tarjeta
+     plegable (regla 2).
+   - La sección y el apartado de cada ajuste van en las tablas de abajo. La pestaña donde aparece (Impresión,
+     Material o Impresora) la decide el perfil al que pertenece la clave (`docs/PROFILES.md`).
+   - Una clave con `*` incluye todo su grupo de `docs/CONFIG.md`, salvo las que otra fila nombra.
+   - Las fichas nombradas entre paréntesis agregan sus claves a ese apartado cuando el motor las tenga.
+
+   **Impresión:**
+
+| Sección | Apartado | Claves | Resumen cerrado (ejemplo) |
 |---|---|---|---|
-| Impresión | Calidad (`quality`) | `layers.*`, `zaa.*` | «0,2 mm · primera capa 0,2 mm» |
-| Impresión | Paredes (`walls`) | `walls.*` | «3 paredes · costura alineada» |
-| Impresión | Arriba y abajo (`surfaces`) | `surfaces.*` | «3 capas arriba · 3 abajo» |
-| Impresión | Relleno (`infill`) | `infill.*` | «20 % · rectilíneo» |
-| Impresión | Soportes (`support`) | `support.*` | «Sin soportes» o «Automáticos» |
-| Impresión | Adhesión (`adhesion`) | `adhesion.*` | «Falda de 1 vuelta · sin borde» |
-| Impresión | Velocidad (`speed`) | `speed.*` | «Paredes 60 · relleno 80 mm/s» |
-| Impresión | Medidas (`compensation`) | `compensation.*`, `slicing.xy_offset`, `slicing.first_layer_shrink` | «Sin correcciones» |
-| Impresión | Salida (`output`) | `gcode.*`, `changes`, el resto de `slicing.*` | «Resolución 0,0125 mm» |
-| Material | Temperaturas (`temperatures`) | `material.*` salvo `material.flow_factor`, y las temperaturas de `machine.variables` | «215 °C · cama 60 °C» |
-| Material | Enfriamiento (`cooling`) | `cooling.*` | «Ventilador 35–100 % · capa mínima 5 s» |
-| Material | Flujo (`flow`) | `extrusion.flow`, `extrusion.pressure_advance`, `extrusion.max_flow`, `material.flow_factor` | «100 % · sin avance de presión» |
-| Material | Retracción (`retraction`) | `retraction.*` | «2 mm a 40 mm/s» |
-| Material | Necesidades (`needs`) | `extrusion.abrasive`, `extrusion.needs_enclosure`, `extrusion.chamber_temperature` | «Sin requisitos» |
-| Impresora | Máquina (`machine`) | `machine.bed`, `machine.max_height`, `machine.enclosed` | «250 × 210 × 210 mm · abierta» |
-| Impresora | Boquilla y extrusor (`nozzle`) | `machine.nozzle_diameter`, `machine.filament_diameter`, `machine.hardened_nozzle`, `machine.max_flow`, `machine.min_layer_height`, `machine.max_layer_height` | «0,4 mm · 1,75 mm» |
-| Impresora | Límites (`limits`) | `machine.max_feed_*`, `machine.acceleration`, `machine.travel_acceleration`, `machine.corner_speed`, `machine.max_nozzle_temp`, `machine.max_bed_temp`, `machine.max_chamber_temp` | «Aceleración 1000 mm/s²» |
-| Impresora | G-code (`gcode`) | `machine.flavor`, `machine.relative_extrusion`, `machine.start_gcode`, `machine.end_gcode`, `machine.variables` | «Klipper» |
+| Calidad | Altura de capa | `layers.height`, `layers.first_height` | «0,2 mm · primera 0,2 mm» |
+| Calidad | Altura variable | `layers.heights`, `layers.cusp_height` (`slicing.md`) | «Igual en toda la pieza» |
+| Calidad | Detalle fino | `layers.detail_*` | «Apagado» |
+| Calidad | Ancho de línea | `walls.width`, `walls.outer_width` | «0,4 mm» |
+| Calidad | Costura | `walls.seam` (`perimeters.md`) | «Alineada» |
+| Calidad | Precisión | `slicing.xy_offset`, `slicing.first_layer_shrink`, `compensation.*` | «Sin correcciones» |
+| Calidad | Superficies inclinadas | `zaa.*` (`z_antialiasing.md`) | «Z anti-aliasing apagado» |
+| Calidad | Planchado | (`ironing.md`) | «Apagado» |
+| Calidad | Puentes y voladizos | (`arc_overhangs.md`, `walls_extra.md`) | «Voladizos en arco apagados» |
+| Resistencia | Paredes | `walls.count` (`walls_extra.md`, `staggered_perimeters.md`) | «3 paredes» |
+| Resistencia | Arriba y abajo | `surfaces.*` | «3 arriba · 3 abajo» |
+| Resistencia | Relleno | `infill.density`, `infill.pattern`, `infill.angle` | «20 % · rectilíneo» |
+| Resistencia | Relleno avanzado | `infill.wall_overlap`, `infill.solid_every`, `infill.solid_below_area`, `infill.combine_*`, `infill.dense_*`, `infill.stress_density` | «Sin cambios» |
+| Resistencia | Relleno ondulado | `infill.nonplanar*` | «Apagado» |
+| Velocidad | Primera capa | `speed.first_layer` | «30 mm/s» |
+| Velocidad | Paredes y superficies | `speed.walls`, `speed.outer_wall`, `speed.solid_infill`, `speed.top_solid_infill` | «60 · externa 50 %» |
+| Velocidad | Relleno y soporte | `speed.infill`, `speed.support` | «80 · 80 mm/s» |
+| Velocidad | Viajes | `speed.travel` | «130 mm/s» |
+| Velocidad | Aceleración | (`speeds_accels.md`) | «De la impresora» |
+| Velocidad | Topes | `speed.max` | «80 mm/s» |
+| Soportes | Soporte | `support.enabled`, `support.automatic`, `support.threshold_angle` | «Sin soportes» o «Automáticos» |
+| Soportes | Separación | `support.z_gap`, `support.xy_gap` | «Z 0,2 · XY 0,6 mm» |
+| Soportes | Interfaz | `support.interface_layers` (`supports_more.md`) | «3 capas» |
+| Soportes | Patrón | `support.spacing` (`supports_more.md`) | «2,5 mm» |
+| Soportes | Árbol | (`supports_more.md`) | «—» |
+| Adhesión | Falda | `adhesion.skirt_*` | «1 vuelta a 3 mm» |
+| Adhesión | Borde | `adhesion.brim_*` | «Sin borde» |
+| Adhesión | Balsa | (`skirt_brim_raft.md`) | «Sin balsa» |
+| Capas no planares | según `nonplanar.md` y `nonplanar_modes.md` | — | «Planas» |
+| Varios materiales | Torre de purga, Goteo, Purga | (`multi_extruder.md`, `multimaterial.md`) | «1 extrusor» |
+| Otros | Modos especiales | (`vase_mode.md`, `sequential.md`) | «Normal» |
+| Otros | Piel difusa | (`fuzzy_skin.md`) | «Apagada» |
+| Otros | Salida G-code | `gcode.*`, `changes` (`gcode_extras.md`) | «Resolución 0,0125 mm» |
+| Otros | Corte | el resto de `slicing.*` | «Unión» |
 
-   - Un grupo que el motor agregue después lleva su sección en su ficha. Si no la tiene, va a una sección **Otros**
-     al final de su pestaña, y la prueba SP1 falla hasta que se le asigne una.
-   - Los ajustes de capas no planares, varios materiales y resina van en sus propias secciones (Capas no planares,
-     Varios materiales, Resina), que solo aparecen con una impresora que los usa.
+   **Material:**
+
+| Sección | Apartado | Claves | Resumen cerrado (ejemplo) |
+|---|---|---|---|
+| Temperaturas | Boquilla | `material.nozzle_temp`, `material.first_nozzle_temp` | «215 °C · primera 215 °C» |
+| Temperaturas | Cama | `material.bed_temp`, `material.first_bed_temp` | «60 °C» |
+| Temperaturas | Cabina | `extrusion.chamber_temperature` | «Sin cabina» |
+| Enfriamiento | Ventilador | `cooling.fan_*` | «35–100 % · apagado 1 capa» |
+| Enfriamiento | Capas cortas | `cooling.min_layer_time`, `cooling.min_speed`, `cooling.keep_outer_speed` (`cooling_more.md`) | «Mínimo 5 s» |
+| Flujo | Flujo | `extrusion.flow`, `material.flow_factor` | «100 %» |
+| Flujo | Presión | `extrusion.pressure_advance` (`pressure_advance_gcode.md`) | «Sin avance de presión» |
+| Flujo | Flujo máximo | `extrusion.max_flow` | «Sin tope» |
+| Retracción | Retracción | `retraction.length`, `retraction.speed` | «2 mm a 40 mm/s» |
+| Retracción | Viajes | `retraction.lift`, `retraction.min_travel` (`retraction_travel.md`, `coasting.md`) | «Sin salto en Z» |
+| Necesidades | Necesidades | `extrusion.abrasive`, `extrusion.needs_enclosure` | «Sin requisitos» |
+
+   **Impresora:**
+
+| Sección | Apartado | Claves | Resumen cerrado (ejemplo) |
+|---|---|---|---|
+| Máquina | Cama y volumen | `machine.bed`, `machine.max_height` | «250 × 210 × 210 mm» |
+| Máquina | Cabina | `machine.enclosed`, `machine.max_chamber_temp` | «Abierta» |
+| Boquilla y extrusor | Boquilla | `machine.nozzle_diameter`, `machine.hardened_nozzle`, `machine.min_layer_height`, `machine.max_layer_height` | «0,4 mm · latón» |
+| Boquilla y extrusor | Extrusor | `machine.filament_diameter`, `machine.max_flow`, `machine.relative_extrusion` | «1,75 mm» |
+| Límites | Velocidades | `machine.max_feed_*`, `machine.corner_speed` | «200 mm/s en X e Y» |
+| Límites | Aceleraciones | `machine.acceleration`, `machine.travel_acceleration` | «1000 mm/s²» |
+| Límites | Temperaturas máximas | `machine.max_nozzle_temp`, `machine.max_bed_temp` | «300 °C · 110 °C» |
+| G-code | Firmware | `machine.flavor` (`gcode_firmware.md`) | «Klipper» |
+| G-code | Inicio y fin | `machine.start_gcode`, `machine.end_gcode` (`gcode_templates.md`) | «12 líneas · 8 líneas» |
+| G-code | Variables | `machine.variables` | «3 variables» |
+
+   - Un grupo que el motor agregue después lleva su sección y su apartado en su ficha. Si no los tiene, va a un
+     apartado **Sin ubicar** de la sección Otros, y la prueba SP1 falla hasta que se le asigne uno.
+   - Capas no planares, Varios materiales y los apartados de resina solo aparecen con una impresora que los usa.
    - `compute.*` no va en el panel: es una preferencia del programa.
-2. **Cada sección es una tarjeta plegable** con:
-   - el ícono y el nombre de la sección;
-   - cerrada, una línea de resumen con los dos o tres valores más importantes, como en la tabla, calculada con los
-     valores actuales;
+2. **Cada apartado es una tarjeta plegable** con:
+   - su nombre y, cerrado, una línea de resumen con los valores más importantes, como en las tablas, calculada con
+     los valores actuales;
    - si tiene ajustes cambiados respecto del perfil guardado, «2 cambios» en violeta al lado del nombre;
-   - una flecha que la abre o la cierra. Pueden estar varias abiertas; las abiertas se recuerdan
+   - una flecha que la abre o la cierra. Pueden estar varios abiertos; los abiertos se recuerdan
      (`ui.sections_open`).
-   La primera vez solo está abierta Calidad.
-3. **Subgrupos:** dentro de una sección, los ajustes van en subgrupos con un título chico. Por ejemplo, Calidad:
-   «Altura de capa», «Detalle fino», «Alturas por Z», «Superficies inclinadas (Z anti-aliasing)».
-4. **Índice:** arriba del panel, una fila de chips con las secciones de la pestaña. Tocar uno abre esa sección y la
-   lleva al principio del panel. El chip de una sección con cambios lleva un punto violeta.
-5. **Búsqueda:** el buscador de la barra superior (`interface.md`) abre la pestaña y la sección del ajuste, lo lleva a
-   la vista y lo resalta 2 s. Si el ajuste está oculto por el nivel, se muestra igual, marcado (regla 12).
-6. **Ajustes que dependen de otro:** se ven solo cuando sirven. La sección muestra el interruptor y, apagado, nada
-   más:
+   La primera vez, en cada sección solo está abierto el primer apartado (Altura de capa en Calidad).
+3. **La sección elegida** se recuerda por pestaña. En la columna de secciones, la que tiene ajustes cambiados lleva un
+   punto violeta, y al pasar el puntero se ve la lista de sus apartados para ir directo a uno.
+4. **Vista de una sola columna** (diseño): un botón arriba del panel, «Ver todo junto», muestra todas las secciones
+   una debajo de otra, cada una con su título, como la columna de categorías de Cura. Se recuerda.
+5. **Búsqueda:** el buscador de la barra superior (`interface.md`) abre la pestaña, la sección y el apartado del
+   ajuste, lo lleva a la vista y lo resalta 2 s. Si el ajuste está oculto por el nivel, se muestra igual, marcado
+   (regla 12).
+6. **Ajustes que dependen de otro** van sangrados debajo de él y se ven solo cuando sirven:
 
 | Interruptor | Lo que se oculta apagado |
 |---|---|
-| `support.enabled` | El resto de `support.*` |
+| `support.enabled` | El resto de la sección Soportes |
 | `zaa.enabled` | El resto de `zaa.*` |
 | `infill.nonplanar` | `infill.nonplanar_amplitude`, `infill.nonplanar_wavelength` |
 | `infill.dense_under_top` | `infill.dense_density` |
 | `infill.combine_auto` encendido | `infill.combine_layers` (lo calcula el motor) |
 
-7. **Una sección sin ajustes** en el nivel elegido no se muestra, ni su chip.
-8. **Restablecer** (diseño): cada sección tiene, en su menú de tres puntos, «Restablecer esta sección», que vuelve sus
-   ajustes al perfil guardado. El botón Restablecer del pie sigue haciendo lo mismo con todo el perfil.
+7. **Un apartado o una sección sin ajustes** en el nivel elegido no se muestra.
+8. **Restablecer** (diseño): cada apartado tiene, en su menú de tres puntos, «Restablecer», que vuelve sus ajustes al
+   perfil guardado. El botón Restablecer del pie sigue haciendo lo mismo con todo el perfil.
 
 ### Niveles
 
@@ -131,18 +202,19 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
     los suyos y los de los niveles de abajo. Un ajuste sin nivel es `advanced`.
     - **Básico** (lista completa):
 
-| Sección | Claves |
+| Sección › apartado | Claves |
 |---|---|
-| Calidad | `layers.height`, `layers.first_height` |
-| Paredes | `walls.count`, `walls.seam` |
-| Arriba y abajo | `surfaces.top_layers`, `surfaces.bottom_layers`, `surfaces.top_min_thickness`, `surfaces.bottom_min_thickness`, `surfaces.top_pattern` |
-| Relleno | `infill.density`, `infill.pattern` |
-| Soportes | `support.enabled`, `support.automatic` |
-| Adhesión | `adhesion.skirt_loops`, `adhesion.skirt_distance`, `adhesion.brim_width` |
-| Temperaturas | `material.nozzle_temp`, `material.first_nozzle_temp`, `material.bed_temp`, `material.first_bed_temp` |
-| Enfriamiento | `cooling.fan_min`, `cooling.fan_max` |
-| Retracción | `retraction.length`, `retraction.lift` |
-| Boquilla y extrusor | `machine.nozzle_diameter` |
+| Calidad › Altura de capa | `layers.height`, `layers.first_height` |
+| Calidad › Costura | `walls.seam` |
+| Resistencia › Paredes | `walls.count` |
+| Resistencia › Arriba y abajo | `surfaces.top_layers`, `surfaces.bottom_layers`, `surfaces.top_min_thickness`, `surfaces.bottom_min_thickness`, `surfaces.top_pattern` |
+| Resistencia › Relleno | `infill.density`, `infill.pattern` |
+| Soportes › Soporte | `support.enabled`, `support.automatic` |
+| Adhesión › Falda y Borde | `adhesion.skirt_loops`, `adhesion.skirt_distance`, `adhesion.brim_width` |
+| Temperaturas › Boquilla y Cama | `material.nozzle_temp`, `material.first_nozzle_temp`, `material.bed_temp`, `material.first_bed_temp` |
+| Enfriamiento › Ventilador | `cooling.fan_min`, `cooling.fan_max` |
+| Retracción › Retracción y Viajes | `retraction.length`, `retraction.lift` |
+| Boquilla y extrusor › Boquilla | `machine.nozzle_diameter` |
 
     - **Solo en Avanzado:** `layers.detail_*`, `layers.cusp_height`, `zaa.min_thickness`, `zaa.raise`,
       `infill.wall_overlap`, `infill.solid_every`, `infill.solid_below_area`, `infill.combine_*`,
@@ -150,9 +222,13 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
       `slicing.*`, `gcode.*`, `changes`, `machine.variables`, y los que `settings_levels.md` (regla 5) pone solo en
       Expert.
     - **Normal:** todo lo demás.
-11. **Básico avisa lo que oculta:** al pie de cada sección con ajustes ocultos, «3 ajustes más en Normal y Avanzado» y
-    el botón «Mostrar todos en esta sección», que la abre entera hasta que se cierre la sección o se cambie de
-    pestaña. El nivel elegido no cambia.
+    - Comparación: la lista Basic de Cura (fuente de la regla 1) trae lo mismo en espíritu (altura de capa, paredes,
+      capas de arriba y abajo, densidad y patrón de relleno, temperaturas, retracción, ventilador, soporte y
+      adhesión), más la velocidad de impresión, que el motor deja en Normal.
+11. **Básico avisa lo que oculta:** al pie de cada apartado con ajustes ocultos, «3 ajustes más en Normal y
+    Avanzado» y el botón «Mostrar todos», que muestra el apartado entero hasta que se cierre o se cambie de sección.
+    El nivel elegido no cambia. Una sección entera oculta en Básico (por ejemplo, Velocidad) no tiene botón: se ve
+    al cambiar de nivel.
 12. **Nada cambiado queda oculto:** un ajuste distinto del perfil guardado, o distinto del valor por defecto en un
     perfil del usuario, se muestra en cualquier nivel, con la etiqueta gris «Avanzado» (o «Normal») y la flecha para
     volverlo atrás. Así un nivel más bajo nunca esconde un cambio.
@@ -166,19 +242,20 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
     en `ui.custom_base`.
 16. **Elegir qué se ve,** de tres formas:
     - **«Elegir ajustes…»**, en el chip de nivel y arriba del panel en Personalizado. Abre un diálogo con un buscador
-      y el árbol pestaña › sección › ajuste, cada uno con su casilla (la de la sección marca o desmarca todos sus
-      ajustes; a medias se ve con una raya). Arriba, «Partir de: Básico, Normal, Avanzado», «Todos» y «Ninguno».
-      Abajo, Cancelar y Aceptar. Cada ajuste muestra su nivel en gris.
+      y el árbol pestaña › sección › apartado › ajuste, cada uno con su casilla (la de una sección o un apartado
+      marca o desmarca todo lo de adentro; a medias se ve con una raya). Arriba, «Partir de: Básico, Normal,
+      Avanzado», «Todos» y «Ninguno». Abajo, Cancelar y Aceptar. Cada ajuste muestra su nivel en gris.
     - **Ocultar desde el panel:** en Personalizado, al pasar el puntero sobre un ajuste aparece un ojo tachado que lo
       quita de la vista.
-    - **Agregar desde el panel:** al pie de cada sección, «+ Agregar ajuste» lista los ocultos de esa sección.
+    - **Agregar desde el panel:** al pie de cada apartado, «+ Agregar ajuste» lista los ocultos de ese apartado.
 17. **Se guarda** en `interface.json` (`ui.custom_visible`) y vuelve al abrir el programa. Más › Configuration suma
     «Exportar vista…» e «Importar vista…» (un JSON con `format` `tisma-ui-view`, `version` 1 y la lista de claves) para
     llevarla a otra computadora o compartirla.
 18. **Claves que no existen** en la lista (de otra versión) se ignoran sin aviso. Un ajuste nuevo de una versión
     nueva se ve si su nivel no pasa `ui.custom_base`.
 19. **Las reglas 6, 7 y 12 siguen valiendo:** un ajuste dependiente se oculta con su interruptor apagado aunque esté
-    marcado, una sección sin ajustes visibles no aparece, y un ajuste cambiado se ve aunque esté desmarcado.
+    marcado, un apartado o una sección sin ajustes visibles no aparece, y un ajuste cambiado se ve aunque esté
+    desmarcado.
 20. **Ajustes rápidos** (Quick settings, `interface.md`) es otra lista y no cambia con el nivel ni con la vista propia.
 
 ### Boquilla rápida
@@ -228,13 +305,14 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
 
 | # | Escenario | Resultado esperado |
 |---|---|---|
-| SP1 | Recorrer todas las claves de `docs/CONFIG.md` | Cada una tiene sección y nivel; ninguna cae en Otros |
-| SP2 | Pestaña Impresión, primera vez | Solo Calidad abierta; las demás cerradas con su resumen («20 % · rectilíneo» en Relleno con los valores por defecto) |
-| SP3 | Cambiar `infill.density` a 40 y cerrar Relleno | El resumen dice «40 % · rectilíneo» y «1 cambio»; el chip de Relleno tiene el punto |
-| SP4 | Abrir Paredes y Soportes, cerrar el programa y volver a abrirlo | Calidad, Paredes y Soportes siguen abiertas |
-| SP5 | `support.enabled` apagado | Soportes muestra solo el interruptor; al encenderlo aparecen los demás |
-| SP6 | Buscar «costura» | Se abre Paredes, se ve `walls.seam` resaltado |
-| SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; al pie de Relleno, «N ajustes más…» |
+| SP1 | Recorrer todas las claves de `docs/CONFIG.md` | Cada una tiene sección, apartado y nivel; ninguna cae en Sin ubicar; ningún apartado tiene más de 8 ajustes |
+| SP2 | Pestaña Impresión, primera vez | Sección Calidad elegida, con Altura de capa abierta y los demás apartados cerrados con su resumen. En Resistencia, Relleno cerrado dice «20 % · rectilíneo» |
+| SP3 | Cambiar `infill.density` a 40 y cerrar Relleno | El resumen dice «40 % · rectilíneo» y «1 cambio»; Resistencia tiene el punto en la columna de secciones |
+| SP4 | Abrir Costura y Precisión, elegir la sección Velocidad, cerrar el programa y volver a abrirlo | Se abre en Velocidad; en Calidad siguen abiertos Altura de capa, Costura y Precisión |
+| SP5 | `support.enabled` apagado | Soportes muestra solo el interruptor; al encenderlo aparecen los demás apartados, y los dependientes sangrados |
+| SP6 | Buscar «costura» | Se elige Calidad, se abre Costura y se ve `walls.seam` resaltado |
+| SP6b | «Ver todo junto» | Todas las secciones una debajo de otra con su título; los apartados mantienen su estado |
+| SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; al pie de Relleno, «N ajustes más…»; la sección Velocidad no aparece |
 | SP8 | En Avanzado, `infill.solid_every` a 5; pasar a Básico | Relleno muestra `infill.solid_every` con la etiqueta «Avanzado» y la flecha atrás |
 | SP9 | Laminar el mismo cubo en los cuatro niveles | Los cuatro G-code son iguales byte a byte |
 | SP10 | Básico › Personalizado | Se ven los mismos ajustes que en Básico; `ui.custom_base` es `basic` |
