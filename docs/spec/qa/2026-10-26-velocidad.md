@@ -229,6 +229,31 @@ la diferencia se explica.
 | V13 | Armar el G-code en paralelo por capa y unirlo en orden (V5, ahora medido) | 3,2 s de 3,4 s en el conejo (regla 6) | RV8 |
 | V14 | Repartir entre núcleos lo que hoy va en uno, después de V7 | 4 núcleos rinden 1,2 a 1,4 veces lo de 1 (regla 3) | RV9 |
 
+## Quinta medición: después de las mejoras de superficies y cobertura
+
+**Cómo:** motor de `dev` en `fe58b47` (con `519581a`, puentes cerca de las superficies de abajo, y `395b4f2`, cobertura
+con un solo offset por trayectoria), mismo equipo, mediana de 3 corridas salvo donde se dice.
+
+| Pieza | Motor en `1ffbdeb` | Motor en `fe58b47` | Tisma Slicer | PrusaSlicer 2.9.6 |
+|---|---|---|---|---|
+| Benchy | 5,82 s | 1,03 s | 3,73 s | 6,68 s |
+| Benchy al doble, gyroid 15 % | 17,97 s | 3,22 s | 7,56 s | 8,25 s |
+| Benchy con soportes | 6,78 s | 1,65 s | 6,65 s | 9,82 s |
+| Conejo al 150 % | 3,60 s | 3,47 s | 2,32 s | 2,01 s |
+| Tornillo M3 al 400 % | 0,27 s | 0,32 s | 1,07 s | 1,07 s |
+
+| Meta (`BENCHMARKS.md`) | Medido | Cumple |
+|---|---|---|
+| RV1: Benchy en 1,5 s o menos | 1,03 s | Sí |
+| RV2: capas de abajo con `simplify_tolerance` 0,005, no más del 25 % | 0,18 s de 1,05 s (17 %) | Sí |
+| RV2: lo mismo con `simplify_tolerance` 0 (una corrida) | 1,62 s de 5,78 s (28 %; antes 200 s) | Casi |
+| RV3: capas de abajo, no más de 0,3 s con cualquier cantidad de paredes | 1 pared 0,18 s; 3 paredes 0,26 s; 6 paredes 0,34 s | Casi (6 paredes) |
+| RV7 (propuesta): pieza hueca, como mucho 1,25 veces | `infill.density` 0: 5,57 s contra 3,07 s (1,81 veces; antes 187 s); `walls.count` 1: 4,55 s (1,48 veces) | No todavía |
+| RV8 (propuesta): armado del G-code del conejo, 1 s o menos | El conejo sigue en 3,5 s | No |
+
+- el G-code tiene el mismo tamaño que antes (7,59 MB en el Benchy): V3 y V4 siguen pendientes;
+- el conejo es la única pieza en la que el motor sigue más lento que los otros dos: es el armado del G-code (V5, V13).
+
 ## Para repetir la medición
 
 La misma tabla con el motor nuevo, en el mismo equipo. El laminado tiene que dar el mismo G-code antes y después de
