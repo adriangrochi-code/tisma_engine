@@ -13,7 +13,7 @@ programa Full Spectrum, para sacar muchos más colores de pocos filamentos:
 **Pedido del dueño (26-10-2026):** documentar las funciones de Full Spectrum para que el motor tenga su capacidad de
 impresión multicolor, según cómo funciona Full Spectrum.
 
-**Fase:** después de `color_mixing.md`. Las reglas 1 a 16 y 20 a 24 van primero; las de imágenes (25 a 29) después.
+**Fase:** después de `color_mixing.md`. Las reglas 1 a 24 y 30 a 40 van primero; las de imágenes (25 a 29) después.
 
 **Fuentes** (todas públicas; no se leyó código de Full Spectrum):
 - el README del proyecto, [ratdoux/OrcaSlicer-FullSpectrum](https://github.com/ratdoux/OrcaSlicer-FullSpectrum)
@@ -49,6 +49,7 @@ Grupo `mixing` (nombres del motor):
 | `surface_depth` | mm | 0,8 | 0,1 a 5 | Grosor de la cáscara que lleva la mezcla |
 | `extra_walls` | entero | 0 | 0 a 8 | Paredes de más en las zonas con mezcla o pintadas de otro color |
 | `bias` | sí/no | no | | Muestra el sesgo de cada mezcla (regla 15) |
+| `purge_infill_max` | % | 0 | 0 a 100 | Densidad máxima a la que sube el relleno de las piezas con mezcla para absorber purga (regla 35) |
 | `predictor` | texto | `"mixer"` | `mixer`, `spectral` | Cómo se predice el color (regla 21) |
 
 Del filamento:
@@ -203,6 +204,48 @@ De cada mezcla (en el proyecto, junto a los datos de `color_mixing.md`):
 31. Abrir un 3MF de Full Spectrum: se leen sus mezclas si el formato está documentado; si no, la pieza conserva su
     número de filamento y un aviso dice que las mezclas no se pudieron leer (a confirmar con un archivo real).
 
+## Una sola boquilla: menos residuos
+
+**Pedido del dueño (26-10-2026):** que esto llegue a impresoras de un solo cabezal con cambiador de filamentos (por
+ejemplo las Bambu Lab con AMS), avisando que lleva mucha purga, y que la purga se haga en lo posible dentro del relleno
+de la pieza para tirar menos filamento. Las reglas siguientes son de diseño del motor y se suman a las de
+`multi_extruder.md` (reglas 12 y 13: volúmenes de purga y purgar en el relleno) y `multimaterial.md` (reglas 9 y 10:
+avisos).
+
+32. **Dónde se ofrece:** en toda impresora de una boquilla con dos o más filamentos, con el aviso de costo al prender
+    la mezcla (`multimaterial.md`, regla 9). El aviso ya da una estimación antes de laminar:
+    - cuántos cambios de filamento hay (de los ciclos y las alturas, sin laminar);
+    - cuánto filamento va a la purga, en g y en % del total, y cuánto tiempo suman los cambios;
+    - con y sin las medidas de las reglas 33 a 37, para que se vea lo que ahorran.
+33. **Purgar en el relleno, prendido por defecto** con mezclas en una boquilla (`object.wipe_into_infill` de
+    `multi_extruder.md`, regla 13): después de cada cambio, la purga se imprime como relleno disperso de esa capa, en
+    cualquier pieza de la placa, con el filamento nuevo. Ese relleno queda tapado por paredes y superficies, así que su
+    color no se ve.
+    - solo el relleno que queda a más de `surface_depth` de la superficie (regla 13) y debajo de las capas sólidas de
+      arriba;
+    - nunca en piezas transparentes o translúcidas marcadas así en el filamento (`filament.transmission_distance` mayor
+      que 10): ahí se vería.
+34. **Primero el relleno:** en una capa que cambia de filamento en una boquilla, la pieza empieza por el relleno
+    disperso y después hace paredes y superficies. Así el filamento de la transición (todavía con restos del color
+    anterior) queda adentro y las paredes salen con el color limpio.
+35. **Relleno que absorbe más** (`mixing.purge_infill_max`, %, defecto 0 = apagado, de 0 a 100): si la purga de una
+    capa no entra en su relleno, el relleno disperso de esa capa en las piezas con mezcla sube de densidad, hasta este
+    valor, para que entre. Más relleno da una pieza más pesada pero sin tirar ese filamento.
+36. **Lo que no entra:** va a la torre de purga o, en impresoras que purgan afuera de la pieza (un descarte por la
+    boquilla a un depósito, como las Bambu Lab), al descarte. Antes de purgar en el relleno se purga siempre
+    `material.min_purge_on_tower` en la torre o en el descarte, para limpiar la boquilla.
+37. **Volumen de purga según los colores:** el volumen de cada par (`wipe_tower.purge_volumes`) se calcula por
+    defecto de la diferencia entre los dos colores: más al pasar de un color oscuro a uno claro que al revés. La
+    persona lo puede corregir en la tabla de pares.
+38. **Menos cambios:** si la purga estimada pasa del 50 % del filamento, el aviso sugiere lo que la baja, con la
+    estimación de cada una: `surface_only` (regla 13), capas más altas para el filamento dominante (`cadence_heights`,
+    regla 8), apagar `subdivide` (regla 10) o una mezcla con un ciclo más corto.
+39. **Orden de los ciclos en la placa:** con varias mezclas en la misma placa, los ciclos se alinean para que en una
+    misma capa se use el mismo filamento en todas las piezas que puedan; cada capa empieza con el filamento que dejó la
+    anterior (`color_mixing.md`, regla 11).
+40. **Informe después de laminar** (`multimaterial.md`, regla 10): cuánto fue a la torre, al descarte, al relleno y a
+    otros objetos, en g, y el total que se tiró.
+
 ## Pruebas
 
 Con la caja de `color_mixing.md` (20 × 20 × 10 mm, capas de 0,2 mm, una boquilla con 4 filamentos y torre de purga),
@@ -230,3 +273,10 @@ salvo donde se dice.
 | MX18 | Paleta rápida de 10 colores con 4 filamentos | 10 muestras con su nombre; una por cada mezcla de hasta 2 capas |
 | MX19 | Proyecto con mezclas por proporción guardado y abierto en una versión anterior | Se abre igual (regla 30) |
 | MX20 | Medir en Full Spectrum los valores marcados «a confirmar» | Se completan o corrigen las reglas 8, 9, 15 y 31 |
+| MX21 | Caja con mezcla 1 : 1 en una boquilla, aviso al prender la mezcla | El aviso da cambios, purga en g y %, y tiempo, con y sin las reglas 33 a 37 |
+| MX22 | MX21 laminada, relleno al 20 % | Después de cada cambio, la capa empieza por el relleno con el filamento nuevo; menos purga en la torre que sin purgar en el relleno |
+| MX23 | MX22 con `purge_infill_max` 60 | El relleno de las capas con cambio sube de densidad hasta absorber la purga o llegar al 60 %; la torre recibe solo `min_purge_on_tower` en esas capas |
+| MX24 | Impresora que purga al descarte (sin torre) | Lo que no entra en el relleno va al descarte; el informe lo cuenta aparte |
+| MX25 | Pasar de negro a blanco y de blanco a negro | El volumen de purga por defecto es mayor de negro a blanco |
+| MX26 | Dos cajas con mezclas distintas que comparten el filamento 1 | Las capas en las que una usa el 1 también usan el 1 en la otra cuando las dos lo tienen en su ciclo |
+| MX27 | Filamento con TD 15 en la pieza | No se purga en su relleno (regla 33) |
