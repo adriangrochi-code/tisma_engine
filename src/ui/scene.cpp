@@ -375,6 +375,40 @@ std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& p, double cell) {
     return hidden;
 }
 
+PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
+    PreviewDrawOrder out;
+    const std::size_t layers = p.layer_extrusions.empty() ? 0 : p.layer_extrusions.size() - 1;
+    out.instances.reserve(p.extrusions.size());
+    out.layer_shown.assign(1, 0);
+    for (const bool hidden : {false, true}) {
+        if (hidden)
+            out.layer_hidden.push_back(out.instances.size());
+        for (std::size_t l = 0; l < layers; ++l) {
+            for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i)
+                if ((i < p.hidden.size() && p.hidden[i] != 0) == hidden)
+                    out.instances.push_back(p.extrusions[i]);
+            (hidden ? out.layer_hidden : out.layer_shown).push_back(out.instances.size());
+        }
+    }
+    for (std::size_t i = 0; i < p.hidden.size(); ++i)
+        if (p.hidden[i] != 0)
+            out.hidden_kinds |= 1u << (p.extrusions[i].kind_layer & 0xFFu);
+    return out;
+}
+
+std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                           std::uint32_t kind_mask) {
+    if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
+        return {};
+    const std::size_t layers = order.layer_shown.size() - 1;
+    lo = std::min(lo, layers - 1);
+    hi = std::clamp(hi, lo, layers - 1);
+    const std::uint32_t kinds_drawn = kind_mask | order.hidden_kinds | (1u << unsigned(LineKind::Travel));
+    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu;
+    return {PreviewRange{order.layer_shown[lo], order.layer_shown[hi + 1] - order.layer_shown[lo]},
+            PreviewRange{order.layer_hidden[lo], whole ? 0 : order.layer_hidden[hi + 1] - order.layer_hidden[lo]}};
+}
+
 std::uint32_t kind_colour(LineKind kind) {
     switch (kind) {
     case LineKind::Travel: return 0x4FA3FF;

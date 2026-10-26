@@ -6,6 +6,8 @@ namespace tisma::gpu {
 
 struct Context::Impl {};
 
+bool load_vulkan() { return false; }
+
 std::unique_ptr<Context> Context::create(const ContextOptions&) { return nullptr; }
 Context::Context(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 Context::~Context() = default;

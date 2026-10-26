@@ -12,10 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
-- **Ventana con Vulkan, primer paso** (decisión del dueño; `PLAN.md`, «Vista con Vulkan»): `--graphics
-  auto|vulkan|opengl` elige qué dibuja la ventana. Con Vulkan, los paneles ya los dibuja Vulkan; la vista 3D llega en
-  el paso siguiente, así que por ahora el modo automático (el de siempre) sigue con OpenGL. Si la máquina no tiene
-  Vulkan, o no puede mostrar la ventana con él, la ventana sigue con OpenGL y lo dice.
+- **Ventana y vista 3D con Vulkan** (decisión del dueño; `PLAN.md`, «Vista con Vulkan»): `--graphics
+  auto|vulkan|opengl` elige qué dibuja la ventana. Con Vulkan, los paneles y la vista 3D (cama, modelo, pintura, vista
+  previa, MSAA y FXAA) los dibuja Vulkan, igual que OpenGL imagen contra imagen, con la luz rápida. La oclusión
+  ambiental y el ray tracing llegan en el paso siguiente, así que por ahora el modo automático (el de siempre) sigue con
+  OpenGL. Si la máquina no tiene Vulkan, o no puede mostrar la ventana con él, la ventana sigue con OpenGL y lo dice.
 - **Tiempo de la vista y FPS** en la barra de estado: lo que tarda la GPU en dibujar la vista 3D en cada cuadro, para
   medir en cada máquina (`docs/LARGE_MODELS.md`). `--bench-frames N` lo mide para las capturas.
 - **Herramientas de la placa** (pedido del dueño; `docs/UI.md`, «Herramientas de la placa»): varios modelos en la placa

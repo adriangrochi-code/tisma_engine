@@ -159,6 +159,27 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
       set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
+      # the model with a painted seam, close; then the sliced cube's preview.
+      set(TISMA_VIEW_prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
+      set(TISMA_VIEW_preview)
+      foreach(view prepare preview)
+        add_test(NAME ui_view_${view}_opengl
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${TISMA_VIEW_${view}} --render fast --graphics opengl
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
+        add_test(NAME ui_view_${view}_vulkan_same_as_opengl
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${TISMA_VIEW_${view}} --render fast --graphics vulkan
+                  --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)
+        set_tests_properties(ui_view_${view}_opengl PROPERTIES FIXTURES_SETUP ui_view_${view})
+        set_tests_properties(ui_view_${view}_vulkan_same_as_opengl PROPERTIES FIXTURES_REQUIRED ui_view_${view})
+        set_tests_properties(ui_view_${view}_opengl ui_view_${view}_vulkan_same_as_opengl
+                             PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      endforeach()
     endif()
     # A seam painted down one side of a cube, sliced; its project keeps the
     # paint and opens to the same G-code.

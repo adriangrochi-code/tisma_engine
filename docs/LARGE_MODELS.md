@@ -25,6 +25,7 @@ la GPU decenas de millones de vértices por cuadro aunque la mayoría estén tap
 | Menos detalle de lejos (LOD) | Una capa más fina que un píxel se puede dibujar junto con la de al lado, como un cordón del doble de alto | Luebke y otros 2002, *Level of Detail for 3D Graphics*: elegir el detalle por el tamaño en pantalla |
 | Malla simplificada mientras se mueve | Un modelo de millones de triángulos se dibuja con una versión de menos triángulos mientras gira la cámara o se arrastra | Garland y Heckbert 1997, «Surface Simplification Using Quadric Error Metrics» (SIGGRAPH 97) |
 | Rayos primarios («tipo raycaster») | Un rayo por píxel contra el árbol de cajas (BVH) de los cordones: el costo crece con los píxeles y apenas con la cantidad de tramos (el logaritmo) | El árbol y el recorrido en la GPU ya están para el ray tracing (`src/ui/raytrace.*`, Wald 2007); el recorrido en GPU, Aila y Laine 2009, «Understanding the Efficiency of Ray Traversal on GPUs» |
+| Mallado voraz («greedy meshing») | Los cordones vecinos del mismo tipo, a la misma altura y en la misma dirección (el relleno sólido, las paredes de una capa sobre la de abajo) se dibujan como una sola instancia más ancha o más larga: menos instancias y menos vértices, sobre todo de lejos | La idea de juntar caras vecinas iguales en rectángulos más grandes, del mallado de vóxeles; descrita por Mikola Lysenko, «Meshing in a Minecraft Game» (2012). Pedido del dueño, 2026-10-26 |
 | Oclusión jerárquica (Hi-Z) | Lo tapado por lo ya dibujado | Greene, Kass y Miller 1993, «Hierarchical Z-Buffer Visibility». Necesita OpenGL 4 o Vulkan para hacerlo en la GPU: queda para después |
 
 ## Plan
@@ -33,9 +34,11 @@ la GPU decenas de millones de vértices por cuadro aunque la mayoría estén tap
 2. Ocultar lo de adentro en la vista previa. Hecho (ver abajo).
 3. Pasar la vista a Vulkan (decisión del dueño, 2026-10-26: «la idea es que el motor funcione en Vulkan», y que
    detecte solo si la máquina lo tiene y si no use OpenGL). El resto de los pasos se hacen ahí, donde el recorte puede
-   correr en la GPU (`PLAN.md`, «Vista con Vulkan»). Hecho el primero (V1): la ventana y los paneles con Vulkan.
+   correr en la GPU (`PLAN.md`, «Vista con Vulkan»). Hechos V1 (la ventana y los paneles) y V2 (la vista 3D con la
+   luz rápida, igual a la de OpenGL imagen contra imagen).
 4. Rayos primarios para la vista previa, como un modo de la vista.
-5. Capas juntas de lejos, y menos vértices por cordón (solo las caras que miran a la cámara).
+5. Capas juntas de lejos, mallado voraz de los cordones vecinos, y menos vértices por cordón (solo las caras que miran
+   a la cámara).
 6. Malla simplificada del modelo mientras se mueve.
 
 Cada paso se compara con la imagen de antes: lo que cambia es el tiempo, no lo que se ve.

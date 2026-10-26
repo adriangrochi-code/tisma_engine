@@ -3,6 +3,7 @@
 #include <imgui.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -10,6 +11,8 @@
 struct GLFWwindow;
 
 namespace tisma::ui {
+
+struct VulkanDevice;
 
 // The window drawn with Vulkan (PLAN.md, «Vista con Vulkan», V1): the
 // instance and the device, the swapchain, one render pass that clears the
@@ -39,10 +42,16 @@ public:
     // A texture for ImGui::Image, from RGBA rows from the top; 0 if it failed.
     ImTextureID add_texture(const std::uint8_t* rgba, int width, int height);
 
-    // Draws a frame: the window cleared to `clear` (RGB 0 to 1), then ImGui's
-    // draw data, and shows it. With keep, the frame is also copied to memory
-    // for read_back.
-    void frame(ImDrawData* draw, const float clear[3], bool keep);
+    // Draws a frame: first `before` records into the frame's command buffer
+    // (a VkCommandBuffer) what must come before the window's pass, with the
+    // frame's index in flight (the 3D view, vk_view.*); then the window cleared
+    // to `clear` (RGB 0 to 1) and ImGui's draw data; and shows it. With keep,
+    // the frame is also copied to memory for read_back.
+    void frame(ImDrawData* draw, const float clear[3], bool keep,
+               const std::function<void(void* command_buffer, int frame)>& before = {});
+
+    // The device it draws with, for the view; nullptr before init.
+    const VulkanDevice* device() const;
 
     // The last kept frame, RGBA rows from the bottom (as glReadPixels gives
     // them); empty if none.

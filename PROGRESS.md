@@ -4168,3 +4168,50 @@ si no lo hace, que vaya a OpenGL».
   es una falla.
 
 **Falta:** la vista 3D en Vulkan (V2). Hasta entonces el modo automático usa OpenGL, para no perder la vista 3D.
+
+## 2026-10-26 — vista con Vulkan, paso V2
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan». En el camino pidió también greedy meshing para los
+cordones y mejorar la oclusión ambiental y el color «como lo hace Prusa 3.0», con los videos del lanzamiento de
+referencia (quedan en `PLAN.md`).
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_view.*`: la vista 3D con Vulkan. Dibuja la cama, la grilla, el modelo con el elegido y su
+  desplazamiento, la pintura y la vista previa instanciada (con lo tapado afuera, como en OpenGL), con MSAA y luego
+  FXAA en una textura que ImGui muestra bajo los paneles. Los shaders son los de OpenGL en GLSL 450
+  (`apps/tisma/shaders/`, compilados a SPIR-V por `tools/compile_shaders.py`).
+- El orden de dibujo de la vista previa (lo que se ve y lo tapado, por capa) pasó a `src/ui/scene.*`, compartido por
+  las dos vistas.
+- El tiempo de la GPU con marcas de tiempo de Vulkan (la barra de estado) y `--bench-frames` con Vulkan.
+- `--compare-view otra.png` y las pruebas `ui_view_prepare_*` y `ui_view_preview_*`: la misma escena con OpenGL y con
+  Vulkan, imagen contra imagen; pasa si menos del 0,5 % de los píxeles de la vista difiere en más de 24 niveles.
+- `src/ui/png.*` lee las capturas que escribe y compara dos imágenes (con su prueba).
+
+**Errores encontrados y corregidos:**
+- El cómputo del motor cargaba sus funciones en los punteros globales de volk, los mismos de la ventana: después de
+  laminar, la ventana Vulkan llamaba funciones del otro dispositivo y se caía al cerrar (`vkDestroySurfaceKHR` nulo).
+  Ahora el cómputo tiene su propia tabla de funciones y el cargador se arranca una sola vez (`load_vulkan`).
+- La validación de sincronización de Khronos encontró dos carreras, ya corregidas:
+  - el cuadro siguiente reescribía la profundidad y el color sin esperar al anterior;
+  - la copia de la captura escribía el mismo buffer en dos cuadros en vuelo.
+  Con la capa de validación, ahora no hay errores.
+- lavapipe dibuja cortadas y gruesas las líneas que salen muy lejos de la pantalla o pasan detrás del ojo: la grilla
+  de Vulkan va en tramos de 5 mm.
+
+**Medido** (CPU del contenedor: llvmpipe para OpenGL, lavapipe para Vulkan; 1200 × 800, luz rápida; sirve para
+comparar, no son FPS reales):
+
+| Pieza | Cordones dibujados | OpenGL | Vulkan |
+|---|---|---|---|
+| Cilindro de 60 × 80 mm | 52 499 | 657 ms | 672 ms |
+| Esfera de 80 mm | 241 612 | 3 838 ms | 3 787 ms |
+
+Iguales, porque las dos usan el mismo rasterizador de Mesa por CPU. Lo que gana Vulkan viene con V4 (el recorte en la
+GPU y los dibujos indirectos) y en una placa de video real.
+
+**No probado:** una placa de video real y Windows con Vulkan.
+
+**Sigue:**
+- mejorar la oclusión y el color, con las imágenes del lanzamiento de PrusaSlicer 3.0 como referencia de caja negra;
+- V3 (la oclusión y los rayos en Vulkan), y entonces el modo automático pasa a Vulkan;
+- greedy meshing en V4.

@@ -689,15 +689,22 @@ Vulkan». Lo estudiado y medido, en `docs/LARGE_MODELS.md`. Hecho con OpenGL (20
 tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 - [x] V1: la ventana, la cadena de imágenes (swapchain) y Dear ImGui con Vulkan (volk y GLFW, como el cómputo);
   OpenGL queda de respaldo donde no hay Vulkan 1.1 (hecho 2026-10-26: `--graphics`, `apps/tisma/vk_window.*`, la
-  prueba `ui_vulkan_window`). Cuando V2 esté, `kVulkanViewReady` pasa a verdadero y el modo automático elige Vulkan
-  primero (pedido del dueño: detectar solo si hay Vulkan y si no ir a OpenGL)
-- [ ] V2: la vista 3D en Vulkan (cama, modelo, cordones instanciados, MSAA, FXAA, capturas), comparada imagen contra
-  imagen con la de OpenGL en la CI (lavapipe y llvmpipe)
-- [ ] V3: oclusión ambiental y ray tracing con la escena en buffers (sin el tope de 4 millones de primitivas)
+  prueba `ui_vulkan_window`). Cuando la vista Vulkan haga todo lo que hace la de OpenGL (V3: la oclusión ambiental es
+  el modo por defecto), `kVulkanViewReady` pasa a verdadero y el modo automático elige Vulkan primero (pedido del
+  dueño: detectar solo si hay Vulkan y si no ir a OpenGL)
+- [x] V2: la vista 3D en Vulkan (cama, modelo, pintura, cordones instanciados, MSAA, FXAA, capturas), comparada
+  imagen contra imagen con la de OpenGL en la CI (lavapipe y llvmpipe). Hecho 2026-10-26: `apps/tisma/vk_view.*`,
+  los shaders en `apps/tisma/shaders/`, `--compare-view` y las pruebas `ui_view_*`; el tiempo de la GPU por marcas
+  de tiempo en la barra de estado y `--bench-frames`. Con la luz rápida: la oclusión y los rayos vienen en V3
+- [ ] V3: oclusión ambiental y ray tracing con la escena en buffers (sin el tope de 4 millones de primitivas). Antes,
+  mejorar la oclusión y el color de la vista previa (pedido del dueño, 2026-10-26: «como lo hace Prusa 3.0»; la
+  referencia son los videos y las imágenes del lanzamiento, mirados como caja negra, nunca su código)
 - [ ] V4: el recorte en la GPU: un shader de cómputo por cuadro elige por capa lo que se ve (cámara, lo tapado, capas
   juntas de lejos) y dibuja con `vkCmdDrawIndirect`; menos vértices por cordón
 - [ ] V5: rayos primarios para la vista previa («tipo raycaster»), en cómputo
 - [ ] V6: malla simplificada del modelo mientras se mueve (Garland y Heckbert 1997)
+- [ ] Greedy meshing en la vista previa (pedido del dueño, 2026-10-26): juntar los cordones vecinos del mismo tipo en
+  menos instancias, como el mallado voraz junta las caras de los vóxeles (`docs/LARGE_MODELS.md`)
 - [ ] Armar los datos de la vista previa en el hilo del laminado (hoy, 120 a 180 ms en el de la interfaz)
 
 Con el PR #24 (2026-10-26):

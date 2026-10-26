@@ -1067,29 +1067,13 @@ void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<P
 void Renderer::set_preview(const PreviewBuffers& p) {
     if (!ready_)
         return;
-    // Drawing order (docs/LARGE_MODELS.md): first, layer by layer, what can
-    // show; then, layer by layer, what the part hides when all of it is drawn.
-    const std::size_t layers = p.layer_extrusions.empty() ? 0 : p.layer_extrusions.size() - 1;
-    std::vector<PreviewInstance> ordered;
-    ordered.reserve(p.extrusions.size());
-    layer_shown_.assign(1, 0);
-    layer_hidden_.clear();
-    for (const bool hidden : {false, true}) {
-        if (hidden)
-            layer_hidden_.push_back(ordered.size());
-        for (std::size_t l = 0; l < layers; ++l) {
-            for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i)
-                if ((i < p.hidden.size() && p.hidden[i] != 0) == hidden)
-                    ordered.push_back(p.extrusions[i]);
-            (hidden ? layer_hidden_ : layer_shown_).push_back(ordered.size());
-        }
-    }
-    hidden_kinds_ = 0;
-    for (std::size_t i = 0; i < p.hidden.size(); ++i)
-        if (p.hidden[i] != 0)
-            hidden_kinds_ |= 1u << (p.extrusions[i].kind_layer & 0xFFu);
+    // Drawing order (docs/LARGE_MODELS.md): what can show, then what the
+    // part hides when all of it is drawn.
+    order_ = preview_draw_order(p);
+    std::vector<PreviewInstance>& ordered = order_.instances;
     upload(extrusions_.vao, extrusions_.vbo, ordered.data(), ordered.size() * sizeof(PreviewInstance));
     extrusions_.count = static_cast<int>(ordered.size());
+    ordered = {}; // on the GPU now
     upload(travels_.vao, travels_.vbo, p.travels.data(), p.travels.size() * sizeof(LineVertex));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex), offset(0));
@@ -1107,8 +1091,7 @@ void Renderer::set_preview(const PreviewBuffers& p) {
 void Renderer::clear_preview() {
     extrusions_.count = travels_.count = 0;
     layer_extrusions_.clear();
-    layer_shown_.clear();
-    layer_hidden_.clear();
+    order_ = {};
     layer_travels_.clear();
     ray_signature_.clear();
 }
@@ -1232,21 +1215,13 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
 void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
     if (!gbuffer)
         drawn_extrusions_ = 0;
-    if (layer_extrusions_.size() < 2 || layer_shown_.size() != layer_extrusions_.size())
+    if (layer_extrusions_.size() < 2)
         return;
     const std::size_t layers = layer_extrusions_.size() - 1;
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
-    // All of the part drawn, every kind but the hidden ones shown: what the
-    // part hides stays out (docs/LARGE_MODELS.md). A cut, a layer alone or a
-    // kind left out shows the inside: then it is drawn too.
-    const std::uint32_t kinds_drawn = f.kind_mask | hidden_kinds_ | (1u << unsigned(LineKind::Travel));
-    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu;
-    struct Range {
-        std::size_t first, count;
-    };
-    Range ranges[2] = {{layer_shown_[lo], layer_shown_[hi + 1] - layer_shown_[lo]},
-                       {layer_hidden_[lo], whole ? 0 : layer_hidden_[hi + 1] - layer_hidden_[lo]}};
-    for (const Range& range : ranges) {
+    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md).
+    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask);
+    for (const PreviewRange& range : ranges) {
         const std::size_t first = range.first, count = range.count;
         if (count == 0)
             continue;

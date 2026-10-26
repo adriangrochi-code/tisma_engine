@@ -382,6 +382,41 @@ TEST_CASE("ui: PNG files are valid", "[ui]") {
     }
 }
 
+TEST_CASE("ui: screenshots read back and compare", "[ui]") {
+    // A 300 x 300 picture (several stored blocks) reads back as it was.
+    const int size = 300;
+    std::vector<std::uint8_t> rgba(std::size_t(size) * std::size_t(size) * 4);
+    for (std::size_t i = 0; i < rgba.size(); ++i)
+        rgba[i] = std::uint8_t(i * 13 + 5);
+    std::vector<std::uint8_t> png = encode_png(size, size, rgba.data());
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> back;
+    REQUIRE(decode_png(png, w, h, back));
+    CHECK(w == size);
+    CHECK(h == size);
+    CHECK(back == rgba);
+    // A damaged one does not.
+    png[png.size() / 2] ^= 0x40;
+    CHECK_FALSE(decode_png(png, w, h, back));
+    CHECK_FALSE(decode_png({}, w, h, back));
+
+    // Two pixels changed, one by more than the tolerance; one more outside
+    // the rectangle; alpha does not count.
+    std::vector<std::uint8_t> other = rgba;
+    const auto at = [&](int x, int y) { return (std::size_t(y) * std::size_t(size) + std::size_t(x)) * 4; };
+    other[at(10, 20) + 1] = std::uint8_t(other[at(10, 20) + 1] + 5);
+    other[at(50, 60) + 2] = std::uint8_t(other[at(50, 60) + 2] ^ 0x80);
+    other[at(250, 250)] = std::uint8_t(other[at(250, 250)] + 90);
+    other[at(30, 30) + 3] = std::uint8_t(other[at(30, 30) + 3] + 90);
+    const PictureDifference d = compare_pictures(rgba.data(), other.data(), size, size, 0, 0, 100, 100, 24);
+    CHECK(d.pixels == 100 * 100);
+    CHECK(d.differing == 2);
+    CHECK(d.over == 1);
+    CHECK(d.largest == 128);
+    CHECK(compare_pictures(rgba.data(), rgba.data(), size, size, -10, -10, 1000, 1000, 0).pixels ==
+          std::size_t(size) * std::size_t(size));
+}
+
 TEST_CASE("ui: SVG icons rasterize and take the theme's colour", "[ui]") {
     const char* square = R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
         <path fill="#808080" d="M6,6H18V18H6Z"/><path fill="#00FF00" d="M0,0H3V3H0Z"/></svg>)";

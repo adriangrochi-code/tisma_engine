@@ -99,6 +99,27 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
 // doubt, an extrusion is not hidden. Layers in parallel (oneTBB).
 std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& preview, double cell = 0.0);
 
+// The extrusions in drawing order (docs/LARGE_MODELS.md): first, layer by
+// layer, those that can show; then, layer by layer, those the whole part hides
+// (PreviewBuffers::hidden). Layer l's are [layer_shown[l], layer_shown[l + 1])
+// and [layer_hidden[l], layer_hidden[l + 1]).
+struct PreviewDrawOrder {
+    std::vector<PreviewInstance> instances;
+    std::vector<std::size_t> layer_shown, layer_hidden;
+    std::uint32_t hidden_kinds = 0; // bit k: some extrusion of LineKind k is hidden
+};
+PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
+
+// What a view draws of it for layers lo to hi with the kinds of kind_mask:
+// the shown range and the hidden one, which is empty when all of the part is
+// drawn (from its first layer to its last, every kind but the hidden ones and
+// the travels shown). Each as (first instance, count).
+struct PreviewRange {
+    std::size_t first = 0, count = 0;
+};
+std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                           std::uint32_t kind_mask);
+
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);
 

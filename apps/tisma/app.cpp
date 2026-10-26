@@ -7,6 +7,7 @@
 #include "file_browser.hpp"
 #include "gl.hpp"
 #include "renderer.hpp"
+#include "vk_view.hpp"
 #include "vk_window.hpp"
 
 #include "calibration/calibration.hpp"
@@ -302,6 +303,7 @@ private:
     void show_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
+    void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
@@ -354,8 +356,9 @@ private:
     std::map<std::string, ImTextureID> icons_;
     ImTextureID logo_ = 0;
     // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
-    // panels drawn by it, the 3D view not yet.
+    // panels and the 3D view drawn by it. The view goes first at shutdown.
     VulkanWindow vk_;
+    VulkanView vk_view_;
     bool vulkan_ = false;
     ImVec2 view_pos_{0, 0}, view_size_{1, 1};
 
@@ -859,15 +862,18 @@ bool App::init(std::string& error) {
         window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
     };
     // Vulkan when this machine has it (found by starting it: the loader, a
-    // Vulkan 1.1 device, a surface for this window); else, and as the
-    // fallback, OpenGL 3.3. Automatically only once the 3D view runs on
-    // Vulkan (PLAN.md «Vista con Vulkan», V2): until then «auto» is OpenGL.
+    // Vulkan 1.1 device, a surface for this window, the 3D view's shaders
+    // and targets); else, and as the fallback, OpenGL 3.3. Automatically
+    // only once the Vulkan view does all the OpenGL one does (PLAN.md «Vista
+    // con Vulkan»): until then «auto» is OpenGL.
     constexpr bool kVulkanViewReady = false;
     if (options_.graphics == "vulkan" || (options_.graphics == "auto" && kVulkanViewReady)) {
         std::string why = "cannot open a window for Vulkan";
         open_window(true);
-        vulkan_ = window_ && vk_.init(window_, true, why);
+        vulkan_ = window_ && vk_.init(window_, true, why) && vk_view_.init(*vk_.device(), why);
         if (!vulkan_) {
+            vk_view_.shutdown();
+            vk_.shutdown();
             // Vulkan asked for in the CI, which has a device and sets
             // TISMA_REQUIRE_GPU=1: there a fallback is a failure.
             if (const char* require = std::getenv("TISMA_REQUIRE_GPU");
@@ -1086,6 +1092,7 @@ void App::apply_theme() {
     look.major = theme_.grid_major;
     look.outline = 0xFF000000u | theme_.accent_hover;
     renderer_.set_bed(settings_.bed, look);
+    vk_view_.set_bed(settings_.bed, look);
 }
 
 void App::shutdown() {
@@ -1107,6 +1114,7 @@ void App::shutdown() {
             glDeleteQueries(3, view_queries_);
         renderer_.shutdown();
     }
+    vk_view_.shutdown(); // its picture is an ImGui texture: before the backend
     if (ImGui::GetCurrentContext()) {
         if (vulkan_)
             vk_.shutdown(); // ImGui's Vulkan backend and the textures with it
@@ -1254,6 +1262,7 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     viewer_ = false;
     result_.reset();
     renderer_.clear_preview();
+    vk_view_.clear_preview();
     place_model();
     voxels_.reset();
     voxels_stale_ = true;
@@ -1308,10 +1317,13 @@ void App::rebuild_plate() {
         mesh_.reset();
         placed_ = {};
         renderer_.set_model({});
+        vk_view_.set_model({});
     } else {
         mesh_ = plate_mesh(placed_meshes_);
         placed_ = mesh_->bounding_box();
-        renderer_.set_model(mesh_vertices(*mesh_, offset_));
+        const std::vector<float> model = mesh_vertices(*mesh_, offset_);
+        renderer_.set_model(model);
+        vk_view_.set_model(model);
     }
     if (selected_ >= int(objects_.size()))
         selected_ = int(objects_.size()) - 1;
@@ -2086,6 +2098,7 @@ void App::show_preview() {
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
+    vk_view_.set_preview(buffers);
     top_layer_ = int(result_->preview.layers.size()) - 1;
     bottom_layer_ = 0;
 }
@@ -2817,6 +2830,7 @@ void App::plate_tools() {
         if (objects_.empty()) {
             result_.reset();
             renderer_.clear_preview();
+            vk_view_.clear_preview();
         }
         plate_changed();
     }
@@ -2876,6 +2890,7 @@ void App::plate_tools() {
             if (objects_.empty()) {
                 result_.reset();
                 renderer_.clear_preview();
+                vk_view_.clear_preview();
             }
             plate_changed();
         }
@@ -3077,6 +3092,7 @@ void App::update_paint_view() {
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
     renderer_.set_paint(m.vertices, groups);
+    vk_view_.set_paint(m.vertices, groups);
 }
 
 namespace {
@@ -4466,6 +4482,31 @@ void App::check_moire(int fb_w, int fb_h) {
     }
 }
 
+// --compare-view: the 3D view against another screenshot's, drawn by the
+// other graphics (OpenGL against Vulkan, PLAN.md «Vista con Vulkan»). The
+// drivers rasterize the edges of lines and triangles a little differently,
+// so a few pixels along them may differ; the surfaces must not.
+void App::compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h) {
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> other;
+    if (!read_png(from_utf8(options_.compare_view), w, h, other) || w != fb_w || h != fb_h) {
+        std::fprintf(stderr, "error: cannot read %s as a %dx%d screenshot\n", options_.compare_view.c_str(), fb_w, fb_h);
+        failed_ = true;
+        return;
+    }
+    const ImGuiIO& io = ImGui::GetIO();
+    const float sx = io.DisplayFramebufferScale.x, sy = io.DisplayFramebufferScale.y;
+    const PictureDifference d =
+        compare_pictures(picture.data(), other.data(), w, h, int(view_pos_.x * sx), int(view_pos_.y * sy),
+                         int(view_size_.x * sx), int(view_size_.y * sy), 24);
+    std::printf("view compare (%s): %zu of %zu pixels differ, %zu by more than 24 levels, at most by %d\n",
+                vulkan_ ? "Vulkan" : "OpenGL", d.differing, d.pixels, d.over, d.largest);
+    if (d.pixels == 0 || d.over * 200 > d.pixels) {
+        std::fprintf(stderr, "error: the 3D view differs from %s\n", options_.compare_view.c_str());
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
@@ -4499,6 +4540,11 @@ void App::frame() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     layout();
+    // With Vulkan the 3D view is a picture under the panels, drawn below
+    // (vk_view.*) before them.
+    if (vulkan_ && vk_view_.texture())
+        ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
+                                                 ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     ImGui::Render();
     if (frame_pending_ && view_size_.x > 10.0f && view_size_.y > 10.0f)
         frame_now();
@@ -4508,9 +4554,19 @@ void App::frame() {
     const Vec3 clear = vec(theme_.window);
     ViewFrame f = view_frame(fb_w, fb_h);
     if (vulkan_) {
-        // V1 of «Vista con Vulkan» (PLAN.md): the panels; the 3D view comes in V2.
+        // The 3D view first, into its picture, then the window and the panels.
         const float colour[3] = {clear.x, clear.y, clear.z};
-        vk_.frame(ImGui::GetDrawData(), colour, !options_.screenshot.empty());
+        vk_.frame(ImGui::GetDrawData(), colour, !options_.screenshot.empty(),
+                  [&](void* commands, int in_flight) { vk_view_.record(commands, in_flight, f); });
+        if (double ms = 0.0; vk_view_.take_time(ms))
+            view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+        if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2) {
+            const double ms = vk_view_.bench(f, options_.bench_frames);
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, Vulkan); preview buffers %.0f ms\n",
+                        ms, options_.bench_frames, vk_view_.drawn_extrusions(), preview_ms_);
+            std::fflush(stdout);
+            benched_ = true;
+        }
     } else {
         glViewport(0, 0, fb_w, fb_h);
         glClearColor(clear.x, clear.y, clear.z, 1.0f);
@@ -4639,6 +4695,8 @@ void App::frame() {
                 std::fprintf(stderr, "error: cannot write %s\n", options_.screenshot.c_str());
                 failed_ = true;
             }
+            if (!options_.compare_view.empty())
+                compare_view(flipped, fb_w, fb_h);
             if (!error_title_.empty())
                 std::fprintf(stderr, "%s: %s\n", error_title_.c_str(), error_message_.c_str());
             quit_ = true;

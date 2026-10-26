@@ -50,6 +50,7 @@ add_executable(tisma WIN32
   file_browser.cpp
   gl.cpp
   renderer.cpp
+  vk_view.cpp
   vk_window.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/embedded.cpp
 )

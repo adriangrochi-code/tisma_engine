@@ -5,6 +5,10 @@
 
 #ifdef TISMA_VULKAN_WINDOW
 
+#include "vk_device.hpp"
+
+#include "gpu/compute.hpp"
+
 #include <volk.h>
 
 #include <GLFW/glfw3.h>
@@ -54,6 +58,7 @@ void barrier(VkCommandBuffer c, VkImage image, VkImageLayout from, VkImageLayout
 } // namespace
 
 struct VulkanWindow::Impl {
+    VulkanDevice shared; // what the view sees of the device
     GLFWwindow* window = nullptr;
     bool vsync = true;
     VkInstance instance = VK_NULL_HANDLE;
@@ -262,7 +267,9 @@ struct VulkanWindow::Impl {
     void init(GLFWwindow* w, bool sync) {
         window = w;
         vsync = sync;
-        if (volkInitialize() != VK_SUCCESS)
+        // volk's global functions are the window's (and ImGui's): loaded for
+        // its instance and device below. The engine's compute keeps its own.
+        if (!gpu::load_vulkan())
             throw std::runtime_error("no Vulkan loader on this machine");
         if (!glfwVulkanSupported())
             throw std::runtime_error("GLFW finds no Vulkan for windows here");
@@ -419,9 +426,13 @@ struct VulkanWindow::Impl {
             check(vkCreateSemaphore(device, &sci, nullptr, &f.acquired), "vkCreateSemaphore");
         }
         make_swapchain();
+        VkPhysicalDeviceProperties props{};
+        vkGetPhysicalDeviceProperties(physical, &props);
+        shared = {instance, physical, memory, props.limits, device, queue, family, pool, kFrames};
     }
 
     void shutdown() {
+        shared = {};
         if (device) {
             vkDeviceWaitIdle(device);
             for (Texture& t : textures) {
@@ -568,7 +579,10 @@ ImTextureID VulkanWindow::add_texture(const std::uint8_t* rgba, int width, int h
     }
 }
 
-void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep) {
+const VulkanDevice* VulkanWindow::device() const { return impl_->device ? &impl_->shared : nullptr; }
+
+void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep,
+                         const std::function<void(void*, int)>& before) {
     Impl& v = *impl_;
     int w = 0, h = 0;
     glfwGetFramebufferSize(v.window, &w, &h);
@@ -594,6 +608,8 @@ void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep) {
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(c, &begin);
+    if (before)
+        before(c, v.current);
     VkClearValue colour{};
     colour.color.float32[0] = clear[0], colour.color.float32[1] = clear[1], colour.color.float32[2] = clear[2];
     colour.color.float32[3] = 1.0f;
@@ -617,6 +633,13 @@ void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep) {
             v.make_buffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT, v.kept, v.kept_memory);
             v.kept_size = bytes;
         }
+        // The other frame in flight may still be copying into the buffer.
+        VkMemoryBarrier after_copy{};
+        after_copy.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        after_copy.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        after_copy.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &after_copy, 0,
+                             nullptr, 0, nullptr);
         VkImage image = v.images[index];
         barrier(c, image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
@@ -707,7 +730,8 @@ bool VulkanWindow::init_imgui(std::string& error) {
 }
 void VulkanWindow::shutdown() {}
 ImTextureID VulkanWindow::add_texture(const std::uint8_t*, int, int) { return ImTextureID(0); }
-void VulkanWindow::frame(ImDrawData*, const float[3], bool) {}
+void VulkanWindow::frame(ImDrawData*, const float[3], bool, const std::function<void(void*, int)>&) {}
+const VulkanDevice* VulkanWindow::device() const { return nullptr; }
 std::vector<std::uint8_t> VulkanWindow::read_back(int& width, int& height) {
     width = height = 0;
     return {};
