@@ -81,6 +81,7 @@ pasar el motor; cómo se logra lo decide el equipo del motor.
 | RT2 | Recorrido, regla 1 | Benchy: viajes entre líneas de superficie de arriba y de puente | 807 | 100 o menos |
 | RT3 | Recorrido, reglas 2 y 6 | Conejo al 150 %: largo de los viajes | 243,6 m | 190 m o menos |
 | RT4 | Recorrido, todas | Benchy: tiempo estimado con el mismo perfil | 1 h 12 m 28 s | Al menos 8 % menos |
+| RT5 | Recorrido, regla 8 (retraer mientras viaja; a aprobar) | Benchy: tiempo estimado con el mismo perfil, después de RT4 | — | Al menos 5 % menos que con RT4 |
 
 - Todas están aprobadas por el dueño: RV1 a RV6 y RV10 el 26-10-2026, y RV7 a RV9 el mismo día, después de medirlas.
   RT1 a RT4 salen de su pedido del mismo día (bajar el tiempo de impresión solo con el recorrido, sin tocar el

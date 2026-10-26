@@ -57,7 +57,15 @@ En el conejo al 150 %, el motor viaja 243,6 m y Tisma Slicer 189,6 m.
 7. **Esquinas** (opcional, `gcode.corner_smoothing`, mm, defecto 0 = apagado, de 0 a 0,05): una esquina de una pared
    interna o de un relleno se redondea con un arco que no se aparta más que este valor; la impresora no tiene que
    frenar del todo en el vértice. Nunca en la pared externa (cambiaría la forma visible).
-8. **Lo que no cambia:** las líneas que se extruyen son las mismas (el mismo largo extruido, con una diferencia de
+8. **Retraer mientras viaja** (propuesta del 26-10-2026, meta RT5 a aprobar): la retracción se hace en el mismo
+   movimiento que el comienzo del viaje y la vuelta en el final, con el mismo largo y la misma velocidad de retracción
+   del perfil, en vez de con la boquilla quieta. En el Benchy, las 2 290 retracciones con la boquilla quieta suman
+   unos 6 min (2 mm a 25 mm/s, ida y vuelta). Si el viaje es tan corto que no alcanza para retraer, se retrae quieta
+   como hoy.
+9. **Ordenar por tiempo, no por distancia:** el costo de cada viaje en las reglas 2 y 6 es su tiempo con el modelo
+   de movimiento de `print_time.md` (aceleración, frenadas, retracción), no su largo: dos viajes cortos con retracción
+   pueden costar más que uno largo sin ella.
+10. **Lo que no cambia:** las líneas que se extruyen son las mismas (el mismo largo extruido, con una diferencia de
    menos de 1 % por las uniones de la regla 1), con el mismo ancho, alto y velocidad.
 
 ## Pruebas
@@ -73,4 +81,5 @@ Las metas están en `BENCHMARKS.md` (RT1 a RT6).
 | TT4 | Benchy: tiempo estimado con el mismo perfil | Al menos 8 % menos que hoy (1 h 12 m 28 s) |
 | TT5 | Largo extruido por tipo de línea, antes y después | Igual, con menos de 1 % de diferencia |
 | TT6 | Cubo de 20 mm con relleno: viajes que no cruzan la pared externa | Ninguno retrae |
+| TT8 | Benchy con la regla 8 | Ninguna retracción con la boquilla quieta salvo las de viajes cortos; el tiempo estimado baja |
 | TT7 | `gcode.corner_smoothing` 0,02 en el Benchy | La pared externa no cambia; ninguna esquina interna se aparta más de 0,02 mm |
