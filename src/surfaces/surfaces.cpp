@@ -62,6 +62,13 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
             s.top = Clipper2Lib::Difference(rest, covered_by_all(regions, i, top_layers, +1), FillRule::NonZero);
             s.top = widen_thin(s.top, rest, min_width);
             rest = Clipper2Lib::Difference(rest, s.top, FillRule::NonZero);
+            if (top_layers > 1) {
+                // Right under the air: what the next layer does not cover.
+                Polygons exposed =
+                    Clipper2Lib::Difference(s.top, covered_by_all(regions, i, 1, +1), FillRule::NonZero);
+                exposed = widen_thin(exposed, s.top, min_width);
+                s.top_under = Clipper2Lib::Difference(s.top, exposed, FillRule::NonZero);
+            }
         }
         if (bottom_layers > 0) {
             s.bottom = Clipper2Lib::Difference(rest, covered_by_all(regions, i, bottom_layers, -1), FillRule::NonZero);

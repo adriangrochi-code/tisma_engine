@@ -98,6 +98,9 @@ public:
     // After a frame: the lit scene before FXAA, RGBA rows from the bottom.
     std::vector<std::uint8_t> read_colour();
 
+    // The preview's extrusions the last frame drew (lit pass).
+    std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;
@@ -123,6 +126,12 @@ private:
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
+    // The extrusions in drawing order: layer l's that can show are
+    // [layer_shown_[l], layer_shown_[l + 1]), and the ones the whole part hides
+    // [layer_hidden_[l], layer_hidden_[l + 1]) (docs/LARGE_MODELS.md).
+    std::vector<std::size_t> layer_shown_, layer_hidden_;
+    std::uint32_t hidden_kinds_ = 0; // bit k: some extrusion of LineKind k is hidden
+    std::size_t drawn_extrusions_ = 0;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;
 

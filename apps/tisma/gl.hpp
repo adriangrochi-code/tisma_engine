@@ -26,6 +26,7 @@ using GLubyte = unsigned char;
 using GLvoid = void;
 using GLsizeiptr = std::ptrdiff_t;
 using GLintptr = std::ptrdiff_t;
+using GLuint64 = unsigned long long;
 
 // Versions this loader provides (Dear ImGui's backend checks for them).
 #define GL_VERSION_3_1 1
@@ -38,6 +39,9 @@ using GLintptr = std::ptrdiff_t;
 #define GL_ONE 1
 #define GL_LINES 0x0001
 #define GL_TRIANGLES 0x0004
+#define GL_QUERY_RESULT 0x8866
+#define GL_QUERY_RESULT_AVAILABLE 0x8867
+#define GL_TIME_ELAPSED 0x88BF
 #define GL_DEPTH_BUFFER_BIT 0x00000100
 #define GL_COLOR_BUFFER_BIT 0x00004000
 #define GL_LESS 0x0201
@@ -198,6 +202,12 @@ using GLintptr = std::ptrdiff_t;
     X(void, glEnable, (GLenum capability))                                                                           \
     X(void, glEnableVertexAttribArray, (GLuint index))                                                               \
     X(void, glFinish, (void))                                                                                        \
+    X(void, glGenQueries, (GLsizei n, GLuint* ids))                                                                  \
+    X(void, glDeleteQueries, (GLsizei n, const GLuint* ids))                                                         \
+    X(void, glBeginQuery, (GLenum target, GLuint id))                                                                \
+    X(void, glEndQuery, (GLenum target))                                                                             \
+    X(void, glGetQueryObjectiv, (GLuint id, GLenum name, GLint* value))                                              \
+    X(void, glGetQueryObjectui64v, (GLuint id, GLenum name, GLuint64* value))                                        \
     X(void, glGenBuffers, (GLsizei n, GLuint* buffers))                                                              \
     X(void, glGenSamplers, (GLsizei n, GLuint* samplers))                                                            \
     X(void, glGenTextures, (GLsizei n, GLuint* textures))                                                            \
@@ -300,6 +310,12 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glEnable tisma_glEnable
 #define glEnableVertexAttribArray tisma_glEnableVertexAttribArray
 #define glFinish tisma_glFinish
+#define glGenQueries tisma_glGenQueries
+#define glDeleteQueries tisma_glDeleteQueries
+#define glBeginQuery tisma_glBeginQuery
+#define glEndQuery tisma_glEndQuery
+#define glGetQueryObjectiv tisma_glGetQueryObjectiv
+#define glGetQueryObjectui64v tisma_glGetQueryObjectui64v
 #define glGenBuffers tisma_glGenBuffers
 #define glGenSamplers tisma_glGenSamplers
 #define glGenTextures tisma_glGenTextures

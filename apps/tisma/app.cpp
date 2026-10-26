@@ -41,6 +41,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -513,6 +514,12 @@ private:
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
     bool failed_ = false; // the screenshot or its export failed
+    bool benched_ = false; // --bench-frames done
+    unsigned view_queries_[3] = {}; // timer queries of the 3D view, in turn
+    bool view_timing_[3] = {};      // a query is out, its result not read yet
+    int view_query_ = 0;
+    double view_ms_ = 0.0; // the 3D view's GPU time per frame, smoothed
+    double preview_ms_ = 0.0; // building the last preview's buffers
 };
 
 ImTextureRef App::icon(const char* name) const {
@@ -1042,6 +1049,8 @@ void App::shutdown() {
             glDeleteTextures(1, &tex);
         if (logo_)
             glDeleteTextures(1, &logo_);
+        if (view_queries_[0])
+            glDeleteQueries(3, view_queries_);
         renderer_.shutdown();
     }
     if (ImGui::GetCurrentContext()) {
@@ -2010,7 +2019,9 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
+    const auto start = std::chrono::steady_clock::now();
     preview_buffers_ = preview_buffers(result_->preview);
+    preview_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     const PreviewBuffers& buffers = preview_buffers_;
     ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
@@ -2494,10 +2505,17 @@ void App::status_bar() {
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }
-    if (result_ && !viewer_) {
-        const std::string device = result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu;
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(device.c_str()).x - 12.0f * scale_);
-        ImGui::TextDisabled("%s", device.c_str());
+    // On the right: the 3D view's time per frame on the GPU, and what sliced.
+    std::string right;
+    if (view_ms_ > 0.0)
+        right = format(tr(T::ViewTime), view_ms_, 1000.0 / std::max(view_ms_, 0.01));
+    if (result_ && !viewer_)
+        right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
+    if (!right.empty()) {
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
+        ImGui::TextDisabled("%s", right.c_str());
+        if (view_ms_ > 0.0 && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::ViewTimeTip));
     }
     ImGui::End();
     ImGui::PopStyleVar();
@@ -4436,7 +4454,46 @@ void App::frame() {
                            renderer_.has_ray_scene() && ray_scene_;
     if (check_now)
         f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
+    // The view's time on the GPU (a timer query), read two frames later so
+    // nothing waits for it; for the status bar.
+    if (!view_queries_[0])
+        glGenQueries(3, view_queries_);
+    const bool timed = !view_timing_[view_query_ % 3];
+    if (timed)
+        glBeginQuery(GL_TIME_ELAPSED, view_queries_[view_query_ % 3]);
     renderer_.draw(f);
+    if (timed) {
+        glEndQuery(GL_TIME_ELAPSED);
+        view_timing_[view_query_ % 3] = true;
+    }
+    view_query_ = (view_query_ + 1) % 3;
+    for (int q = 0; q < 3; ++q) {
+        GLint ready = 0;
+        if (!view_timing_[q])
+            continue;
+        glGetQueryObjectiv(view_queries_[q], GL_QUERY_RESULT_AVAILABLE, &ready);
+        if (!ready)
+            continue;
+        GLuint64 ns = 0;
+        glGetQueryObjectui64v(view_queries_[q], GL_QUERY_RESULT, &ns);
+        view_timing_[q] = false;
+        const double ms = double(ns) / 1e6;
+        view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+    }
+    // --bench-frames: the ready view drawn that many times more, timed to the
+    // end of the GPU's work (docs/UI.md, «Modelos grandes»).
+    if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2 && f.mode != RenderMode::RayTraced) {
+        glFinish();
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < options_.bench_frames; ++i)
+            renderer_.draw(f);
+        glFinish();
+        const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+        std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn); preview buffers %.0f ms\n",
+                    ms / options_.bench_frames, options_.bench_frames, renderer_.drawn_extrusions(), preview_ms_);
+        std::fflush(stdout);
+        benched_ = true;
+    }
     if (check_now && renderer_.ray_samples() == 1)
         check_rays(f);
 

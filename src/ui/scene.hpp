@@ -78,9 +78,26 @@ struct PreviewBuffers {
     float min_feed = 0, max_feed = 0;          // of the extrusions, mm/s
     float min_width = 0, max_width = 0;        // of the extrusions, mm
     float min_height = 0, max_height = 0;      // of the extrusions, mm (layer heights by zone vary them)
+    // Per extrusion, 1 when the part hides it from every side as long as all
+    // of it is drawn (hidden_inside): the view leaves those out then.
+    std::vector<std::uint8_t> hidden;
 };
 
 PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF);
+
+// Which extrusions the part itself hides from every side when all of it is
+// drawn (docs/LARGE_MODELS.md): the inner walls and the sparse infill that
+// lie, a cell to spare, inside what the outer walls enclose both in the layer
+// below and in the layer above (those layers cover them from under and over,
+// and their own layer's outer wall from the sides), and are not within two
+// bead widths of a step: where the next or the last layer's outer wall lies
+// more than 0.05 mm from this one's, the groove between their beads opens
+// onto the beads inside. Never in the first or the last layer. The areas are
+// rasters of cells of `cell` mm (0: a size from the part's extent, at least
+// 0.2 mm), filled by the even-odd rule along each row; a row the outer walls
+// cross an odd number of times (a wall not closed) counts as outside. When in
+// doubt, an extrusion is not hidden. Layers in parallel (oneTBB).
+std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& preview, double cell = 0.0);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

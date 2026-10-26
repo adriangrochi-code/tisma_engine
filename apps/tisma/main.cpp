@@ -27,7 +27,8 @@ constexpr const char* kUsage =
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
+    "                                   [--bench-frames N]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -36,7 +37,8 @@ constexpr const char* kUsage =
     "the picture. --browse shows the file browser. --profile chooses a profile.\n"
     "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
     "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
-    "shadow rays with the CPU's and exits with 1 if they differ).\n";
+    "shadow rays with the CPU's and exits with 1 if they differ). --bench-frames\n"
+    "draws the ready 3D view N more times and prints the time per frame.\n";
 
 } // namespace
 
@@ -174,6 +176,8 @@ int main(int argc, char** argv) {
             options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
+        } else if (arg == "--bench-frames") {
+            options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--ray-check") {
             options.ray_check = true;
         } else if (arg == "--moire-check") {

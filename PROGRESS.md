@@ -4124,3 +4124,29 @@ a 180 mm/s.
 **Para el equipo de fichas:** la ficha `gcode_motion.md` y otras dan velocidades por defecto medidas en Tisma Slicer;
 con esta decisión el motor no tiene velocidades por defecto. QA6 (`speed.top_solid_infill` 15 mm/s) queda sin efecto:
 esa velocidad es la que dé el perfil de la impresora.
+
+## 2026-10-26 — vista previa de modelos grandes, primer paso
+
+**Pedido del dueño:** técnicas como LOD y otras formas de dibujar para más FPS con modelos grandes, «tipo raycaster»;
+se traba según cuántas capas se muestran; llegar por lo menos a 60 FPS; y «la idea es que el motor funcione en
+Vulkan».
+
+**Hecho** (`docs/LARGE_MODELS.md`):
+- Estudio de técnicas con sus fuentes (recorte, LOD, simplificación por cuádricas, rayos primarios contra el BVH,
+  oclusión jerárquica) y un plan; el paso a Vulkan queda en `PLAN.md`, «Vista con Vulkan».
+- Medir: `--bench-frames N` para las capturas, y el tiempo de la vista en la barra de estado («Vista 8,3 ms · 120
+  FPS», consulta de tiempo de la GPU) para muestrear en cada máquina.
+- No dibujar lo que la pieza tapa (`hidden_inside`): paredes internas y relleno cubiertos por la capa de abajo, la de
+  arriba y la pared externa, lejos de los escalones. La primera versión, sin lo de los escalones, dejaba puntitos en
+  la cúpula de una esfera (vistos al comparar las imágenes); ahora la imagen es la misma píxel por píxel.
+- Regla 2 de `surfaces_infill.md` (de la prueba de caja negra): solo la capa de arriba de todo es la superficie de
+  arriba; las otras capas sólidas de arriba van como relleno sólido.
+
+**Medido** (GPU por software del contenedor, 1200 × 800, pieza entera; sirve para comparar, no son FPS reales):
+cilindro de 60 × 80 mm, 181 384 cordones → 52 499 dibujados, 2 330 → 633 ms por cuadro con oclusión ambiental;
+esfera de 80 mm (peor caso), 188 664 → 157 196, 3 400 → 2 231 ms. Armar los datos: 121 y 181 ms.
+
+**No probado:** FPS en una placa de video real (no hay en el contenedor): para eso está el número de la barra de
+estado.
+
+**Sigue:** V1 de «Vista con Vulkan».

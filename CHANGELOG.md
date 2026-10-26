@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Tiempo de la vista y FPS** en la barra de estado: lo que tarda la GPU en dibujar la vista 3D en cada cuadro, para
+  medir en cada máquina (`docs/LARGE_MODELS.md`). `--bench-frames N` lo mide para las capturas.
 - **Herramientas de la placa** (pedido del dueño; `docs/UI.md`, «Herramientas de la placa»): varios modelos en la placa
   y una columna con **Agregar**, **Quitar**, **Duplicar**, **Mover** (también arrastrando el modelo), **Rotar**,
   **Escalar** (en % o en mm), **Apoyar en una cara** y **Organizar** (grilla compacta centrada, ficha `placement.md`).
@@ -42,6 +44,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Vista previa más rápida con modelos grandes** (pedido del dueño; `docs/LARGE_MODELS.md`): con la pieza entera a la
+  vista, las paredes internas y el relleno que la pieza tapa por todos lados ya no se dibujan; la imagen es la misma.
+  En un cilindro de 60 × 80 mm se dibuja un 71 % menos y el cuadro tarda 3,7 veces menos; en una esfera, el peor caso
+  (cada capa es un escalón), 1,5 veces menos. Un corte, una capa sola o un tipo oculto en la leyenda los dibujan.
+- **Solo la capa de arriba de todo es «Top solid infill»** (ficha `surfaces_infill.md`, regla 2): las otras capas
+  sólidas de arriba son relleno sólido, a su velocidad y en líneas comunes. Antes las tres iban a la velocidad de la
+  superficie de arriba.
 - **Ventilador por tiempo de capa** (ficha `cooling.md`; prueba de caja negra del equipo de fichas): el ventilador va
   al máximo en las capas que tardan `cooling.min_layer_time` o menos y baja en línea recta hasta `cooling.fan_min` en
   las que tardan `cooling.fan_below_time` (nuevo, 60 s); las más largas van sin ventilador, o con `fan_min` si

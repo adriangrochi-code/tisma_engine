@@ -15,7 +15,9 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -209,6 +211,89 @@ TEST_CASE("ui: preview buffers keep the layers and kinds", "[ui]") {
     CHECK(zones.max_height == 0.3f);
     for (std::size_t k = 0; k < kLineKinds; ++k)
         CHECK(kind_colour(LineKind(k)) <= 0xFFFFFF);
+}
+
+namespace {
+
+// G-code of layers of square walls: per layer, the outer wall's square
+// {x0, y0, side}, an inner wall 0.45 mm in and a line of infill across. An
+// open wall leaves its last side out.
+std::string squares_gcode(const std::vector<std::array<float, 3>>& layers, bool open = false) {
+    std::string g;
+    double e = 0.0;
+    char line[128];
+    const auto move = [&](float x, float y, bool extrude) {
+        if (extrude)
+            std::snprintf(line, sizeof line, "G1 X%.3f Y%.3f E%.4f F1800\n", double(x), double(y), e += 1.0);
+        else
+            std::snprintf(line, sizeof line, "G1 X%.3f Y%.3f F6000\n", double(x), double(y));
+        g += line;
+    };
+    const auto square = [&](float x0, float y0, float side, int sides) {
+        move(x0, y0, false);
+        const float xs[] = {x0 + side, x0 + side, x0, x0}, ys[] = {y0, y0 + side, y0 + side, y0};
+        for (int k = 0; k < sides; ++k)
+            move(xs[k], ys[k], true);
+    };
+    for (std::size_t l = 0; l < layers.size(); ++l) {
+        const auto [x0, y0, side] = layers[l];
+        std::snprintf(line, sizeof line, ";LAYER_CHANGE\n;Z:%.1f\n;HEIGHT:0.2\nG1 Z%.1f F600\n;WIDTH:0.45\n",
+                      0.2 * double(l + 1), 0.2 * double(l + 1));
+        g += line;
+        g += ";TYPE:Perimeter\n";
+        square(x0 + 0.45f, y0 + 0.45f, side - 0.9f, 4);
+        g += ";TYPE:External perimeter\n";
+        square(x0, y0, side, open ? 3 : 4);
+        g += ";TYPE:Internal infill\n";
+        move(x0 + 1.0f, y0 + side / 2, false);
+        move(x0 + side - 1.0f, y0 + side / 2, true);
+    }
+    return g;
+}
+
+// Whether every extrusion of `kind` in layer l is hidden (1), none is (0), or some are (-1).
+int hidden_of(const PreviewBuffers& b, std::size_t l, LineKind kind) {
+    int seen = 0, hidden = 0;
+    for (std::size_t i = b.layer_extrusions[l]; i < b.layer_extrusions[l + 1]; ++i)
+        if ((b.extrusions[i].kind_layer & 0xFFu) == std::uint32_t(kind))
+            ++seen, hidden += b.hidden[i];
+    return hidden == 0 ? 0 : hidden == seen ? 1 : -1;
+}
+
+} // namespace
+
+TEST_CASE("ui: the preview leaves out what the part hides when all of it shows", "[ui]") {
+    // Six equal layers of a 20 mm square: inside the layers between the
+    // first and the last, the inner wall and the infill are covered from
+    // under, over and the sides.
+    const PreviewBuffers equal = preview_buffers(read_gcode_preview(squares_gcode(std::vector<std::array<float, 3>>(6, {0, 0, 20}))));
+    REQUIRE(equal.hidden.size() == equal.extrusions.size());
+    for (std::size_t l = 0; l < 6; ++l) {
+        INFO("layer " << l);
+        const int inside = l == 0 || l == 5 ? 0 : 1;
+        CHECK(hidden_of(equal, l, LineKind::InnerWall) == inside);
+        CHECK(hidden_of(equal, l, LineKind::SparseInfill) == inside);
+        CHECK(hidden_of(equal, l, LineKind::OuterWall) == 0);
+    }
+
+    // A step: three layers of 20 mm, then three of 10 mm in the middle. The
+    // big part's last layer is under the air around the small one; the small
+    // part's first layer stands back from the big one's wall, and the groove
+    // between them shows its inner wall.
+    std::vector<std::array<float, 3>> step(3, {0, 0, 20});
+    step.insert(step.end(), 3, {5, 5, 10});
+    const PreviewBuffers stepped = preview_buffers(read_gcode_preview(squares_gcode(step)));
+    CHECK(hidden_of(stepped, 1, LineKind::InnerWall) == 1);
+    CHECK(hidden_of(stepped, 2, LineKind::InnerWall) == 0);  // under the air
+    CHECK(hidden_of(stepped, 2, LineKind::SparseInfill) == 0); // one line, its ends under the air
+    CHECK(hidden_of(stepped, 3, LineKind::InnerWall) == 0);  // by the step
+    CHECK(hidden_of(stepped, 4, LineKind::InnerWall) == 1);
+
+    // Walls that do not close: nothing is known to be inside.
+    const PreviewBuffers open =
+        preview_buffers(read_gcode_preview(squares_gcode(std::vector<std::array<float, 3>>(6, {0, 0, 20}), true)));
+    for (const std::uint8_t h : open.hidden)
+        CHECK(h == 0);
 }
 
 TEST_CASE("ui: preview beads join where they go on into the next move", "[ui]") {
