@@ -163,9 +163,9 @@ implementar».
     - `--no-plugins` los apaga;
     - `--plugin-test <carpeta> <modelo>` corre cada momento del complemento con ese modelo y revisa sus respuestas
       contra esta ficha, para quien lo está programando.
-15. **Licencia:** un complemento es un programa aparte que intercambia archivos con el motor, así que su autor elige su
-    licencia. El kit de inicio es MIT para que no imponga nada. Que la licencia del motor no alcance a los
-    complementos lo confirma el dueño.
+15. **Licencia:** decisión del dueño (26-10-2026): cada complemento elige su licencia. La licencia del motor no
+    alcanza a los complementos: son programas aparte que intercambian archivos con él. El kit de inicio es MIT para
+    no imponer nada. Esto se anota en el `README.md` del motor, en la parte de la licencia.
 
 ## Pruebas
 

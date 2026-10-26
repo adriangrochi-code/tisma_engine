@@ -21,9 +21,13 @@ sentido de la OSI: es de *código disponible*. Se publica bajo la
 
 Las bibliotecas de terceros conservan sus propias licencias: ver `THIRD_PARTY.md`.
 
+**Complementos:** cada complemento (`docs/spec/features/plugins.md`) elige su propia licencia, también comercial o
+cerrada. La licencia del motor no los alcanza: son programas aparte que intercambian archivos con él (decisión del
+dueño, 26-10-2026).
+
 **English:** this repository is public so it can be read and built, but it is source-available, not open source. It is
 licensed under the PolyForm Noncommercial License 1.0.0. Any commercial use is prohibited unless the owner grants a
-separate written license.
+separate written license. Plugins choose their own license; the engine's license does not extend to them.
 
 ## Compilar
 
