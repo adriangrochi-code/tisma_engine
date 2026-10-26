@@ -57,6 +57,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Soportes más rápidos** (pedido del dueño): la columna del soporte se calcula en una grilla de bits, en la CPU o en
+  la GPU con el mismo resultado. Un cráneo escaneado de 546 684 triángulos lamina en 5,8 s en vez de 12,9 s, y el
+  Benchy con soportes en 1,18 s en vez de 1,38 s. El borde de afuera del soporte queda a menos de 0,05 mm de antes,
+  algo más grande, y se simplifica a medio cordón; la separación con la pieza no cambia.
 - **Piezas huecas más rápidas:** sin relleno (`infill.density` 0), las capas sólidas de abajo ya no calculan los
   cordones de la capa entera para saber si son puentes. Una estrella hueca de 160 mm: el corte de 0,90 s a 0,62 s;
   el Benchy sin relleno, de 1,30 s a 1,04 s. El mismo G-code.

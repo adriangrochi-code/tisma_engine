@@ -1,10 +1,16 @@
 #pragma once
 
+#include "geom/bitgrid.hpp"
 #include "geom/polygons.hpp"
 
+#include <span>
 #include <vector>
 
 namespace tisma {
+
+namespace gpu {
+class Context;
+}
 
 struct SupportParams {
     double threshold_angle = 0.0; // degrees from the horizontal; 0: automatic (half a bead per layer)
@@ -18,6 +24,7 @@ struct SupportParams {
     bool automatic = true;
     const std::vector<Polygons>* enforce = nullptr;
     const std::vector<Polygons>* block = nullptr;
+    gpu::Context* gpu = nullptr; // the column's steps on the GPU when given, with the same bits
 };
 
 // What each layer overhangs (docs/spec/BEHAVIOR.md, "Soportes"): the part of
@@ -35,5 +42,13 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
 // from the part; gaps narrower than two beads in it are closed. Own design.
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params);
+
+// The column's steps over a chunk of layers, on its grid (support_areas):
+// from the chunk's last layer down, the column takes adds[k] and is closed by
+// `radius` pixels when adds[k] has a grid (an overhang above), then loses
+// parts[k]; kept[k] becomes the column after it. The CPU reference of
+// gpu::Context::support_column.
+void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
+                    std::span<BitGrid> kept, int radius);
 
 } // namespace tisma

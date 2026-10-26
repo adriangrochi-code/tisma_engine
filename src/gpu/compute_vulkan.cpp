@@ -6,6 +6,7 @@
 
 #include "gpu/shaders/generated/level_ranges.spv.h"
 #include "gpu/shaders/generated/level_segments.spv.h"
+#include "gpu/shaders/generated/support_column.spv.h"
 
 // The device functions only through the context's own table (Functions):
 // volk's global ones belong to the interface's window.
@@ -209,6 +210,14 @@ struct Context::Impl {
     // buffers bound at bindings 0..n-1 and the push constants.
     void run(std::span<const std::uint32_t> spirv, std::span<Buffer* const> buffers, const void* push,
              std::uint32_t push_size, std::uint32_t groups) {
+        run_steps(spirv, buffers, push, push_size, 1, groups);
+    }
+
+    // The same shader `steps` times in one submission, each with its own push
+    // constants (push_size bytes each, one after another in `pushes`), every
+    // step seeing what the one before wrote.
+    void run_steps(std::span<const std::uint32_t> spirv, std::span<Buffer* const> buffers, const void* pushes,
+                   std::uint32_t push_size, std::uint32_t steps, std::uint32_t groups) {
         std::vector<VkDescriptorSetLayoutBinding> bindings(buffers.size());
         for (std::uint32_t i = 0; i < bindings.size(); ++i)
             bindings[i] = {i, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
@@ -315,9 +324,21 @@ struct Context::Impl {
             check(vk.vkBeginCommandBuffer(cmd, &begin), "vkBeginCommandBuffer");
             vk.vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
             vk.vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &set, 0, nullptr);
-            if (push_size)
-                vk.vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push_size, push);
-            vk.vkCmdDispatch(cmd, groups, 1, 1);
+            for (std::uint32_t step = 0; step < steps; ++step) {
+                if (step > 0) {
+                    VkMemoryBarrier between{};
+                    between.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+                    between.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+                    between.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+                    vk.vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                                            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1, &between, 0, nullptr, 0,
+                                            nullptr);
+                }
+                if (push_size)
+                    vk.vkCmdPushConstants(cmd, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, push_size,
+                                          static_cast<const std::byte*>(pushes) + std::size_t(step) * push_size);
+                vk.vkCmdDispatch(cmd, groups, 1, 1);
+            }
             // Make the shader writes visible to the host before it reads the mapped memory.
             VkMemoryBarrier barrier{};
             barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -511,6 +532,59 @@ void Context::level_segments_by_triangle(const IndexedMesh& mesh, std::span<cons
                   (EdgeKey(g.edge_from_hi) << 32) | g.edge_from_lo,
                   (EdgeKey(g.edge_to_hi) << 32) | g.edge_to_lo,
                   g.triangle};
+    }
+}
+
+void Context::support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
+                             std::span<BitGrid> kept, int radius) {
+    const std::size_t count = parts.size();
+    if (count == 0 || column.width() == 0 || column.height() == 0)
+        return;
+    if (radius < 0 || radius > 31)
+        throw std::runtime_error("support_column: the radius must be 0 to 31 pixels");
+    const std::size_t grid = column.words().size(); // 64-bit words
+    const std::size_t bytes = grid * sizeof(std::uint64_t);
+    Impl::Buffer b_parts, b_adds, b_column, b_temp, b_kept;
+    impl_->make_buffer(b_parts, count * bytes);
+    impl_->make_buffer(b_adds, count * bytes);
+    impl_->make_buffer(b_column, bytes);
+    impl_->make_buffer(b_temp, bytes);
+    impl_->make_buffer(b_kept, count * bytes);
+    std::memset(b_adds.mapped, 0, count * bytes);
+    for (std::size_t k = 0; k < count; ++k) {
+        std::memcpy(static_cast<std::byte*>(b_parts.mapped) + k * bytes, parts[k].words().data(), bytes);
+        if (adds[k].width() > 0)
+            std::memcpy(static_cast<std::byte*>(b_adds.mapped) + k * bytes, adds[k].words().data(), bytes);
+    }
+    std::memcpy(b_column.mapped, column.words().data(), bytes);
+
+    // Push constants of support_column.comp, 32-bit words on the GPU.
+    struct Push {
+        std::uint32_t width, height, stride, radius, mode, layer;
+    };
+    const auto stride = static_cast<std::uint32_t>(2 * column.words_per_row());
+    const auto words = static_cast<std::uint32_t>(2 * grid);
+    std::vector<Push> steps;
+    for (std::size_t k = count; k-- > 0;) {
+        const Push base{static_cast<std::uint32_t>(column.width()), static_cast<std::uint32_t>(column.height()),
+                        stride, static_cast<std::uint32_t>(radius), 2u, static_cast<std::uint32_t>(k) * words};
+        if (adds[k].width() > 0) {
+            Push dilate = base, erode = base;
+            dilate.mode = 0u, erode.mode = 1u;
+            steps.push_back(dilate);
+            steps.push_back(erode);
+        } else {
+            steps.push_back(base);
+        }
+    }
+    const std::array<Impl::Buffer*, 5> bound = {&b_parts, &b_adds, &b_column, &b_temp, &b_kept};
+    impl_->run_steps(kSupportColumnSpirv, bound, steps.data(), sizeof(Push), static_cast<std::uint32_t>(steps.size()),
+                     (words + 255u) / 256u);
+
+    std::memcpy(column.words().data(), b_column.mapped, bytes);
+    for (std::size_t k = 0; k < count; ++k) {
+        kept[k] = BitGrid(column.x0(), column.y0(), column.pixel(), column.width(), column.height());
+        std::memcpy(kept[k].words().data(), static_cast<const std::byte*>(b_kept.mapped) + k * bytes, bytes);
     }
 }
 

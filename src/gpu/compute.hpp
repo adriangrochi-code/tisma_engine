@@ -1,5 +1,6 @@
 #pragma once
 
+#include "geom/bitgrid.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/level_set.hpp"
 
@@ -51,6 +52,16 @@ public:
                                     std::span<const float> isos, std::span<const std::uint32_t> first,
                                     std::span<const std::uint32_t> end, std::vector<std::uint32_t>& offsets,
                                     std::vector<LevelSegment>& out);
+
+    // GPU version of the support column's steps over a chunk of layers
+    // (support_areas, src/support/support.cpp), bit for bit the CPU's: from
+    // the chunk's last layer down, the column takes adds[k] and is closed by
+    // `radius` pixels (at most 31) when adds[k] has a grid (an overhang
+    // above), then loses parts[k]; kept[k] becomes the column after it. Every
+    // grid has the column's size. Throws std::runtime_error on a Vulkan
+    // failure.
+    void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
+                        std::span<BitGrid> kept, int radius);
 
     struct Impl;
 
