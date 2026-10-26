@@ -763,6 +763,13 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
 - [x] V9: simplificar después de cada pared (hecho 2026-10-26): lo que dejan las paredes se simplifica con
   `slicing.simplify_tolerance`, como los contornos. Benchy 1,04 → 0,98 s (6 %); con 6 paredes, 3 %. El G-code del
   Benchy cambia en el relleno (menos del 1 % de largo); las paredes quedan iguales
+- [x] RV10, costura alineada tan rápida como `nearest` (hecho 2026-10-26; `perimeters.md`, regla 8): las esquinas de
+  cada lazo se buscaban caminando, desde cada punto, hasta el primero a 0,1 mm; en lazos de 11 000 puntos amontonados
+  en las esquinas redondeadas eran decenas de pasos por punto. Ahora un puntero sobre el largo acumulado del lazo
+  saltea los que no pueden estar tan lejos, con las mismas esquinas. Los candidatos de todos los lazos se buscan en
+  una etapa en paralelo antes del plan, y en el plan solo queda elegir, capa tras capa. Los viajes también se planean
+  en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
+  byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
 
 ## Avance
 

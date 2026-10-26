@@ -57,6 +57,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Costura alineada más rápida:** en piezas de superficie curva con muchos puntos por pared, armar el G-code con la
+  costura alineada (la de siempre) tardaba tres veces más que con `nearest`; ahora tarda lo mismo. Una gota de 172 080
+  triángulos lamina en 2,7 s en vez de 3,8 s, y el cráneo escaneado en 4,7 s en vez de 4,9 s, con el mismo G-code.
 - **Soportes más rápidos** (pedido del dueño): la columna del soporte se calcula en una grilla de bits, en la CPU o en
   la GPU con el mismo resultado. Un cráneo escaneado de 546 684 triángulos lamina en 5,8 s en vez de 12,9 s, y el
   Benchy con soportes en 1,18 s en vez de 1,38 s. El borde de afuera del soporte queda a menos de 0,05 mm de antes,

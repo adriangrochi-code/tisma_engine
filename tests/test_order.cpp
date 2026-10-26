@@ -192,3 +192,95 @@ TEST_CASE("ordering many paths through the grid picks what looking at every path
                       got[k].points.back().p.y != want[k].points.back().p.y;
     CHECK(differ == 0);
 }
+
+namespace {
+
+// The aligned seam's candidates by the plain walk: from every point, one point
+// after another until one is kSeamSpan away (or the loop comes back).
+std::vector<std::size_t> plain_candidates(const Toolpath& loop) {
+    const std::size_t n = loop.points.size();
+    double area = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const Point2d& a = loop.points[i].p;
+        const Point2d& b = loop.points[(i + 1) % n].p;
+        area += a.x * b.y - b.x * a.y;
+    }
+    const auto walk = [&](std::size_t i, bool forward) {
+        std::size_t j = i;
+        for (std::size_t k = 0; k + 1 < n; ++k) {
+            j = forward ? (j + 1) % n : (j + n - 1) % n;
+            if (std::hypot(loop.points[j].p.x - loop.points[i].p.x, loop.points[j].p.y - loop.points[i].p.y) >= kSeamSpan)
+                break;
+        }
+        return j;
+    };
+    const double limit = std::sin(kSeamCorner * 3.14159265358979323846 / 180.0);
+    std::vector<std::size_t> corners, all;
+    for (std::size_t i = 0; i < n; ++i) {
+        all.push_back(i);
+        const Point2d& a = loop.points[walk(i, false)].p;
+        const Point2d& b = loop.points[i].p;
+        const Point2d& c = loop.points[walk(i, true)].p;
+        const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+        const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
+        if (lu == 0.0 || lv == 0.0)
+            continue;
+        if ((ux * vy - uy * vx) / (lu * lv) * (area > 0.0 ? -1.0 : 1.0) > limit)
+            corners.push_back(i);
+    }
+    return corners.empty() ? all : corners;
+}
+
+} // namespace
+
+TEST_CASE("the aligned seam's candidates are the plain walk's, points crowded or not", "[order]") {
+    std::mt19937 random(7);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    for (int trial = 0; trial < 300; ++trial) {
+        // A star with rounded tips: arcs of crowded points at every tip and
+        // notch, sometimes repeated points, sometimes a loop smaller than kSeamSpan.
+        Toolpath loop;
+        loop.closed = true;
+        const int tips = 3 + int(unit(random) * 9);
+        const double scale = trial % 10 == 0 ? 0.01 : 1.0 + unit(random) * 20.0;
+        for (int k = 0; k < 2 * tips; ++k) {
+            const double angle = 2.0 * 3.14159265358979323846 * k / (2 * tips);
+            const double radius = scale * (k % 2 ? 0.4 + 0.3 * unit(random) : 1.0);
+            const int crowd = int(unit(random) * 40);
+            for (int c = 0; c <= crowd; ++c) {
+                const double a = angle + (c - crowd / 2.0) * 0.002 * unit(random);
+                loop.points.push_back({{radius * std::cos(a), radius * std::sin(a)}, 0.4});
+                if (unit(random) < 0.05)
+                    loop.points.push_back(loop.points.back());
+            }
+        }
+        if (trial % 2)
+            std::reverse(loop.points.begin(), loop.points.end());
+        CHECK(seam_candidates(loop) == plain_candidates(loop));
+    }
+}
+
+TEST_CASE("candidates found beforehand pick the same aligned seams", "[order]") {
+    Toolpath l;
+    l.closed = true;
+    l.points = {{{0, 0}, 0.4}, {{10, 0}, 0.4}, {{10, 4}, 0.4}, {{4, 4}, 0.4}, {{4, 10}, 0.4}, {{0, 10}, 0.4}};
+    const std::vector<Toolpath> paths{l, square_loop(20, 0, 5), square_loop(40, 0, 5, 1)};
+    SeamMemory with, without;
+    with.below[0] = without.below[0] = {{24.0, 6.0}};
+    std::vector<std::vector<std::size_t>> found;
+    for (const Toolpath& t : paths)
+        found.push_back(seam_candidates(t));
+    const std::vector<const std::vector<std::size_t>*> given{&found[0], &found[1], nullptr};
+    Point2d a{0, 0}, b{0, 0};
+    const std::vector<Toolpath> one = order_paths(paths, a, SeamMode::Aligned, 1, with, nullptr, given);
+    const std::vector<Toolpath> two = order_paths(paths, b, SeamMode::Aligned, 1, without);
+    REQUIRE(one.size() == two.size());
+    for (std::size_t k = 0; k < one.size(); ++k)
+        CHECK(one[k].points.front().p.x == two[k].points.front().p.x);
+    REQUIRE(with.current.size() == without.current.size());
+    for (const auto& [index, seams] : with.current) {
+        REQUIRE(seams.size() == without.current.at(index).size());
+        for (std::size_t k = 0; k < seams.size(); ++k)
+            CHECK((seams[k].x == without.current.at(index)[k].x && seams[k].y == without.current.at(index)[k].y));
+    }
+}

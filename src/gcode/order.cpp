@@ -45,6 +45,56 @@ std::uint64_t mix(std::uint64_t z) {
 }
 
 
+// For each offered point of a loop, the first point at least kSeamSpan away
+// from it going forward (after) and going backward (before) along the loop,
+// or the last one before coming back to it if none is. A point nearer than
+// kSeamSpan along the loop, by more than the sums' rounding, is nearer in a
+// straight line too: those are passed over by pointers that only move ahead,
+// so the points crowded at rounded corners cost a step each where looking at
+// them one by one from every point cost dozens.
+struct Away {
+    std::vector<std::size_t> after, before;
+};
+Away away(const Toolpath& loop, const std::vector<char>& offered) {
+    const std::size_t n = loop.points.size();
+    Away out{std::vector<std::size_t>(n, 0), std::vector<std::size_t>(n, 0)};
+    if (n == 0)
+        return out;
+    // Points by their index in the loop gone round twice.
+    const auto point = [&](std::size_t m) -> const Point2d& { return loop.points[m < n ? m : m - n].p; };
+    std::vector<double> along(2 * n, 0.0); // from point 0 forward to point m
+    for (std::size_t m = 1; m < 2 * n; ++m) {
+        const Point2d& a = point(m - 1);
+        const Point2d& b = point(m);
+        along[m] = along[m - 1] + std::sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+    }
+    const double near = kSeamSpan - (1e-6 + 8.0 * double(n) * along.back() * std::numeric_limits<double>::epsilon());
+    // Going forward, points i + 1 to last are met; going backward, last down
+    // to i + 1. e: the first near enough to look at forward; b: backward.
+    std::size_t e = 0, b = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t last = i + n - 1;
+        e = std::max(e, i + 1);
+        while (e < last && along[e] - along[i] < near)
+            ++e;
+        b = std::max(b, i + 1);
+        while (b < last && along[i + n] - along[b + 1] >= near)
+            ++b;
+        if (!offered[i])
+            continue;
+        const Point2d& p = loop.points[i].p;
+        std::size_t j = e;
+        while (j < last && !at_least(point(j), p, kSeamSpan))
+            ++j;
+        out.after[i] = j < n ? j : j - n;
+        std::size_t k = along[i + n] - along[b] >= near ? b : i + 1;
+        while (k > i + 1 && !at_least(point(k), p, kSeamSpan))
+            --k;
+        out.before[i] = k < n ? k : k - n;
+    }
+    return out;
+}
+
 // Below this many paths, looking at every one is as quick.
 constexpr std::size_t kFiledPaths = 64;
 
@@ -195,10 +245,87 @@ double SeamMemory::nearest_below(int index, const Point2d& p) const {
 
 namespace {
 
+// The concave corners of a loop among some of its points: the turns against
+// the loop's direction sharper than kSeamCorner, measured to the points at
+// least kSeamSpan away on each side (zig-zags much smaller than a bead are
+// not corners).
+std::vector<std::size_t> concave_corners(const Toolpath& loop, const std::vector<std::size_t>& allowed) {
+    const std::size_t n = loop.points.size();
+    double area = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const Point2d& a = loop.points[i].p;
+        const Point2d& b = loop.points[i + 1 < n ? i + 1 : 0].p;
+        area += a.x * b.y - b.x * a.y;
+    }
+    const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
+    std::vector<char> offered(n, 0);
+    for (std::size_t i : allowed)
+        offered[i] = 1;
+    std::vector<std::size_t> corners;
+    const Away reach = away(loop, offered);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (!offered[i])
+            continue;
+        const Point2d& a = loop.points[reach.before[i]].p;
+        const Point2d& b = loop.points[i].p;
+        const Point2d& c = loop.points[reach.after[i]].p;
+        const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+        const double cross = ux * vy - uy * vx;
+        // Only a turn against the loop's direction can be a corner: the
+        // others need no lengths.
+        if (cross * (area > 0.0 ? -1.0 : 1.0) <= 0.0)
+            continue;
+        const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
+        if (lu == 0.0 || lv == 0.0)
+            continue;
+        const double turn = cross / (lu * lv); // sine of the turn, + to the left
+        if (turn * (area > 0.0 ? -1.0 : 1.0) > limit)
+            corners.push_back(i); // turns against the loop's direction: a concave corner
+    }
+    return corners;
+}
+
+// The aligned seam among the candidates (never none): the one nearest to a
+// seam of the same wall index below, the first of the nearest; the rear one
+// if there is none below.
+std::size_t aligned_pick(const Toolpath& loop, const std::vector<std::size_t>& candidates, const SeamMemory& memory) {
+    const auto it = memory.below.find(loop.index);
+    if (it == memory.below.end() || it->second.empty())
+        return rear_point(loop, candidates);
+    std::size_t best = candidates.front();
+    double nearest = std::numeric_limits<double>::max();
+    // With few seams below, the squares first: only the candidates within
+    // a hair of the nearest square need the distances, which pick as
+    // before (the first of the nearest).
+    const std::vector<Point2d>& below = it->second;
+    std::vector<double> squares;
+    double least = std::numeric_limits<double>::infinity();
+    if (below.size() <= 32) {
+        squares.reserve(candidates.size());
+        for (std::size_t i : candidates) {
+            const Point2d& p = loop.points[i].p;
+            double square = std::numeric_limits<double>::infinity();
+            for (const Point2d& q : below) {
+                const double dx = p.x - q.x, dy = p.y - q.y;
+                square = std::min(square, dx * dx + dy * dy);
+            }
+            squares.push_back(square);
+            least = std::min(least, square);
+        }
+    }
+    for (std::size_t k = 0; k < candidates.size(); ++k) {
+        if (!squares.empty() && squares[k] > least * (1.0 + 1e-9))
+            continue;
+        const std::size_t i = candidates[k];
+        if (const double d = memory.nearest_below(loop.index, loop.points[i].p); d < nearest)
+            nearest = d, best = i;
+    }
+    return best;
+}
+
 // seam_point among some of the loop's points only (never none).
 std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& allowed, SeamMode mode,
                        const Point2d& from, std::uint64_t seed, const SeamMemory& memory) {
-    const std::size_t n = loop.points.size();
     switch (mode) {
     case SeamMode::Nearest: {
         std::size_t best = allowed.front();
@@ -212,79 +339,8 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
     case SeamMode::Random:
         return allowed[static_cast<std::size_t>(mix(seed) % allowed.size())];
     case SeamMode::Aligned: {
-        double area = 0.0;
-        for (std::size_t i = 0; i < n; ++i) {
-            const Point2d& a = loop.points[i].p;
-            const Point2d& b = loop.points[i + 1 < n ? i + 1 : 0].p;
-            area += a.x * b.y - b.x * a.y;
-        }
-        const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
-        std::vector<char> offered(n, 0);
-        for (std::size_t i : allowed)
-            offered[i] = 1;
-        std::vector<std::size_t> corners;
-        // The turn at a point, measured to the points at least kSeamSpan away
-        // on each side: zig-zags much smaller than a bead are not corners.
-        auto away = [&](std::size_t i, bool forward) {
-            const Point2d& b = loop.points[i].p;
-            std::size_t j = i;
-            for (std::size_t k = 0; k + 1 < n; ++k) {
-                j = forward ? (j + 1 == n ? 0 : j + 1) : (j == 0 ? n - 1 : j - 1);
-                if (at_least(loop.points[j].p, b, kSeamSpan))
-                    break;
-            }
-            return j;
-        };
-        for (std::size_t i = 0; i < n; ++i) {
-            const Point2d& a = loop.points[away(i, false)].p;
-            const Point2d& b = loop.points[i].p;
-            const Point2d& c = loop.points[away(i, true)].p;
-            const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
-            const double cross = ux * vy - uy * vx;
-            // Only a turn against the loop's direction can be a corner: the
-            // others need no lengths.
-            if (!offered[i] || cross * (area > 0.0 ? -1.0 : 1.0) <= 0.0)
-                continue;
-            const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
-            if (lu == 0.0 || lv == 0.0)
-                continue;
-            const double turn = cross / (lu * lv); // sine of the turn, + to the left
-            if (turn * (area > 0.0 ? -1.0 : 1.0) > limit)
-                corners.push_back(i); // turns against the loop's direction: a concave corner
-        }
-        const std::vector<std::size_t>& candidates = corners.empty() ? allowed : corners;
-        const auto it = memory.below.find(loop.index);
-        if (it == memory.below.end() || it->second.empty())
-            return rear_point(loop, candidates);
-        std::size_t best = candidates.front();
-        double nearest = std::numeric_limits<double>::max();
-        // With few seams below, the squares first: only the candidates within
-        // a hair of the nearest square need the distances, which pick as
-        // before (the first of the nearest).
-        const std::vector<Point2d>& below = it->second;
-        std::vector<double> squares;
-        double least = std::numeric_limits<double>::infinity();
-        if (below.size() <= 32) {
-            squares.reserve(candidates.size());
-            for (std::size_t i : candidates) {
-                const Point2d& p = loop.points[i].p;
-                double square = std::numeric_limits<double>::infinity();
-                for (const Point2d& q : below) {
-                    const double dx = p.x - q.x, dy = p.y - q.y;
-                    square = std::min(square, dx * dx + dy * dy);
-                }
-                squares.push_back(square);
-                least = std::min(least, square);
-            }
-        }
-        for (std::size_t k = 0; k < candidates.size(); ++k) {
-            if (!squares.empty() && squares[k] > least * (1.0 + 1e-9))
-                continue;
-            const std::size_t i = candidates[k];
-            if (const double d = memory.nearest_below(loop.index, loop.points[i].p); d < nearest)
-                nearest = d, best = i;
-        }
-        return best;
+        const std::vector<std::size_t> corners = concave_corners(loop, allowed);
+        return aligned_pick(loop, corners.empty() ? allowed : corners, memory);
     }
     }
     return 0;
@@ -416,8 +472,18 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
     return seam_among(loop, all, mode, from, seed, memory);
 }
 
+std::vector<std::size_t> seam_candidates(const Toolpath& loop) {
+    const std::size_t n = loop.points.size();
+    std::vector<std::size_t> all(n);
+    for (std::size_t i = 0; i < n; ++i)
+        all[i] = i;
+    std::vector<std::size_t> corners = concave_corners(loop, all);
+    return corners.empty() ? all : corners;
+}
+
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
-                                  SeamMemory& memory, const SeamPaint* paint) {
+                                  SeamMemory& memory, const SeamPaint* paint,
+                                  std::span<const std::vector<std::size_t>* const> candidates) {
     std::vector<Toolpath> out;
     out.reserve(paths.size());
     std::vector<bool> done(paths.size(), false);
@@ -431,6 +497,9 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
     // An enforced seam goes to the middle of its painted run in the aligned
     // and rear modes; nearest and random choose among the painted points.
     const auto seam_of = [&](std::size_t i) {
+        if (!painted[i] && mode == SeamMode::Aligned && i < candidates.size() && candidates[i] &&
+            !paths[i].points.empty())
+            return aligned_pick(paths[i], *candidates[i], memory);
         if (!painted[i])
             return seam_point(paths[i], mode, cursor, seed + i, memory);
         if (painted[i]->middle && (mode == SeamMode::Aligned || mode == SeamMode::Rear))

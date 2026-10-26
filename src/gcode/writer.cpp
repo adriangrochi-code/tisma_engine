@@ -426,8 +426,11 @@ public:
     }
 
     // A travel along the planner's route. It retracts first (and lifts Z by
-    // lift) when it leaves the part or is longer than min_travel.
-    void travel(const Point2d& p, double feed, const TravelPlanner& planner) {
+    // lift) when it leaves the part or is longer than min_travel. A route
+    // planned beforehand from exactly where the head is stands for the
+    // planner's.
+    void travel(const Point2d& p, double feed, const TravelPlanner& planner, const TravelPlan* planned = nullptr,
+                const Point2d* planned_from = nullptr) {
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
@@ -453,7 +456,9 @@ public:
             x_value_ = p.x, y_value_ = p.y, known_ = true;
             return;
         }
-        const TravelPlan plan = planner.plan({x_value_, y_value_}, p);
+        const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
+        const TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
+        const TravelPlan& plan = ready ? *planned : own;
         const bool retract = plan.leaves_part || plan.length > min_travel_;
         if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
@@ -865,7 +870,17 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const char* type = nullptr;
         double feed = 0.0;
         double height = 0.0;
+        // Where the head comes from, when the plan knows it, and the travel
+        // from there, planned with the paths across layers; the emitter takes
+        // it when the head is exactly there (a route around the walls costs
+        // hundreds of tests, and the layers are written one after another).
+        std::optional<Point2d> from;
+        TravelPlan travel;
     };
+    // The aligned seam's candidates of each wall loop of a layer (by its
+    // place in the layer's walls), found for many layers at once ahead of
+    // the plans, which only pick among them (perimeters.md, rule 8).
+    std::vector<std::vector<std::vector<std::size_t>>> loop_candidates(model.layers.size());
     // The order of a layer's paths and their seams. It goes on from where the
     // layer below ended and from its seams, so the layers are planned one
     // after another; the G-code is written apart (write_layer), so a layer is
@@ -882,7 +897,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         };
         auto lay = [&](Toolpath path, const char* type, double feed) {
             if (!path.points.empty())
-                steps.push_back({std::move(path), type, feed, 0.0});
+                steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
         };
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -911,9 +926,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         if (l < model.seam_block.size())
             painted.block = &model.seam_block[l];
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam,
-                         bool walls = false) {
-            std::vector<Toolpath> ordered =
-                order_paths(paths, cursor, seam, seed, seams, walls && !painted.empty() ? &painted : nullptr);
+                         bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {}) {
+            std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams,
+                                                        walls && !painted.empty() ? &painted : nullptr, candidates);
             if (deferring) {
                 for (const Toolpath& t : ordered) {
                     if (t.wavy) { // its waves are its own: not cut by height
@@ -962,6 +977,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // bead index in nearest order; then the fills, one kind after the other.
         struct Island {
             std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
+            std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Point2d> ends;                  // where its paths start or end
         };
@@ -995,10 +1011,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 i.ends.push_back(t.points.back().p);
         };
         if (l < model.walls.size())
-            for (const Toolpath& t : model.walls[l].toolpaths)
-                if (!t.points.empty()) {
+            for (std::size_t k = 0; k < model.walls[l].toolpaths.size(); ++k)
+                if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty()) {
                     Island& i = island(t);
                     i.walls[t.index].push_back(t);
+                    i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
                     add(i, t);
                 }
         if (l < model.fills.size()) {
@@ -1067,8 +1084,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             const Island& i = islands[next];
             auto walls = [&](int index, const std::vector<Toolpath>& paths) {
                 const bool outer = index == 0;
+                const auto found = i.candidates.find(index);
                 group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
+                      found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
             };
             if (s.zaa) {
                 for (const auto& [index, paths] : i.walls)
@@ -1085,7 +1104,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
         if (l < model.thick.size() && !model.thick[l].empty()) {
             const ThickLayer& t = model.thick[l];
-            steps.push_back({{}, nullptr, 0.0, t.height});
+            steps.push_back({{}, nullptr, 0.0, t.height, {}, {}});
             deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
@@ -1100,7 +1119,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (std::size_t k = 0; k < 5; ++k)
                 group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
             flush();
-            steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom});
+            steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
         }
         return steps;
     };
@@ -1147,7 +1166,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 continue;
             }
             const Toolpath& t = step.path;
-            g.travel(t.points.front().p, s.travel_speed, planner);
+            g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr);
             g.type(step.type);
             g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)
@@ -1241,10 +1260,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.flush(out);
     };
 
-    // Planned in order, simplified in parallel and written in order: the
-    // stages overlap across layers, and a slowed layer is written again from
-    // the same plan.
+    // Where a path leaves the head: a closed one back at its start.
+    const auto end_of = [](const Toolpath& t) {
+        return t.closed && t.points.size() > 2 ? t.points.front().p : t.points.back().p;
+    };
+    // Planned in order, simplified and their travels planned in parallel, and
+    // written in order: the stages overlap across layers, and a slowed layer
+    // is written again from the same plan. Simplifying keeps a path's ends,
+    // so the last plan's end is where the next layer starts from.
     std::vector<std::vector<Step>> planned(model.layers.size());
+    std::optional<Point2d> last_end;
     std::size_t next_layer = 0;
     const std::size_t in_flight = 4 * std::max<std::size_t>(1, std::thread::hardware_concurrency());
     tbb::parallel_pipeline(
@@ -1255,17 +1280,50 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                                     control.stop();
                                                     return 0;
                                                 }
-                                                const std::size_t l = next_layer++;
-                                                planned[l] = plan_layer(l, actives[l]);
-                                                return l;
+                                                return next_layer++;
                                             }) &
             tbb::make_filter<std::size_t, std::size_t>(tbb::filter_mode::parallel,
                                                        [&](std::size_t l) {
-                                                           for (Step& step : planned[l])
-                                                               if (step.type)
-                                                                   step.path = simplify_toolpath(step.path, s.gcode_resolution);
+                                                           if (s.seam != SeamMode::Aligned || l >= model.walls.size())
+                                                               return l;
+                                                           const std::vector<Toolpath>& walls = model.walls[l].toolpaths;
+                                                           loop_candidates[l].resize(walls.size());
+                                                           for (std::size_t k = 0; k < walls.size(); ++k)
+                                                               if (walls[k].closed && !walls[k].points.empty())
+                                                                   loop_candidates[l][k] = seam_candidates(walls[k]);
                                                            return l;
                                                        }) &
+            tbb::make_filter<std::size_t, std::size_t>(tbb::filter_mode::serial_in_order,
+                                                       [&](std::size_t l) {
+                                                           planned[l] = plan_layer(l, actives[l]);
+                                                           std::vector<std::vector<std::size_t>>().swap(loop_candidates[l]);
+                                                           for (Step& step : planned[l])
+                                                               if (step.type) {
+                                                                   step.from = last_end;
+                                                                   break;
+                                                               }
+                                                           for (const Step& step : planned[l])
+                                                               if (step.type)
+                                                                   last_end = end_of(step.path);
+                                                           return l;
+                                                       }) &
+            tbb::make_filter<std::size_t, std::size_t>(
+                tbb::filter_mode::parallel,
+                [&](std::size_t l) {
+                    const TravelPlanner& planner = *plans[plan_of[l]].planner;
+                    std::optional<Point2d> from;
+                    for (Step& step : planned[l]) {
+                        if (!step.type)
+                            continue;
+                        step.path = simplify_toolpath(step.path, s.gcode_resolution);
+                        if (from)
+                            step.from = from;
+                        if (step.from)
+                            step.travel = planner.plan(*step.from, step.path.points.front().p);
+                        from = end_of(step.path);
+                    }
+                    return l;
+                }) &
             tbb::make_filter<std::size_t, void>(tbb::filter_mode::serial_in_order, [&](std::size_t l) {
                 write(l, planned[l]);
                 std::vector<Step>().swap(planned[l]);

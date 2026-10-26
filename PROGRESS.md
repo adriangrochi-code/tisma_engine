@@ -4512,3 +4512,53 @@ instrucciones. Calcular antes, en paralelo, el offset por `support.xy_gap` no ca
 **Sigue:** medir la GPU en una placa real; si rinde, pasar también el relleno de las grillas a la GPU. Los contornos
 y la resta de la separación (0,77 s en el cráneo) son lo que más queda en la CPU.
 
+
+## 2026-10-26 — costura alineada tan rápida como `nearest` (RV10)
+
+**Por qué:** la sexta medición del equipo de fichas (`qa/2026-10-26-velocidad.md`, en `dev` `5b0bdbd`) dejó RV10 sin
+cumplir: el conejo con costura `aligned` tardaba 1,61 veces lo de `nearest` (meta 1,2). Sin el conejo (no se puede
+usar), se midió con una gota con bultos de 172 080 triángulos y 450 capas, generada por un script propio.
+
+**Lo que costaba:** un perfil (callgrind) en la gota mostró que no eran los viajes sino la búsqueda de esquinas:
+- las paredes de esta pieza tienen hasta 11 000 puntos por lazo, amontonados en las esquinas redondeadas del offset;
+- para medir el giro de cada punto se caminaba, punto por punto, hasta el primero a 0,1 mm de cada lado: decenas de
+  pasos por punto, 76 millones en 60 capas.
+
+**Hecho** (`src/gcode/order.*`, `src/gcode/writer.cpp`):
+- **Esquinas en tiempo lineal:** una cuerda nunca es más larga que el camino por el lazo, así que los puntos a menos
+  de 0,1 mm por el lazo (con un margen mucho más grande que el redondeo de las sumas) no pueden estar a 0,1 mm en línea
+  recta. Un puntero sobre el largo acumulado, que solo avanza, los saltea; los demás se miden como antes. Las esquinas
+  son las mismas.
+- **Candidatos aparte, elección en orden** (`perimeters.md`, regla 8, el camino sin GPU): `seam_candidates` depende solo
+  del lazo, así que una etapa nueva del pipeline los busca en paralelo para todas las paredes de cada capa, antes del
+  plan. El plan, que sigue a la capa de abajo, solo elige entre ellos.
+- **Viajes en paralelo:** el viaje hasta cada recorrido se planea en la etapa paralela, desde donde termina el
+  anterior (simplificar conserva las puntas). El escritor lo usa solo si la boquilla está exactamente ahí; si no, lo
+  planea él, como antes.
+- **Pruebas:** las esquinas contra la caminata punto por punto en 300 lazos al azar (estrellas con puntas redondeadas
+  de hasta 40 puntos amontonados, puntos repetidos, lazos más chicos que 0,1 mm, en los dos sentidos); y los candidatos
+  dados de antemano eligen las mismas costuras que sin ellos.
+
+**Medido** (4 núcleos, mediana de 5, tiempo total del comando):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Gota, costura `aligned` | 3,81 s (`write_ms` 1524) | 2,68 s (`write_ms` 463) |
+| Gota, costura `nearest` | 2,69 s (`write_ms` 478) | 2,79 s (`write_ms` 466) |
+| Alineada contra `nearest` (RV10, meta 1,2) | 1,41 veces | 0,96 veces |
+| Cráneo de triceratops sin soportes | 4,93 s (`write_ms` 861) | 4,72 s (`write_ms` 566) |
+| Benchy | 0,96 s | 0,97 s |
+
+- Los viajes en paralelo solos (prueba A/B): cráneo `write_ms` 883 → 568, Benchy 158 → 130; en la gota, nada.
+- **RV6:** el G-code es el mismo byte a byte en 21 casos: Benchy (por defecto, gyroid, alineada, una pared), cajas,
+  cubo con piel difusa, cilindros, esferas (soportes, ZAA, torre, no planar), islas, placa, tubo, torcido, estrella
+  hueca, gota y cráneo con dos juegos de ajustes.
+- **Pruebas:** los 376 casos de la suite pasan en Release.
+
+**La GPU no rinde acá** (regla 8 pide la GPU cuando hay una): para dar las mismas esquinas bit a bit, el cálculo tiene
+que ser en doble precisión, que en las placas de consumo corre de 32 a 64 veces más lento que en simple. Y habría que
+copiar a la GPU todos los puntos de todas las paredes (en la gota, unos 15 millones, unos 240 MB, estimado). Con el
+cambio, la costura alineada ya cuesta lo mismo que `nearest`: no queda nada para ganar. Se avisa al equipo de fichas.
+
+**Sigue:** la pared exterior en espiral (pedido del dueño, ficha `walls_extra.md`, regla 4, costura en bufanda con la
+vuelta entera), V3 y V4 con la regla de 0,005 mm, RV7 con una pared y RV9.
