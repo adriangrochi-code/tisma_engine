@@ -53,6 +53,17 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 | Wang y otros. *Cost-effective Printing of 3D Objects with Skin-Frame Structures.* ACM TOG 32(6), 2013 | Cáscara con armazón interno (E3) |
 | Mueller y otros. *WirePrint: 3D Printed Previews for Fast Prototyping.* UIST 2014 | Vista previa en alambre (W1) |
 
+## Resina (`qa/2026-10-26-papers-resina.md`)
+
+| Fuente | Para qué |
+|---|---|
+| Jacobs. *Rapid Prototyping & Manufacturing: Fundamentals of Stereolithography.* SME, 1992 | Curva de trabajo `Cd = Dp · ln(E / Ec)` (R1) |
+| Gong, Bickham, Woolley, Nordin. Lab on a Chip 17, 2017. [BYU](https://scholarsarchive.byu.edu/facpub/1923) | Profundidad de penetración desde el absorbente (R2) |
+| Pritchard, de Beer, Whelan, Scott, Burns. *Modeling and Correcting Cure-Through in Continuous Stereolithographic 3D Printing,* 2019, DOI 10.1002/admt.201900700 | Curado de más bajo huecos y voladizos (R3) |
+| *Development of a Calibration Procedure of the Additive Masked Stereolithography Method…* Applied Sciences 15(13), 7412, 2025 | Máscara de iluminación de la pantalla (R4) |
+| Pan, He, Xu, Feinerman. Rapid Prototyping Journal 23(2), 2017 | Fuerza de despegue por capa (R6) |
+| Flach, Chartoff. Solid Freeform Fabrication Symposium, 1994. [PDF](https://utw10945.utweb.utexas.edu/Manuscripts/1994/1994-23-Flach.pdf) | Contracción y alabeo (R8) |
+
 ## Estabilidad durante la impresión
 
 | Fuente | Para qué |

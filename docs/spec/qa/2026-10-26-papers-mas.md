@@ -48,8 +48,8 @@ Para `stability.md`, `structural_optimization.md` y `structural_analysis.md`.
 
 - **Alabeo y esquinas que se levantan:** solo foros y documentación de slicers; ningún paper con un modelo que el
   motor pueda usar. `docs/RESEARCH_MAP.md` ya trata la deformación.
-- **Resina:** lo publicado sobre la fuerza de despegue habla de la máquina (vibración, film tensado, cuba que se
-  inclina), no del laminador; lo que depende del laminador (orientación, ventosas) ya está en `resin.md`.
+- **Resina:** buscada aparte, con los papers que sirven al laminador (curado, pantalla, despegue, ventosas):
+  `2026-10-26-papers-resina.md`.
 
 ## Lo que más rinde para el motor, en orden
 
