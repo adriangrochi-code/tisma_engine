@@ -308,6 +308,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Servidor de Tisma Cloud: maestro y nodos, cola con prioridades, cuentas, planes y cobro, seguridad | `cloud.md` (contrato; el servidor es un programa aparte, `INTEGRATION.md`) | ✔ |
 | Informar un problema, con catálogo de errores y recompensa | `problem_reports.md` (la pantalla), `cloud.md` (regla 11; el catálogo y la recompensa son del servidor) | ✔ |
 | Pieza de prueba propia «Mabel», con mecanismos (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `quality_model.md` | ✔ (ficha) |
+| Recorrido que ahorra tiempo sin cambiar el perfil (pedido del dueño, 26-10-2026) | `toolpath_time.md` | ✔ (ficha) |
 | Biblioteca de modelos de Tisma Cloud con laminados hechos y análisis (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `model_library.md` | ✔ (ficha; más adelante) |
 | Thingiverse dentro del programa | `thingiverse.md` | ✔ (la búsqueda con la API se confirma con un token antes de programarla, regla 20) |
 | App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | `mobile_app.md` (app nueva, de cero, sobre el motor) | ✔ |

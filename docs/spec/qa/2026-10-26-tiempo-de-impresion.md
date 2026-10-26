@@ -55,18 +55,13 @@ las mismas velocidades en todos los casos (las de respaldo del motor). Benchy y 
 | T9 | Menos soporte | Orientación automática que minimiza soporte y altura; soporte en árbol | Ezair, Massarwi y Elber (2015), «Orientation analysis of 3D objects toward minimal support volume», *Computers & Graphics*; Vanek, Galicia y Benes (2014), «Clever support», *Computer Graphics Forum* | Depende de la pieza; el soporte fue casi la mitad del recorrido del cráneo de triceratops en Tisma Slicer (178 de 383 m) |
 | T10 | Capas cortas sin esperar | Cuando una capa es más rápida que el tiempo mínimo, imprimir otra pieza de la placa en vez de frenar; avisar que conviene imprimir varias copias | `cooling.md` y `print_review.md` | Grande en placas con piezas chicas |
 
-## Propuesta
+## Decisión del dueño
 
-En este orden, por ahorro y por lo poco que cambia la calidad:
-1. **T1:** que la altura variable también use capas más altas que `layers.height`, hasta `machine.max_layer_height`,
-   donde la pendiente lo permite.
-2. **T2:** que `combine_layers` funcione con todos los patrones, `lightning` incluido, y que la interfaz lo sugiera.
-3. **T3:** que la interfaz proponga el relleno según para qué es la pieza («para mirar» o «para usar»).
-4. **T4:** ancho de cordón propio para el relleno y las paredes de adentro (`infill.width`, `walls.inner_width`),
-   limitado por el flujo máximo.
-5. **T6 y T5:** orden de recorrido y caminos continuos, con metas medidas en viajes y arranques.
-6. **T7:** arcos y esquinas suavizadas (`gcode_extras.md`, regla 10).
-7. **T8 y T10:** más adelante; T8 necesita una calibración de vibraciones por impresora.
+El dueño no quiere cambiar el perfil (capas, rellenos, anchos): solo el recorrido. De la tabla quedan T5 (caminos
+continuos), T6 (orden de recorrido) y T7 (esquinas), más lo que mostró la medición de viajes: líneas vecinas que se
+unen en vez de viajar, y retracciones solo cuando hacen falta. Están en `features/toolpath_time.md`, con las metas RT1
+a RT4 de `BENCHMARKS.md`. T1 a T4, T8 y T9 quedan como ideas; T10 sigue en `cooling.md`.
 
-Cada una con una prueba: el mismo modelo con y sin la técnica, el tiempo estimado y, para las que cambian la forma
-impresa, las medidas de la pieza de prueba Mabel (`features/quality_model.md`).
+Hallazgos que siguen valiendo aunque no cambien el perfil:
+- `infill.combine_layers` no se aplica con `lightning` (regla 2 de arriba);
+- la altura variable nunca usa capas más altas que `layers.height` (regla 3 de arriba).
