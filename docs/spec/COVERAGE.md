@@ -295,6 +295,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Calibraciones y sus piezas | `calibrations.md`, `calibration_models.md` | ✔ |
 | Revisión antes de imprimir y estabilidad | `print_review.md`, `stability.md` | ✔ |
 | Ubicación en la cama | `placement.md` | ✔ |
+| Impresoras de pellets (pedido del dueño, 26-10-2026; Tisma Slicer no las trata aparte) | `pellets.md` | ✔ |
+| Impresoras de metal por arco, WAAM (pedido del dueño, a futuro) | `waam.md` (estudio) | ◐ las reglas se cierran con una máquina de prueba |
 
 ## Servicios
 
