@@ -448,7 +448,14 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
 - [ ] Puentes cortos sin soporte (`max_bridge_length`)
-- [ ] En GPU: voladizos y proyección, si conviene
+- [ ] En GPU: voladizos y proyección, si conviene. Hecho en parte (2026-10-26, pedido del dueño):
+  - la columna del soporte va en una grilla de bits de un octavo de cordón (`src/geom/bitgrid.*`); el cierre por un
+    cordón es dilatar y erosionar con un disco, y cuesta lo mismo aunque la pieza tenga ruido;
+  - el mismo paso corre en la GPU (`support_column.comp`), con los mismos bits que la CPU (prueba con radios 1, 8 y
+    31, y un laminado con soportes);
+  - cráneo de 546 684 triángulos con soportes: 12,9 → 5,8 s; Benchy con soportes 1,38 → 1,18 s; las esferas igual;
+  - falta: medir la GPU en una placa real (acá solo hay lavapipe, que emula la GPU en la CPU y tarda más que el
+    camino de la CPU); los voladizos siguen en la CPU, con Clipper2, y cuestan poco (85 ms en el cráneo)
 - [ ] Criterio de F5: una pieza con voladizos se imprime y el soporte sale (necesita al dueño)
 
 ## Altura de capa por zona (pedido del dueño, 2026-10-25)

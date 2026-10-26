@@ -32,8 +32,17 @@ TEST_CASE("support: a T's cap is held up from the bed, outside the stem", "[supp
     CHECK_THAT(area_mm2(over[10]), WithinAbs(100.0 - 2.402 * 2.402, 1e-6));
     CHECK(over[11].empty());
     const std::vector<Polygons> support = support_areas(regions, heights, p);
-    for (int l = 0; l <= 8; ++l)
-        CHECK_THAT(area_mm2(support[std::size_t(l)]), WithinAbs(100.0 - 3.2 * 3.2, 1e-6)); // 0.6 away from the stem
+    // 0.6 away from the stem, exactly; the cap's outline, from a grid of an
+    // eighth of a bead (0.05 mm), within a pixel and a half outwards.
+    const double pixel = p.bead / 8.0;
+    for (int l = 0; l <= 8; ++l) {
+        const double area = area_mm2(support[std::size_t(l)]);
+        CHECK(area >= 100.0 - 3.2 * 3.2 - 1e-6);
+        CHECK(area <= (10.0 + 3.0 * pixel) * (10.0 + 3.0 * pixel) - 3.2 * 3.2);
+        CHECK_FALSE(region_contains(support[std::size_t(l)], 5.0, 5.0));
+        CHECK_FALSE(region_contains(support[std::size_t(l)], 3.41, 5.0)); // 0.59 from the stem
+        CHECK(region_contains(support[std::size_t(l)], 3.39, 5.0));
+    }
     CHECK(support[9].empty()); // the gap under the cap
     for (int l = 10; l < 15; ++l)
         CHECK(support[std::size_t(l)].empty());

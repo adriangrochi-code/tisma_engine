@@ -2,8 +2,13 @@
 
 #include "support/support.hpp"
 
+#include "geom/bitgrid.hpp"
+#include "gpu/compute.hpp"
+
 #include <oneapi/tbb/parallel_for.h>
 
+#include <algorithm>
+#include <climits>
 #include <cmath>
 #include <numbers>
 
@@ -17,6 +22,9 @@ constexpr double kAnyReach = 0.01;
 
 // mm: a step this much past the allowed reach is still no overhang.
 constexpr double kTouching = 1e-3;
+
+// The support column's grid: pixels a bead across (the closing's radius).
+constexpr int kPixelsPerBead = 8;
 
 } // namespace
 
@@ -59,24 +67,87 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
         });
     }
     std::vector<Polygons> out(n);
-    // From the top down: a column grows with every overhang (gap layers lower)
-    // and loses what the part occupies, where it stands on the part.
-    Polygons column;
-    for (std::size_t l = n; l-- > 0;) {
-        const std::size_t above = l + 1 + std::size_t(std::max(params.z_gap_layers, 0));
-        if (above < n && !over[above].empty()) {
-            // Each overhang leaves out the band its layer holds by itself, so
-            // the overhangs of a slope project as rings with thin gaps between
-            // them: closing by one bead fills those (support needs no detail).
-            column = Clipper2Lib::Union(column, over[above], Clipper2Lib::FillRule::NonZero);
-            column = offset(offset(column, params.bead), -params.bead);
-        }
-        if (column.empty())
-            continue;
-        column = Clipper2Lib::Difference(column, regions[l], Clipper2Lib::FillRule::NonZero);
-        out[l] = Clipper2Lib::Difference(column, offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
+    // The column on a grid of an eighth of a bead (bitgrid.hpp): closing it
+    // by polygon offsets cost as much as every overlapping speck of a
+    // detailed part, and the grid is what the GPU takes. The column never
+    // leaves the overhangs' bounds (closing fills in, it does not grow), so
+    // the grid holds them, with room around for the closing.
+    Clipper2Lib::Rect64 bounds(INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN);
+    std::size_t highest = 0; // above the highest layer that takes an overhang, no column
+    for (std::size_t l = 0; l < n; ++l)
+        for (const Polygon& path : over[l])
+            for (const Clipper2Lib::Point64& q : path) {
+                bounds.left = std::min(bounds.left, q.x), bounds.right = std::max(bounds.right, q.x);
+                bounds.top = std::min(bounds.top, q.y), bounds.bottom = std::max(bounds.bottom, q.y);
+                highest = std::max(highest, l);
+            }
+    if (bounds.left > bounds.right)
+        return out;
+    const std::int64_t pixel = std::max<std::int64_t>(to_units(params.bead / double(kPixelsPerBead)), 1);
+    const int radius = kPixelsPerBead; // the closing: one bead
+    const int margin = 2 * radius + 2; // the overhangs grow a pixel, then the closing
+    const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;
+    const int width = int((bounds.right - bounds.left) / pixel) + 2 * margin + 1;
+    const int height = int((bounds.bottom - bounds.top) / pixel) + 2 * margin + 1;
+    const auto above_of = [&](std::size_t l) { return l + 1 + std::size_t(std::max(params.z_gap_layers, 0)); };
+    const auto adds = [&](std::size_t l) { return above_of(l) < n && !over[above_of(l)].empty(); };
+    // From the top down, a chunk of layers at a time: their grids filled in
+    // parallel; the column, in order, grows with every overhang (gap layers
+    // lower), is closed by a bead (each overhang leaves out the band its
+    // layer holds by itself, so the overhangs of a slope project as rings
+    // with thin gaps between them; support needs no detail) and loses what
+    // the part occupies, where it stands on the part; then, in parallel, its
+    // outline kept xy_gap away from the part.
+    constexpr std::size_t kChunk = 32;
+    std::vector<BitGrid> part(kChunk), add(kChunk), kept(kChunk);
+    BitGrid column(x0, y0, pixel, width, height);
+    for (std::size_t top = std::min(n, highest); top > 0;) {
+        const std::size_t bottom = top > kChunk ? top - kChunk : 0;
+        tbb::parallel_for(bottom, top, [&](std::size_t l) {
+            BitGrid& p = part[l - bottom];
+            p = BitGrid(x0, y0, pixel, width, height);
+            p.fill(regions[l]);
+            BitGrid& a = add[l - bottom];
+            a = BitGrid();
+            if (adds(l)) {
+                // Grown by a pixel's half-diagonal first: an overhang thinner
+                // than a pixel (a slope just past the threshold) still sets
+                // the pixels it crosses.
+                a = BitGrid(x0, y0, pixel, width, height);
+                a.fill(offset(over[above_of(l)], 0.75 * to_mm(pixel)));
+            }
+        });
+        const std::size_t count = top - bottom;
+        const std::span<const BitGrid> parts(part.data(), count), adding(add.data(), count);
+        if (params.gpu)
+            params.gpu->support_column(column, parts, adding, std::span<BitGrid>(kept.data(), count), radius);
+        else
+            support_column(column, parts, adding, std::span<BitGrid>(kept.data(), count), radius);
+        tbb::parallel_for(bottom, top, [&](std::size_t l) {
+            const BitGrid& c = kept[l - bottom];
+            if (c.width() == 0 || c.empty())
+                return;
+            // Simplified to half a bead (support needs no detail, and its
+            // lines follow the outline), then kept xy_gap off the part, exactly.
+            out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
+                                             Clipper2Lib::FillRule::NonZero);
+        });
+        top = bottom;
     }
     return out;
+}
+
+void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
+                    std::span<BitGrid> kept, int radius) {
+    for (std::size_t k = parts.size(); k-- > 0;) {
+        if (adds[k].width() > 0) {
+            column |= adds[k];
+            column.dilate(radius);
+            column.erode(radius);
+        }
+        column.subtract(parts[k]);
+        kept[k] = column;
+    }
 }
 
 } // namespace tisma

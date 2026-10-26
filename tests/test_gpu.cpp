@@ -1,6 +1,7 @@
 #include "gpu/compute.hpp"
 #include "io/stl.hpp"
 #include "slice/layers.hpp"
+#include "support/support.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -144,4 +145,63 @@ TEST_CASE("slicing on the GPU gives the same contours as on the CPU", "[gpu]") {
             }
         }
     }
+}
+
+namespace {
+
+Polygons rectangle(double x0, double y0, double x1, double y1) {
+    return {{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)}, {to_units(x0), to_units(y1)}}};
+}
+
+} // namespace
+
+TEST_CASE("the support column on the GPU has the CPU's bits", "[gpu]") {
+    gpu::Context& ctx = require_context();
+    // A grid wider than a 64-bit word and not a multiple of it, 12 layers:
+    // overhang rings and specks every other layer, parts that come and go.
+    const BitGrid shape(to_units(-1.0), to_units(-2.0), to_units(0.05), 333, 180);
+    std::vector<BitGrid> parts(12), adds(12), cpu(12), gpu(12);
+    for (int k = 0; k < 12; ++k) {
+        parts[std::size_t(k)] = shape;
+        parts[std::size_t(k)].fill(rectangle(2.0 + 0.3 * k, 1.0, 4.0 + 0.3 * k, 3.0));
+        if (k % 2 == 0) {
+            adds[std::size_t(k)] = shape;
+            adds[std::size_t(k)].fill(rectangle(0.5 + 0.2 * k, 0.5, 9.0 - 0.1 * k, 0.7 + 0.05 * k));
+            adds[std::size_t(k)].fill(rectangle(12.0, 4.0 + 0.1 * k, 12.04, 4.04 + 0.1 * k)); // a speck
+            adds[std::size_t(k)].fill(rectangle(-1.0, 3.0, 1.0, 5.0));                    // at the grid's edge
+        }
+    }
+    for (const int radius : {1, 8, 31}) {
+        CAPTURE(radius);
+        BitGrid column_cpu = shape, column_gpu = shape;
+        column_cpu.fill(rectangle(5.0, 5.0, 7.0, 6.0));
+        column_gpu = column_cpu;
+        support_column(column_cpu, parts, adds, cpu, radius);
+        ctx.support_column(column_gpu, parts, adds, gpu, radius);
+        CHECK(column_gpu == column_cpu);
+        for (std::size_t k = 0; k < 12; ++k) {
+            CAPTURE(k);
+            CHECK(gpu[k] == cpu[k]);
+        }
+        CHECK_FALSE(column_cpu.empty());
+    }
+}
+
+TEST_CASE("supports with the GPU are the CPU's", "[gpu]") {
+    gpu::Context& ctx = require_context();
+    // A T with a slanted cap: overhang rings on every layer of the slope.
+    std::vector<Polygons> regions;
+    for (int l = 0; l < 30; ++l)
+        regions.push_back(l < 15 ? rectangle(4, 4, 6, 6) : rectangle(-0.3 * (l - 15), 0, 10 + 0.3 * (l - 15), 10));
+    const std::vector<double> heights(30, 0.2);
+    SupportParams p;
+    const std::vector<Polygons> on_cpu = support_areas(regions, heights, p);
+    p.gpu = &ctx;
+    const std::vector<Polygons> on_gpu = support_areas(regions, heights, p);
+    REQUIRE(on_gpu.size() == on_cpu.size());
+    for (std::size_t l = 0; l < on_cpu.size(); ++l) {
+        CAPTURE(l);
+        CHECK(on_gpu[l] == on_cpu[l]);
+    }
+    CHECK(area_mm2(on_cpu[5]) > 50.0);
 }

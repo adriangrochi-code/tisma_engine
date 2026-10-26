@@ -170,7 +170,8 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
 
 Vulkan a través de volk, cargado en tiempo de ejecución: sin GPU, el motor sigue en la CPU. Los shaders están en
 `src/gpu/shaders/*.comp` y se compilan a SPIR-V con `tools/compile_shaders.py`; el SPIR-V generado se guarda en el
-repositorio. Hoy corren en la GPU el rango de capas por triángulo y los segmentos de cada capa.
+repositorio. Hoy corren en la GPU el rango de capas por triángulo, los segmentos de cada capa y la columna del
+soporte en su grilla de bits (`support_column.comp`, con los mismos bits que `support_column` de la CPU).
 
 ### `fea/`: análisis estructural
 

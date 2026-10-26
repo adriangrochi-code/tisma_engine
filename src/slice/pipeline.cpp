@@ -320,6 +320,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         sp.xy_gap = settings.support_xy_gap;
         sp.bead = settings.wall_width;
         sp.automatic = settings.support_automatic;
+        sp.gpu = gpu;
         // A painted face's own layer, a little wider: its overhang lies under it.
         const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
         const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);

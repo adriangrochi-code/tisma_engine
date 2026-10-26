@@ -4461,3 +4461,54 @@ otra sesión del motor estaba trabajando.
 **Sigue:** RV9 (los soportes y lo demás que va en serie), RV2 con tolerancia 0, las mediciones del conejo (RV7, RV8 y
 RV10) y la decisión del dueño sobre el ancho en V3 y V4.
 
+## 2026-10-26 — soportes más rápidos, en la CPU y en la GPU
+
+**Pedido del dueño:** mejorar la velocidad de laminado de los soportes, y buscar acelerarlos también con la GPU. Salió
+de su cráneo de triceratops (3MF de una MK3S, 546 684 triángulos): 13,2 s de laminado, 8 s en los soportes.
+
+**Por qué era lento:** la columna del soporte baja capa por capa y se cierra por un cordón (agrandar y achicar) en cada
+capa con un voladizo arriba. En una pieza escaneada, cada capa trae de 26 a 51 voladizos diminutos (ruido). La columna
+junta unos 250 anillos, y el offset de Clipper2 calcula todas sus intersecciones: 5,6 s en 307 cierres, 33 G
+instrucciones. Calcular antes, en paralelo, el offset por `support.xy_gap` no cambió nada.
+
+**Hecho:**
+- **Una grilla de bits** (`src/geom/bitgrid.*`):
+  - relleno por línea de barrido en los centros de los píxeles;
+  - dilatación y erosión con un disco, con desplazamientos de palabras de 64 bits;
+  - contornos por los bordes de los píxeles.
+  - Pruebas propias: relleno, disco, cierre de huecos, borde de la grilla, contornos con agujeros y diagonales, y
+    volver a rellenar el contorno da los mismos bits.
+- **La columna del soporte en la grilla** (`support_areas`). Píxeles de un octavo de cordón (0,05 mm con cordón de
+  0,4), y el cierre es un disco de un cordón. Los voladizos se agrandan tres cuartos de píxel antes de rasterizar: un
+  anillo más fino que un píxel (una pendiente apenas pasada del límite) no se pierde; sin eso, el cráneo perdía un
+  19 % de soporte. La grilla cubre solo los voladizos, y las capas de arriba del último no la usan. El contorno se
+  simplifica a medio cordón (con un píxel, las uniones en zigzag sumaban un 40 % de movimientos) y la separación XY se
+  resta exacta. Las grillas de cada tanda de 32 capas se llenan en paralelo y los contornos se sacan en paralelo; la
+  columna va en orden.
+- **La GPU:** `support_column.comp` hace los mismos pasos, una invocación por palabra de 32 bits, una tanda de capas en
+  un solo envío (`run_steps`, con barreras entre pasos). `SupportParams::gpu` lo elige cuando hay contexto. Una prueba
+  compara los bits con la CPU con radios 1, 8 y 31 y una grilla que no es múltiplo de la palabra; otra, los soportes
+  enteros de una T con tapa en pendiente.
+
+**Medido** (4 núcleos, mediana de 3, `slice_ms`):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Cráneo, ajustes del 3MF (MK3S, soportes a 35°) | 12,9 s | 5,8 s |
+| Benchy con soportes | 1,38 s | 1,18 s |
+| Esfera grande con soportes | 2,10 s | 2,08 s |
+| Esfera de 50 mm con soportes | 0,58 s | 0,58 s |
+
+- **El paso de los soportes del cráneo, solo:** de 7,6 s a 1,4 s (rasterizar 81 ms, columna 529 ms, contornos y
+  separación 773 ms).
+- **La GPU acá es lavapipe**, que emula en la CPU: el cráneo tarda 8,95 s con ella contra 6,13 s sin ella, con el
+  mismo G-code byte a byte. Falta medir en una placa real; por eso la línea de comandos sigue sin usar lavapipe.
+- **RV6:** el soporte cambia. Área: cráneo +9 %, Benchy +5 %, esferas +1 % (el borde de afuera queda a menos de
+  0,05 mm, del lado seguro). Movimientos de soporte: Benchy 8475 → 7925, esfera grande 40 432 → 40 510. Tiempo de
+  impresión: cráneo 4 h 58 min → 4 h 50 min; Benchy 1 h 26 min 33 s → 1 h 27 min 28 s.
+- **Pruebas:** 402 de 402 en Release, 600 casos del fuzzer sin fallas. La prueba del soporte de la T ya no pide el
+  área exacta: la pide dentro de un píxel y medio por lado, y la separación de 0,6 mm del tallo, exacta.
+
+**Sigue:** medir la GPU en una placa real; si rinde, pasar también el relleno de las grillas a la GPU. Los contornos
+y la resta de la separación (0,77 s en el cráneo) son lo que más queda en la CPU.
+
