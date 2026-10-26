@@ -252,12 +252,12 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | `formats.md` | ◐ falta el ZIP: solo lo abre la interfaz |
+| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | `formats.md` (reglas 1 a 5 y 17) | ✔ |
 | Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | `formats.md` | ◐ medidos el paquete, las mallas, las partes y los ajustes; falta lo que se guarda desde la interfaz (regla 10) |
-| Abrir proyectos de Bambu Studio y OrcaSlicer | — | ✘ → `formats.md` (falta medirlo) |
-| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | `formats.md` | ◐ faltan con soportes y las trayectorias |
+| Abrir proyectos de Bambu Studio y OrcaSlicer | `formats.md` (regla 18) | ◐ falta medirlo con proyectos reales |
+| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | `formats.md` (reglas 15 y 16) | ✔ |
 | Archivos de resina: importar, exportar | `resin.md` | ◐ → `formats.md` |
-| Exportar a una tarjeta o memoria y expulsarla | — | ✘ → `formats.md` |
+| Exportar a una tarjeta o memoria y expulsarla | `formats.md` (regla 19) | ✔ |
 
 ## Perfiles y configuración
 
