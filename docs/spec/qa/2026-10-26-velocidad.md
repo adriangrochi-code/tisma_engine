@@ -22,6 +22,16 @@ No se leyó su código.
 | Conejo al 150 % | 1,9 s | 3,4 s |
 | Tornillo M3 al 400 % | 1,0 s | 0,3 s |
 
+**Ojo con la comparación:** con sus valores por defecto, Tisma Slicer lamina el Benchy en capas de 0,3 mm (160 capas)
+y el motor en 0,2 mm (240 capas). Con las mismas capas de 0,2 mm:
+
+| Benchy, capas de 0,2 mm | Tiempo | CPU | G-code | Movimientos `G1` |
+|---|---|---|---|---|
+| Tisma Slicer | 4,39 s | 11,9 s | 3,08 MB | 99 480 |
+| Motor | 6,07 s | 7,0 s | 7,57 MB | 202 429 |
+
+El motor gasta menos CPU que Tisma Slicer para la misma pieza; tarda más porque usa casi un solo núcleo.
+
 ## Por qué
 
 1. **El trabajo total es parecido; el motor usa un solo núcleo.** En el Benchy, Tisma Slicer gasta 8,9 s de CPU en
@@ -53,15 +63,30 @@ No se leyó su código.
    - las paredes sí: 1 pared, 2,4 s; 4 paredes, 7,4 s. Puede ser porque el área que se compara entre capas depende de
      las paredes.
 
+5. **Sin las capas de abajo, lo que queda** (Benchy con `bottom_layers` en 0: 0,93 s; uso de CPU cada 0,05 s):
+   - de 0 a 0,15 s, 1 núcleo (leer y preparar la malla);
+   - de 0,15 a 0,5 s, 4 núcleos (el resto del laminado);
+   - de 0,5 a 0,85 s, 1 núcleo, y recién al final se escribe el archivo: el armado del G-code va en serie.
+6. **Por qué el G-code pesa 2,5 veces más** que el de Tisma Slicer con las mismas capas:
+   - `;WIDTH` va en 123 717 líneas (1,61 MB, el 21 % del archivo): casi en cada movimiento. En Tisma Slicer, solo
+     cuando cambia el ancho (15 855 líneas);
+   - el motor hace 2 veces más movimientos (202 429 contra 99 480). Parece que no simplifica los tramos muy cortos
+     de las curvas (Tisma Slicer junta los tramos que se apartan menos que una resolución fija).
+
 ## Qué hacer
 
 | # | Qué | Por qué | Ganancia esperada en el Benchy |
 |---|---|---|---|
 | V1 | Revisar el cálculo de las superficies de abajo: corre en un solo núcleo y cuesta casi lo mismo con 1 capa que con 3 | Es el 85 % del tiempo | De 6,3 s a cerca de 1 s si se lleva al costo de las de arriba |
 | V2 | Si una capa solo necesita la de abajo ya cortada, hacerlo en paralelo por capa, como el resto | El paso que mira las capas vecinas queda fuera del paso en paralelo (`docs/ARCHITECTURE.md` del motor) | Hasta 4 veces en 4 núcleos |
-| V3 | Un G-code más chico: el del motor pesa 3,3 veces el de Tisma Slicer para el mismo Benchy (7,57 MB contra 2,29 MB) | Menos para escribir, guardar y mandar (`model_library.md`, regla 16) | Poco en tiempo; mucho en espacio |
+| V3 | `;WIDTH` solo cuando cambia el ancho | 21 % del archivo (regla 6) | −1,6 MB en el Benchy |
+| V4 | Simplificar las curvas: juntar tramos que se apartan menos que una resolución (por ejemplo 0,0125 mm) | 2 veces más movimientos que Tisma Slicer | Archivo y armado del G-code a la mitad; la impresora recibe menos comandos por segundo |
+| V5 | Armar el G-code de cada capa en paralelo y unirlo en orden | 0,35 s en un solo núcleo al final | Unos 0,25 s en el Benchy, más en piezas grandes |
+| V6 | En el servidor, un laminado por núcleo | Cada laminado del motor hoy usa casi un núcleo | Medido: 4 a la vez en 4 núcleos, 1737 Benchys por hora contra 1462 de Tisma Slicer (con sus capas de 0,3 mm) |
 
-Con V1 y V2, el motor quedaría más rápido que Tisma Slicer: 0,84 s sin capas sólidas contra 3,3 s.
+Con V1 y V2, el motor quedaría cerca de 1 s contra 4,4 s de Tisma Slicer con las mismas capas: unas 4 veces más
+rápido. V3 y V4 bajan el G-code a menos de la mitad, que ayuda al guardado de la biblioteca y al envío a las
+impresoras.
 
 ## Para repetir la medición
 
