@@ -396,9 +396,9 @@ conectar desde un ícono chico en la tarjeta de la impresora que abre el menú d
 
 41. **Conexión por red activada de entrada:** el programa busca impresoras en la red local desde que arranca, sin que
     la persona tenga que encender nada.
-    - Usa los anuncios en la red que publique cada fabricante o programa de impresoras; cuáles, y cómo se leen, los
-      agrega `printer_connections.md` con su fuente oficial. Mientras esa ficha no defina uno para una marca, esas
-      impresoras se agregan a mano (dirección y datos), como hoy.
+    - Usa los anuncios en la red de cada fabricante o programa de impresoras, con su fuente oficial:
+      `printer_connections.md`, «Búsqueda en la red» (Bambu Lab, OctoPrint y Moonraker). Las marcas sin fuente oficial
+      se agregan a mano (dirección y datos), como hoy.
     - Una preferencia «Buscar impresoras en la red» (encendida por defecto) en Preferences › General la apaga.
     - Encontrar una impresora no la conecta: conectar siempre lo pide la persona (regla 43), y los códigos de acceso se
       guardan como secretos (`printer_connections.md`, regla 8 de la parte de Bambu Lab).

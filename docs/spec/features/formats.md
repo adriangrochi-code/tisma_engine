@@ -9,6 +9,8 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
 **Fuentes:**
 - 3MF Consortium, [3MF Core Specification](https://github.com/3MFConsortium/spec_core/blob/master/3MF%20Core%20Specification.md):
   el paquete, el modelo, las unidades y la transformación de cada pieza;
+- 3MF Consortium, «Production Extension» (`https://github.com/3MFConsortium/spec_production`): mallas en archivos
+  aparte, para los proyectos de Bambu Studio y OrcaSlicer (regla 18);
 - las mediciones de abajo, del 25-10-2026, con Tisma Slicer como caja negra desde la línea de comandos, y un proyecto
   guardado desde la interfaz (24-10-2026).
 
@@ -87,6 +89,35 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
 15. **Con soportes y las trayectorias:** la interfaz tiene «Export Plate as STL/OBJ Including Supports» y «Export
     Toolpaths as OBJ». No se midieron.
 
+16. **Exportar con soportes y trayectorias** (completa la regla 15):
+    - «con soportes» suma a la malla de la placa el soporte generado al laminar, como sólidos capa por capa (cada
+      región de soporte de una capa, levantada a la altura de su capa);
+    - «trayectorias como OBJ» escribe cada extrusión como un tubo de sección rectangular de su ancho y su altura, con
+      un material por tipo de línea (`GCODE_OUTPUT.md`), para verla en otro programa;
+    - las dos piden un laminado al día; si no lo hay, laminan primero.
+17. **Abrir un ZIP:** se listan los modelos que trae (STL, OBJ, 3MF, AMF, STEP) y se abren todos como objetos de la
+    placa. Los otros archivos se ignoran, con un aviso que dice cuántos. Un ZIP dentro de otro no se abre.
+18. **Abrir proyectos de Bambu Studio y OrcaSlicer:**
+    - son 3MF que guardan las mallas en archivos aparte, referidos con la extensión de producción del estándar 3MF
+      (3MF Consortium, «Production Extension»);
+    - se leen las mallas, sus nombres, sus partes y su ubicación; si el proyecto tiene varias placas, cada placa pasa a
+      una cama (`model_tools.md`, regla 26);
+    - los ajustes de esos programas no se toman: un diálogo avisa «Se abrieron las piezas; los ajustes del proyecto
+      no se usan» y ofrece elegir impresora y perfiles;
+    - sin medir todavía con proyectos reales de cada programa: hace falta un archivo de muestra de cada uno, con
+      permiso para usarlo en las pruebas.
+19. **Guardar en una tarjeta o memoria:**
+    - el programa detecta las unidades extraíbles conectadas (Windows: unidades de tipo extraíble; Linux: lo montado
+      bajo `/media` o `/run/media`; macOS: lo montado bajo `/Volumes` que no sea el disco del sistema);
+    - con una conectada, la salida «Guardar en la tarjeta» (Ctrl+U) aparece en el menú del botón principal
+      (`interface.md`) y escribe ahí el G-code con su nombre (`gcode_templates.md`);
+    - al terminar, una notificación ofrece **Expulsar** (Ctrl+T), que desmonta la unidad y avisa cuando se puede
+      sacar;
+    - si se desconecta durante la escritura, se avisa y el archivo a medias se borra si la unidad vuelve.
+20. **Miniaturas en el G-code** (`gcode_extras.md`): tamaños y formatos salen del perfil de la impresora. Su forma
+    exacta en el archivo (comentarios, codificación y largo de cada línea) se mide guardando un G-code desde la
+    interfaz de Tisma Slicer: queda pendiente.
+
 ## Pruebas
 
 Medidas en Tisma Slicer (25-10-2026) desde la línea de comandos: `--info` da medidas, triángulos y partes; las piezas
@@ -105,3 +136,11 @@ se laminan con los ajustes base de `walls_extra.md`.
 | FM9 | 3MF con un objeto de dos partes de 10 × 20 × 10 mm (extrusores 1 y 2) | Un objeto, 2 partes, 24 triángulos. Exportado a STL: una malla de 24 triángulos |
 | FM10 | OBJ de la caja (de 0 a 20) exportado a 3MF | Vértices de 0 a 20 en el modelo; ubicación del objeto: identidad; matriz de la parte con traslado (10, 10, 5) |
 | FM11 | La caja exportada a STL y a OBJ | STL: binario, cabecera en cero, 12 triángulos, mínimo en (0, 0, 0). OBJ: 8 vértices, 12 caras |
+
+Reglas 16 a 19:
+
+| # | Escenario | Resultado esperado |
+|---|---|---|
+| FM20 | Exportar trayectorias como OBJ del cubo de `gcode_motion.md` | Un tubo por extrusión, con el ancho y el alto del G-code, y un material por tipo |
+| FM21 | Abrir un ZIP con dos STL y un PDF | Dos objetos en la placa; aviso de 1 archivo ignorado |
+| FM22 | Unidad extraíble simulada (una carpeta montada como extraíble) | Aparece «Guardar en la tarjeta»; el G-code queda en la unidad; Expulsar la desmonta |

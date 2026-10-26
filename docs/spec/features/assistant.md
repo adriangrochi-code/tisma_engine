@@ -1,6 +1,7 @@
 # Asistente sin conexión y tutoriales
 
 **Qué hace:**
+- guías de calibración en orden, con cómo leer cada prueba y aplicar el resultado;
 - un panel de ayuda que funciona sin red: problemas de impresión con sus causas y arreglos, procedimientos paso a
   paso, un glosario y fichas de materiales;
 - tutoriales guiados la primera vez que se usa cada parte;
@@ -146,6 +147,30 @@ Preferencias de la interfaz:
     `docs/UI.md`). Retomar uno empieza en ese paso.
 19. **Idioma:** se usan los archivos cuyo `language` coincide con el de la interfaz; si no hay, los de `es`.
 
+### Guías de calibración
+
+Vienen en `calibrations.json` (`docs/KNOWLEDGE.md` del repositorio de perfiles): 14 guías en el orden recomendado,
+basadas en la wiki de calibración de OrcaSlicer, la guía de ajuste de Andrew Ellis y la documentación de Klipper
+(`credits.md`).
+
+20. **Dónde se ven:**
+    - en la página de calibraciones (`calibrations.md`) y en la sección Calibración de la configuración de la
+      impresora (`settings_panel.md`, regla 38): cada prueba tiene un botón «Cómo se hace» que abre su guía;
+    - en el panel de ayuda, una pestaña Calibraciones con las guías en orden, separadas en «Del filamento» (se repiten
+      con cada filamento) y «De la impresora» (al cambiar la máquina).
+21. **Una guía:** para qué sirve, cuándo repetirla, qué prueba va antes (con enlace), los pasos, una tabla «Lo que
+    ves → Qué significa», el resultado y los consejos. Al pie, «Basado en …» con sus fuentes.
+22. **Orden:** si la prueba de `before` no está hecha (sin fecha en la sección Calibración), la guía lo avisa: «Antes
+    conviene hacer: Flujo máximo», con un botón que abre esa prueba. No impide seguir.
+23. **Resultado:**
+    - si `result` trae `key`, la guía muestra el valor actual de ese ajuste y, al terminar la prueba, un campo para
+      escribir lo medido (la altura o el bloque elegido); con la fórmula de la guía calcula el valor nuevo y ofrece
+      **Aplicar**, como la regla 7 (con Deshacer);
+    - si trae `where` `printer_firmware`, el resultado no va al perfil: la guía explica que se guarda en la impresora
+      y, si la impresora está conectada, ofrece mandar el comando de su firmware (`calibrations.md`, regla 3).
+24. **Tutorial `new_material`:** su paso de calibración sigue el orden de las guías (temperatura, flujo máximo, avance
+    de presión, flujo, retracción).
+
 ## Pruebas
 
 Con un `knowledge.tar.xz` armado por el equipo del motor: dos materiales, tres problemas (uno con `last_resort`), un
@@ -168,3 +193,7 @@ procedimiento, cinco términos y un tutorial de tres pasos.
 | AS13 | Paso con `wait_for` `model_added`: agregar un modelo | El tutorial pasa solo al siguiente paso |
 | AS14 | Cerrar la interfaz en el paso 2 y volver a abrirla | Al retomar el tutorial empieza en el paso 2 |
 | AS15 | Ajuste `walls.count` nombrado por un término | El ícono de información aparece junto al ajuste con la definición |
+| AS16 | Abrir la guía de Flujo sin haber hecho el avance de presión | Aviso «Antes conviene hacer: Avance de presión» con botón; se puede seguir |
+| AS17 | Guía de Flujo máximo: escribir 19 mm con inicio 5 y paso 0,5 | Calcula 14,5 mm³/s, propone un 10 % menos y ofrece Aplicar a `extrusion.max_flow` |
+| AS18 | Guía de Input shaping | Dice que el resultado va en la impresora; con una impresora conectada ofrece mandar el comando |
+| AS19 | Pestaña Calibraciones del panel de ayuda | 14 guías en orden, en dos grupos, cada una con «Basado en» al pie |

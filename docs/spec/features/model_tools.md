@@ -11,8 +11,8 @@ cómo se combinan, medido como caja negra.
 
 Los bloqueadores y forzadores de soporte están en `supports_more.md`; el extrusor por parte, en `multi_extruder.md`;
 cómo se agregan desde la interfaz, en `settings_levels.md` (reglas 10 y 11); cómo se guardan en el proyecto, en
-`formats.md`. Escalar, girar, cortar y separar están al final. Faltan medir, pintar, espejar, simplificar y los
-conectores del corte.
+`formats.md`. Escalar, girar, cortar y separar van después, y las herramientas de la interfaz (espejar, cortar con
+conectores, medir, simplificar, texto y SVG, galería, varias camas, pintar, deshacer) al final.
 
 **Fase:** F3 para partes, volúmenes negativos y ajustes por objeto; modificadores y rangos de alturas, P4.
 
@@ -110,6 +110,101 @@ claves son propuestas:
     una falla de memoria (código 139) con cualquier pieza (prueba MT19). No se copia: el motor pone las copias en la
     grilla pedida, con `placement.spacing` entre cajas, y el conjunto centrado.
 
+## Herramientas de la interfaz
+
+Lo que la interfaz hace sobre el modelo y la línea de comandos no puede medir. Se describe lo que ve la persona.
+
+**Fuentes:**
+- la base de conocimiento de Prusa (documentación de usuario, no código):
+  - «Cut tool», `https://help.prusa3d.com/article/cut-tool_1779`;
+  - «Measurement tool», `https://help.prusa3d.com/article/measurement-tool_399451`;
+  - «Simplify mesh», `https://help.prusa3d.com/article/simplify-mesh_238941`;
+  - «Text tool», `https://help.prusa3d.com/article/text-tool_399460`;
+  - «SVG embossing tool», `https://help.prusa3d.com/article/svg-embossing-tool_686167`;
+  - «Multiple build plates on PrusaSlicer»,
+    `https://help.prusa3d.com/article/multiple-build-plates-on-prusaslicer_823894`;
+- lo que se ve en Tisma Slicer (`interface.md`, grupos de herramientas).
+
+Las medidas exactas de cada control las fija el motor; las reglas dicen qué tiene que poder hacer la persona.
+
+16. **Espejar:** en X, en Y o en Z, alrededor del centro de la caja del objeto. Después el objeto vuelve a la cama.
+    Espejar dos veces en el mismo eje deja la pieza como estaba.
+17. **Escalar por medidas:**
+    - la persona escribe el tamaño en mm de un eje;
+    - con el candado de proporción cerrado, los otros dos ejes cambian en la misma proporción;
+    - abierto, solo cambia ese eje (escala distinta por eje).
+18. **Cortar** (tecla C), además del corte horizontal de la regla 13:
+    - **plano libre:** se mueve en X, Y y Z y se gira con flechas sobre el plano. La altura en Z se escribe en mm. Con
+      Shift y dos clics en la pantalla, el plano pasa por esa línea, perpendicular a la vista. «Restablecer» lo vuelve
+      al lugar inicial y saca los conectores;
+    - **conectores** (clic izquierdo pone uno sobre la cara del corte, clic derecho lo saca), cada uno con forma
+      (prisma o tronco, de base redonda, cuadrada o hexagonal), tamaño, profundidad, giro y tolerancia:
+      - **espiga fija:** se suma a un lado y se resta del otro;
+      - **pasador:** se resta de los dos lados y sale como un objeto aparte para imprimir;
+      - **encastre a presión:** la pieza con traba de un lado y su hueco del otro;
+    - **cola de milano:** un perfil trapezoidal a lo largo del corte, con su ancho, profundidad, ángulo y tolerancia;
+    - «Invertir plano» cambia qué mitad lleva la espiga o el encastre;
+    - **resultado:**
+      - dos objetos, cada uno sin girar, apoyado sobre la cara del corte o dado vuelta, a elección de la persona;
+      - o un objeto con dos partes, que siguen juntas y pueden tener ajustes distintos (no con cola de milano);
+    - si el plano corta varias zonas de la pieza, con clic derecho se elige en cada una si se separa o queda unida.
+19. **Separar en partes:** como `transform.split`, pero los pedazos quedan como partes del mismo objeto, no como objetos
+    aparte. Conservan su lugar.
+20. **Medir** (tecla U): reconoce puntos (vértices), aristas, círculos y planos de un objeto.
+    - Entre dos elementos muestra la distancia y, entre aristas o planos, el ángulo. De un círculo, el diámetro.
+    - Tocar una distancia medida deja escribir la medida que debería tener, y el objeto se escala parejo en los tres
+      ejes para lograrla.
+    - Mide entre partes del mismo objeto, no entre objetos distintos.
+21. **Simplificar la malla:**
+    - se limita por nivel de detalle o por la parte de los triángulos que se quita;
+    - al mover el control se arma una vista previa, con la opción de ver los triángulos (malla de alambre);
+    - Aplicar reemplaza la malla, y Deshacer la vuelve atrás;
+    - con muchos triángulos tarda: se muestra el progreso y se puede cancelar.
+22. **Texto en relieve** (tecla T): un texto que se agrega a un objeto, o un objeto nuevo de texto en la cama.
+    - Fuente (cualquier TrueType del sistema), alto, profundidad, separación entre letras y entre renglones, negrita,
+      inclinación, alineación y giro.
+    - Sobre una cara curva sigue la superficie (opción «Usar superficie»).
+    - Operación: **sumado** (una parte, relieve), **restado** (un volumen negativo, bajorrelieve) o **modificador**.
+    - El texto queda editable: al seleccionarlo se vuelve a abrir con sus valores.
+    - Las combinaciones de fuente, alto y profundidad se guardan como estilos.
+23. **SVG en relieve:** lo mismo que el texto con un archivo SVG, con profundidad, tamaño, «Usar superficie», distancia
+    a la superficie, giro, espejo y «Mirar a la cámara». Las curvas del SVG se aproximan con la resolución del G-code
+    (`gcode.resolution`).
+24. **Galería de formas:**
+    - formas del sistema: caja, cilindro, esfera, placa y las piezas de calibración (`calibration_models.md`);
+    - la persona puede sumar sus STL a la galería y borrarlos;
+    - una forma se agrega como objeto nuevo o como parte, volumen negativo o modificador del objeto elegido.
+25. **Llenar la cama:** copias del objeto elegido hasta que no entren más, ordenadas como en `placement.md`, con
+    `placement.spacing` entre cajas.
+26. **Varias camas:**
+    - hasta 9 camas en un proyecto, en una grilla fija de 3 × 3; todas usan la misma impresora y los mismos perfiles;
+    - una cama nueva aparece al arrastrar una pieza más allá del borde de la última; no hay botón de agregar;
+    - Ordenar reparte las piezas en varias camas si no entran en una; otro botón ordena solo la cama activa;
+    - se lamina y se exporta cada cama por separado o todas juntas (un G-code por cama).
+27. **Herramientas de pintura** (soporte, costura, piel difusa, colores, aletas; `docs/PAINTING.md`):
+    - pinceles: círculo, esfera, triángulo y relleno inteligente (pinta caras vecinas mientras el ángulo entre ellas
+      no pase un límite que elige la persona);
+    - tamaño del pincel; clic izquierdo pinta el primer estado (forzar, color 1), clic derecho el segundo (bloquear),
+      Shift borra;
+    - cortar la vista por una altura, para pintar dentro;
+    - «Borrar todo» por canal;
+    - lo pintado se guarda en el proyecto y sigue a la malla al escalar, girar o espejar.
+28. **Agujeros de drenaje y puntos de soporte a mano** (resina, `resin_supports.md`):
+    - un clic sobre la pieza pone un agujero con su diámetro y profundidad, o un punto de soporte;
+    - se mueven arrastrándolos y se sacan con clic derecho;
+    - «Generar puntos automáticamente» propone puntos que la persona después edita.
+29. **Deshacer y rehacer** (Ctrl+Z, Ctrl+Y): todo cambio en la placa (agregar, mover, girar, escalar, cortar, pintar,
+    ajustes por objeto) es un paso.
+    - La lista de pasos se ve con la flecha al lado de los botones, y se puede volver a cualquiera.
+    - Un cambio de perfil no entra en la lista: los perfiles tienen su propio deshacer (`presets.md`).
+
+30. **Unidades y archivo de origen:**
+    - «Convertir desde pulgadas» multiplica por 25,4 y «Convertir desde metros» por 1000; se ofrecen al abrir una
+      pieza que mide menos de 3 mm o más que la cama, y desde el menú del objeto;
+    - «Reemplazar por STL…» cambia la malla y conserva lugar, giro, escala, ajustes propios, partes y modificadores;
+    - «Recargar desde el disco» (F5) vuelve a leer el archivo de origen con la misma transformación; si el archivo
+      ya no está, lo dice y deja la pieza como estaba.
+
 ## Pruebas
 
 Medidas en Tisma Slicer (25-10-2026) con los ajustes base de `walls_extra.md` (2 perímetros, sin relleno ni capas
@@ -144,3 +239,19 @@ dice otra cosa:
 | MT18 | Dos cajas sueltas de 10 × 10 × 10 y 10 × 10 × 5 mm a 20 mm, sin y con `transform.split` | Sin separar: X de 80 a 90 y de 110 a 120. Separadas: X de 87 a 97 y de 103 a 113 |
 | MT19 | Cubo de 20 mm y la caja, copias en grilla de 2 × 2 y de 2 × 1 | Tisma Slicer se cierra (código 139). No se copia |
 
+Herramientas de la interfaz (reglas 16 a 29), con la pieza de MT14:
+
+| # | Escenario | Resultado esperado |
+|---|---|---|
+| MT20 | Espejar en X dos veces | La malla vuelve a ser la misma |
+| MT21 | Escribir 60 mm en X con el candado cerrado; después 15 mm en Z con el candado abierto | 60 × 40 × 20 mm; después 60 × 40 × 15 mm |
+| MT22 | Cortar a 5 mm con una espiga fija redonda de 4 mm de diámetro y 3 mm de profundidad, tolerancia 0,1 | Una mitad con la espiga de 4 mm y 3 mm de alto; la otra con un hueco más grande y más hondo según la tolerancia (cómo se aplica la tolerancia lo fija el motor y lo anota en esta ficha) |
+| MT23 | El mismo corte con pasador | Las dos mitades con hueco y un tercer objeto, el pasador |
+| MT24 | Corte con «un objeto con dos partes» | Un objeto, dos partes; cambiar el relleno de una no cambia la otra |
+| MT25 | Medir entre las dos caras de 30 mm y escribir 45 | La caja queda de 45 × 30 × 15 mm |
+| MT26 | Simplificar una esfera de 100 000 triángulos a la mitad y deshacer | 50 000 ± 1 % triángulos; después, otra vez 100 000 |
+| MT27 | Texto «TISMA» restado, de 1 mm de profundidad, sobre la cara de arriba | Un volumen negativo; el G-code tiene el bajorrelieve; al elegir el texto se reabre con sus valores |
+| MT28 | Arrastrar un cubo fuera de la cama a la derecha | Aparece la cama 2 con el cubo; laminar todas da dos G-code |
+| MT29 | 12 cubos de 80 mm en una cama de 250 × 210 y Ordenar | Se reparten en varias camas, ninguna con piezas que se pisen |
+| MT30 | Pintar con relleno inteligente a 30° sobre un cilindro | Se pinta todo el costado; la tapa (90°) no |
+| MT31 | Cortar, pintar y mover; después Deshacer tres veces | Vuelve a la pieza entera, sin pintura, en su lugar |
