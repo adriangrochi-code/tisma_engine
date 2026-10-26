@@ -516,9 +516,17 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - revisión de patentes por un abogado antes de vender (decide el dueño)
   - laminado no planar: los artículos y qué conviene (`docs/NONPLANAR_SLICING.md`): en 3 ejes, techos curvos, después
     el campo optimizado de CurviSlicer y un término de resistencia con el análisis propio (F7); en 5 ejes, S³-Slicer
-    (F9)
+    (F9). Actualizado el 2026-10-26 (`docs/NONPLANAR_2026.md`): F7 sobre las superficies de corte en grilla 2D de
+    Double QuickCurve, en este orden:
+    - [ ] la base, probada con `wave` (NP1 a NP4): campo en los vértices, material según `J`, tope de Z, choques con
+      un mapa de alturas y el perfil del cabezal, verificador y vista previa
+    - [ ] `surface` con la superficie de arriba, y el Z anti-aliasing encima
+    - [ ] `overhangs` con la superficie de abajo; `automatic`; `conical`
+    - [ ] `stress`, solo si el análisis «como impresa» muestra ganancia
   - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
-    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md`
+    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
+      `docs/ARC_OVERHANGS.md`); después, frentes por distancia (las ondas de Andersons et al. 2026), con la
+      transformada de distancia de Q11
     - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
       abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
     - [x] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17): `support.style` `organic` (2026-10-26)
@@ -552,6 +560,19 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
+    - lo nuevo de 2018 a 2026 (`docs/QUALITY_2026.md`, 2026-10-26), por ganancia contra esfuerzo:
+      - [ ] Q13: planchado según `ironing.md` (Ra −60 a −83 % en cuatro estudios); hoy es solo un tipo de la vista
+        previa
+      - [ ] Q14: sección redondeada para los cordones sin vecinos (relleno ralo, capas combinadas, paredes de un
+        cordón): el rectángulo pone 11 a 27 % de más; explicaría P11 de `docs/INFILL.md`
+      - [ ] Q15: sin bordes débiles entre bandas de densidad del relleno (Hutton y Bartolai 2023: +26 a +33 % de
+        deformación a la rotura)
+      - [ ] Q16: ventilador por tipo de tramo (alto en voladizos, puentes y pared externa; bajo adentro), con Q1 y T3;
+        medirlo en el banco, porque los estudios no coinciden
+      - [ ] Q17: pieza de capacidad (agujeros y pernos de 2 a 20 mm) y compensación de agujeros según el diámetro
+      - [ ] Q18: lista de ángulos por capa para el relleno y las superficies sólidas
+      - patente US 10,353,378 B2 (WARF): toca el análisis «como impresa» que ya existe; al abogado ya (decide el
+        dueño)
   - brillo parejo (pedido del dueño, 2026-10-25; `docs/GLOSS.md`):
     - [x] G1 y G2: la pared externa a flujo constante en toda la pieza; para el tiempo mínimo de capa, frenar primero
       lo de adentro (`cooling.keep_outer_speed`)
@@ -685,6 +706,14 @@ Con el PR #23 (2026-10-26):
   tiempo de capa), QA6 (`speed.top_solid_infill` 15 mm/s) y QA7 (la última capa con la primera más gruesa). Faltan:
   - QA8: la revisión de estabilidad (`print_review.md`, `stability.md`, claves `review.*`);
   - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
+  - segunda prueba (`docs/spec/qa/2026-10-26-segunda-prueba.md`), soporte en grilla del estante de S4:
+    - QA10: la zona de soporte unos 1,6 mm más allá de lo que cuelga (`supports_skirt.md`, regla 2); hoy termina
+      0,15 mm adentro, y en piezas orgánicas sale en pedazos sueltos. La más importante;
+    - QA11: la separación XY medida desde la cara de la pieza (el eje de la línea a 0,425 mm de la cara, no a 0,8);
+    - QA12: la base en líneas paralelas a `support.line_angle` en todas las capas, cada `support.spacing` más un
+      cordón (2,857 mm);
+    - QA13: la primera capa sobre el soporte, con la altura de capa más la separación y los perímetros como
+      `;TYPE:Overhang perimeter` (regla 4);
   - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): la primera capa sólida sobre el relleno ralo es un puente
     (regla 6). Hecho (2026-10-26): solo la capa de arriba de todo es «Top solid infill» (regla 2);
   - `cooling.enabled`

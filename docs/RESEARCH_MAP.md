@@ -10,7 +10,9 @@ temas que ya tienen su propio documento:
 |---|---|
 | Rellenos | `docs/INFILL.md` |
 | Relleno no planar | `docs/NONPLANAR_INFILL.md` |
-| Laminado no planar | `docs/NONPLANAR_SLICING.md` |
+| Laminado no planar | `docs/NONPLANAR_SLICING.md` y `docs/NONPLANAR_2026.md` |
+| Arcos en voladizos | `docs/ARC_OVERHANGS.md` |
+| Calidad, trayectorias y resistencia (2018 a 2026, lo que este mapa no tenía) | `docs/QUALITY_2026.md` |
 | Soportes | `docs/SUPPORT_RESEARCH.md` |
 | Enfriamiento | `docs/COOLING_SIMULATION.md` |
 | Z anti-aliasing | `docs/ZAA.md` |
@@ -111,6 +113,12 @@ Ordenado por ganancia medida contra esfuerzo, con lo que el motor ya tiene:
 | Q10 | **Umbral de voladizo según ventilador, velocidad y temperatura**, y puentes con anchos enteros de línea | Menos soporte y puentes que no se doblan | Chico | F5 y S1 |
 | Q11 | **Rendimiento:** transformada de distancia exacta en Vulkan como primer núcleo raster, número de vueltas para mallas rotas, y robustez del Voronoi propio | Velocidad y laminar lo que hoy falla | Medio | GPU y F2 |
 | Q12 | **Interfaz trabada entre materiales** (ITIL) | Uniones fuertes entre materiales distintos | Medio | MM1 |
+| Q13 | **Planchado** según `ironing.md` (`docs/QUALITY_2026.md`, 1.1) | Ra −60 a −83 % en la cara de arriba | Chico a medio | Superficies y S2 |
+| Q14 | **Sección redondeada** para los cordones sin vecinos (2.1) | Corrige 11 a 27 % de material de más en esos cordones | Chico | Escritor y relleno combinado |
+| Q15 | **Sin bordes débiles** entre bandas de densidad del relleno (2.4) | +26 a +33 % de deformación a la rotura | Chico | `docs/INFILL.md` |
+| Q16 | **Ventilador por tipo de tramo** (3.1) | Hasta 4 veces en tracción según el aire; los estudios no coinciden | Chico | Q1, T3 |
+| Q17 | **Pieza de capacidad** y agujeros según el diámetro (1.3) | Medidas de agujeros chicos | Chico a medio | Calibraciones, Q7 |
+| Q18 | **Lista de ángulos por capa** (3.2) | Tenacidad y +40 % alineando con la carga | Chico | Relleno, Q5 |
 
 **Lo que cambia en otros documentos:**
 - **T3** (`docs/COOLING_SIMULATION.md`): en PLA la unión entre capas ya llega a la resistencia del material (Allum et
@@ -136,3 +144,9 @@ Ninguna es una opinión legal; las fechas de vencimiento son estimadas. Todo pas
 | CN 122442952 A (solicitud) | — | Anchos de cordón alternados en capas pares e impares | Revisar si se hacen cordones alternados |
 | US 11,309,087 | — | Cálculo de diagramas de Voronoi | Revisar antes de un Voronoi en GPU |
 | Sin revisar | ORNL; grupo de Okwudire | Pernos en Z; compensación anticipada de la extrusión y velocidad optimizada | Revisar antes de N4 y antes de Q4 con modelo |
+| **US 10,353,378 B2** (urgente) | Wisconsin Alumni Research Foundation | Girar el tensor de propiedades del material para alinearlo con cada cordón y armar así el modelo que se analiza | **Lo hace el análisis «como impresa» (A1, `src/fea/as_printed.*`)**. Vence cerca de 2036; ver si se pagó la tasa del año 8 (fines de 2026 o comienzos de 2027) |
+| US 8,349,239 B2, US 8,974,715 B2 y continuaciones | Stratasys | Empezar o terminar el contorno dentro de la región interior de la capa; rampa de flujo y solape | La bufanda empieza sobre el contorno; revisar antes de la costura por costo o de un barrido hacia adentro. Vence 2029 a 2031 |
+| US 10,591,897 B2 | Autodesk | Borde cuyo ancho cambia según cuánto sobresale el contorno | El borde es de ancho fijo; revisar antes de un borde automático variable. Vence cerca de 2038 |
+| US 12,472,695 B2 | Markforged | Anclas y faldas de PEI con soporte de otro material | Nada hoy; tenerla en cuenta en balsas y soportes técnicos. Vence cerca de 2044 |
+
+Las cuatro últimas filas salen de `docs/QUALITY_2026.md`, sección 7 (2026-10-26).

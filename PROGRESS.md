@@ -4756,3 +4756,35 @@ ocho ajustes.
 
 **Sigue:** que las ramas engorden y se junten antes, como en la ficha (y con menos material); la base del soporte que
 apoya en la pieza (`support.bottom_*`); después, RT1 a RT5.
+
+## 2026-10-26 — investigación: no planar, arcos en voladizos y calidad en general
+
+**Por qué:** pedidos del dueño: papers de impresión no planar «para sacar la opción más óptima», sobre arc overhangs,
+y sobre impresión 3D en general para mejorar calidad y funciones.
+
+**Hecho** (solo artículos, resúmenes, registros de patentes y documentación de usuario; ningún código):
+- `docs/NONPLANAR_2026.md`: lo publicado de 2022 a 2026. F7 cambia de base: las dos superficies de corte en grilla 2D
+  de Double QuickCurve (Eurographics 2025), resueltas como una ecuación tipo Poisson con el multigrid propio, en vez
+  del campo por volumen de CurviSlicer (de 2 a 46 veces más lento, y falla en varias piezas). La pendiente útil en una
+  impresora común es de 20 a 27° (la cara plana de la boquilla raya más arriba); contra plano, la rugosidad baja 34 a
+  76 %, pero contra el Z anti-aliasing con subida lo que se gana es sobre todo una piel continua, sin medir; en 3 ejes
+  la ganancia de resistencia no está probada. Orden en `PLAN.md`.
+- `docs/ARC_OVERHANGS.md`: no hay un artículo revisado que mida los arcos solos; el único estudio con números
+  (Andersons et al. 2026) encuentra que los arcos se hunden en sus centros y que los frentes en ondas se hunden
+  bastante menos. S1 sigue la ficha, con la geometría que la ficha no fija como diseño propio, y después un modo de
+  frentes por distancia. Seis preguntas de comportamiento para el equipo de fichas.
+- `docs/QUALITY_2026.md`: diez pasos por ganancia contra esfuerzo (Q13 a Q18 en `PLAN.md` y en el mapa). Lo más
+  importante: el planchado (Ra −60 a −83 %), que el motor no genera; el volumen de los cordones sueltos, que el
+  rectángulo sobrestima entre 11 y 27 % y explicaría P11; y una patente de WARF (US 10,353,378 B2, hasta cerca de
+  2036) que toca el análisis «como impresa» que ya existe. Las patentes nuevas, en la sección 6 de
+  `docs/RESEARCH_MAP.md`.
+- Del equipo de fichas (`dev`, PR #28): la segunda prueba de caja negra (QA10 a QA13, el soporte en grilla del
+  estante: margen, separación XY, líneas y primera capa sobre el soporte), la cobertura contra Tisma Slicer con el
+  orden aprobado por el dueño, y su propia lista de papers. Anotados en `PLAN.md`.
+
+**Sin leer completo:** varios números salen de resúmenes o de notas de prensa (cada informe lo marca); los de las
+ondas hay que confirmarlos en el artículo, que es de acceso abierto.
+
+**Sigue:** según el orden aprobado por el dueño (`docs/spec/qa/2026-10-26-cobertura.md`): formatos de entrada (3MF y
+OBJ en la línea de comandos) y centrar la pieza en la cama; después QA10 a QA13 del soporte en grilla.
+
