@@ -88,6 +88,58 @@ Con V1 y V2, el motor quedaría cerca de 1 s contra 4,4 s de Tisma Slicer con la
 rápido. V3 y V4 bajan el G-code a menos de la mitad, que ayuda al guardado de la biblioteca y al envío a las
 impresoras.
 
+## Segunda medición: de qué depende el costo de las capas de abajo
+
+**Cómo:** motor de `dev` en `1ffbdeb` (0.8.0-alpha.1), mismo equipo. Una corrida por caso salvo el Benchy base
+(mediana de 3). El Benchy base sigue igual: 6,15 s.
+
+1. **No depende del área ni de la cantidad de capas sólidas.** En cajas de 20 × 20 a 160 × 160 mm y en cilindros, las
+   capas de abajo no suman tiempo (menos de 0,1 s).
+2. **Depende del detalle de los contornos, y más que en proporción.** El Benchy cambiando solo
+   `slicing.simplify_tolerance`:
+
+| `simplify_tolerance` | Con `bottom_layers` 3 | Con `bottom_layers` 0 |
+|---|---|---|
+| 0 (sin simplificar) | 207,8 s | 7,5 s |
+| 0,005 | 9,3 s | — |
+| 0,01 (por defecto) | 6,1 s | 0,9 s |
+| 0,02 | 4,4 s | — |
+| 0,05 | 3,3 s | — |
+
+   Sin simplificar, el resto del laminado tarda 8 veces más (de 0,9 a 7,5 s), pero las capas de abajo tardan 40
+   veces más (de 5,2 a 200 s). Parece un paso que compara cada tramo de un contorno con cada tramo del otro.
+3. **Depende de las paredes.** El Benchy con `bottom_layers` 3 y con 0:
+
+| `walls.count` | Con `bottom_layers` 3 | Con `bottom_layers` 0 | Costo de las capas de abajo |
+|---|---|---|---|
+| 0 (y `top_layers` 0) | 0,74 s | — | casi nada |
+| 1 | 2,55 s | — | — |
+| 2 | 3,71 s | 0,84 s | 2,9 s |
+| 3 | 5,72 s | 0,82 s | 4,9 s |
+| 4 | 6,96 s | 0,96 s | 6,0 s |
+| 6 | 7,61 s | 0,91 s | 6,7 s |
+
+   Sin paredes el paso es barato aunque el contorno tenga todo su detalle. Puede ser que cada pared, al achicar el
+   contorno con esquinas redondeadas, le sume vértices, y que la comparación con la capa de abajo se haga sobre esa
+   zona de adentro.
+4. **Un modelo muy detallado** (cilindro de Ø 60 mm y 40 mm de alto con 32 768 lados, 131 072 triángulos, 200 capas):
+   el motor tarda 2,2 s y Tisma Slicer 352,9 s, una corrida cada uno. Acá el motor es mucho más rápido.
+   - el tiempo del motor casi no cambia con `simplify_tolerance` (de 2,4 s con 0,005 a 1,8 s con 0,05);
+   - las 200 capas son iguales, y cada una se calcula de nuevo.
+
+## Qué hacer, segunda parte
+
+| # | Qué | Por qué | Ganancia esperada en el Benchy |
+|---|---|---|---|
+| V7 | Hacer que el paso de las capas de abajo no crezca más que en proporción a los vértices: comparar con la capa de abajo usando un índice de tramos (o cajas por isla), en vez de todos con todos | Sin simplificar tarda 200 s; con 0,01 mm, 5 s (regla 2) | Las capas de abajo cerca del costo de las de arriba: de 6,1 s a cerca de 1 s (lo mismo que V1, por la causa) |
+| V8 | Buscar las superficies de abajo en el contorno de la capa (como sale del corte), y recién después recortarlas con la zona de adentro de las paredes | Sin paredes el paso es barato (regla 3) | Igual que V7, si la causa es la zona de adentro |
+| V9 | Simplificar con `simplify_tolerance` también después de cada pared, no solo al cortar | Cada pared suma tiempo al paso (regla 3) | Parte de V7, también en las paredes y el relleno |
+| V10 | Reusar el resultado de una capa cuando su sección es igual a la de la capa de abajo (piezas prismáticas) | El cilindro de 200 capas iguales se calcula 200 veces (regla 4) | No cambia el Benchy; en piezas prismáticas, cerca de 1 capa en vez de N |
+| V11 | En el programa, laminar por etapas: si se cambia solo una velocidad, una temperatura o el ventilador, rehacer solo el G-code, sin volver a cortar ni a calcular las superficies | Con «Slice automatically» (`interface.md`, `preferences.md`), cada cambio relamina todo | Un cambio de velocidad en el Benchy, de 6 s a lo que tarda escribir el G-code (0,3 s) |
+
+Las fichas no piden un algoritmo: piden el resultado. El G-code tiene que salir igual antes y después de cada cambio, o
+la diferencia se explica.
+
 ## Para repetir la medición
 
 La misma tabla con el motor nuevo, en el mismo equipo. El laminado tiene que dar el mismo G-code antes y después de
