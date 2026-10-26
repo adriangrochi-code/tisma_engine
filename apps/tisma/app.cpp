@@ -2136,6 +2136,7 @@ void App::settings_panel() {
         changed |= row(T::FanMin, s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
         changed |= row(T::FanMax, s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
         changed |= row(T::MinLayerTime, s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
+        changed |= row(T::KeepOuterSpeed, s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
         ImGui::EndTable();
     }
     const bool printer_open = section("printer", "tisma_printer", T::Printer, false);

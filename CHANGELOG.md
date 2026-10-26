@@ -25,6 +25,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Brillo parejo** (pedido del dueño; `docs/GLOSS.md`): para llegar al tiempo mínimo de capa, ahora se frena primero
+  todo lo que no es pared externa, y la pared externa sigue a su velocidad (`cooling.keep_outer_speed`, encendido por
+  defecto). Una pared que se frena sale de una boquilla más caliente y brilla distinto: las capas cortas dejaban bandas.
+  Si frenar lo de adentro no alcanza, se frena todo como antes. En el cubo de 10 mm, la pared externa va a 30 mm/s en
+  todas las capas (antes, entre 27,5 y 28,1 según la capa), con el mismo tiempo total.
 - **Vista previa más parecida a la pieza impresa** (pedido del dueño, con una foto de una esquina): los cordones que
   siguen de un movimiento al siguiente se unen en inglete. En las curvas ya no sobresale el extremo de cada tramo en
   dientes, y las paredes no titilan donde dos tramos se encimaban. La luz sigue el perfil de un cordón real: plano

@@ -18,8 +18,12 @@ struct Slowdown {
     double floor = 0.0;
     double cap = std::numeric_limits<double>::infinity();
     int stage = 0; // 0: unchanged
+    // The outer walls keep their speed (docs/GLOSS.md, G1 and G2): a wall
+    // printed slower comes out of a hotter nozzle and shines differently.
+    bool spare_outer = false;
 
     double feed(double f) const;
+    double feed(double f, bool outer) const { return spare_outer && outer ? f : feed(f); }
 };
 
 inline constexpr double kSlowestFeed = 1.0 / 60.0; // mm/s, 1 mm/min
@@ -29,7 +33,18 @@ inline constexpr double kSlowestFeed = 1.0 / 60.0; // mm/s, 1 mm/min
 Slowdown plan_slowdown(const std::map<double, double>& length_by_feed, double other_time, double min_time,
                        double min_speed);
 
-// The layer's time with a slowdown applied, in seconds.
+// The same, sparing the outer walls when it can (cooling.keep_outer_speed):
+// outer_by_feed holds the outer walls' part of length_by_feed. The other
+// extrusions slow down first, as stage 1 does, not below the minimum print
+// speed; only when that is not enough does the plan above take every
+// extrusion, the outer walls too.
+Slowdown plan_slowdown(const std::map<double, double>& length_by_feed, const std::map<double, double>& outer_by_feed,
+                       double other_time, double min_time, double min_speed);
+
+// The layer's time with a slowdown applied, in seconds; with the outer walls'
+// part, for a slowdown that spares them.
 double layer_time(const std::map<double, double>& length_by_feed, double other_time, const Slowdown& slowdown);
+double layer_time(const std::map<double, double>& length_by_feed, const std::map<double, double>& outer_by_feed,
+                  double other_time, const Slowdown& slowdown);
 
 } // namespace tisma

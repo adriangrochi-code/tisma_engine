@@ -545,8 +545,14 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "z_gap" ? s.support_z_gap : s.support_xy_gap) = d;
                });
-    read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers"},
+    read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers", "keep_outer_speed"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "keep_outer_speed") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.keep_outer_speed = g.at(n).get<bool>();
+                       return;
+                   }
                    if (n == "fan_off_layers") {
                        const json& v = g.at(n);
                        if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
@@ -798,6 +804,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_min", num(s.fan_min)},
         {"cooling.fan_max", num(s.fan_max)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
+        {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
         {"zaa.enabled", s.zaa ? "true" : "false"},
         {"zaa.min_thickness", num(s.zaa_min_thickness)},
@@ -950,7 +957,8 @@ std::string settings_json(const Settings& s) {
           {"min_speed", s.min_print_speed},
           {"fan_min", s.fan_min},
           {"fan_max", s.fan_max},
-          {"fan_off_layers", s.fan_off_layers}}},
+          {"fan_off_layers", s.fan_off_layers},
+          {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"compensation",

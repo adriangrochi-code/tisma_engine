@@ -3935,3 +3935,18 @@ arrastre con modelos de más de un millón de triángulos (se recalcula la malla
 
 **Sigue:** pintar (soportes y costura, con el motor), G1 y G2 del brillo, el rendimiento con modelos grandes y la
 decisión del dueño sobre los perfiles abiertos.
+
+## 2026-10-26 — brillo parejo: la pared externa no se frena (G1 y G2)
+
+**Hecho:** para llegar al tiempo mínimo de capa, el escritor frena primero todo lo que no es pared externa (paredes
+internas, relleno, soporte), sin bajar de la velocidad mínima. La pared externa sigue a su velocidad. Si eso no
+alcanza, se frena todo como antes. `cooling.keep_outer_speed` (encendido por defecto) lo apaga. `src/gcode/cooling.*`
+con una prueba nueva en `test_cooling.cpp`; fila en la interfaz.
+
+**Medido:** cubo de 10 mm: la pared externa a 1800 mm/min en todas las capas (antes, 1651 a 1687 según la capa), con
+el mismo tiempo total (6 min).
+
+**No probado:** el brillo de una pieza impresa (hace falta la pieza de prueba de `docs/GLOSS.md` y un medidor).
+
+**Sigue:** pintar (soportes y costura, con el motor), esperar lejos de la pieza cuando frenar lo de adentro no
+alcanza.

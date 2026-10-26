@@ -42,3 +42,30 @@ TEST_CASE("stage 2 puts every extrusion at one common speed", "[cooling]") {
     CHECK(slowest.stage == 2);
     CHECK_THAT(slowest.feed(60.0), WithinAbs(kSlowestFeed, 1e-15));
 }
+
+TEST_CASE("sparing the outer walls: the rest slows down first (docs/GLOSS.md)", "[cooling]") {
+    // An outer wall of 60 mm at 30 mm/s (2 s) and 120 mm of infill at 60 mm/s
+    // (2 s): 4 s, short of 5 s.
+    const std::map<double, double> all{{30.0, 60.0}, {60.0, 120.0}}, outer{{30.0, 60.0}};
+    const Slowdown s = plan_slowdown(all, outer, 0.0, 5.0, 10.0);
+    CHECK(s.stage == 1);
+    CHECK(s.spare_outer);
+    CHECK(s.feed(30.0, true) == 30.0);           // the outer wall keeps its speed
+    CHECK_THAT(s.feed(60.0, false), WithinRel(40.0, 1e-9)); // the infill takes the 3 s: 120 mm in 3 s
+    CHECK_THAT(layer_time(all, outer, 0.0, s), WithinRel(5.0, 1e-9));
+    // The same layer without sparing: both slow by one factor.
+    const Slowdown plain = plan_slowdown(all, 0.0, 5.0, 10.0);
+    CHECK_FALSE(plain.spare_outer);
+    CHECK(plain.feed(30.0) < 30.0);
+    // When the rest at the minimum speed is not enough, every extrusion slows
+    // as before, the outer wall too.
+    const Slowdown hard = plan_slowdown(all, outer, 0.0, 20.0, 10.0);
+    CHECK_FALSE(hard.spare_outer);
+    CHECK(hard.feed(30.0, true) < 30.0);
+    CHECK_THAT(layer_time(all, outer, 0.0, hard), WithinRel(20.0, 1e-9));
+    // A layer of outer wall only, or with no outer wall: the plain plan.
+    CHECK_FALSE(plan_slowdown(outer, outer, 0.0, 5.0, 10.0).spare_outer);
+    const Slowdown none = plan_slowdown(all, {}, 0.0, 5.0, 10.0);
+    CHECK(none.stage == plain.stage);
+    CHECK(none.scale == plain.scale);
+}

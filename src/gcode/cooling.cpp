@@ -46,4 +46,49 @@ Slowdown plan_slowdown(const std::map<double, double>& length_by_feed, double ot
     return s;
 }
 
+namespace {
+
+// What is not an outer wall, by feed.
+std::map<double, double> inner_part(const std::map<double, double>& all, const std::map<double, double>& outer) {
+    std::map<double, double> out;
+    for (const auto& [f, length] : all) {
+        const auto o = outer.find(f);
+        const double rest = length - (o == outer.end() ? 0.0 : o->second);
+        if (rest > 1e-9)
+            out[f] = rest;
+    }
+    return out;
+}
+
+double outer_time(const std::map<double, double>& outer) {
+    double t = 0.0;
+    for (const auto& [f, length] : outer)
+        t += length / f;
+    return t;
+}
+
+} // namespace
+
+Slowdown plan_slowdown(const std::map<double, double>& length_by_feed, const std::map<double, double>& outer_by_feed,
+                       double other_time, double min_time, double min_speed) {
+    if (outer_by_feed.empty())
+        return plan_slowdown(length_by_feed, other_time, min_time, min_speed);
+    const std::map<double, double> inner = inner_part(length_by_feed, outer_by_feed);
+    if (!inner.empty()) {
+        Slowdown s = plan_slowdown(inner, other_time + outer_time(outer_by_feed), min_time, min_speed);
+        if (s.stage <= 1) {
+            s.spare_outer = s.stage == 1;
+            return s;
+        }
+    }
+    return plan_slowdown(length_by_feed, other_time, min_time, min_speed);
+}
+
+double layer_time(const std::map<double, double>& length_by_feed, const std::map<double, double>& outer_by_feed,
+                  double other_time, const Slowdown& slowdown) {
+    if (!slowdown.spare_outer)
+        return layer_time(length_by_feed, other_time, slowdown);
+    return layer_time(inner_part(length_by_feed, outer_by_feed), other_time + outer_time(outer_by_feed), slowdown);
+}
+
 } // namespace tisma

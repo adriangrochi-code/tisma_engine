@@ -276,9 +276,11 @@ public:
     // everything else (travels, retractions, lifts).
     void reset_times() {
         extruded_.clear();
+        outer_extruded_.clear();
         other_time_ = 0.0;
     }
     const std::map<double, double>& extruded() const { return extruded_; }
+    const std::map<double, double>& outer_extruded() const { return outer_extruded_; } // the outer walls' part
     double other_time() const { return other_time_; }
 
     // The part-cooling fan in percent: M106 S0-255, or M107 when off.
@@ -393,6 +395,7 @@ public:
             text_ += t;
             text_ += '\n';
             type_ = t;
+            outer_ = std::strcmp(t, "External perimeter") == 0;
         }
     }
 
@@ -498,6 +501,8 @@ public:
                 feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
         }
         extruded_[feed] += length;
+        if (outer_)
+            outer_extruded_[feed] += length;
         total_e_ += e;
         pending_ += e;
         // A piece that rounds to no move at 3 decimals is not written; its E
@@ -510,7 +515,8 @@ public:
         pending_ = 0.0;
         // A slowed-down feed is rounded down to whole mm/min (as F is written), so
         // the layer lasts at least the minimum time.
-        const double paced = pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed) * 60.0)) / 60.0;
+        const double paced =
+            pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
         move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
@@ -568,7 +574,7 @@ private:
     PrintTime time_;
     double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
-    std::map<double, double> extruded_;
+    std::map<double, double> extruded_, outer_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
@@ -591,6 +597,7 @@ private:
     std::string x_, y_, z_, e_text_, width_;
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
+    bool outer_ = false; // the current type is the outer wall
 };
 
 } // namespace
@@ -1083,6 +1090,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
         const Slowdown slowdown = active.volumetric_flow > 0.0
                                       ? Slowdown{}
+                                      : s.keep_outer_speed
+                                      ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
+                                                      s.min_print_speed)
                                       : plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
         if (slowdown.stage != 0) {
             g = emitter_before;
@@ -1091,7 +1101,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             g.pace(slowdown);
             emit_layer(l, active.fan ? *active.fan : s.fan_max, active); // fan_max also on the first layers (owner's decision, 2026-10-24)
             g.pace(Slowdown{});
-            const double reached = layer_time(g.extruded(), g.other_time(), slowdown);
+            const double reached = layer_time(g.extruded(), g.outer_extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {
                 char text[160];
                 std::snprintf(text, sizeof text, "the layer takes %.1f s even at 1 mm/min, less than the minimum of %.1f s",

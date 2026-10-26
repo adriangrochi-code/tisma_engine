@@ -62,6 +62,8 @@
     X(FanMin, "Ventilador normal", "Fan, normal layers")                                                              \
     X(FanMax, "Ventilador en capas lentas", "Fan, slowed layers")                                                     \
     X(MinLayerTime, "Tiempo mínimo de capa", "Minimum layer time")                                                    \
+    X(KeepOuterSpeed, "Pared externa a su velocidad", "Outer wall at its speed")                                      \
+    X(KeepOuterSpeedTip, "Para llegar al tiempo mínimo se frena primero lo de adentro: la pared externa no cambia de velocidad y la pieza brilla parejo (docs/GLOSS.md).", "To reach the minimum time the inside slows down first: the outer wall keeps its speed and the part has an even sheen (docs/GLOSS.md).") \
     X(LayerHeight, "Altura de capa", "Layer height")                                                                  \
     X(FirstLayerHeight, "Altura de la primera capa", "First layer height")                                            \
     X(DetailHeight, "Alto del detalle", "Detail height")                                                              \

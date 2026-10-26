@@ -171,6 +171,9 @@ struct Settings {
     double fan_min = 35.0;         // %: the fan on ordinary layers
     double fan_max = 100.0;        // %: the fan on layers that had to slow down
     int fan_off_layers = 1;        // the first layers print with the fan off
+    // The outer walls keep their speed while the rest slows down for the
+    // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
+    bool keep_outer_speed = true;
 
     // compensation (docs/CALIBRATION.md): the model is scaled around the centre
     // of its footprint and its bottom before slicing; holes grow by hole_offset.

@@ -24,8 +24,8 @@ usuarios.
 
 | # | Medida | Apoyo | Estado |
 |---|---|---|---|
-| G1 | **La pared externa a una sola velocidad, ancho y alto en toda la pieza**, así su flujo, y con él la temperatura de salida, no cambia | A, B | A hacer: hoy el tiempo mínimo de capa (`docs/spec/BEHAVIOR.md`, «Enfriamiento») frena todas las extrusiones por igual |
-| G2 | **Para que una capa dure más, frenar primero las paredes internas, el relleno y los viajes**, o esperar con la boquilla lejos de la pieza, y dejar la pared externa a su velocidad. Sin frenarla a valores extremos (la punta se enfría con flujo muy bajo, A) | Práctica | A hacer, junto con G1 |
+| G1 | **La pared externa a una sola velocidad, ancho y alto en toda la pieza**, así su flujo, y con él la temperatura de salida, no cambia | A, B | Hecho (2026-10-26) para el tiempo mínimo de capa, con G2: la pared externa ya no se frena mientras alcance con frenar lo demás. Los voladizos, G3 |
+| G2 | **Para que una capa dure más, frenar primero las paredes internas, el relleno y los viajes**, o esperar con la boquilla lejos de la pieza, y dejar la pared externa a su velocidad. Sin frenarla a valores extremos (la punta se enfría con flujo muy bajo, A) | Práctica | Hecho (2026-10-26): `cooling.keep_outer_speed` (`docs/CONFIG.md`), encendido por defecto. Si no alcanza, se frena todo como antes. Esperar lejos de la pieza, pendiente |
 | G3 | **Los voladizos frenan la pared externa de toda la capa**, o se limita cuánto frena | Práctica | Cuando haya velocidad de voladizo |
 | G4 | **Subir la temperatura con el flujo planeado**, con anticipación por la inercia del hot end: con el ajuste de PLA de A, mantener lo que sale a 3 mm³/s cuando se imprime a 13 mm³/s pide unos 224 °C en lugar de 210 °C | Dirección probada (A); que empareje el brillo, no | Experimental: va con Q3 de `docs/RESEARCH_MAP.md` |
 | G5 | **El ventilador parejo en las paredes externas**, sin rampas atadas al tiempo de capa | Práctica | A revisar con G2 |

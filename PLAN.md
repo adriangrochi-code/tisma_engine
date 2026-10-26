@@ -545,8 +545,9 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
   - brillo parejo (pedido del dueño, 2026-10-25; `docs/GLOSS.md`):
-    - [ ] G1 y G2: la pared externa a flujo constante en toda la pieza; para el tiempo mínimo de capa, frenar primero
-      lo de adentro, o esperar lejos de la pieza
+    - [x] G1 y G2: la pared externa a flujo constante en toda la pieza; para el tiempo mínimo de capa, frenar primero
+      lo de adentro (`cooling.keep_outer_speed`)
+    - [ ] esperar con la boquilla lejos de la pieza cuando frenar lo de adentro no alcanza; G3, los voladizos
     - [ ] G4: temperatura según el flujo planeado (experimental, con Q3)
     - [ ] la calibración de brillo: bandas a flujo constante, de 2 a 20 mm³/s, a tres temperaturas
   - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
