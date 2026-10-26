@@ -264,6 +264,24 @@ con un solo offset por trayectoria), mismo equipo, mediana de 3 corridas salvo d
   `write_ms` 3938). Con `nearest`, el conejo tarda 1,28 s: menos que Tisma Slicer (2,32 s) y que PrusaSlicer (2,01 s).
   Propuesta V15: la costura alineada en la GPU (`perimeters.md`, regla 8; meta RV10).
 
+## Sexta medición: las metas en `dev` `5b0bdbd`
+
+Con V5 (G-code en cadena), V9 (simplificar lo que dejan las paredes), V10 (capas repetidas) y el arreglo de las
+piezas huecas. Mismo equipo, mediana de 5 corridas.
+
+| Meta | Medido | Cumple |
+|---|---|---|
+| RV7: conejo con `infill.density` 0, como mucho 1,25 veces | 1,20 s contra 1,19 s (1,01 veces) | Sí |
+| RV7: conejo con `walls.count` 1 | 3,29 s (2,76 veces); sin capas de abajo, 0,87 s | No |
+| RV8: armado del G-code del conejo, 1 s o menos | `write_ms` 647 | Sí |
+| RV9: Benchy con 4 núcleos contra 1, 2,5 veces o más | 0,93 s contra 2,18 s (2,34 veces; antes 1,38) | Casi |
+| RV10: conejo con costura `aligned` contra `nearest`, como mucho 1,2 veces | 1,19 s contra 0,74 s (1,61 veces) | No |
+
+- El conejo con los valores por defecto tarda 1,19 s: menos que Tisma Slicer (2,32 s) y que PrusaSlicer (2,01 s).
+- Con una sola pared, el conejo tiene 7 veces más superficie de arriba que con 3 (29 302 contra 4 389 mm²): en sus
+  caras inclinadas, menos paredes dejan más superficie al descubierto. Más trabajo real, pero el paso de las capas de
+  abajo sigue costando 2,4 s de los 3,3.
+
 ## Para repetir la medición
 
 La misma tabla con el motor nuevo, en el mismo equipo. El laminado tiene que dar el mismo G-code antes y después de
