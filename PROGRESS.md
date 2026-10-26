@@ -4321,3 +4321,143 @@ cama. El dueño pidió dejar la vista para después y priorizar V7 a V11 de velo
 
 **Sigue:** V10 (reusar capas iguales, RV4) y medir V9.
 
+## 2026-10-26 — velocidad: V10, capas repetidas
+
+**Pedido del dueño:** priorizar V7 a V11 del informe de velocidad. Queda V10 (RV4: el cilindro de 80 mm debe tardar
+como mucho un 25 % más que el de 40 mm) y medir V9.
+
+**Hecho:**
+- **El corte por tandas** (`src/slice/layers.*`). Un nivel sin ningún vértice entre él y el de abajo cruza las mismas
+  aristas, unidas en el mismo orden (`same_crossings`). Solo se corta el primero de cada tanda; los demás calculan sus
+  puntos sobre las aristas de ese, iguales bit a bit a un corte nuevo (lo prueba un test en una pirámide y un prisma).
+  Sirve también para conos, pirámides y campos curvos.
+- **La misma sección.** Si además toda arista cruzada es vertical, o está solo en triángulos verticales (los lados de
+  un prisma partidos por diagonales), la sección en x e y es la misma (`same_sections`). El corte deja esos niveles
+  vacíos y el laminado copia la región y las paredes de la capa de abajo; no los de la primera capa con su achique,
+  ni con piel difusa (cada capa la dibuja de nuevo). Con un borde abierto en la malla corta todo, porque el extremo de
+  un contorno abierto se movería.
+- **Copias que dan el mismo resultado byte a byte:**
+  - las superficies de una capa, si su región de relleno y las regiones que miran son las de la capa de abajo;
+  - el relleno, si las superficies son las de la capa a un período del patrón (`fill_period`: 2, o 6 en panal; nada
+    en giroide, cúbico y adaptativos, que se mueven con la altura); una prueba lo confirma para cada patrón;
+  - el planificador de viajes y las islas del G-code, si la región es la de la capa de abajo.
+- **El G-code en serie, más liviano:** la costura alineada y la simplificación de los recorridos comparan distancias
+  al cuadrado y solo sacan la raíz cuando quedan a un pelo del límite (`hypot` era 9 millones de llamadas en el
+  cilindro de 80 mm). La respuesta es la misma.
+
+**Medido** (4 núcleos, mediana de 3, ajustes por defecto):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 2,69 s | 0,36 s |
+| Cilindro de 32 768 lados, 80 mm | 5,33 s | 0,63 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,98 | 1,75 |
+| Benchy | 1,35 s | 1,35 s |
+
+- **RV4 no se cumple todavía.** Lo que crece con las capas es la parte en serie del G-code. Por cada 200 capas del
+  cilindro: el orden y las costuras unos 50 ms, la simplificación 22 ms, el texto unos 35 ms y su verificación 35 ms.
+  El corte y el laminado ya casi no crecen (+10 ms). Hace falta V5: armar el texto de cada capa en paralelo y
+  verificar en paralelo.
+- **RV6:** el G-code del Benchy (con y sin giroide), la esfera, la esfera con soportes, el tubo, las islas, las cajas,
+  el cubo con piel difusa y la pieza torcida sale igual byte a byte. En los cilindros (128 y 32 768 lados) cambia:
+  antes cada capa simplificaba otros puntos de las diagonales de los lados, y ahora todas repiten la sección de la
+  primera. Las paredes nuevas quedan a menos de 0,018 mm de las de antes (dos simplificaciones del mismo círculo,
+  cada una dentro de `slicing.simplify_tolerance` y `gcode.resolution`).
+- **Pruebas:** 395 de 395 pasan en Release. Nuevas: los niveles con las mismas aristas, la misma sección del prisma
+  (con un lado abierto y con una pirámide como contraejemplo), un prisma laminado que repite región, paredes y
+  relleno, el escalón de superficies y el período de cada patrón.
+
+**Sigue:** V5 (el G-code en paralelo) para llegar a RV4; después medir V9.
+
+## 2026-10-26 — velocidad: V5 y V9; RV4 se cumple
+
+**Pedido del dueño:** V7 a V11 primero. V10 había quedado sin llegar a RV4 por la parte en serie del G-code, y V9
+estaba sin medir.
+
+**Hecho:**
+- **V5, el G-code en un pipeline** (`src/gcode/writer.*`). Cada capa se planea (`plan_layer`: el orden de las islas
+  y los recorridos y las costuras, que siguen de donde terminó la capa de abajo) y se escribe (`write_layer`) por
+  separado. Un pipeline de oneTBB planea en orden, simplifica los recorridos en paralelo y escribe en orden, así que
+  mientras se escribe una capa se planean las siguientes. Una capa que se frena por el tiempo mínimo se vuelve a
+  escribir desde el mismo plan, sin planearla de nuevo.
+- **La verificación por bloques** (`src/gcode/check.*`): lee bloques de unos 256 KiB de líneas enteras en paralelo
+  y sigue el estado en orden. Una prueba nueva pone un error a cada lado del corte entre bloques y espera su número de
+  línea exacto.
+- **Menos trabajo en serie, con el mismo texto:**
+  - la costura alineada calcula la distancia solo para los candidatos a un pelo del cuadrado más chico;
+  - sin módulos en los recorridos de la costura;
+  - el emisor formatea X, Y y el ancho una sola vez;
+  - la exportación relee el archivo de una vez (carácter por carácter era un décimo de la exportación).
+- **V9:** lo que dejan las paredes se simplifica con `slicing.simplify_tolerance`, como los contornos.
+
+**Medido** (4 núcleos, sin otra carga, mediana de 9):
+
+| Pieza | V10 | V5 | V5 y V9 |
+|---|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 0,365 s | 0,282 s | 0,291 s |
+| Cilindro de 32 768 lados, 80 mm | 0,561 s | 0,343 s | 0,360 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,54 | 1,22 | 1,24 |
+| Benchy (RV1, meta 1,5 s) | 1,133 s | 0,997 s | 0,975 s |
+| Benchy sin capas de abajo | — | 0,758 s | 0,748 s |
+
+- **RV4 se cumple, pero justo:** el ruido de la máquina mueve unos 0,02 s. Las corridas sueltas del cilindro van de
+  0,26 a 0,40 s. Lo que crece con las capas es el texto del G-code, que va en serie (unos 55 ms por cada 200 capas),
+  y la verificación (unos 10 ms).
+- **RV6, V5:** el mismo G-code byte a byte en el Benchy (con y sin giroide), la esfera (con soportes, con la tabla de
+  ventilador, con relleno ondulado y con ZAA), los cilindros, el tubo, las islas, las cajas, el cubo con piel difusa,
+  la pieza torcida, las capas por zona y una torre de cambios por altura (temperatura, ventilador, velocidad,
+  retracción, G-code propio y flujo forzado).
+- **RV6, V9:** cambia el relleno del Benchy (29 234 de 336 533 líneas). Por tipo, el largo total cambia: relleno
+  interno −0,2 %, sólido +0,1 %, superior −0,05 %, puentes +0,8 % (7,6 mm). Las paredes y el contorno quedan iguales.
+  La esfera, el cilindro de 128 lados, el tubo y las islas no cambian.
+- **Pruebas:** 396 de 396 en Release; el fuzzer de G-code, 150 casos sin fallas.
+
+**No medido:** RV2 y RV3 con V9 (V9 solo saca vértices; ya se cumplían). RV5 no cambia: el relaminado por etapas
+usa el mismo escritor, ahora más rápido.
+
+**Sigue:** V3 (`;WIDTH` solo cuando cambia, hoy 21 % del archivo) y V4 (juntar tramos cortos). Ninguna de las dos
+cambia el tiempo de corte, pero sí el tamaño del G-code y el tiempo de escribirlo. Después, la vista (pedido del
+dueño: oclusión y color como Prusa 3.0, mallado codicioso).
+
+## 2026-10-26 — mantenimiento (18:30)
+
+El bloque de mantenimiento de las 16:40 se disparó mientras se terminaba V10; se hizo al terminar V5 y V9. Ninguna
+otra sesión del motor estaba trabajando.
+
+**Revisado:**
+- `origin/main` no trae nada nuevo. Las fichas nuevas están en `spec/next` (PR #27, sin unir): RV7 a RV10 en
+  `BENCHMARKS.md` y la regla 8 de `perimeters.md` (la costura alineada en la GPU). `check_spec` pasa en las tres.
+- **Fuzzer de G-code:** 2000 casos con la semilla 20261026, 0 fallas (2 rechazados como no imprimibles, como
+  corresponde), en 86 s.
+- **CI de Linux** (gcc, clang, ASan) en verde sobre `2e4ff17`; Windows en verde sobre `1b2e782`.
+
+**Encontrado y arreglado:**
+- **Piezas huecas** (`infill.density` 0, la meta RV7). Con relleno impreso, una superficie inferior que queda toda
+  sobre la región de abajo se descarta sin calcular cordones; sin relleno, ese atajo no corría. Las capas sólidas de
+  abajo calculaban los cordones de toda la capa de abajo para descubrir que apoyan sobre la primera, que es sólida.
+  Ahora el mismo atajo mira la región de abajo menos su relleno disperso, que no se imprime.
+  - Estrella hueca de 160 mm (800 capas): corte de 0,90 a 0,62 s.
+  - Benchy sin relleno: de 1,30 a 1,04 s; sin relleno y con 1 pared, de 1,41 a 1,13 s.
+  - G-code igual byte a byte en las 9 piezas probadas (estrella y elipsoide huecos, esfera, Benchy con 1 pared, islas,
+    esfera grande).
+  - Prueba nueva: con relleno 0, el puente de la placa sobre dos pilares sigue igual y la estrella hueca no tiene
+    puentes.
+
+**Medido:**
+- **RV3** (Benchy, lo que suman las capas de abajo, mediana de 5): 1 pared 0,21 s, 3 paredes 0,33 s, 6 paredes
+  0,29 s. La meta es 0,3 s: queda en el límite con 3 paredes.
+- **RV2 con `simplify_tolerance` 0** (mediana de 3): 5,12 s contra 3,74 s sin capas de abajo, un 37 % más (meta
+  25 %). Sigue sin cumplirse: con tolerancia 0, el resto del laminado también es más lento.
+- **La costura alineada (RV10) no se reproduce sin el conejo**, que sale de los recursos de Tisma Slicer y no se
+  puede abrir. En piezas propias, `aligned` y `nearest` tardan casi lo mismo después de V5: Benchy 143 contra
+  141 ms de `write_ms`; esfera 66 contra 74; una estrella de 7 puntas 308 contra 377; un elipsoide de pocas caras 74
+  contra 57. Se pide al equipo de fichas que mida el conejo en `dev`.
+- **Un modelo del dueño** (cráneo de triceratops, 3MF de 546 684 triángulos, ajustes de una MK3S con soportes): 13,2 s
+  de laminado, 8 s de ellos en los soportes. Los soportes van en serie de arriba abajo, y lo caro es cerrar la
+  columna con dos offsets en cada capa con voladizo arriba. Calcular antes, en paralelo, el offset de la pieza por
+  `support.xy_gap` no se nota (12,1 contra 11,9 s), y se descartó. El cierre depende de la capa de arriba: va con
+  RV9.
+
+**Sigue:** RV9 (los soportes y lo demás que va en serie), RV2 con tolerancia 0, las mediciones del conejo (RV7, RV8 y
+RV10) y la decisión del dueño sobre el ancho en V3 y V4.
+

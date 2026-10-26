@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <functional>
@@ -154,6 +155,38 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         const std::size_t undo = g.find("\nG1 E", retract + 1);
         g.erase(undo + 1, g.find('\n', undo + 1) - undo);
     }, "while the filament is retracted");
+}
+
+TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
+    // The check reads the file in chunks of about 256 KiB of whole lines, in
+    // parallel, and takes them in order: lines on both sides of a cut.
+    IndexedMesh box; // posts, for many lines
+    for (int i = 0; i < 5; ++i)
+        for (int j = 0; j < 5; ++j)
+            add_box(box, 8.0f * float(i), 8.0f * float(j), 0, 8.0f * float(i) + 4, 8.0f * float(j) + 4, 12);
+    const Settings s = test_printer();
+    const Output o = slice_and_write(box, s);
+    REQUIRE(o.gcode.size() > 600 * 1024);
+    {
+        const GcodeCheck c = check_gcode(o.gcode, o.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+        CHECK(c.stats.lines == std::size_t(std::count(o.gcode.begin(), o.gcode.end(), '\n')));
+    }
+    for (const std::size_t cut : {std::size_t(256 * 1024), std::size_t(512 * 1024)}) {
+        const std::size_t next = o.gcode.find('\n', cut) + 1; // the first line of the next chunk
+        const std::size_t last = o.gcode.rfind('\n', next - 2) + 1; // the last line of this one
+        for (const std::size_t at : {last, next}) {
+            std::string g = o.gcode;
+            g.insert(at, "M106 S300\n");
+            const std::size_t line = std::size_t(std::count(g.begin(), g.begin() + std::ptrdiff_t(at), '\n')) + 1;
+            const GcodeCheck c = check_gcode(g, o.limits);
+            INFO(problems_of(c));
+            REQUIRE(c.problems.size() == 1);
+            CHECK(c.problems.front().line == line);
+            CHECK_THAT(c.problems.front().message, ContainsSubstring("fan speed"));
+        }
+    }
 }
 
 TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][check]") {

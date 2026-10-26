@@ -298,3 +298,49 @@ TEST_CASE("monotonic tops reach a quarter bead into the walls: the area is laid"
         }
     CHECK(parse_settings(R"({"infill": {"wall_overlap": 10}})").infill_wall_overlap == 10.0);
 }
+
+TEST_CASE("fill_period: the same surfaces fill alike that many layers apart, at any height", "[infill]") {
+    LayerSurfaces s;
+    s.top = square(0, 0, 10);
+    s.bottom = square(20, 0, 10);
+    s.sparse = square(0, 20, 30);
+    s.bridge = square(40, 0, 10);
+    s.bridge_angle = 30.0;
+    const auto alike = [](const std::vector<Toolpath>& a, const std::vector<Toolpath>& b) {
+        if (a.size() != b.size())
+            return false;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            if (a[i].points.size() != b[i].points.size())
+                return false;
+            for (std::size_t k = 0; k < a[i].points.size(); ++k)
+                if (a[i].points[k].p.x != b[i].points[k].p.x || a[i].points[k].p.y != b[i].points[k].p.y)
+                    return false;
+        }
+        return true;
+    };
+    for (int k = 0; k <= int(InfillPattern::Octagram); ++k) {
+        FillParams p;
+        p.pattern = InfillPattern(k);
+        p.density = 0.2;
+        INFO("pattern " << k);
+        const std::size_t period = fill_period(p);
+        const bool moves = p.pattern == InfillPattern::Gyroid || p.pattern == InfillPattern::Cubic ||
+                           p.pattern == InfillPattern::AdaptiveCubic || p.pattern == InfillPattern::SupportCubic;
+        CHECK((period == 0) == moves);
+        if (period == 0)
+            continue;
+        for (std::size_t l = 0; l < 3; ++l) {
+            const LayerFill a = fill_layer(s, l, p, 0.2 + 0.2 * double(l));
+            const LayerFill b = fill_layer(s, l + period, p, 7.0 + 0.2 * double(l));
+            CHECK(alike(a.top, b.top));
+            CHECK(alike(a.solid, b.solid));
+            CHECK(alike(a.sparse, b.sparse));
+            CHECK(alike(a.bridge, b.bridge));
+            CHECK(alike(a.gaps, b.gaps));
+        }
+    }
+    FillParams none;
+    none.density = 0.0;
+    none.pattern = InfillPattern::Gyroid;
+    CHECK(fill_period(none) == 2); // only the solid lines turn
+}

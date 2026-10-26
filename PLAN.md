@@ -726,7 +726,11 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   `PROGRESS.md`). Faltan RV4 (V10) y RV5 (V11)
 - [ ] V3: `;WIDTH` solo cuando cambia el ancho (hoy, 21 % del archivo)
 - [ ] V4: juntar los tramos cortos de las curvas dentro de `gcode.resolution` (el motor hace el doble de movimientos)
-- [ ] V5: armar el G-code de cada capa en paralelo y unirlo en orden
+- [x] V5: armar el G-code de cada capa en paralelo y unirlo en orden (hecho 2026-10-26). Cada capa se planea (orden y
+  costuras, que siguen de la capa de abajo) y se escribe por separado, en un pipeline de oneTBB: mientras se escribe
+  una capa se planean las siguientes, y los recorridos se simplifican en paralelo. La verificación lee el texto en
+  bloques en paralelo. Las costuras y la simplificación sacan la raíz solo cuando hace falta, y X, Y y el ancho se
+  formatean una vez. El G-code es el mismo byte a byte en todas las piezas de medición
 - [x] V7 (hecho con lo de arriba: el paso de las capas de abajo ya no crece más que los vértices; RV2 se cumple). V8
   no hace falta: las fichas piden el resultado, no el algoritmo, y RV1 a RV3 se cumplen
 - [x] V11, relaminar por etapas (hecho 2026-10-26): el programa guarda el último corte; si solo cambian ajustes que
@@ -734,8 +738,24 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   G-code de la impresora), rehace solo el G-code, su verificación y la vista previa. Una prueba compara byte a byte,
   ajuste por ajuste, contra un laminado entero (RV5). Benchy: 0,41 s contra 1,35 s entero (meta 0,5 s). Para
   llegar, los planificadores de viajes de cada capa se arman en paralelo, y la verificación y la vista previa a la vez
-- [ ] V10: reusar una capa igual a la de abajo (RV4)
-- [ ] V9: simplificar después de cada pared (medir antes: RV1 ya se cumple)
+- [x] V10: reusar una capa igual a la de abajo (RV4, hecho 2026-10-26 con V5):
+  - las capas que cruzan las mismas aristas que la de abajo (ningún vértice entre las dos) no se cortan de nuevo:
+    sus puntos salen de las aristas de la primera de la tanda, iguales bit a bit;
+  - si además la sección es la misma en x e y (aristas verticales, o caras verticales como los lados de un prisma
+    partidos por diagonales), el corte las deja vacías y el laminado copia la región y las paredes de la capa de
+    abajo;
+  - se reusan, con el mismo resultado byte a byte: las superficies (si la región de relleno y las capas que miran
+    son las de la capa de abajo), el relleno (si las superficies son las de la capa a un período del patrón) y el
+    planificador de viajes y las islas del G-code (si la región es la misma);
+  - cilindro de 32 768 lados: 40 mm, 2,69 → 0,36 s; 80 mm, 5,33 → 0,63 s. La relación 80/40 bajó de 1,98 a 1,75;
+    lo que crecía con las capas era la parte en serie del G-code. Con V5 y V9: 0,29 s y 0,36 s, relación 1,24 (meta
+    1,25, mediana de 9; queda justo, el ruido de la máquina mueve unos 0,02);
+  - RV6: el G-code del Benchy, la esfera, el tubo, las islas y las cajas sale igual byte a byte. En los cilindros
+    cambia: cada capa repite la sección de la primera, en vez de simplificar en cada capa otros puntos de las
+    diagonales. Las paredes nuevas quedan a menos de 0,018 mm de las de antes
+- [x] V9: simplificar después de cada pared (hecho 2026-10-26): lo que dejan las paredes se simplifica con
+  `slicing.simplify_tolerance`, como los contornos. Benchy 1,04 → 0,98 s (6 %); con 6 paredes, 3 %. El G-code del
+  Benchy cambia en el relleno (menos del 1 % de largo); las paredes quedan iguales
 
 ## Avance
 

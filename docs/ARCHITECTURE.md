@@ -111,6 +111,11 @@ archivos truncados y números no finitos. `stl_binary` escribe una malla como ST
   en el futuro: cualquier campo escalar sirve.
 - `slice_levels` saca los segmentos de cada nivel visitando cada triángulo solo para los niveles que cruza, y
   `join_segments` los une en contornos por la clave de arista.
+- Los niveles sin vértices entre uno y otro cruzan las mismas aristas (`same_crossings`): solo se corta el primero de
+  la tanda, y los demás calculan sus puntos con `edge_crossing` sobre esas aristas. Si la sección en x e y es la misma
+  (`same_sections`, los lados de un prisma), el corte deja el nivel vacío y `pipeline.cpp` copia la región y las
+  paredes de la capa de abajo. Las superficies, el relleno y los planes de viaje del G-code se reusan igual cuando
+  sus entradas son iguales a las de otra capa.
 - `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir.
 
 ### `geom/`: geometría
@@ -151,8 +156,12 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
 
 - **`writer.*`:** recorre las capas, ordena islas y recorridos (`order.*`), planifica los viajes por dentro
   (`travel.*`), aplica el tiempo mínimo de capa (`cooling.*`) y estima el tiempo con aceleraciones (`print_time.*`).
-  Cada capa se arma en un búfer, con los números formateados por `std::to_chars`.
-- **`check.*`:** relee y verifica el G-code.
+  Cada capa se arma en un búfer, con los números formateados por `std::to_chars`. Las capas pasan por un pipeline de
+  oneTBB: `plan_layer` ordena y elige las costuras, en orden, porque sigue desde donde terminó la capa de abajo;
+  los recorridos se simplifican en paralelo; `write_layer` escribe el texto, en orden. Mientras se escribe una capa
+  se planean las siguientes, y una capa que se frena por el tiempo mínimo se vuelve a escribir desde el mismo plan.
+- **`check.*`:** relee y verifica el G-code. Lee el texto en bloques de unos 256 KiB de líneas enteras, en paralelo,
+  y sigue el estado en orden.
 - **`export.*`:** junta escribir y verificar en una exportación que nunca deja un archivo malo con el nombre pedido.
 - **`preview.*`:** lee G-code (el propio o cualquier otro) en movimientos con su tipo, ancho, alto, avance y capa,
   para la vista previa de la interfaz.

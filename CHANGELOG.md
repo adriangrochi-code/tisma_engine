@@ -57,6 +57,20 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Piezas huecas más rápidas:** sin relleno (`infill.density` 0), las capas sólidas de abajo ya no calculan los
+  cordones de la capa entera para saber si son puentes. Una estrella hueca de 160 mm: el corte de 0,90 s a 0,62 s;
+  el Benchy sin relleno, de 1,30 s a 1,04 s. El mismo G-code.
+- **El G-code se arma y se verifica en paralelo** (V5 del informe de velocidad): mientras se escribe una capa se
+  ordenan las siguientes, y la verificación lee el archivo por bloques. El mismo G-code byte a byte. El Benchy pasa de
+  1,13 s a 1,00 s.
+- **Lo que dejan las paredes se simplifica** como los contornos (V9): el Benchy, de 1,04 s a 0,98 s. El relleno se
+  mueve menos que `slicing.simplify_tolerance` (0,01 mm); las paredes no cambian.
+- **Piezas prismáticas mucho más rápidas** (V10 del informe de velocidad): las capas con la misma sección que la de
+  abajo (un cilindro, una caja, una extrusión) ya no se cortan ni se calculan de nuevo; se copian la región, las
+  paredes, las superficies y el relleno. Un cilindro de 32 768 lados y 40 mm de alto: de 2,7 s a 0,36 s; de 80 mm, de
+  5,3 s a 0,63 s (0,29 s y 0,36 s con lo de arriba). En los cilindros, cada capa repite ahora exactamente la sección de la primera (antes la
+  simplificación elegía otros puntos en cada capa); las paredes se mueven menos de 0,02 mm. El resto de las piezas da
+  el mismo G-code byte a byte.
 - **Vista previa más rápida con modelos grandes** (pedido del dueño; `docs/LARGE_MODELS.md`): con la pieza entera a la
   vista, las paredes internas y el relleno que la pieza tapa por todos lados ya no se dibujan; la imagen es la misma.
   En un cilindro de 60 × 80 mm se dibuja un 71 % menos y el cuadro tarda 3,7 veces menos; en una esfera, el peor caso

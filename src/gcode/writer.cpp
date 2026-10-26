@@ -10,6 +10,7 @@
 #include "infill/nonplanar.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/parallel_pipeline.h>
 
 #include <algorithm>
 #include <charconv>
@@ -27,6 +28,7 @@
 #include <numbers>
 #include <optional>
 #include <string_view>
+#include <thread>
 
 namespace tisma {
 namespace {
@@ -490,13 +492,16 @@ public:
             other_time_ += retracted_amount_ / retract_feed_;
         }
         const double width = (from.width + to.width) / 2.0;
-        char w[kNumberCapacity];
-        const std::string_view width_text(w, format_fixed(w, width, 3));
-        if (width_text != width_) {
-            text_ += ";WIDTH:";
-            text_ += width_text;
-            text_ += '\n';
-            width_.assign(width_text);
+        if (width != width_value_) { // the same width writes the same text
+            width_value_ = width;
+            char w[kNumberCapacity];
+            const std::string_view width_text(w, format_fixed(w, width, 3));
+            if (width_text != width_) {
+                text_ += ";WIDTH:";
+                text_ += width_text;
+                text_ += '\n';
+                width_.assign(width_text);
+            }
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
@@ -536,8 +541,8 @@ public:
         // A piece that rounds to no move at 3 decimals is not written; its E
         // (next to nothing) goes with the next piece.
         char tx[kNumberCapacity], ty[kNumberCapacity];
-        if (std::string_view(tx, format_fixed(tx, to.p.x, 3)) == x_ &&
-            std::string_view(ty, format_fixed(ty, to.p.y, 3)) == y_)
+        const std::string_view x_text(tx, format_fixed(tx, to.p.x, 3)), y_text(ty, format_fixed(ty, to.p.y, 3));
+        if (x_text == x_ && y_text == y_)
             return;
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
@@ -545,7 +550,8 @@ public:
         // the layer lasts at least the minimum time.
         const double paced =
             pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
-        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced);
+        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced, x_text,
+             y_text);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
     }
@@ -564,16 +570,17 @@ private:
         return value == 1 ? 2 : value;
     }
 
+    // x_text and y_text, when given, are x and y as format_fixed writes them.
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
-              std::optional<double> e, double feed) {
+              std::optional<double> e, double feed, std::string_view x_text = {}, std::string_view y_text = {}) {
         const std::size_t start = text_.size();
         text_ += g;
         const std::size_t bare = text_.size();
-        auto axis = [&](char name, std::optional<double> v, int decimals, std::string& last) {
+        auto axis = [&](char name, std::optional<double> v, int decimals, std::string& last, std::string_view given) {
             if (!v)
                 return;
             char buffer[kNumberCapacity];
-            const std::string_view t(buffer, format_fixed(buffer, *v, decimals));
+            const std::string_view t = given.empty() ? std::string_view(buffer, format_fixed(buffer, *v, decimals)) : given;
             if (t != last || name == 'E') {
                 text_ += ' ';
                 text_ += name;
@@ -581,10 +588,10 @@ private:
                 last.assign(t);
             }
         };
-        axis('X', x, 3, x_);
-        axis('Y', y, 3, y_);
-        axis('Z', z, 3, z_);
-        axis('E', e, 5, e_text_);
+        axis('X', x, 3, x_, x_text);
+        axis('Y', y, 3, y_, y_text);
+        axis('Z', z, 3, z_, {});
+        axis('E', e, 5, e_text_, {});
         const long f = std::lround(feed * 60.0);
         if (f != f_) {
             text_ += " F";
@@ -634,6 +641,7 @@ private:
     bool resync_ = false;    // after a change's own G-code: the next travel writes everything
     bool retracted_ = false;
     std::string x_, y_, z_, e_text_, width_;
+    double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
     bool outer_ = false; // the current type is the outer wall
@@ -814,40 +822,67 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
 
-    // Every layer's travel planner first, in parallel: each depends on its
-    // layer's region alone, and the layers are written one after another.
-    std::vector<std::optional<TravelPlanner>> planners(model.layers.size());
-    tbb::parallel_for(std::size_t(0), planners.size(), [&](std::size_t l) {
-        planners[l].emplace(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
+    // Every layer's travel planner and islands first, in parallel: they
+    // depend on the layer's region alone, and the layers are written one after
+    // another. A layer with the region of the layer below shares them
+    // (prismatic parts; the speed report's V10).
+    struct RegionPlan {
+        std::optional<TravelPlanner> planner;
+        std::vector<Polygons> pieces;
+        std::vector<std::array<std::int64_t, 4>> boxes; // each piece's box
+    };
+    std::vector<std::size_t> plan_of(model.layers.size(), 0);
+    {
+        std::vector<char> same(model.layers.size(), 0);
+        tbb::parallel_for(std::size_t(1), std::min(model.layers.size(), model.regions.size()),
+                          [&](std::size_t l) { same[l] = model.regions[l] == model.regions[l - 1]; });
+        for (std::size_t l = 0; l < plan_of.size(); ++l)
+            plan_of[l] = same[l] ? plan_of[l - 1] : l;
+    }
+    std::vector<RegionPlan> plans(model.layers.size());
+    const Polygons none;
+    tbb::parallel_for(std::size_t(0), plans.size(), [&](std::size_t l) {
+        if (plan_of[l] != l)
+            return;
+        const Polygons& region = l < model.regions.size() ? model.regions[l] : none;
+        RegionPlan& p = plans[l];
+        p.planner.emplace(region, s.wall_width);
+        p.pieces = split_islands(region);
+        // The point-in-polygon tests run only where a box holds the point
+        // (hundreds of islands made every path test them all).
+        p.boxes.assign(p.pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
+        for (std::size_t k = 0; k < p.pieces.size(); ++k)
+            for (const auto& q : p.pieces[k].front()) {
+                auto& b = p.boxes[k];
+                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
+            }
     });
 
-    auto emit_layer = [&](std::size_t l, const Active& a) {
+    // What a layer lays, in order: its paths with their line types and
+    // feeds, and the thick zone's changes of height (no type).
+    struct Step {
+        Toolpath path;
+        const char* type = nullptr;
+        double feed = 0.0;
+        double height = 0.0;
+    };
+    // The order of a layer's paths and their seams. It goes on from where the
+    // layer below ended and from its seams, so the layers are planned one
+    // after another; the G-code is written apart (write_layer), so a layer is
+    // written while the next ones are planned (the speed report's V5).
+    auto plan_layer = [&](std::size_t l, const Active& a) {
         const Layer& layer = model.layers[l];
-        g.open_layer_fan();
-        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
-        g.custom(a.lines, a.user);
-        g.set_retraction(a.retract_length, a.retract_speed);
-        g.set_flow(a.flow);
-        g.set_forced_flow(a.volumetric_flow);
+        std::vector<Step> steps;
         seams.next_layer();
-        const TravelPlanner& planner = *planners[l];
+        const RegionPlan& plan = plans[plan_of[l]];
         const bool first = l == 0;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
             return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
-        auto lay = [&](const Toolpath& path, const char* type, double feed) {
-            if (path.points.empty())
-                return;
-            const Toolpath t = simplify_toolpath(path, s.gcode_resolution);
-            g.travel(t.points.front().p, s.travel_speed, planner);
-            g.type(type);
-            g.nonplanar(t.wavy);
-            for (std::size_t i = 1; i < t.points.size(); ++i)
-                g.extrude(t.points[i - 1], t.points[i], feed);
-            if (t.closed && t.points.size() > 2)
-                g.extrude(t.points.back(), t.points.front(), feed);
-            g.nonplanar(false);
+        auto lay = [&](Toolpath path, const char* type, double feed) {
+            if (!path.points.empty())
+                steps.push_back({std::move(path), type, feed, 0.0});
         };
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -890,8 +925,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 }
                 return;
             }
-            for (const Toolpath& t : ordered)
-                lay(t, type, feed);
+            for (Toolpath& t : ordered)
+                lay(std::move(t), type, feed);
         };
         auto off_top = [](std::initializer_list<const std::vector<Toolpath>*> lists) {
             for (const std::vector<Toolpath>* list : lists)
@@ -913,36 +948,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (const Pending& p : pending)
                 paths.push_back(&p.path);
             for (const std::size_t k : height_order(paths, reach))
-                lay(pending[k].path, pending[k].type, pending[k].feed);
+                lay(std::move(pending[k].path), pending[k].type, pending[k].feed);
             pending.clear();
             deferring = false;
         };
-        if (s.zaa && s.zaa_raise) {
-            // Travels keep above the highest raised bead of the layer.
-            double highest = 0.0;
-            auto scan = [&](const std::vector<Toolpath>& paths) {
-                for (const Toolpath& t : paths)
-                    for (const ToolpathPoint& p : t.points)
-                        highest = std::max(highest, p.dz);
-            };
-            if (l < model.walls.size())
-                scan(model.walls[l].toolpaths);
-            if (l < model.fills.size())
-                scan(model.fills[l].top), scan(model.fills[l].gaps);
-            if (l < model.thick.size())
-                scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
-            g.set_clearance(highest);
-        }
-        if (l < model.fills.size()) {
-            // Wavy infill: travels keep above its crests.
-            double highest = 0.0;
-            for (const Toolpath& t : model.fills[l].sparse)
-                if (t.wavy)
-                    for (const ToolpathPoint& p : t.points)
-                        highest = std::max(highest, p.dz);
-            if (highest > 0.0)
-                g.set_clearance(std::max(g.clearance(), highest));
-        }
         // Skirt, then brim, before the part, at the first layer's speed.
         if (l < std::size_t(std::max(s.skirt_layers, 0)))
             group(model.skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
@@ -956,16 +965,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Point2d> ends;                  // where its paths start or end
         };
-        const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
+        const std::vector<Polygons>& pieces = plan.pieces;
         std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
-        // Each island's box: the point-in-polygon tests run only where the box
-        // holds the point (hundreds of islands made every path test them all).
-        std::vector<std::array<std::int64_t, 4>> piece_box(pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
-        for (std::size_t k = 0; k < pieces.size(); ++k)
-            for (const auto& q : pieces[k].front()) {
-                auto& b = piece_box[k];
-                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
-            }
+        const std::vector<std::array<std::int64_t, 4>>& piece_box = plan.boxes;
         auto island = [&](const Toolpath& t) -> Island& {
             if (pieces.size() <= 1)
                 return islands.front();
@@ -1083,7 +1085,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
         if (l < model.thick.size() && !model.thick[l].empty()) {
             const ThickLayer& t = model.thick[l];
-            g.set_height(t.height);
+            steps.push_back({{}, nullptr, 0.0, t.height});
             deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
@@ -1098,19 +1100,68 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (std::size_t k = 0; k < 5; ++k)
                 group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
             flush();
-            g.set_height(layer.top - layer.bottom);
+            steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom});
+        }
+        return steps;
+    };
+
+    // A layer's G-code from its plan, the paths already simplified.
+    auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& steps) {
+        const Layer& layer = model.layers[l];
+        g.open_layer_fan();
+        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
+        g.custom(a.lines, a.user);
+        g.set_retraction(a.retract_length, a.retract_speed);
+        g.set_flow(a.flow);
+        g.set_forced_flow(a.volumetric_flow);
+        const TravelPlanner& planner = *plans[plan_of[l]].planner;
+        if (s.zaa && s.zaa_raise) {
+            // Travels keep above the highest raised bead of the layer.
+            double highest = 0.0;
+            auto scan = [&](const std::vector<Toolpath>& paths) {
+                for (const Toolpath& t : paths)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            };
+            if (l < model.walls.size())
+                scan(model.walls[l].toolpaths);
+            if (l < model.fills.size())
+                scan(model.fills[l].top), scan(model.fills[l].gaps);
+            if (l < model.thick.size())
+                scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
+            g.set_clearance(highest);
+        }
+        if (l < model.fills.size()) {
+            // Wavy infill: travels keep above its crests.
+            double highest = 0.0;
+            for (const Toolpath& t : model.fills[l].sparse)
+                if (t.wavy)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            if (highest > 0.0)
+                g.set_clearance(std::max(g.clearance(), highest));
+        }
+        for (const Step& step : steps) {
+            if (!step.type) {
+                g.set_height(step.height);
+                continue;
+            }
+            const Toolpath& t = step.path;
+            g.travel(t.points.front().p, s.travel_speed, planner);
+            g.type(step.type);
+            g.nonplanar(t.wavy);
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                g.extrude(t.points[i - 1], t.points[i], step.feed);
+            if (t.closed && t.points.size() > 2)
+                g.extrude(t.points.back(), t.points.front(), step.feed);
+            g.nonplanar(false);
         }
     };
 
+    // The height changes of every layer first: the plans take their speeds.
+    std::vector<Active> actives;
+    actives.reserve(model.layers.size());
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
-        // Each layer is built in the emitter's buffer first. One faster than the
-        // minimum layer time is built again from the same state with its
-        // extrusions slowed down and the fan at its maximum
-        // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
-        const Emitter emitter_before = g;
-        const Point2d cursor_before = cursor;
-        const SeamMemory seams_before = seams;
-        g.reset_times();
         // Changes below this layer's top take effect now: its top as ;Z: writes
         // it, so a reader of the G-code (the check) takes them at the same layer.
         active.lines.clear();
@@ -1143,9 +1194,20 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             if (c.fan)
                 active.fan = *c.fan;
         }
-        emit_layer(l, active);
+        actives.push_back(active);
+    }
+
+    // Each layer is built in the emitter's buffer first. One faster than the
+    // minimum layer time is built again from the same state with its
+    // extrusions slowed down and the fan at its maximum
+    // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
+    const auto write = [&](std::size_t l, const std::vector<Step>& steps) {
+        const Active& a = actives[l];
+        const Emitter emitter_before = g;
+        g.reset_times();
+        write_layer(l, a, steps);
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
-        const Slowdown slowdown = active.volumetric_flow > 0.0
+        const Slowdown slowdown = a.volumetric_flow > 0.0
                                       ? Slowdown{}
                                       : s.keep_outer_speed
                                       ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
@@ -1153,10 +1215,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                       : plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
         if (slowdown.stage != 0) {
             g = emitter_before;
-            cursor = cursor_before;
-            seams = seams_before;
             g.pace(slowdown);
-            emit_layer(l, active);
+            write_layer(l, a, steps);
             g.pace(Slowdown{});
             const double reached = layer_time(g.extruded(), g.outer_extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {
@@ -1170,16 +1230,46 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // at fan_max, even among the first layers, which otherwise print
         // without fan (owner's decision, 2026-10-24). Bridges get their own.
         const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
-        const double fan = active.fan       ? *active.fan
+        const double fan = a.fan            ? *a.fan
                            : fan_off        ? 0.0
                            : slowdown.stage ? s.fan_max
                                             : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
                                                         s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
                                                         s.fan_always);
-        g.settle_fan(fan, active.fan || fan_off ? fan : s.fan_bridges);
+        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
         g.end_layer();
         g.flush(out);
-    }
+    };
+
+    // Planned in order, simplified in parallel and written in order: the
+    // stages overlap across layers, and a slowed layer is written again from
+    // the same plan.
+    std::vector<std::vector<Step>> planned(model.layers.size());
+    std::size_t next_layer = 0;
+    const std::size_t in_flight = 4 * std::max<std::size_t>(1, std::thread::hardware_concurrency());
+    tbb::parallel_pipeline(
+        in_flight,
+        tbb::make_filter<void, std::size_t>(tbb::filter_mode::serial_in_order,
+                                            [&](tbb::flow_control& control) -> std::size_t {
+                                                if (next_layer == model.layers.size()) {
+                                                    control.stop();
+                                                    return 0;
+                                                }
+                                                const std::size_t l = next_layer++;
+                                                planned[l] = plan_layer(l, actives[l]);
+                                                return l;
+                                            }) &
+            tbb::make_filter<std::size_t, std::size_t>(tbb::filter_mode::parallel,
+                                                       [&](std::size_t l) {
+                                                           for (Step& step : planned[l])
+                                                               if (step.type)
+                                                                   step.path = simplify_toolpath(step.path, s.gcode_resolution);
+                                                           return l;
+                                                       }) &
+            tbb::make_filter<std::size_t, void>(tbb::filter_mode::serial_in_order, [&](std::size_t l) {
+                write(l, planned[l]);
+                std::vector<Step>().swap(planned[l]);
+            }));
 
     g.type("Custom");
     g.flush(out);

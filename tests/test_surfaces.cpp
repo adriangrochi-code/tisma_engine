@@ -7,7 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <cmath>
 #include <filesystem>
+#include <numbers>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -49,6 +51,22 @@ TEST_CASE("classify_surfaces on a column of equal layers", "[surfaces]") {
     // No solid layers asked: everything is sparse.
     for (const LayerSurfaces& l : classify_surfaces(regions, regions, 0, 0))
         CHECK_THAT(area_mm2(l.sparse), WithinAbs(100.0, 1e-9));
+}
+
+TEST_CASE("classify_surfaces on a step: the repeated layers end where the regions change", "[surfaces]") {
+    // A 10 mm square for ten layers, then a 6 mm one in its corner for ten.
+    std::vector<Polygons> regions(10, square(0, 0, 10));
+    regions.resize(20, square(0, 0, 6));
+    const std::vector<LayerSurfaces> s = classify_surfaces(regions, regions, 3, 2);
+    for (std::size_t i = 0; i < 20; ++i) {
+        INFO("layer " << i);
+        const double area = i < 10 ? 100.0 : 36.0;
+        const double top = i >= 17 ? 36.0 : (i >= 7 && i < 10 ? 64.0 : 0.0);
+        const double bottom = i < 2 ? 100.0 : 0.0; // the small square stands on the big one
+        CHECK_THAT(area_mm2(s[i].top), WithinAbs(top, 1e-9));
+        CHECK_THAT(area_mm2(s[i].bottom), WithinAbs(bottom, 1e-9));
+        CHECK_THAT(area_mm2(s[i].sparse), WithinAbs(area - top - bottom, 1e-9));
+    }
 }
 
 TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfaces]") {
@@ -155,6 +173,43 @@ TEST_CASE("bridges: a plate on two pillars bridges the gap, with lines from pill
     for (std::size_t i = 0; i < sliced.surfaces.size(); ++i)
         if (i != 25)
             CHECK(sliced.surfaces[i].bridge.empty());
+}
+
+TEST_CASE("bridges: with no infill, the same bridge, and none from a narrowing hollow part", "[surfaces]") {
+    // The plate on two pillars, with the sparse infill not printed.
+    TriangleMesh plate;
+    add_box(plate, 0, 0, 0, 5, 10, 5);
+    add_box(plate, 15, 0, 0, 20, 10, 5);
+    add_box(plate, 0, 0, 5, 20, 10, 7);
+    Settings s;
+    s.infill_density = 0.0;
+    const SlicedModel sliced = slice_model(weld_exact(plate), s);
+    REQUIRE(sliced.surfaces.size() == 35);
+    CHECK_THAT(area_mm2(sliced.surfaces[25].bridge), WithinAbs(10.0 * 7.6, 1e-6));
+    for (std::size_t i = 0; i < sliced.surfaces.size(); ++i)
+        if (i != 25)
+            CHECK(sliced.surfaces[i].bridge.empty());
+    // A hollow star: its bottom layers rest on the first one, solid; none is
+    // a bridge, though the sparse infill above them is not printed.
+    TriangleMesh star;
+    const int points = 7;
+    const auto corner = [&](int i, float z) {
+        const double r = (i % 2 == 0 ? 45.0 : 20.0) * (1.0 - 0.5 * double(z) / 160.0); // half in 160 mm
+        const double a = std::numbers::pi * double(i % (2 * points)) / double(points);
+        return Vec3f{float(r * std::cos(a)), float(r * std::sin(a)), z};
+    };
+    for (int i = 0; i < 2 * points; ++i) {
+        star.add_triangle(corner(i, 0), corner(i + 1, 0), corner(i + 1, 20));
+        star.add_triangle(corner(i, 0), corner(i + 1, 20), corner(i, 20));
+        star.add_triangle({0, 0, 0}, corner(i + 1, 0), corner(i, 0));
+        star.add_triangle({0, 0, 20}, corner(i, 20), corner(i + 1, 20));
+    }
+    const SlicedModel hollow = slice_model(weld_exact(star), s);
+    REQUIRE(hollow.surfaces.size() == 100);
+    for (std::size_t i = 0; i < 3; ++i)
+        CHECK_FALSE(hollow.surfaces[i].bottom.empty());
+    for (const LayerSurfaces& l : hollow.surfaces)
+        CHECK(l.bridge.empty());
 }
 
 TEST_CASE("bridges: none in the cube", "[surfaces]") {

@@ -14,6 +14,17 @@ namespace {
 
 double distance(const Point2d& a, const Point2d& b) { return std::hypot(a.x - b.x, a.y - b.y); }
 
+// distance(a, b) >= d, the same answer without the square root unless the
+// squares come within a hair of each other (far beyond their rounding).
+bool at_least(const Point2d& a, const Point2d& b, double d) {
+    const double dx = a.x - b.x, dy = a.y - b.y, squared = dx * dx + dy * dy, limit = d * d;
+    if (squared > limit * (1.0 + 1e-9))
+        return true;
+    if (squared < limit * (1.0 - 1e-9))
+        return false;
+    return distance(a, b) >= d;
+}
+
 std::size_t rear_point(const Toolpath& t, const std::vector<std::size_t>& candidates) {
     std::size_t best = candidates.front();
     for (std::size_t i : candidates) {
@@ -204,7 +215,7 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
         double area = 0.0;
         for (std::size_t i = 0; i < n; ++i) {
             const Point2d& a = loop.points[i].p;
-            const Point2d& b = loop.points[(i + 1) % n].p;
+            const Point2d& b = loop.points[i + 1 < n ? i + 1 : 0].p;
             area += a.x * b.y - b.x * a.y;
         }
         const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
@@ -218,8 +229,8 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
             const Point2d& b = loop.points[i].p;
             std::size_t j = i;
             for (std::size_t k = 0; k + 1 < n; ++k) {
-                j = forward ? (j + 1) % n : (j + n - 1) % n;
-                if (distance(loop.points[j].p, b) >= kSeamSpan)
+                j = forward ? (j + 1 == n ? 0 : j + 1) : (j == 0 ? n - 1 : j - 1);
+                if (at_least(loop.points[j].p, b, kSeamSpan))
                     break;
             }
             return j;
@@ -229,11 +240,16 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
             const Point2d& b = loop.points[i].p;
             const Point2d& c = loop.points[away(i, true)].p;
             const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+            const double cross = ux * vy - uy * vx;
+            // Only a turn against the loop's direction can be a corner: the
+            // others need no lengths.
+            if (!offered[i] || cross * (area > 0.0 ? -1.0 : 1.0) <= 0.0)
+                continue;
             const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
             if (lu == 0.0 || lv == 0.0)
                 continue;
-            const double turn = (ux * vy - uy * vx) / (lu * lv); // sine of the turn, + to the left
-            if (offered[i] && turn * (area > 0.0 ? -1.0 : 1.0) > limit)
+            const double turn = cross / (lu * lv); // sine of the turn, + to the left
+            if (turn * (area > 0.0 ? -1.0 : 1.0) > limit)
                 corners.push_back(i); // turns against the loop's direction: a concave corner
         }
         const std::vector<std::size_t>& candidates = corners.empty() ? allowed : corners;
@@ -242,9 +258,32 @@ std::size_t seam_among(const Toolpath& loop, const std::vector<std::size_t>& all
             return rear_point(loop, candidates);
         std::size_t best = candidates.front();
         double nearest = std::numeric_limits<double>::max();
-        for (std::size_t i : candidates)
+        // With few seams below, the squares first: only the candidates within
+        // a hair of the nearest square need the distances, which pick as
+        // before (the first of the nearest).
+        const std::vector<Point2d>& below = it->second;
+        std::vector<double> squares;
+        double least = std::numeric_limits<double>::infinity();
+        if (below.size() <= 32) {
+            squares.reserve(candidates.size());
+            for (std::size_t i : candidates) {
+                const Point2d& p = loop.points[i].p;
+                double square = std::numeric_limits<double>::infinity();
+                for (const Point2d& q : below) {
+                    const double dx = p.x - q.x, dy = p.y - q.y;
+                    square = std::min(square, dx * dx + dy * dy);
+                }
+                squares.push_back(square);
+                least = std::min(least, square);
+            }
+        }
+        for (std::size_t k = 0; k < candidates.size(); ++k) {
+            if (!squares.empty() && squares[k] > least * (1.0 + 1e-9))
+                continue;
+            const std::size_t i = candidates[k];
             if (const double d = memory.nearest_below(loop.index, loop.points[i].p); d < nearest)
                 nearest = d, best = i;
+        }
         return best;
     }
     }
