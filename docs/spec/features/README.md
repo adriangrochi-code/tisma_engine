@@ -47,6 +47,9 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
 | [`mobile_app.md`](mobile_app.md): la app de Android nueva, de cero sobre el motor: API en C del motor, pantallas como el escritorio, laminar en el teléfono, Ingeniería, impresoras de la red, nube | después de P1 | Para revisar |
 | [`cloud.md`](cloud.md): contrato con Tisma Cloud: cuenta, laminar y calcular en la nube, informar problemas, el motor como puente de impresoras y como programa de los nodos | después de la primera versión | Para revisar |
+| [`step_faces.md`](step_faces.md): STEP con caras: calidad al abrir, cara por triángulo, el STEP en el proyecto, pintar y elegir cargas por cara, volver a convertir sin perder lo pintado, revisar el sólido | después de la primera versión | Para revisar |
+| [`problem_reports.md`](problem_reports.md): la pantalla de informar un problema: campos, qué se adjunta y se ve antes, mandar, respuestas del servidor, los informes propios | después de la primera versión | Para revisar |
+| [`thingiverse.md`](thingiverse.md): el sitio de Thingiverse dentro del programa con descarga directa a la placa; la búsqueda con la API, para cuando se lea su documentación | después de la primera versión | Para revisar |
 | [`preferences.md`](preferences.md): todas las preferencias del programa por página (General, GUI, Other, Camera), las propias del motor, buscador, exportar e importar | P1 | Para revisar |
 | [`walls_extra.md`](walls_extra.md): paredes: ancho fijo o variable, costura, voladizos, paredes extra | después de F2 | Para revisar |
 | [`infill_patterns.md`](infill_patterns.md): patrones de relleno y opciones del relleno que no están en `surfaces_infill.md` | después de F3 | Para revisar |
