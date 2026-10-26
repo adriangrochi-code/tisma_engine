@@ -4419,3 +4419,45 @@ usa el mismo escritor, ahora más rápido.
 cambia el tiempo de corte, pero sí el tamaño del G-code y el tiempo de escribirlo. Después, la vista (pedido del
 dueño: oclusión y color como Prusa 3.0, mallado codicioso).
 
+## 2026-10-26 — mantenimiento (18:30)
+
+El bloque de mantenimiento de las 16:40 se disparó mientras se terminaba V10; se hizo al terminar V5 y V9. Ninguna
+otra sesión del motor estaba trabajando.
+
+**Revisado:**
+- `origin/main` no trae nada nuevo. Las fichas nuevas están en `spec/next` (PR #27, sin unir): RV7 a RV10 en
+  `BENCHMARKS.md` y la regla 8 de `perimeters.md` (la costura alineada en la GPU). `check_spec` pasa en las tres.
+- **Fuzzer de G-code:** 2000 casos con la semilla 20261026, 0 fallas (2 rechazados como no imprimibles, como
+  corresponde), en 86 s.
+- **CI de Linux** (gcc, clang, ASan) en verde sobre `2e4ff17`; Windows en verde sobre `1b2e782`.
+
+**Encontrado y arreglado:**
+- **Piezas huecas** (`infill.density` 0, la meta RV7). Con relleno impreso, una superficie inferior que queda toda
+  sobre la región de abajo se descarta sin calcular cordones; sin relleno, ese atajo no corría. Las capas sólidas de
+  abajo calculaban los cordones de toda la capa de abajo para descubrir que apoyan sobre la primera, que es sólida.
+  Ahora el mismo atajo mira la región de abajo menos su relleno disperso, que no se imprime.
+  - Estrella hueca de 160 mm (800 capas): corte de 0,90 a 0,62 s.
+  - Benchy sin relleno: de 1,30 a 1,04 s; sin relleno y con 1 pared, de 1,41 a 1,13 s.
+  - G-code igual byte a byte en las 9 piezas probadas (estrella y elipsoide huecos, esfera, Benchy con 1 pared, islas,
+    esfera grande).
+  - Prueba nueva: con relleno 0, el puente de la placa sobre dos pilares sigue igual y la estrella hueca no tiene
+    puentes.
+
+**Medido:**
+- **RV3** (Benchy, lo que suman las capas de abajo, mediana de 5): 1 pared 0,21 s, 3 paredes 0,33 s, 6 paredes
+  0,29 s. La meta es 0,3 s: queda en el límite con 3 paredes.
+- **RV2 con `simplify_tolerance` 0** (mediana de 3): 5,12 s contra 3,74 s sin capas de abajo, un 37 % más (meta
+  25 %). Sigue sin cumplirse: con tolerancia 0, el resto del laminado también es más lento.
+- **La costura alineada (RV10) no se reproduce sin el conejo**, que sale de los recursos de Tisma Slicer y no se
+  puede abrir. En piezas propias, `aligned` y `nearest` tardan casi lo mismo después de V5: Benchy 143 contra
+  141 ms de `write_ms`; esfera 66 contra 74; una estrella de 7 puntas 308 contra 377; un elipsoide de pocas caras 74
+  contra 57. Se pide al equipo de fichas que mida el conejo en `dev`.
+- **Un modelo del dueño** (cráneo de triceratops, 3MF de 546 684 triángulos, ajustes de una MK3S con soportes): 13,2 s
+  de laminado, 8 s de ellos en los soportes. Los soportes van en serie de arriba abajo, y lo caro es cerrar la
+  columna con dos offsets en cada capa con voladizo arriba. Calcular antes, en paralelo, el offset de la pieza por
+  `support.xy_gap` no se nota (12,1 contra 11,9 s), y se descartó. El cierre depende de la capa de arriba: va con
+  RV9.
+
+**Sigue:** RV9 (los soportes y lo demás que va en serie), RV2 con tolerancia 0, las mediciones del conejo (RV7, RV8 y
+RV10) y la decisión del dueño sobre el ancho en V3 y V4.
+

@@ -61,8 +61,16 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
         if (surfaces[i].bottom.empty())
             return;
         auto open = [&](const Polygons& p) { return offset(offset(p, -width / 2.0), width / 2.0); };
-        if (sparse_printed && open(Clipper2Lib::Difference(surfaces[i].bottom, regions[i - 1], FillRule::NonZero)).empty())
-            return; // all over the region below, which is printed but for slits
+        // All over what is printed below but for slits: the region below, less
+        // its sparse infill when that is not printed (a hollow part, whose
+        // bottom layers would otherwise each weigh a whole layer's beads).
+        const Polygons& region = regions[i - 1];
+        if (open(Clipper2Lib::Difference(
+                     surfaces[i].bottom,
+                     sparse_printed ? region : Clipper2Lib::Difference(region, surfaces[i - 1].sparse, FillRule::NonZero),
+                     FillRule::NonZero))
+                .empty())
+            return;
         // What is printed below, only near the bottom surface: the bridge
         // comes out of the surface, and its anchors (within the bottom
         // surface's box) look at most twice the width away (the mitred offset

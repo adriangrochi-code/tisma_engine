@@ -57,6 +57,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Piezas huecas más rápidas:** sin relleno (`infill.density` 0), las capas sólidas de abajo ya no calculan los
+  cordones de la capa entera para saber si son puentes. Una estrella hueca de 160 mm: el corte de 0,90 s a 0,62 s;
+  el Benchy sin relleno, de 1,30 s a 1,04 s. El mismo G-code.
 - **El G-code se arma y se verifica en paralelo** (V5 del informe de velocidad): mientras se escribe una capa se
   ordenan las siguientes, y la verificación lee el archivo por bloques. El mismo G-code byte a byte. El Benchy pasa de
   1,13 s a 1,00 s.
