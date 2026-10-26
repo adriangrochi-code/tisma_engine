@@ -98,7 +98,8 @@ entrada), una entrada repetida y las fuentes no permitidas. Las entradas quedan 
 | `machine.max_height` | La altura del volumen |
 | `machine.nozzle_diameter` | La boquilla elegida |
 | `machine.flavor` | `klipper` → Klipper; `reprap` → RepRap; `marlin`, `bambu`, `other` y sin dato → Marlin (comandos que también entienden los demás) |
-| `retraction.length`, `speed` | Valores de partida propios: extrusor directo 0,8 mm a 35 mm/s; Bowden 4 mm a 40 mm/s. Las torres de calibración encuentran los de cada impresora |
+| `retraction.length` | Valores de partida propios: extrusor directo 0,8 mm; Bowden 4 mm. Las torres de calibración encuentran los de cada impresora |
+| Las velocidades (`speed`, `retraction.speed`, `cooling.min_speed`, `machine.corner_speed`) | El catálogo no las sabe: las de respaldo de una Ender-3 de fábrica (`docs/CONFIG.md`, «Velocidades de respaldo»; decisión del dueño, 2026-10-26), ninguna por encima de la velocidad máxima publicada del modelo. La interfaz lo dice al agregar la impresora |
 | `machine.max_feed_x`, `_y`, `acceleration` | Los máximos publicados, si los hay |
 | `machine.max_flow`, `max_nozzle_temp`, `max_bed_temp`, `max_chamber_temp`, `enclosed`, `hardened_nozzle` | Sus capacidades, si se conocen (ver «Capacidades») |
 | G-code de inicio y fin | Propios del motor, en comandos que entiende cualquier firmware: calentar, `G28`, `M420 S1` (la malla guardada) en Marlin con nivelación automática, esperar las temperaturas, una línea de cebado junto al borde, y al final apagar, subir y presentar la pieza |

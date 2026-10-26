@@ -116,11 +116,12 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
-    // Motion limits, for the time estimate.
-    double max_feed_x = 200.0, max_feed_y = 200.0, max_feed_z = 12.0, max_feed_e = 120.0; // mm/s
+    // Motion limits, for the time estimate. Like every speed, from the
+    // printer's profile; 0: not known, not applied.
+    double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
     double acceleration = 1000.0;        // mm/s2, moves that extrude
     double travel_acceleration = 1250.0; // mm/s2, travels and retractions
-    double corner_speed = 10.0;          // mm/s through a sharp corner
+    double corner_speed = 0.0;           // mm/s through a sharp corner, from the printer's profile; 0: not set
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -139,26 +140,27 @@ struct Settings {
     bool enclosed = false;
     bool hardened_nozzle = false;   // takes abrasive filaments
 
-    // speed, mm/s
-    double wall_speed = 60.0;
-    Speed outer_wall_speed{50.0, true}; // of wall_speed
-    double infill_speed = 80.0;
-    double solid_infill_speed = 80.0;
-    double top_solid_infill_speed = 50.0;
-    double support_speed = 80.0;
-    double travel_speed = 130.0;
-    double first_layer_speed = 30.0;
-    double max_speed = 80.0; // no extrusion goes faster
+    // speed, mm/s. No speed has a value of its own: they come from the
+    // printer's profile (owner's decision, 2026-10-26); 0: not set.
+    double wall_speed = 0.0;
+    Speed outer_wall_speed; // in mm/s, or a share of wall_speed
+    double infill_speed = 0.0;
+    double solid_infill_speed = 0.0;
+    double top_solid_infill_speed = 0.0;
+    double support_speed = 0.0;
+    double travel_speed = 0.0;
+    double first_layer_speed = 0.0;
+    double max_speed = 0.0; // no extrusion goes faster; 0: no cap
 
     // retraction
     double retract_length = 2.0;     // mm of filament
-    double retract_speed = 40.0;     // mm/s
+    double retract_speed = 0.0;      // mm/s, from the printer's profile; 0: not set
     double retract_lift = 0.0;       // mm of Z while travelling
     double retract_min_travel = 2.0; // mm: shorter travels do not retract
 
     // adhesion
     int skirt_loops = 1;
-    double skirt_distance = 3.0; // mm from the part (or its brim)
+    double skirt_distance = 6.0; // mm from the part (or its brim; supports_skirt.md)
     int skirt_layers = 1;
     double brim_width = 0.0; // mm; 0: no brim
 
@@ -173,10 +175,16 @@ struct Settings {
 
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
-    double min_print_speed = 10.0; // mm/s: the first stage slows extrusions down to this
-    double fan_min = 35.0;         // %: the fan on ordinary layers
-    double fan_max = 100.0;        // %: the fan on layers that had to slow down
-    int fan_off_layers = 1;        // the first layers print with the fan off
+    double min_print_speed = 0.0;  // mm/s, from the printer's profile: the first stage slows extrusions down to this
+    // The fan by layer time (docs/spec/features/cooling.md, rule 3): fan_max
+    // at the minimum layer time or less, down to fan_min at fan_below_time,
+    // and off from there (fan_min with fan_always).
+    double fan_min = 35.0;         // %
+    double fan_max = 100.0;        // %: also every layer that had to slow down
+    double fan_below_time = 60.0;  // s: layers this long or longer print without fan
+    bool fan_always = false;       // the fan never below fan_min
+    double fan_bridges = 100.0;    // %: the fan while bridging
+    int fan_off_layers = 3;        // the first layers print with the fan off
     // The outer walls keep their speed while the rest slows down for the
     // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
     bool keep_outer_speed = true;
@@ -206,6 +214,26 @@ struct Settings {
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;
 };
+
+// The speeds (every setting in mm/s) come only from the printer's profile
+// (owner's decision, 2026-10-26). The keys of those not set, in the order of
+// docs/CONFIG.md.
+std::vector<std::string> missing_speeds(const Settings& settings);
+
+// Only when the printer's profile has none (a printer made from nothing, or
+// one the catalog knows no speeds of): the speeds of a stock Creality Ender-3,
+// the commonest and safest machine (owner's decision, 2026-10-26;
+// docs/CONFIG.md, "Velocidades de respaldo"), into the speeds not set. A
+// speed already set stays. Returns the keys filled.
+std::vector<std::string> fill_missing_speeds(Settings& settings);
+
+// Throws SettingsError naming the speeds not set, if any: the G-code needs
+// all of them.
+void require_speeds(const Settings& settings);
+
+// The fastest an extrusion is asked to go, mm/s: the fastest extrusion speed,
+// capped by speed.max when that is set.
+double fastest_extrusion(const Settings& settings);
 
 // Every setting as "group.key" and its value, for the end of the G-code.
 std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);

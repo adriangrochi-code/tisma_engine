@@ -257,6 +257,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    // The speeds come from the printer's profile; those the file does not give
+    // are a stock Ender-3's (docs/CONFIG.md, "Velocidades de respaldo").
+    std::string fallback;
+    for (const std::string& key : fill_missing_speeds(settings))
+        fallback += (fallback.empty() ? "" : ", ") + key;
+    if (!fallback.empty())
+        err << "warning: no speed for " << fallback << ": using a stock Ender-3's\n";
 
     StlFile stl;
     double seconds = 0.0;
@@ -304,6 +311,9 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     SlicedModel sliced;
     std::vector<Warning> warnings;
+    if (!fallback.empty())
+        warnings.push_back({"speed_fallback", -1, 0.0,
+                            "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
         sliced = slice_model(mesh, settings, gpu.get(), &stress);
     } catch (const std::runtime_error& e) {

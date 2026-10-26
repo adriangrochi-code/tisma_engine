@@ -27,6 +27,8 @@ namespace tisma::ui {
 // The settings the interface starts with: the engine's defaults on a generic
 // 256 x 256 x 256 mm Marlin printer, whose start G-code heats the bed and the
 // nozzle to the [bed_temperature] and [temperature] variables (60 and 210 C).
+// A printer made from nothing: its speeds are a stock Ender-3's
+// (fill_missing_speeds).
 Settings default_settings();
 
 struct SliceResult {

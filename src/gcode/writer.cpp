@@ -258,6 +258,8 @@ public:
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
         feed_limit_ = std::max(s.max_feed_x, s.max_feed_y);
+        if (!(feed_limit_ > 0.0)) // not known: no cap
+            feed_limit_ = std::numeric_limits<double>::infinity();
     }
 
     // Plans the time of the moves since the last call (they end at rest).
@@ -267,6 +269,7 @@ public:
     void flush(std::ostream& out) {
         out.write(text_.data(), std::streamsize(text_.size()));
         text_.clear();
+        fan_marks_.clear(); // past the last layer: its fan stays
     }
 
     // Extrusion speeds of the layer being written go through this.
@@ -283,23 +286,41 @@ public:
     const std::map<double, double>& outer_extruded() const { return outer_extruded_; } // the outer walls' part
     double other_time() const { return other_time_; }
 
-    // The part-cooling fan in percent: M106 S0-255, or M107 when off.
-    void fan(double percent) {
-        long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
-        // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
-        // there. S2 is the same breeze (0.8 %) on every firmware.
-        if (value == 1)
-            value = 2;
-        if (value == fan_)
+    // The part-cooling fan (docs/spec/features/cooling.md, rules 3 and 4). A
+    // layer's fan hangs on its time, known only once the layer is built: the
+    // layer opens with a mark where its fan goes, before its ;LAYER_CHANGE,
+    // each bridge with a mark for the bridge fan and its end with a mark for
+    // the layer's again. settle_fan() writes the commands at the marks.
+    void open_layer_fan() {
+        fan_marks_.clear();
+        fan_marks_.push_back({text_.size(), false});
+        marked_bridge_ = false;
+    }
+    void settle_fan(double layer, double bridge) {
+        if (fan_marks_.empty())
             return;
-        if (value == 0) {
-            text_ += "M107\n";
-        } else {
-            text_ += "M106 S";
-            append_integer(text_, value);
-            text_ += '\n';
+        const long values[2] = {fan_value(layer), fan_value(bridge)};
+        std::string out;
+        out.reserve(text_.size() + 12 * fan_marks_.size());
+        std::size_t from = 0;
+        for (const auto& [at, on_bridge] : fan_marks_) {
+            out.append(text_, from, at - from);
+            from = at;
+            const long value = values[on_bridge];
+            if (value == fan_)
+                continue;
+            if (value == 0) {
+                out += "M107\n";
+            } else {
+                out += "M106 S";
+                append_integer(out, value);
+                out += '\n';
+            }
+            fan_ = value;
         }
-        fan_ = value;
+        out.append(text_, from);
+        text_ = std::move(out);
+        fan_marks_.clear();
     }
 
     // Values a height change sets (docs/CONFIG.md, "changes").
@@ -396,6 +417,7 @@ public:
             text_ += '\n';
             type_ = t;
             outer_ = std::strcmp(t, "External perimeter") == 0;
+            bridge_ = std::strcmp(t, "Bridge infill") == 0;
         }
     }
 
@@ -455,6 +477,10 @@ public:
     }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
+        if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
+            fan_marks_.push_back({text_.size(), bridge_});
+            marked_bridge_ = bridge_;
+        }
         if (retracted_) { // unretract: back to where E was (a length changed since stays the old one)
             e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
@@ -528,6 +554,14 @@ private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
 
+    // A fan in percent as M106 writes it, S0-255.
+    static long fan_value(double percent) {
+        const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 255.0 / 100.0); // 50 % is S128
+        // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
+        // there. S2 is the same breeze (0.8 %) on every firmware.
+        return value == 1 ? 2 : value;
+    }
+
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
               std::optional<double> e, double feed) {
         const std::size_t start = text_.size();
@@ -580,6 +614,9 @@ private:
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;
     long fan_ = -1; // not set yet
+    std::vector<std::pair<std::size_t, bool>> fan_marks_; // where the layer's fan commands go: (offset, a bridge's)
+    bool marked_bridge_ = false; // the last mark is a bridge's
+    bool bridge_ = false;        // the current type is a bridge
     double filament_area_ = 1.0;
     double retract_, retract_feed_, lift_, min_travel_;
     double retracted_amount_ = 0.0;
@@ -731,6 +768,7 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
 }
 
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
+    require_speeds(s); // from the printer's profile: the writer has none of its own
     out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
     Emitter g(s);
     g.set_flow(s.flow / 100.0);
@@ -771,20 +809,23 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // in the G-code (and of the height changes) count from its bottom.
     const double base = model.layers.empty() ? 0.0 : model.layers.front().bottom;
 
-    auto emit_layer = [&](std::size_t l, double fan, const Active& a) {
+    // No extrusion faster than speed.max, when it is set.
+    const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
+
+    auto emit_layer = [&](std::size_t l, const Active& a) {
         const Layer& layer = model.layers[l];
+        g.open_layer_fan();
         g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
         g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
         g.set_forced_flow(a.volumetric_flow);
-        g.fan(fan);
         seams.next_layer();
         const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
         const bool first = l == 0;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
-            return std::min(first ? std::min(v, s.first_layer_speed) : v, s.max_speed) * a.speed;
+            return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
         auto lay = [&](const Toolpath& path, const char* type, double feed) {
             if (path.points.empty())
@@ -895,9 +936,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         }
         // Skirt, then brim, before the part, at the first layer's speed.
         if (l < std::size_t(std::max(s.skirt_layers, 0)))
-            group(model.skirt, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed) * a.speed, SeamMode::Nearest);
+            group(model.skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         if (l == 0)
-            group(model.brim, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed) * a.speed, SeamMode::Nearest);
+            group(model.brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         // Every island is finished before the next, the nearest one first. In an
         // island: walls from the inside out, the outer wall (bead 0) last, each
         // bead index in nearest order; then the fills, one kind after the other.
@@ -1056,7 +1097,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // Each layer is built in the emitter's buffer first. One faster than the
         // minimum layer time is built again from the same state with its
         // extrusions slowed down and the fan at its maximum
-        // (docs/spec/BEHAVIOR.md, "Enfriamiento").
+        // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
         const Emitter emitter_before = g;
         const Point2d cursor_before = cursor;
         const SeamMemory seams_before = seams;
@@ -1093,8 +1134,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             if (c.fan)
                 active.fan = *c.fan;
         }
-        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0));
-        emit_layer(l, active.fan ? *active.fan : fan_off ? 0.0 : s.fan_min, active);
+        emit_layer(l, active);
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
         const Slowdown slowdown = active.volumetric_flow > 0.0
                                       ? Slowdown{}
@@ -1107,7 +1147,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             cursor = cursor_before;
             seams = seams_before;
             g.pace(slowdown);
-            emit_layer(l, active.fan ? *active.fan : s.fan_max, active); // fan_max also on the first layers (owner's decision, 2026-10-24)
+            emit_layer(l, active);
             g.pace(Slowdown{});
             const double reached = layer_time(g.extruded(), g.outer_extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {
@@ -1117,6 +1157,17 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 warnings->push_back({"layer_time", int(l), model.layers[l].top - base, text, reached});
             }
         }
+        // The fan: a height change's, else by the layer's time; a slowed layer
+        // at fan_max, even among the first layers, which otherwise print
+        // without fan (owner's decision, 2026-10-24). Bridges get their own.
+        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
+        const double fan = active.fan       ? *active.fan
+                           : fan_off        ? 0.0
+                           : slowdown.stage ? s.fan_max
+                                            : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
+                                                        s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
+                                                        s.fan_always);
+        g.settle_fan(fan, active.fan || fan_off ? fan : s.fan_bridges);
         g.end_layer();
         g.flush(out);
     }

@@ -13,6 +13,7 @@
 #include "project/project.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -69,7 +70,7 @@ TEST_CASE("hostile input: JSON errors of any kind come back as the file's own er
 }
 
 TEST_CASE("hostile input: a start G-code variable cannot add G-code after the print", "[hostile]") {
-    Settings s = parse_settings("{\"machine\":{\"variables\":{\"note\":\"PLA\\nG1 X0 Y0\"}}}");
+    Settings s = test_printer(parse_settings("{\"machine\":{\"variables\":{\"note\":\"PLA\\nG1 X0 Y0\"}}}"));
     s.gpu = GpuMode::Off;
     const SlicedModel m = slice_model(cube(5.0f), s);
     std::ostringstream g;
@@ -103,40 +104,40 @@ TEST_CASE("hostile input: settings out of reach of the printer are refused or wa
     }
     // The whole set against the nozzle: layers thicker than it, or than the
     // printer's own limit, and lines it cannot lay.
-    Settings s;
+    Settings s = test_printer();
     CHECK_NOTHROW(check_settings(s));
     s.layer_height = 0.6;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
-    s = Settings{};
+    s = test_printer();
     s.first_layer_height = 1.0;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
-    s = Settings{};
+    s = test_printer();
     s.max_layer_height = 0.3;
     s.layer_height = 0.32;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
-    s = Settings{};
+    s = test_printer();
     s.min_layer_height = 0.1;
     s.layer_height = 0.08;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
     // Limits that contradict each other are named as such, before the layers.
-    s = Settings{};
+    s = test_printer();
     s.min_layer_height = 0.3;
     s.max_layer_height = 0.25;
     CHECK_THROWS_WITH(check_settings(s), ContainsSubstring("machine.min_layer_height") &&
                                              ContainsSubstring("above machine.max_layer_height"));
-    s = Settings{};
+    s = test_printer();
     s.wall_width = 0.05;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
     s.wall_width = 1.7;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
     // A 0.8 mm nozzle lays 0.6 mm layers and 1.2 mm lines.
-    s = Settings{};
+    s = test_printer();
     s.nozzle_diameter = 0.8;
     s.layer_height = 0.6;
     s.wall_width = 1.2;
     CHECK_NOTHROW(check_settings(s));
     // Wide but possible lines, and a tower hotter than the printer: warnings.
-    s = Settings{};
+    s = test_printer();
     s.wall_width = 1.2;
     s.max_nozzle_temp = 260.0;
     HeightChange hot;
@@ -162,24 +163,24 @@ TEST_CASE("hostile input: calibrations stay inside what the settings can read ba
                 return false;
         return !c.segments.empty();
     };
-    Settings s;
+    Settings s = test_printer();
     s.flow = 15.0;
     CHECK(within(automatic_calibration(CalibrationKind::Flow, s), 10.0, 300.0));
-    s = Settings{};
+    s = test_printer();
     s.acceleration = 60000.0;
     CHECK(within(automatic_calibration(CalibrationKind::Acceleration, s), 100.0, 100000.0));
-    s = Settings{};
+    s = test_printer();
     s.machine_max_flow = 800.0;
     CHECK(within(automatic_calibration(CalibrationKind::MaxFlow, s), 0.5, 1000.0));
     s.machine_max_flow = 0.3;
     CHECK(within(automatic_calibration(CalibrationKind::MaxFlow, s), 0.5, 1000.0));
     // A temperature tower never goes past what the printer reaches.
-    s = Settings{};
+    s = test_printer();
     s.variables["temperature"] = {"250"};
     s.max_nozzle_temp = 260.0;
     CHECK(within(automatic_calibration(CalibrationKind::Temperature, s), 100.0, 260.0));
     // The chosen value too, and the settings read back.
-    s = Settings{};
+    s = test_printer();
     REQUIRE(apply_calibration(CalibrationKind::Flow, 5.0, s));
     CHECK(s.flow == 10.0);
     REQUIRE(apply_calibration(CalibrationKind::Acceleration, 108500.0, s));
@@ -216,7 +217,7 @@ TEST_CASE("hostile input: one facet wound the wrong way does not drop the part",
     // ends were too far apart to close: every layer came out empty.
     IndexedMesh m = cube(10.0f);
     std::swap(m.triangles[6][1], m.triangles[6][2]); // a side facet, turned
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(!sliced.regions.empty());
@@ -234,7 +235,7 @@ TEST_CASE("hostile input: after a change's own G-code the writer takes nothing f
     // was, without F or a retraction, or the check refused the export.
     for (const char* gcode : {"G91\nG1 Z5 F600\nG90\nM0", "G91\nG1 Z5 F300\nG90\nG1 X-60 Y-60 F3000\nM0\nG91\nG1 Z-5 F300\nG90"}) {
         INFO(gcode);
-        Settings s;
+        Settings s = test_printer();
         s.gpu = GpuMode::Off;
         HeightChange pause;
         pause.z = 2.0;
@@ -262,7 +263,7 @@ TEST_CASE("hostile input: after a change's own G-code the writer takes nothing f
 }
 
 TEST_CASE("hostile input: a whisper of fan is never S1, a full fan on RepRapFirmware", "[hostile]") {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.fan_min = 0.4;
     s.fan_max = 0.4;
@@ -304,13 +305,13 @@ TEST_CASE("hostile input: a project cannot name one mesh for many models", "[hos
 }
 
 TEST_CASE("hostile input: an empty slice says why, and ignored wavy infill is told", "[hostile]") {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.xy_offset = -6.0; // a 10 mm cube shrunk away
     const SlicedModel gone = slice_model(cube(10.0f), s);
     CHECK(unprintable_reason(gone, s).find("slicing.xy_offset") != std::string::npos);
     // Wavy infill with an infill that moves from layer to layer.
-    Settings wavy;
+    Settings wavy = test_printer();
     wavy.infill_nonplanar = true;
     wavy.infill_pattern = InfillPattern::Rectilinear;
     bool told = false;

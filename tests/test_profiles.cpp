@@ -26,7 +26,8 @@ Settings changed_everywhere() {
     Settings s;
     s.layer_height = 0.12;               // print
     s.infill_density = 35.0;             // print
-    s.wall_speed = 45.0;                 // print
+    s.wall_speed = 45.0;                 // printer (every speed, owner's decision, 2026-10-26)
+    s.min_print_speed = 12.0;            // printer, though in the cooling group
     s.nozzle_diameter = 0.6;             // printer
     s.flavor = GcodeFlavor::Klipper;     // printer
     s.retract_length = 0.8;              // printer
@@ -104,11 +105,13 @@ TEST_CASE("a profile takes only its own settings", "[profiles]") {
     CHECK_FALSE(printer.variables.contains("temperature"));
     CHECK(printer.filament_diameter == base.filament_diameter);
     CHECK(printer.infill_density == base.infill_density);
+    CHECK(printer.wall_speed == 45.0);
+    CHECK(printer.min_print_speed == 12.0);
 
     const Settings print = with_profile(base, ProfileKind::Print, source);
     CHECK(print.layer_height == 0.12);
     CHECK(print.infill_density == 35.0);
-    CHECK(print.wall_speed == 45.0);
+    CHECK(print.wall_speed == base.wall_speed);
     CHECK(print.nozzle_diameter == base.nozzle_diameter);
     CHECK(print.fan_min == base.fan_min);
 
@@ -161,7 +164,7 @@ TEST_CASE("profile files are read back and reject settings of another kind", "[p
     };
     fails("{", "not valid JSON");
     fails(R"({"format": "x"})", "not a profile");
-    fails(R"({"format": "tisma-profile", "version": 2, "kind": "print", "name": "a", "settings": {}})", "newer");
+    fails(R"({"format": "tisma-profile", "version": 3, "kind": "print", "name": "a", "settings": {}})", "newer");
     fails(R"({"format": "tisma-profile", "version": 1, "kind": "nozzle", "name": "a", "settings": {}})", "kind");
     fails(R"({"format": "tisma-profile", "version": 1, "kind": "print", "name": "", "settings": {}})", "name");
     fails(R"({"format": "tisma-profile", "version": 1, "kind": "filament", "name": "a",
@@ -176,6 +179,22 @@ TEST_CASE("profile files are read back and reject settings of another kind", "[p
     fails(R"({"format": "tisma-profile", "version": 1, "kind": "print", "name": "a",
               "settings": {"layers": {"height": -1}}})",
           "layers.height");
+    // Version 2: the speeds are the printer's.
+    fails(R"({"format": "tisma-profile", "version": 2, "kind": "print", "name": "a",
+              "settings": {"speed": {"walls": 50}}})",
+          "speed.walls: a printer setting, not a print one");
+    fails(R"({"format": "tisma-profile", "version": 2, "kind": "filament", "name": "a",
+              "settings": {"cooling": {"min_speed": 8}}})",
+          "cooling.min_speed: a printer setting, not a filament one");
+    // A version 1 print profile kept them: it still opens, without them.
+    const Profile old = parse_profile(R"({"format": "tisma-profile", "version": 1, "kind": "print", "name": "a",
+                                          "settings": {"layers": {"height": 0.12}, "speed": {"walls": 50}}})");
+    CHECK(old.settings.layer_height == 0.12);
+    CHECK(old.settings.wall_speed == 0.0);
+    const Profile old_filament = parse_profile(R"({"format": "tisma-profile", "version": 1, "kind": "filament",
+                                                   "name": "a", "settings": {"cooling": {"min_speed": 8, "fan_min": 40}}})");
+    CHECK(old_filament.settings.fan_min == 40.0);
+    CHECK(old_filament.settings.min_print_speed == 0.0);
 }
 
 TEST_CASE("profiles are saved, listed, replaced and removed in their folders", "[profiles]") {

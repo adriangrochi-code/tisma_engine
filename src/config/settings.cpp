@@ -10,6 +10,9 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
 
 namespace tisma {
 namespace {
@@ -17,6 +20,43 @@ namespace {
 using nlohmann::json;
 
 const std::vector<std::string> kPlannedGroups = {"material"};
+
+// The speeds a G-code needs, in the order of docs/CONFIG.md, and what a stock
+// Creality Ender-3 prints at, for a printer whose profile has none (owner's
+// decision, 2026-10-26; the numbers and their sources in docs/CONFIG.md,
+// "Velocidades de respaldo").
+struct NeededSpeed {
+    const char* key;
+    double fallback; // mm/s
+};
+constexpr NeededSpeed kNeededSpeeds[] = {
+    {"machine.corner_speed", 10.0}, {"speed.walls", 40.0},       {"speed.outer_wall", 30.0},
+    {"speed.infill", 60.0},         {"speed.solid_infill", 60.0}, {"speed.top_solid_infill", 40.0},
+    {"speed.support", 40.0},        {"speed.travel", 180.0},      {"speed.first_layer", 25.0},
+    {"retraction.speed", 25.0},     {"cooling.min_speed", 10.0},
+};
+
+// The setting a speed key names (not speed.outer_wall, which may be a share).
+template <typename S>
+auto speed_of(S& s, std::string_view key) -> decltype(&s.wall_speed) {
+    const std::pair<std::string_view, decltype(&s.wall_speed)> speeds[] = {
+        {"machine.corner_speed", &s.corner_speed},
+        {"speed.walls", &s.wall_speed},
+        {"speed.infill", &s.infill_speed},
+        {"speed.solid_infill", &s.solid_infill_speed},
+        {"speed.top_solid_infill", &s.top_solid_infill_speed},
+        {"speed.support", &s.support_speed},
+        {"speed.travel", &s.travel_speed},
+        {"speed.first_layer", &s.first_layer_speed},
+        {"speed.max", &s.max_speed},
+        {"retraction.speed", &s.retract_speed},
+        {"cooling.min_speed", &s.min_print_speed},
+    };
+    for (const auto& [name, target] : speeds)
+        if (name == key)
+            return target;
+    throw std::logic_error("no speed " + std::string(key));
+}
 
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
@@ -370,6 +410,15 @@ Settings parse_checked(std::string_view text) {
                 "hardened_nozzle", "min_layer_height", "max_layer_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (v.is_null() && (n.starts_with("max_feed_") || n == "corner_speed")) {
+                       // Not set: the printer's profile gives it, or nothing does (docs/CONFIG.md).
+                       (n == "max_feed_x"   ? s.max_feed_x
+                        : n == "max_feed_y" ? s.max_feed_y
+                        : n == "max_feed_z" ? s.max_feed_z
+                        : n == "max_feed_e" ? s.max_feed_e
+                                            : s.corner_speed) = 0.0;
+                       return;
+                   }
                    if (n == "relative_extrusion" || n == "enclosed" || n == "hardened_nozzle") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -453,6 +502,13 @@ Settings parse_checked(std::string_view text) {
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (v.is_null()) { // not set: from the printer's profile
+                       if (n == "outer_wall")
+                           s.outer_wall_speed = {};
+                       else
+                           *speed_of(s, "speed." + n) = 0.0;
+                       return;
+                   }
                    if (n == "outer_wall" && v.is_string()) {
                        const std::string t = v.get<std::string>();
                        char* end = nullptr;
@@ -488,6 +544,10 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction", {"length", "speed", "lift", "min_travel"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "speed" && g.at(n).is_null()) { // not set: from the printer's profile
+                       s.retract_speed = 0.0;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (n == "speed") {
                        if (!(d > 0.0))
@@ -551,12 +611,14 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "z_gap" ? s.support_z_gap : s.support_xy_gap) = d;
                });
-    read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers", "keep_outer_speed"},
+    read_group(root, "cooling",
+               {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
+                "fan_off_layers", "keep_outer_speed"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "keep_outer_speed") {
+                   if (n == "keep_outer_speed" || n == "fan_always") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       s.keep_outer_speed = g.at(n).get<bool>();
+                       (n == "fan_always" ? s.fan_always : s.keep_outer_speed) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "fan_off_layers") {
@@ -566,19 +628,23 @@ Settings parse_checked(std::string_view text) {
                        s.fan_off_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
+                   if (n == "min_speed" && g.at(n).is_null()) { // not set: from the printer's profile
+                       s.min_print_speed = 0.0;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (n == "min_speed") {
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
                        s.min_print_speed = d;
-                   } else if (n == "min_layer_time") {
+                   } else if (n == "min_layer_time" || n == "fan_below_time") {
                        if (d < 0.0)
                            fail(k, "must not be negative");
-                       s.min_layer_time = d;
+                       (n == "fan_below_time" ? s.fan_below_time : s.min_layer_time) = d;
                    } else {
                        if (d < 0.0 || d > 100.0)
                            fail(k, "must be a percentage from 0 to 100");
-                       (n == "fan_min" ? s.fan_min : s.fan_max) = d;
+                       (n == "fan_min" ? s.fan_min : n == "fan_max" ? s.fan_max : s.fan_bridges) = d;
                    }
                });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
@@ -738,8 +804,52 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
 
 } // namespace
 
+std::vector<std::string> missing_speeds(const Settings& s) {
+    std::vector<std::string> out;
+    for (const NeededSpeed& n : kNeededSpeeds) {
+        const double v = std::string_view(n.key) == "speed.outer_wall" ? s.outer_wall_speed.value : *speed_of(s, n.key);
+        if (!(v > 0.0))
+            out.emplace_back(n.key);
+    }
+    return out;
+}
+
+std::vector<std::string> fill_missing_speeds(Settings& s) {
+    std::vector<std::string> out = missing_speeds(s);
+    for (const std::string& key : out) {
+        double fallback = 0.0;
+        for (const NeededSpeed& n : kNeededSpeeds)
+            if (key == n.key)
+                fallback = n.fallback;
+        if (key == "speed.outer_wall")
+            s.outer_wall_speed = {fallback, false};
+        else
+            *speed_of(s, key) = fallback;
+    }
+    return out;
+}
+
+void require_speeds(const Settings& settings) {
+    const std::vector<std::string> missing = missing_speeds(settings);
+    if (missing.empty())
+        return;
+    std::string list;
+    for (const std::string& key : missing)
+        list += (list.empty() ? "" : ", ") + key;
+    throw SettingsError("settings: no speed for " + list +
+                        ": speeds come from the printer's profile (docs/CONFIG.md, \"Velocidades\")");
+}
+
+double fastest_extrusion(const Settings& s) {
+    const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
+                                     s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
+                                     s.first_layer_speed});
+    return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
+}
+
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
+    auto speed = [](double v) { return v > 0.0 ? json(v).dump() : std::string("null"); }; // 0: not set
     auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
@@ -792,28 +902,30 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.flavor", flavor},
         {"machine.start_gcode", text(s.start_gcode)},
         {"machine.end_gcode", text(s.end_gcode)},
-        {"machine.max_feed_x", num(s.max_feed_x)},
-        {"machine.max_feed_y", num(s.max_feed_y)},
-        {"machine.max_feed_z", num(s.max_feed_z)},
-        {"machine.max_feed_e", num(s.max_feed_e)},
+        {"machine.max_feed_x", speed(s.max_feed_x)},
+        {"machine.max_feed_y", speed(s.max_feed_y)},
+        {"machine.max_feed_z", speed(s.max_feed_z)},
+        {"machine.max_feed_e", speed(s.max_feed_e)},
         {"machine.acceleration", num(s.acceleration)},
         {"machine.travel_acceleration", num(s.travel_acceleration)},
-        {"machine.corner_speed", num(s.corner_speed)},
+        {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
-        {"speed.walls", num(s.wall_speed)},
-        {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
-        {"speed.infill", num(s.infill_speed)},
-        {"speed.solid_infill", num(s.solid_infill_speed)},
-        {"speed.top_solid_infill", num(s.top_solid_infill_speed)},
-        {"speed.support", num(s.support_speed)},
-        {"speed.travel", num(s.travel_speed)},
-        {"speed.first_layer", num(s.first_layer_speed)},
-        {"speed.max", num(s.max_speed)},
+        {"speed.walls", speed(s.wall_speed)},
+        {"speed.outer_wall", s.outer_wall_speed.value <= 0.0 ? std::string("null")
+                             : s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%"
+                                                          : num(s.outer_wall_speed.value)},
+        {"speed.infill", speed(s.infill_speed)},
+        {"speed.solid_infill", speed(s.solid_infill_speed)},
+        {"speed.top_solid_infill", speed(s.top_solid_infill_speed)},
+        {"speed.support", speed(s.support_speed)},
+        {"speed.travel", speed(s.travel_speed)},
+        {"speed.first_layer", speed(s.first_layer_speed)},
+        {"speed.max", speed(s.max_speed)},
         {"retraction.length", num(s.retract_length)},
-        {"retraction.speed", num(s.retract_speed)},
+        {"retraction.speed", speed(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
         {"retraction.min_travel", num(s.retract_min_travel)},
         {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
@@ -828,9 +940,12 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
-        {"cooling.min_speed", num(s.min_print_speed)},
+        {"cooling.min_speed", speed(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},
         {"cooling.fan_max", num(s.fan_max)},
+        {"cooling.fan_below_time", num(s.fan_below_time)},
+        {"cooling.fan_always", s.fan_always ? "true" : "false"},
+        {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
@@ -886,8 +1001,11 @@ std::string settings_json(const Settings& s) {
     ordered_json layer_heights = ordered_json::array();
     for (const auto& p : s.layer_heights)
         layer_heights.push_back({p[0], p[1]});
-    const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
-                                                               : ordered_json(s.outer_wall_speed.value);
+    const ordered_json outer_wall = s.outer_wall_speed.value <= 0.0 ? ordered_json(nullptr)
+                                    : s.outer_wall_speed.percent    ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
+                                                                    : ordered_json(s.outer_wall_speed.value);
+    // A speed not set is null: the printer's profile gives it (docs/CONFIG.md).
+    const auto speed = [](double v) { return v > 0.0 ? ordered_json(v) : ordered_json(nullptr); };
     const ordered_json root = {
         {"layers",
          {{"height", s.layer_height},
@@ -936,13 +1054,13 @@ std::string settings_json(const Settings& s) {
           {"start_gcode", s.start_gcode},
           {"end_gcode", s.end_gcode},
           {"variables", variables},
-          {"max_feed_x", s.max_feed_x},
-          {"max_feed_y", s.max_feed_y},
-          {"max_feed_z", s.max_feed_z},
-          {"max_feed_e", s.max_feed_e},
+          {"max_feed_x", speed(s.max_feed_x)},
+          {"max_feed_y", speed(s.max_feed_y)},
+          {"max_feed_z", speed(s.max_feed_z)},
+          {"max_feed_e", speed(s.max_feed_e)},
           {"acceleration", s.acceleration},
           {"travel_acceleration", s.travel_acceleration},
-          {"corner_speed", s.corner_speed},
+          {"corner_speed", speed(s.corner_speed)},
           {"bed", bed},
           {"max_height", s.max_height},
           {"min_layer_height", s.min_layer_height},
@@ -954,18 +1072,18 @@ std::string settings_json(const Settings& s) {
           {"enclosed", s.enclosed},
           {"hardened_nozzle", s.hardened_nozzle}}},
         {"speed",
-         {{"walls", s.wall_speed},
+         {{"walls", speed(s.wall_speed)},
           {"outer_wall", outer_wall},
-          {"infill", s.infill_speed},
-          {"solid_infill", s.solid_infill_speed},
-          {"top_solid_infill", s.top_solid_infill_speed},
-          {"support", s.support_speed},
-          {"travel", s.travel_speed},
-          {"first_layer", s.first_layer_speed},
-          {"max", s.max_speed}}},
+          {"infill", speed(s.infill_speed)},
+          {"solid_infill", speed(s.solid_infill_speed)},
+          {"top_solid_infill", speed(s.top_solid_infill_speed)},
+          {"support", speed(s.support_speed)},
+          {"travel", speed(s.travel_speed)},
+          {"first_layer", speed(s.first_layer_speed)},
+          {"max", speed(s.max_speed)}}},
         {"retraction",
          {{"length", s.retract_length},
-          {"speed", s.retract_speed},
+          {"speed", speed(s.retract_speed)},
           {"lift", s.retract_lift},
           {"min_travel", s.retract_min_travel}}},
         {"adhesion",
@@ -983,9 +1101,12 @@ std::string settings_json(const Settings& s) {
           {"interface_layers", s.support_interface_layers}}},
         {"cooling",
          {{"min_layer_time", s.min_layer_time},
-          {"min_speed", s.min_print_speed},
+          {"min_speed", speed(s.min_print_speed)},
           {"fan_min", s.fan_min},
           {"fan_max", s.fan_max},
+          {"fan_below_time", s.fan_below_time},
+          {"fan_always", s.fan_always},
+          {"fan_bridges", s.fan_bridges},
           {"fan_off_layers", s.fan_off_layers},
           {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},

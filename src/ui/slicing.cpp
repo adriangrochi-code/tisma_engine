@@ -77,6 +77,9 @@ Settings default_settings() {
     s.end_gcode = kEndGcode;
     s.variables["temperature"] = {"210"};
     s.variables["bed_temperature"] = {"60"};
+    // A printer made from nothing: a stock Ender-3's speeds (owner's
+    // decision, 2026-10-26; docs/CONFIG.md, "Velocidades de respaldo").
+    fill_missing_speeds(s);
     return s;
 }
 

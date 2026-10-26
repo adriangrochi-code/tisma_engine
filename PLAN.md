@@ -655,11 +655,26 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4
-- [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios
+- [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios. Las
+  velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
+  impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)
 - [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
   `walls.width` (40 mm); falta `machine.feedstock` y el resto de la ficha
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
+
+Con el PR #23 (2026-10-26):
+- [ ] Prueba de caja negra del equipo de fichas (`docs/spec/qa/2026-10-26.md`). Hechos (2026-10-26): QA1 a QA4 (falda
+  a 6 mm y redondeada, borde a la separación de los cordones, soporte solo «más de» el límite), QA5 (ventilador por
+  tiempo de capa), QA6 (`speed.top_solid_infill` 15 mm/s) y QA7 (la última capa con la primera más gruesa). Faltan:
+  - QA8: la revisión de estabilidad (`print_review.md`, `stability.md`, claves `review.*`);
+  - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
+  - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): solo la capa de arriba de todo es «Top solid infill» (regla
+    2; hoy lo son las tres de arriba), y la primera capa sólida sobre el relleno ralo es un puente (regla 6);
+  - `cooling.enabled`
+- [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
+- [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
+  (la API de C) e `INTEGRATION.md`
 
 ## Avance
 

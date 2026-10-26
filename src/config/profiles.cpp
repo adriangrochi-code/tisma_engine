@@ -16,7 +16,7 @@ namespace {
 
 using nlohmann::ordered_json;
 
-constexpr int kProfileVersion = 1;
+constexpr int kProfileVersion = 2; // 2 (2026-10-26): the speeds in the printer profile
 
 // A path as UTF-8 text for messages (string() can throw on Windows for
 // names the code page cannot hold).
@@ -134,13 +134,13 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
             return ProfileKind::Filament;
         return ProfileKind::Printer;
     }
-    if (group == "retraction" || group == "gcode")
+    // Every speed is the printer's (owner's decision, 2026-10-26).
+    if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed"))
         return ProfileKind::Printer;
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
-        group == "speed" || group == "adhesion" || group == "support" || group == "compute" || group == "zaa" ||
-        group == "fuzzy")
+        group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy")
         return ProfileKind::Print;
     return std::nullopt;
 }
@@ -232,8 +232,15 @@ static Profile parse_profile_checked(std::string_view text) {
     p.name = root.at("name").get<std::string>();
     if (!root.contains("settings") || !root.at("settings").is_object())
         fail("settings: must be an object");
-    const ordered_json& settings = root.at("settings");
+    ordered_json settings = root.at("settings");
     const std::string kind_name(profile_kind_name(p.kind));
+    if (root.at("version").get<int>() < 2 && p.kind != ProfileKind::Printer) {
+        // Version 1 kept the speeds in the print profile (and cooling.min_speed
+        // in the filament's): they are the printer's now, and stay out.
+        settings.erase("speed");
+        if (settings.contains("cooling") && settings.at("cooling").is_object())
+            settings.at("cooling").erase("min_speed");
+    }
     for (const auto& [group, keys] : settings.items()) {
         if (group == "changes")
             fail("changes: height changes belong to a calibration or a project, not a profile");

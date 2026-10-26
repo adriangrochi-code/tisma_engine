@@ -4053,3 +4053,74 @@ el primer paso; lo que falta está en `PLAN.md`, «Fichas nuevas».
 
 **Sigue:** el resto de `assistant.md` (panel de ayuda con los datos del paquete), `settings_levels.md` y
 `settings_panel.md`, y el tiempo de impresión (`print_time.md`).
+
+## 2026-10-26 — prueba de caja negra del equipo de fichas: QA1 a QA7
+
+El equipo de fichas corrió el motor como caja negra contra las fichas (`docs/spec/qa/2026-10-26.md`, llegó con el PR
+#23). Arreglado:
+- **QA1, QA2 (falda):** `adhesion.skirt_distance` 6 mm por defecto (antes 3), y la pieza se agranda con uniones
+  redondeadas (`InflatePaths` con `JoinType::Round`). S7: 118,5 mm; S8: 287,0 mm por capa.
+- **QA3 (borde):** las vueltas van a la separación de los cordones, el ancho menos (1 − π/4) por la altura de la
+  primera capa (0,357 mm con 0,4 × 0,2), y son tantas como entran en el ancho pedido. S9: 14 vueltas, la de afuera
+  con el eje a 4,82 mm, 1340,4 mm.
+- **QA4 (soporte en el límite):** lo que sale justo medio cordón (o justo el ángulo pedido) ya no es voladizo: la
+  ficha dice «más de». S1: la cuña de 45° queda sin soporte; las de 20°, 30° y 40° lo llevan.
+- **QA5 (ventilador):** la regla 3 de `cooling.md`. Ajustes nuevos `cooling.fan_below_time` (60 s),
+  `cooling.fan_always` y `cooling.fan_bridges` (100 %); `cooling.fan_off_layers` pasa a 3. El escritor deja marcas en
+  cada capa (su comienzo y el comienzo y el fin de cada puente) y, cuando sabe el tiempo de la capa, escribe ahí los
+  comandos: el de la capa queda justo antes de su `;LAYER_CHANGE` (regla 4). Las capas que frenan llevan
+  `fan_max`, también entre las primeras (decisión del dueño del 24-10, que la ficha no contradice de forma explícita).
+  Los porcentajes se pasan a S con 255/100 (50 % es S128; con 2,55 daba S127).
+- **QA6:** `speed.top_solid_infill` 15 mm/s (antes 50). Queda reemplazado por la decisión del dueño de esta tarde:
+  ninguna velocidad tiene valor por defecto (ver la entrada siguiente).
+- **QA7 (C4):** con la primera capa de 0,3 y las demás de 0,2, un cubo de 10 mm tiene 50 capas hasta 10,1 mm (antes
+  49 hasta 9,9): una capa se agrega mientras su plano de corte no pase el techo de la pieza.
+
+**Medido** (cubo de 20 × 20 × 10 mm, como K1, con los ajustes del motor): capas 1 a 3 sin ventilador; capa 4 (8,1 s)
+S246 (96 %); capas 5 a 47 (7,7 s) S247; capas 48 a 50 (56 s) S100 (39 %). La fórmula da lo mismo que K1 (98, 93, 86,
+50 % para 6,6, 10,3, 16,8 y 46,7 s; prueba nueva en `tests/test_cooling.cpp`); los tiempos de capa son otros porque
+las velocidades y las capas de arriba son otras (ver abajo). Un puente sobre dos pilares lleva `fan_bridges` solo
+mientras se tiende, y vuelve el de la capa (prueba nueva en `tests/test_gcode.cpp`).
+
+**Encontrado al medir:** el motor marca como «Top solid infill» las tres capas sólidas de arriba; la ficha
+`surfaces_infill.md` (regla 2 e I1) marca así solo la de arriba de todo, y la primera sólida sobre el relleno es un
+puente (regla 6, la capa 48 de K1). Quedan en `PLAN.md`.
+
+**Falta:** QA8 (revisión de estabilidad) y QA9 (paredes finas con `walls.min_line_width`), y `cooling.enabled`.
+
+**Probado:** `tools/ci_linux.sh` (gcc, clang y ASan+UBSan).
+
+## 2026-10-26 — las velocidades son de la impresora (decisión del dueño)
+
+**Pedido del dueño:** «velocidades de todas las variables deben ser exclusivamente por los perfiles de impresora, no
+debe darse por defecto ninguna, ya que dependen exclusivamente de la impresora que se haya elegido». Y después: solo en
+el caso extremo de una impresora creada de cero o sin ningún valor, y solo para lo que falte, un valor por defecto que
+sea el de una Ender 3, lo más estándar y seguro para cualquier máquina.
+
+**Hecho:**
+- `Settings` ya no tiene velocidades: todas valen 0 («sin valor») y en el JSON se escriben `null`. Son las de
+  `speed`, `retraction.speed`, `cooling.min_speed` y `machine.corner_speed`, que el G-code necesita, y los topes
+  `speed.max` y `machine.max_feed_*`, que sin valor no topan.
+- `write_gcode` se niega sin ellas (`require_speeds`, nombra las que faltan). `fill_missing_speeds` pone las de
+  respaldo solo en las que faltan, y dice cuáles.
+- Respaldo «Ender-3 de fábrica», de las guías públicas de Creality: paredes 40, externa 30, relleno y sólido 60, arriba
+  40, soporte 40, viajes 180, primera capa 25, retracción 25 mm/s; `cooling.min_speed` y `machine.corner_speed` 10,
+  propios. Tabla y enlaces en `docs/CONFIG.md`, «Velocidades de respaldo».
+- Perfiles (versión 2): `speed` y `cooling.min_speed` pasan al perfil de impresora. Un perfil de impresión de la
+  versión 1 se abre sin sus velocidades.
+- Quién usa el respaldo: la impresora genérica de la interfaz (creada de cero); las del catálogo, que no saben más
+  que su velocidad máxima (ninguna velocidad de respaldo la pasa; la retracción de 35 o 40 mm/s que inventaba el
+  catálogo ya no está); un perfil de impresora guardado sin velocidades; `slice` con un archivo sin ellas (aviso
+  `speed_fallback`). La interfaz lo dice al elegir la impresora, y las velocidades están ahora en **Impresora ›
+  Velocidades**.
+- Pruebas: la impresora de las pruebas (`tests/test_printer.hpp`) tiene las velocidades con que se midieron; prueba
+  nueva de las reglas (sin valor, `null`, el respaldo solo en lo que falta, sus números); perfiles de versión 1 y 2;
+  `slice` sin velocidades avisa y usa las de respaldo; `tests/data/printer_settings.json` para la prueba sin avisos.
+
+**Cambia para quien usa el motor:** un archivo de ajustes sin velocidades ya no lamina con las de banco (60, 80,
+130 mm/s…) sino con las de respaldo, más lentas: el cubo de 10 mm de `tests/data` con `{}` lleva paredes a 40 y viajes
+a 180 mm/s.
+
+**Para el equipo de fichas:** la ficha `gcode_motion.md` y otras dan velocidades por defecto medidas en Tisma Slicer;
+con esta decisión el motor no tiene velocidades por defecto. QA6 (`speed.top_solid_infill` 15 mm/s) queda sin efecto:
+esa velocidad es la que dé el perfil de la impresora.

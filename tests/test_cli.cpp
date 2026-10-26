@@ -126,8 +126,8 @@ TEST_CASE("info prints the mesh summary", "[cli]") {
 TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     const auto gcode = std::filesystem::temp_directory_path() / "tisma_test_warn.gcode";
     const auto json = std::filesystem::temp_directory_path() / "tisma_test_warn.json";
-    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode.string(),
-                       "--warnings", json.string()});
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o",
+                       gcode.string(), "--warnings", json.string()});
     CHECK(r.code == kExitOk);
     CHECK_THAT(r.out, ContainsSubstring("warnings: 0"));
     std::ifstream f(json);
@@ -136,6 +136,23 @@ TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     CHECK_THAT(text.str(), ContainsSubstring("\"version\": 1"));
     CHECK_THAT(text.str(), ContainsSubstring("\"warnings\": []"));
     f.close();
+    // Settings without the printer's speeds: a stock Ender-3's, and a warning
+    // that says so (owner's decision, 2026-10-26).
+    const Run bare = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o",
+                          gcode.string(), "--warnings", json.string()});
+    CHECK(bare.code == kExitOk);
+    CHECK_THAT(bare.err, ContainsSubstring("warning: no speed for machine.corner_speed, speed.walls"));
+    std::ifstream g(json);
+    std::stringstream bare_text;
+    bare_text << g.rdbuf();
+    CHECK_THAT(bare_text.str(), ContainsSubstring("\"kind\": \"speed_fallback\""));
+    g.close();
+    std::ifstream written(gcode);
+    std::stringstream gcode_text;
+    gcode_text << written.rdbuf();
+    CHECK_THAT(gcode_text.str(), ContainsSubstring("; speed.walls = 40.0\n"));
+    CHECK_THAT(gcode_text.str(), ContainsSubstring("; speed.travel = 180.0\n"));
+    written.close();
     std::filesystem::remove(gcode);
     std::filesystem::remove(json);
     CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", "x", "--warnings"}).code ==

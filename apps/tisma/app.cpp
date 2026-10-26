@@ -323,6 +323,8 @@ private:
     void load_profile_lists();
     void profile_row(ProfileKind kind);
     void choose_profile(ProfileKind kind, const Profile& profile);
+    // Speeds the settings lack: a stock Ender-3's, and a word about it.
+    void fill_speeds();
     void save_profile_as(ProfileKind kind, std::string name);
     void refresh_profiles();
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
@@ -486,6 +488,9 @@ private:
     // ProfileKind), the one chosen, and whether the settings still match it
     // (worked out again when the settings change).
     std::array<std::vector<Profile>, 3> builtin_profiles_, user_profiles_;
+    // Printer profiles without speeds of their own, which took a stock
+    // Ender-3's (fill_missing_speeds).
+    std::set<std::string> speed_fallback_;
     std::array<std::string, 3> chosen_profile_;
     std::array<bool, 3> profile_modified_{};
     std::string profiles_checked_;
@@ -645,6 +650,8 @@ void info_button(T label, const char* key) {
     ImGui::SetCursorScreenPos(ImVec2(at.x, y));
     // Asked from the command line, it stays open: the screenshot is taken
     // some frames later.
+    if (g_open_info == key && !ImGui::IsPopupOpen("##info_card"))
+        ImGui::SetScrollHereY(0.5f); // the row in sight, wherever it is in the panel
     if (ImGui::InvisibleButton("##info", ImVec2(size, size)) || (g_open_info == key && !ImGui::IsPopupOpen("##info_card")))
         ImGui::OpenPopup("##info_card");
     const bool hovered = ImGui::IsItemHovered();
@@ -1076,6 +1083,7 @@ void App::load_preferences() {
         if (j.contains("settings")) {
             try {
                 settings_ = parse_settings(j.at("settings").dump());
+                fill_speeds();
             } catch (const std::exception&) {
                 // The rest still counts; the settings start from the defaults.
                 keep_unreadable(path);
@@ -1352,6 +1360,7 @@ void App::load_settings_file(const std::filesystem::path& path) {
         bed_changed();
         settings_changed();
         notify(format(tr(T::SettingsLoaded), utf8(path.filename()).c_str()));
+        fill_speeds();
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -1386,6 +1395,7 @@ void App::open_project(const std::filesystem::path& path) {
         return;
     }
     settings_ = std::move(p.settings);
+    fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
     bed_changed();
@@ -1476,18 +1486,28 @@ void App::load_profile_lists() {
     // on every machine.
     const std::filesystem::path root = options_.screenshot.empty() ? profiles_root() : std::filesystem::path();
     std::vector<std::string> errors;
+    speed_fallback_.clear();
     for (const ProfileKind kind : kProfileKinds) {
         const std::size_t k = std::size_t(kind);
         builtin_profiles_[k] = builtin_profiles(kind);
+        // The built-in printer is one made from nothing: its speeds are the fallback.
+        if (kind == ProfileKind::Printer)
+            for (const Profile& p : builtin_profiles_[k])
+                speed_fallback_.insert(p.name);
         user_profiles_[k].clear();
         if (root.empty())
             continue;
         for (Profile& p : load_profiles(root, kind, &errors)) {
             bool builtin = false;
-            if (find_profile(kind, p.name, &builtin) && builtin)
+            if (find_profile(kind, p.name, &builtin) && builtin) {
                 errors.push_back(p.name + ": the name of a built-in profile");
-            else
-                user_profiles_[k].push_back(std::move(p));
+                continue;
+            }
+            // A printer saved without speeds (before they were the printer's):
+            // the fallback, said when it is chosen.
+            if (kind == ProfileKind::Printer && !fill_missing_speeds(p.settings).empty())
+                speed_fallback_.insert(p.name);
+            user_profiles_[k].push_back(std::move(p));
         }
     }
     if (!errors.empty())
@@ -1537,9 +1557,17 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
     profiles_checked_.clear();
-    if (kind == ProfileKind::Printer)
+    if (kind == ProfileKind::Printer) {
         bed_changed();
+        if (speed_fallback_.contains(profile.name))
+            notify(tr(T::SpeedFallback));
+    }
     settings_changed();
+}
+
+void App::fill_speeds() {
+    if (!fill_missing_speeds(settings_).empty())
+        notify(tr(T::SpeedFallback));
 }
 
 void App::save_profile_as(ProfileKind kind, std::string name) {
@@ -1873,7 +1901,9 @@ void App::add_catalog_profile(const Profile& catalog) {
     load_profile_lists();
     if (const Profile* saved = find_profile(profile.kind, profile.name))
         choose_profile(profile.kind, *saved);
-    notify(format(tr(T::ProfileAdded), profile.name.c_str()));
+    // The catalog's printers have no speeds of their own (printer_profile).
+    notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
+                  profile.name.c_str()));
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
@@ -2307,22 +2337,6 @@ void App::settings_panel() {
         changed |= row(T::SkirtDistance, s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
         changed |= row(T::BrimWidth, s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
         ImGui::EndTable();
-        if (ImGui::TreeNode(tr(T::Speeds)) ) {
-            if (begin_rows("##speeds")) {
-                changed |= row(T::SpeedWalls, s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedOuterWall, s.outer_wall_speed.value, 1.0, s.outer_wall_speed.percent ? 100.0 : 1000.0,
-                               s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedInfill, s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedSolid, s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedTop, s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedSupport, s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedTravel, s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedFirstLayer, s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedMax, s.max_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                ImGui::EndTable();
-            }
-            ImGui::TreePop();
-        }
     }
     const bool filament_open = section("filament", "tisma_filament", T::Filament);
     if (filament_open)
@@ -2338,6 +2352,11 @@ void App::settings_panel() {
         changed |= row(T::KeepOuterSpeed, s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
         ImGui::EndTable();
     }
+    // A printer setting asked with --info opens its section (closed at first).
+    const std::string_view asked = g_open_info;
+    if (asked.starts_with("machine.") || asked.starts_with("retraction.") || asked.starts_with("gcode.") ||
+        asked.starts_with("speed."))
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
     const bool printer_open = section("printer", "tisma_printer", T::Printer, false);
     if (printer_open)
         profile_row(ProfileKind::Printer);
@@ -2366,6 +2385,26 @@ void App::settings_panel() {
         changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
         changed |= row(T::GcodeResolution, s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f, tr(T::GcodeResolutionTip));
         ImGui::EndTable();
+        // Every speed is the printer's (owner's decision, 2026-10-26).
+        if (asked.starts_with("speed."))
+            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+        if (ImGui::TreeNode(tr(T::Speeds))) {
+            if (begin_rows("##speeds")) {
+                changed |= row(T::SpeedWalls, s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedOuterWall, s.outer_wall_speed.value, 1.0, s.outer_wall_speed.percent ? 100.0 : 1000.0,
+                               s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedInfill, s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedSolid, s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedTop, s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedSupport, s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedTravel, s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                changed |= row(T::SpeedFirstLayer, s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+                // 0: no cap.
+                changed |= row(T::SpeedMax, s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+                ImGui::EndTable();
+            }
+            ImGui::TreePop();
+        }
         ImGui::TextUnformatted(tr(T::StartGcode));
         changed |= ImGui::InputTextMultiline("##start", &s.start_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 7));
         ImGui::TextUnformatted(tr(T::EndGcode));

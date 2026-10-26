@@ -54,9 +54,11 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value);
 // first). Travels follow TravelPlanner and retract when they leave the part or
 // are longer than retraction.min_travel. A layer faster than
 // cooling.min_layer_time is slowed down (plan_slowdown) and gets the fan at
-// cooling.fan_max, even among the first layers; others get cooling.fan_min,
-// and the first cooling.fan_off_layers layers none. Layers that stay shorter than the
-// minimum time even at 1 mm/min are added to warnings, when given.
+// cooling.fan_max, even among the first layers; others get a fan by their
+// time (docs/spec/features/cooling.md, rule 3), and the first
+// cooling.fan_off_layers layers none. Layers that stay shorter than the
+// minimum time even at 1 mm/min are added to warnings, when given. Every
+// speed must be set (require_speeds): the writer has none of its own.
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings,
                  std::vector<Warning>* warnings = nullptr);
 
