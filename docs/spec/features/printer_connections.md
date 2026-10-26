@@ -75,6 +75,42 @@ llamada que describe la documentación oficial de esa API:
 
 No se copian llamadas de otro programa: se leen de la documentación y se prueban contra un simulador propio.
 
+## Búsqueda en la red
+
+Para el ícono de conexión de `settings_panel.md` (reglas 41 a 43): el programa encuentra solo las impresoras de la red
+local. Encontrar no conecta: conectar lo pide la persona.
+
+**Fuentes:**
+- Bambu Lab: la tabla de puertos de su wiki oficial (`https://wiki.bambulab.com/en/bambu-studio/manual/pin-code`):
+  «Device discovering», puertos 1990 y 2021, SSDP por multicast o broadcast, en modo nube y en modo LAN;
+- OctoPrint: la documentación oficial de su complemento Discovery
+  (`https://docs.octoprint.org/en/master/bundledplugins/discovery.html`);
+- Moonraker: la documentación oficial de su configuración, sección `[zeroconf]`
+  (`https://moonraker.readthedocs.io/en/latest/configuration/`).
+
+| Marca o programa | Cómo se anuncia | Qué hace el programa |
+|---|---|---|
+| Bambu Lab | Anuncios SSDP a los puertos UDP 1990 y 2021, con campos propios para el modelo y el nombre de la impresora (su forma exacta se mide con una impresora real) | Escucha esos puertos; muestra cada impresora una vez por el identificador del anuncio |
+| OctoPrint | Zeroconf (mDNS y DNS-SD) con los servicios `_http._tcp` y `_octoprint._tcp`; el registro TXT trae `path`, `version`, `api` y, si los hay, `model` y `vendor` | Busca `_octoprint._tcp`; la dirección del servidor es la del servicio más `path` |
+| Moonraker (Klipper) | mDNS con el nombre de host de `mdns_hostname` (por defecto el del sistema); SSDP solo si `enable_ssdp` está encendido | Busca nombres `.local` anunciados y, en cada uno, pregunta la información del servidor por la API de Moonraker en el puerto anunciado; si contesta, es una impresora Klipper |
+| Otras (Prusa, Duet, Elegoo, Creality con firmware propio, Flashforge) | Sin fuente oficial revisada | Se agregan a mano; se suman a esta tabla cuando haya documentación del fabricante |
+
+1. **Escucha y búsqueda:**
+   - empiezan al abrir el programa, si la preferencia «Buscar impresoras en la red» está encendida (`preferences.md`);
+   - se repite la búsqueda activa cada 30 s mientras el menú de conexión está abierto, y cada 5 minutos si no.
+2. **Una impresora una sola vez:** se identifica por el identificador del anuncio (Bambu Lab) o por su dirección y
+   puerto. Si aparece por dos caminos (por ejemplo, OctoPrint por `_http._tcp` y `_octoprint._tcp`), se muestra una vez.
+3. **Desaparece** de la lista si pasan 3 minutos sin anuncio ni respuesta. Una impresora ya conectada no desaparece:
+   su estado lo da la conexión.
+4. **Ligar al modelo:** si el anuncio dice el modelo (Bambu Lab, `model` de OctoPrint) y coincide con una impresora
+   del paquete de perfiles, el menú la ofrece para ese modelo; si no, aparece en «Otras impresoras de la red».
+5. **Puertos ocupados:** solo un programa a la vez puede escuchar el puerto UDP 2021. Si otro programa lo tiene (por
+   ejemplo, Bambu Studio abierto), se avisa «Otro programa está escuchando las impresoras Bambu Lab; cerralo o
+   agregá la impresora por su dirección», y se puede agregar a mano.
+6. **Problemas de la red:** si no aparece nada, el menú explica las causas comunes: computadora e impresora en redes
+   distintas, cortafuegos que bloquea UDP 1990 y 2021, o en Windows la red marcada como «Pública».
+7. **Nada sale de la red local:** la búsqueda no usa internet ni manda datos afuera.
+
 ## Cámara USB de la computadora
 
 Lo diseñó el equipo del dueño. Una cámara USB (UVC) conectada a la computadora sirve de cámara de una impresora: para
@@ -125,3 +161,7 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | CA1 | Cámara simulada que ofrece MJPEG de 1920 × 1080, 1280 × 720 y 640 × 480 a 30 imágenes por segundo | Elige 1280 × 720 MJPEG; muestra 15 imágenes por segundo; la elección vuelve al reiniciar |
 | CA2 | Sin cámaras conectadas | La lista ofrece solo «Sin cámara» (y la de la impresora, si tiene) |
 | CA3 | La cámara deja de mandar imágenes | A los 10 s, aviso en la vista |
+| BD1 | Anuncio SSDP simulado de una Bambu Lab al puerto 2021 | La impresora aparece en el menú de conexión con su modelo y nombre, una sola vez aunque el anuncio se repita |
+| BD2 | Servicio `_octoprint._tcp` simulado con `path` `/octo/` | Aparece con la dirección del servicio más `/octo/` |
+| BD3 | Puerto 2021 ocupado por otro programa | Aviso de la regla 5; agregar a mano sigue funcionando |
+| BD4 | El anuncio deja de llegar | A los 3 minutos sale de la lista, salvo que esté conectada |
