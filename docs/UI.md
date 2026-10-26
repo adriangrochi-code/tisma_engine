@@ -221,6 +221,23 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   usuario, en la carpeta `profiles` de al lado.
 - **Idiomas:** español (por defecto) e inglés. Se elige en **Más** o con `--lang en`.
 
+### Ayuda
+
+Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
+información al lado de cada ajuste.
+
+- **Asistente:** se abre solo la primera vez (sin preferencias guardadas), y desde **Más > Tutorial**. Siete pasos
+  abajo de la vista: abrir un modelo, elegir impresora, filamento y perfil, los ajustes, las herramientas de la placa,
+  laminar y revisar, imprimir. **Atrás**, **Siguiente** y **Saltar**.
+- **Consejos:** la primera vez que se usa Mover, Rotar, Escalar, Apoyar en una cara, Organizar, Pintar, el laminado,
+  la Vista previa, Análisis, Calibración o Impresora, una tarjeta abajo de la vista explica cómo se usa. **Entendido**
+  no la muestra más; **No mostrar más consejos** los apaga. En **Más**: **Consejos al usar cada función** (prenderlos o
+  apagarlos) y **Ver los consejos de nuevo**. Lo visto se guarda en las preferencias (`tips`, `tips_seen`).
+- **Botón (i):** al lado del nombre de cada ajuste del motor. Un clic abre qué hace, su clave, su valor por defecto y
+  su rango. El texto sale de `docs/CONFIG.md`, que el programa lleva adentro (`src/ui/help.*`): la ayuda dice siempre
+  lo mismo que la documentación. En inglés, el texto sigue en español y lo avisa. La prueba «help: every setting the
+  engine writes has its explanation in docs/CONFIG.md» falla si un ajuste nuevo no tiene su fila.
+
 ## Capturas y pruebas automáticas
 
 `tisma` puede dibujarse sin nadie frente a la pantalla, para las pruebas y para mostrar cambios:
@@ -235,7 +252,9 @@ tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot 
 ```
 
 Varios STL en la línea de comandos arman una placa: el primero la abre y los demás se suman. `--tool
-move|rotate|scale|lay` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
+move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
+`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). Las capturas no muestran la ayuda salvo que se pida:
+`--tips` (los consejos), `--tour PASO` (el asistente, de 0 a 6) y `--info grupo.clave` (la tarjeta de un ajuste).
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
@@ -262,6 +281,8 @@ sombras en lugar de la luz, para revisarlas.
     exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos;
   - `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: lo mismo con una placa de dos cubos, ordenada, con la
     herramienta Escalar abierta.
+  - `ui_help_tour` y `ui_help_tip_and_info`: el cuarto paso del asistente; el consejo de Pintar con la tarjeta de
+    `walls.seam` abierta;
   - `ui_paint_save`, `ui_paint_reopen` y `ui_paint_same_gcode`: una costura pintada en un cubo (`--paint`), exportada,
     guardada en el proyecto y vuelta a abrir, da el mismo G-code.
 

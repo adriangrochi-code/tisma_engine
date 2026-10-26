@@ -4026,3 +4026,30 @@ paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`, que todavía no se hacen
 
 **Sigue:** el tutorial de cada función la primera vez que se usa y el botón de información al lado de cada ajuste
 (pedido del dueño).
+
+## 2026-10-26 — ayuda en la interfaz y mantenimiento
+
+**Ayuda** (pedido del dueño: un asistente, un tutorial de cada función la primera vez y un botón de información al
+lado de cada ajuste; `docs/UI.md`, «Ayuda»):
+- asistente de siete pasos la primera vez (sin preferencias guardadas) y desde **Más > Tutorial**;
+- consejos la primera vez que se usa cada herramienta de la placa, Pintar, el laminado y cada pestaña; se apagan, y
+  lo visto se guarda (`tips`, `tips_seen`);
+- botón (i) al lado de cada ajuste: qué hace, clave, valor por defecto y rango, leídos de `docs/CONFIG.md`, que el
+  programa lleva adentro (`src/ui/help.*`). La prueba nueva falla si un ajuste del motor no tiene su fila.
+- `--tips`, `--tour` e `--info` para las capturas; `ui_help_tour` y `ui_help_tip_and_info`.
+
+Llegó la ficha `assistant.md` (con el PR #22): pide además un panel de ayuda con datos del paquete libre. Lo hecho es
+el primer paso; lo que falta está en `PLAN.md`, «Fichas nuevas».
+
+**Mantenimiento** (bloque de las 8 horas):
+- fusionado `origin/dev` (PR #22, fichas nuevas) sin rebase;
+- `tisma_fuzz_gcode 2000` con la semilla 20261026: 2000 corridas, 2 rechazadas por no imprimibles, ninguna falla
+  (194 s);
+- encontrado por el equipo de fichas (2317 impresoras del paquete libre): las impresoras de pellets fallaban porque
+  `layers.height` no pasaba de 2 mm. Arreglado según `pellets.md`: capas hasta 10 mm y cordones hasta 40 mm, con los
+  topes de la boquilla de siempre; prueba nueva con boquilla de 8 mm y capas de 4 mm;
+- la CI de Linux corre más de 30 minutos con ASan (las dos pruebas del relleno por esfuerzos tardan 18 min cada una
+  con ASan): el aviso de tiempo cortó una corrida; esas dos se corrieron aparte y pasaron.
+
+**Sigue:** el resto de `assistant.md` (panel de ayuda con los datos del paquete), `settings_levels.md` y
+`settings_panel.md`, y el tiempo de impresión (`print_time.md`).

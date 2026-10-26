@@ -24,6 +24,7 @@
 #include "ui/camera.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
+#include "ui/help.hpp"
 #include "ui/plate.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
@@ -48,6 +49,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -450,6 +452,18 @@ private:
     std::string error_title_, error_message_;
     std::vector<std::string> error_details_;
     bool about_open_ = false;
+    // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
+    // the first-use tip on screen, the tips already seen and whether they show.
+    int tour_step_ = -1;
+    std::string tip_;
+    std::set<std::string> tips_seen_;
+    bool tips_ = true;
+    bool first_run_ = false; // no preferences yet: the assistant opens
+    PlateTool last_tool_ = PlateTool::Select;
+    Tab last_tab_ = Tab::Prepare;
+    bool had_result_ = false;
+    void tip(const std::string& id);
+    void help_windows();
 
     // Calibration: the dimensional test, what was measured on it, the towers'
     // ranges, and the test loaded last (its segments, without the mesh).
@@ -571,7 +585,103 @@ bool App::section(const char* id, const char* icon_name, T title, bool open_by_d
     return open;
 }
 
-// Rows of the settings tables: a label (with a tooltip) and a control.
+// What each setting does, from the copy of docs/CONFIG.md the program carries.
+const std::map<std::string, SettingDoc>& setting_docs() {
+    static const std::map<std::string, SettingDoc> docs = parse_setting_docs(embedded("CONFIG.md"));
+    return docs;
+}
+
+// The setting each row of the panel edits, for its info button.
+const char* row_key(T label) {
+    static const std::map<T, const char*> keys = {
+        {T::LayerHeight, "layers.height"}, {T::FirstLayerHeight, "layers.first_height"},
+        {T::LayerHeights, "layers.heights"},
+        {T::DetailHeight, "layers.detail_height"}, {T::DetailTolerance, "layers.detail_tolerance"},
+        {T::DetailMargin, "layers.detail_margin"}, {T::CuspHeight, "layers.cusp_height"},
+        {T::Zaa, "zaa.enabled"}, {T::ZaaMinThickness, "zaa.min_thickness"}, {T::ZaaRaise, "zaa.raise"},
+        {T::Walls, "walls.count"}, {T::LineWidth, "walls.width"}, {T::Seam, "walls.seam"},
+        {T::FuzzySkin, "fuzzy.mode"}, {T::FuzzyThickness, "fuzzy.thickness"},
+        {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
+        {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
+        {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
+        {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
+        {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
+        {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
+        {T::NonplanarWavelength, "infill.nonplanar_wavelength"}, {T::CombineInfill, "infill.combine_layers"},
+        {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
+        {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
+        {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
+        {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
+        {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
+        {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
+        {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
+        {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
+        {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
+        {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
+        {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
+        {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
+        {T::MaxHeight, "machine.max_height"}, {T::Nozzle, "machine.nozzle_diameter"},
+        {T::MinLayerHeight, "machine.min_layer_height"}, {T::MaxLayerHeight, "machine.max_layer_height"},
+        {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
+        {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
+        {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"}};
+    const auto it = keys.find(label);
+    return it == keys.end() ? nullptr : it->second;
+}
+
+// The setting whose info card is kept open (--info, for screenshots).
+std::string g_open_info;
+
+// The (i) beside a setting's name: a click opens what the setting does, its
+// key, default and range (docs/UI.md, «Ayuda»).
+void info_button(T label, const char* key) {
+    const float size = ImGui::GetFontSize() * 0.95f;
+    ImGui::SameLine(0.0f, size * 0.35f);
+    ImGui::PushID(key);
+    ImGui::PushID(static_cast<int>(label));
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float y = at.y + (ImGui::GetFrameHeight() - size) * 0.5f;
+    ImGui::SetCursorScreenPos(ImVec2(at.x, y));
+    // Asked from the command line, it stays open: the screenshot is taken
+    // some frames later.
+    if (ImGui::InvisibleButton("##info", ImVec2(size, size)) || (g_open_info == key && !ImGui::IsPopupOpen("##info_card")))
+        ImGui::OpenPopup("##info_card");
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 colour = ImGui::GetColorU32(hovered ? ImGuiCol_CheckMark : ImGuiCol_TextDisabled);
+    const ImVec2 c(at.x + size * 0.5f, y + size * 0.5f);
+    dl->AddCircle(c, size * 0.45f, colour, 16, 1.2f);
+    dl->AddLine(ImVec2(c.x, c.y - size * 0.05f), ImVec2(c.x, c.y + size * 0.25f), colour, 1.6f);
+    dl->AddCircleFilled(ImVec2(c.x, c.y - size * 0.22f), size * 0.07f, colour);
+    if (hovered)
+        ImGui::SetTooltip("%s", tr(T::Info));
+    if (ImGui::BeginPopup("##info_card")) {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
+        ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
+        const auto& docs = setting_docs();
+        const auto doc = docs.find(key);
+        if (label == T::NozzleTemp || label == T::BedTemp)
+            ImGui::TextUnformatted(tr(T::InfoTemperatures));
+        else if (doc != docs.end())
+            ImGui::TextUnformatted(doc->second.meaning.c_str());
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s: %s", tr(T::InfoKey), key);
+        if (doc != docs.end() && !doc->second.default_value.empty())
+            ImGui::TextDisabled("%s: %s", tr(T::InfoDefault), doc->second.default_value.c_str());
+        if (doc != docs.end() && !doc->second.range.empty())
+            ImGui::TextDisabled("%s: %s", tr(T::InfoRange), doc->second.range.c_str());
+        if (language() == Language::English)
+            ImGui::TextDisabled("%s", tr(T::InfoSpanish));
+        ImGui::PopTextWrapPos();
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    ImGui::PopID();
+}
+
+// Rows of the settings tables: a label (with a tooltip and, for a setting of
+// the engine, its info button) and a control.
 void label_cell(T label, const char* tip = nullptr) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -579,6 +689,8 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", tip);
+    if (const char* key = row_key(label))
+        info_button(label, key);
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
@@ -799,6 +911,14 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    // The assistant on the first run; screenshots show help only when asked.
+    if (options_.screenshot.empty() && first_run_)
+        tour_step_ = 0;
+    if (!options_.screenshot.empty())
+        tips_ = options_.tips;
+    if (options_.tour >= 0)
+        tour_step_ = options_.tour;
+    g_open_info = options_.info;
     if (options_.light)
         theme_ = light_theme();
     if (options_.language_given)
@@ -930,10 +1050,17 @@ void App::shutdown() {
 void App::load_preferences() {
     const std::filesystem::path path = preferences_path();
     std::ifstream in(path, std::ios::binary);
-    if (!in)
+    if (!in) {
+        first_run_ = true;
         return;
+    }
     try {
         const nlohmann::json j = nlohmann::json::parse(in);
+        tips_ = j.value("tips", true);
+        if (j.contains("tips_seen") && j.at("tips_seen").is_array())
+            for (const auto& t : j.at("tips_seen"))
+                if (t.is_string())
+                    tips_seen_.insert(t.get<std::string>());
         if (j.value("language", "es") == "en")
             set_language(Language::English);
         if (j.value("theme", "dark") == "light")
@@ -980,6 +1107,8 @@ void App::save_preferences() {
         j["device_port"] = device_port_;
         j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
+        j["tips"] = tips_;
+        j["tips_seen"] = tips_seen_;
         // Without the changes of a calibration tower left on the bed.
         Settings kept = settings_;
         if (calibration_)
@@ -2043,6 +2172,14 @@ void App::top_bar() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem(tr(T::Tutorial)))
+            tour_step_ = 0;
+        if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
+            tips_ = !tips_;
+        if (ImGui::MenuItem(tr(T::TipsAgain))) {
+            tips_seen_.clear();
+            tips_ = true;
+        }
         if (ImGui::MenuItem(tr(T::About)))
             about_open_ = true;
         ImGui::Separator();
@@ -2587,8 +2724,10 @@ void App::plate_tools() {
         if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
             tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
     ImGui::Separator();
-    if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size))
+    if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size)) {
         arrange_plate();
+        tip("arrange");
+    }
     ImGui::Separator();
     if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
@@ -2610,8 +2749,10 @@ void App::plate_tools() {
             tool_ = PlateTool::LayFlat;
         if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
             tool_ = PlateTool::Paint;
-        if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl)
+        if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl) {
             arrange_plate();
+            tip("arrange");
+        }
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             tool_ = PlateTool::Select;
         if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen) {
@@ -2821,6 +2962,107 @@ void App::update_paint_view() {
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
     renderer_.set_paint(m.vertices, groups);
+}
+
+namespace {
+
+struct TipText {
+    T title, text;
+};
+
+const std::map<std::string, TipText>& tip_texts() {
+    static const std::map<std::string, TipText> tips = {
+        {"move", {T::TipMoveTitle, T::TipMove}},
+        {"rotate", {T::TipRotateTitle, T::TipRotate}},
+        {"scale", {T::TipScaleTitle, T::TipScale}},
+        {"lay", {T::TipLayTitle, T::TipLay}},
+        {"arrange", {T::TipArrangeTitle, T::TipArrange}},
+        {"paint", {T::TipPaintTitle, T::TipPaint}},
+        {"slice", {T::TipSliceTitle, T::TipSlice}},
+        {"preview", {T::TipPreviewTitle, T::TipPreview}},
+        {"analysis", {T::TipAnalysisTitle, T::TipAnalysis}},
+        {"calibration", {T::TipCalibrationTitle, T::TipCalibration}},
+        {"device", {T::TipDeviceTitle, T::TipDevice}}};
+    return tips;
+}
+
+// The assistant's steps (docs/UI.md, «Ayuda»).
+constexpr std::array<std::pair<T, T>, 7> kTour = {{{T::Tour0Title, T::Tour0},
+                                                   {T::Tour1Title, T::Tour1},
+                                                   {T::Tour2Title, T::Tour2},
+                                                   {T::Tour3Title, T::Tour3},
+                                                   {T::Tour4Title, T::Tour4},
+                                                   {T::Tour5Title, T::Tour5},
+                                                   {T::Tour6Title, T::Tour6}}};
+
+} // namespace
+
+// The tip of a function, the first time it is used (unless tips are off or
+// the assistant is on screen). A tip still on screen counts as seen.
+void App::tip(const std::string& id) {
+    if (!tips_ || tour_step_ >= 0 || tips_seen_.count(id) || !tip_texts().count(id))
+        return;
+    if (!tip_.empty())
+        tips_seen_.insert(tip_);
+    tip_ = id;
+}
+
+// The assistant, or else the tip on screen: a card at the bottom of the view.
+void App::help_windows() {
+    const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
+    if (!tour && tip_.empty())
+        return;
+    const float width = 420.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + view_size_.y - 16.0f * scale_),
+                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.96f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.accent));
+    ImGui::Begin("##help", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const T title = tour ? kTour[std::size_t(tour_step_)].first : tip_texts().at(tip_).title;
+    const T text = tour ? kTour[std::size_t(tour_step_)].second : tip_texts().at(tip_).text;
+    ImGui::PushFont(nullptr, kTitleSize);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(text));
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    if (tour) {
+        ImGui::TextDisabled("%d / %d", tour_step_ + 1, int(kTour.size()));
+        ImGui::SameLine();
+        const bool last = tour_step_ + 1 == int(kTour.size());
+        const float buttons = (last ? 1.0f : 2.0f) * 100.0f * scale_ + (tour_step_ > 0 ? 100.0f * scale_ : 0.0f);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - buttons));
+        if (tour_step_ > 0 && ImGui::Button(tr(T::Back), ImVec2(92.0f * scale_, 0)))
+            --tour_step_;
+        if (tour_step_ > 0)
+            ImGui::SameLine();
+        if (!last && ImGui::Button(tr(T::SkipTour), ImVec2(92.0f * scale_, 0)))
+            tour_step_ = -1;
+        if (!last)
+            ImGui::SameLine();
+        if (ImGui::Button(tr(last ? T::Finish : T::Next), ImVec2(92.0f * scale_, 0)))
+            tour_step_ = last ? -1 : tour_step_ + 1;
+    } else {
+        if (ImGui::Button(tr(T::GotIt))) {
+            tips_seen_.insert(tip_);
+            tip_.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::NoMoreTips))) {
+            tips_ = false;
+            tip_.clear();
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
 }
 
 void App::empty_hint() {
@@ -3546,6 +3788,27 @@ void App::layout() {
         calibration_panel();
     if (tab_ == Tab::Device)
         device_panel();
+    // Each function's tip the first time it is used.
+    if (tool_ != last_tool_) {
+        last_tool_ = tool_;
+        static const std::map<PlateTool, const char*> tool_tips = {
+            {PlateTool::Move, "move"}, {PlateTool::Rotate, "rotate"}, {PlateTool::Scale, "scale"},
+            {PlateTool::LayFlat, "lay"}, {PlateTool::Paint, "paint"}};
+        if (const auto it = tool_tips.find(tool_); it != tool_tips.end())
+            tip(it->second);
+    }
+    if (tab_ != last_tab_) {
+        last_tab_ = tab_;
+        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+                                                            {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
+        if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
+            tip(it->second);
+    }
+    if (result_ && !had_result_ && !viewer_) {
+        had_result_ = true;
+        tip("slice");
+    }
+    help_windows();
     toasts();
     dialogs();
 

@@ -6,7 +6,7 @@
 namespace tisma::ui {
 
 // Files compiled into the program (cmake/embed.cmake): the Tisma icons of
-// assets/brand/ and the interface font.
+// assets/brand/, the interface font and docs/CONFIG.md (the settings' help).
 struct EmbeddedFile {
     const char* name; // the file's name, without folders
     const unsigned char* data;

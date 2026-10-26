@@ -24,6 +24,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
     afuera.
   - El pincel corta los triángulos grandes en pedazos chicos sin tocar la malla, y la pintura sigue al modelo cuando se
     mueve, gira o escala. Los proyectos la guardan (parte `PNT `). Los colores llegan con varios extrusores.
+- **Ayuda en la interfaz** (pedido del dueño; `docs/UI.md`, «Ayuda»):
+  - un asistente de siete pasos la primera vez, y desde **Más > Tutorial**;
+  - un consejo la primera vez que se usa cada función (las herramientas de la placa, Pintar, el laminado y cada
+    pestaña), que se puede apagar;
+  - un botón (i) al lado de cada ajuste: qué hace, su clave, su valor por defecto y su rango, leídos de
+    `docs/CONFIG.md`.
 - **Piel difusa** (ficha `fuzzy_skin.md`; `fuzzy.mode`, `fuzzy.thickness` y `fuzzy.point_distance`, en la interfaz bajo
   Costura): la pared externa pasa por puntos nuevos cada 0,4 a 1,2 mm, corridos al azar hasta 0,3 mm hacia afuera o
   hacia adentro, y la superficie queda rugosa. `external` deja lisos los agujeros, `all` también los hace rugosos; las
@@ -36,6 +42,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Impresoras de pellets** (ficha `pellets.md`): `layers.height` y `layers.first_height` aceptan hasta 10 mm (antes
+  2) y `walls.width` hasta 40 mm (antes 10). Como siempre, nunca más gruesas que la boquilla ni más anchas que cuatro
+  boquillas. Una impresora con boquilla de 8 mm y capas de 4 mm ya lamina.
 - **Modelos grandes más fluidos** (pedido del dueño; `docs/UI.md`, «Modelos grandes»): con un modelo de un millón de
   triángulos, arrastrarlo ya no rehace la malla en cada cuadro (antes, 5 cuadros por segundo), y el clic y el pincel
   buscan en un árbol de cajas: un clic pasa de 57 ms a 3 µs.

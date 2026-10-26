@@ -21,8 +21,8 @@ Reglas:
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `height` | número | 0.2 | 0,01 a 2 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
-| `first_height` | número | 0.2 | 0,01 a 2 | Alto de la primera capa, con los mismos topes que `height` |
+| `height` | número | 0.2 | 0,01 a 10 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
+| `first_height` | número | 0.2 | 0,01 a 10 | Alto de la primera capa, con los mismos topes que `height` |
 
 Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 
@@ -54,7 +54,7 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
-| `width` | número | 0.4 | 0,05 a 10 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
+| `width` | número | 0.4 | 0,05 a 40 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
 | `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 
 ### `fuzzy`

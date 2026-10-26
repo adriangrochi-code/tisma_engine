@@ -198,9 +198,10 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         // Below 0.01 mm the layers run to the hundreds of thousands; the
-        // nozzle limits them from above (check_settings).
-        if (!(v >= 0.01 && v <= 2.0))
-            fail(k, "must be from 0.01 to 2 mm");
+        // nozzle limits them from above (check_settings): pellet printers
+        // with 5 to 8 mm nozzles lay 2.5 to 4 mm layers (pellets.md).
+        if (!(v >= 0.01 && v <= 10.0))
+            fail(k, "must be from 0.01 to 10 mm");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
     });
     read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink", "simplify_tolerance"},
@@ -247,8 +248,8 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (!(v >= 0.05 && v <= 10.0))
-            fail(k, "must be from 0.05 to 10 mm");
+        if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
+            fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
