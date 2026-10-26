@@ -262,6 +262,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Impresora por modelo, boquilla y cama aparte, datos oficiales | `profiles.md` | ✔ |
+| Miles de impresoras, filamentos y resinas de otros laminadores, descargados de un paquete libre aparte | `profile_pack.md` | ✔ |
 | Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | — | ✘ → `presets.md` |
 | Compatibilidad entre perfiles (condiciones) | — | ✘ → `presets.md` |
 | Impresoras físicas (una impresora con su conexión) | `printer_connections.md` | ◐ → `presets.md` |

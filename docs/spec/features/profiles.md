@@ -60,9 +60,11 @@ que la persona elija la impresora por su modelo y, aparte, la boquilla y la cama
   `resin.md` toman la pantalla de las especificaciones de Elegoo.
 - **Materiales:** temperaturas, densidad y velocidad de la ficha técnica (TDS) del fabricante del material.
 - **Sin dato oficial:** se usa un valor genérico de la familia del material (PLA, PETG…), marcado como genérico.
-- **Nunca** se copian perfiles de otros laminadores (PrusaSlicer, OrcaSlicer, Bambu Studio, Cura, Creality Print…),
-  ni siquiera los números: sus repositorios de perfiles tienen licencias (AGPL, LGPL) que el motor no acepta, y
-  `CLEANROOM.md` no permite leerlos.
+- **Dentro del motor nunca** se copian perfiles de otros laminadores (PrusaSlicer, OrcaSlicer, Bambu Studio, Cura,
+  Creality Print…), ni siquiera los números: sus repositorios de perfiles tienen licencias (AGPL, LGPL) que el motor no
+  acepta, y `CLEANROOM.md` no permite leerlos.
+- **Aparte, el paquete libre:** desde el 26-10-2026 (decisión del dueño), esos perfiles llegan convertidos en un
+  repositorio aparte, de uso libre, que el motor descarga y lee como datos (`profile_pack.md`).
 - Un valor que da el fabricante, aunque otro laminador también lo use, se toma del fabricante y se cita el
   fabricante.
 
