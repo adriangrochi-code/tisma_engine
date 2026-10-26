@@ -43,7 +43,7 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 | Relleno ondulado | Ficha | `interlock_infill.md` | Parcial: el motor tiene `infill.nonplanar`; las claves de la ficha no están |
 | Corrección de medidas | Ficha | `calibrations.md`, `gcode_extras.md` | Parcial |
 | Tipo de cama y boquilla aparte | Ficha | `profiles.md`, `settings_panel.md` | Sin programar en la interfaz |
-| STEP con caras para pintar y analizar | Ficha | `formats.md` (regla 2) | Falta lo de las caras: ficha nueva `step_faces.md` |
+| STEP con caras para pintar y analizar | Ficha | `formats.md` (regla 2), `step_faces.md` | Ficha lista; sin programar |
 | Varias camas | Ficha | `model_tools.md` (regla 26) | Sin programar |
 | Proyectos de Bambu Studio y OrcaSlicer | Ficha | `formats.md` (regla 18) | Falta medirlo con proyectos reales |
 | Resina: GOO, vaciado, ventosas | Ficha | `resin.md`, `resin_supports.md` | Sin programar |
@@ -53,10 +53,10 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 | Análisis estructural, optimización, aerodinámica | Ficha | `structural_analysis.md`, `structural_optimization.md`, `aerodynamics.md` | El motor tiene su propio análisis (A1); faltan optimización y aerodinámica |
 | Orientación automática | Ficha | `orientation.md` | Sin programar |
 | Tisma Cloud: el motor como cliente y como programa de los nodos | Contrato | `features/cloud.md` | Ficha lista; el servidor ya corre el motor en los nodos que lo configuran |
-| Informar un problema | Contrato | `features/cloud.md` (informes) | Ficha nueva; falta la pantalla en `problem_reports.md` |
+| Informar un problema | Contrato | `features/cloud.md` (informes), `problem_reports.md` (la pantalla) | Ficha lista |
 | Acceso remoto a impresoras | Contrato | `features/cloud.md` (puentes) | Ficha nueva |
 | App de Android | Ficha (app nueva) | `mobile_app.md` | Decisión del dueño: se hace de cero en el repositorio del motor, sobre su API; la vieja no se usa |
-| Thingiverse | Contrato | `thingiverse.md` | Falta: su API pública |
+| Thingiverse | Ficha y contrato | `thingiverse.md`, `cloud.md` (regla 22) | Ficha lista; la API se confirma con un token antes de programarla; falta el paso por el servidor |
 | Detección de fallas con la cámara (Obico) | Contrato | `features/cloud.md` | Obico es AGPL: va como servicio aparte, nunca dentro del motor |
 | Perfiles | Datos | `profile_pack.md` | Hecho (repositorio de perfiles) |
 | Ayuda, tutoriales y guías de calibración | Datos | `assistant.md` | Hecho (repositorio de perfiles) |
@@ -70,9 +70,8 @@ Ningún código de Tisma Slicer entra al motor (`CLEANROOM.md`). Cada parte entr
 - Bibliotecas cerradas de fabricantes (por ejemplo, el complemento de red de Bambu Studio).
 - Obico dentro del motor (AGPL): solo como servicio aparte que habla por la red.
 
-## Siguientes fichas, en orden
+## Siguientes fichas
 
-1. `step_faces.md`: caras del STEP para pintar, cargas de Ingeniería y volver a convertir en triángulos sin perder lo
-   pintado.
-2. `problem_reports.md`: la pantalla de informar un problema, con lo que manda (`cloud.md`).
-3. `thingiverse.md`: buscar y abrir modelos con la API pública de Thingiverse.
+Las tres que faltaban (`step_faces.md`, `problem_reports.md` y `thingiverse.md`) están escritas. Lo que queda:
+- confirmar la API de Thingiverse con un token real (`thingiverse.md`, regla 20);
+- medir los proyectos de Bambu Studio y OrcaSlicer con archivos reales (`formats.md`, regla 18).
