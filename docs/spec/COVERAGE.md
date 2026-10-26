@@ -253,6 +253,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | `formats.md` (reglas 1 a 5 y 17) | ✔ |
+| STEP guardado en el proyecto, cara por triángulo, volver a convertir sin perder la pintura, revisar el sólido | `step_faces.md` | ✔ |
 | Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | `formats.md` | ◐ medidos el paquete, las mallas, las partes y los ajustes; falta lo que se guarda desde la interfaz (regla 10) |
 | Abrir proyectos de Bambu Studio y OrcaSlicer | `formats.md` (regla 18) | ◐ falta medirlo con proyectos reales |
 | Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | `formats.md` (reglas 15 y 16) | ✔ |
@@ -304,8 +305,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 |---|---|---|
 | Tisma Cloud desde el programa: cuenta, laminar y calcular en la nube | `interface.md` (diálogo), `cloud.md` (reglas 1 a 10) | ✔ |
 | Servidor de Tisma Cloud: maestro y nodos, cola con prioridades, cuentas, planes y cobro, seguridad | `cloud.md` (contrato; el servidor es un programa aparte, `INTEGRATION.md`) | ✔ |
-| Informar un problema, con catálogo de errores y recompensa | `interface.md` (qué manda) | ◐ → `problem_reports.md` |
-| Thingiverse dentro del programa | `interface.md` (nombra) | ◐ → `thingiverse.md` |
+| Informar un problema, con catálogo de errores y recompensa | `problem_reports.md` (la pantalla), `cloud.md` (regla 11; el catálogo y la recompensa son del servidor) | ✔ |
+| Thingiverse dentro del programa | `thingiverse.md` | ✔ (la búsqueda con la API se confirma con un token antes de programarla, regla 20) |
 | App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | `mobile_app.md` (app nueva, de cero, sobre el motor) | ✔ |
 | Acceso remoto a las impresoras y detección de fallas con la cámara | `cloud.md` (reglas 12 a 17) | ◐ falta la detección de fallas (Obico, servicio aparte) |
 

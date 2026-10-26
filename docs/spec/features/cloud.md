@@ -142,6 +142,12 @@ Los nodos corren el motor como programa aparte para cada trabajo. El contrato es
 21. **El lado del servidor ya está hecho:** con `tisma_engine` en la configuración de un nodo, el nodo corre los
     trabajos con este contrato. Sin esa opción, sigue con los programas de Tisma Slicer.
 
+## Thingiverse por el servidor
+
+22. **Paso a la API de Thingiverse:** `GET /v1/thingiverse/<ruta>`, con o sin sesión. El servidor agrega el token de
+    la aplicación de Tisma y devuelve la respuesta de Thingiverse sin cambios. Las rutas permitidas, los límites y lo
+    que no hace están en `thingiverse.md`, reglas 12 y 21. Falta programarlo del lado del servidor.
+
 ## Pruebas
 
 Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
