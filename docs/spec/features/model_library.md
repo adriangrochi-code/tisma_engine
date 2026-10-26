@@ -93,7 +93,8 @@ pagos; mandar a imprimir con la comodidad de una app de impresora en el teléfon
 | Pagos | Sin límite, con un tope de pedidos por minuto y de trabajos a la vez | Sin límite | Con las horas del plan, como hoy |
 
     - **Por qué 20:** el servidor mide que un Benchy de 225 000 triángulos tarda de 6 a 13 s en un nodo de 4 núcleos
-      (medido en el servidor de Tisma Cloud, en su documentación, «Capacidad»). 20 laminados así son de 2 a 4,5 minutos de nodo por persona y por
+      (medido en el servidor de Tisma Cloud, en su documentación, «Capacidad»). 20 laminados así son de 2 a 4,5 minutos
+      de nodo por persona y por
       mes, menos que la hora del plan de prueba que ya tiene el servidor.
     - **Sin límite tiene un tope:** pocos trabajos a la vez y un tope de pedidos por minuto por cuenta, para que una
       sola cuenta no llene la cola. Es el mismo control que ya tiene el servidor por plan.
