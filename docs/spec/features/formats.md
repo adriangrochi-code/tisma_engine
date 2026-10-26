@@ -52,6 +52,7 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
 | `Metadata/thumbnail.png` | Miniatura de 256 × 256 px (solo desde la interfaz) |
 | `Metadata/Slic3r_PE.config` | Todos los ajustes del proyecto (impresión, material, impresora), uno por línea (`; clave = valor`), 439 en la medición (solo desde la interfaz) |
 | `Metadata/Slic3r_PE_model.config` | Por objeto y por parte: nombre, tipo de parte, matriz, extrusor, de qué archivo vino, datos de la reparación, ajustes propios |
+| `Metadata/Prusa_Slicer_layer_config_ranges.xml` | Los rangos de alturas de cada objeto: desde, hasta y sus ajustes (`model_tools.md`, regla 6), si hay |
 | `Metadata/Prusa_Slicer_wipe_tower_information.xml` | Posición y giro de la torre de purga, por cama |
 | `Metadata/Prusa_Slicer_full_spectrum.json` | Las mezclas de colores (`color_mixing.md`), si hay |
 

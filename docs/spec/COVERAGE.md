@@ -169,7 +169,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Desfase de Z | `gcode_extras.md` | ✔ |
 | Firmware (dialectos) | `gcode_firmware.md`, `gcode_extras.md` | ✔ |
 | Límites de la máquina (avance, aceleración, jerk, avance mínimo) y su uso (escribir, solo estimar, ignorar) | `gcode_firmware.md` | ✔ |
-| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md` | ✔ |
+| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md`, `print_time.md` | ✔ |
+| Tiempo de impresión estimado: límites, comandos del G-code, qué cuenta | `print_time.md` | ◐ faltan pares medidos con impresoras reales |
 | Tiempo restante, etiquetas de objetos | `gcode_firmware.md` | ✔ |
 | Miniaturas en el G-code (tamaños y formatos PNG, JPG, QOI, la de las pantallas de BTT) | `gcode_extras.md` | ◐ falta el formato exacto: solo la interfaz las escribe → `formats.md` |
 | G-code binario | `gcode_extras.md` | ✔ |
@@ -220,17 +221,17 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Mover, rotar, escalar (también por medidas), espejar | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Mover, rotar, escalar (también por medidas), espejar | `model_tools.md` (reglas 11 y 12) | ◐ falta espejar y escalar por medidas en un solo eje |
 | Apoyar sobre una cara | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Separar en objetos y en partes | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `model_tools.md` (regla 13) | ◐ falta el corte con conectores, solo en la interfaz |
+| Separar en objetos y en partes | `model_tools.md` (regla 14) | ◐ falta separar en partes, solo en la interfaz |
 | Medir (distancias, ángulos, diámetros) | `interface.md` (nombra) | ◐ → `model_tools.md` |
 | Simplificar la malla | `slicing.md` (contornos) | ◐ falta la de la malla → `model_tools.md` |
 | Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
 | Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | — | ✘ → `model_tools.md` |
-| Ajustes por objeto, por parte y por rango de alturas | `calibration_models.md` (los usa) | ◐ → `model_tools.md` |
-| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias) | ◐ → `model_tools.md` |
+| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | `model_tools.md`, `supports_more.md` (bloqueadores y forzadores) | ✔ |
+| Ajustes por objeto, por parte y por rango de alturas | `model_tools.md` (reglas 5 a 7), `settings_levels.md` (reglas 10 y 11) | ✔ |
+| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias), `model_tools.md` (reglas 11 y 15) | ◐ falta llenar la cama, convertir unidades, reemplazar y recargar |
 | Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
 | Galería de formas | — | ✘ → `model_tools.md` |
 | Orientación automática (Tisma) | `orientation.md` | ✔ |
@@ -242,8 +243,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Leyenda por tipo, deslizadores, tiempos | `interface.md` | ✔ |
-| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | — | ✘ → `preview.md` |
-| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos) | ◐ → `preview.md` |
+| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | `preview.md` | ✔ |
+| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos), `preview.md` (regla 5) | ◐ falta qué hace cada ícono |
 | Visor de G-code aparte | `interface.md` (Más) | ◐ → `preview.md` |
 | Estimación de tiempo normal y silenciosa, filamento por tipo | `interface.md` | ✔ |
 
@@ -269,6 +270,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | `presets.md` | ◐ falta medir la actualización de los perfiles del sistema y volver a una instantánea |
 | Plantillas de filamento | `interface.md` (menú del filamento) | ◐ falta medir cómo se instalan y se usan (no entraron en `presets.md`) |
 | Buscar un ajuste | `interface.md` | ✔ |
+| Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta el comienzo de tres páginas de impresión en Expert y las páginas de material e impresora en Expert |
 | Asistente de primer uso | `interface.md` | ✔ |
 | Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
 

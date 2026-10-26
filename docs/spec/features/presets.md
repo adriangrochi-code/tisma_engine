@@ -154,7 +154,8 @@ comandos. Solo se toma el comportamiento; ningún valor de los perfiles de otros
 
 ## Parámetros propios para el G-code
 
-20. **Dónde:** al final de la página «Advanced» de impresión, y en las de material e impresora, «Custom parameters»:
+20. **Dónde:** en el nivel Expert, al final de la página «Advanced» de impresión, y en las de material e impresora,
+    «Custom parameters»:
     un texto JSON de un solo nivel, por ejemplo `{"my_key": "my_value"}`.
 21. **Cómo se usan:** cada clave entra a las plantillas de G-code con un prefijo según el perfil:
 
