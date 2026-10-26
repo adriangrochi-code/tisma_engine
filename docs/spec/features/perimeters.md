@@ -54,6 +54,13 @@ que los cordones pedidos se cubren con menos cordones, de ancho variable, sin hu
    - `nearest`: el punto más cercano a donde estaba la boquilla; en un cilindro se corre de a poco, capa a capa;
    - `random`: en cualquier lugar, distinto en cada capa.
 7. **Primera capa:** los cordones miden `layers.first_line_width` (0,4 mm con una primera capa de 0,2).
+8. **Costura alineada en la GPU** (diseño, pedido del dueño del 26-10-2026; meta RV10 de `BENCHMARKS.md`):
+   - con `compute.gpu` en `auto` y una GPU disponible, el cálculo de los puntos candidatos de `aligned` (esquinas,
+     distancia a la costura de la capa de abajo, puntaje de cada vértice) se hace en la GPU, todas las capas a la vez;
+   - la elección final, que depende de la costura de la capa de abajo, se encadena después, capa por capa;
+   - el resultado es el mismo byte a byte con `compute.gpu` en `auto` y en `off`: los puntajes se comparan de forma que
+     no dependan del orden de las operaciones (por ejemplo, con enteros), y los empates se deciden siempre igual;
+   - sin GPU, el mismo cálculo en paralelo en los núcleos.
 
 ## Pruebas
 

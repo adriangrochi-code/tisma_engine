@@ -252,7 +252,17 @@ con un solo offset por trayectoria), mismo equipo, mediana de 3 corridas salvo d
 | RV8 (propuesta): armado del G-code del conejo, 1 s o menos | El conejo sigue en 3,5 s | No |
 
 - el G-code tiene el mismo tamaño que antes (7,59 MB en el Benchy): V3 y V4 siguen pendientes;
-- el conejo es la única pieza en la que el motor sigue más lento que los otros dos: es el armado del G-code (V5, V13).
+- el conejo es la única pieza en la que el motor sigue más lento que los otros dos. La causa es la costura alineada:
+
+| Pieza | `walls.seam` `aligned` (por defecto) | `nearest` | `rear` |
+|---|---|---|---|
+| Conejo al 150 % | 3,30 s (`write_ms` 2520) | 1,28 s (`write_ms` 620) | 1,14 s (`write_ms` 538) |
+| Benchy | 1,05 s | 1,04 s | 1,01 s |
+| Benchy al doble, gyroid | 2,77 s | 2,31 s | 2,23 s |
+
+  En el conejo, ubicar la costura alineada se lleva unos 2 s de 3,3; crece con las paredes (`walls.count` 6:
+  `write_ms` 3938). Con `nearest`, el conejo tarda 1,28 s: menos que Tisma Slicer (2,32 s) y que PrusaSlicer (2,01 s).
+  Propuesta V15: la costura alineada en la GPU (`perimeters.md`, regla 8; meta RV10).
 
 ## Para repetir la medición
 
