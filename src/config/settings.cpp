@@ -273,11 +273,42 @@ Settings parse_checked(std::string_view text) {
                    else
                        s.simplify_tolerance = v;
                });
-    read_group(root, "walls", {"count", "width", "seam"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "walls",
+               {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
+                "scarf_entire_loop", "scarf_max_segment", "scarf_inner"},
+               [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "seam") {
             s.seam = choice<SeamMode>(g, n, k,
                                       {{"aligned", SeamMode::Aligned}, {"nearest", SeamMode::Nearest},
                                        {"random", SeamMode::Random}, {"rear", SeamMode::Rear}});
+            return;
+        }
+        if (n == "scarf") {
+            s.scarf = choice<ScarfMode>(g, n, k,
+                                        {{"nowhere", ScarfMode::Nowhere}, {"contours", ScarfMode::Contours},
+                                         {"everywhere", ScarfMode::Everywhere}});
+            return;
+        }
+        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "scarf_only_smooth"   ? s.scarf_only_smooth
+             : n == "scarf_entire_loop" ? s.scarf_entire_loop
+                                        : s.scarf_inner) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "scarf_start_height") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.scarf_start_height = v;
+            return;
+        }
+        if (n == "scarf_length" || n == "scarf_max_segment") {
+            const double v = number(g, n, k);
+            if (!(v > 0.0 && v <= 1000.0))
+                fail(k, "must be more than 0 and at most 1000 mm");
+            (n == "scarf_length" ? s.scarf_length : s.scarf_max_segment) = v;
             return;
         }
         if (n == "count") {
@@ -872,6 +903,13 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.width", num(s.wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
+        {"walls.scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
+        {"walls.scarf_only_smooth", flag(s.scarf_only_smooth)},
+        {"walls.scarf_start_height", num(s.scarf_start_height)},
+        {"walls.scarf_length", num(s.scarf_length)},
+        {"walls.scarf_entire_loop", flag(s.scarf_entire_loop)},
+        {"walls.scarf_max_segment", num(s.scarf_max_segment)},
+        {"walls.scarf_inner", flag(s.scarf_inner)},
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
         {"fuzzy.thickness", num(s.fuzzy_thickness)},
         {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
@@ -1021,7 +1059,17 @@ std::string settings_json(const Settings& s) {
           {"xy_offset", s.xy_offset},
           {"first_layer_shrink", s.first_layer_shrink},
           {"simplify_tolerance", s.simplify_tolerance}}},
-        {"walls", {{"count", s.wall_count}, {"width", s.wall_width}, {"seam", seam}}},
+        {"walls",
+         {{"count", s.wall_count},
+          {"width", s.wall_width},
+          {"seam", seam},
+          {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
+          {"scarf_only_smooth", s.scarf_only_smooth},
+          {"scarf_start_height", s.scarf_start_height},
+          {"scarf_length", s.scarf_length},
+          {"scarf_entire_loop", s.scarf_entire_loop},
+          {"scarf_max_segment", s.scarf_max_segment},
+          {"scarf_inner", s.scarf_inner}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},

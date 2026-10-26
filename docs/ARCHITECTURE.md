@@ -157,9 +157,13 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
 - **`writer.*`:** recorre las capas, ordena islas y recorridos (`order.*`), planifica los viajes por dentro
   (`travel.*`), aplica el tiempo mínimo de capa (`cooling.*`) y estima el tiempo con aceleraciones (`print_time.*`).
   Cada capa se arma en un búfer, con los números formateados por `std::to_chars`. Las capas pasan por un pipeline de
-  oneTBB: `plan_layer` ordena y elige las costuras, en orden, porque sigue desde donde terminó la capa de abajo;
-  los recorridos se simplifican en paralelo; `write_layer` escribe el texto, en orden. Mientras se escribe una capa
-  se planean las siguientes, y una capa que se frena por el tiempo mínimo se vuelve a escribir desde el mismo plan.
+  oneTBB: primero, en paralelo, los candidatos de la costura alineada de cada pared (`seam_candidates`);
+  `plan_layer` ordena y elige las costuras, en orden, porque sigue desde donde terminó la capa de abajo; los
+  recorridos se simplifican, toman la costura en bufanda (`scarf.*`) y se planean sus viajes en paralelo;
+  `write_layer` escribe el texto, en orden. Mientras se escribe una capa se planean las siguientes, y una capa que se
+  frena por el tiempo mínimo se vuelve a escribir desde el mismo plan.
+- **`scarf.*`:** la costura en bufanda (`walls_extra.md`, regla 4): el lazo empieza en una rampa desde la capa de
+  abajo y termina pasando otra vez sobre ella, con el alto de cada cordón en sus puntos (como el relleno ondulado).
 - **`check.*`:** relee y verifica el G-code. Lee el texto en bloques de unos 256 KiB de líneas enteras, en paralelo,
   y sigue el estado en orden.
 - **`export.*`:** junta escribir y verificar en una exportación que nunca deja un archivo malo con el nombre pedido.

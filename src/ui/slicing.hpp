@@ -47,7 +47,7 @@ struct SliceResult {
 
 // The settings with every one that only the G-code stage reads put back to its
 // default: the speeds, the motion limits, the cooling and the fan, the
-// retraction, the temperatures, the flow and the printer's G-code. Two
+// retraction, the temperatures, the flow, the scarf seam and the printer's G-code. Two
 // settings with the same result here cut the same model (the speed report's
 // V11, docs/spec/qa/2026-10-26-velocidad.md).
 Settings without_gcode_settings(Settings settings);

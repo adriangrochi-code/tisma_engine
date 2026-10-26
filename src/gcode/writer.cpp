@@ -6,6 +6,7 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
+#include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
 
@@ -518,8 +519,9 @@ public:
         }
         double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
         if (nonplanar_) {
-            // On the wavy bead below, not on the layer below's top.
-            height -= (from.below + to.below) / 2.0;
+            // On the wavy bead below, not on the layer below's top; a scarf
+            // ramp's foot, as the Z written rounds it, may come to nothing.
+            height = std::max(0.0, height - (from.below + to.below) / 2.0);
             const std::string shown = fixed(height, 3);
             if (shown != shown_height_) {
                 text_ += ";HEIGHT:" + shown + "\n";
@@ -1260,6 +1262,35 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         g.flush(out);
     };
 
+    // The scarf seam (docs/spec/features/walls_extra.md, rule 4): which wall
+    // loops start on a ramp. Not on the first layer, with nothing under the
+    // ramp but the bed, nor on a loop already off the layer's top (Z
+    // anti-aliasing) or laid over a wavy bead. A hole's loop runs with the
+    // hole on its left (every loop runs counter-clockwise): a bead to its
+    // left is out of the part.
+    const auto scarfed = [&](std::size_t l, const Step& step) {
+        if (s.scarf == ScarfMode::Nowhere || l == 0)
+            return false;
+        const Toolpath& t = step.path;
+        const bool outer = std::strcmp(step.type, "External perimeter") == 0;
+        if (!t.closed || t.wavy || t.points.size() < 3 || (!outer && (std::strcmp(step.type, "Perimeter") != 0 || !s.scarf_inner)))
+            return false;
+        for (const ToolpathPoint& p : t.points)
+            if (p.dz != 0.0 || p.below != 0.0)
+                return false;
+        if (s.scarf == ScarfMode::Contours && l < model.regions.size()) {
+            const Point2d& a = t.points[0].p;
+            const Point2d& b = t.points[1].p;
+            const double length = std::hypot(b.x - a.x, b.y - a.y);
+            if (length > 0.0) {
+                const double side = s.wall_width / length;
+                const double x = (a.x + b.x) / 2.0 - (b.y - a.y) * side, y = (a.y + b.y) / 2.0 + (b.x - a.x) * side;
+                if (!region_contains(model.regions[l], x, y))
+                    return false;
+            }
+        }
+        return !s.scarf_only_smooth || !has_sharp_corner(t);
+    };
     // Where a path leaves the head: a closed one back at its start.
     const auto end_of = [](const Toolpath& t) {
         return t.closed && t.points.size() > 2 ? t.points.front().p : t.points.back().p;
@@ -1312,10 +1343,18 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 [&](std::size_t l) {
                     const TravelPlanner& planner = *plans[plan_of[l]].planner;
                     std::optional<Point2d> from;
+                    double height = model.layers[l].top - model.layers[l].bottom;
                     for (Step& step : planned[l]) {
-                        if (!step.type)
+                        if (!step.type) {
+                            height = step.height;
                             continue;
+                        }
                         step.path = simplify_toolpath(step.path, s.gcode_resolution);
+                        if (scarfed(l, step))
+                            step.path = scarf_loop(step.path, height, s.scarf_start_height / 100.0,
+                                                   s.scarf_entire_loop ? std::numeric_limits<double>::infinity()
+                                                                       : s.scarf_length,
+                                                   s.scarf_max_segment);
                         if (from)
                             step.from = from;
                         if (step.from)

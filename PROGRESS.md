@@ -4562,3 +4562,51 @@ cambio, la costura alineada ya cuesta lo mismo que `nearest`: no queda nada para
 
 **Sigue:** la pared exterior en espiral (pedido del dueño, ficha `walls_extra.md`, regla 4, costura en bufanda con la
 vuelta entera), V3 y V4 con la regla de 0,005 mm, RV7 con una pared y RV9.
+
+## 2026-10-26 — costura en bufanda
+
+**Pedido del dueño:** una forma de imprimir la pared de afuera como en el modo vaso, en espiral, para que la calidad
+sea alta y casi no haga falta costura. La ficha `walls_extra.md` ya lo tenía como «costura en bufanda» (regla 4), con la
+opción de la vuelta entera.
+
+**Hecho:**
+- **`scarf_loop`** (`src/gcode/scarf.*`): el lazo, desde su costura, se vuelve un camino abierto:
+  - una rampa de `walls.scarf_length` antes de la costura, la boquilla subiendo desde la capa de abajo (más
+    `walls.scarf_start_height`) hasta la capa, con el cordón tan alto como la boquilla;
+  - el lazo entero a la altura de la capa, y sus últimos milímetros otra vez sobre la rampa con el cordón cada vez más
+    fino: el filamento de un lazo común;
+  - con `walls.scarf_entire_loop`, la rampa y su segunda pasada dan la vuelta entera;
+  - la rampa y su segunda pasada en tramos de `walls.scarf_max_segment` como mucho.
+- **El escritor** la aplica en la etapa en paralelo, después de simplificar (así la simplificación no junta los tramos
+  de la rampa): la pared externa de los contornos (`contours`) o también la de los agujeros (`everywhere`), las
+  internas con `walls.scarf_inner`, nunca en la primera capa ni sobre recorridos que ya salen de la capa (ZAA,
+  relleno ondulado), y con `walls.scarf_only_smooth` (por defecto) solo en lazos sin giros de más de 30°. El alto de
+  cada cordón va en los puntos (`dz` y `below`), como en el relleno ondulado.
+- **El verificador** acepta esos bloques hasta la capa de abajo, un cordón no planar que termina en nada (el pie de la
+  rampa) y, en todo cordón, el medio milésimo que puede esconder un `;HEIGHT` de 3 decimales (los primeros cordones
+  de la rampa miden milésimas). El fuzzer, con la bufanda al azar, encontró además un caso viejo de ZAA que fallaba
+  por eso mismo: un cordón de 0,009 mm en una capa de 0,046 mm.
+- Los ajustes `walls.scarf*` solo los lee el G-code: cambiarlos rehace solo el G-code (V11).
+
+**Medido** (cilindro de 128 lados, 10 mm de radio, capas de 0,2; capa 10, como la prueba W1 de la ficha):
+
+| | Pared externa | Z | Filamento |
+|---|---|---|---|
+| Sin bufanda | 61,55 mm | 2,2 | 2,0472 mm |
+| `everywhere` | 81,55 mm (lazo + 20) | de 2,0 a 2,2; termina en la costura de siempre | 2,0473 mm |
+| Vuelta entera | 123,10 mm (dos vueltas) | de 2,0 a 2,2 | 2,0472 mm |
+
+- El filamento de toda la pieza es el mismo con y sin bufanda (357,65 mm).
+- **RV6:** con la bufanda apagada (por defecto), el G-code de los 21 casos de medición es el mismo; solo se suman las
+  líneas de los ajustes nuevos al pie.
+- **Pruebas:** rampa, largo, vuelta entera, altura inicial, filamento igual y tramos de 1 mm en un cuadrado;
+  esquinas marcadas; en el G-code de un tubo, `contours` contra `everywhere` y la primera capa sin rampa; un cubo con y
+  sin `walls.scarf_only_smooth`; todo verificado. 381 casos pasan. Fuzzer de G-code con la bufanda al azar en un
+  tercio de las corridas: 3000 corridas (semillas 26 y 27), 0 fallas.
+- **Sin probar:** una impresión real. La ficha mide la regla en Tisma Slicer como caja negra; las cifras exactas de W1
+  dependen de su cilindro, así que las pruebas comparan la forma (lazo + rampa, desde la capa de abajo, mismo
+  filamento), no los números.
+
+**Sigue:** el panel de ajustes con todo lo agregado (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de
+información). Más adelante, si el dueño quiere, una pared externa en espiral continua entre capas (como el modo vaso,
+pero con paredes internas y relleno): la pared externa primero en cada capa, subiendo una capa por vuelta.

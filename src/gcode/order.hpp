@@ -55,6 +55,12 @@ std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from,
 // the layer below (docs/spec/features/perimeters.md, rule 8).
 std::vector<std::size_t> seam_candidates(const Toolpath& loop);
 
+// Whether a loop turns sharply anywhere, either way: more than kSeamCorner,
+// measured to the points kSeamSpan away on each side, as the aligned seam
+// measures its corners. A cube's walls do, a cylinder's do not (the scarf
+// seam's walls.scarf_only_smooth).
+bool has_sharp_corner(const Toolpath& loop);
+
 // The seams painted on a layer (docs/PAINTING.md): a loop that crosses an
 // enforced area starts in it, in the aligned and rear modes at the middle of
 // the longest stretch of the loop inside (a painted line keeps the seam on

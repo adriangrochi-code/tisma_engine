@@ -104,6 +104,9 @@ Settings without_gcode_settings(Settings s) {
     s.machine_max_flow = d.machine_max_flow, s.chamber_temperature = d.chamber_temperature;
     s.max_nozzle_temp = d.max_nozzle_temp, s.max_bed_temp = d.max_bed_temp, s.max_chamber_temp = d.max_chamber_temp;
     s.gcode_resolution = d.gcode_resolution, s.relative_extrusion = d.relative_extrusion, s.flavor = d.flavor;
+    s.scarf = d.scarf, s.scarf_only_smooth = d.scarf_only_smooth, s.scarf_start_height = d.scarf_start_height;
+    s.scarf_length = d.scarf_length, s.scarf_entire_loop = d.scarf_entire_loop;
+    s.scarf_max_segment = d.scarf_max_segment, s.scarf_inner = d.scarf_inner;
     return s;
 }
 

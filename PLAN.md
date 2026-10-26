@@ -542,7 +542,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] Q4: flujo según la velocidad planeada en las esquinas, y avance de presión por tipo de tramo
     - [ ] Q5: cordones alineados con la tensión por región, y propiedades ortótropas según las trayectorias en el
       análisis
-    - [ ] Q6: costura por costo (cóncava, atrás, lo que se ve, tensión) y en bisel (`walls_extra.md`)
+    - [ ] Q6: costura por costo (cóncava, atrás, lo que se ve, tensión) y en bisel (`walls_extra.md`). Hecha la
+      costura en bufanda (`walls_extra.md`, regla 4, 2026-10-26, pedido del dueño): falta la costura por costo
     - [ ] Q7: mapa de rugosidad por cara y compensación en XY según el ángulo
     - [ ] Q8: riesgo de alabeo con un modelo cerrado, borde automático y patrón según el material
     - [ ] Q9: orden de islas y viajes que escala (curva que llena el plano y 2-opt)

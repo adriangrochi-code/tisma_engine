@@ -481,6 +481,28 @@ std::vector<std::size_t> seam_candidates(const Toolpath& loop) {
     return corners.empty() ? all : corners;
 }
 
+bool has_sharp_corner(const Toolpath& loop) {
+    const std::size_t n = loop.points.size();
+    if (n < 3)
+        return false;
+    const double limit = std::sin(kSeamCorner * std::numbers::pi / 180.0);
+    const Away reach = away(loop, std::vector<char>(n, 1));
+    for (std::size_t i = 0; i < n; ++i) {
+        const Point2d& a = loop.points[reach.before[i]].p;
+        const Point2d& b = loop.points[i].p;
+        const Point2d& c = loop.points[reach.after[i]].p;
+        const double ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+        const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
+        if (lu == 0.0 || lv == 0.0)
+            continue;
+        // Sharper than kSeamCorner: the sine past the limit, or turned back
+        // (the cosine below zero).
+        if (std::abs(ux * vy - uy * vx) / (lu * lv) > limit || ux * vx + uy * vy < 0.0)
+            return true;
+    }
+    return false;
+}
+
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
                                   SeamMemory& memory, const SeamPaint* paint,
                                   std::span<const std::vector<std::size_t>* const> candidates) {

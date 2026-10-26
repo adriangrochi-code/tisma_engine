@@ -22,6 +22,7 @@ enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class FuzzyMode { None, External, All };
 
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
@@ -72,6 +73,15 @@ struct Settings {
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
     SeamMode seam = SeamMode::Aligned;
+    // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
+    // on a ramp up from the layer below instead of a step.
+    ScarfMode scarf = ScarfMode::Nowhere;
+    bool scarf_only_smooth = true;    // only loops without sharp corners
+    double scarf_start_height = 0.0;  // percent of the layer the ramp starts at, over the layer below
+    double scarf_length = 20.0;       // mm of ramp before the seam
+    bool scarf_entire_loop = false;   // the ramp the whole way round
+    double scarf_max_segment = 1.0;   // mm, the longest piece of the ramp
+    bool scarf_inner = false;         // the inner walls too
     // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
     FuzzyMode fuzzy_mode = FuzzyMode::None;
     double fuzzy_thickness = 0.3;      // mm off the line, either way

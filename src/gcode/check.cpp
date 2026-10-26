@@ -188,12 +188,15 @@ private:
             }
         } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
             nonplanar_ = c == "NONPLANAR:1";
-            if (nonplanar_ && !(limits_.wave > 0.0))
-                problem("a nonplanar block, but the settings ask for no wavy infill");
+            if (nonplanar_ && !(limits_.wave > 0.0) && !(limits_.scarf > 0.0))
+                problem("a nonplanar block, but the settings ask for no wavy infill and no scarf seam");
         } else if (const std::optional<double> h = value("HEIGHT:")) {
-            if (*h <= 0.0)
+            // A nonplanar bead may taper to nothing (the foot of a scarf ramp).
+            if (*h < 0.0 || (*h == 0.0 && !nonplanar_))
                 problem("layer height " + text(*h) + " is not positive");
             height_ = *h;
+            if (!nonplanar_)
+                layer_height_ = *h;
         } else if (const std::optional<double> w = value("WIDTH:")) {
             if (*w <= 0.0)
                 problem("line width " + text(*w) + " is not positive");
@@ -297,9 +300,11 @@ private:
                 const double h = height_.value_or(0.0);
                 // Off the layer's Z (Z anti-aliasing) the bound comes from the
                 // layer's true top, and both it and the move's Z are rounded.
+                // A scarf ramp goes down by the layer's ;HEIGHT, itself rounded.
                 const bool zaa = limits_.zaa_below > 0.0 || limits_.zaa_above > 0.0;
-                const double slack = zaa ? 2.0 * kPositionSlack : kPositionSlack;
-                const double low = *layer_z_ - (nonplanar_ ? limits_.wave : limits_.zaa_below * h) - slack;
+                const double slack = zaa || (nonplanar_ && limits_.scarf > 0.0) ? 2.0 * kPositionSlack : kPositionSlack;
+                const double low =
+                    *layer_z_ - (nonplanar_ ? std::max(limits_.wave, limits_.scarf * layer_height_) : limits_.zaa_below * h) - slack;
                 const double high = *layer_z_ + (nonplanar_ ? limits_.wave : limits_.zaa_above * h) + slack;
                 for (const double z : {position_[2], to[2]})
                     if (z < low || z > high) {
@@ -316,7 +321,11 @@ private:
                     *height_ + (at_layer && !nonplanar_ ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
                 const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
-                if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + 2e-5)
+                // ;HEIGHT, written to 3 decimals, may hide half the last one:
+                // much of a bead a few thousandths thick (a scarf ramp's foot,
+                // a Z anti-aliased bead on a thin layer).
+                const double rounding = *width_ * 0.0005 / limits_.filament_area * flow_ * length;
+                if (std::abs(de - expected) > kFlowShare * expected + per_mm * kFlowLength + rounding + 2e-5)
                     problem("extrudes " + text(de) + " mm of filament over " + text(length) + " mm, where width " +
                             text(*width_) + " and height " + text(thickness) + " ask for " + text(expected));
             }
@@ -350,6 +359,7 @@ private:
     std::size_t line_ = 0;
     bool custom_ = false;
     bool nonplanar_ = false; // in a ;NONPLANAR block
+    double layer_height_ = 0.0; // the last ;HEIGHT out of a ;NONPLANAR block: the layer's
     bool absolute_ = true;
     bool relative_e_ = false;
     double position_[4] = {0.0, 0.0, 0.0, 0.0};
@@ -401,6 +411,8 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
             thickest = std::max(thickest, t.height);
         limits.max_z += limits.zaa_above * thickest;
     }
+    if (s.scarf != ScarfMode::Nowhere)
+        limits.scarf = 1.0 - s.scarf_start_height / 100.0;
     if (const std::optional<WaveParams> waves = wave_params(s)) {
         // The crests, and the travels over them, go up to half the amplitude higher.
         limits.wave = 0.5 * waves->amplitude;

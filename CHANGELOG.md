@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Costura en bufanda** (pedido del dueño; ficha `walls_extra.md`, regla 4): `walls.scarf` en `contours` o
+  `everywhere` hace que la pared externa empiece en una rampa que sube desde la capa de abajo, en vez de un escalón,
+  y que al final del lazo pase otra vez sobre la rampa con el cordón cada vez más fino: la costura casi no se ve, con
+  el mismo filamento. Con `walls.scarf_entire_loop`, la rampa da la vuelta entera y la pared sube en espiral. Ajustes
+  del largo, la altura inicial, el tramo máximo, solo en lazos lisos (por defecto) y también en las paredes internas.
+
 - **Relaminar por etapas:** si después de laminar se cambia solo una velocidad, una temperatura, el ventilador, la
   retracción u otro ajuste que solo afecta al G-code, el programa no vuelve a cortar la pieza: rehace solo el G-code.
   En el Benchy, 0,4 s en vez de 1,4 s, con el mismo G-code byte a byte. La barra de estado dice «G-code rehecho».
