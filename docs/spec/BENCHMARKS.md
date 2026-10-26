@@ -76,7 +76,7 @@ pasar el motor; cómo se logra lo decide el equipo del motor.
 | RV7 | V7, V12 | Conejo al 150 % con `infill.density` 0 y con `walls.count` 1 | 187,4 s y 50,9 s | Como mucho 1,25 veces el tiempo con los valores por defecto |
 | RV8 | V5, V13 | Conejo al 150 %: el armado del G-code | 3,2 s | 1 s o menos |
 | RV9 | V14 | Benchy con 4 núcleos contra 1 núcleo | 1,38 veces | 2,5 veces o más |
-| RV10 | Costura en la GPU (`perimeters.md`, regla 8) | Conejo al 150 % con `walls.seam` `aligned` contra `nearest`, con `compute.gpu` en `auto` y en `off` | 3,3 s contra 1,28 s (2,6 veces) | Como mucho 1,2 veces, y el mismo G-code con `auto` y con `off` |
+| RV10 | Costura en la GPU (`perimeters.md`, regla 8) | Conejo al 150 % con `walls.seam` `aligned` contra `nearest`, con GPU y con `compute.gpu` en `off` | 3,3 s contra 1,28 s (2,6 veces) | Como mucho 1,2 veces, y el mismo G-code con GPU y sin ella |
 
 - RV7 a RV9 son propuestas del 26-10-2026 y esperan la aprobación del dueño; RV1 a RV6 y RV10 (pedida por el dueño)
   ya están aprobadas.
