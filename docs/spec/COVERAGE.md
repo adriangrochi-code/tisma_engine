@@ -274,7 +274,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Buscar un ajuste | `interface.md` | ✔ |
 | Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta el comienzo de tres páginas de impresión en Expert y las páginas de material e impresora en Expert |
 | Asistente de primer uso | `interface.md` | ✔ |
-| Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
+| Preferencias | `interface.md`, `preferences.md` | ✔ |
 
 ## Conexión con impresoras
 

@@ -45,6 +45,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`pellets.md`](pellets.md): impresoras de pellets: alimentación, eje E en largo o en volumen, sección redonda del cordón, flujo según la velocidad, topes para boquillas y capas grandes | P3 | Para revisar |
 | [`waam.md`](waam.md): estudio de impresoras de metal por arco: arco en lugar de E, menos arranques, paso entre cordones, intersecciones, espera entre capas, sobremedida para mecanizar | después de la primera versión | Para revisar |
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
+| [`preferences.md`](preferences.md): todas las preferencias del programa por página (General, GUI, Other, Camera), las propias del motor, buscador, exportar e importar | P1 | Para revisar |
 | [`walls_extra.md`](walls_extra.md): paredes: ancho fijo o variable, costura, voladizos, paredes extra | después de F2 | Para revisar |
 | [`infill_patterns.md`](infill_patterns.md): patrones de relleno y opciones del relleno que no están en `surfaces_infill.md` | después de F3 | Para revisar |
 | [`retraction_travel.md`](retraction_travel.md): retracción y viajes: vuelta, cambio de capa, barrido, saltos en Z y rampa, viajes por dentro, valores del material | después de F4 | Para revisar |
