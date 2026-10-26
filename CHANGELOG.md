@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Herramientas de la placa** (pedido del dueño; `docs/UI.md`, «Herramientas de la placa»): varios modelos en la placa
+  y una columna con **Agregar**, **Quitar**, **Duplicar**, **Mover** (también arrastrando el modelo), **Rotar**,
+  **Escalar** (en % o en mm), **Apoyar en una cara** y **Organizar** (grilla compacta centrada, ficha `placement.md`).
+  Atajos M, R, S, F, A y Supr. Soltar un STL sobre la placa lo suma; los proyectos guardan todos los modelos. Pintar
+  soportes y costura viene después.
+
 - **Zonas de relleno chicas, sólidas** (`infill.solid_below_area`, 70 mm², de la ficha `surfaces_infill.md`; en la
   interfaz, sección Relleno): una isla del relleno de una capa más chica que eso (una pata fina, un perno) se llena
   sólida. Cambia las piezas chicas: un cubo de 10 mm con 3 paredes queda sólido entero, y una placa de 12 islas

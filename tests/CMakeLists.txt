@@ -120,6 +120,27 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_project_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode)
+    # A plate of two models (the second one added and the plate arranged),
+    # with the Scale tool open, sliced; its project opens to the same G-code.
+    add_test(NAME ui_plate_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
+              --lang en --size 900x600 --tool scale
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.gcode
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_plate.tisma
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.png)
+    add_test(NAME ui_plate_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_plate.tisma --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.png)
+    add_test(NAME ui_plate_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.gcode)
+    set_tests_properties(ui_plate_save PROPERTIES FIXTURES_SETUP ui_plate)
+    set_tests_properties(ui_plate_reopen PROPERTIES FIXTURES_REQUIRED ui_plate FIXTURES_SETUP ui_plate_b)
+    set_tests_properties(ui_plate_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_plate;ui_plate_b")
+    set_tests_properties(ui_plate_save ui_plate_reopen PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     set_tests_properties(ui_project_save PROPERTIES FIXTURES_SETUP ui_project)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")

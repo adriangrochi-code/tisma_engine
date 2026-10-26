@@ -51,11 +51,34 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Laminar | Ctrl+R |
 | Exportar | Ctrl+E |
 | Capas de la vista previa | Flechas arriba y abajo, Re Pág y Av Pág, Inicio y Fin, o la rueda sobre la barra de capas |
+| Elegir un modelo de la placa | Clic sobre él; clic en la cama vacía: ninguno |
+| Mover un modelo | Arrastrarlo con el botón izquierdo |
+| Herramientas de la placa | M mover, R rotar, S escalar, F apoyar en una cara, A organizar, Supr quitar, Esc ninguna |
 
 ### Preparar
 
 Al abrir un STL, el modelo queda centrado en la cama y apoyado en ella (Z = 0). Cambiar el tamaño de la cama lo vuelve
 a centrar. **Laminar** corre el motor en segundo plano y la ventana sigue respondiendo.
+
+#### Herramientas de la placa
+
+La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
+izquierda de la vista 3D, una columna con:
+
+| Herramienta | Qué hace |
+|---|---|
+| **Agregar** | Suma un STL a la placa y la ordena. Soltar un STL sobre una placa con modelos también lo suma; **Abrir** empieza una placa nueva |
+| **Quitar**, **Duplicar** | El modelo elegido |
+| **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta |
+| **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
+| **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original** |
+| **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
+| **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
+
+Cada modelo queda siempre apoyado en la cama. El elegido se ve más claro. La lógica está en `src/ui/plate.*`, sin
+OpenGL, con sus pruebas (`tests/test_plate.cpp`). Un proyecto guarda cada modelo ya ubicado (con su giro y su escala
+aplicados), así se abre igual; ya no se queda solo con el primero. Pintar (soportes, costura, colores) viene después:
+necesita que el motor lea lo pintado.
 
 El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
 - las comprobaciones de la malla y de la pieza laminada;
@@ -200,6 +223,9 @@ tisma --screenshot explorador.png --browse /una/carpeta
 tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
 
+Varios STL en la línea de comandos arman una placa: el primero la abre y los demás se suman. `--tool
+move|rotate|scale|lay` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
+
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
 `--view calibration` muestra su pestaña. `--color kind|speed|width|height` elige el color de la vista previa (por alto
@@ -222,7 +248,9 @@ sombras en lugar de la luz, para revisarlas.
   - `ui_device_prints_to_simulator`: el cubo laminado e impreso en la impresora simulada desde la pestaña Impresora
     (`docs/DEVICE.md`);
   - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
-    exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
+    exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos;
+  - `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: lo mismo con una placa de dos cubos, ordenada, con la
+    herramienta Escalar abierta.
 
 ## Cómo está hecha
 

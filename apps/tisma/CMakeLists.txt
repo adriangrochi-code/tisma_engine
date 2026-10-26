@@ -23,7 +23,7 @@ set(TISMA_EMBEDDED
   ${PROJECT_SOURCE_DIR}/assets/brand/app/tisma.svg
   ${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf
 )
-file(GLOB TISMA_ICONS ${PROJECT_SOURCE_DIR}/assets/brand/icons/*.svg)
+file(GLOB TISMA_ICONS ${PROJECT_SOURCE_DIR}/assets/brand/icons/*.svg ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)
 list(SORT TISMA_ICONS)
 list(APPEND TISMA_EMBEDDED ${TISMA_ICONS})
 add_custom_command(

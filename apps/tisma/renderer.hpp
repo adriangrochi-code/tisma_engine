@@ -28,6 +28,8 @@ struct ViewFrame {
     Vec3 background_top{0.17f, 0.17f, 0.19f}, background_bottom{0.10f, 0.10f, 0.12f};
     Vec3 plate{0.20f, 0.20f, 0.23f};
     Vec3 model{0.62f, 0.37f, 0.86f};
+    Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
+    std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     bool show_model = true;
     bool show_preview = false;
     bool show_travels = false;

@@ -143,6 +143,21 @@
     X(ZoomIn, "Acercar", "Zoom in")                                                                                   \
     X(ZoomOut, "Alejar", "Zoom out")                                                                                  \
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
+    X(ToolAdd, "Agregar modelo", "Add a model")                                                                       \
+    X(ToolAddTip, "Agregar un modelo a la placa; se ordenan todos", "Add a model to the plate; all of them are arranged") \
+    X(ToolRemoveTip, "Quitar el modelo elegido (Supr)", "Remove the chosen model (Delete)")                           \
+    X(ToolDuplicateTip, "Duplicar el modelo elegido", "Duplicate the chosen model")                                   \
+    X(ToolMoveTip, "Mover (M): arrastrá el modelo sobre la cama o escribí su posición", "Move (M): drag the model on the bed or type its position") \
+    X(ToolRotateTip, "Rotar (R): ángulos en X, Y y Z", "Rotate (R): angles about X, Y and Z")                         \
+    X(ToolScaleTip, "Escalar (S): en % o en mm", "Scale (S): in % or in mm")                                          \
+    X(ToolLayFlatTip, "Apoyar en una cara (F): hacé clic en la cara que va contra la cama", "Lay on face (F): click the face that goes on the bed") \
+    X(ToolArrangeTip, "Organizar (A): todos los modelos en una grilla, centrada en la cama", "Arrange (A): every model in a grid, centred on the bed") \
+    X(ToolMoveHint, "El centro de su caja en la cama", "The centre of its box on the bed")                            \
+    X(ToolLayFlatHint, "Hacé clic en una cara del modelo: queda apoyada en la cama.", "Click a face of the model: it goes down on the bed.") \
+    X(ResetRotation, "Sin giro", "No rotation")                                                                       \
+    X(ScaleTogether, "Los tres ejes juntos", "All three axes together")                                               \
+    X(ResetScale, "Tamaño original", "Original size")                                                                 \
+    X(Models, "modelos", "models")                                                                                    \
     X(TabCalibration, "Calibración", "Calibration")                                                                   \
     X(TabDevice, "Impresora", "Printer")                                                                              \
     X(DeviceTitle, "Impresora conectada", "Connected printer")                                                        \

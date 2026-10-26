@@ -24,6 +24,7 @@
 #include "ui/camera.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
+#include "ui/plate.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
@@ -66,6 +67,8 @@ constexpr const char* kIcons[] = {
     "tisma_save",       "tisma_slice",     "tisma_send",     "tisma_engineering", "tisma_calibrate", "tisma_vibration",
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
+    "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
+    "tool_lay_flat",    "tool_arrange",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".tisma", ".gcode", ".gco", ".g", ".json"};
@@ -231,7 +234,10 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+
+// The plate tool in use (docs/UI.md, «Herramientas de la placa»).
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat };
 
 class App {
 public:
@@ -254,6 +260,13 @@ private:
     void analysis_panel();
     void calibration_panel();
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
+    void add_model(const std::filesystem::path& path);
+    void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
+    void rebuild_plate();
+    void plate_changed();
+    void arrange_plate();
+    void plate_tools();
+    Vec3 mouse_ray() const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
@@ -331,7 +344,18 @@ private:
     Tab tab_ = Tab::Prepare;
     Settings settings_ = default_settings();
 
-    // The model, as read and where it sits on the bed.
+    // The plate: each model as read with where it goes (objects_), each as
+    // placed (placed_meshes_), and all of them in one mesh, as the slicer and
+    // the view take them (mesh_, in bed coordinates: offset_ stays zero).
+    std::vector<PlateObject> objects_;
+    std::vector<TriangleMesh> placed_meshes_;
+    std::vector<std::size_t> object_vertices_; // where each model's vertices start in the view's mesh
+    int selected_ = -1;
+    PlateTool tool_ = PlateTool::Select;
+    int pressed_object_ = -1;  // the model the left button went down on
+    Vec3 drag_anchor_{};       // the point on the bed plane the drag holds
+    bool dragged_ = false;
+    bool keep_scale_ = true;   // the Scale tool scales all three axes together
     std::optional<TriangleMesh> mesh_;
     std::filesystem::path model_path_;
     Vec3 offset_{};
@@ -793,8 +817,19 @@ bool App::init(std::string& error) {
     bed_changed();
     camera_.set_view(StandardView::Iso);
     frame_all();
-    for (const std::string& file : options_.files)
-        open_path(from_utf8(file));
+    // The first model opens the plate; the next ones join it.
+    bool first_model = true;
+    for (const std::string& file : options_.files) {
+        const std::filesystem::path path = from_utf8(file);
+        if (lower_extension(path) == ".stl" && !first_model)
+            add_model(path);
+        else
+            open_path(path);
+        first_model = first_model && lower_extension(path) != ".stl";
+    }
+    if (!options_.tool.empty())
+        tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
+              : options_.tool == "scale" ? PlateTool::Scale : PlateTool::LayFlat;
     for (const std::string& choice : options_.profiles) {
         const std::size_t eq = choice.find('=');
         const auto kind = profile_kind_from_name(choice.substr(0, eq));
@@ -973,7 +1008,10 @@ void App::load_model(const std::filesystem::path& path) {
 
 void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab) {
     ++revision_.model;
-    mesh_ = std::move(mesh);
+    objects_.clear();
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}});
+    selected_ = 0;
+    tool_ = PlateTool::Select;
     model_path_ = name;
     viewer_ = false;
     result_.reset();
@@ -999,16 +1037,110 @@ void App::load_calibration(CalibrationPrint print) {
     use_mesh(std::move(mesh), name, Tab::Calibration);
 }
 
+// After the bed changed: one model goes back to its centre; several keep
+// their places.
 void App::place_model() {
-    if (!mesh_)
-        return;
-    offset_ = centre_on_bed(mesh_->bounding_box(), settings_.bed);
-    const BoundingBox box = mesh_->bounding_box();
-    placed_ = box;
-    placed_.min = {box.min.x + offset_.x, box.min.y + offset_.y, box.min.z + offset_.z};
-    placed_.max = {box.max.x + offset_.x, box.max.y + offset_.y, box.max.z + offset_.z};
-    renderer_.set_model(mesh_vertices(*mesh_, offset_));
+    if (objects_.size() == 1) {
+        PlateObject& o = objects_[0];
+        o.place.x = o.place.y = 0.0;
+        const BoundingBox box = placed_mesh(o).bounding_box();
+        const Vec3 at = centre_on_bed(box, settings_.bed);
+        o.place.x = 0.5 * (double(box.min.x) + double(box.max.x)) + at.x;
+        o.place.y = 0.5 * (double(box.min.y) + double(box.max.y)) + at.y;
+    }
+    rebuild_plate();
+}
+
+// The placed meshes, the plate's mesh and the view's copy, from objects_.
+void App::rebuild_plate() {
+    placed_meshes_.clear();
+    object_vertices_.clear();
+    std::size_t vertices = 0;
+    for (const PlateObject& o : objects_) {
+        placed_meshes_.push_back(placed_mesh(o));
+        object_vertices_.push_back(vertices);
+        vertices += 3 * placed_meshes_.back().triangle_count();
+    }
+    object_vertices_.push_back(vertices);
+    offset_ = {};
+    if (objects_.empty()) {
+        mesh_.reset();
+        placed_ = {};
+        renderer_.set_model({});
+    } else {
+        mesh_ = plate_mesh(placed_meshes_);
+        placed_ = mesh_->bounding_box();
+        renderer_.set_model(mesh_vertices(*mesh_, offset_));
+    }
+    if (selected_ >= int(objects_.size()))
+        selected_ = int(objects_.size()) - 1;
     ++scene_version_;
+}
+
+// A model was moved, turned, scaled, added or removed: the slice and the
+// analysis are out of date.
+void App::plate_changed() {
+    ++revision_.model;
+    if (result_ && !viewer_)
+        stale_ = true;
+    voxels_stale_ = true;
+    rebuild_plate();
+}
+
+void App::add_model(const std::filesystem::path& path) {
+    try {
+        StlFile stl = read_stl(path);
+        if (stl.mesh.empty()) {
+            fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
+            return;
+        }
+        last_folder_ = path.parent_path();
+        add_mesh(std::move(stl.mesh), path);
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// One more model on the plate, and the plate arranged (placement.md, rule 2).
+void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
+    if (objects_.empty() || calibration_ || viewer_) {
+        use_mesh(std::move(mesh), name, Tab::Prepare);
+        return;
+    }
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}});
+    selected_ = int(objects_.size()) - 1;
+    arrange_plate();
+    frame_all();
+}
+
+void App::arrange_plate() {
+    if (objects_.empty())
+        return;
+    std::vector<std::array<double, 2>> sizes;
+    for (const PlateObject& o : objects_) {
+        const std::array<double, 3> s = placed_size(o);
+        sizes.push_back({s[0], s[1]});
+    }
+    // The bed's centre (its box), or the origin with no bed.
+    double x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    for (std::size_t i = 0; i < settings_.bed.size(); ++i) {
+        const auto& p = settings_.bed[i];
+        x0 = i == 0 ? p[0] : std::min(x0, p[0]), x1 = i == 0 ? p[0] : std::max(x1, p[0]);
+        y0 = i == 0 ? p[1] : std::min(y0, p[1]), y1 = i == 0 ? p[1] : std::max(y1, p[1]);
+    }
+    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, 6.0);
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        objects_[i].place.x = at[i][0], objects_[i].place.y = at[i][1];
+    plate_changed();
+}
+
+// The ray from the eye through the mouse, in the view.
+Vec3 App::mouse_ray() const {
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
+    const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
+    const float half = std::tan(0.5f * camera_.fov), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
+    return normalize(camera_.forward() + camera_.right() * (nx * half * aspect) + camera_.up() * (ny * half));
 }
 
 void App::load_gcode(const std::filesystem::path& path) {
@@ -1084,8 +1216,15 @@ void App::open_project(const std::filesystem::path& path) {
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
-        if (p.models.size() > 1)
-            notify(format(tr(T::ProjectFirstModel), int(p.models.size())));
+        // Each model as the project placed it (its mesh moved by its offset).
+        std::vector<PlateObject> objects;
+        for (ProjectModel& m : p.models) {
+            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {}};
+            const BoundingBox box = o.mesh.bounding_box();
+            o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
+            o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
+            objects.push_back(std::move(o));
+        }
         ProjectModel& model = p.models.front();
         if (p.calibration) {
             CalibrationPrint print;
@@ -1102,6 +1241,10 @@ void App::open_project(const std::filesystem::path& path) {
         } else {
             calibration_.reset();
             use_mesh(std::move(model.mesh), from_utf8(model.name), Tab::Prepare);
+            objects_ = std::move(objects);
+            selected_ = objects_.size() == 1 ? 0 : -1;
+            rebuild_plate();
+            frame_all();
         }
     }
     project_path_ = path;
@@ -1128,8 +1271,9 @@ void App::save_project_to(const std::filesystem::path& path) {
     Project p;
     p.settings = settings_;
     p.profiles = chosen_profile_;
-    if (mesh_)
-        p.models.push_back({utf8(model_path_.filename()), *mesh_, {offset_.x, offset_.y, offset_.z}});
+    // Each model as placed on the bed, its turn and scale applied.
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}});
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     try {
@@ -2069,7 +2213,9 @@ void App::status_bar() {
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
     if (mesh_) {
         const Vec3f size{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y, placed_.max.z - placed_.min.z};
-        ImGui::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", utf8(model_path_.filename()).c_str(),
+        const std::string name = objects_.size() > 1 ? std::to_string(objects_.size()) + " " + tr(T::Models)
+                                                     : utf8(model_path_.filename());
+        ImGui::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
                     number_text(mesh_->triangle_count()).c_str(), tr(T::Triangles), double(size.x), double(size.y),
                     double(size.z));
     } else {
@@ -2135,11 +2281,59 @@ void App::viewport() {
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
                                ImGuiButtonFlags_MouseButtonMiddle);
     const ImGuiIO& io = ImGui::GetIO();
+    // The plate's models (docs/UI.md, «Herramientas de la placa»): a click
+    // chooses one (or lays it on the face clicked, with that tool); dragging a
+    // model moves it on the bed, dragging elsewhere turns the view.
+    const bool editing = tab_ == Tab::Prepare && !objects_.empty() && !calibration_;
+    const auto bed_point = [&](float z) -> std::optional<Vec3> {
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (std::abs(d.z) < 1e-6f)
+            return std::nullopt;
+        const float t = (z - e.z) / d.z;
+        if (!(t > 0.0f))
+            return std::nullopt;
+        return e + d * t;
+    };
+    if (editing && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        pressed_object_ = -1;
+        dragged_ = false;
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (const auto hit = pick(placed_meshes_, e, d)) {
+            selected_ = int(hit->object);
+            if (tool_ == PlateTool::LayFlat) {
+                PlateObject& o = objects_[hit->object];
+                o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));
+                plate_changed();
+            } else if (const auto p = bed_point(e.z + d.z * float(hit->distance))) {
+                pressed_object_ = int(hit->object);
+                drag_anchor_ = *p;
+            }
+        }
+    }
     if (ImGui::IsItemActive()) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f))
+        if (pressed_object_ >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+            if (const auto p = bed_point(drag_anchor_.z)) {
+                PlateObject& o = objects_[std::size_t(pressed_object_)];
+                o.place.x += double(p->x - drag_anchor_.x);
+                o.place.y += double(p->y - drag_anchor_.y);
+                drag_anchor_ = *p;
+                dragged_ = true;
+                rebuild_plate();
+            }
+        } else if (pressed_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+        }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
+    }
+    if (ImGui::IsItemDeactivated() && editing) {
+        if (dragged_)
+            plate_changed(); // the move is over: now the slice is out of date
+        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                 std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
+            selected_ = -1; // a click on the empty bed
+        pressed_object_ = -1;
+        dragged_ = false;
     }
     if (ImGui::IsItemHovered()) {
         if (io.MouseWheel != 0.0f)
@@ -2246,6 +2440,185 @@ void App::view_tools() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
+}
+
+// The plate's tools (docs/UI.md, «Herramientas de la placa»): a column at
+// the left of the view, and next to it the chosen tool's numbers.
+void App::plate_tools() {
+    const float size = 34.0f * scale_, margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.88f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##plate_tools", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+    if (button("##add", "tool_add", nullptr, false, false, true, tr(T::ToolAddTip), size)) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), {".stl"}, last_folder_);
+    }
+    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size)) {
+        objects_.erase(objects_.begin() + selected_);
+        selected_ = objects_.empty() ? -1 : std::min(selected_, int(objects_.size()) - 1);
+        if (objects_.empty()) {
+            result_.reset();
+            renderer_.clear_preview();
+        }
+        plate_changed();
+    }
+    if (button("##duplicate", "tool_duplicate", nullptr, false, false, chosen, tr(T::ToolDuplicateTip), size)) {
+        objects_.push_back(objects_[std::size_t(selected_)]);
+        selected_ = int(objects_.size()) - 1;
+        arrange_plate();
+    }
+    ImGui::Separator();
+    const struct {
+        const char* id;
+        const char* icon;
+        T tip;
+        PlateTool tool;
+    } tools[] = {{"##move", "tool_move", T::ToolMoveTip, PlateTool::Move},
+                 {"##rotate", "tool_rotate", T::ToolRotateTip, PlateTool::Rotate},
+                 {"##scale", "tool_scale", T::ToolScaleTip, PlateTool::Scale},
+                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat}};
+    for (const auto& t : tools)
+        if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
+            tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
+    ImGui::Separator();
+    if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size))
+        arrange_plate();
+    const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+
+    // Shortcuts, when no field takes the keys: M move, R rotate, S scale,
+    // F lay flat, A arrange, Delete removes.
+    if (!ImGui::GetIO().WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_M, false))
+            tool_ = PlateTool::Move;
+        if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Rotate;
+        if (ImGui::IsKeyPressed(ImGuiKey_S, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Scale;
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false))
+            tool_ = PlateTool::LayFlat;
+        if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl)
+            arrange_plate();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            tool_ = PlateTool::Select;
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen) {
+            objects_.erase(objects_.begin() + selected_);
+            selected_ = -1;
+            if (objects_.empty()) {
+                result_.reset();
+                renderer_.clear_preview();
+            }
+            plate_changed();
+        }
+    }
+    if (tool_ == PlateTool::Select || !chosen)
+        return;
+
+    // The chosen tool's card.
+    PlateObject& o = objects_[std::size_t(selected_)];
+    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##plate_tool", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
+    const float field = 110.0f * scale_;
+    bool changed = false;
+    const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(field);
+        const bool edited = ImGui::DragScalar((std::string("##") + label).c_str(), ImGuiDataType_Double, &v, float(speed), &lo,
+                                              &hi, fmt, ImGuiSliderFlags_AlwaysClamp);
+        changed |= edited;
+        return edited;
+    };
+    if (tool_ == PlateTool::Move) {
+        ImGui::TextDisabled("%s", tr(T::ToolMoveHint));
+        number("X", o.place.x, 0.1, -10000.0, 10000.0, "%.2f mm");
+        number("Y", o.place.y, 0.1, -10000.0, 10000.0, "%.2f mm");
+    } else if (tool_ == PlateTool::Rotate) {
+        std::array<double, 3> angles = euler_degrees(o.place.rotation);
+        bool turned = false;
+        const char* axes[3] = {"X", "Y", "Z"};
+        for (int k = 0; k < 3; ++k) {
+            ImGui::PushID(k);
+            turned |= number(axes[k], angles[std::size_t(k)], 0.5, -360.0, 360.0, "%.1f°");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-90")) {
+                o.place.rotation = rotated(o.place.rotation, k, -90.0);
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+90")) {
+                o.place.rotation = rotated(o.place.rotation, k, 90.0);
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        if (turned)
+            o.place.rotation = from_euler_degrees(angles);
+        if (ImGui::Button(tr(T::ResetRotation))) {
+            o.place.rotation = kNoRotation;
+            changed = true;
+        }
+    } else if (tool_ == PlateTool::Scale) {
+        const BoundingBox box = o.mesh.bounding_box();
+        const double own[3] = {double(box.max.x - box.min.x), double(box.max.y - box.min.y), double(box.max.z - box.min.z)};
+        double percent[3], mm[3];
+        for (int k = 0; k < 3; ++k)
+            percent[k] = o.place.scale[std::size_t(k)] * 100.0, mm[k] = own[k] * o.place.scale[std::size_t(k)];
+        changed |= ImGui::Checkbox(tr(T::ScaleTogether), &keep_scale_);
+        const char* axes[3] = {"X", "Y", "Z"};
+        for (int k = 0; k < 3; ++k) {
+            ImGui::PushID(k);
+            const double before_percent = percent[k], before_mm = mm[k];
+            number(axes[k], percent[k], 0.5, 0.1, 100000.0, "%.1f %%");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(field);
+            double lo = 0.001, hi = 100000.0;
+            changed |= ImGui::DragScalar("##mm", ImGuiDataType_Double, &mm[k], 0.1f, &lo, &hi, "%.2f mm",
+                                         ImGuiSliderFlags_AlwaysClamp);
+            double factor = 1.0;
+            if (percent[k] != before_percent)
+                factor = percent[k] / before_percent;
+            else if (mm[k] != before_mm && own[k] > 0.0)
+                factor = mm[k] / before_mm;
+            if (factor != 1.0 && std::isfinite(factor) && factor > 0.0) {
+                for (int j = 0; j < 3; ++j)
+                    if (keep_scale_ || j == k)
+                        o.place.scale[std::size_t(j)] = std::max(o.place.scale[std::size_t(j)] * factor, 1e-3);
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        if (ImGui::Button(tr(T::ResetScale))) {
+            o.place.scale = {1.0, 1.0, 1.0};
+            changed = true;
+        }
+    } else if (tool_ == PlateTool::LayFlat) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
+        ImGui::PopTextWrapPos();
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (changed)
+        plate_changed();
 }
 
 void App::empty_hint() {
@@ -2838,6 +3211,7 @@ void App::dialogs() {
     if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover))) {
         switch (purpose_) {
         case Purpose::Open: open_path(chosen); break;
+        case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
@@ -2958,6 +3332,8 @@ void App::layout() {
     settings_panel();
     status_bar();
     view_tools();
+    if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+        plate_tools();
     if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
         empty_hint();
     if (tab_ == Tab::Preview)
@@ -3015,6 +3391,15 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
+    f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
+        std::size_t(selected_) + 1 < object_vertices_.size()) {
+        f.selected_first = object_vertices_[std::size_t(selected_)];
+        f.selected_count = object_vertices_[std::size_t(selected_) + 1] - f.selected_first;
+    } else if (tab_ == Tab::Prepare && objects_.size() == 1 && selected_ == 0 && tool_ != PlateTool::Select) {
+        f.selected_first = 0;
+        f.selected_count = object_vertices_.size() > 1 ? object_vertices_[1] : 0;
+    }
     // The calibration tab shows its sliced part, up to the chosen segment.
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
@@ -3504,8 +3889,13 @@ void App::frame() {
     // Files dropped while a file dialog is open wait for it to close: opening
     // one would change the model under a pending export.
     if (!browser_.is_open())
-        for (const std::filesystem::path& path : std::exchange(dropped_, {}))
-            open_path(path);
+        for (const std::filesystem::path& path : std::exchange(dropped_, {})) {
+            // A model dropped on a plate joins it, as Add does.
+            if (lower_extension(path) == ".stl" && !objects_.empty() && !calibration_ && !viewer_)
+                add_model(path);
+            else
+                open_path(path);
+        }
     poll_jobs();
     device_poll();
 

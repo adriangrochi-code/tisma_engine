@@ -29,6 +29,7 @@ struct AppOptions {
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
     std::vector<float> look;
+    std::string tool; // the plate tool chosen at start: move, rotate, scale or lay (for screenshots)
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel

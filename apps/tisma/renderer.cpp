@@ -1145,9 +1145,20 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     }
     if (f.show_model && model_.count > 0) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
-        uniform(p_.mesh, "u_colour", f.model);
         glBindVertexArray(model_.vao);
-        glDrawArrays(GL_TRIANGLES, 0, model_.count);
+        // The chosen model in its own colour, the rest before and after it.
+        const GLint count = model_.count;
+        const GLint first = GLint(std::min<std::size_t>(f.selected_first, std::size_t(count)));
+        const GLint chosen = GLint(std::min<std::size_t>(f.selected_count, std::size_t(count - first)));
+        uniform(p_.mesh, "u_colour", f.model);
+        if (first > 0)
+            glDrawArrays(GL_TRIANGLES, 0, first);
+        if (first + chosen < count)
+            glDrawArrays(GL_TRIANGLES, first + chosen, count - first - chosen);
+        if (chosen > 0) {
+            uniform(p_.mesh, "u_colour", f.model_selected);
+            glDrawArrays(GL_TRIANGLES, first, chosen);
+        }
     }
     if (f.show_preview)
         draw_preview(f, vp, gbuffer, visibility);

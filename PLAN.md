@@ -544,6 +544,11 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] Q12: interfaz trabada entre materiales (ITIL, con MM1)
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
+  - brillo parejo (pedido del dueño, 2026-10-25; `docs/GLOSS.md`):
+    - [ ] G1 y G2: la pared externa a flujo constante en toda la pieza; para el tiempo mínimo de capa, frenar primero
+      lo de adentro, o esperar lejos de la pieza
+    - [ ] G4: temperatura según el flujo planeado (experimental, con Q3)
+    - [ ] la calibración de brillo: bandas a flujo constante, de 2 a 20 mm³/s, a tres temperaturas
   - lo que quedó de la revisión profunda (2026-10-25), sin errores de seguridad:
     - [x] resolución del G-code (juntar puntos alineados con el mismo ancho, desvío de 0,0125 mm): las paredes
       duplican vértices, el gyroid escribe el triple de tramos y quedan tramos de un micrón que extruyen
@@ -613,7 +618,11 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   borde apoyado. En sala limpia: desde la descripción pública de la idea, con diseño propio, sin leer código GPL.
   Se prueba con el estante plano de la torre de temperatura
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
-- [ ] Mover, girar y escalar el modelo; varias piezas en la cama
+- [x] Mover, girar y escalar el modelo; varias piezas en la cama (pedido del dueño, 2026-10-25): Agregar, Quitar,
+  Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)
+- [ ] Pintar en el modelo (pedido del dueño): soportes forzados y prohibidos, costura y colores; el motor tiene que
+  leer lo pintado (fichas `supports_more.md`, `multimaterial.md`); después Cortar, Partir y Medir de la ficha
+  `interface.md`
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 

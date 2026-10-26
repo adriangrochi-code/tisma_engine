@@ -22,6 +22,7 @@ constexpr const char* kUsage =
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
+    "                                   [--tool move|rotate|scale|lay]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
@@ -74,6 +75,12 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--layer") {
             options.layer = std::atoi(value());
+        } else if (arg == "--tool") {
+            options.tool = value();
+            if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale or lay\n");
+                return 2;
+            }
         } else if (arg == "--look") {
             std::string text = value();
             for (char& c : text)

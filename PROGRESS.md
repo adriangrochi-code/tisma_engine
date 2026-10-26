@@ -3909,3 +3909,29 @@ esfera de 50 mm, +0,07 % (sus casquetes). El cilindro de 20 mm de diámetro no c
 
 **Sigue:** lo que queda de la revisión en `PLAN.md` (verificación con muchas islas, `info`, gyroid por franjas,
 streaming del G-code).
+
+## 2026-10-25 — vista previa realista, ray tracing continuo, herramientas de la placa y brillo
+
+Pedidos del dueño, con una foto de una esquina de la vista previa.
+
+**Hecho:**
+- **Vista previa:** los tramos seguidos se unen en inglete. Ya no sobresalen dientes en las curvas, y las caras
+  encimadas no titilan. La luz sigue el perfil de un cordón impreso (`docs/UI.md`). `--look` acerca la cámara de las
+  capturas.
+- **Ray tracing:** el cordón es un poliedro convexo de seis planos, igual en la CPU y en la GPU (Haines 1991). Las
+  sombras de una pared son continuas. `--ray-check`: la GPU y la CPU coinciden en el 99,999 % de los píxeles.
+- **Herramientas de la placa:** varios modelos; Agregar, Quitar, Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar
+  en una cara y Organizar (ficha `placement.md`); íconos propios en `assets/icons/`; los proyectos guardan todos los
+  modelos. `src/ui/plate.*` con 5 pruebas; `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: dos cubos
+  ordenados, exportados, guardados y vueltos a abrir dan el mismo G-code.
+- **Brillo parejo:** `docs/GLOSS.md` con lo que se sabe (la temperatura de salida baja con el flujo; las capas que se
+  frenan salen más brillantes) y lo que el motor puede hacer (G1 a G7). No hay mediciones públicas del brillo de piezas
+  FFF sin pintar: hace falta una pieza de prueba y un medidor.
+
+**Medido:** placa de 2 cubos de 10 mm, ordenada: centros a 6 mm entre caras, G-code idéntico al reabrir el proyecto.
+
+**No probado:** las herramientas con una persona usando el mouse (solo capturas y pruebas automáticas); el
+arrastre con modelos de más de un millón de triángulos (se recalcula la malla en cada cuadro).
+
+**Sigue:** pintar (soportes y costura, con el motor), G1 y G2 del brillo, el rendimiento con modelos grandes y la
+decisión del dueño sobre los perfiles abiertos.
