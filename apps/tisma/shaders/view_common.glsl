@@ -18,8 +18,9 @@ layout(set = 0, binding = 0, std140) uniform Frame {
 layout(push_constant) uniform Draw {
     vec4 colour;   // a surface's colour; the background's top
     vec4 extra;    // xyz: the model drawn this far from its mesh; the background's bottom
-    uvec4 preview; // x: the line kinds drawn (bit k), y: colour by (0 kind, 1 speed, 2 width, 3 height)
-    vec4 range;    // xy: the colour ramp's range
+    uvec4 preview; // x: the line kinds drawn (bit k), y: colour by (0 kind, 1 speed, 2 width, 3 height),
+                   // z, w: the first and the last layer shown
+    vec4 range;    // xy: the colour ramp's range; z: 1 with the beads' grooves
 } draw;
 
 vec4 to_vulkan(vec4 p) {

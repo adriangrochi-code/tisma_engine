@@ -20,6 +20,13 @@ layout(location = 4) flat out vec3 v_side;
 layout(location = 5) flat out vec3 v_up;
 layout(location = 6) flat out vec2 v_size;  // the line's width and height
 layout(location = 7) flat out float v_cap;  // 1 on the end caps, 0 on the sides
+layout(location = 8) flat out vec2 v_neighbours; // 1 where a bead of the layer above (x) and below (y) touches this one
+
+// The kinds that usually have a bead of the layer above on them, and those
+// that lie on one of the layer below (not the top surface, a bridge or an
+// overhang): the grooves come only between them, inside the layers shown.
+const uint kAbove = 0x39BEu; // walls, overhang walls, infill, bridges, gap fill, support, its interface, wipe tower
+const uint kBelow = 0x3F76u; // walls, infill, top surface, gap fill, ironing, skirt, support, its interface, wipe tower
 
 const vec2 kCorner[4] = vec2[4](vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0), vec2(0.0, -1.0));
 const ivec2 kQuad[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));
@@ -47,6 +54,7 @@ void main() {
     v_up = vec3(0.0, 0.0, 1.0);
     v_size = a_size;
     v_cap = 0.0;
+    v_neighbours = vec2(0.0);
     bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
     int id = gl_VertexIndex;
     bool hidden = (draw.preview.x & (1u << kind)) == 0u || len <= 0.0;
@@ -107,5 +115,11 @@ void main() {
     v_base = pow(base, vec3(2.2));
     v_normal = normal;
     v_position = position;
+    // draw.preview.zw: the first and the last layer shown; draw.range.z: the
+    // grooves on (not with ray tracing, whose rays see the neighbours).
+    uint layer = a_kind_layer >> 8;
+    bool grooves = draw.range.z > 0.5 && v_cap < 0.5;
+    v_neighbours = vec2(grooves && layer < draw.preview.w && (kAbove & (1u << kind)) != 0u ? 1.0 : 0.0,
+                        grooves && layer > draw.preview.z && (kBelow & (1u << kind)) != 0u ? 1.0 : 0.0);
     gl_Position = to_vulkan(frame.view_projection * vec4(position, 1.0));
 }

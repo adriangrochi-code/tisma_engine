@@ -210,6 +210,17 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   normales de todo el perfil de la línea, cada una pesada por cuánto mira al ojo (lo que ese píxel vería de verdad),
   y ensancha el brillo lo que se abren esas normales (Toksvig 2005). De cerca no cambia nada. En la grilla de la cama, cada línea se desvanece cuando la siguiente de su clase queda a
   menos de unos píxeles (las mayores aguantan más, porque están más separadas); el contorno de la cama no cambia.
+- **Ranuras entre capas** (pedido del dueño, 2026-10-26: mejorar la oclusión y el color «como Prusa 3.0», con las
+  imágenes del lanzamiento como referencia de caja negra): en los modos rápido y de oclusión, cada cordón de la vista
+  previa calcula cuánto cielo y cuánta luz principal le tapan el cordón de la capa de arriba y el de la de abajo, sobre
+  el perfil, con la fórmula de horizontes de la oclusión ambiental (Bavoil, Sainz y Dimitrov 2008) resuelta exacta para
+  dos cordones que se tocan. Así cada capa se ve como un tubo con su ranura oscura, como en una pieza impresa. Se
+  aplica solo entre los tipos que suelen apilarse (paredes, relleno, soporte), dentro de las capas mostradas: la
+  superficie de arriba, el borde y la última capa mostrada no tienen nada encima. La luz principal es suave (unos 35°),
+  así la sombra del cordón de arriba entra con penumbra. De lejos la ranura se promedia con el resto del perfil, como
+  las normales del filtro de moiré. Con ray tracing no se aplica: los rayos ya ven a los vecinos.
+- **Color:** la curva de tono se aplica al canal más brillante y los otros se escalan con él, así un color saturado
+  brillante no se lava hacia el blanco; los grises quedan como antes.
 - **Intensidad de la oclusión:** se elige entre 0 y 1,5.
 - **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
   jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
