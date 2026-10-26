@@ -5,7 +5,9 @@
   finos (Altura de capa, Costura, Precisión…), plegables y con un resumen, en lugar de una sola lista larga;
 - tres niveles, **Básico**, **Normal** y **Avanzado**, y un modo **Personalizado** donde la persona elige qué ajustes
   se ven;
-- cambia la boquilla con un clic, al lado de la impresora;
+- arriba del panel, solo la impresora, la cama y la boquilla, cada una con un dibujo; la configuración de la
+  impresora, con su calibración, va en una página aparte;
+- cambia la boquilla con un clic, debajo de la impresora;
 - muestra la cámara de la impresora desde la placa, sin ir a Dispositivos.
 
 **Fase:** P1 (interfaz).
@@ -47,7 +49,7 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
 |---|---|---|
 | `ui.level` | `normal` | `basic`, `normal`, `advanced` o `custom` |
 | `ui.custom_base` | `normal` | El nivel del que partió la vista propia (regla 15) |
-| `ui.custom_visible` | lista vacía | Las claves que se ven en Personalizado, por pestaña (Impresión, Material, Impresora) |
+| `ui.custom_visible` | lista vacía | Las claves que se ven en Personalizado, por pestaña (Impresión, Material) y en la configuración de la impresora |
 | `ui.section` | `quality` | La sección elegida, por pestaña (regla 3) |
 | `ui.sections_open` | el primer apartado de cada sección | Los apartados abiertos, por pestaña (regla 2) |
 | `ui.single_column` | no | «Ver todo junto» (regla 4) |
@@ -138,7 +140,7 @@ El motor toma de los dos:
 | Retracción | Viajes | `retraction.lift`, `retraction.min_travel` (`retraction_travel.md`, `coasting.md`) | «Sin salto en Z» |
 | Necesidades | Necesidades | `extrusion.abrasive`, `extrusion.needs_enclosure` | «Sin requisitos» |
 
-   **Impresora:**
+   **Impresora** (solo en la configuración aparte, regla 37):
 
 | Sección | Apartado | Claves | Resumen cerrado (ejemplo) |
 |---|---|---|---|
@@ -214,7 +216,6 @@ El motor toma de los dos:
 | Temperaturas › Boquilla y Cama | `material.nozzle_temp`, `material.first_nozzle_temp`, `material.bed_temp`, `material.first_bed_temp` |
 | Enfriamiento › Ventilador | `cooling.fan_min`, `cooling.fan_max` |
 | Retracción › Retracción y Viajes | `retraction.length`, `retraction.lift` |
-| Boquilla y extrusor › Boquilla | `machine.nozzle_diameter` |
 
     - **Solo en Avanzado:** `layers.detail_*`, `layers.cusp_height`, `zaa.min_thickness`, `zaa.raise`,
       `infill.wall_overlap`, `infill.solid_every`, `infill.solid_below_area`, `infill.combine_*`,
@@ -260,10 +261,10 @@ El motor toma de los dos:
 
 ### Boquilla rápida
 
-21. **Dónde:** en la tarjeta Printer del panel de la placa, la lista **Nozzle** al lado de la impresora
-    (`interface.md`). Muestra las boquillas del modelo elegido: las variantes del modelo en el paquete
-    (`profile_pack.md`) y las impresoras del usuario hechas de ese modelo. Cada fila, el diámetro y, si el perfil lo
-    dice, el tipo: «0,4 mm», «0,6 mm · acero endurecido» (`machine.hardened_nozzle`). La elegida, con una marca.
+21. **Dónde:** en la tarjeta de la impresora (regla 32), la lista de boquilla debajo de la impresora. Muestra las
+    boquillas del modelo elegido: las variantes del modelo en el paquete (`profile_pack.md`) y las impresoras del
+    usuario hechas de ese modelo. Cada fila, su dibujo (regla 36), el diámetro y, si el perfil lo dice, el tipo:
+    «0,4 mm», «0,6 mm · acero endurecido» (`machine.hardened_nozzle`). La elegida, con una marca.
 22. **Cambiar es un clic** y no abre diálogos, salvo la regla 24:
     - la impresora pasa a la variante de esa boquilla;
     - el perfil de impresión se mantiene si es compatible con la variante nueva; si no, se elige el que el paquete
@@ -285,9 +286,9 @@ El motor toma de los dos:
 
 ### Cámara rápida
 
-27. **Botón de cámara** (diseño): en la tarjeta Printer, al lado del engranaje, cuando la impresora elegida tiene una
-    cámara (la suya o una USB de la computadora, `printer_connections.md`, «Cámara USB de la computadora»). Sin cámara
-    no aparece.
+27. **Botón de cámara** (diseño): en la tarjeta de la impresora, al lado del engranaje, cuando la impresora elegida
+    tiene una cámara (la suya o una USB de la computadora, `printer_connections.md`, «Cámara USB de la computadora»).
+    Sin cámara no aparece.
     - Abre una **ventana flotante** sobre la vista 3D, con la imagen, el nombre de la impresora, el estado de la
       impresión (porcentaje, capa y tiempo que falta, si la conexión los da) y botones para pantalla completa y cerrar.
     - Se mueve y se agranda con el mouse, sin salir de la vista 3D; posición, tamaño y si estaba abierta se recuerdan
@@ -300,6 +301,92 @@ El motor toma de los dos:
 30. **Sin imágenes:** si la cámara se desconecta o pasa 10 s sin mandar imágenes, la ventana lo dice sobre la última
     imagen, en gris, y reintenta sola cada 5 s.
 31. **Las imágenes** quedan solo en memoria: no se guardan en disco ni salen de la computadora.
+
+### La impresora en el panel y su configuración aparte
+
+Pedido del dueño (26-10-2026): en el panel de ajustes la impresora tiene que ser solo la elección de la impresora,
+con la cama a la derecha y la boquilla abajo, cada una con un dibujo de lo que se tiene; la configuración de la
+impresora va en un menú aparte, más detallado, con todo lo de la calibración, para que el panel no quede recargado.
+
+32. **Tarjeta de la impresora,** arriba de todo en el panel de ajustes, antes del material y de las secciones de la
+    impresión. No tiene ajustes de la impresora, solo tres listas con dibujo:
+
+| Lugar | Lista | Dibujo | Texto |
+|---|---|---|---|
+| Arriba a la izquierda, lo más ancho | Impresora | La silueta del tipo de impresora (regla 34) | Marca y modelo («Bambu Lab A1 mini», «Creality CR-5 Pro») |
+| Arriba a la derecha | Cama | La superficie de la cama (regla 35) | El nombre del fabricante («Textured PEI Plate») |
+| Abajo, a todo el ancho | Boquilla | La boquilla (regla 36) | «0,4 mm» y, si se sabe, «acero endurecido» |
+
+    - La lista de cama solo aparece en impresoras con camas intercambiables (`profiles.md`, regla 3). Sin ella, la
+      impresora usa todo el ancho.
+    - Con varios extrusores, una fila de boquilla por extrusor (regla 25).
+    - A la derecha de la impresora, el engranaje abre la configuración de la impresora (regla 37) y, si tiene, el
+      botón de cámara (regla 27).
+    - La pestaña Impresora del panel deja de existir: el panel tiene Impresión y Material.
+    - El dibujo mide 3 em de alto en la tarjeta y 2 em en las listas desplegadas, en violeta de una sola tinta sobre
+      el fondo violeta suave (`interface.md`, «Aspecto»), en tema claro y oscuro.
+33. **La lista de impresoras:** un buscador arriba, las impresoras agrupadas por marca, cada fila con su dibujo, y al
+    final «Agregar impresora…», que abre el asistente de configuración (`interface.md`). Las impresoras del usuario
+    van primero, con su nombre.
+34. **Dibujo de la impresora:** propio del motor, uno por tipo, elegido con datos del perfil:
+
+| Tipo | Cuándo |
+|---|---|
+| Resina | Impresora de resina (`resin.md`) |
+| Pellets | Impresora de pellets (`pellets.md`, PR #18) |
+| Cinta | Impresora de cinta (`belt_printer.md`) |
+| Delta | Cama redonda (`machine.bed` con forma de círculo) |
+| Cerrada | `machine.enclosed` sí |
+| Abierta | El resto |
+
+    - No se usan fotos de los fabricantes: no son del proyecto (`interface.md`). Si el paquete de perfiles trae algún
+      día una imagen del modelo con una licencia que permita repartirla, `profile_pack.md` dirá cómo, y reemplaza al
+      dibujo.
+35. **Dibujo de la cama:** uno por familia, según el nombre del tipo de cama, sin importar mayúsculas:
+
+| Familia | Nombre que contiene | Dibujo |
+|---|---|---|
+| Texturada | «textur», «satin» | Placa con puntos |
+| Lisa | «smooth», «PEI» sin «textur» | Placa lisa con brillo suave |
+| Vidrio | «glass», «vidrio» | Placa con un reflejo diagonal |
+| Fría | «cool» | Placa con un copo |
+| Ingeniería y alta temperatura | «engineering», «high temp» | Placa con una llama chica |
+| Otra | Ninguno | Placa lisa |
+
+36. **Dibujo de la boquilla:** la punta con el diámetro escrito al lado.
+    - Latón: dibujo lleno; acero endurecido (`machine.hardened_nozzle`): dibujo con rayas;
+    - alto flujo (el nombre de la variante contiene «high flow» o «HF»): el cuerpo más largo;
+    - el tamaño de la punta crece con el diámetro, de 0,2 a 1,2 mm, para que se distingan a simple vista.
+37. **Configuración de la impresora, aparte:** el engranaje de la tarjeta, o la sección Printer de la barra superior
+    (`interface.md`), abre una página a todo el ancho con la lista de secciones a la izquierda y los apartados
+    plegables (reglas 2 a 8):
+
+| Sección | Apartados |
+|---|---|
+| Máquina | Cama y volumen, Cabina, las camas que tiene (con su dibujo y su nombre) |
+| Boquilla y extrusor | Boquilla, Extrusor, las boquillas que tiene (con su dibujo) |
+| Límites | Velocidades, Aceleraciones, Temperaturas máximas |
+| G-code | Firmware, Inicio y fin, Variables |
+| Calibración | Estado de cada calibración (regla 38) |
+| Conexión | La conexión y la cámara de la impresora (`printer_connections.md`) |
+| Notas | Texto libre de la persona |
+
+    Las claves de cada apartado son las de la tabla «Impresora» de la regla 1.
+38. **Sección Calibración:** una fila por cada prueba de `calibrations.md` que sirve a esa impresora (regla 5 de esa
+    ficha), con:
+    - el ajuste que fija y su valor actual en el perfil (por ejemplo, flujo 98 %, retracción 0,8 mm);
+    - el estado: «Sin calibrar» (gris), «Calibrado el 26-10-2026» (verde), o «Calibrado con otra boquilla» (amarillo)
+      si la boquilla cambió desde entonces;
+    - el botón **Calibrar**, que abre esa prueba con la impresora, la boquilla y el filamento elegidos;
+    - las que dependen del filamento (temperatura, flujo, avance de presión, retracción) dicen con qué filamento se
+      hicieron.
+    La fecha y la boquilla se guardan cuando se aplica un resultado desde «Apply a calibration result…» (`interface.md`,
+    Más › Calibration). Arriba de la sección, el resumen «5 de 9 calibradas» y un botón «Calibrar en orden», que abre
+    la primera sin calibrar en el orden del tutorial `new_material` (`assistant.md`, PR #17).
+39. **Volver a la placa:** la página tiene arriba «‹ Placa»; Escape también vuelve. Los cambios sin guardar quedan con
+    su asterisco, como en `presets.md` (PR #13).
+40. **El nivel también vale aquí:** la configuración de la impresora usa el nivel o la vista propia de las reglas 9 a
+    20, con la pestaña Impresora en el diálogo de la regla 16.
 
 ## Pruebas
 
@@ -327,3 +414,12 @@ El motor toma de los dos:
 | SP19 | Cámara USB simulada (la de la prueba CA1 de `printer_connections.md`) asignada a la impresora | Botón de cámara; la ventana muestra la imagen; moverla, cerrar el programa y abrirlo: vuelve en el mismo lugar |
 | SP20 | Desconectar la cámara simulada | A los 10 s, el aviso sobre la última imagen; al volver, la imagen sigue sola |
 | SP21 | Cambiar a «Sin cámara» desde la ventana | La ventana se cierra y el botón desaparece; Dispositivos muestra «Sin cámara» |
+| SP22 | Panel de ajustes con una Bambu Lab A1 mini | Arriba, la tarjeta con la impresora y su dibujo, la cama a la derecha y la boquilla abajo; no hay pestaña Impresora ni ajustes de la impresora en el panel |
+| SP23 | Impresora sin camas intercambiables | No hay lista de cama; la impresora ocupa todo el ancho |
+| SP24 | Lista de impresoras, buscar «CR-5» | Se ven los modelos que coinciden, con su dibujo, agrupados por marca |
+| SP25 | Dibujos según el perfil: resina, cama redonda, cerrada, abierta | Resina, Delta, Cerrada y Abierta |
+| SP26 | Camas «Textured PEI Plate», «Cool Plate» y «Glass» | Placa con puntos, con copo y con reflejo |
+| SP27 | Boquillas 0,2 de latón y 0,6 de acero endurecido | La de 0,6 más grande y rayada, con su diámetro escrito |
+| SP28 | Engranaje de la tarjeta | Se abre la configuración aparte con Máquina, Boquilla y extrusor, Límites, G-code, Calibración, Conexión y Notas; Escape vuelve a la placa |
+| SP29 | Aplicar un resultado de flujo y abrir Calibración | Flujo «Calibrado el» con la fecha, la boquilla y el filamento; las demás «Sin calibrar»; arriba «1 de N calibradas» |
+| SP30 | Después de SP29, cambiar a la boquilla de 0,6 | Flujo pasa a «Calibrado con otra boquilla» |

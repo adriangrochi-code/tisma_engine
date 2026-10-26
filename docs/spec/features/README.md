@@ -41,7 +41,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`fragment.md`](fragment.md): dividir un objeto que no entra, con cortes en las secciones chicas y encastres (pernos o espigas) | después de la primera versión | Para revisar |
 | [`interface.md`](interface.md): la ventana en orden (barra superior, grupos de herramientas, panel de la placa, botón principal, vista previa, páginas de ajustes, Más, asistente, panel de Ingeniería), todos los menús con sus atajos, el aspecto (colores claro y oscuro, medidas de cada componente) y 39 capturas en [`interface/`](interface/) | P1 | Para revisar |
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
-| [`settings_panel.md`](settings_panel.md): el panel de ajustes en secciones (Calidad, Resistencia, Velocidad…) con apartados finos plegables, niveles Básico, Normal y Avanzado, vista Personalizada, boquilla con un clic y ventana de la cámara | P1 | Para revisar |
+| [`settings_panel.md`](settings_panel.md): el panel de ajustes en secciones (Calidad, Resistencia, Velocidad…) con apartados finos plegables, niveles Básico, Normal y Avanzado, vista Personalizada, tarjeta de impresora, cama y boquilla con dibujos, configuración de la impresora aparte con su calibración, boquilla con un clic y ventana de la cámara | P1 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
