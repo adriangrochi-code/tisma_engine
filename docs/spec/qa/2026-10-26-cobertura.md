@@ -57,7 +57,9 @@ El motor lee solo STL desde la línea de comandos. `formats.md` pide OBJ y 3MF e
 paquete de perfiles y la nube (fases P1, P2, P3 y P5). No se miden con `tisma-engine slice`; se revisan cuando esas
 fases tengan una forma de probarlas.
 
-## Orden sugerido para no perder nada
+## Orden para no perder nada
+
+Aprobado por el dueño el 26-10-2026.
 
 1. Formatos de entrada (3MF y OBJ) y centrar la pieza en la cama: cualquier proyecto de Tisma Slicer los usa.
 2. Velocidades y aceleraciones por tipo, relleno de huecos, planchado, balsa y extras de G-code (cambio de color y
