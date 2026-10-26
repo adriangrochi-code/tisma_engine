@@ -738,7 +738,7 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   G-code de la impresora), rehace solo el G-code, su verificación y la vista previa. Una prueba compara byte a byte,
   ajuste por ajuste, contra un laminado entero (RV5). Benchy: 0,41 s contra 1,35 s entero (meta 0,5 s). Para
   llegar, los planificadores de viajes de cada capa se arman en paralelo, y la verificación y la vista previa a la vez
-- [ ] V10: reusar una capa igual a la de abajo (RV4). Hecho en parte (2026-10-26):
+- [x] V10: reusar una capa igual a la de abajo (RV4, hecho 2026-10-26 con V5):
   - las capas que cruzan las mismas aristas que la de abajo (ningún vértice entre las dos) no se cortan de nuevo:
     sus puntos salen de las aristas de la primera de la tanda, iguales bit a bit;
   - si además la sección es la misma en x e y (aristas verticales, o caras verticales como los lados de un prisma
@@ -747,13 +747,15 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   - se reusan, con el mismo resultado byte a byte: las superficies (si la región de relleno y las capas que miran
     son las de la capa de abajo), el relleno (si las superficies son las de la capa a un período del patrón) y el
     planificador de viajes y las islas del G-code (si la región es la misma);
-  - cilindro de 32 768 lados: 40 mm, 2,69 → 0,36 s; 80 mm, 5,33 → 0,63 s. La relación 80/40 baja de 1,98 a 1,75;
-    la meta es 1,25. Lo que crece con las capas es la parte en serie del G-code (orden y costuras, simplificación,
-    texto) y su verificación: falta V5;
+  - cilindro de 32 768 lados: 40 mm, 2,69 → 0,36 s; 80 mm, 5,33 → 0,63 s. La relación 80/40 bajó de 1,98 a 1,75;
+    lo que crecía con las capas era la parte en serie del G-code. Con V5 y V9: 0,29 s y 0,36 s, relación 1,24 (meta
+    1,25, mediana de 9; queda justo, el ruido de la máquina mueve unos 0,02);
   - RV6: el G-code del Benchy, la esfera, el tubo, las islas y las cajas sale igual byte a byte. En los cilindros
     cambia: cada capa repite la sección de la primera, en vez de simplificar en cada capa otros puntos de las
     diagonales. Las paredes nuevas quedan a menos de 0,018 mm de las de antes
-- [ ] V9: simplificar después de cada pared (medir antes: RV1 ya se cumple)
+- [x] V9: simplificar después de cada pared (hecho 2026-10-26): lo que dejan las paredes se simplifica con
+  `slicing.simplify_tolerance`, como los contornos. Benchy 1,04 → 0,98 s (6 %); con 6 paredes, 3 %. El G-code del
+  Benchy cambia en el relleno (menos del 1 % de largo); las paredes quedan iguales
 
 ## Avance
 

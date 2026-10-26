@@ -131,6 +131,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
         if (settings.wall_count > 0) {
             out.walls[l] = layer_walls(out.regions[l], beading);
+            // What the walls leave, simplified as the contours are: each wall's
+            // rounded corners add vertices that every later step would carry
+            // (the speed report's V9).
+            out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
             fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
                        l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
         } else

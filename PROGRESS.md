@@ -4369,3 +4369,53 @@ como mucho un 25 % más que el de 40 mm) y medir V9.
 
 **Sigue:** V5 (el G-code en paralelo) para llegar a RV4; después medir V9.
 
+## 2026-10-26 — velocidad: V5 y V9; RV4 se cumple
+
+**Pedido del dueño:** V7 a V11 primero. V10 había quedado sin llegar a RV4 por la parte en serie del G-code, y V9
+estaba sin medir.
+
+**Hecho:**
+- **V5, el G-code en un pipeline** (`src/gcode/writer.*`). Cada capa se planea (`plan_layer`: el orden de las islas
+  y los recorridos y las costuras, que siguen de donde terminó la capa de abajo) y se escribe (`write_layer`) por
+  separado. Un pipeline de oneTBB planea en orden, simplifica los recorridos en paralelo y escribe en orden, así que
+  mientras se escribe una capa se planean las siguientes. Una capa que se frena por el tiempo mínimo se vuelve a
+  escribir desde el mismo plan, sin planearla de nuevo.
+- **La verificación por bloques** (`src/gcode/check.*`): lee bloques de unos 256 KiB de líneas enteras en paralelo
+  y sigue el estado en orden. Una prueba nueva pone un error a cada lado del corte entre bloques y espera su número de
+  línea exacto.
+- **Menos trabajo en serie, con el mismo texto:**
+  - la costura alineada calcula la distancia solo para los candidatos a un pelo del cuadrado más chico;
+  - sin módulos en los recorridos de la costura;
+  - el emisor formatea X, Y y el ancho una sola vez;
+  - la exportación relee el archivo de una vez (carácter por carácter era un décimo de la exportación).
+- **V9:** lo que dejan las paredes se simplifica con `slicing.simplify_tolerance`, como los contornos.
+
+**Medido** (4 núcleos, sin otra carga, mediana de 9):
+
+| Pieza | V10 | V5 | V5 y V9 |
+|---|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 0,365 s | 0,282 s | 0,291 s |
+| Cilindro de 32 768 lados, 80 mm | 0,561 s | 0,343 s | 0,360 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,54 | 1,22 | 1,24 |
+| Benchy (RV1, meta 1,5 s) | 1,133 s | 0,997 s | 0,975 s |
+| Benchy sin capas de abajo | — | 0,758 s | 0,748 s |
+
+- **RV4 se cumple, pero justo:** el ruido de la máquina mueve unos 0,02 s. Las corridas sueltas del cilindro van de
+  0,26 a 0,40 s. Lo que crece con las capas es el texto del G-code, que va en serie (unos 55 ms por cada 200 capas),
+  y la verificación (unos 10 ms).
+- **RV6, V5:** el mismo G-code byte a byte en el Benchy (con y sin giroide), la esfera (con soportes, con la tabla de
+  ventilador, con relleno ondulado y con ZAA), los cilindros, el tubo, las islas, las cajas, el cubo con piel difusa,
+  la pieza torcida, las capas por zona y una torre de cambios por altura (temperatura, ventilador, velocidad,
+  retracción, G-code propio y flujo forzado).
+- **RV6, V9:** cambia el relleno del Benchy (29 234 de 336 533 líneas). Por tipo, el largo total cambia: relleno
+  interno −0,2 %, sólido +0,1 %, superior −0,05 %, puentes +0,8 % (7,6 mm). Las paredes y el contorno quedan iguales.
+  La esfera, el cilindro de 128 lados, el tubo y las islas no cambian.
+- **Pruebas:** 396 de 396 en Release; el fuzzer de G-code, 150 casos sin fallas.
+
+**No medido:** RV2 y RV3 con V9 (V9 solo saca vértices; ya se cumplían). RV5 no cambia: el relaminado por etapas
+usa el mismo escritor, ahora más rápido.
+
+**Sigue:** V3 (`;WIDTH` solo cuando cambia, hoy 21 % del archivo) y V4 (juntar tramos cortos). Ninguna de las dos
+cambia el tiempo de corte, pero sí el tamaño del G-code y el tiempo de escribirlo. Después, la vista (pedido del
+dueño: oclusión y color como Prusa 3.0, mallado codicioso).
+
