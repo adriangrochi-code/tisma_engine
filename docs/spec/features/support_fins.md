@@ -7,6 +7,8 @@ así que salen igual con cualquier impresora y material.
 
 **Fase:** después de la primera versión, junto con los soportes (`supports_skirt.md`, `supports_more.md`).
 
+**Diseño:** propio del motor, basado en Support Fins (reglas 17 a 23).
+
 **Pedido del dueño (26-10-2026):** «también hay que integrar esto», con el enlace a Support Fins.
 
 **Basado en:** Support Fins, de gittrahan (MIT), `https://github.com/gittrahan/support-fins`. La interfaz lo muestra
@@ -19,12 +21,9 @@ en el panel de la función y en Créditos y fuentes (`credits.md`).
   `CLEANROOM.md`.
 - Esta ficha sale de su documentación: `README.md`, `docs/FIN-SPEC.md`, `docs/PLUGIN-CONFIG.md`, `docs/NOZZLE.md` y
   `docs/CALIBRATION.md`. No se copió su código.
-- **Cómo se integra:** el motor programa la función desde esta ficha, como cualquier otra.
-  - Usar su código (JavaScript, MIT) como base de un port es otra decisión y la toma el dueño. Si se toma, va a
-    `THIRD_PARTY.md` con el aviso MIT.
-  - De ese repositorio no se toman nunca:
-    - `plugins/` (son complementos de laminadores prohibidos);
-    - `occt-import-js`, que viene adentro y es LGPL-2.1.
+- **Cómo se integra:** diseño propio del motor (decisión del dueño, 26-10-2026, sección «Diseño propio del motor»).
+  No se porta ni se lee el código de Support Fins; de ese repositorio solo se usa su documentación. Nunca se usan
+  sus `plugins/` (complementos de laminadores prohibidos) ni `occt-import-js` (LGPL-2.1).
 - **Nombre:** «grip fin» es el término de Slant3D, que mostró la idea en un video. El motor dice «aletas de soporte».
 
 **Sin medir todavía:** no se corrió su programa de línea de comandos sobre piezas de prueba (este entorno no dejó
@@ -150,6 +149,36 @@ La boquilla y la altura de capa no son ajustes de la función: salen de `machine
 16. **Calibración:** Support Fins trae piezas de prueba (ángulo, separación, agarre, ancho de puente, base, agujeros).
     Se suman a `calibrations.md` cuando se programe esta función: cada una fija un ajuste de la tabla.
 
+### Diseño propio del motor
+
+Decisión del dueño (26-10-2026): «hagamos nuestro propio fin support». El motor no porta el código de Support Fins:
+toma la idea y las medidas de su documentación (con su crédito, `credits.md`) y la hace dentro del laminador, lo que
+un programa aparte no puede hacer.
+
+17. **Dentro del laminado, no en la malla:**
+    - las aletas se generan como regiones de soporte de cada capa, no como sólidos sumados al STL;
+    - así la separación con la pieza es un número entero de capas (la regla del Gap de Support Fins se cumple sola:
+      0,2 mm con capa de 0,2 es una capa vacía), y cada diente es exactamente una capa;
+    - los dientes salen como un solo cordón, sin retracción, con la etiqueta de soporte en el G-code
+      (`GCODE_OUTPUT.md`), y en la vista previa se ven de su propio color, «Aleta».
+    - Exportar la malla con las aletas (regla 15) sigue existiendo, para usarla en otro laminador.
+18. **Boquilla y capa de verdad:** `machine.nozzle_diameter`, `layers.height`, `walls.width` y la altura de cada capa
+    (también con altura variable, `slicing.md`) salen del perfil; nada se pide a mano. Con altura variable, un diente
+    toma la altura de su capa.
+19. **Pintar aletas** (`docs/PAINTING.md`): un canal nuevo, «Aletas», con Forzar y Bloquear.
+    - Forzar pone una aleta donde se pinta, aunque el voladizo no la pida.
+    - Bloquear no deja aletas en caras que se ven.
+    - Reemplaza a la colocación a mano de Support Fins.
+20. **Con la estabilidad** (`stability.md`): si la revisión de estabilidad dice que la pieza se vuelca o flexiona, se
+    ofrece encender `fins.sway` y subir `fins.tine_density`, con un botón **Aplicar** que muestra los valores.
+21. **Con la orientación** (`orientation.md`): la orientación automática puede contar las aletas como soporte que no
+    marca la superficie, y sugerir la orientación más fuerte (regla 14); la persona elige.
+22. **Con los soportes del laminador:** una pieza usa aletas o soportes comunes. Se elige en la sección Soportes
+    (`settings_panel.md`, PR #19) con chips: Sin soporte, Soporte, Aletas.
+23. **Mejoras para medir** (diseño, se confirman con piezas impresas antes de dejarlas por defecto):
+    - dientes que siguen el contorno de la capa en lugar de una recta, para agarrar curvas;
+    - largo del diente según la fuerza que pide la estabilidad, no solo por la cantidad de capas.
+
 ## Pruebas
 
 Medidas en la malla que genera el motor, con boquilla de 0,4 mm, capa de 0,2 mm y los valores por defecto, salvo que
@@ -173,3 +202,7 @@ se diga otra cosa.
 | SF14 | `fins.cutout` `diamond` en una pared alta | Agujeros con techo de 45° o más; borde de arriba, pie y extremos macizos |
 | SF15 | Laminar SF1 | Cada diente es un solo cordón en una capa, sin retracción; hay una capa vacía entre la parte de arriba de la pared y la pieza |
 | SF16 | `fins.enabled` y los soportes del laminador encendidos | Los soportes del laminador quedan apagados para esa pieza, con un aviso |
+| SF17 | SF1 laminado con capa de 0,2 mm | Una capa vacía entre la aleta y la pieza; cada diente en una sola capa, en la vista previa con el color «Aleta» |
+| SF18 | Capa variable de 0,1 a 0,3 mm | Cada diente tiene la altura de su capa |
+| SF19 | Pintar Bloquear aletas en la cara de adelante | Ninguna aleta sobre esa cara; el informe dice si un voladizo quedó sin soporte |
+| SF20 | Pieza alta que la revisión de estabilidad marca como que se vuelca | Se ofrece encender los contrafuertes, con los valores antes y después |
