@@ -39,6 +39,11 @@ La pieza de prueba general, con todo junto y mecanismos, es Mabel: `quality_mode
 | Esquinas | Caja hueca de 60 × 60 mm, 1 perímetro | 1 → 20, 1, 5 mm | Perímetros a 120 mm/s |
 | Vibraciones | Caja hueca de 60 × 60 mm, 1 perímetro | 15 → 85 Hz, 5, 5 mm | Perímetros a 150 mm/s |
 
+**Caudal máximo con un valor conocido** (extra del motor, aprobado por el dueño el 27-10-2026; Tisma Slicer no lo
+hace): si la impresora tiene `machine.max_flow` mayor que 0, la torre va de 0,5 a 1,5 veces ese valor, con un paso de
+una décima del valor redondeado a 0,5 mm³/s (mínimo 0,5) y franjas de 2 mm. Así la prueba queda centrada en esa
+máquina. Sin valor conocido, la tabla de arriba.
+
 **Torre de temperatura.** Cada bloque mide lo que la franja de alto y 12 mm de fondo. De izquierda a derecha:
 - **pilar A** de 14 mm, con la temperatura en relieve al frente. Los dígitos miden `min(7; 0,6 · franja)` mm de alto
   y quedan centrados;
@@ -117,3 +122,5 @@ El ancho es el de cada parche más su separación; la pieza ocupa el ancho menos
 | CM3 | Torre de exposición con franjas de 1 mm | Solo los agujeros de 0,4 mm (≤ 0,4 mm de diámetro) |
 | CM4 | Boquilla de 0,6 | Capas de 0,3 mm |
 | CM5 | Paso 0 | No se genera la pieza: «el paso y su alto tienen que ser mayores que 0» |
+| CM6 | Caudal máximo con `machine.max_flow` 20 | De 10 a 30 mm³/s, de a 2, franjas de 2 mm (11 franjas) |
+| CM7 | Caudal máximo sin `machine.max_flow` | De 5 a 25 mm³/s, de a 1, franjas de 2 mm |
