@@ -439,7 +439,9 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         double height = s.layer_height;
         for (const Layer& layer : model.layers)
             height = std::min(height, layer.top - layer.bottom);
-        const double narrow = 0.25 * s.wall_width;
+        // The ironing's lines are beads spacing x flow wide (ironing.md, rule 3).
+        const double ironing = std::max(0.001, std::round(s.ironing_spacing * s.ironing_flow / 100.0 * 1000.0) / 1000.0);
+        const double narrow = s.ironing ? std::min(0.25 * s.wall_width, ironing) : 0.25 * s.wall_width;
         const double machine = std::max(s.max_feed_x, s.max_feed_y); // 0: not known, no cap
         // A scarf ramp's foot or a Z anti-aliased bead is thinner than any
         // layer: up to what the machine moves.
