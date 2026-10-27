@@ -4105,7 +4105,7 @@ void App::help_panel() {
     const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
     ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
     ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
-    ImGui::Begin("##help", nullptr,
+    ImGui::Begin("##help_panel", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
     if (!knowledge_)
