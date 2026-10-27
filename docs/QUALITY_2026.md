@@ -12,7 +12,8 @@ un trabajo ya citado allí importa para una conclusión, se nombra con «(en el 
 - se leyeron solo resúmenes, artículos abiertos, páginas de editoriales, registros de patentes y documentación de
   usuario;
 - ningún código, tampoco el que publican algunos artículos;
-- los métodos se describen con palabras propias, sin fórmulas ni pasos copiados.
+- los métodos se describen sin copiar texto, fórmulas ni pasos, pero no son nuestros: cada uno va como «Basado en» el
+  trabajo que lo publicó.
 
 **Calidad de los datos:**
 - «(texto)»: se leyó el artículo completo;

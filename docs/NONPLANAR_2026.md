@@ -9,7 +9,8 @@ para este motor.
 **Sala limpia:**
 - se usaron artículos, resúmenes, páginas de editoriales, notas de prensa y documentación de usuario;
 - ningún código, tampoco el que publican los artículos (QuickCurve, INF-3DP, S4 y otros) ni el de los laminadores;
-- los métodos se cuentan con palabras propias.
+- los métodos se cuentan sin copiar texto, pero no son nuestros: cada uno va como «Basado en» el trabajo que lo
+  publicó.
 
 **Calidad de los datos.** Cada trabajo lleva una marca:
 - **artículo:** leído completo;
