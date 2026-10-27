@@ -38,6 +38,13 @@ struct CurvedField {
     double flat_below = 0.6, ramp_height = 5.0;
     bool flat_top = false;
     double radius = 0.0;        // how far from the centre the nozzle may go (the bed's corners), mm
+    // Top faces (nonplanar_modes.md, rules 14 to 18): h on a grid of nx by
+    // ny nodes `cell` mm apart from (grid_x, grid_y), bilinear between and
+    // level past its edges, by `scale`; ramped in evenly from flat_below up
+    // to `full` (from the base), where the sloping top faces start.
+    std::vector<float> grid;
+    int nx = 0, ny = 0;
+    double grid_x = 0.0, grid_y = 0.0, cell = 1.0, full = 0.0, scale = 1.0;
 
     // The shape at (x, y) (from the part's centre) and height z (from its base).
     double shape(double x, double y, double z) const;
@@ -59,7 +66,11 @@ struct CurvedField {
 
 // The field the settings ask for on this part (rules 1 to 3 and 6): the
 // wave or cone, as large as the head lets it be with curved.fit_head, and
-// shrunk until J stays within 0.6 to 1.4 everywhere in the part. Without
+// shrunk until J stays within 0.6 to 1.4 everywhere in the part. With
+// surface (nonplanar_modes.md, rules 14 to 18), one smooth h fitted by least
+// squares to the slopes of the faces looking up, each weighed by its area
+// and by how flat it lies, the steepest at the head's free slope, then
+// shrunk the same way; empty when nothing slopes (a flat top, CO1). Without
 // curved.fit_head, a layer steeper than the head allows, or one whose
 // material rises next to the nozzle past head.clearance_height, or J out of
 // bounds, is a CurvedError. Empty with curved.mode disabled.

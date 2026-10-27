@@ -200,7 +200,7 @@ TEST_CASE("curved layers: need relative E, and only what is done (NP4)", "[curve
     CHECK_THROWS_WITH(check_settings(s), ContainsSubstring("relative E"));
     s.relative_extrusion = true;
     CHECK_NOTHROW(check_settings(s));
-    s.curved_mode = CurvedMode::Surface;
+    s.curved_mode = CurvedMode::Stress;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
     s.curved_mode = CurvedMode::Wave;
     s.zaa = true;
@@ -267,4 +267,128 @@ TEST_CASE("curved layers: the mesh split to bend, still closed", "[curved]") {
     }
     // Children follow their parent's order.
     CHECK(std::is_sorted(origin.begin(), origin.end()));
+}
+
+namespace {
+
+// The spec's block with a roof: 40 x 40 mm, its top rising along X from
+// `low` to `high` (SU1 to SU5).
+IndexedMesh roof_block(float low, float high) {
+    TriangleMesh m;
+    const Vec3f v[8] = {{80, 80, 0}, {120, 80, 0}, {120, 120, 0}, {80, 120, 0},
+                        {80, 80, low}, {120, 80, high}, {120, 120, high}, {80, 120, low}};
+    const auto quad = [&](int a, int b, int c, int d) {
+        m.add_triangle(v[a], v[b], v[c]);
+        m.add_triangle(v[a], v[c], v[d]);
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    quad(0, 1, 5, 4);
+    quad(1, 2, 6, 5);
+    quad(2, 3, 7, 6);
+    quad(3, 0, 4, 7);
+    return weld_exact(m);
+}
+
+Settings surface_base() {
+    Settings s = base();
+    s.curved_mode = CurvedMode::Surface;
+    s.infill_density = 20.0;
+    s.wall_count = 2;
+    s.top_layers = s.bottom_layers = 3;
+    return s;
+}
+
+// The top face's error (SU1): in 1 x 1 mm cells, 2 mm in from the edges,
+// the highest extruded Z less the model's height there; its standard
+// deviation.
+double top_error(const std::string& text, float low, float high) {
+    std::map<std::pair<int, int>, double> highest;
+    std::istringstream in(text);
+    double x = 0, y = 0, z = 0;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            if (w[0] == ';')
+                break;
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        // Along the whole extrusion, a point every 0.25 mm.
+        const int pieces = e > 0.0 ? std::max(1, int(std::ceil(std::hypot(nx - x, ny - y) / 0.25))) : 0;
+        for (int k = 1; k <= pieces; ++k) {
+            const double px = x + (nx - x) * k / pieces, py = y + (ny - y) * k / pieces, pz = z + (nz - z) * k / pieces;
+            if (px > 82 && px < 118 && py > 82 && py < 118) {
+                auto [it, fresh] = highest.try_emplace({int(std::floor(px)), int(std::floor(py))}, pz);
+                it->second = std::max(it->second, pz);
+            }
+        }
+        x = nx, y = ny, z = nz;
+    }
+    double sum = 0, squares = 0;
+    for (const auto& [cell, top] : highest) {
+        const double model = low + (high - low) * (cell.first + 0.5 - 80.0) / 40.0;
+        sum += top - model, squares += (top - model) * (top - model);
+    }
+    const double n = double(highest.size()), mean = sum / n;
+    return std::sqrt(std::max(0.0, squares / n - mean * mean));
+}
+
+// A layer's slope along X: the least squares line through its extruded points.
+double slope_x(const std::vector<Move>& moves) {
+    double sx = 0, sz = 0, sxx = 0, sxz = 0, n = 0;
+    for (const Move& m : moves)
+        sx += m.x1, sz += m.z1, sxx += m.x1 * m.x1, sxz += m.x1 * m.z1, ++n;
+    return (n * sxz - sx * sz) / (n * sxx - sx * sx);
+}
+
+} // namespace
+
+TEST_CASE("curved layers: top faces, a flat top stays flat (CO1)", "[curved][surface]") {
+    const Settings s = surface_base();
+    CHECK_FALSE(curved_field(s, block()).has_value());
+    CHECK(layer_count(gcode_of(slice_model(block(), s), s)) == 60);
+}
+
+TEST_CASE("curved layers: top faces follow a sloping roof (SU1 to SU3, SU5)", "[curved][surface]") {
+    Settings s = surface_base();
+    Settings flat = s;
+    flat.curved_mode = CurvedMode::Disabled;
+    const std::string plain = gcode_of(slice_model(roof_block(20, 24), flat), flat);
+    const std::string bent = gcode_of(slice_model(roof_block(20, 24), s), s);
+    const double before = top_error(plain, 20, 24), after = top_error(bent, 20, 24);
+    WARN("top face error: flat " << before << " mm, curved " << after << " mm");
+    CHECK(after < 0.5 * before); // Tisma Slicer: 0.057 to 0.010
+    // The layers' slope grows evenly with the height, up to the roof's 0.1 (SU3).
+    double last = 0.0;
+    for (const char* z : {"2.000", "10.000", "15.000", "18.000"}) {
+        const double k = slope_x(layer_moves(bent, z));
+        CHECK(k > last);
+        last = k;
+    }
+    CHECK_THAT(slope_x(layer_moves(bent, "21.000")), WithinAbs(0.1, 0.012));
+    CHECK(std::abs(layer_count(bent) - 110) <= 2); // flat: 120
+    // The first layers flat (SU5: Tisma Slicer bends the first one too; the engine does not).
+    for (const Move& m : layer_moves(bent, "0.200"))
+        CHECK_THAT(m.z1, WithinAbs(0.2, 1e-6));
+}
+
+TEST_CASE("curved layers: a low part bends little (SU4)", "[curved][surface]") {
+    const Settings s = surface_base();
+    const std::optional<CurvedField> f = curved_field(s, roof_block(5, 9));
+    REQUIRE(f);
+    const std::string bent = gcode_of(slice_model(roof_block(5, 9), s), s);
+    const double top = slope_x(layer_moves(bent, "6.000"));
+    CHECK(top > 0.02);
+    CHECK(top < 0.1); // Tisma Slicer: 0.087
 }

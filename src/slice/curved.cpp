@@ -34,6 +34,18 @@ double CurvedField::shape(double x, double y, double z) const {
     switch (mode) {
     case CurvedMode::Conical:
         return cone * (std::sqrt(x * x + y * y + kTipRadius * kTipRadius) - kTipRadius);
+    case CurvedMode::Surface: {
+        if (grid.empty())
+            return 0.0;
+        // Bilinear between the nodes, level past the grid's edges.
+        const double gx = std::clamp((x + cx - grid_x) / cell, 0.0, double(nx - 1));
+        const double gy = std::clamp((y + cy - grid_y) / cell, 0.0, double(ny - 1));
+        const int i = std::min(int(gx), nx - 2), j = std::min(int(gy), ny - 2);
+        const double u = gx - i, v = gy - j;
+        const auto at = [&](int a, int b) { return double(grid[std::size_t(b) * std::size_t(nx) + std::size_t(a)]); };
+        return scale * ((1 - u) * (1 - v) * at(i, j) + u * (1 - v) * at(i + 1, j) + (1 - u) * v * at(i, j + 1) +
+                        u * v * at(i + 1, j + 1));
+    }
     case CurvedMode::Wave:
         if (pattern == CurvedPattern::Egg)
             return amplitude * std::sin(k * x) * std::sin(k * y);
@@ -47,6 +59,9 @@ double CurvedField::shape(double x, double y, double z) const {
 }
 
 double CurvedField::ramp(double z) const {
+    // Top faces: evenly over the whole height up to them (rule 15, SU3).
+    if (mode == CurvedMode::Surface)
+        return full > flat_below ? std::clamp((z - flat_below) / (full - flat_below), 0.0, 1.0) : 1.0;
     double r = smooth((z - flat_below) / ramp_height);
     if (flat_top)
         r *= 1.0 - smooth((z - (height - ramp_height)) / ramp_height);
@@ -70,7 +85,11 @@ std::array<double, 2> CurvedField::slope(double x, double y, double z) const {
     return {(offset(x + e, y, z) - offset(x - e, y, z)) / (2.0 * e), (offset(x, y + e, z) - offset(x, y - e, z)) / (2.0 * e)};
 }
 
-double CurvedField::thickness(double x, double y, double z) const { return 1.0 / (1.0 - offset_dz(x, y, z)); }
+double CurvedField::thickness(double x, double y, double z) const {
+    if (flat_at(z))
+        return 1.0; // under the ramp: flat, whatever the ramp's kink
+    return 1.0 / (1.0 - offset_dz(x, y, z));
+}
 
 double CurvedField::real_z(double x, double y, double flat) const {
     if (flat_at(flat))
@@ -91,6 +110,12 @@ double CurvedField::most() const {
         return amplitude;
     if (mode == CurvedMode::Conical)
         return std::abs(cone) * (std::sqrt(radius * radius + kTipRadius * kTipRadius) - kTipRadius);
+    if (mode == CurvedMode::Surface) {
+        double most = 0.0;
+        for (const float h : grid)
+            most = std::max(most, std::abs(double(h)));
+        return most * scale;
+    }
     return 0.0;
 }
 
@@ -163,6 +188,134 @@ double clearance_use(const Bounds& b, const Settings& s) {
     return use;
 }
 
+// Top faces (nonplanar_modes.md, rules 14 and 15): every face looking up
+// asks the layers under it for its own slope (the steepest at the head's
+// free slope), by its area and by how flat it lies; h on a grid over the
+// part is the least squares fit of those slopes, edge by edge between the
+// nodes, with a little weight everywhere so it stays smooth where nothing
+// asks. False when no face slopes.
+bool fit_surface(CurvedField& f, const IndexedMesh& mesh, const Box& b, double tan_x, double tan_y) {
+    const double dx = b.x1 - b.x0, dy = b.y1 - b.y0;
+    f.cell = std::max({1.0, dx / 63.0, dy / 63.0});
+    f.nx = int(std::ceil(dx / f.cell)) + 2, f.ny = int(std::ceil(dy / f.cell)) + 2;
+    f.grid_x = b.x0 - 0.5 * f.cell, f.grid_y = b.y0 - 0.5 * f.cell;
+    const int cx = f.nx - 1, cy = f.ny - 1; // cells
+    std::vector<double> weight(std::size_t(cx * cy), 0.0), sx(weight.size(), 0.0), sy(weight.size(), 0.0);
+    double lowest_slope = 1e300; // where the sloping faces start
+    for (const auto& tri : mesh.triangles) {
+        const Vec3f& a = mesh.vertices[tri[0]];
+        const Vec3f& p = mesh.vertices[tri[1]];
+        const Vec3f& q = mesh.vertices[tri[2]];
+        const double ux = double(p.x) - a.x, uy = double(p.y) - a.y, uz = double(p.z) - a.z;
+        const double vx = double(q.x) - a.x, vy = double(q.y) - a.y, vz = double(q.z) - a.z;
+        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const double length = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (length <= 0.0 || nz / length < 0.05)
+            continue; // not looking up
+        const double area = 0.5 * length, up = nz / length;
+        double tx = -nx / nz, ty = -ny / nz; // the face's slope
+        const double over = std::sqrt((tx / tan_x) * (tx / tan_x) + (ty / tan_y) * (ty / tan_y));
+        if (over > 1.0)
+            tx /= over, ty /= over;
+        if (std::hypot(tx, ty) > 0.005)
+            lowest_slope = std::min({lowest_slope, double(a.z), double(p.z), double(q.z)});
+        // Spread over the cells it covers, a sample every half cell.
+        const double longest = std::max({std::hypot(ux, uy), std::hypot(vx, vy), std::hypot(vx - ux, vy - uy)});
+        const int n = std::max(1, int(std::ceil(longest / (0.5 * f.cell))));
+        const double share = area * up * up / (double(n + 1) * double(n + 2) / 2.0);
+        for (int i = 0; i <= n; ++i)
+            for (int j = 0; i + j <= n; ++j) {
+                const double x = a.x + (ux * i + vx * j) / n, y = a.y + (uy * i + vy * j) / n;
+                const int ci = std::clamp(int((x - f.grid_x) / f.cell), 0, cx - 1);
+                const int cj = std::clamp(int((y - f.grid_y) / f.cell), 0, cy - 1);
+                const std::size_t c = std::size_t(cj * cx + ci);
+                weight[c] += share, sx[c] += share * tx, sy[c] += share * ty;
+            }
+    }
+    if (lowest_slope > 1e299)
+        return false;
+    // Each edge between two nodes: the difference its cells ask for.
+    double heaviest = 0.0;
+    for (const double w : weight)
+        heaviest = std::max(heaviest, w);
+    const double soft = 1e-3 * heaviest, anchor = 1e-6 * heaviest;
+    struct Edge {
+        std::size_t a, b;
+        double w, d;
+    };
+    std::vector<Edge> edges;
+    const auto node = [&](int i, int j) { return std::size_t(j * f.nx + i); };
+    const auto cell_at = [&](int i, int j) { return std::size_t(j * cx + i); };
+    for (int j = 0; j < f.ny; ++j)
+        for (int i = 0; i < f.nx; ++i)
+            for (int along = 0; along < 2; ++along) {
+                if ((along == 0 && i + 1 >= f.nx) || (along == 1 && j + 1 >= f.ny))
+                    continue;
+                double w = 0.0, s = 0.0;
+                int cells = 0;
+                for (int side = -1; side <= 0; ++side) { // the cells each side of the edge
+                    const int ci = along == 0 ? i : i + side, cj = along == 0 ? j + side : j;
+                    if (ci < 0 || cj < 0 || ci >= cx || cj >= cy)
+                        continue;
+                    const std::size_t c = cell_at(ci, cj);
+                    w += weight[c], s += along == 0 ? sx[c] : sy[c];
+                    ++cells;
+                }
+                if (cells == 0)
+                    continue;
+                const double slope = w > 0.0 ? s / w : 0.0;
+                edges.push_back({node(i, j), along == 0 ? node(i + 1, j) : node(i, j + 1), w / cells + soft,
+                                 (w / cells) / (w / cells + soft) * slope * f.cell});
+            }
+    // Conjugate gradients on the normal equations.
+    const std::size_t n = std::size_t(f.nx * f.ny);
+    const auto apply = [&](const std::vector<double>& h, std::vector<double>& out) {
+        for (std::size_t k = 0; k < n; ++k)
+            out[k] = anchor * h[k];
+        for (const Edge& e : edges) {
+            const double r = e.w * (h[e.b] - h[e.a]);
+            out[e.b] += r, out[e.a] -= r;
+        }
+    };
+    std::vector<double> rhs(n, 0.0), h(n, 0.0), r(n), p(n), ap(n);
+    for (const Edge& e : edges)
+        rhs[e.b] += e.w * e.d, rhs[e.a] -= e.w * e.d;
+    r = rhs, p = r;
+    double rr = 0.0;
+    for (const double v : r)
+        rr += v * v;
+    const double stop = 1e-20 * std::max(rr, 1e-300);
+    for (int it = 0; it < 2000 && rr > stop; ++it) {
+        apply(p, ap);
+        double pap = 0.0;
+        for (std::size_t k = 0; k < n; ++k)
+            pap += p[k] * ap[k];
+        if (pap <= 0.0)
+            break;
+        const double alpha = rr / pap;
+        double next = 0.0;
+        for (std::size_t k = 0; k < n; ++k) {
+            h[k] += alpha * p[k];
+            r[k] -= alpha * ap[k];
+            next += r[k] * r[k];
+        }
+        for (std::size_t k = 0; k < n; ++k)
+            p[k] = r[k] + next / rr * p[k];
+        rr = next;
+    }
+    // Level on average, so the layers bend both ways about where they were.
+    double mean = 0.0;
+    for (const double v : h)
+        mean += v;
+    mean /= double(n);
+    f.grid.resize(n);
+    for (std::size_t k = 0; k < n; ++k)
+        f.grid[k] = float(h[k] - mean);
+    f.full = std::max(lowest_slope - b.z0, f.flat_below + 1.0);
+    f.scale = 1.0;
+    return true;
+}
+
 } // namespace
 
 std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& mesh) {
@@ -205,6 +358,9 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
             f.k = 2.0 * std::numbers::pi / s.curved_wavelength;
             f.amplitude = s.curved_amplitude;
         }
+    } else if (f.mode == CurvedMode::Surface) {
+        if (!fit_surface(f, mesh, b, tan_x, tan_y))
+            return std::nullopt; // nothing slopes: flat layers (CO1)
     } else {
         f.cone = std::tan(radians(s.curved_cone_angle));
     }
@@ -215,7 +371,7 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     };
     if (fits(f))
         return f;
-    if (!s.curved_fit_head) {
+    if (!s.curved_fit_head && f.mode != CurvedMode::Surface) {
         const Bounds bb = bounds_of(f, b, tan_x, tan_y);
         char text[300];
         if (bb.j_min < kMinJ - 1e-9 || bb.j_max > kMaxJ + 1e-9)
@@ -240,10 +396,12 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     for (int i = 0; i < 40; ++i) {
         const double mid = 0.5 * (lo + hi);
         CurvedField g = full;
-        g.amplitude *= mid, g.cone *= mid;
+        g.amplitude *= mid, g.cone *= mid, g.scale *= mid;
         (fits(g) ? lo : hi) = mid;
     }
-    f.amplitude = full.amplitude * lo, f.cone = full.cone * lo;
+    f.amplitude = full.amplitude * lo, f.cone = full.cone * lo, f.scale = full.scale * lo;
+    if (f.mode == CurvedMode::Surface && f.most() < 1e-3)
+        return std::nullopt; // too low a part to bend (rule 17)
     return f;
 }
 

@@ -5951,3 +5951,30 @@ pintadas con capas curvas. La estimación de tiempo y el filamento del pie del G
 
 **Sigue:** F7, `surface` (las caras de arriba inclinadas como una sola capa) con `nonplanar_modes.md`; después resina.
 
+## 2026-10-27 — F7: capas paralelas a las caras de arriba (`surface`)
+
+**Hecho** (ficha `nonplanar_modes.md`, reglas 14 a 18): `curved.mode` `surface`. Cada cara que mira hacia arriba
+pide su pendiente (como mucho la pendiente libre de la cabeza), con un peso por su área y por lo horizontal que es;
+los pedidos se reparten por una grilla sobre la pieza (celdas de 1 mm, hasta 64 por lado) y `h(x, y)` sale por
+mínimos cuadrados arista por arista entre los nodos, con un peso chico en todas partes para que quede suave donde nadie
+pide (gradiente conjugado). La deformación es `h · rampa(z)`, con la rampa pareja desde `curved.flat_below` hasta donde
+empiezan las caras inclinadas (regla 15), achicada por bisección hasta cumplir `J`, la pendiente y la holgura de la
+cabeza (regla 16). Una pieza sin caras inclinadas se lamina plana (CO1), y las primeras capas quedan planas (SU5).
+Corregido de paso: `J` es 1 en las capas planas aunque la rampa tenga un quiebre justo ahí.
+
+**Medido** (bloque de 40 × 40 mm con techo de 20 a 24 mm a lo largo de X; entre paréntesis Tisma Slicer): error de la
+cara de arriba, desvío estándar por celdas de 1 mm muestreando a lo largo de cada extrusión, 0,050 mm en plano (0,057)
+y 0,0052 mm con `surface` (0,010); pendiente de las capas 0,0073 en Z 2 (0,010), 0,049 en 10 (0,048), 0,075 en 15
+(0,074), 0,090 en 18 (0,090), 0,095 en 20 (0,097) y 0,098 arriba (0,099); 110 capas (110; plano 120). Bloque bajo de 5
+a 9 mm (SU4): pendiente arriba 0,062 (0,087) y error 0,056 mm contra 0,050 en plano (0,056 contra 0,057): no gana, como
+dice la regla 17, pero queda un poco peor que plano. CO1: el bloque de techo plano sale con 60 capas planas. G-code del
+techo: 2,8 MB (plano 404 kB).
+
+Pruebas nuevas en `tests/test_curved.cpp` (9 casos en total: CO1, SU1 a SU3 y SU5, SU4); fuzzer con `surface`: 600
+corridas (semillas 56 y 57), 0 fallas.
+
+**No hecho:** el Z anti-aliasing encima de `surface` (hoy no van juntos); que una pieza baja no quede peor que plana
+(SU4); `overhangs`, el cono según la pieza y `automatic`.
+
+**Sigue:** F7, `overhangs` y el cono según los voladizos (reglas 1 a 13, CO1 a VO7); después `automatic`.
+

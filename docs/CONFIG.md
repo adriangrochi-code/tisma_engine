@@ -465,7 +465,7 @@ purga ni las caras pintadas.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `mode` | texto | `"disabled"` | `disabled`, `wave`, `conical`, `overhangs`, `stress`, `surface`, `automatic` | `wave`: una onda; `conical`: un cono `tan(cone_angle) · (√(x² + y² + 4) − 2)`, hoy solo sin `fit_head`. Los modos según la pieza (`nonplanar_modes.md`) todavía no están: dan error |
+| `mode` | texto | `"disabled"` | `disabled`, `wave`, `conical`, `overhangs`, `stress`, `surface`, `automatic` | `wave`: una onda; `conical`: un cono `tan(cone_angle) · (√(x² + y² + 4) − 2)`, hoy solo sin `fit_head`; `surface` (`nonplanar_modes.md`, reglas 14 a 18): las capas de arriba paralelas a las caras de arriba inclinadas, con una deformación `h(x, y)` ajustada por mínimos cuadrados a sus pendientes (cada cara pesa por su área y por lo horizontal que es; como mucho la pendiente libre de la cabeza), que crece pareja con la altura desde `flat_below` hasta donde empiezan las caras inclinadas, y achicada hasta que `J` quede en [0,6; 1,4]; una pieza sin caras inclinadas se lamina plana. `overhangs`, `stress`, `automatic` y el cono según la pieza todavía no están: dan error |
 | `pattern` | texto | `"egg"` | `egg`, `ridges`, `twisted` | La onda: `egg` `a · sin(kx) · sin(ky)`; `ridges` `a · sin(k(x cos θ + y sin θ))`; `twisted`, crestas cuya dirección gira `twist` grados por mm de altura (regla 1) |
 | `amplitude` | número | 0,6 | 0 a 50 | Amplitud `a` de la onda, en mm, sin `fit_head` |
 | `wavelength` | número | 16 | 1 a 1000 | Largo `λ` de la onda, en mm, sin `fit_head` (`k = 2π / λ`) |

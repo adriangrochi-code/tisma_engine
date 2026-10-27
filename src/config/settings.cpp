@@ -2809,10 +2809,11 @@ void check_settings(const Settings& s) {
         if (!relative_e(s))
             throw SettingsError("curved.mode: curved layers need relative E (machine.relative_extrusion, on a flavor that "
                                 "has M83)");
-        if (s.curved_mode != CurvedMode::Wave && s.curved_mode != CurvedMode::Conical)
+        if (s.curved_mode != CurvedMode::Wave && s.curved_mode != CurvedMode::Conical &&
+            s.curved_mode != CurvedMode::Surface)
             throw SettingsError(std::string("curved.mode: ") + curved_mode_name(s.curved_mode) +
-                                " (layers from the part, nonplanar_modes.md) is not done yet: use wave, or conical "
-                                "without curved.fit_head");
+                                " (layers from the part, nonplanar_modes.md) is not done yet: use wave, surface, or "
+                                "conical without curved.fit_head");
         if (s.curved_mode == CurvedMode::Conical && s.curved_fit_head)
             throw SettingsError("curved.fit_head: the cone from the part's overhangs (nonplanar_modes.md) is not done "
                                 "yet; a cone of curved.cone_angle needs curved.fit_head false");
