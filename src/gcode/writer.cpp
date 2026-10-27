@@ -640,6 +640,37 @@ void append_integer(std::string& text, long v) {
 
 // Keeps the machine's position and writes only the axes that change. The
 // text goes to a buffer that flush() hands to the stream.
+// What the lines of each kind do, for gcode.verbose_comments (gcode_extras.md,
+// rule 12): its extrusions, and the travel to its first point.
+struct KindNotes {
+    const char* type;
+    const char* extrude;
+    const char* travel;
+};
+constexpr KindNotes kKindNotes[] = {
+    {"External perimeter", "perimeter", "move to first perimeter point"},
+    {"Perimeter", "perimeter", "move to first perimeter point"},
+    {"Overhang perimeter", "perimeter", "move to first perimeter point"},
+    {"Internal infill", "infill", "move to first infill point"},
+    {"Solid infill", "infill", "move to first infill point"},
+    {"Top solid infill", "infill", "move to first infill point"},
+    {"Bridge infill", "infill (bridge)", "move to first infill point"},
+    {"Gap fill", "gap fill", "move to first gap fill point"},
+    {"Ironing", "ironing", "move to first ironing point"},
+    {"Skirt/Brim", "skirt", "move to first skirt point"},
+    {"Support material", "support material", "move to first support material point"},
+    {"Support material interface", "support material interface", "move to first support material point"},
+};
+constexpr KindNotes kOtherNotes{"", "extrude", "travel"};
+
+const KindNotes& notes_of(const char* type) {
+    if (type)
+        for (const KindNotes& k : kKindNotes)
+            if (std::strcmp(k.type, type) == 0)
+                return k;
+    return kOtherNotes;
+}
+
 class Emitter {
 public:
     explicit Emitter(const Settings& s)
@@ -654,6 +685,7 @@ public:
           short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
+        verbose_ = s.verbose_comments;
         // Volumetric E (gcode_extras.md, rule 11): every E in mm3 of
         // plastic, retractions too; the engine counts filament as ever.
         if (s.volumetric_e)
@@ -715,11 +747,11 @@ public:
             if (value == fan_)
                 continue;
             if (value == 0) {
-                out += "M107\n";
+                out += verbose_ ? "M107 ; disable fan\n" : "M107\n";
             } else {
                 out += "M106 S";
                 append_integer(out, value);
-                out += '\n';
+                out += verbose_ ? " ; enable fan\n" : "\n";
             }
             fan_ = value;
         }
@@ -758,13 +790,15 @@ public:
     // the extruder's position. The modes and E are set again, and the next
     // travel retracts and writes X, Y, Z and F in full.
     void resync() {
-        text_ += "G90\n";
-        text_ += relative_ ? "M83\n" : "M82\n";
+        text_ += "G90";
+        line_end("use absolute coordinates");
+        text_ += relative_ ? "M83" : "M82";
+        line_end(relative_ ? "use relative distances for extrusion" : "use absolute distances for extrusion");
         if (!relative_) {
             char buffer[kNumberCapacity];
             text_ += "G92 E";
             text_.append(buffer, format_fixed(buffer, e_ * e_scale_, 5));
-            text_ += '\n';
+            line_end("reset extrusion distance");
         }
         x_.clear(), y_.clear(), z_.clear(), e_text_.clear();
         f_ = std::numeric_limits<long>::min();
@@ -810,7 +844,8 @@ public:
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retracted_amount_ : 0.0;
-            text_ += "G92 E" + fixed(e_ * e_scale_, 5) + "\n";
+            text_ += "G92 E" + fixed(e_ * e_scale_, 5);
+            line_end("reset extrusion distance");
             position_[3] = e_;
             e_text_.clear();
         }
@@ -828,7 +863,8 @@ public:
         };
         user(before);
         if (!keep_z)
-            move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed));
+            move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed), {}, {}, "simple layer change");
+        first_travel_ = true;
         height_ = height;
         z_value_ = z;
         if (!keep_z)
@@ -868,7 +904,7 @@ public:
             return;
         text_ += marlin_ ? "M204 P" : "M204 S";
         append_integer(text_, std::lround(a));
-        text_ += '\n';
+        line_end("set acceleration");
         accel_print_ = a;
         if (!marlin_)
             accel_travel_ = a;
@@ -881,6 +917,7 @@ public:
             text_ += t;
             text_ += '\n';
             type_ = t;
+            note_ = notes_of(t).extrude;
             outer_ = std::strcmp(t, "External perimeter") == 0;
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
             bridge_ = std::strcmp(t, "Bridge infill") == 0 || std::strcmp(t, "Overhang perimeter") == 0;
@@ -891,23 +928,26 @@ public:
     // lift) when it leaves the part or is longer than min_travel. A route
     // planned beforehand from exactly where the head is stands for the
     // planner's.
+    // next_type: the kind printed after it, for the verbose comments.
     void travel(const Point2d& p, double feed, const TravelPlanner& planner, const TravelPlan* planned = nullptr,
-                const Point2d* planned_from = nullptr, bool force_retract = false) {
+                const Point2d* planned_from = nullptr, bool force_retract = false, const char* next_type = nullptr) {
+        const char* note = first_travel_ ? "travel to first layer point" : notes_of(next_type).travel;
+        first_travel_ = false;
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
             travel_acceleration(std::numeric_limits<double>::infinity());
             if (retract_ > 0.0 && !retracted_) {
                 e_ = relative_ ? -retract_ : e_ - retract_;
-                move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+                move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract");
                 retracted_ = true;
                 retracted_amount_ = retract_;
                 other_time_ += retract_ / retract_feed_;
             }
             const double cruise = written(z_value_ + clearance_);
-            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed));
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {}, "move to layer height");
             z_now_ = cruise;
-            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
             other_time_ += std::hypot(p.x - x_value_, p.y - y_value_) / feed;
             x_value_ = p.x, y_value_ = p.y;
             resync_ = false;
@@ -916,7 +956,7 @@ public:
         resync_ = false;
         if (!known_) {
             travel_acceleration(std::numeric_limits<double>::infinity());
-            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
+            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
             x_value_ = p.x, y_value_ = p.y, known_ = true;
             return;
         }
@@ -928,7 +968,7 @@ public:
             travel_acceleration(plan.length);
         if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
-            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract");
             retracted_ = true;
             retracted_amount_ = retract_;
             other_time_ += retract_ / retract_feed_;
@@ -936,18 +976,19 @@ public:
         // Off the layer's top (Z anti-aliasing): back up, and over what was raised.
         const double cruise = written(z_value_ + clearance_);
         if (z_now_ != cruise) {
-            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed));
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {},
+                 cruise > z_now_ ? "lift" : "lower");
             z_now_ = cruise;
         }
         const bool lift = retract && lift_ > 0.0;
         const double level = clearance_ > 0.0 ? cruise : z_value_;
         other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / z_feed(feed) : 0.0);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, z_feed(feed));
+            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, z_feed(feed), {}, {}, "lift");
         for (const Point2d& q : plan.points)
-            move("G1", q.x, q.y, std::nullopt, std::nullopt, feed);
+            move("G1", q.x, q.y, std::nullopt, std::nullopt, feed, {}, {}, note);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, level, std::nullopt, z_feed(feed));
+            move("G1", std::nullopt, std::nullopt, level, std::nullopt, z_feed(feed), {}, {}, "lower");
         x_value_ = p.x, y_value_ = p.y;
     }
 
@@ -958,7 +999,7 @@ public:
         }
         if (retracted_) { // unretract: back to where E was (a length changed since stays the old one)
             e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
-            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "unretract");
             retracted_ = false;
             other_time_ += retracted_amount_ / retract_feed_;
         }
@@ -968,7 +1009,7 @@ public:
         // as thick as what is left down to the layer's bottom, by the Z written.
         const double z_layer = written(z_value_), z_from = written(z_value_ + from.dz), z_to = written(z_value_ + to.dz);
         if (z_now_ != z_from) {
-            move("G1", std::nullopt, std::nullopt, z_from, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, z_from, std::nullopt, feed, {}, {}, z_from > z_now_ ? "lift" : "lower");
             z_now_ = z_from;
         }
         double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
@@ -1025,7 +1066,7 @@ public:
         const double paced =
             pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
         move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced, x_text,
-             y_text);
+             y_text, note_);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
     }
@@ -1044,7 +1085,7 @@ private:
             return;
         text_ += marlin_ ? "M204 T" : "M204 S";
         append_integer(text_, std::lround(a));
-        text_ += '\n';
+        line_end("set acceleration");
         accel_travel_ = a;
         if (!marlin_)
             accel_print_ = a;
@@ -1062,9 +1103,20 @@ private:
         return value == 1 ? 2 : value;
     }
 
-    // x_text and y_text, when given, are x and y as format_fixed writes them.
+    // The end of a line, with what it does when the comments are verbose.
+    void line_end(const char* note) {
+        if (verbose_) {
+            text_ += " ; ";
+            text_ += note;
+        }
+        text_ += '\n';
+    }
+
+    // x_text and y_text, when given, are x and y as format_fixed writes them;
+    // note: what the move does, for the verbose comments.
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
-              std::optional<double> e, double feed, std::string_view x_text = {}, std::string_view y_text = {}) {
+              std::optional<double> e, double feed, std::string_view x_text = {}, std::string_view y_text = {},
+              const char* note = nullptr) {
         const std::size_t start = text_.size();
         text_ += g;
         const std::size_t bare = text_.size();
@@ -1094,7 +1146,10 @@ private:
             text_.resize(start); // nothing changed
             return;
         }
-        text_ += '\n';
+        if (note)
+            line_end(note);
+        else
+            text_ += '\n';
         // The move for the time estimate, at the feed as written.
         const double to[4] = {x.value_or(position_[0]), y.value_or(position_[1]), z.value_or(position_[2]),
                               e ? (relative_ ? position_[3] + *e : *e) : position_[3]};
@@ -1106,6 +1161,9 @@ private:
 
     std::string text_;
     bool relative_;
+    bool verbose_ = false;            // gcode.verbose_comments
+    const char* note_ = "extrude";    // what the current kind's extrusions are, for them
+    bool first_travel_ = false;       // the next travel is the layer's first
     PrintTime time_;
     double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
@@ -1313,7 +1371,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const std::vector<Warning> capability = capability_warnings(s);
         warnings->insert(warnings->end(), capability.begin(), capability.end());
     }
-    out << "G90\n" << (s.relative_extrusion ? "M83" : "M82") << "\n";
+    out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n")
+        << (s.relative_extrusion ? "M83" : "M82")
+        << (!s.verbose_comments          ? "\n"
+            : s.relative_extrusion       ? " ; use relative distances for extrusion\n"
+                                         : " ; use absolute distances for extrusion\n");
     Point2d cursor{0.0, 0.0};
     SeamMemory seams;
 
@@ -2041,7 +2103,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             // the user's G-code moved the head.
             if (!turn || g.lost())
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
-                         t.retract);
+                         t.retract, step.type);
             g.type(step.type);
             g.print_acceleration(acceleration_of(step.type, l == 0, model.raft_layers > 0 && l == model.raft_layers));
             g.nonplanar(t.wavy);

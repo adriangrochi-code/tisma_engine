@@ -154,7 +154,12 @@ double bridge_bead(const Settings& settings) {
 }
 
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
-    if (mesh.vertices.empty() || (settings.scale_x == 100.0 && settings.scale_y == 100.0 && settings.scale_z == 100.0))
+    // The filament's shrinkage (gcode_extras.md, rule 4): the part grows so
+    // that, shrunk, it measures what was asked.
+    const double grow_xy = 100.0 / (100.0 - settings.shrinkage_xy), grow_z = 100.0 / (100.0 - settings.shrinkage_z);
+    const double sx = settings.scale_x / 100.0 * grow_xy, sy = settings.scale_y / 100.0 * grow_xy,
+                 sz = settings.scale_z / 100.0 * grow_z;
+    if (mesh.vertices.empty() || (sx == 1.0 && sy == 1.0 && sz == 1.0))
         return mesh;
     float x0 = mesh.vertices.front().x, x1 = x0, y0 = mesh.vertices.front().y, y1 = y0, z0 = mesh.vertices.front().z;
     for (const Vec3f& v : mesh.vertices) {
@@ -163,7 +168,6 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
         z0 = std::min(z0, v.z);
     }
     const double cx = (double(x0) + double(x1)) / 2.0, cy = (double(y0) + double(y1)) / 2.0;
-    const double sx = settings.scale_x / 100.0, sy = settings.scale_y / 100.0, sz = settings.scale_z / 100.0;
     IndexedMesh out = mesh;
     for (Vec3f& v : out.vertices) {
         v.x = float(cx + (double(v.x) - cx) * sx);

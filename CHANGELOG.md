@@ -70,6 +70,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Espera de la cámara** (`extrusion.chamber_min_temperature`): la cámara se pide antes del G-code de inicio y, después,
   se espera a que llegue a ese mínimo (`M191`).
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
+- **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
+  grande para que, al contraerse, quede de la medida pedida.
+- **Comentarios detallados** (`gcode.verbose_comments`, en Otros › Salida del G-code): cada línea que escribe el motor
+  dice qué hace (`; perimeter`, `; retract`, `; travel to first layer point`…).
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.

@@ -327,9 +327,9 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
                       "needs_enclosure": true, "infill_max_speed": 50, "infill_max_crossing_speed": 35,
                       "bridge_flow_ratio": 0.8, "chamber_min_temperature": 35, "density": 1.24, "cost": 25,
-                      "spool_weight": 200},
+                      "spool_weight": 200, "shrinkage_xy": 0.6, "shrinkage_z": 1.5},
         "gcode": {"color_change": "M600 B1", "pause": "M601 ; [x]", "before_layer": ";B {layer_num}", "after_layer": ";A",
-                  "volumetric_e": true},
+                  "volumetric_e": true, "verbose_comments": true},
         "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi", "color_change": true, "pause": true},
                     {"z": 5, "fan": 50, "retraction_length": 1.2,
                      "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65, "volumetric_flow": 12,
@@ -339,6 +339,8 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
     CHECK(s.over_bridges_speed == Speed{60.0, true});
     CHECK(s.first_layer_infill_speed == Speed{35.0, false});
     CHECK(s.bridge_flow_ratio == 0.8);
+    CHECK(s.shrinkage_xy == 0.6);
+    CHECK(s.shrinkage_z == 1.5);
     CHECK(s.accel_short_travel == 600.0);
     CHECK(s.overhang_speeds[0] == Speed{40.0, true});
     CHECK(s.overhang_speeds[3] == Speed{90.0, true});
@@ -370,6 +372,8 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("compensation.hole_offset"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"flow": 0}})"), ContainsSubstring("extrusion.flow"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"max_flow": -1}})"), ContainsSubstring("extrusion.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"shrinkage_xy": 25}})"),
+                      ContainsSubstring("extrusion.shrinkage_xy: must be a percentage from 0 to 20"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"chamber_temperature": 300}})"),
                       ContainsSubstring("extrusion.chamber_temperature"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"abrasive": 1}})"),

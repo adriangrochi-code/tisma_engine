@@ -60,8 +60,8 @@ struct SlicedModel {
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by
 // compensation.scale_x, _y and _z around the centre of its footprint and its
-// bottom, so it stays where it was on the bed. The mesh itself when the
-// scales are all 100 %.
+// bottom, so it stays where it was on the bed, and grown by the filament's
+// shrinkage. The mesh itself when the scales are all 100 % and nothing shrinks.
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
 
 // The diameter of the round bead of bridges and overhang perimeters

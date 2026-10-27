@@ -130,7 +130,8 @@ const std::vector<SectionLayout>& print_layout() {
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
-          {"gcode_output", T::SubGcodeOut, {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}}},
+          {"gcode_output", T::SubGcodeOut,
+           {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
            {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.before_layer", A}, {"gcode.after_layer", A}}},
           {"slicing", T::SubSlicing,
@@ -145,7 +146,8 @@ const std::vector<SectionLayout>& material_layout() {
          {{"nozzle_temp", T::SubNozzleTemp, {{"machine.variables.temperature", B}}},
           {"bed_temp", T::SubBedTemp, {{"machine.variables.bed_temperature", B}}},
           {"chamber", T::SubChamber, {{"extrusion.chamber_temperature", N}, {"extrusion.chamber_min_temperature", A}}},
-          {"price", T::SubPrice, {{"extrusion.density", N}, {"extrusion.cost", N}, {"extrusion.spool_weight", A}}}}},
+          {"price", T::SubPrice, {{"extrusion.density", N}, {"extrusion.cost", N}, {"extrusion.spool_weight", A}}},
+          {"shrinkage", T::SubShrinkage, {{"extrusion.shrinkage_xy", A}, {"extrusion.shrinkage_z", A}}}}},
         {"cooling", T::SecCooling, "section_cooling.svg",
          {{"fan", T::SubFan,
            {{"cooling.fan_min", B},
@@ -441,6 +443,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return variable(s, "bed_temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "bed_temperature")))) : "—";
     if (id == "price")
         return s.filament_density > 0.0 ? format(T::SumDensity, number(s.filament_density, 2).c_str()) : "—";
+    if (id == "shrinkage")
+        return s.shrinkage_xy == 0.0 && s.shrinkage_z == 0.0
+                   ? tr(T::SumNoShrinkage)
+                   : format(T::SumShrinkage, number(s.shrinkage_xy, 2).c_str(), number(s.shrinkage_z, 2).c_str());
     if (id == "chamber")
         return s.chamber_temperature > 0.0 ? format(T::SumTemp, int(std::lround(s.chamber_temperature))) : tr(T::SumNoChamber);
     if (id == "fan")

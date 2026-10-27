@@ -335,6 +335,9 @@ struct Settings {
     double filament_density = 0.0;     // g/cm3; 0: not known
     double filament_cost = 0.0;        // money per kg
     double spool_weight = 0.0;         // g of the empty spool (for the interface)
+    // How much the filament shrinks as it cools, in %, across the layers and
+    // along Z: the part is sliced 100 / (100 - p) times larger (gcode_extras.md, rule 4).
+    double shrinkage_xy = 0.0, shrinkage_z = 0.0;
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
 
@@ -343,6 +346,8 @@ struct Settings {
     double gcode_resolution = 0.0125;
     // E in mm3 of plastic instead of mm of filament (gcode_extras.md, rule 11).
     bool volumetric_e = false;
+    // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).
+    bool verbose_comments = false;
     // Templates (gcode_templates.md, rules 11 and 13), with the variables of
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";

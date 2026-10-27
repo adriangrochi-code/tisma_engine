@@ -855,11 +855,17 @@
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
+    X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(ChamberMinTemp, "Esperar la cámara a", "Wait for the chamber at") \
     X(SubPrice, "Peso y costo", "Weight and cost") \
     X(FilamentDensity, "Densidad", "Density") \
     X(FilamentCost, "Costo por kg", "Cost per kg") \
     X(SpoolWeight, "Peso del carrete vacío", "Empty spool weight") \
+    X(SubShrinkage, "Contracción", "Shrinkage") \
+    X(ShrinkageXY, "Contracción en XY", "Shrinkage in XY") \
+    X(ShrinkageZ, "Contracción en Z", "Shrinkage in Z") \
+    X(SumNoShrinkage, "Sin compensar", "Not compensated") \
+    X(SumShrinkage, "XY %s %% · Z %s %%", "XY %s %% · Z %s %%") \
     X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \

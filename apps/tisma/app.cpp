@@ -682,8 +682,10 @@ const char* row_key(T label) {
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::VerboseComments, "gcode.verbose_comments"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
+        {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
         {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
         {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
         {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
@@ -3063,6 +3065,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
            tr(T::GcodeResolutionTip));
         count(T::HeightChanges, "changes", s.changes.size());
         flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
+        flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
             changed |= row(T::FillModeRow, s.fill_mode,
@@ -3088,6 +3091,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
            s.filament_density > 0.0 ? "%.2f g/cm³" : "—", 0.005f);
         mm(T::FilamentCost, "extrusion.cost", s.filament_cost, 0.0, 1e6, "%.2f", 0.1f);
         mm(T::SpoolWeight, "extrusion.spool_weight", s.spool_weight, 0.0, 1e6, "%.0f g", 1.0f);
+    } else if (id == "shrinkage") {
+        mm(T::ShrinkageXY, "extrusion.shrinkage_xy", s.shrinkage_xy, 0.0, 20.0, "%.2f %%", 0.01f);
+        mm(T::ShrinkageZ, "extrusion.shrinkage_z", s.shrinkage_z, 0.0, 20.0, "%.2f %%", 0.01f);
     } else if (id == "fan") {
         mm(T::FanMin, "cooling.fan_min", s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
         mm(T::FanMax, "cooling.fan_max", s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);

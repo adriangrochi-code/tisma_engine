@@ -160,6 +160,9 @@ int main(int argc, char** argv) {
         if (pick(5) == 0) { // the G-code's extras
             s.z_offset = uni(-0.3, 0.3);
             s.volumetric_e = pick(2) == 0;
+            s.shrinkage_xy = pick(2) == 0 ? uni(0, 3) : 0.0;
+            s.shrinkage_z = pick(2) == 0 ? uni(0, 3) : 0.0;
+            s.verbose_comments = pick(2) == 0;
         }
         if (pick(5) == 0) { // a raft
             s.raft_layers = 1 + pick(5);

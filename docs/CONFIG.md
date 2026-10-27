@@ -395,6 +395,7 @@ de la pieza de prueba.
 | `density` | número | 0 | 0 a 30 | Densidad del filamento, en g/cm³, para el peso al final del G-code (`; filament used [g]`, regla 1). 0: no se sabe y no se escribe el peso |
 | `cost` | número | 0 | ≥ 0 | Costo del filamento por kg, para `; filament cost` |
 | `spool_weight` | número | 0 | ≥ 0 | Peso del carrete vacío, en g (para que la interfaz compare con el carrete pesado) |
+| `shrinkage_xy`, `shrinkage_z` | número | 0 | 0 a 20 | Cuánto se contrae el filamento al enfriarse, en %, a lo ancho de las capas y en Z: la pieza se lamina 100 / (100 − p) veces más grande, alrededor del centro de su base como `compensation`, para que al contraerse quede de la medida pedida (ficha `gcode_extras.md`, regla 4; con 1 %, un cubo de 99 mm se lamina de 100). Se suma a la escala de `compensation` |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
 
@@ -408,6 +409,7 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
+| `verbose_comments` | booleano | `false` | | Cada línea que escribe el motor lleva al final `; ` y qué hace (ficha `gcode_extras.md`, regla 12): `perimeter`, `infill`, `infill (bridge)`, `skirt`, `support material`, `gap fill`, `ironing` en las extrusiones; `retract`, `unretract`, `lift`, `lower`, `move to layer height` (después del G-code del usuario), `reset extrusion distance`, `simple layer change`, `travel to first layer point`, `move to first perimeter point` (o `infill`, `skirt`…), `travel`, `enable fan`, `disable fan`, `set acceleration`, `use absolute coordinates`, `use absolute distances for extrusion` (o `relative`). El G-code del usuario no cambia |
 | `volumetric_e` | booleano | `false` | | Toda E (extrusión y retracción) en mm³ de plástico en vez de mm de filamento: la E de siempre por la sección del filamento (ficha `gcode_extras.md`, regla 11). El motor no escribe `M200`: va en el G-code de inicio |
 | `color_change` | texto | `"M600"` | | Lo que se escribe en un cambio de color de `changes` (ficha `gcode_templates.md`, regla 13), con las variables de `machine.variables`, después de la marca `;COLOR_CHANGE` |
 | `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |

@@ -974,12 +974,13 @@ Settings parse_checked(std::string_view text) {
                        fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
-    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e"},
+    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
+                               "verbose_comments"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "volumetric_e") {
+        if (n == "volumetric_e" || n == "verbose_comments") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            s.volumetric_e = g.at(n).get<bool>();
+            (n == "volumetric_e" ? s.volumetric_e : s.verbose_comments) = g.at(n).get<bool>();
             return;
         }
         if (n != "resolution") {
@@ -1012,7 +1013,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "extrusion",
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
-                "cost", "spool_weight"},
+                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "abrasive" || n == "needs_enclosure") {
             if (!g.at(n).is_boolean())
@@ -1027,6 +1028,12 @@ Settings parse_checked(std::string_view text) {
             (n == "max_flow"              ? s.filament_max_flow
              : n == "chamber_temperature" ? s.chamber_temperature
                                           : s.chamber_min_temperature) = v;
+            return;
+        }
+        if (n == "shrinkage_xy" || n == "shrinkage_z") {
+            if (v < 0.0 || v > 20.0)
+                fail(k, "must be a percentage from 0 to 20");
+            (n == "shrinkage_xy" ? s.shrinkage_xy : s.shrinkage_z) = v;
             return;
         }
         if (n == "density" || n == "cost" || n == "spool_weight") {
@@ -1383,11 +1390,14 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.before_layer", text(s.gcode_before_layer)},
         {"gcode.after_layer", text(s.gcode_after_layer)},
         {"gcode.volumetric_e", flag(s.volumetric_e)},
+        {"gcode.verbose_comments", flag(s.verbose_comments)},
         {"machine.z_offset", num(s.z_offset)},
         {"extrusion.chamber_min_temperature", num(s.chamber_min_temperature)},
         {"extrusion.density", num(s.filament_density)},
         {"extrusion.cost", num(s.filament_cost)},
         {"extrusion.spool_weight", num(s.spool_weight)},
+        {"extrusion.shrinkage_xy", num(s.shrinkage_xy)},
+        {"extrusion.shrinkage_z", num(s.shrinkage_z)},
         {"machine.max_flow", num(s.machine_max_flow)},
         {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
         {"machine.max_bed_temp", num(s.max_bed_temp)},
@@ -1631,6 +1641,8 @@ std::string settings_json(const Settings& s) {
           {"density", s.filament_density},
           {"cost", s.filament_cost},
           {"spool_weight", s.spool_weight},
+          {"shrinkage_xy", s.shrinkage_xy},
+          {"shrinkage_z", s.shrinkage_z},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
@@ -1640,7 +1652,8 @@ std::string settings_json(const Settings& s) {
           {"pause", s.gcode_pause},
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
-          {"volumetric_e", s.volumetric_e}}},
+          {"volumetric_e", s.volumetric_e},
+          {"verbose_comments", s.verbose_comments}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

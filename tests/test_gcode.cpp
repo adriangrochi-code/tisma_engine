@@ -1395,3 +1395,68 @@ TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 1
     CHECK(volumetric.str().find("M200") == std::string::npos);
     CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
 }
+
+TEST_CASE("extras: the part grows by the filament's shrinkage (gcode_extras.md, rule 4, X3)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, -10, -10, 10, 10, 10);
+    Settings s = test_printer();
+    s.shrinkage_xy = 1.0;
+    s.shrinkage_z = 2.0;
+    const auto size = [](const IndexedMesh& mesh) {
+        std::array<float, 3> lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
+        for (const Vec3f& v : mesh.vertices)
+            for (int a = 0; a < 3; ++a)
+                lo[a] = std::min(lo[a], (&v.x)[a]), hi[a] = std::max(hi[a], (&v.x)[a]);
+        return std::array<double, 4>{hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], lo[2]};
+    };
+    std::array<double, 4> grown = size(compensated(m, s));
+    CHECK_THAT(grown[0], Catch::Matchers::WithinAbs(20.0 * 100.0 / 99.0, 1e-4)); // shrunk 1 %, 20 mm again
+    CHECK_THAT(grown[1], Catch::Matchers::WithinAbs(20.0 * 100.0 / 99.0, 1e-4));
+    CHECK_THAT(grown[2], Catch::Matchers::WithinAbs(10.0 * 100.0 / 98.0, 1e-4));
+    CHECK(grown[3] == 0.0); // still on the bed
+    CHECK(slice_model(m, s).layers.size() == 51);
+    CHECK(slice_model(m, test_printer()).layers.size() == 50);
+    // With the compensation's scale, both.
+    s.scale_x = 101.0;
+    grown = size(compensated(m, s));
+    CHECK_THAT(grown[0], Catch::Matchers::WithinAbs(20.0 * 1.01 * 100.0 / 99.0, 1e-4));
+}
+
+TEST_CASE("extras: verbose comments say what each line does (gcode_extras.md, rule 12, X12)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, -10, -10, 10, 10, 10);
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    s.skirt_loops = 1;
+    s.retract_length = 0.8;
+    s.retract_lift = 0.4;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream plain, verbose;
+    write_gcode(plain, model, s);
+    s.verbose_comments = true;
+    write_gcode(verbose, model, s);
+    std::map<std::string, int> notes;
+    for (const std::string& line : lines_of(verbose.str()))
+        if (line.rfind(";", 0) != 0)
+            if (const std::size_t at = line.find(" ; "); at != std::string::npos)
+                ++notes[line.substr(at + 3)];
+    for (const char* note : {"simple layer change", "travel to first layer point", "move to first perimeter point",
+                             "move to first infill point", "perimeter", "infill", "skirt", "retract", "unretract",
+                             "lift", "lower", "reset extrusion distance", "use absolute coordinates",
+                             "use absolute distances for extrusion"}) {
+        INFO(note);
+        CHECK(notes[note] > 0);
+    }
+    CHECK(notes["simple layer change"] == int(model.layers.size()));
+    CHECK(notes["perimeter"] > 100);
+    // The same G-code but for the comments.
+    const auto bare = [](const std::string& gcode) {
+        std::vector<std::string> out;
+        for (std::string line : lines_of(gcode))
+            if (line.rfind("; gcode.verbose_comments", 0) != 0)
+                out.push_back(line.substr(0, line.find(" ; ")));
+        return out;
+    };
+    CHECK(bare(verbose.str()) == bare(plain.str()));
+    CHECK(check_gcode(verbose.str(), gcode_limits(model, s)).ok());
+}
