@@ -967,7 +967,17 @@ Settings parse_checked(std::string_view text) {
                        fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
-    read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n != "resolution") {
+            if (!g.at(n).is_string())
+                fail(k, "must be a string");
+            (n == "color_change" ? s.gcode_color_change
+             : n == "pause"      ? s.gcode_pause
+             : n == "before_layer" ? s.gcode_before_layer
+                                   : s.gcode_after_layer) = g.at(n).get<std::string>();
+            return;
+        }
         const double v = number(g, n, k);
         if (v < 0.0 || v > 1.0)
             fail(k, "must be from 0 to 1 mm");
@@ -1070,6 +1080,10 @@ Settings parse_checked(std::string_view text) {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
                     c.gcode = v.get<std::string>();
+                } else if (n == "color_change" || n == "pause") {
+                    if (!v.is_boolean())
+                        fail(where + "." + n, "must be true or false");
+                    (n == "color_change" ? c.color_change : c.pause) = v.get<bool>();
                 } else {
                     fail(where + "." + n, "unknown setting (see docs/CONFIG.md)");
                 }
@@ -1098,6 +1112,10 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
                 j[name] = **v;
         if (!c.gcode.empty())
             j["gcode"] = c.gcode;
+        if (c.color_change)
+            j["color_change"] = true;
+        if (c.pause)
+            j["pause"] = true;
         list.push_back(j);
     }
     return list;
@@ -1338,6 +1356,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.abrasive", flag(s.abrasive)},
         {"extrusion.needs_enclosure", flag(s.needs_enclosure)},
         {"gcode.resolution", num(s.gcode_resolution)},
+        {"gcode.color_change", text(s.gcode_color_change)},
+        {"gcode.pause", text(s.gcode_pause)},
+        {"gcode.before_layer", text(s.gcode_before_layer)},
+        {"gcode.after_layer", text(s.gcode_after_layer)},
         {"machine.max_flow", num(s.machine_max_flow)},
         {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
         {"machine.max_bed_temp", num(s.max_bed_temp)},
@@ -1579,7 +1601,12 @@ std::string settings_json(const Settings& s) {
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
-        {"gcode", {{"resolution", s.gcode_resolution}}},
+        {"gcode",
+         {{"resolution", s.gcode_resolution},
+          {"color_change", s.gcode_color_change},
+          {"pause", s.gcode_pause},
+          {"before_layer", s.gcode_before_layer},
+          {"after_layer", s.gcode_after_layer}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

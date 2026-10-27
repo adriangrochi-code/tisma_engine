@@ -797,7 +797,11 @@ public:
 
     // keep_z: a vase's turn goes on from where the turn below ended, at its
     // height (vase_mode.md, rule 4): no move up to the layer's Z.
-    void new_layer(double z, double height, double travel_feed, bool keep_z = false) {
+    // before and after: the user's G-code around the move in Z
+    // (gcode_templates.md, rule 11); one that moves anything makes the next
+    // travel write every axis again.
+    void new_layer(double z, double height, double travel_feed, bool keep_z = false, const std::string& before = {},
+                   const std::string& after = {}) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
@@ -806,6 +810,19 @@ public:
             position_[3] = e_;
             e_text_.clear();
         }
+        // The user's text as their own G-code (;TYPE:Custom), the type before it back after.
+        const auto user = [&](const std::string& text) {
+            if (text.empty())
+                return;
+            const char* was = type_;
+            type("Custom");
+            text_ += text;
+            if (text.back() != '\n')
+                text_ += '\n';
+            if (was && std::string_view(was) != "Custom")
+                type(was);
+        };
+        user(before);
         if (!keep_z)
             move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed));
         height_ = height;
@@ -813,6 +830,25 @@ public:
         if (!keep_z)
             z_now_ = written(z);
         clearance_ = 0.0;
+        user(after);
+        if (commands(before) || commands(after))
+            resync();
+    }
+
+    // Whether the user's G-code left the head where the engine does not know.
+    bool lost() const { return resync_; }
+
+    // Whether a user's text has anything but comments and blank lines.
+    static bool commands(const std::string& text) {
+        std::size_t at = 0;
+        while (at < text.size()) {
+            const std::size_t end = std::min(text.find('\n', at), text.size());
+            const std::size_t first = text.find_first_not_of(" \t\r", at);
+            if (first < end && text[first] != ';')
+                return true;
+            at = end + 1;
+        }
+        return false;
     }
 
     // After a kind's extrusions: back to `a` (0: none). With M204 S and an
@@ -1927,7 +1963,20 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const Layer& layer = model.layers[l];
         g.open_layer_fan();
         const bool turn = l < continues.size() && continues[l];
-        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn);
+        // The layer's templates, from the second layer (gcode_templates.md,
+        // rule 11, T8), with the layer's number and Z.
+        std::string before, after;
+        if (l > 0 && (!s.gcode_before_layer.empty() || !s.gcode_after_layer.empty())) {
+            auto vars = s.variables;
+            char z_text[32];
+            const double z_written = std::round((layer.top - base) * 1000.0) / 1000.0;
+            const auto r = std::to_chars(z_text, z_text + sizeof z_text, z_written);
+            vars["layer_num"] = {std::to_string(l)};
+            vars["layer_z"] = vars["max_layer_z"] = {std::string(z_text, r.ptr)};
+            before = substitute_variables(s.gcode_before_layer, vars);
+            after = substitute_variables(s.gcode_after_layer, vars);
+        }
+        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn, before, after);
         g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -1966,8 +2015,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 continue;
             }
             const Toolpath& t = step.path;
-            // A vase's turn starts where the one below ended: no travel.
-            if (!turn)
+            // A vase's turn starts where the one below ended: no travel, unless
+            // the user's G-code moved the head.
+            if (!turn || g.lost())
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract);
             g.type(step.type);
@@ -2011,6 +2061,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 active.volumetric_flow = *c.volumetric_flow;
             if (!c.gcode.empty()) {
                 active.lines += substitute_variables(c.gcode, s.variables) + "\n";
+                active.user = true;
+            }
+            // A colour change or a pause (gcode_templates.md, rule 13): the
+            // template, after a mark the preview reads.
+            if (c.color_change) {
+                active.lines += ";COLOR_CHANGE\n" + substitute_variables(s.gcode_color_change, s.variables) + "\n";
+                active.user = true;
+            }
+            if (c.pause) {
+                active.lines += ";PAUSE_PRINT\n" + substitute_variables(s.gcode_pause, s.variables) + "\n";
                 active.user = true;
             }
             if (c.retract_length)

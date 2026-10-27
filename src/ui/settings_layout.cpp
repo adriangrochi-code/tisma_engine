@@ -131,6 +131,8 @@ const std::vector<SectionLayout>& print_layout() {
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut, {{"gcode.resolution", A}, {"changes", A}}},
+          {"gcode_templates", T::SubGcodeTemplates,
+           {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.before_layer", A}, {"gcode.after_layer", A}}},
           {"slicing", T::SubSlicing,
            {{"slicing.fill_mode", A}, {"slicing.gap_closing_radius", A}, {"slicing.simplify_tolerance", A}}}}},
     };
@@ -414,6 +416,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.arcs ? format(T::SumArcs, number(s.arcs_speed, 0).c_str()) : tr(T::SumNoArcs);
     if (id == "skirt")
         return s.skirt_loops > 0 ? format(T::SumSkirt, s.skirt_loops, number(s.skirt_distance).c_str()) : tr(T::SumNoSkirt);
+    if (id == "gcode_templates")
+        return s.gcode_color_change.substr(0, s.gcode_color_change.find('\n')) + " / " +
+               s.gcode_pause.substr(0, s.gcode_pause.find('\n'));
     if (id == "raft")
         return s.raft_layers > 0 ? format(T::SumRaft, s.raft_layers) : tr(T::SumOff);
     if (id == "brim")

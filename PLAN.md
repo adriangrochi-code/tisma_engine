@@ -744,7 +744,11 @@ Con el PR #23 (2026-10-26):
   - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
   - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27). Del resto de la ficha faltan el
     largo mínimo de falda (B1), el escudo contra corrientes (B3), los tipos de borde y su separación (B4); B2 ya;
-  - [ ] cambio de color y pausas, y los extras del G-code (`gcode_extras.md`)
+  - [x] cambio de color y pausas (`gcode_templates.md`, reglas 11 y 13; hecho 2026-10-27): `gcode.color_change`,
+    `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`. Falta ponerlos
+    desde la vista previa (regla 13, con la interfaz P1) y el resto del lenguaje de plantillas (reglas 1 a 10, 12, 14
+    a 17);
+  - [ ] los extras del G-code (`gcode_extras.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

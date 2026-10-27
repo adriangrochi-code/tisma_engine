@@ -51,6 +51,10 @@ struct HeightChange {
     std::optional<double> volumetric_flow; // mm3/s: every extrusion runs at this flow, past every cap (a flow tower)
     std::optional<double> acceleration;    // mm/s2, written in the flavor's command (M204, SET_VELOCITY_LIMIT)
     std::string gcode;                     // G-code put at that layer's start, with variables
+    // A colour change or a pause at that height (gcode_templates.md, rule
+    // 13): gcode.color_change or gcode.pause at the layer's start.
+    bool color_change = false;
+    bool pause = false;
 };
 
 // A speed in mm/s, or a percentage of another speed.
@@ -331,6 +335,12 @@ struct Settings {
     // gcode
     // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
     double gcode_resolution = 0.0125;
+    // Templates (gcode_templates.md, rules 11 and 13), with the variables of
+    // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
+    std::string gcode_color_change = "M600";
+    std::string gcode_pause = "M601";
+    std::string gcode_before_layer; // right before each layer's move in Z, from the second layer
+    std::string gcode_after_layer;  // right after it
 
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;

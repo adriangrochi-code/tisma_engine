@@ -327,7 +327,9 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
                       "needs_enclosure": true, "infill_max_speed": 50, "infill_max_crossing_speed": 35,
                       "bridge_flow_ratio": 0.8},
-        "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
+        "gcode": {"color_change": "M600 B1", "pause": "M601 ; [x]", "before_layer": ";B {layer_num}", "after_layer": ";A"},
+        "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi", "color_change": true, "pause": true},
+                    {"z": 5, "fan": 50, "retraction_length": 1.2,
                      "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65, "volumetric_flow": 12,
                      "acceleration": 3000}]
     })");

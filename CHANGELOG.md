@@ -62,12 +62,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Balsa** (ficha `skirt_brim_raft.md`; `adhesion.raft_layers` y sus ajustes, en Adhesión › Balsa): capas de
   soporte debajo de toda la pieza, base e interfaz, que la levantan de la cama; la primera capa de la pieza con su
   propio tope de velocidad y aceleración.
+- **Cambio de color y pausas por altura** (ficha `gcode_templates.md`; `color_change` y `pause` en `changes`, con
+  `gcode.color_change` y `gcode.pause`), y **G-code antes y después de cada cambio de capa** (`gcode.before_layer`,
+  `gcode.after_layer`, con `layer_num` y `layer_z`), en Otros › Plantillas de G-code.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.
 
 ### Corregido
 
+- En el modo vaso, después de G-code del usuario que mueve el cabezal, la vuelta siguiente salía desde donde el cabezal ya no estaba.
 - El verificador del G-code no contaba los cordones finos del planchado al calcular el avance de un flujo forzado.
 - Las etiquetas de las velocidades en voladizos tenían un «%» que la prueba de textos leía como formato.
 - El verificador del G-code rechazaba un G-code válido cuando una velocidad nueva (puentes, relleno de huecos, sobre

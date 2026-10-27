@@ -403,6 +403,10 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
+| `color_change` | texto | `"M600"` | | Lo que se escribe en un cambio de color de `changes` (ficha `gcode_templates.md`, regla 13), con las variables de `machine.variables`, después de la marca `;COLOR_CHANGE` |
+| `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |
+| `before_layer` | texto | `""` | | G-code justo antes del movimiento en Z de cada cambio de capa, desde la segunda capa (regla 11, prueba T8), con las variables y además `layer_num` (desde 0), `layer_z` y `max_layer_z` (la Z escrita, sin ceros de más). Va como G-code propio (`;TYPE:Custom`); si tiene algo más que comentarios, el viaje siguiente vuelve a escribir todos los ejes |
+| `after_layer` | texto | `""` | | Lo mismo, justo después del movimiento en Z |
 
 ### `changes` (lista)
 
@@ -431,6 +435,8 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 | `volumetric_flow` | número | 0,5 a 1000 | Flujo volumétrico forzado, en mm³/s: desde esa altura, toda extrusión corre a la velocidad que da ese flujo en su cordón, por encima de `speed.max` y de `machine.max_flow` y sin el frenado del tiempo mínimo de capa, hasta `machine.max_feed_x` o `_y`. Es para la torre de tope de flujo (`docs/CALIBRATION.md`); el verificador admite esas velocidades |
 | `acceleration` | número | 100 a 100 000 | Aceleración, con el comando del dialecto (`M204 P… T…` con `machine.travel_acceleration`, o `SET_VELOCITY_LIMIT ACCEL=…`). El tiempo estimado sigue con `machine.acceleration` |
 | `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
+| `color_change` | booleano | | Cambio de color a esa altura: `gcode.color_change` (`M600`) al empezar la capa (ficha `gcode_templates.md`, regla 13) |
+| `pause` | booleano | | Pausa a esa altura: `gcode.pause` (`M601`) |
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).
 

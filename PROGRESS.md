@@ -5225,3 +5225,26 @@ primera capa de la pieza, 60 en la siguiente), R8 y R9 (falda a 6 mm de la base)
 balsa: G-code verificado. Fuzzer con balsa: 800 corridas, 0 fallas (después del arreglo del verificador).
 
 **Sigue:** cambio de color y pausas, y los extras del G-code (`gcode_extras.md`).
+
+## 2026-10-27 — Punto 2: cambio de color, pausas y plantillas por capa
+
+**Hecho** (ficha `gcode_templates.md`, reglas 11 y 13): `gcode.color_change` (`M600`) y `gcode.pause` (`M601`), que se
+escriben al empezar la capa de un cambio por altura con `"color_change": true` o `"pause": true` (después de las
+marcas `;COLOR_CHANGE` y `;PAUSE_PRINT`, para la vista previa); `gcode.before_layer` y `gcode.after_layer`, justo antes
+y justo después del movimiento en Z de cada capa desde la segunda, con `layer_num`, `layer_z` y `max_layer_z`. Todos
+van como G-code propio (`;TYPE:Custom`) y, si mueven algo, el viaje siguiente vuelve a escribir todos los ejes. En el
+panel, Otros › Plantillas de G-code.
+
+**Corregido:**
+- en el modo vaso, después de G-code del usuario que mueve el cabezal (un cambio de color, una plantilla), la vuelta
+  seguía sin viajar desde donde el cabezal ya no estaba; ahora viaja. Lo encontró el fuzzer;
+- la prueba del verificador que corta el G-code a la mitad podía caer justo en un salto de línea (pasó al crecer el
+  resumen final); ahora corta siempre a mitad de línea.
+
+**Medido:** T8: `;BEFORE 1 0.4` justo antes de `G1 Z0.4` y `;AFTER 1 0.4 0.4` justo después, 49 de cada uno en 50
+capas; cambio de color en la capa de Z 2,2 y pausa en la de 4,2 con cambios a 2 y 4 mm; verificados, también con una
+plantilla que mueve Z y en el modo vaso. Fuzzer con plantillas, cambios de color y pausas: 800 corridas, 0 fallas
+(después del arreglo del vaso).
+
+**Sigue:** los extras del G-code (`gcode_extras.md`): peso y costo (X1), desfase de Z (X4), E volumétrica (X11),
+cámara con espera (X2) y lo demás.

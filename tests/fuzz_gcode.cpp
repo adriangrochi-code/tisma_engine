@@ -149,6 +149,14 @@ int main(int argc, char** argv) {
             s.scarf_inner = pick(3) == 0;
         }
         s.detect_overhangs = pick(4) != 0;
+        if (pick(4) == 0) { // templates around the layer changes, and colour changes and pauses
+            s.gcode_before_layer = pick(2) == 0 ? ";before [layer_num] [layer_z]" : "G91\nG1 Z0.5\nG90";
+            s.gcode_after_layer = pick(2) == 0 ? "" : ";after {layer_z}";
+            HeightChange c;
+            c.z = uni(0.5, 8);
+            (pick(2) == 0 ? c.color_change : c.pause) = true;
+            s.changes.push_back(c);
+        }
         if (pick(5) == 0) { // a raft
             s.raft_layers = 1 + pick(5);
             s.raft_gap = pick(3) == 0 ? 0.0 : uni(0.05, 0.3);

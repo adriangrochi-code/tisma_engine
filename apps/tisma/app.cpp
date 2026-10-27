@@ -681,6 +681,8 @@ const char* row_key(T label) {
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
+        {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
+        {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
         {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
         {T::RaftExpansion, "adhesion.raft_expansion"}, {T::RaftFirstDensity, "adhesion.raft_first_layer_density"},
         {T::RaftFirstExpansion, "adhesion.raft_first_layer_expansion"}, {T::SpeedOverRaft, "speed.first_layer_over_raft"},
@@ -3165,6 +3167,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
         count(T::VariablesRow, "machine.variables", s.variables.size());
     }
     ImGui::EndTable();
+    // The templates below the table, full width (gcode_templates.md).
+    if (id == "gcode_templates") {
+        const std::pair<T, std::pair<const char*, std::string*>> texts[] = {
+            {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
+            {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
+            {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},
+            {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}}};
+        for (const auto& [label, key_text] : texts)
+            if (shown(key_text.first)) {
+                ImGui::TextUnformatted(tr(label));
+                ImGui::PushID(key_text.first);
+                changed |= ImGui::InputTextMultiline("##text", key_text.second,
+                                                     ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
+                ImGui::PopID();
+            }
+    }
     // The start and end G-code below the table, full width.
     if (id == "start_end") {
         if (shown("machine.start_gcode")) {

@@ -852,6 +852,11 @@
     X(SumBySupport, "Según el apoyo", "By support") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
+    X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
+    X(ColorChangeGcode, "Cambio de color", "Colour change") \
+    X(PauseGcode, "Pausa", "Pause") \
+    X(BeforeLayerGcode, "Antes de cada capa", "Before each layer") \
+    X(AfterLayerGcode, "Después de cada capa", "After each layer") \
     X(SubRaft, "Balsa", "Raft") \
     X(RaftLayers, "Capas de la balsa", "Raft layers") \
     X(RaftGap, "Separación con la pieza", "Gap to the part") \

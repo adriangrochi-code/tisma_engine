@@ -1,4 +1,5 @@
 #include "config/settings.hpp"
+#include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "report/warnings.hpp"
 #include "io/stl.hpp"
@@ -1215,4 +1216,81 @@ TEST_CASE("raft: the part's first layer at speed.first_layer_over_raft, no brim,
         }
     }
     CHECK_THAT(skirt_reach, Catch::Matchers::WithinAbs(4.5 + 6.0, 0.3));
+}
+
+TEST_CASE("templates: around each layer's move in Z from the second layer, with its number and Z (gcode_templates.md, "
+          "rule 11, T8)",
+          "[gcode][templates]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.gcode_before_layer = ";BEFORE {layer_num} {layer_z}";
+    s.gcode_after_layer = ";AFTER [layer_num] [layer_z] [max_layer_z]";
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::vector<std::string> lines = lines_of(out.str());
+    int before = 0, after = 0;
+    for (std::size_t i = 0; i < lines.size(); ++i) {
+        if (lines[i].rfind(";BEFORE", 0) == 0) {
+            ++before;
+            REQUIRE(i + 2 < lines.size());
+            // Right before the move in Z, as the user's own G-code.
+            CHECK(lines[i - 1] == ";TYPE:Custom");
+            CHECK(lines[i + 1].rfind(";TYPE:", 0) == 0);
+            CHECK(lines[i + 2].rfind("G1 Z", 0) == 0);
+        }
+        if (lines[i].rfind(";AFTER", 0) == 0) {
+            ++after;
+            CHECK(lines[i - 2].rfind("G1 Z", 0) == 0);
+            CHECK(lines[i - 1] == ";TYPE:Custom");
+        }
+    }
+    CHECK(before == 49); // not on the first of the 50 layers
+    CHECK(after == 49);
+    CHECK(std::find(lines.begin(), lines.end(), ";BEFORE 1 0.4") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";AFTER 1 0.4 0.4") != lines.end());
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+    // One that moves the head: the next travel writes every axis again.
+    s.gcode_after_layer = "G91\nG1 Z1\nG90";
+    std::ostringstream moved;
+    write_gcode(moved, model, s);
+    CHECK(check_gcode(moved.str(), gcode_limits(model, s)).ok());
+    // In a vase too, whose turns otherwise go on without a travel (the fuzzer's run 141, seed 20261038).
+    s.vase = true;
+    s.gcode_before_layer = "G91\nG1 Z0.5\nG90";
+    const SlicedModel vase = slice_model(m, s);
+    std::ostringstream spiral;
+    write_gcode(spiral, vase, s);
+    CHECK(check_gcode(spiral.str(), gcode_limits(vase, s)).ok());
+}
+
+TEST_CASE("templates: a colour change and a pause at a height (gcode_templates.md, rule 13)", "[gcode][templates]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.changes = parse_settings(R"({"changes": [{"z": 2, "color_change": true}, {"z": 4, "pause": true}]})").changes;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::vector<std::string> lines = lines_of(out.str());
+    std::string z;
+    std::map<std::string, std::string> at; // what, at which ;Z:
+    for (std::size_t i = 0; i + 1 < lines.size(); ++i) {
+        if (lines[i].rfind(";Z:", 0) == 0)
+            z = lines[i].substr(3);
+        if (lines[i] == ";COLOR_CHANGE" || lines[i] == ";PAUSE_PRINT")
+            at[lines[i + 1]] = z;
+    }
+    CHECK(at["M600"] == "2.200"); // the first layer whose top is past 2
+    CHECK(at["M601"] == "4.200");
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+    // Their own templates, with the variables.
+    s.gcode_color_change = "M600 ; to [colour]";
+    s.variables["colour"] = {"red"};
+    std::ostringstream own;
+    write_gcode(own, model, s);
+    CHECK(own.str().find("M600 ; to red\n") != std::string::npos);
 }

@@ -130,7 +130,13 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         REQUIRE(at != std::string::npos);
         g.replace(at, what.size(), with);
     };
-    damaged([](std::string& g) { g.resize(g.size() / 2); }, "cut short");
+    damaged(
+        [](std::string& g) {
+            g.resize(g.size() / 2);
+            while (!g.empty() && g.back() == '\n') // in the middle of a line, wherever the half falls
+                g.pop_back();
+        },
+        "cut short");
     damaged([](std::string& g) { g.resize(g.rfind("; estimated printing time")); }, "closing summary is missing");
     damaged([&](std::string& g) { g.insert(layer, "G1 X500 Y500\n"); }, "leaves the allowed area");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 Ynan\n"); }, "unreadable parameter 'Ynan'");
