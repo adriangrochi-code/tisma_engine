@@ -190,7 +190,7 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase" || group == "placement")
+            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -775,6 +775,31 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0.1 to 20 mm");
                    s.fuzzy_point_distance = v;
                });
+    read_group(root, "arcs", {"enabled", "overlap", "speed", "max_distance"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "enabled") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.arcs = g.at(n).get<bool>();
+                       return;
+                   }
+                   const double v = number(g, n, k);
+                   if (n == "overlap") {
+                       if (v < 0.0 || v > 90.0)
+                           fail(k, "must be from 0 to 90 %");
+                       s.arcs_overlap = v;
+                       return;
+                   }
+                   if (n == "speed") {
+                       if (v < 0.0 || v > 1000.0)
+                           fail(k, "must be from 0 to 1000 mm/s");
+                       s.arcs_speed = v;
+                       return;
+                   }
+                   if (v < 0.0 || v > 1000.0)
+                       fail(k, "must be from 0 to 1000 mm");
+                   s.arcs_max_distance = v;
+               });
     read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
         if (v < 0.0 || v > 1.0)
@@ -981,6 +1006,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
         {"fuzzy.thickness", num(s.fuzzy_thickness)},
         {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
+        {"arcs.enabled", flag(s.arcs)},
+        {"arcs.overlap", num(s.arcs_overlap)},
+        {"arcs.speed", num(s.arcs_speed)},
+        {"arcs.max_distance", num(s.arcs_max_distance)},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
@@ -1256,6 +1285,11 @@ std::string settings_json(const Settings& s) {
          {{"mode", fuzzy_mode_name(s.fuzzy_mode)},
           {"thickness", s.fuzzy_thickness},
           {"point_distance", s.fuzzy_point_distance}}},
+        {"arcs",
+         {{"enabled", s.arcs},
+          {"overlap", s.arcs_overlap},
+          {"speed", s.arcs_speed},
+          {"max_distance", s.arcs_max_distance}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"extrusion",

@@ -648,7 +648,7 @@ public:
     // planned beforehand from exactly where the head is stands for the
     // planner's.
     void travel(const Point2d& p, double feed, const TravelPlanner& planner, const TravelPlan* planned = nullptr,
-                const Point2d* planned_from = nullptr) {
+                const Point2d* planned_from = nullptr, bool force_retract = false) {
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
@@ -677,7 +677,7 @@ public:
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
         const TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan& plan = ready ? *planned : own;
-        const bool retract = plan.leaves_part || plan.length > min_travel_;
+        const bool retract = force_retract || plan.leaves_part || plan.length > min_travel_;
         if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
@@ -1296,6 +1296,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
             std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
+            std::vector<Toolpath> arcs;                 // over overhangs, in their order
             std::vector<Point2d> ends;                  // where its paths start or end
         };
         const std::vector<Polygons>& pieces = plan.pieces;
@@ -1346,6 +1347,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                         i.fills[k].push_back(t);
                         add(i, t);
                     }
+            for (const Toolpath& t : f.arcs)
+                if (!t.points.empty()) {
+                    Island& i = island(t);
+                    i.arcs.push_back(t);
+                    add(i, t);
+                }
         }
         const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
                                           "Gap fill",        "Internal infill",  "Support material",
@@ -1411,6 +1418,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                     deferring = deferring || off_top({&paths});
                 deferring = deferring || off_top({&i.fills[1], &i.fills[3]});
             }
+            // The arcs over an overhang first, in their order, from the centre
+            // out: the walls round them then rest on their ends
+            // (arc_overhangs.md, rule 4).
+            for (Toolpath t : i.arcs)
+                lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : s.solid_infill_speed));
             for (const auto& [index, paths] : i.walls)
                 walls(index, paths);
             for (std::size_t k = 0; k < 7; ++k)
@@ -1490,7 +1502,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             const Toolpath& t = step.path;
             // A vase's turn starts where the one below ended: no travel.
             if (!turn)
-                g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr);
+                g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
+                         t.retract);
             g.type(step.type);
             g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)

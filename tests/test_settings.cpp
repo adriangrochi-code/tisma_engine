@@ -132,6 +132,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
     CHECK(Settings().detect_overhangs);
+    const Settings arcs = parse_settings(R"({"arcs": {"enabled": true, "overlap": 20, "speed": 0, "max_distance": 8}})");
+    CHECK(arcs.arcs);
+    CHECK(arcs.arcs_overlap == 20.0);
+    CHECK(arcs.arcs_speed == 0.0);
+    CHECK(arcs.arcs_max_distance == 8.0);
+    CHECK_FALSE(Settings().arcs);
+    CHECK_THROWS_WITH(parse_settings(R"({"arcs": {"overlap": 95}})"), ContainsSubstring("arcs.overlap: must be from 0 to 90"));
     CHECK_FALSE(parse_settings(R"({"walls": {"detect_overhangs": false}})").detect_overhangs);
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"detect_overhangs": 1}})"), ContainsSubstring("must be true or false"));
     CHECK(parse_settings(R"({"speed": {"outer_wall": 35}})").outer_wall_speed.of(60.0) == 35.0);

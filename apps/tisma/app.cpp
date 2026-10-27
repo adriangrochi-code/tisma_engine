@@ -678,6 +678,8 @@ const char* row_key(T label) {
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
         {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
         {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
+        {T::ArcsEnabled, "arcs.enabled"}, {T::ArcsOverlap, "arcs.overlap"}, {T::ArcsSpeed, "arcs.speed"},
+        {T::ArcsMaxDistance, "arcs.max_distance"},
         {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
         {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
@@ -2931,6 +2933,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
+    } else if (id == "arcs") {
+        flag(T::ArcsEnabled, "arcs.enabled", s.arcs);
+        mm(T::ArcsOverlap, "arcs.overlap", s.arcs_overlap, 0.0, 90.0, "%.0f %%", 0.5f);
+        mm(T::ArcsSpeed, "arcs.speed", s.arcs_speed, 0.0, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::ArcsMaxDistance, "arcs.max_distance", s.arcs_max_distance, 0.0, 1000.0, "%.1f mm", 0.1f);
     } else if (id == "skirt") {
         whole(T::SkirtLoops, "adhesion.skirt_loops", s.skirt_loops, 0, 20);
         mm(T::SkirtDistance, "adhesion.skirt_distance", s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);

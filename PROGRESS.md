@@ -4973,3 +4973,42 @@ contra 7,0 s. Los tres soportes en el cráneo y el Benchy con soporte, verificad
 línea, y la de mi guion es otra); la base ancha de los troncos cerca de la cama.
 
 **Sigue:** los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15, QA8, QA9 y `support.width`.
+
+## 2026-10-27 — arcos en voladizos (S1)
+
+**Por qué:** tercer ítem de lo pendiente, en orden. Los arcos no estaban hechos: faltaban las reglas 7 a 11 de la
+ficha `arc_overhangs.md` (el centro, hasta dónde, agujeros y tiras, el sentido, con soportes), que el equipo de fichas
+agregó con las pruebas A2 a A5 (`spec/next` 2f55a4b, `tools/check_spec.py` limpio). También era un pedido del dueño
+(P1, «Arc Overhang»).
+
+**Hecho:**
+- `src/infill/arcs.*` (diseño propio sobre la idea publicada; `PROVENANCE.md`): las zonas que salen de la capa de abajo
+  por un solo tramo de borde (dos tramos son un puente; el borde entero, un anillo alrededor de una columna, sigue con
+  su puente), con los pedazos cuyos tramos se tocan en un extremo juntos (la L de A2); un centro por zona, 1,2 mm
+  adentro del medio del tramo apoyado; círculos cada `walls.width × (1 − arcs.overlap)` (0,36 mm), cortados por la zona
+  y una mordida de 1,2 mm en lo que la sostiene, hasta el punto más lejano; uno en un sentido y el siguiente en el
+  otro, partido en el eje (A1: los enteros en 0,684, 1,404, 2,124 y 2,844 contra 0,686, 1,407, 2,128 y 2,849 de la
+  ficha); un pedazo que no se apoya en el arco anterior ni en la capa de abajo no va.
+- En el laminado, los arcos toman el lugar del relleno de la zona y de la mordida; en el G-code van antes que las
+  paredes de su isla, como `Overhang perimeter`, a `arcs.speed` (5 mm/s; 0, la de los puentes), con cordón redondo
+  (`;HEIGHT:0.314` con ancho 0,4), el ventilador de los puentes y retracción antes de cada uno (`Toolpath::retract`).
+  Con soportes, el soporte va igual y la capa lleva arcos en vez del puente grueso de QA13 (A5).
+- Ajustes `arcs.enabled`, `arcs.overlap`, `arcs.speed`, `arcs.max_distance` (perfil de impresión; `docs/CONFIG.md`);
+  en el panel, Soportes › Arcos en voladizos.
+
+**Medido** (estante A1, Z 8,2): 598 mm de arcos (ficha 606), 0,0522 mm de filamento por mm (ficha 0,052245), F300, 67
+retracciones en la capa (ficha 62); la capa 8,4, sólida. A5: el mismo resultado con el soporte debajo. Benchy con
+arcos: G-code verificado, 1,11 s (0,62 sin arcos); cráneo: 3,5 s (2,7 sin arcos). Fuzzer con arcos al azar: 600
+corridas, 0 fallas.
+
+**Pruebas nuevas:** `test_arcs.cpp` (A1: centro, radios, vaivén y corte en el eje, hasta la esquina más lejana, largo;
+A2: un solo grupo con el centro cerca del de la ficha, (98,8; 105,0) contra (98,8; 103,8); A3: el agujero corta y
+nada cae en él; A4: la tira; un puente y un anillo sin arcos; `max_distance`); en `test_gcode.cpp`, A1 y A5 en el
+G-code; los ajustes.
+
+**No probado:** impreso (el estante plano de la torre de temperatura; necesita al dueño). Los arcos sobre las paredes
+de la zona: acá las paredes se imprimen después, como `Overhang perimeter`, y los arcos llenan solo el relleno y la
+mordida; la ficha no dice qué pasa con las paredes (en A3 el agujero lleva las suyas).
+
+**Sigue:** que los arcos tarden menos (los círculos se muestrean contra toda la zona); PL15 de ubicación, QA8, QA9 y
+`support.width`.

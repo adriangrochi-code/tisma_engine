@@ -524,9 +524,10 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - [ ] `overhangs` con la superficie de abajo; `automatic`; `conical`
     - [ ] `stress`, solo si el análisis «como impresa» muestra ganancia
   - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
-    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
-      `docs/ARC_OVERHANGS.md`); después, frentes por distancia (las ondas de Andersons et al. 2026), con la
-      transformada de distancia de Q11
+    - [x] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
+      `docs/ARC_OVERHANGS.md`): `arcs.*`, reglas 1 a 11, A1 a A5 (2026-10-27)
+    - [ ] después, frentes por distancia (las ondas de Andersons et al. 2026), con la transformada de distancia de
+      Q11; y que los arcos no tarden tanto (el Benchy con arcos lamina en 1,1 s en vez de 0,6)
     - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
       abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
     - [x] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17): `support.style` `organic` (2026-10-26);
@@ -645,9 +646,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7
 - [x] Opciones de guardar (pedido del dueño): perfiles con nombre de impresora, filamento e impresión, con perfiles de
   fábrica genéricos (`docs/PROFILES.md`), y proyectos `.tisma` (`docs/PROJECT.md`)
-- [ ] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
+- [x] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
   borde apoyado. En sala limpia: desde la descripción pública de la idea, con diseño propio, sin leer código GPL.
-  Se prueba con el estante plano de la torre de temperatura
+  Hecho el 2026-10-27 (`arcs.enabled`, Soportes › Arcos en voladizos). Falta probarlo impreso (el estante plano de la
+  torre de temperatura; necesita al dueño)
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
 - [x] Mover, girar y escalar el modelo; varias piezas en la cama (pedido del dueño, 2026-10-25): Agregar, Quitar,
   Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)

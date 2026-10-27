@@ -63,6 +63,7 @@ struct Toolpath {
     // mm the bead also fills under the layer's bottom: the part's first layer
     // over the support reaches down to the support's top (supports_skirt.md, rule 4).
     double gap = 0.0;
+    bool retract = false; // retract before it, however short the travel (each arc, arc_overhangs.md rule 4)
 };
 
 // Connects the sites of each bead index inside every trapezoid into extrusion

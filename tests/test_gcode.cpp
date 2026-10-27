@@ -809,6 +809,46 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
     CHECK(thick_wall);
 }
 
+TEST_CASE("arcs: the shelf's overhang in arcs, round beads, slow, a retraction each (arc_overhangs.md, A1 and A5)",
+          "[gcode][arcs]") {
+    for (const bool support : {false, true}) {
+        CAPTURE(support);
+        Settings s = test_printer();
+        s.skirt_loops = 0;
+        s.relative_extrusion = true;
+        s.arcs = true;
+        s.support = support;
+        std::ostringstream out;
+        write_gcode(out, slice_model(shelf(), s), s);
+        double arcs = 0.0, arc_e = 0.0;
+        int retractions = 0;
+        std::string z;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line.rfind(";Z:", 0) == 0)
+                z = line.substr(3);
+            else if (z == "8.200" && line.rfind("G1 E-", 0) == 0)
+                ++retractions;
+        }
+        for (const Extrusion& x : extrusions(out.str())) {
+            INFO(x.z << " " << x.type << " " << x.height);
+            if (x.z == "8.200" && x.type == "Overhang perimeter" && x.feed == 300.0) {
+                // 5 mm/s, a round bead (pi/4 of 0.4 squared), no bridge.
+                CHECK(x.height == "0.314");
+                arcs += x.length();
+                arc_e += x.e;
+            }
+            CHECK_FALSE((x.z == "8.200" && x.type == "Bridge infill"));
+            if (x.z == "8.400") // the layer over them, solid
+                CHECK((x.type == "Solid infill" || x.type == "Perimeter" || x.type == "External perimeter" ||
+                       x.type == "Internal infill"));
+        }
+        CHECK(arcs > 520.0); // 606 mm in the spec
+        CHECK(arcs < 700.0);
+        CHECK_THAT(arc_e / arcs, WithinRel(0.052245, 0.01));
+        CHECK(retractions > 40); // 62 in the spec
+    }
+}
+
 TEST_CASE("walls: a bead that tapers to nothing writes no width of 0", "[gcode]") {
     // The tip of a variable-width bead has width 0; a piece of it that does
     // not move (a repeated point, or a cut right at the tip) is not written,

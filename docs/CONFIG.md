@@ -86,6 +86,22 @@ se pintó piel difusa (`docs/PAINTING.md`) se aplica con estos ajustes aunque `m
 | `thickness` | número | 0.3 | 0 a 5 | Cuánto se aparta cada punto de la línea, como máximo, para cada lado, en mm |
 | `point_distance` | número | 0.8 | 0,1 a 20 | Distancia media entre los puntos nuevos, en mm: cada una, al azar entre la mitad y una vez y media |
 
+### `arcs`
+
+Arcos en voladizos, ficha `docs/spec/features/arc_overhangs.md`: un voladizo que sale de la capa de abajo por un solo
+lado (no un puente, que se apoya de los dos) se imprime sin soporte con arcos que crecen alrededor de un centro, 1,2 mm
+adentro de lo que lo sostiene y frente al medio del borde apoyado; cada arco pisa al anterior. Van antes que las
+paredes de su isla, con cordón redondo (la sección de un cordón redondo del ancho de las paredes), como `;TYPE:Overhang
+perimeter`, con el ventilador de los puentes y retracción antes de cada uno. La capa siguiente lo cubre con relleno
+sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arcos en vez del puente grueso.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | | Activa los arcos |
+| `overlap` | número | 10 | 0 a 90 | Cuánto pisa cada arco al anterior, en % del ancho: los arcos van a `walls.width × (1 − overlap)` (0,36 mm con 0,4) |
+| `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.solid_infill`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
+| `max_distance` | número | 0 | 0 a 1000 | Hasta qué distancia del centro llegan los arcos, en mm; más allá, el voladizo se imprime como siempre. 0: sin límite |
+
 ### `surfaces`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

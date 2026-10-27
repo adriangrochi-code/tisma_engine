@@ -655,6 +655,13 @@
     X(SubSupportGap, "Separación", "Gaps") \
     X(SubSupportInterface, "Interfaz", "Interface") \
     X(SubSupportTree, "Árbol", "Tree") \
+    X(SubArcs, "Arcos en voladizos", "Arc overhangs") \
+    X(ArcsEnabled, "Voladizos con arcos", "Overhangs in arcs") \
+    X(ArcsOverlap, "Cuánto pisa cada arco", "Arc overlap") \
+    X(ArcsSpeed, "Velocidad de los arcos", "Arc speed") \
+    X(ArcsMaxDistance, "Hasta qué distancia", "Up to") \
+    X(SumArcs, "Arcos a %s mm/s", "Arcs at %s mm/s") \
+    X(SumNoArcs, "Sin arcos", "No arcs") \
     X(SubSupportPattern, "Patrón", "Pattern") \
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \

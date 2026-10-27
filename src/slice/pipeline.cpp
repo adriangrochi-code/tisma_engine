@@ -5,6 +5,7 @@
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
 #include "infill/adaptive.hpp"
+#include "infill/arcs.hpp"
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
 #include "infill/nonplanar.hpp"
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 namespace tisma {
 namespace {
@@ -243,6 +245,35 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             s.sparse = Clipper2Lib::Difference(s.sparse, small, Clipper2Lib::FillRule::NonZero);
             s.bottom = Clipper2Lib::Union(s.bottom, solid, Clipper2Lib::FillRule::NonZero);
         });
+    // Arcs over the overhangs held from one side (arc_overhangs.md): they take
+    // the place of the zone's fill, and of the bite of what holds it.
+    std::vector<std::vector<Toolpath>> arc_paths(out.layers.size());
+    std::vector<Polygons> arc_areas(out.layers.size());
+    if (settings.arcs) {
+        ArcParams ap;
+        ap.width = settings.wall_width;
+        ap.overlap = settings.arcs_overlap;
+        ap.max_distance = settings.arcs_max_distance;
+        tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
+            if (out.regions[l].empty() || out.regions[l - 1].empty())
+                return;
+            // Round beads, as the bridges' (rule 3): pi/4 of the width squared.
+            const double round = std::numbers::pi / 4.0 * settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
+            for (ArcZone& z : overhang_arcs(out.regions[l], out.regions[l - 1], ap)) {
+                for (Toolpath& t : z.arcs) {
+                    t.gap = round;
+                    t.retract = true;
+                    arc_paths[l].push_back(std::move(t));
+                }
+                arc_areas[l].insert(arc_areas[l].end(), z.area.begin(), z.area.end());
+            }
+            if (arc_areas[l].empty())
+                return;
+            LayerSurfaces& surface = out.surfaces[l];
+            for (Polygons* part : {&surface.top, &surface.top_under, &surface.bottom, &surface.sparse, &surface.bridge})
+                *part = Clipper2Lib::Difference(*part, arc_areas[l], Clipper2Lib::FillRule::NonZero);
+        });
+    }
     out.support_areas.resize(out.layers.size());
     if (settings.support) {
         std::vector<double> thickness;
@@ -309,6 +340,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         Polygons on = Clipper2Lib::Intersect(
             Clipper2Lib::Difference(out.regions[l], out.regions[l - 1], Clipper2Lib::FillRule::NonZero),
             offset(out.support_areas[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);
+        // Arcs instead, where there are (arc_overhangs.md, rule 11).
+        if (!arc_areas[l].empty())
+            on = Clipper2Lib::Difference(on, arc_areas[l], Clipper2Lib::FillRule::NonZero);
         on = offset(offset(on, -settings.wall_width / 4.0), settings.wall_width / 4.0);
         if (on.empty())
             return;
@@ -447,7 +481,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     const auto plain = [&](std::size_t l) {
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
-               dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty();
+               dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty() &&
+               arc_paths[l].empty();
     };
     std::vector<char> repeats(out.layers.size(), 0);
     if (period > 0)
@@ -465,6 +500,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
                                               kBridgeAnchor + settings.wall_width);
+                          out.fills[l].arcs = std::move(arc_paths[l]);
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {

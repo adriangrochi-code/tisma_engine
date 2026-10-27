@@ -77,7 +77,9 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface, {{"support.interface_layers", N}}},
-          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}}}}},
+          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}}},
+          {"arcs", T::SubArcs,
+           {{"arcs.enabled", N}, {"arcs.overlap", A}, {"arcs.speed", A}, {"arcs.max_distance", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",
          {{"skirt", T::SubSkirt, {{"adhesion.skirt_loops", B}, {"adhesion.skirt_distance", B}, {"adhesion.skirt_layers", N}}},
           {"brim", T::SubBrim, {{"adhesion.brim_width", B}}}}},
@@ -353,6 +355,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumLayersN, s.support_interface_layers);
     if (id == "pattern")
         return format(T::SumMm, number(s.support_spacing).c_str());
+    if (id == "arcs")
+        return s.arcs ? format(T::SumArcs, number(s.arcs_speed, 0).c_str()) : tr(T::SumNoArcs);
     if (id == "skirt")
         return s.skirt_loops > 0 ? format(T::SumSkirt, s.skirt_loops, number(s.skirt_distance).c_str()) : tr(T::SumNoSkirt);
     if (id == "brim")

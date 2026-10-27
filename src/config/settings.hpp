@@ -95,6 +95,11 @@ struct Settings {
     FuzzyMode fuzzy_mode = FuzzyMode::None;
     double fuzzy_thickness = 0.3;      // mm off the line, either way
     double fuzzy_point_distance = 0.8; // mm between points, on average
+    // Arcs over overhangs held from one side (docs/spec/features/arc_overhangs.md).
+    bool arcs = false;
+    double arcs_overlap = 10.0;     // percent of the width each arc lies on the one before
+    double arcs_speed = 5.0;        // mm/s; 0: the bridges' (speed.solid_infill)
+    double arcs_max_distance = 0.0; // mm from the arcs' centre; 0: no limit
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)

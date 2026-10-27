@@ -191,6 +191,7 @@ add_library(tisma_core
   src/surfaces/surfaces.cpp
   src/surfaces/bridges.cpp
   src/infill/adaptive.cpp
+  src/infill/arcs.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
   src/infill/lightning.cpp

@@ -20,6 +20,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   así llenan el hueco hasta el soporte en vez de caer en el aire; el puente entra 0,6 mm sobre la parte apoyada para
   anclarse. La capa de arriba ya es normal.
 
+- **Arcos en voladizos** (pedido del dueño; ficha `arc_overhangs.md`; `arcs.enabled`, apagado por defecto, en
+  Soportes › Arcos en voladizos): un voladizo que sale por un solo lado se imprime sin soporte con arcos que crecen
+  alrededor de un centro 1,2 mm adentro de lo apoyado, cada uno pisando al anterior, en vaivén, lentos (5 mm/s), con
+  cordón redondo, ventilador al máximo y retracción entre arcos; la capa de arriba lo cubre sólida. Los agujeros cortan
+  los arcos y las tiras angostas se llenan a lo ancho. Los puentes (apoyados de dos lados) siguen siendo puentes. En el
+  estante de la ficha, 598 mm de arcos (la ficha: 606).
+
 ### Cambiado
 
 - **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las
