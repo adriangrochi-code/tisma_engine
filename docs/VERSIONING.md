@@ -13,7 +13,11 @@ de pre-release opcional (`0.6.0-alpha.1`).
     caso de análisis, informe) y la línea de comandos; cada cambio así se anota en `CHANGELOG.md`, en «Cambiado» o
     «Quitado».
   - **PARCHE** sube solo con correcciones, sin funciones nuevas ni cambios de formato.
-- **1.0.0** es la primera versión para producción. La decide el dueño. Desde ahí, un cambio incompatible sube MAYOR.
+- **1.0.0** es la versión de lanzamiento y nada más: la primera para producción, cuando el motor reemplaza a Tisma
+  Slicer. La decide el dueño.
+- **Decisión del dueño (2026-10-27):** el primer número marca los cambios grandes de versión (1.0 es el lanzamiento);
+  el segundo, un cambio de versión chico; el tercero, exclusivamente correcciones de errores. Una versión con una
+  función nueva, por chica que sea, nunca sube solo el tercero.
 
 Hitos ya cumplidos, que no se publicaron por separado:
 
