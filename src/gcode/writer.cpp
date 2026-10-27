@@ -654,6 +654,10 @@ public:
           short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
+        // Volumetric E (gcode_extras.md, rule 11): every E in mm3 of
+        // plastic, retractions too; the engine counts filament as ever.
+        if (s.volumetric_e)
+            e_scale_ = filament_area_;
         // The melt limit: the lower of the hot end's and the filament's (0: none).
         for (const double limit : {s.machine_max_flow, s.filament_max_flow})
             if (limit > 0.0)
@@ -759,7 +763,7 @@ public:
         if (!relative_) {
             char buffer[kNumberCapacity];
             text_ += "G92 E";
-            text_.append(buffer, format_fixed(buffer, e_, 5));
+            text_.append(buffer, format_fixed(buffer, e_ * e_scale_, 5));
             text_ += '\n';
         }
         x_.clear(), y_.clear(), z_.clear(), e_text_.clear();
@@ -806,7 +810,7 @@ public:
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retracted_amount_ : 0.0;
-            text_ += "G92 E" + fixed(e_, 5) + "\n";
+            text_ += "G92 E" + fixed(e_ * e_scale_, 5) + "\n";
             position_[3] = e_;
             e_text_.clear();
         }
@@ -1079,7 +1083,7 @@ private:
         axis('X', x, 3, x_, x_text);
         axis('Y', y, 3, y_, y_text);
         axis('Z', z, 3, z_, {});
-        axis('E', e, 5, e_text_, {});
+        axis('E', e ? std::optional<double>(*e * e_scale_) : std::nullopt, 5, e_text_, {});
         const long f = std::lround(feed * 60.0);
         if (f != f_) {
             text_ += " F";
@@ -1115,6 +1119,7 @@ private:
     bool marked_bridge_ = false; // the last mark is a bridge's
     bool bridge_ = false;        // the current type is a bridge
     double filament_area_ = 1.0;
+    double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
     // Accelerations (speeds_accels.md, rules 10 to 13): Marlin's M204 P for
@@ -1178,6 +1183,14 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
         ++i;
     }
     return out;
+}
+
+// Waits for the chamber to reach at least `celsius`: M191, or Klipper's
+// TEMPERATURE_WAIT on the chamber's heater.
+std::string chamber_wait_gcode(GcodeFlavor flavor, double celsius) {
+    const std::string t = std::to_string(std::lround(celsius));
+    return flavor == GcodeFlavor::Klipper ? "TEMPERATURE_WAIT SENSOR=\"heater_generic chamber\" MINIMUM=" + t
+                                          : "M191 S" + t + " ; wait for the chamber";
 }
 
 std::string chamber_gcode(GcodeFlavor flavor, double celsius) {
@@ -1278,16 +1291,24 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     g.set_flow(s.flow / 100.0);
     g.type("Custom");
     g.flush(out);
+    // The chamber the filament wants, when the machine heats one: set before
+    // the start (so it heats while the nozzle does) and again after it, once
+    // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
+    const double chamber = std::min(s.chamber_temperature, s.max_chamber_temp);
+    const bool heat_chamber = s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0;
+    if (heat_chamber)
+        out << chamber_gcode(s.flavor, chamber) << "\n";
     if (!s.start_gcode.empty())
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     if (s.pressure_advance > 0.0)
         out << pressure_advance_gcode(s.flavor, s.pressure_advance) << "\n";
     if (s.acceleration > 0.0)
         out << acceleration_gcode(s.flavor, s.acceleration, s.travel_acceleration) << "\n";
-    // The chamber the filament wants, when the machine heats one.
-    const double chamber = std::min(s.chamber_temperature, s.max_chamber_temp);
-    if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
+    if (heat_chamber) {
+        if (s.chamber_min_temperature > 0.0)
+            out << chamber_wait_gcode(s.flavor, std::min(s.chamber_min_temperature, chamber)) << "\n";
         out << chamber_gcode(s.flavor, chamber) << "\n";
+    }
     if (warnings) {
         const std::vector<Warning> capability = capability_warnings(s);
         warnings->insert(warnings->end(), capability.begin(), capability.end());
@@ -1311,7 +1332,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     std::size_t next_change = 0;
     // The part prints resting on the bed wherever its mesh is in Z: heights
     // in the G-code (and of the height changes) count from its bottom.
-    const double base = model.layers.empty() ? 0.0 : model.layers.front().bottom;
+    // machine.z_offset moves every Z of the part (gcode_extras.md, rule 5).
+    const double base = (model.layers.empty() ? 0.0 : model.layers.front().bottom) - s.z_offset;
 
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
@@ -2249,6 +2271,20 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
     out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
+    // The filament, its weight and cost (gcode_extras.md, rule 1).
+    {
+        const double r = s.filament_diameter / 2.0;
+        const double mm = g.total_e(), cm3 = mm * std::numbers::pi * r * r / 1000.0;
+        const double grams = cm3 * s.filament_density, cost = grams * s.filament_cost / 1000.0;
+        out << "; filament used [mm] = " << fixed(mm, 2) << "\n";
+        out << "; filament used [cm3] = " << fixed(cm3, 2) << "\n";
+        if (s.filament_density > 0.0)
+            out << "; filament used [g] = " << fixed(grams, 2) << "\n";
+        out << "; filament cost = " << fixed(cost, 2) << "\n";
+        out << "; total filament used [g] = " << fixed(grams, 2) << "\n";
+        out << "; total filament cost = " << fixed(cost, 2) << "\n";
+        out << "; total filament used for wipe tower [g] = 0.00\n";
+    }
     // Each setting on one comment line: a line break in a value (a start
     // G-code variable, say) would otherwise end the comment and run the rest
     // as G-code after the print.

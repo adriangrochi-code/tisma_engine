@@ -15,6 +15,7 @@ struct Settings;
 struct GcodeLimits {
     double min_x = 0.0, min_y = 0.0, max_x = 0.0, max_y = 0.0; // where moves may go, mm
     double max_z = 0.0;           // the top layer plus the travel lift, mm
+    double min_z = 0.0;           // below the bed only with a negative machine.z_offset
     double max_feed = 0.0;        // the fastest move, mm/s
     double filament_area = 1.0;   // mm2
     double retract_length = 0.0;  // mm of filament

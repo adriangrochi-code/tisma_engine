@@ -681,6 +681,9 @@ const char* row_key(T label) {
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
+        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
+        {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
         {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
         {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
@@ -3059,6 +3062,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::GcodeResolution, "gcode.resolution", s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f,
            tr(T::GcodeResolutionTip));
         count(T::HeightChanges, "changes", s.changes.size());
+        flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
             changed |= row(T::FillModeRow, s.fill_mode,
@@ -3077,6 +3081,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
     } else if (id == "chamber") {
         mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 120.0, "%.0f °C", 0.5f);
+        mm(T::ChamberMinTemp, "extrusion.chamber_min_temperature", s.chamber_min_temperature, 0.0, 120.0,
+           s.chamber_min_temperature > 0.0 ? "%.0f °C" : "—", 0.5f);
+    } else if (id == "price") {
+        mm(T::FilamentDensity, "extrusion.density", s.filament_density, 0.0, 30.0,
+           s.filament_density > 0.0 ? "%.2f g/cm³" : "—", 0.005f);
+        mm(T::FilamentCost, "extrusion.cost", s.filament_cost, 0.0, 1e6, "%.2f", 0.1f);
+        mm(T::SpoolWeight, "extrusion.spool_weight", s.spool_weight, 0.0, 1e6, "%.0f g", 1.0f);
     } else if (id == "fan") {
         mm(T::FanMin, "cooling.fan_min", s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
         mm(T::FanMax, "cooling.fan_max", s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
@@ -3127,6 +3138,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
         }
         mm(T::MaxHeight, "machine.max_height", s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
+        mm(T::ZOffset, "machine.z_offset", s.z_offset, -10.0, 10.0, "%.2f mm", 0.005f);
     } else if (id == "enclosure") {
         flag(T::Enclosed, "machine.enclosed", s.enclosed);
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);

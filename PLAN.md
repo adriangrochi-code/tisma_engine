@@ -748,7 +748,10 @@ Con el PR #23 (2026-10-26):
     `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`. Falta ponerlos
     desde la vista previa (regla 13, con la interfaz P1) y el resto del lenguaje de plantillas (reglas 1 a 10, 12, 14
     a 17);
-  - [ ] los extras del G-code (`gcode_extras.md`)
+  - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
+    cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4) y la E volumétrica (regla 11, X11). Faltan los
+    sabores viejos (X5), el modo silencioso (X6), las miniaturas (X7), el G-code binario (X8), los arcos `G2`/`G3`
+    (X10), los comentarios detallados (X12) y la contracción (X3)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

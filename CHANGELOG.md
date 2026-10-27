@@ -65,6 +65,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Cambio de color y pausas por altura** (ficha `gcode_templates.md`; `color_change` y `pause` en `changes`, con
   `gcode.color_change` y `gcode.pause`), y **G-code antes y después de cada cambio de capa** (`gcode.before_layer`,
   `gcode.after_layer`, con `layer_num` y `layer_z`), en Otros › Plantillas de G-code.
+- **Peso y costo del filamento** al final del G-code (ficha `gcode_extras.md`; `extrusion.density`, `extrusion.cost`,
+  en Filamento › Precio): `; filament used [mm]`, `[cm3]`, `[g]`, `; filament cost` y los totales.
+- **Espera de la cámara** (`extrusion.chamber_min_temperature`): la cámara se pide antes del G-code de inicio y, después,
+  se espera a que llegue a ese mínimo (`M191`).
+- **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.

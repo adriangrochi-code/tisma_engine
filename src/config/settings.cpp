@@ -516,9 +516,16 @@ Settings parse_checked(std::string_view text) {
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
-                "hardened_nozzle", "min_layer_height", "max_layer_height"},
+                "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "z_offset") {
+                       const double d = number(g, n, k);
+                       if (!(d >= -10.0 && d <= 10.0))
+                           fail(k, "must be from -10 to 10 mm");
+                       s.z_offset = d;
+                       return;
+                   }
                    if (v.is_null() && (n.starts_with("max_feed_") || n == "corner_speed")) {
                        // Not set: the printer's profile gives it, or nothing does (docs/CONFIG.md).
                        (n == "max_feed_x"   ? s.max_feed_x
@@ -967,8 +974,14 @@ Settings parse_checked(std::string_view text) {
                        fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
-    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer"},
+    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "volumetric_e") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.volumetric_e = g.at(n).get<bool>();
+            return;
+        }
         if (n != "resolution") {
             if (!g.at(n).is_string())
                 fail(k, "must be a string");
@@ -998,7 +1011,8 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "extrusion",
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
-                "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio"},
+                "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
+                "cost", "spool_weight"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "abrasive" || n == "needs_enclosure") {
             if (!g.at(n).is_boolean())
@@ -1007,10 +1021,18 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (n == "max_flow" || n == "chamber_temperature") {
+        if (n == "max_flow" || n == "chamber_temperature" || n == "chamber_min_temperature") {
             if (v < 0.0 || v > (n == "max_flow" ? 1000.0 : 200.0))
                 fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 200 C");
-            (n == "max_flow" ? s.filament_max_flow : s.chamber_temperature) = v;
+            (n == "max_flow"              ? s.filament_max_flow
+             : n == "chamber_temperature" ? s.chamber_temperature
+                                          : s.chamber_min_temperature) = v;
+            return;
+        }
+        if (n == "density" || n == "cost" || n == "spool_weight") {
+            if (v < 0.0 || v > (n == "density" ? 30.0 : 1e6))
+                fail(k, n == "density" ? "must be from 0 to 30 g/cm3" : "must not be negative");
+            (n == "density" ? s.filament_density : n == "cost" ? s.filament_cost : s.spool_weight) = v;
             return;
         }
         if (n == "pressure_advance") {
@@ -1360,6 +1382,12 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.pause", text(s.gcode_pause)},
         {"gcode.before_layer", text(s.gcode_before_layer)},
         {"gcode.after_layer", text(s.gcode_after_layer)},
+        {"gcode.volumetric_e", flag(s.volumetric_e)},
+        {"machine.z_offset", num(s.z_offset)},
+        {"extrusion.chamber_min_temperature", num(s.chamber_min_temperature)},
+        {"extrusion.density", num(s.filament_density)},
+        {"extrusion.cost", num(s.filament_cost)},
+        {"extrusion.spool_weight", num(s.spool_weight)},
         {"machine.max_flow", num(s.machine_max_flow)},
         {"machine.max_nozzle_temp", num(s.max_nozzle_temp)},
         {"machine.max_bed_temp", num(s.max_bed_temp)},
@@ -1490,6 +1518,7 @@ std::string settings_json(const Settings& s) {
           {"max_height", s.max_height},
           {"min_layer_height", s.min_layer_height},
           {"max_layer_height", s.max_layer_height},
+          {"z_offset", s.z_offset},
           {"max_flow", s.machine_max_flow},
           {"max_nozzle_temp", s.max_nozzle_temp},
           {"max_bed_temp", s.max_bed_temp},
@@ -1598,6 +1627,10 @@ std::string settings_json(const Settings& s) {
           {"infill_max_speed", s.infill_max_speed},
           {"infill_max_crossing_speed", s.infill_max_crossing_speed},
           {"bridge_flow_ratio", s.bridge_flow_ratio},
+          {"chamber_min_temperature", s.chamber_min_temperature},
+          {"density", s.filament_density},
+          {"cost", s.filament_cost},
+          {"spool_weight", s.spool_weight},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
@@ -1606,7 +1639,8 @@ std::string settings_json(const Settings& s) {
           {"color_change", s.gcode_color_change},
           {"pause", s.gcode_pause},
           {"before_layer", s.gcode_before_layer},
-          {"after_layer", s.gcode_after_layer}}},
+          {"after_layer", s.gcode_after_layer},
+          {"volumetric_e", s.volumetric_e}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

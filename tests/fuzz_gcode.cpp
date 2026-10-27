@@ -157,6 +157,10 @@ int main(int argc, char** argv) {
             (pick(2) == 0 ? c.color_change : c.pause) = true;
             s.changes.push_back(c);
         }
+        if (pick(5) == 0) { // the G-code's extras
+            s.z_offset = uni(-0.3, 0.3);
+            s.volumetric_e = pick(2) == 0;
+        }
         if (pick(5) == 0) { // a raft
             s.raft_layers = 1 + pick(5);
             s.raft_gap = pick(3) == 0 ? 0.0 : uni(0.05, 0.3);

@@ -5248,3 +5248,24 @@ plantilla que mueve Z y en el modo vaso. Fuzzer con plantillas, cambios de color
 
 **Sigue:** los extras del G-code (`gcode_extras.md`): peso y costo (X1), desfase de Z (X4), E volumétrica (X11),
 cámara con espera (X2) y lo demás.
+
+## 2026-10-27 — Punto 2: extras del G-code (peso y costo, cámara, desfase de Z, E volumétrica)
+
+**Hecho** (ficha `gcode_extras.md`):
+- regla 1 (X1): al final del G-code, `; filament used [mm]`, `[cm3]` y, con `extrusion.density`, `[g]`; con
+  `extrusion.cost` (por kg), `; filament cost`; después los totales y `; total filament used for wipe tower [g] =
+  0.00` (todavía sin torre). En el panel, Filamento › Precio, con el peso del carrete vacío (`spool_weight`);
+- regla 3 (X2): con cámara, `M141` antes del G-code de inicio para que caliente junto con la boquilla; después del
+  inicio, con `extrusion.chamber_min_temperature`, la espera (`M191 S…`, o `TEMPERATURE_WAIT` en Klipper) y otra vez
+  `M141`;
+- regla 5 (X4): `machine.z_offset` se suma a todas las Z de la pieza y al `;Z:`; no toca el G-code de inicio;
+- regla 11 (X11): `gcode.volumetric_e`, toda E (extrusión, retracción, `G92`) en mm³; el verificador la lee con la
+  sección 1.
+
+**Medido:** X1 con PLA de 1,24 g/cm³ y 25 por kg: los valores cuadran con la sección del filamento al redondeo; el
+Benchy local da 4 071 mm, 9,79 cm³, 12,14 g y 0,30 (laminado en 1,0 s con la CI de Linux corriendo al lado). X2: el
+orden `M141 S50`, `M109 S200`, `M191 S40`, `M141 S50`, `M141 S0`. X4 con −0,3: la primera capa en `;Z:-0.100`.
+X11: `E-2` sale `E-4.81056`, sin `M200`. 465 pruebas pasan; fuzzer con las opciones nuevas: 400 corridas, 0 fallas.
+
+**Sigue:** el resto de `gcode_extras.md` (sabores viejos, modo silencioso, miniaturas, binario, arcos, comentarios
+detallados, contracción).

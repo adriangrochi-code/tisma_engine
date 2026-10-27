@@ -130,7 +130,7 @@ const std::vector<SectionLayout>& print_layout() {
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
-          {"gcode_output", T::SubGcodeOut, {{"gcode.resolution", A}, {"changes", A}}},
+          {"gcode_output", T::SubGcodeOut, {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
            {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.before_layer", A}, {"gcode.after_layer", A}}},
           {"slicing", T::SubSlicing,
@@ -144,7 +144,8 @@ const std::vector<SectionLayout>& material_layout() {
         {"temperature", T::SecTemperature, "section_temperature.svg",
          {{"nozzle_temp", T::SubNozzleTemp, {{"machine.variables.temperature", B}}},
           {"bed_temp", T::SubBedTemp, {{"machine.variables.bed_temperature", B}}},
-          {"chamber", T::SubChamber, {{"extrusion.chamber_temperature", N}}}}},
+          {"chamber", T::SubChamber, {{"extrusion.chamber_temperature", N}, {"extrusion.chamber_min_temperature", A}}},
+          {"price", T::SubPrice, {{"extrusion.density", N}, {"extrusion.cost", N}, {"extrusion.spool_weight", A}}}}},
         {"cooling", T::SecCooling, "section_cooling.svg",
          {{"fan", T::SubFan,
            {{"cooling.fan_min", B},
@@ -172,7 +173,7 @@ const std::vector<SectionLayout>& material_layout() {
 const std::vector<SectionLayout>& printer_layout() {
     static const std::vector<SectionLayout> layout = {
         {"machine", T::SecMachine, "section_machine.svg",
-         {{"bed_volume", T::SubBedVolume, {{"machine.bed", B}, {"machine.max_height", B}}},
+         {{"bed_volume", T::SubBedVolume, {{"machine.bed", B}, {"machine.max_height", B}, {"machine.z_offset", A}}},
           {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}},
           {"stability", T::SubStability,
            {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
@@ -438,6 +439,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return variable(s, "temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "temperature")))) : "—";
     if (id == "bed_temp")
         return variable(s, "bed_temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "bed_temperature")))) : "—";
+    if (id == "price")
+        return s.filament_density > 0.0 ? format(T::SumDensity, number(s.filament_density, 2).c_str()) : "—";
     if (id == "chamber")
         return s.chamber_temperature > 0.0 ? format(T::SumTemp, int(std::lround(s.chamber_temperature))) : tr(T::SumNoChamber);
     if (id == "fan")

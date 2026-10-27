@@ -853,6 +853,14 @@
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
+    X(ZOffset, "Desfase de Z", "Z offset") \
+    X(VolumetricE, "E volumétrica", "Volumetric E") \
+    X(ChamberMinTemp, "Esperar la cámara a", "Wait for the chamber at") \
+    X(SubPrice, "Peso y costo", "Weight and cost") \
+    X(FilamentDensity, "Densidad", "Density") \
+    X(FilamentCost, "Costo por kg", "Cost per kg") \
+    X(SpoolWeight, "Peso del carrete vacío", "Empty spool weight") \
+    X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \
     X(BeforeLayerGcode, "Antes de cada capa", "Before each layer") \

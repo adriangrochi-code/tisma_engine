@@ -167,6 +167,7 @@ struct Settings {
 
     // machine
     double nozzle_diameter = 0.4;   // mm
+    double z_offset = 0.0;          // mm added to every Z of the part (gcode_extras.md, rule 5)
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
@@ -329,12 +330,19 @@ struct Settings {
     // rule 14): its section times this, its diameter times the root.
     double bridge_flow_ratio = 1.0;
     double chamber_temperature = 0.0;  // C the filament wants in the chamber; 0: none
+    double chamber_min_temperature = 0.0; // C the chamber must reach before printing (M191); 0: no wait
+    // For the weight and cost at the end of the G-code (gcode_extras.md, rule 1).
+    double filament_density = 0.0;     // g/cm3; 0: not known
+    double filament_cost = 0.0;        // money per kg
+    double spool_weight = 0.0;         // g of the empty spool (for the interface)
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
 
     // gcode
     // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
     double gcode_resolution = 0.0125;
+    // E in mm3 of plastic instead of mm of filament (gcode_extras.md, rule 11).
+    bool volumetric_e = false;
     // Templates (gcode_templates.md, rules 11 and 13), with the variables of
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";

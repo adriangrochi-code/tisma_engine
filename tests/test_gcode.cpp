@@ -1294,3 +1294,104 @@ TEST_CASE("templates: a colour change and a pause at a height (gcode_templates.m
     write_gcode(own, model, s);
     CHECK(own.str().find("M600 ; to red\n") != std::string::npos);
 }
+
+TEST_CASE("extras: filament used, weight and cost at the end (gcode_extras.md, rule 1, X1)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.filament_density = 1.24;
+    s.filament_cost = 25.0;
+    const auto summary = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::map<std::string, double> values;
+        for (const std::string& line : lines_of(out.str()))
+            if (const std::size_t eq = line.find(" = "); line.rfind("; ", 0) == 0 && eq != std::string::npos &&
+                                                         (line.find("filament") != std::string::npos))
+                values[line.substr(2, eq - 2)] = std::stod(line.substr(eq + 3));
+        return values;
+    };
+    std::map<std::string, double> v = summary(s);
+    REQUIRE(v.count("filament used [mm]"));
+    const double area = std::numbers::pi * 0.875 * 0.875;
+    CHECK_THAT(v["filament used [cm3]"], Catch::Matchers::WithinAbs(v["filament used [mm]"] * area / 1000.0, 0.006));
+    CHECK_THAT(v["filament used [g]"], Catch::Matchers::WithinAbs(v["filament used [cm3]"] * 1.24, 0.01));
+    CHECK_THAT(v["filament cost"], Catch::Matchers::WithinAbs(v["filament used [g]"] * 25.0 / 1000.0, 0.006));
+    CHECK(v["total filament used [g]"] == v["filament used [g]"]);
+    CHECK(v["total filament cost"] == v["filament cost"]);
+    CHECK(v.count("total filament used for wipe tower [g]"));
+    // Without a density: no weight, the totals 0.
+    s.filament_density = 0.0;
+    v = summary(s);
+    CHECK_FALSE(v.count("filament used [g]"));
+    CHECK(v["total filament used [g]"] == 0.0);
+    CHECK(v["total filament cost"] == 0.0);
+}
+
+TEST_CASE("extras: the chamber set before the start and waited for after it (gcode_extras.md, rule 3, X2)",
+          "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.start_gcode = "M109 S200";
+    s.max_chamber_temp = 60.0;
+    s.chamber_temperature = 50.0;
+    s.chamber_min_temperature = 40.0;
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    std::vector<std::string> order;
+    for (const std::string& line : lines_of(out.str()))
+        if (line.rfind("M141", 0) == 0 || line.rfind("M191", 0) == 0 || line.rfind("M109", 0) == 0)
+            order.push_back(line.substr(0, line.find(' ', 5)));
+    CHECK(order == std::vector<std::string>{"M141 S50", "M109 S200", "M191 S40", "M141 S50", "M141 S0"});
+    s.chamber_min_temperature = 0.0;
+    std::ostringstream no_wait;
+    write_gcode(no_wait, slice_model(m, s), s);
+    CHECK(no_wait.str().find("M191") == std::string::npos);
+}
+
+TEST_CASE("extras: machine.z_offset moves every Z of the part (gcode_extras.md, rule 5, X4)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.start_gcode = "G1 Z5 F5000 ; lift nozzle";
+    s.z_offset = -0.3;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::vector<std::string> lines = lines_of(out.str());
+    CHECK(std::find(lines.begin(), lines.end(), ";Z:-0.100") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";Z:0.100") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";Z:9.700") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "G1 Z5 F5000 ; lift nozzle") != lines.end());
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 11, X11)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.retract_length = 2.0;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream plain, volumetric;
+    write_gcode(plain, model, s);
+    s.volumetric_e = true;
+    write_gcode(volumetric, model, s);
+    const auto es = [](const std::string& gcode) {
+        std::vector<double> out;
+        for (const std::string& line : lines_of(gcode))
+            if (line.rfind("G1 ", 0) == 0)
+                if (const std::size_t e = line.find(" E"); e != std::string::npos)
+                    out.push_back(std::stod(line.substr(e + 2)));
+        return out;
+    };
+    const std::vector<double> a = es(plain.str()), b = es(volumetric.str());
+    REQUIRE(a.size() == b.size());
+    const double area = std::numbers::pi * 0.875 * 0.875;
+    for (std::size_t i = 0; i < a.size(); i += 37)
+        CHECK_THAT(b[i], Catch::Matchers::WithinAbs(a[i] * area, 1e-4 + 1e-4 * std::abs(b[i])));
+    CHECK(volumetric.str().find("E-4.81056") != std::string::npos); // X11: E-2 becomes E-4.81056
+    CHECK(volumetric.str().find("M200") == std::string::npos);
+    CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
+}

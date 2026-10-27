@@ -269,8 +269,8 @@ private:
                 (given[1] && (to[1] < limits_.min_y - kPositionSlack || to[1] > limits_.max_y + kPositionSlack)))
                 problem("move to X" + text(to[0]) + " Y" + text(to[1]) +
                         " leaves the allowed area (the part with its skirt and brim, on the bed)");
-            if (given[2] && (to[2] < -kPositionSlack || to[2] > limits_.max_z + kPositionSlack))
-                problem("move to Z" + text(to[2]) + " is out of 0 to " + text(limits_.max_z));
+            if (given[2] && (to[2] < limits_.min_z - kPositionSlack || to[2] > limits_.max_z + kPositionSlack))
+                problem("move to Z" + text(to[2]) + " is out of " + text(limits_.min_z) + " to " + text(limits_.max_z));
             classify(to, given);
         }
         for (int a = 0; a < 4; ++a) {
@@ -402,6 +402,9 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     }
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + s.retract_lift;
+    // machine.z_offset moves every Z (gcode_extras.md, rule 5), below the bed too.
+    limits.max_z += std::max(0.0, s.z_offset);
+    limits.min_z = std::min(0.0, s.z_offset);
     if (s.zaa) {
         limits.zaa_below = 1.0 - s.zaa_min_thickness / 100.0;
         limits.zaa_above = s.zaa_raise ? 0.5 : 0.0;
@@ -451,14 +454,17 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         limits.max_feed = std::max(limits.max_feed, machine > 0.0 ? std::min(machine, needed) : needed);
     }
     const double r = s.filament_diameter / 2.0;
-    limits.filament_area = std::numbers::pi * r * r;
-    limits.retract_length = s.retract_length;
+    // With volumetric E every E is in mm3 (gcode_extras.md, rule 11): the
+    // section of the filament is 1, and the retractions are its volume.
+    const double area = std::numbers::pi * r * r, e_scale = s.volumetric_e ? area : 1.0;
+    limits.filament_area = s.volumetric_e ? 1.0 : area;
+    limits.retract_length = s.retract_length * e_scale;
     limits.flow = s.flow / 100.0;
-    GcodeLimits::Change current{0.0, s.retract_length, s.flow / 100.0};
+    GcodeLimits::Change current{0.0, s.retract_length * e_scale, s.flow / 100.0};
     for (const HeightChange& c : s.changes) {
         current.z = c.z;
         if (c.retract_length)
-            current.retract_length = *c.retract_length;
+            current.retract_length = *c.retract_length * e_scale;
         if (c.flow)
             current.flow = *c.flow / 100.0;
         limits.changes.push_back(current);
