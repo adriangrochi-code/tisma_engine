@@ -96,6 +96,26 @@ struct KnowledgeTutorial {
     std::vector<Step> steps;
 };
 
+// A calibration guide (rules 20 to 24): what it is for, when to repeat it,
+// the guides to do before, its steps, how to read the print, the setting it
+// fixes (or `where` "printer_firmware" when the result goes in the printer)
+// with its formula as a text, tips, and a related procedure.
+struct KnowledgeCalibration {
+    std::string id, name, group; // group: "filament" or "printer"
+    int order = 0;
+    std::vector<std::string> before;
+    std::string why, repeat;
+    std::vector<KnowledgeStep> steps; // a step given as a text alone has no title
+    struct Reading {
+        std::string look, means;
+    };
+    std::vector<Reading> read;
+    std::string result_key, result_where, result_text;
+    std::vector<std::string> tips;
+    std::string open; // a procedure's id
+    std::vector<KnowledgeSource> sources;
+};
+
 // Everything the folder has. A file that is not there leaves its list
 // empty; one that does not read is named in `errors` and left out.
 struct Knowledge {
@@ -106,9 +126,11 @@ struct Knowledge {
     std::vector<KnowledgeProcedure> procedures;
     std::vector<KnowledgeTerm> terms; // in alphabetical order
     std::vector<KnowledgeTutorial> tutorials;
+    std::vector<KnowledgeCalibration> calibrations; // in their `order`
     std::vector<std::string> errors;
     bool empty() const {
-        return materials.empty() && problems.empty() && procedures.empty() && terms.empty() && tutorials.empty();
+        return materials.empty() && problems.empty() && procedures.empty() && terms.empty() && tutorials.empty() &&
+               calibrations.empty();
     }
 };
 
@@ -125,7 +147,7 @@ Knowledge load_knowledge(const std::filesystem::path& folder, std::string_view l
 // whose name or text holds every word of the query, whatever the case and the
 // accents; names count more, best first.
 struct KnowledgeHit {
-    enum class Kind { Problem, Procedure, Term, Material, Tutorial } kind = Kind::Problem;
+    enum class Kind { Problem, Procedure, Term, Material, Tutorial, Calibration } kind = Kind::Problem;
     std::size_t index = 0;
     int score = 0;
 };
@@ -134,6 +156,9 @@ std::vector<KnowledgeHit> search_knowledge(const Knowledge& knowledge, std::stri
 // The term the glossary has for a setting (rule 12): the first in
 // alphabetical order that names it; none when no term does.
 const KnowledgeTerm* term_for_setting(const Knowledge& knowledge, std::string_view key);
+
+// The guide with this id; none when the folder has no such guide.
+const KnowledgeCalibration* find_guide(const Knowledge& knowledge, std::string_view id);
 
 // A material of the file as the warnings take it (rules 13 and 14).
 MaterialInfo material_info(const KnowledgeMaterial& material);

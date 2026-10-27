@@ -6382,3 +6382,32 @@ pasos del tutorial de prueba.
 
 **No probado:** el tiempo del clic en mallas de millones de triángulos (cada clic suelda la malla y arma sus aristas).
 
+
+## 2026-10-27 — Interfaz P1: el asistente, quinto paso (guías de calibración)
+
+**Hecho:**
+- Las guías de `calibrations.json` (`KnowledgeCalibration` en `src/ui/knowledge.*`), en su `order`. El lector acepta
+  los pasos como texto u objeto, `before` como texto, lista o null, `open` como id u objeto, y las fuentes de cada
+  guía como objetos o ids de las del archivo; sin fuentes propias, usa las del archivo. Los tipos exactos se
+  preguntaron al equipo de especificaciones.
+- La pestaña Calibraciones del panel de ayuda (regla 20, AS19), la página de cada guía (regla 21) con «Basado en» al
+  pie, el aviso «Antes conviene hacer» si la prueba anterior no tiene fecha (regla 22, AS16), el valor de ahora del
+  ajuste que fija y, en Flujo máximo, inicio + altura × paso con un 10 % menos y Aplicar con Deshacer, que fecha la
+  prueba (regla 23, AS17). Si el resultado va en la impresora, la guía lo dice.
+- «Cómo se hace» en la página de calibraciones y en la sección Calibración de la impresora; la acción `calibration` de
+  un problema abre la guía si existe.
+- Regla 9: un clic en los avisos del laminado los lista con «¿Cómo lo arreglo?» hacia su problema (tiempo de capa →
+  `overheating_small`, despegue → `first_layer_adhesion`, parte en el aire → `support_surface`).
+- Las preferencias `assistant.tutorials`, `assistant.glossary_tips` y `assistant.material_tips` (Más).
+- Los informes de investigación (no planar, calidad, arcos) dicen que los métodos se basan en los trabajos citados,
+  como pidió el equipo de especificaciones.
+
+**Probado:** `[assistant]` 170 comprobaciones en 15 casos; `ui_calibration_guide` y las demás capturas de la ayuda
+(29 pruebas). La CI de Linux completa del 0.10.0-alpha.2: gcc y clang 662 de 662; en ASan la última prueba (la más
+lenta, unos 5 min) quedó cortada por el límite de tiempo de la tarea, no por un fallo. Se corre entera de nuevo antes
+de este push.
+
+**Falta (sigue):** las fórmulas de las demás guías (esperan la tabla del equipo de especificaciones), mandar el
+comando del firmware con la impresora conectada (AS18), el orden de las guías en `new_material` (regla 24), y los
+avisos de hilos y esquinas que la revisión del motor todavía no da. Después, `model_tools.md` (partes, modificadores,
+ajustes por objeto).

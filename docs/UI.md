@@ -314,12 +314,20 @@ información al lado de cada ajuste.
   Glosario, Tutoriales y Calibraciones; al pie, «Basado en las guías de Rafa Barajas». Sus datos llegan con el paquete
   de perfiles (`knowledge/`, en la carpeta `pack/` junto a las preferencias); sin ellos, el panel lo dice. Tutoriales
   ofrece además el recorrido de la interfaz. `--help-panel problems|procedures|glossary|tutorials|calibrations` lo
-  abre en esa pestaña, `--knowledge CARPETA` lee los datos de otra carpeta y `--help-item ID` abre un problema o un
-  procedimiento.
+  abre en esa pestaña, `--knowledge CARPETA` lee los datos de otra carpeta y `--help-item ID` abre un problema, un
+  procedimiento o una guía de calibración. En **Más** se apagan los tutoriales, las definiciones del glosario y la
+  ficha del material (`assistant` en las preferencias). Un clic en los avisos del laminado (barra de estado) los
+  lista con **¿Cómo lo arreglo?**, que abre el problema de la ayuda que les corresponde.
   - **Problemas:** la lista con su síntoma; uno muestra sus causas (las de último recurso al final, con su nota), la
     pregunta para confirmarla y sus acciones: **Aplicar** un ajuste (el valor de ahora y el nuevo, acotado al rango de
     `docs/CONFIG.md`; el cambio queda sin guardar en el perfil y el aviso ofrece **Deshacer**), abrir un procedimiento,
     otro problema (con **Volver**) o la calibración, o un consejo. Una clave que el motor no tiene no da botón.
+  - **Calibraciones:** las guías en orden, del filamento y de la impresora. Una guía dice para qué sirve, cuándo
+    repetirla, la prueba que conviene hacer antes si no tiene fecha en la sección Calibración (con Abrir; no impide
+    seguir), **Calibrar**, los pasos, la tabla «Lo que ves / Qué significa», el resultado con el valor de ahora y, en
+    Flujo máximo, los campos para calcular el valor nuevo y **Aplicar** (que fecha la prueba); si el resultado va en la
+    impresora, lo avisa. Al pie, «Basado en» con sus fuentes, en lugar del pie del panel. **Cómo se hace** abre la
+    guía desde la página de calibraciones y desde la sección Calibración de la impresora.
   - **Procedimientos:** las advertencias arriba, los pasos con su casilla, cómo evitarlo y las notas.
   - **Glosario:** los términos en orden alfabético. El botón (i) de un ajuste que nombra un término muestra su
     definición al pasar el puntero y en la tarjeta.

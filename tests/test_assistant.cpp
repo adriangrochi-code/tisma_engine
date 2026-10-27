@@ -312,3 +312,69 @@ TEST_CASE("assistant: the guided tutorials, offered, moved on and resumed (AS12 
     no.dismissed.insert("first_print");
     CHECK(tutorials_to_offer(k, "first_start", no).empty());
 }
+
+TEST_CASE("assistant: the calibration guides read, in order (rules 20, 21, AS19)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    CHECK(k.errors.empty());
+    REQUIRE(k.calibrations.size() == 5);
+    // In their order, whatever the file's.
+    CHECK(k.calibrations[0].id == "temperature_tower");
+    CHECK(k.calibrations[1].id == "max_flow");
+    CHECK(k.calibrations[3].id == "flow");
+    CHECK(k.calibrations[4].group == "printer");
+    // Steps as texts or as objects; `before` as a list, a text or null.
+    const KnowledgeCalibration& flow = *find_guide(k, "flow");
+    REQUIRE(flow.steps.size() == 2);
+    CHECK(flow.steps[0].title == "Imprimir");
+    CHECK(flow.steps[1].title.empty());
+    CHECK(flow.steps[1].text == "Elegí el más liso.");
+    CHECK(flow.before == std::vector<std::string>{"pressure_advance"});
+    CHECK(find_guide(k, "max_flow")->before == std::vector<std::string>{"temperature_tower"});
+    CHECK(find_guide(k, "input_shaping")->before.empty());
+    REQUIRE(flow.read.size() == 1);
+    CHECK(flow.read[0].means == "Falta material");
+    CHECK(flow.result_key == "extrusion.flow");
+    CHECK(find_guide(k, "input_shaping")->result_where == "printer_firmware");
+    CHECK(find_guide(k, "max_flow")->open == "drying");
+    // Its own sources by id; without them, the file's (AS19's «Basado en»).
+    REQUIRE(flow.sources.size() == 1);
+    CHECK(flow.sources[0].title == "Otra fuente de prueba");
+    CHECK(find_guide(k, "max_flow")->sources.size() == 2);
+    CHECK(find_guide(k, "no_such_guide") == nullptr);
+    // The search finds a guide too.
+    bool found = false;
+    for (const KnowledgeHit& h : search_knowledge(k, "flujo maximo"))
+        found |= h.kind == KnowledgeHit::Kind::Calibration && k.calibrations[h.index].id == "max_flow";
+    CHECK(found);
+    // An engine test has its guide, and back (rule 20).
+    CHECK(guide_for_test("temperature") == "temperature_tower");
+    CHECK(test_for_guide("max_flow") == "max_flow");
+    CHECK(guide_for_test("fit").empty());
+    CHECK(test_for_guide("vfa").empty());
+}
+
+TEST_CASE("assistant: a guide before the others and its result (AS16, AS17)", "[ui][assistant]") {
+    // AS16: the flow's guide without the pressure advance done warns of it.
+    CHECK(guides_missing({"pressure_advance"}, {}) == std::vector<std::string>{"pressure_advance"});
+    CHECK(guides_missing({"pressure_advance"}, {"pressure_advance"}).empty());
+    CHECK(guides_missing({"a", "b", "c"}, {"b"}) == std::vector<std::string>{"a", "c"});
+    // AS17: 19 mm with start 5 and step 0.5 is 14.5 mm³/s; 10 % less is offered.
+    const std::optional<GuideOutcome> r = guide_result("max_flow", {5.0, 0.5, 19.0});
+    REQUIRE(r);
+    CHECK_THAT(r->value, Catch::Matchers::WithinAbs(14.5, 1e-9));
+    CHECK_THAT(r->proposed, Catch::Matchers::WithinAbs(13.05, 1e-9));
+    // Applied to extrusion.max_flow as a set action (rule 7).
+    Settings s;
+    const std::optional<SettingChange> change =
+        plan_setting(s, {"extrusion.max_flow", SettingOp::Set, "13.05", {}});
+    REQUIRE(change);
+    CHECK(apply_setting(s, *change).filament_max_flow == 13.05);
+    CHECK_FALSE(guide_result("input_shaping", {}));
+}
+
+TEST_CASE("assistant: the review's warnings lead to their problems (rule 9)", "[ui][assistant]") {
+    CHECK(review_problem("layer_time") == "overheating_small");
+    CHECK(review_problem("stability_peel") == "first_layer_adhesion");
+    CHECK(review_problem("stability_air") == "support_surface");
+    CHECK(review_problem("thin_detail").empty());
+}

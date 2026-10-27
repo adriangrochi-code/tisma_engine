@@ -691,9 +691,16 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   `knowledge/` leídos (`src/ui/knowledge.*`), la búsqueda (AS2), los problemas con Aplicar y Deshacer, los
   procedimientos, el glosario junto a cada ajuste (regla 12, AS15) y la ficha del material con sus avisos. Cuarto
   paso (2026-10-27): los tutoriales guiados con anclas, eventos, ofertas y progreso guardado (reglas 15 a 18, AS12 a
-  AS14). Falta: las guías de calibración (20 a 24, AS16 a AS19), los enlaces desde la revisión previa (regla 9), las
-  preferencias `assistant.*`, el idioma de los archivos por carpeta (19, hecho en el lector pero sin datos en inglés) y
-  las anclas de Ingeniería por paso (hoy todas iluminan la pestaña Análisis)
+  AS14). Quinto paso (2026-10-27): las guías de calibración leídas de `calibrations.json`, la pestaña Calibraciones en
+  dos grupos, la página de cada guía con «Basado en» al pie, «Cómo se hace» en la página de calibraciones y en la
+  sección Calibración de la impresora, el aviso de la prueba que va antes (regla 22, AS16), el resultado de Flujo
+  máximo con Aplicar (AS17) y el aviso de que el resultado va en la impresora (regla 23); los enlaces «¿Cómo lo
+  arreglo?» desde los avisos (regla 9) y las preferencias `assistant.*`. Falta: las fórmulas de las demás guías y
+  los tipos exactos de `calibrations.json` (preguntados al equipo de especificaciones), mandar el comando del
+  firmware con la impresora conectada (AS18), el orden de las guías en el tutorial `new_material` (regla 24), los
+  avisos de la revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
+  hecho en el lector pero sin datos en inglés) y las anclas de Ingeniería por paso (hoy todas iluminan la pestaña
+  Análisis)
 - [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas.
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,

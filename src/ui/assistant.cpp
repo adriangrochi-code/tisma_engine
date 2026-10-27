@@ -327,4 +327,58 @@ std::string material_warning_text(MaterialWarning warning, const MaterialInfo& m
     return {};
 }
 
+std::string_view review_problem(std::string_view kind) {
+    // The review's warnings of rule 9 as the engine names them: travel in
+    // the air without a retraction leaves strings; short layers have no time
+    // to cool; a part that can come off the bed has too little first layer;
+    // a part that starts in the air is an overhang without support.
+    static constexpr std::pair<std::string_view, std::string_view> map[] = {
+        {"travel_no_retraction", "stringing"},  {"layer_time", "overheating_small"},
+        {"stability_peel", "first_layer_adhesion"}, {"stability_air", "support_surface"},
+        {"corner_lift", "warping"},
+    };
+    for (const auto& [k, problem] : map)
+        if (k == kind)
+            return problem;
+    return {};
+}
+
+namespace {
+constexpr std::pair<std::string_view, std::string_view> kTestGuides[] = {
+    {"temperature", "temperature_tower"}, {"max_flow", "max_flow"},   {"pressure_advance", "pressure_advance"},
+    {"flow", "flow"},                     {"retraction", "retraction"}, {"first_layer", "first_layer"},
+    {"dimensions", "dimensional"},
+};
+} // namespace
+
+std::string_view guide_for_test(std::string_view test) {
+    for (const auto& [t, guide] : kTestGuides)
+        if (t == test)
+            return guide;
+    return {};
+}
+
+std::string_view test_for_guide(std::string_view guide) {
+    for (const auto& [test, g] : kTestGuides)
+        if (g == guide)
+            return test;
+    return {};
+}
+
+std::vector<std::string> guides_missing(const std::vector<std::string>& before, const std::set<std::string>& done) {
+    std::vector<std::string> out;
+    for (const std::string& id : before)
+        if (!done.contains(id))
+            out.push_back(id);
+    return out;
+}
+
+std::optional<GuideOutcome> guide_result(std::string_view id, const GuideInput& in) {
+    if (id == "max_flow") {
+        const double value = in.start + in.measured * in.step;
+        return GuideOutcome{value, value * 0.9};
+    }
+    return std::nullopt;
+}
+
 } // namespace tisma::ui

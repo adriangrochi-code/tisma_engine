@@ -4,6 +4,7 @@
 #include "config/settings.hpp"
 
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -108,5 +109,36 @@ std::vector<MaterialWarning> material_warnings(const MaterialInfo& material, con
 // The warning's text in the interface's language («Conviene secarlo antes de
 // imprimir: 45 a 55 °C, 4 h»).
 std::string material_warning_text(MaterialWarning warning, const MaterialInfo& material);
+
+// The help's problem for a warning of the review before printing (rule 9),
+// by the warning's kind ("layer_time" → "overheating_small"); empty for the
+// kinds without one.
+std::string_view review_problem(std::string_view warning_kind);
+
+// The guide of an engine calibration test (rule 20), by the test's name
+// (calibration_kind_name: "max_flow" → "max_flow", "temperature" →
+// "temperature_tower"); empty for the tests without one.
+std::string_view guide_for_test(std::string_view test_name);
+// The test a guide's «Calibrar» opens: the reverse of guide_for_test.
+std::string_view test_for_guide(std::string_view guide_id);
+
+// The guides of `before` not done yet (rule 22), in the order given: `done`
+// holds the ids of the guides with a date.
+std::vector<std::string> guides_missing(const std::vector<std::string>& before, const std::set<std::string>& done);
+
+// What the person writes after a guide's test (rule 23): the test's start
+// and step per millimetre of height, and what was measured (the height in
+// mm where the print failed, or the block chosen).
+struct GuideInput {
+    double start = 0.0, step = 0.0, measured = 0.0;
+};
+// The value read from the print and the one proposed for the setting.
+struct GuideOutcome {
+    double value = 0.0, proposed = 0.0;
+};
+// The guide's formula: today max_flow, the flow where the print failed
+// (start + height × step) and 10 % less (AS17). None for the guides whose
+// formula the engine does not compute yet.
+std::optional<GuideOutcome> guide_result(std::string_view guide_id, const GuideInput& input);
 
 } // namespace tisma::ui

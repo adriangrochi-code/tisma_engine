@@ -468,6 +468,9 @@ private:
     void help_body();
     void help_problem(const KnowledgeProblem& problem);
     void help_procedure(const KnowledgeProcedure& procedure);
+    void help_guide(const KnowledgeCalibration& guide);
+    void open_guide(std::string_view id);
+    std::set<std::string> guides_done() const;
     void help_action(const KnowledgeAction& action);
     void help_apply_dialog();
     void anchor(const char* name); // the last item, as a part tutorials can point at
@@ -489,6 +492,7 @@ private:
     void choose_nozzle(double diameter, const std::string& profile);
     void printer_page();
     void record_calibration(CalibrationKind kind);
+    void record_calibration(const std::string& name);
     void notify_undo(std::string text, std::function<void()> undo);
 
     AppOptions options_;
@@ -697,12 +701,17 @@ private:
     // (a list, or one problem or procedure) and the problems it came through,
     // for Back; a setting change waiting for its confirmation (rule 7).
     std::optional<Knowledge> knowledge_;
-    enum class HelpPage { List, Problem, Procedure };
+    enum class HelpPage { List, Problem, Procedure, Guide };
     HelpPage help_page_ = HelpPage::List;
     std::size_t help_item_ = 0;
     std::vector<std::size_t> help_back_;
     std::vector<bool> help_steps_done_;
+    // What the person writes in a guide's result (rule 23).
+    GuideInput guide_input_;
+    // The assistant's preferences (assistant.md, «Ajustes»).
+    bool assistant_tutorials_ = true, assistant_glossary_ = true, assistant_material_ = true;
     std::optional<SettingChange> help_change_;
+    std::string help_change_guide_; // the guide whose result it is (rule 23), to date it
     bool help_change_open_ = false;
     // The guided tutorials (assistant.md, rules 15 to 18): the parts of the
     // interface named this frame (anchors), what is remembered of each
@@ -1083,6 +1092,8 @@ std::string g_open_info;
 // The help's data, for the glossary's definitions beside the settings
 // (assistant.md, rule 12); none until it is read.
 const Knowledge* g_knowledge = nullptr;
+// assistant.glossary_tips: the glossary's definition next to the settings.
+bool g_glossary_tips = true;
 
 // The (i) beside a setting's name: a click opens what the setting does, its
 // key, default and range (docs/UI.md, «Ayuda»).
@@ -1107,7 +1118,7 @@ void info_button(T label, const char* key) {
     dl->AddCircle(c, size * 0.45f, colour, 16, 1.2f);
     dl->AddLine(ImVec2(c.x, c.y - size * 0.05f), ImVec2(c.x, c.y + size * 0.25f), colour, 1.6f);
     dl->AddCircleFilled(ImVec2(c.x, c.y - size * 0.22f), size * 0.07f, colour);
-    const KnowledgeTerm* term = g_knowledge ? term_for_setting(*g_knowledge, key) : nullptr;
+    const KnowledgeTerm* term = g_knowledge && g_glossary_tips ? term_for_setting(*g_knowledge, key) : nullptr;
     if (hovered) {
         if (term) {
             // The glossary's definition, on the pointer (rule 12).
@@ -1550,6 +1561,10 @@ void App::choose_nozzle(double diameter, const std::string& profile) {
 // A calibration's result applied: its day, the nozzle and the filament, for
 // the printer page (rule 38).
 void App::record_calibration(CalibrationKind kind) {
+    record_calibration(std::string(calibration_kind_name(kind)));
+}
+
+void App::record_calibration(const std::string& name) {
     const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
     if (printer.empty())
         return;
@@ -1557,7 +1572,7 @@ void App::record_calibration(CalibrationKind kind) {
     char date[16] = "";
     if (const std::tm* t = std::localtime(&now))
         std::strftime(date, sizeof date, "%Y-%m-%d", t);
-    calibration_records_[printer][calibration_kind_name(kind)] =
+    calibration_records_[printer][name] =
         CalibrationRecord{date, settings_.nozzle_diameter, chosen_profile_[std::size_t(ProfileKind::Filament)]};
 }
 
@@ -1722,6 +1737,12 @@ void App::printer_page() {
                     printer_page_ = false;
                     set_tab(Tab::Calibration);
                     create_calibration(kind, false);
+                }
+                if (const std::string_view guide = guide_for_test(calibration_kind_name(kind));
+                    !guide.empty() && knowledge_ && find_guide(*knowledge_, guide)) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::GuideHow)))
+                        open_guide(guide);
                 }
                 ImGui::PopID();
             }
@@ -2107,6 +2128,8 @@ bool App::init(std::string& error) {
     for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
         if (knowledge_->procedures[i].id == options_.help_open)
             help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+    if (!options_.help_open.empty() && find_guide(*knowledge_, options_.help_open))
+        open_guide(options_.help_open);
     if (!options_.tutorial.empty())
         for (std::size_t i = 0; i < knowledge_->tutorials.size(); ++i)
             if (knowledge_->tutorials[i].id == options_.tutorial) {
@@ -2308,6 +2331,11 @@ void App::load_preferences() {
     try {
         const nlohmann::json j = nlohmann::json::parse(in);
         tips_ = j.value("tips", true);
+        if (const auto a = j.find("assistant"); a != j.end() && a->is_object()) {
+            assistant_tutorials_ = a->value("tutorials", true);
+            g_glossary_tips = assistant_glossary_ = a->value("glossary_tips", true);
+            assistant_material_ = a->value("material_tips", true);
+        }
         if (j.contains("tips_seen") && j.at("tips_seen").is_array())
             for (const auto& t : j.at("tips_seen"))
                 if (t.is_string())
@@ -2416,6 +2444,9 @@ void App::save_preferences() {
         j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
+        j["assistant"]["tutorials"] = assistant_tutorials_;
+        j["assistant"]["glossary_tips"] = assistant_glossary_;
+        j["assistant"]["material_tips"] = assistant_material_;
         j["tips_seen"] = tips_seen_;
         j["tutorials"]["step"] = guide_memory_.step;
         j["tutorials"]["dismissed"] = guide_memory_.dismissed;
@@ -3683,6 +3714,13 @@ void App::top_bar() {
             tips_seen_.clear();
             tips_ = true;
         }
+        // The assistant's preferences (assistant.md, «Ajustes»).
+        if (ImGui::MenuItem(tr(T::AssistantTutorials), nullptr, assistant_tutorials_))
+            assistant_tutorials_ = !assistant_tutorials_;
+        if (ImGui::MenuItem(tr(T::AssistantGlossary), nullptr, assistant_glossary_))
+            g_glossary_tips = assistant_glossary_ = !assistant_glossary_;
+        if (ImGui::MenuItem(tr(T::AssistantMaterial), nullptr, assistant_material_))
+            assistant_material_ = !assistant_material_;
         if (ImGui::MenuItem(tr(T::Help), "F1"))
             help_open_ = true;
         if (ImGui::MenuItem(tr(T::Credits)))
@@ -4208,10 +4246,11 @@ void App::help_panel() {
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
     help_apply_dialog();
-    // Rule 4: where the help's texts come from.
+    // Rule 4: where the help's texts come from. The calibration guides name
+    // their own sources at their foot (rule 21), so their tab leaves it out.
     ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
     for (const FeatureCredit& c : credits().features)
-        if (c.spec == "assistant.md" && c.author == "Rafa Barajas") {
+        if (help_tab_ != 4 && c.spec == "assistant.md" && c.author == "Rafa Barajas") {
             ImGui::TextDisabled("%s", tr(T::HelpBasedOn));
             ImGui::SameLine(0.0f, ImGui::CalcTextSize(" ").x);
             ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
@@ -4245,6 +4284,10 @@ void App::help_body() {
         help_procedure(k.procedures[help_item_]);
         return;
     }
+    if (help_page_ == HelpPage::Guide && help_item_ < k.calibrations.size()) {
+        help_guide(k.calibrations[help_item_]);
+        return;
+    }
     // The search, over every tab (rule 2).
     if (!help_query_.empty()) {
         const std::vector<KnowledgeHit> hits = search_knowledge(k, help_query_);
@@ -4272,12 +4315,17 @@ void App::help_body() {
             case Kind::Tutorial:
                 ImGui::TextUnformatted(k.tutorials[h.index].name.c_str());
                 break;
+            case Kind::Calibration:
+                if (ImGui::Selectable(k.calibrations[h.index].name.c_str()))
+                    open_guide(k.calibrations[h.index].id);
+                break;
             }
             ImGui::SameLine();
             ImGui::TextDisabled("· %s", tr(h.kind == Kind::Problem     ? T::HelpProblems
                                            : h.kind == Kind::Procedure ? T::HelpProcedures
                                            : h.kind == Kind::Term      ? T::HelpGlossary
                                            : h.kind == Kind::Tutorial  ? T::HelpTutorials
+                                           : h.kind == Kind::Calibration ? T::HelpCalibrations
                                                                        : T::HelpMaterial));
             ImGui::PopID();
         }
@@ -4339,7 +4387,21 @@ void App::help_body() {
             ImGui::Spacing();
         }
     } else if (help_tab_ == 4) {
-        ImGui::TextDisabled("%s", tr(T::HelpGuidesSoon));
+        // The guides in their order, the filament's and then the printer's (rule 20).
+        for (const char* group : {"filament", "printer"}) {
+            ImGui::SeparatorText(tr(std::string_view(group) == "filament" ? T::GuidesFilament : T::GuidesPrinter));
+            for (std::size_t i = 0; i < k.calibrations.size(); ++i) {
+                const KnowledgeCalibration& g = k.calibrations[i];
+                if ((g.group == "printer") != (std::string_view(group) == "printer"))
+                    continue;
+                ImGui::PushID(int(i));
+                if (ImGui::Selectable(g.name.c_str()))
+                    open_guide(g.id);
+                ImGui::TextDisabled("%s", g.why.c_str());
+                ImGui::PopID();
+                ImGui::Spacing();
+            }
+        }
     }
 }
 
@@ -4401,6 +4463,7 @@ void App::help_action(const KnowledgeAction& a) {
         if (ImGui::SmallButton(tr(T::HelpApply))) {
             help_change_ = change;
             help_change_open_ = true;
+            help_change_guide_.clear();
         }
     } else if (a.type == "procedure") {
         for (std::size_t i = 0; i < k.procedures.size(); ++i)
@@ -4415,11 +4478,191 @@ void App::help_action(const KnowledgeAction& a) {
                 help_item_ = i;
             }
     } else if (a.type == "calibration") {
-        if (ImGui::SmallButton(tr(T::HelpOpenCalibration)))
-            tab_ = Tab::Calibration;
+        if (ImGui::SmallButton(tr(T::HelpOpenCalibration))) {
+            if (find_guide(k, a.id))
+                open_guide(a.id);
+            else
+                tab_ = Tab::Calibration;
+        }
     } else if (!a.text.empty()) {
         ImGui::Bullet();
         ImGui::TextUnformatted(a.text.c_str());
+    }
+}
+
+// The guide with this id open in the help panel (rule 20).
+void App::open_guide(std::string_view id) {
+    if (!knowledge_)
+        load_help_data();
+    for (std::size_t i = 0; i < knowledge_->calibrations.size(); ++i)
+        if (knowledge_->calibrations[i].id == id) {
+            help_open_ = true;
+            help_tab_ = 4, help_select_ = true, help_page_ = HelpPage::Guide, help_item_ = i;
+            help_steps_done_.assign(knowledge_->calibrations[i].steps.size(), false);
+            guide_input_ = {};
+            help_query_.clear();
+        }
+}
+
+// The guides done on this printer (rule 22): those with a date in its
+// Calibration section, by their test's name or by their own id.
+std::set<std::string> App::guides_done() const {
+    std::set<std::string> done;
+    const auto records = calibration_records_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
+    if (records == calibration_records_.end())
+        return done;
+    for (const auto& [name, record] : records->second) {
+        if (record.date.empty())
+            continue;
+        done.insert(name);
+        if (const std::string_view guide = guide_for_test(name); !guide.empty())
+            done.insert(std::string(guide));
+    }
+    return done;
+}
+
+// One calibration guide (rules 21 to 23): what it is for, when to repeat
+// it, what goes before, its steps, how to read the print, the result and
+// tips, and at its foot what it is based on.
+void App::help_guide(const KnowledgeCalibration& g) {
+    const Knowledge& k = *knowledge_;
+    if (ImGui::SmallButton(tr(T::HelpBack))) {
+        help_page_ = HelpPage::List;
+        return;
+    }
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(g.name.c_str());
+    ImGui::PopFont();
+    ImGui::TextUnformatted(g.why.c_str());
+    if (!g.repeat.empty())
+        ImGui::TextDisabled(tr(T::GuideRepeat), g.repeat.c_str());
+    // Rule 22: what is not done yet goes before; it warns, it does not stop.
+    for (const std::string& id : guides_missing(g.before, guides_done())) {
+        const KnowledgeCalibration* before = find_guide(k, id);
+        ImGui::PushID(id.c_str());
+        ImGui::TextColored(rgb(kWarningColour), tr(T::GuideBefore), before ? before->name.c_str() : id.c_str());
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::HelpOpen))) {
+            if (const std::string_view test = test_for_guide(id); !test.empty()) {
+                if (const auto kind = calibration_kind_from_name(test)) {
+                    set_tab(Tab::Calibration);
+                    create_calibration(*kind, false);
+                }
+            } else {
+                open_guide(id);
+            }
+            ImGui::PopID();
+            return;
+        }
+        ImGui::PopID();
+    }
+    const std::string_view test = test_for_guide(g.id);
+    if (!test.empty() && ImGui::Button(tr(T::GuideCalibrate))) {
+        if (const auto kind = calibration_kind_from_name(test)) {
+            set_tab(Tab::Calibration);
+            create_calibration(*kind, false);
+        }
+    }
+    if (!g.steps.empty()) {
+        ImGui::SeparatorText(tr(T::GuideSteps));
+        help_steps_done_.resize(g.steps.size(), false);
+        for (std::size_t i = 0; i < g.steps.size(); ++i) {
+            ImGui::PushID(int(i));
+            bool done = help_steps_done_[i];
+            const std::string label = g.steps[i].title.empty() ? std::to_string(i + 1) + "." : g.steps[i].title;
+            if (ImGui::Checkbox(label.c_str(), &done))
+                help_steps_done_[i] = done;
+            ImGui::Indent();
+            ImGui::TextDisabled("%s", g.steps[i].text.c_str());
+            ImGui::Unindent();
+            ImGui::PopID();
+        }
+    }
+    if (!g.read.empty() && ImGui::BeginTable("##read", 2, ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn(tr(T::GuideLook));
+        ImGui::TableSetupColumn(tr(T::GuideMeans));
+        ImGui::TableHeadersRow();
+        for (const KnowledgeCalibration::Reading& r : g.read) {
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(r.look.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(r.means.c_str());
+        }
+        ImGui::EndTable();
+    }
+    // Rule 23: the setting it fixes with its value now, the formula, and
+    // with what was measured the new value to apply; or the printer's.
+    ImGui::SeparatorText(tr(T::GuideResult));
+    if (!g.result_text.empty())
+        ImGui::TextUnformatted(g.result_text.c_str());
+    if (g.result_where == "printer_firmware") {
+        ImGui::TextColored(rgb(kWarningColour), "%s", tr(T::GuideFirmware));
+    } else if (!g.result_key.empty()) {
+        std::optional<SettingChange> now;
+        try {
+            now = plan_setting(settings_, {g.result_key, SettingOp::Multiply, "1", {}});
+        } catch (const std::exception&) {
+        }
+        if (now)
+            ImGui::TextDisabled(tr(T::GuideNow), (key_label(g.result_key) + " " + now->before).c_str());
+        if (guide_result(g.id, {1.0, 1.0, 1.0})) {
+            const float field = ImGui::GetFontSize() * 7.0f;
+            const auto input = [&](T label, double& v) {
+                ImGui::SetNextItemWidth(field);
+                ImGui::InputDouble(tr(label), &v, 0.0, 0.0, "%g");
+            };
+            input(T::GuideStart, guide_input_.start);
+            input(T::GuideStepPerMm, guide_input_.step);
+            input(T::GuideHeight, guide_input_.measured);
+            if (const std::optional<GuideOutcome> r = guide_result(g.id, guide_input_); r && guide_input_.measured > 0.0) {
+                char value[32], proposed[32];
+                std::snprintf(value, sizeof value, "%.2f", r->value);
+                std::snprintf(proposed, sizeof proposed, "%.2f", r->proposed);
+                ImGui::TextColored(rgb(theme_.accent_hover), tr(T::GuideRead), value, proposed);
+                std::optional<SettingChange> change;
+                try {
+                    const auto& docs = setting_docs();
+                    const auto doc = docs.find(g.result_key);
+                    change = plan_setting(settings_, {g.result_key, SettingOp::Set, proposed, {}},
+                                          doc == docs.end() ? SettingRange{} : parse_range(doc->second.range));
+                } catch (const std::exception&) {
+                }
+                if (change && ImGui::Button(tr(T::HelpApply))) {
+                    help_change_ = change;
+                    help_change_open_ = true;
+                    help_change_guide_ = g.id;
+                }
+            }
+        }
+    }
+    if (!g.tips.empty()) {
+        ImGui::SeparatorText(tr(T::GuideTips));
+        for (const std::string& t : g.tips)
+            ImGui::BulletText("%s", t.c_str());
+    }
+    if (!g.open.empty())
+        for (std::size_t i = 0; i < k.procedures.size(); ++i)
+            if (k.procedures[i].id == g.open &&
+                ImGui::SmallButton((std::string(tr(T::HelpOpen)) + " " + k.procedures[i].name).c_str())) {
+                help_page_ = HelpPage::Procedure, help_item_ = i, help_tab_ = 1, help_select_ = true;
+                help_steps_done_.assign(k.procedures[i].steps.size(), false);
+            }
+    // Rule 21: at its foot, what it is based on.
+    if (!g.sources.empty()) {
+        ImGui::Spacing();
+        ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+        ImGui::TextDisabled("%s", tr(T::BasedOn));
+        ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        for (const KnowledgeSource& src : g.sources) {
+            const std::string label = src.author.empty() ? src.title : src.title + " (" + src.author + ")";
+            ImGui::Bullet();
+            if (!src.url.empty())
+                ImGui::TextLinkOpenURL(label.c_str(), src.url.c_str());
+            else
+                ImGui::TextDisabled("%s", label.c_str());
+        }
+        ImGui::PopStyleColor();
+        ImGui::PopFont();
     }
 }
 
@@ -4476,7 +4719,7 @@ const KnowledgeMaterial* App::current_material() const {
 // this printer lacks for it.
 void App::material_card() {
     const KnowledgeMaterial* m = current_material();
-    if (!m)
+    if (!m || !assistant_material_)
         return;
     const auto range = [](const KnowledgeRange& r, const char* unit) {
         if (!r.known)
@@ -4551,7 +4794,7 @@ void App::fire(std::string_view event) {
 }
 
 void App::offer_tutorials(std::string_view when) {
-    if (!knowledge_)
+    if (!knowledge_ || !assistant_tutorials_)
         return;
     for (const std::size_t i : tutorials_to_offer(*knowledge_, when, guide_memory_))
         if (std::find(guide_offers_.begin(), guide_offers_.end(), i) == guide_offers_.end())
@@ -4731,16 +4974,23 @@ void App::help_apply_dialog() {
                     settings_ = before;
                     settings_changed();
                 });
+                // A guide's result dates its test, as the calibration page does (rule 22).
+                if (!help_change_guide_.empty()) {
+                    const std::string_view test = test_for_guide(help_change_guide_);
+                    record_calibration(test.empty() ? help_change_guide_ : std::string(test));
+                }
             } catch (const std::exception& e) {
                 notify(e.what(), true);
             }
             help_change_.reset();
+            help_change_guide_.clear();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
     }
     if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         help_change_.reset();
+        help_change_guide_.clear();
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
@@ -6104,7 +6354,31 @@ void App::status_bar() {
         if (!result_->warnings.empty()) {
             ImGui::SameLine(0, 16.0f * scale_);
             ImGui::TextColored(rgb(0xE8A33D), "%s", format(tr(T::Warnings), int(result_->warnings.size())).c_str());
-            if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+            // A click lists them with a link to the help's problem of each (assistant.md, rule 9).
+            if (ImGui::IsItemClicked())
+                ImGui::OpenPopup("##review");
+            if (ImGui::BeginPopup("##review")) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
+                for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i) {
+                    const Warning& w = result_->warnings[i];
+                    ImGui::PushID(int(i));
+                    ImGui::BulletText("%s", w.message.c_str());
+                    const std::string_view problem = review_problem(w.kind);
+                    if (!problem.empty() && knowledge_)
+                        for (std::size_t p = 0; p < knowledge_->problems.size(); ++p)
+                            if (knowledge_->problems[p].id == problem) {
+                                ImGui::SameLine();
+                                if (ImGui::SmallButton(tr(T::ReviewFix))) {
+                                    help_open_ = true, help_query_.clear(), help_back_.clear();
+                                    help_tab_ = 0, help_select_ = true, help_page_ = HelpPage::Problem, help_item_ = p;
+                                    ImGui::CloseCurrentPopup();
+                                }
+                            }
+                    ImGui::PopID();
+                }
+                ImGui::PopTextWrapPos();
+                ImGui::EndPopup();
+            } else if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
                 for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i)
                     ImGui::BulletText("%s", result_->warnings[i].message.c_str());
@@ -6118,7 +6392,7 @@ void App::status_bar() {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }
     // The chosen material's warnings (assistant.md, rule 14).
-    if (const KnowledgeMaterial* m = current_material()) {
+    if (const KnowledgeMaterial* m = assistant_material_ ? current_material() : nullptr) {
         const MaterialInfo info = material_info(*m);
         const std::vector<MaterialWarning> warnings = material_warnings(info, settings_);
         if (!warnings.empty()) {
@@ -7990,6 +8264,10 @@ void App::calibration_panel() {
         const bool active = calibration_ && calibration_kind_ == card.kind;
         if (card_head(card.title, card.what, active, tr(T::Create), !slice_job_.running()))
             create_calibration(card.kind, false);
+        // Its guide, when the pack has one (assistant.md, rule 20).
+        if (const std::string_view guide = guide_for_test(calibration_kind_name(card.kind));
+            !guide.empty() && knowledge_ && find_guide(*knowledge_, guide) && ImGui::SmallButton(tr(T::GuideHow)))
+            open_guide(guide);
 
         if (active) {
             const CalibrationPrint& c = *calibration_;

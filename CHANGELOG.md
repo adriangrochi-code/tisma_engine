@@ -10,6 +10,22 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Guías de calibración en la ayuda** (ficha `assistant.md`): la pestaña Calibraciones con las guías del paquete en
+  orden, del filamento y de la impresora; cada guía dice para qué sirve, cuándo repetirla, qué prueba conviene hacer
+  antes, sus pasos, cómo leer la impresión, el resultado y sus fuentes («Basado en»). La de Flujo máximo calcula el
+  valor con lo medido y ofrece aplicarlo. «Cómo se hace» abre la guía desde la página de calibraciones y desde la
+  sección Calibración de la impresora.
+- **«¿Cómo lo arreglo?» en los avisos del laminado**: un clic en los avisos los lista con un enlace al problema de la
+  ayuda que les corresponde.
+- **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
+  la ficha y los avisos del material.
+
+### Cambiado
+
+- Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
+
 ## [0.10.0-alpha.2] - 2026-10-27
 
 ### Agregado
