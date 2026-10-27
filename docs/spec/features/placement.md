@@ -41,7 +41,8 @@ origen y, sin moverla, queda fuera de la cama.
    - el motor sale con un código distinto de 0, como en los demás errores de entrada (`slicing.md`). Tisma Slicer sale
      con 0 en este caso; eso no se copia;
    - sin `machine.bed` no se centra ni se comprueba nada en X e Y: los objetos quedan donde vienen y solo se aplica la
-     regla 3 (diseño).
+     regla 3 (diseño). Tisma Slicer no tiene ese caso: siempre hay una cama (200 × 200 mm si no se da otra), así que
+     con el centro dado a mano mueve el objeto igual (PL15).
 5. **Varios archivos en una misma placa:** en Tisma Slicer, la línea de comandos se cierra con una falla de memoria
    al juntarlos (PL13). No se copia: el motor los ordena como en la regla 2.
 
@@ -67,3 +68,4 @@ externo queda a 0,22 mm hacia adentro.
 | PL12 | Barra de 190 × 20 × 10 mm | — | Entra: X de 5 a 195 |
 | PL13 | El cubo de PL1 y un cubo de 20 mm, en una misma placa | — | Tisma Slicer se cierra con una falla de memoria (código 139). No se copia |
 | PL14 | Cubo de 20 mm, dos copias | `placement.center` (100, 100) dado a mano | X de 64 a 110: una copia de 90 a 110 y la otra de 64 a 84. Sin darlo, de 77 a 123 (PL7) |
+| PL15 | Cubo de 20 mm en X e Y de 10 a 30, sin cama en los ajustes | — / `placement.arrange` «no» / `placement.center` (50, 50) | X e Y de 90 a 110 (centro de la cama de 200 × 200 que Tisma Slicer usa por defecto) / de 10 a 30 / de 40 a 60. Con el centro en (300, 300): fuera del volumen |
