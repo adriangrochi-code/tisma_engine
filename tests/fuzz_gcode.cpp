@@ -452,7 +452,8 @@ int main(int argc, char** argv) {
         // gentle cone, without what does not go with them.
         if (pick(12) == 0) {
             s.curved_mode =
-                std::array{CurvedMode::Wave, CurvedMode::Conical, CurvedMode::Surface, CurvedMode::Overhangs}[std::size_t(pick(4))];
+                std::array{CurvedMode::Wave, CurvedMode::Conical, CurvedMode::Surface, CurvedMode::Overhangs,
+                           CurvedMode::Automatic}[std::size_t(pick(5))];
             s.curved_pattern = std::array{CurvedPattern::Egg, CurvedPattern::Ridges, CurvedPattern::Twisted}[std::size_t(pick(3))];
             s.curved_angle = uni(0, 90);
             s.curved_fit_head = s.curved_mode != CurvedMode::Conical || pick(2) == 0;
