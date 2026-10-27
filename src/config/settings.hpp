@@ -219,6 +219,7 @@ struct Settings {
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
     double travel_z_speed = 0.0;    // moves in Z (speed.travel)
+    Speed first_layer_over_raft;    // cap of the part's first layer on a raft, or a share of each speed (speed.first_layer)
     // Walls by how much of their bead rests on the layer below
     // (speeds_accels.md, rules 6 and 7): at overhang_speeds[k] with 0, 25, 50
     // and 75 %, their own with 100 %, in a straight line in between. Each in
@@ -240,6 +241,7 @@ struct Settings {
     double accel_top_solid_infill = 0.0; // (accel_solid_infill)
     double accel_bridges = 0.0;          // bridges and overhang perimeters (accel_default)
     double accel_first_layer = 0.0;      // everything on the first layer (each kind's)
+    double accel_first_layer_over_raft = 0.0; // the part's first layer on a raft (each kind's)
     double accel_travel = 0.0;           // travels (none)
     double accel_short_travel = 0.0;     // travels shorter than retraction.min_travel (accel_travel)
 
@@ -254,6 +256,13 @@ struct Settings {
     double skirt_distance = 6.0; // mm from the part (or its brim; supports_skirt.md)
     int skirt_layers = 1;
     double brim_width = 0.0; // mm; 0: no brim
+    // The raft (skirt_brim_raft.md, rules 9 to 14): raft_layers of support
+    // under the whole part, which goes up by them and raft_gap; 0: none.
+    int raft_layers = 0;
+    double raft_gap = 0.1;                    // mm between the raft's top and the part
+    double raft_expansion = 1.5;              // mm round the part's first layer
+    double raft_first_layer_density = 90.0;   // % of the raft's first layer
+    double raft_first_layer_expansion = 3.0;  // mm more for the raft's first layer
 
     // support (docs/spec/BEHAVIOR.md, "Soportes")
     bool support = false;

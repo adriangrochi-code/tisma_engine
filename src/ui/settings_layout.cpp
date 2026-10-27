@@ -69,7 +69,8 @@ const std::vector<SectionLayout>& print_layout() {
           {"wavy", T::SubWavy,
            {{"infill.nonplanar", N}, {"infill.nonplanar_amplitude", N}, {"infill.nonplanar_wavelength", N}}}}},
         {"speed", T::SecSpeed, "section_speed.svg",
-         {{"first_layer", T::SubFirstLayerSpeed, {{"speed.first_layer", N}, {"speed.first_layer_infill", A}}},
+         {{"first_layer", T::SubFirstLayerSpeed,
+           {{"speed.first_layer", N}, {"speed.first_layer_infill", A}, {"speed.first_layer_over_raft", A}}},
           {"walls_surfaces", T::SubWallSpeed,
            {{"speed.walls", N},
             {"speed.outer_wall", N},
@@ -94,9 +95,12 @@ const std::vector<SectionLayout>& print_layout() {
             {"acceleration.infill", A},
             {"acceleration.solid_infill", A},
             {"acceleration.top_solid_infill", A},
-            {"acceleration.bridges", A},
-            {"acceleration.first_layer", A}}},
-          {"accel_travel", T::SubAccelTravel, {{"acceleration.travel", A}, {"acceleration.short_travel", A}}}}},
+            {"acceleration.bridges", A}}},
+          {"accel_travel", T::SubAccelTravel,
+           {{"acceleration.first_layer", A},
+            {"acceleration.first_layer_over_raft", A},
+            {"acceleration.travel", A},
+            {"acceleration.short_travel", A}}}}},
         {"support", T::SecSupport, "section_support.svg",
          {{"support", T::SubSupport,
            {{"support.enabled", B}, {"support.automatic", B}, {"support.style", N}, {"support.threshold_angle", N}}},
@@ -116,7 +120,13 @@ const std::vector<SectionLayout>& print_layout() {
            {{"arcs.enabled", N}, {"arcs.overlap", A}, {"arcs.speed", A}, {"arcs.max_distance", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",
          {{"skirt", T::SubSkirt, {{"adhesion.skirt_loops", B}, {"adhesion.skirt_distance", B}, {"adhesion.skirt_layers", N}}},
-          {"brim", T::SubBrim, {{"adhesion.brim_width", B}}}}},
+          {"brim", T::SubBrim, {{"adhesion.brim_width", B}}},
+          {"raft", T::SubRaft,
+           {{"adhesion.raft_layers", N},
+            {"adhesion.raft_gap", A},
+            {"adhesion.raft_expansion", A},
+            {"adhesion.raft_first_layer_density", A},
+            {"adhesion.raft_first_layer_expansion", A}}}}},
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
@@ -404,6 +414,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.arcs ? format(T::SumArcs, number(s.arcs_speed, 0).c_str()) : tr(T::SumNoArcs);
     if (id == "skirt")
         return s.skirt_loops > 0 ? format(T::SumSkirt, s.skirt_loops, number(s.skirt_distance).c_str()) : tr(T::SumNoSkirt);
+    if (id == "raft")
+        return s.raft_layers > 0 ? format(T::SumRaft, s.raft_layers) : tr(T::SumOff);
     if (id == "brim")
         return s.brim_width > 0.0 ? format(T::SumMm, number(s.brim_width).c_str()) : tr(T::SumNoBrim);
     if (id == "special_modes")

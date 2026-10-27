@@ -230,6 +230,7 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `dynamic_overhangs` | booleano | `false` | Las paredes más lentas cuanto menos de su cordón se apoya en la capa de abajo (`speeds_accels.md`, reglas 6 y 7): la parte apoyada sale de cuánto queda el centro del cordón adentro o afuera de la capa de abajo, contra su ancho; a 0, 25, 50 y 75 % van a `overhang_0` a `overhang_3`, apoyadas del todo a la suya, y en línea recta entre esos puntos, nunca más rápido que la suya. Los tramos en el aire (`Overhang perimeter`) van a `overhang_0`. No en el modo vaso |
 | `overhang_0`, `overhang_1`, `overhang_2`, `overhang_3` | número o texto | 15, 15, 20, 25 | mm/s, o un porcentaje de `outer_wall` como `"50%"`; los de la ficha, no de la impresora |
 | `flow_slope_up`, `flow_slope_down` | número | 0 | Ecualizador del caudal (`speeds_accels.md`, reglas 8 y 9), en mm³/s²: cuánto puede subir o bajar por segundo el caudal (sección del cordón por su velocidad) de una extrusión a la siguiente. Donde baja, el final de la primera se parte en pedazos cada vez más lentos hasta el caudal de la siguiente; donde sube, el comienzo de la segunda, cada vez más rápidos, salvo después de una retracción. Hasta 16 pedazos; si el camino es más corto que la rampa, la rampa se aprieta. 0: libre (de 0 a 1000) |
+| `first_layer_over_raft` | número o texto | — (sin valor: `first_layer`) | Tope de todas las extrusiones de la primera capa de la pieza sobre la balsa, en mm/s o un porcentaje de cada velocidad como `"50%"` (`skirt_brim_raft.md`, regla 12); la capa siguiente vuelve a las suyas |
 | `travel_z` | número | — (sin valor: `travel`) | Movimientos en Z: cambios de capa, saltos de `retraction.lift` y las subidas del Z anti-aliasing (`speeds_accels.md`, regla 4) |
 
 ### `acceleration`
@@ -240,7 +241,7 @@ su tipo y, al terminar el tipo, se vuelve a `default`; antes de cada viaje, la d
 cuando cambia. Con `default` en 0 no se usan las de los tipos: solo se fija la de los viajes y las extrusiones siguen
 con ella. Todas en 0 (lo de siempre): nada más que la `machine.acceleration` del comienzo. El tiempo estimado sigue
 cada cambio. Todavía no hay topes por los límites de la máquina (se escriben en el G-code con `gcode_firmware.md`,
-que falta), ni las de la balsa y la torre de purga.
+que falta), ni la de la torre de purga.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
@@ -251,7 +252,8 @@ que falta), ni las de la balsa y la torre de purga.
 | `solid_infill` | número | 0 | 0 a 100 000 | Relleno sólido; 0: `infill` |
 | `top_solid_infill` | número | 0 | 0 a 100 000 | Superficie de arriba; 0: `solid_infill` |
 | `bridges` | número | 0 | 0 a 100 000 | Puentes y perímetros en voladizo; 0: `default` |
-| `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa; 0: la de cada tipo |
+| `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa (con balsa, la de la balsa); 0: la de cada tipo |
+| `first_layer_over_raft` | número | 0 | 0 a 100 000 | La primera capa de la pieza sobre la balsa; 0: la de cada tipo |
 | `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |
 | `short_travel` | número | 0 | 0 a 100 000 | Viajes más cortos que `retraction.min_travel`; 0: `travel` |
 
@@ -289,7 +291,12 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 | `skirt_loops` | entero | 1 | 0–1000 | Vueltas de falda; 0 no hace falda |
 | `skirt_distance` | número | 6 | ≥ 0 | Distancia en mm entre la pieza (o su borde) y la primera vuelta de falda (ficha `supports_skirt.md`) |
 | `skirt_layers` | entero | 1 | 0–1000 | En cuántas capas se repite la falda |
-| `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde |
+| `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde. Con balsa, ninguno |
+| `raft_layers` | entero | 0 | 0 a 100 | Capas de la balsa (ficha `skirt_brim_raft.md`, reglas 9 a 14): soporte debajo de toda la pieza, que sube esas capas y `raft_gap`. La primera capa de la balsa tiene la altura de `layers.first_height`; las demás, tres cuartos de `machine.nozzle_diameter` (0,3 mm con boquilla de 0,4). De arriba hacia abajo: `support.interface_layers` de interfaz densa a 135° y 45° alternados (como mucho todas menos la primera; con una sola capa, esa es de interfaz), y la base a `support.spacing`, a `support.line_angle` la de más arriba y girada 90° en capas alternas. La pieza empieza con una capa de `layers.height`, sin la compensación de pata de elefante; la falda rodea la primera capa de la balsa. 0: sin balsa |
+| `raft_gap` | número | 0,1 | 0 a 100 | Separación en Z entre la balsa y la pieza, en mm |
+| `raft_expansion` | número | 1,5 | 0 a 100 | Cuánto se agranda la balsa alrededor de la primera capa de la pieza, en mm (el valor exacto, sin ajustarse a la grilla de las líneas) |
+| `raft_first_layer_density` | número | 90 | 5 a 100 | Densidad de las líneas de la primera capa de la balsa, en % |
+| `raft_first_layer_expansion` | número | 3 | 0 a 100 | Cuánto más se agranda la primera capa de la balsa, en mm |
 
 ### `support`
 

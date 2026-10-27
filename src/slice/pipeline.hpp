@@ -53,6 +53,9 @@ struct SlicedModel {
     std::vector<LayerGroup> groups;
     std::vector<ThickLayer> thick; // one per layer, empty but at a group's top
     std::size_t zaa_points = 0;    // points Z anti-aliasing moved off their layer's top (docs/ZAA.md)
+    // The raft's layers (skirt_brim_raft.md, rule 10): the first ones, before
+    // the part's; their regions are the raft's, their fills its support.
+    std::size_t raft_layers = 0;
 };
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by

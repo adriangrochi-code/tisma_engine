@@ -681,6 +681,10 @@ const char* row_key(T label) {
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
+        {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
+        {T::RaftExpansion, "adhesion.raft_expansion"}, {T::RaftFirstDensity, "adhesion.raft_first_layer_density"},
+        {T::RaftFirstExpansion, "adhesion.raft_first_layer_expansion"}, {T::SpeedOverRaft, "speed.first_layer_over_raft"},
+        {T::AccelOverRaft, "acceleration.first_layer_over_raft"},
         {T::IroningEnabled, "ironing.enabled"}, {T::IroningSurfacesRow, "ironing.surfaces"},
         {T::IroningFlow, "ironing.flow"}, {T::IroningSpacing, "ironing.spacing"}, {T::IroningSpeed, "ironing.speed"}, {T::ScaleXRow, "compensation.scale_x"},
         {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
@@ -2933,6 +2937,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "first_layer") {
         mm(T::SpeedFirstLayer, "speed.first_layer", s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         share_row(T::SpeedFirstLayerInfill, "speed.first_layer_infill", s.first_layer_infill_speed);
+        share_row(T::SpeedOverRaft, "speed.first_layer_over_raft", s.first_layer_over_raft);
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
@@ -2977,8 +2982,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
             accel(T::AccelSolid, "acceleration.solid_infill", s.accel_solid_infill);
             accel(T::AccelTop, "acceleration.top_solid_infill", s.accel_top_solid_infill);
             accel(T::AccelBridges, "acceleration.bridges", s.accel_bridges);
-            accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
         } else {
+            accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
+            accel(T::AccelOverRaft, "acceleration.first_layer_over_raft", s.accel_first_layer_over_raft);
             accel(T::AccelTravel, "acceleration.travel", s.accel_travel);
             accel(T::AccelShortTravel, "acceleration.short_travel", s.accel_short_travel);
         }
@@ -3027,6 +3033,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::SkirtLayers, "adhesion.skirt_layers", s.skirt_layers, 1, 100);
     } else if (id == "brim") {
         mm(T::BrimWidth, "adhesion.brim_width", s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
+    } else if (id == "raft") {
+        whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
+        mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        mm(T::RaftExpansion, "adhesion.raft_expansion", s.raft_expansion, 0.0, 100.0, "%.1f mm", 0.05f);
+        mm(T::RaftFirstDensity, "adhesion.raft_first_layer_density", s.raft_first_layer_density, 5.0, 100.0, "%.0f %%",
+           0.5f);
+        mm(T::RaftFirstExpansion, "adhesion.raft_first_layer_expansion", s.raft_first_layer_expansion, 0.0, 100.0,
+           "%.1f mm", 0.05f);
     }
     // Print: Others.
     else if (id == "special_modes") {

@@ -852,6 +852,15 @@
     X(SumBySupport, "Según el apoyo", "By support") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
+    X(SubRaft, "Balsa", "Raft") \
+    X(RaftLayers, "Capas de la balsa", "Raft layers") \
+    X(RaftGap, "Separación con la pieza", "Gap to the part") \
+    X(RaftExpansion, "Cuánto se agranda", "Expansion") \
+    X(RaftFirstDensity, "Densidad de la primera capa", "First layer density") \
+    X(RaftFirstExpansion, "Agrandar la primera capa", "First layer expansion") \
+    X(SpeedOverRaft, "Primera capa sobre la balsa", "First layer over the raft") \
+    X(AccelOverRaft, "Primera capa sobre la balsa", "First layer over the raft") \
+    X(SumRaft, "%d capas", "%d layers") \
     X(SubIroning, "Planchado", "Ironing") \
     X(IroningEnabled, "Planchar", "Iron") \
     X(IroningSurfacesRow, "Qué superficies", "Which surfaces") \
@@ -866,7 +875,7 @@
     X(WallVariable, "Variable", "Variable") \
     X(WallFixed, "Fijo", "Fixed") \
     X(WallGapFill, "Relleno de huecos", "Gap fill") \
-    X(SubAccelTravel, "Aceleración de los viajes", "Travel acceleration") \
+    X(SubAccelTravel, "Aceleración de la primera capa y los viajes", "First layer and travel acceleration") \
     X(AccelDefault, "Por defecto", "Default") \
     X(AccelWalls, "Paredes internas", "Inner walls") \
     X(AccelOuterWall, "Pared externa", "Outer wall") \

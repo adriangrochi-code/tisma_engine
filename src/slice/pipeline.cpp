@@ -53,6 +53,91 @@ void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double 
     }
 }
 
+// The raft (skirt_brim_raft.md, rules 3 and 9 to 14) under a part sliced
+// without it: raft_layers layers of support put before the part's, which go
+// up by their height and raft_gap. The raft follows the part's first layer
+// grown by raft_expansion (the exact value, rule 13), its first layer
+// raft_first_layer_expansion more. Its first layer is as thick as the first
+// layer, the others three quarters of the nozzle (0.3 mm with a 0.4 nozzle,
+// rule 11). From the top: support.interface_layers of dense interface at 135
+// and 45 degrees in turn, at most all but the first (R1, R2; a raft of one
+// layer is interface), then the base, support.spacing apart, at
+// support.line_angle and turned 90 degrees in turn; the first layer at
+// raft_first_layer_density. The skirt goes round the raft's first layer.
+void add_raft(SlicedModel& out, const Settings& settings) {
+    const auto n = std::size_t(settings.raft_layers);
+    if (n == 0 || out.layers.empty())
+        return;
+    Polygons footprint;
+    for (const Polygons& r : out.regions)
+        if (!r.empty()) {
+            footprint = r;
+            break;
+        }
+    if (footprint.empty())
+        return;
+    const auto Union = [](const Polygons& p) { return Clipper2Lib::Union(p, Clipper2Lib::FillRule::NonZero); };
+    const Polygons area = Union(offset(footprint, settings.raft_expansion));
+    const Polygons first_area = Union(offset(area, settings.raft_first_layer_expansion));
+    const std::size_t interfaces =
+        n == 1 ? 1 : std::min(n - 1, std::size_t(std::max(settings.support_interface_layers, 0)));
+    const double width = settings.support_width.value <= 0.0 ? settings.wall_width
+                         : settings.support_width.percent   ? settings.support_width.value / 100.0 * settings.layer_height
+                                                            : settings.support_width.value;
+    std::vector<Layer> layers;
+    std::vector<LayerFill> fills(n);
+    std::vector<Polygons> regions(n);
+    double z = out.layers.front().bottom;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double h = k == 0 ? settings.first_layer_height : 0.75 * settings.nozzle_diameter;
+        layers.push_back({z, z + h});
+        z += h;
+        regions[k] = k == 0 ? first_area : area;
+        const double bead = loop_spacing(width, h);
+        if (k + interfaces >= n) { // interface, the top one at 135
+            const double angle = (n - 1 - k) % 2 == 0 ? 135.0 : 45.0;
+            fills[k].support_interface = rectilinear_fill(regions[k], bead, angle, width, true);
+        } else { // base, the top one at support.line_angle
+            const double angle = settings.support_line_angle + ((n - interfaces - 1 - k) % 2 == 1 ? 90.0 : 0.0);
+            const double spacing =
+                k == 0 ? bead / (settings.raft_first_layer_density / 100.0) : settings.support_spacing + bead;
+            fills[k].support = rectilinear_fill(regions[k], spacing, angle, width, true);
+        }
+    }
+    // The part goes up.
+    const double shift = z + settings.raft_gap - out.layers.front().bottom;
+    for (Layer& l : out.layers)
+        l.bottom += shift, l.top += shift;
+    // Every per-layer list gets the raft's layers in front.
+    const std::size_t count = out.layers.size();
+    const auto prepend = [&](auto& list, auto&& value) {
+        if (list.size() == count)
+            list.insert(list.begin(), n, value);
+    };
+    prepend(out.walls, LayerWalls{});
+    prepend(out.surfaces, LayerSurfaces{});
+    prepend(out.support_areas, Polygons{});
+    prepend(out.hanging, Polygons{});
+    prepend(out.on_support, Polygons{});
+    prepend(out.support_gap, 0.0);
+    prepend(out.air_bridges, Polygons{});
+    prepend(out.seam_enforce, Polygons{});
+    prepend(out.seam_block, Polygons{});
+    prepend(out.open_by_layer, std::size_t(0));
+    prepend(out.thin_area, 0.0);
+    prepend(out.thick, ThickLayer{});
+    out.regions.insert(out.regions.begin(), regions.begin(), regions.end());
+    out.fills.insert(out.fills.begin(), std::make_move_iterator(fills.begin()), std::make_move_iterator(fills.end()));
+    out.layers.insert(out.layers.begin(), layers.begin(), layers.end());
+    for (LayerGroup& g : out.groups)
+        g.first += n, g.last += n;
+    out.raft_layers = n;
+    // No brim on a raft (rule 9); the skirt round its first layer (rule 3).
+    out.brim.clear();
+    out.skirt = skirt_loops(first_area, 0.0, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
+                            settings.skirt_distance, settings.wall_width, settings.first_layer_height);
+}
+
 // The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
 // are wide, their section pi/4 of the width squared, the height past the
 // layer's in each path's gap. The ones resting on the support get its gap after.
@@ -103,6 +188,19 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
         return slice_model(input, vase, gpu, stress, painting);
+    }
+    // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
+    // the bed, its first layer as thick as the others, without the first
+    // layer's shrink or a brim, and the raft put under it.
+    if (settings.raft_layers > 0) {
+        Settings part = settings;
+        part.raft_layers = 0;
+        part.first_layer_height = settings.layer_height;
+        part.first_layer_shrink = 0.0;
+        part.brim_width = 0.0;
+        SlicedModel raft = slice_model(input, part, gpu, stress, painting);
+        add_raft(raft, settings);
+        return raft;
     }
     IndexedMesh mesh = compensated(input, settings);
     // The painted pieces before any triangle is turned: a tree follows the

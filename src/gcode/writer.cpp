@@ -1304,11 +1304,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     const double accel_solid = or_else(s.accel_solid_infill, accel_infill);
     const double accel_top = or_else(s.accel_top_solid_infill, accel_solid);
     const double accel_bridges = or_else(s.accel_bridges, s.accel_default);
-    const auto acceleration_of = [&](const char* type, bool first) {
+    const auto acceleration_of = [&](const char* type, bool first, bool over_raft) {
         if (!(s.accel_default > 0.0))
             return 0.0;
         if (first && s.accel_first_layer > 0.0)
             return s.accel_first_layer;
+        if (over_raft && s.accel_first_layer_over_raft > 0.0)
+            return s.accel_first_layer_over_raft;
         const auto is = [&](const char* name) { return std::strcmp(type, name) == 0; };
         return is("External perimeter")                             ? accel_outer
                : is("Perimeter")                                    ? accel_walls
@@ -1444,8 +1446,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         seams.next_layer();
         const RegionPlan& plan = plans[plan_of[l]];
         const bool first = l == 0;
+        // The part's first layer on a raft: no faster than
+        // speed.first_layer_over_raft, or that share of each speed
+        // (skirt_brim_raft.md, rule 12); unset, speed.first_layer.
+        const bool over_raft = model.raft_layers > 0 && l == model.raft_layers;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
+            if (over_raft)
+                v = std::min(v, s.first_layer_over_raft.value > 0.0 ? s.first_layer_over_raft.of(v) : s.first_layer_speed);
             return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
         // The fills' feeds; the first layer's solid infill at its own speed,
@@ -1963,7 +1971,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract);
             g.type(step.type);
-            g.print_acceleration(acceleration_of(step.type, l == 0));
+            g.print_acceleration(acceleration_of(step.type, l == 0, model.raft_layers > 0 && l == model.raft_layers));
             g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)
                 g.extrude(t.points[i - 1], t.points[i], step.feed);

@@ -16,6 +16,7 @@
 #include <charconv>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <numbers>
 #include <random>
 #include <regex>
@@ -1078,4 +1079,140 @@ TEST_CASE("ironing: every top surface, the topmost only, or every solid layer (i
     m = roofed;
     CHECK(ironed(IroningSurfaces::Topmost) == std::set<std::string>{"10.000"});
     CHECK(ironed(IroningSurfaces::Top) == std::set<std::string>{"4.000", "10.000"});
+}
+
+namespace {
+
+// The layers of a G-code by their ;Z, with the ;HEIGHT of their first move and
+// the kinds of moves in them.
+struct RaftLayer {
+    std::string height;
+    std::map<std::string, double> length; // by type
+    std::set<long> angles;                // of the support's lines, degrees mod 180
+    double reach = 0.0;                   // farthest support point past the 20 mm cube (0..20)
+};
+std::map<std::string, RaftLayer> raft_layers(const std::string& gcode) {
+    std::map<std::string, RaftLayer> out;
+    for (const Extrusion& x : extrusions(gcode)) {
+        RaftLayer& l = out[x.z];
+        if (l.height.empty())
+            l.height = x.height;
+        l.length[x.type] += x.length();
+        if (x.type.rfind("Support material", 0) == 0 && x.length() > 5.0) {
+            l.angles.insert(std::lround(std::atan2(x.y1 - x.y0, x.x1 - x.x0) * 180.0 / std::numbers::pi + 360.0) % 180);
+            for (const double v : {x.x0, x.x1, x.y0, x.y1})
+                l.reach = std::max({l.reach, -v, v - 20.0});
+        }
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("raft: support under the part, which goes up by it and the gap (skirt_brim_raft.md, rules 9 to 14)",
+          "[gcode][raft]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.wall_count = 2;
+    s.raft_layers = 3;
+    const auto gcode = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        return out.str();
+    };
+    // R1: the base at Z 0.2 (0.2 thick), at 0 degrees; the interface at 0.5
+    // and 0.8 (0.3 thick), at 45 and 135; the part from Z 1.1, 0.2 thick.
+    std::map<std::string, RaftLayer> layers = raft_layers(gcode(s));
+    REQUIRE(layers.count("0.200"));
+    CHECK(layers["0.200"].height == "0.200");
+    CHECK(layers["0.200"].length.count("Support material"));
+    CHECK(layers["0.200"].angles == std::set<long>{0});
+    CHECK(layers["0.500"].height == "0.300");
+    CHECK(layers["0.500"].angles == std::set<long>{45});
+    CHECK(layers["0.800"].angles == std::set<long>{135});
+    CHECK(layers["0.800"].length.count("Support material interface"));
+    CHECK_FALSE(layers.count("1.000"));
+    REQUIRE(layers.count("1.100"));
+    CHECK(layers["1.100"].height == "0.200");
+    CHECK(layers["1.100"].length.count("External perimeter"));
+    CHECK(layers.size() == 53);
+    // R5: the base 4.5 mm past the part (the exact expansions, rule 13), the
+    // interface 1.5; half a bead in from each.
+    CHECK_THAT(layers["0.200"].reach, Catch::Matchers::WithinAbs(4.5 - 0.2, 0.25));
+    CHECK_THAT(layers["0.800"].reach, Catch::Matchers::WithinAbs(1.5 - 0.2, 0.25));
+    // R6: the first layer's lines by its density.
+    Settings sparse = s;
+    sparse.raft_first_layer_density = 50.0;
+    const double ratio = raft_layers(gcode(sparse))["0.200"].length["Support material"] /
+                         layers["0.200"].length["Support material"];
+    CHECK_THAT(ratio, Catch::Matchers::WithinAbs(50.0 / 90.0, 0.03));
+    // The gap: 0 and 0.2.
+    s.raft_gap = 0.0;
+    CHECK(raft_layers(gcode(s)).count("1.000"));
+    s.raft_gap = 0.2;
+    CHECK(raft_layers(gcode(s)).count("1.200"));
+    s.raft_gap = 0.1;
+    // R2: 5 layers, two of base (90 and 0) and three of interface (135, 45,
+    // 135), the part from 1.7; one layer, of interface, the part from 0.5.
+    s.raft_layers = 5;
+    layers = raft_layers(gcode(s));
+    CHECK(layers["0.200"].angles == std::set<long>{90});
+    CHECK(layers["0.500"].angles == std::set<long>{0});
+    CHECK(layers["0.800"].angles == std::set<long>{135});
+    CHECK(layers["1.100"].angles == std::set<long>{45});
+    CHECK(layers["1.400"].angles == std::set<long>{135});
+    CHECK(layers["1.700"].length.count("External perimeter"));
+    s.raft_layers = 1;
+    layers = raft_layers(gcode(s));
+    CHECK(layers["0.200"].length.count("Support material interface"));
+    CHECK_FALSE(layers["0.200"].length.count("Support material"));
+    CHECK(layers["0.500"].length.count("External perimeter"));
+    // R3: layers of 0.1: the raft at 0.1, 0.4 and 0.7, the part at 0.9.
+    s.raft_layers = 3;
+    s.layer_height = s.first_layer_height = 0.1;
+    layers = raft_layers(gcode(s));
+    CHECK(layers.count("0.100"));
+    CHECK(layers.count("0.400"));
+    CHECK(layers.count("0.700"));
+    CHECK(layers["0.900"].length.count("External perimeter"));
+    CHECK(layers["0.900"].height == "0.100");
+}
+
+TEST_CASE("raft: the part's first layer at speed.first_layer_over_raft, no brim, the skirt round the raft (R7 to R9)",
+          "[gcode][raft]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.raft_layers = 3;
+    s.first_layer_over_raft = {15.0, false};
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    std::set<double> first, next;
+    for (const Extrusion& x : extrusions(out.str())) {
+        if (x.z == "1.100")
+            first.insert(x.feed / 60.0);
+        else if (x.z == "1.300" && x.type == "Perimeter")
+            next.insert(x.feed / 60.0);
+    }
+    CHECK(first == std::set<double>{15.0});
+    CHECK(next == std::set<double>{60.0});
+    // R8: with a brim asked, none on a raft.
+    s.brim_width = 5.0;
+    // R9: the skirt 6 mm round the raft's base (4.5 mm past the part).
+    s.skirt_loops = 1;
+    s.skirt_distance = 6.0;
+    std::ostringstream with;
+    write_gcode(with, slice_model(m, s), s);
+    double skirt_reach = 0.0;
+    for (const Extrusion& x : extrusions(with.str())) {
+        if (x.type == "Skirt/Brim") {
+            CHECK(x.z == "0.200"); // on the raft's first layer only: no brim on the part
+            for (const double v : {x.x0, x.x1, x.y0, x.y1})
+                skirt_reach = std::max({skirt_reach, -v, v - 20.0});
+        }
+    }
+    CHECK_THAT(skirt_reach, Catch::Matchers::WithinAbs(4.5 + 6.0, 0.3));
 }

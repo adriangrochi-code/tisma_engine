@@ -149,6 +149,14 @@ int main(int argc, char** argv) {
             s.scarf_inner = pick(3) == 0;
         }
         s.detect_overhangs = pick(4) != 0;
+        if (pick(5) == 0) { // a raft
+            s.raft_layers = 1 + pick(5);
+            s.raft_gap = pick(3) == 0 ? 0.0 : uni(0.05, 0.3);
+            s.raft_expansion = uni(0, 4);
+            s.raft_first_layer_density = uni(30, 100);
+            s.raft_first_layer_expansion = uni(0, 5);
+            s.first_layer_over_raft = pick(2) == 0 ? Speed{} : Speed{uni(10, 60), false};
+        }
         if (pick(4) == 0) { // ironing
             s.ironing = true;
             s.ironing_surfaces = std::array{IroningSurfaces::Top, IroningSurfaces::Topmost,

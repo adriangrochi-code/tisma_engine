@@ -59,12 +59,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Planchado** (ficha `ironing.md`; grupo `ironing`, en Calidad › Planchado): la boquilla vuelve a pasar sobre las
   superficies de arriba con muy poco material en líneas muy juntas, para alisarlas; todas, solo la más alta o todas
   las capas sólidas.
+- **Balsa** (ficha `skirt_brim_raft.md`; `adhesion.raft_layers` y sus ajustes, en Adhesión › Balsa): capas de
+  soporte debajo de toda la pieza, base e interfaz, que la levantan de la cama; la primera capa de la pieza con su
+  propio tope de velocidad y aceleración.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.
 
 ### Corregido
 
+- El verificador del G-code no contaba los cordones finos del planchado al calcular el avance de un flujo forzado.
 - Las etiquetas de las velocidades en voladizos tenían un «%» que la prueba de textos leía como formato.
 - El verificador del G-code rechazaba un G-code válido cuando una velocidad nueva (puentes, relleno de huecos, sobre
   los puentes, relleno de la primera capa) era más rápida que todas las demás.

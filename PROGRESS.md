@@ -5200,3 +5200,28 @@ techo: `top`, `topmost` y `solid` planchan lo que deben. Benchy y cráneo con pl
 tramos de planchado). Fuzzer con planchado: 800 corridas, 0 fallas (antes del redondeo del ancho, 2 fallas).
 
 **Sigue:** balsa (`skirt_brim_raft.md`).
+
+## 2026-10-27 — Punto 2: balsa
+
+**Hecho** (ficha `skirt_brim_raft.md`, reglas 3 y 9 a 14): `adhesion.raft_layers`, `raft_gap` (0,1), `raft_expansion`
+(1,5), `raft_first_layer_density` (90 %), `raft_first_layer_expansion` (3), `speed.first_layer_over_raft` y
+`acceleration.first_layer_over_raft`. La pieza se lamina como si estuviera en la cama (su primera capa con la altura
+normal, sin pata de elefante ni borde) y debajo se ponen las capas de la balsa como capas del modelo: la primera con
+la altura de la primera capa, las demás de 3/4 de la boquilla; arriba la interfaz densa a 135° y 45° alternados (como
+mucho todas menos la primera, como miden R1 y R2; con una sola capa, esa), abajo la base a `support.spacing`, a
+`support.line_angle` la de arriba y girada 90° en las alternas, la primera a su densidad. La balsa sigue la primera
+capa de la pieza agrandada (el valor exacto, sin la grilla de Tisma Slicer), su primera capa más. La pieza sube la
+balsa y la separación; su primera capa no pasa del tope sobre la balsa (o de la primera capa). La falda rodea la
+primera capa de la balsa; sin borde. En el panel, Adhesión › Balsa y las filas en Velocidad.
+
+**Corregido:** el verificador del G-code tomaba como cordón más angosto un cuarto de la pared al calcular el avance
+de un flujo forzado (torre de flujo); con planchado hay cordones mucho más finos. Lo encontró el fuzzer (commit aparte).
+
+**Medido:** R1 (base a 0° en Z 0,2 de 0,2; interfaz a 45° y 135° en 0,5 y 0,8 de 0,3; la pieza desde 1,1 con alto
+0,2; 53 capas; con separación 0 y 0,2, desde 1,0 y 1,2), R2 (5 capas: base a 90° y 0°, interfaz 135°, 45°, 135°, la
+pieza desde 1,7; 1 capa: interfaz, la pieza desde 0,5), R3 (capas de 0,1: balsa en 0,1, 0,4 y 0,7, la pieza en 0,9),
+R5 con los valores exactos (4,5 y 1,5 mm), R6 (largo por la densidad: 0,56 de 50 contra 90), R7 (15 mm/s en la
+primera capa de la pieza, 60 en la siguiente), R8 y R9 (falda a 6 mm de la base). Benchy y cráneo con 3 capas de
+balsa: G-code verificado. Fuzzer con balsa: 800 corridas, 0 fallas (después del arreglo del verificador).
+
+**Sigue:** cambio de color y pausas, y los extras del G-code (`gcode_extras.md`).

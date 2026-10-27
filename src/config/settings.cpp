@@ -73,6 +73,7 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
         {"top_solid_infill", &s.accel_top_solid_infill},
         {"bridges", &s.accel_bridges},
         {"first_layer", &s.accel_first_layer},
+        {"first_layer_over_raft", &s.accel_first_layer_over_raft},
         {"travel", &s.accel_travel},
         {"short_travel", &s.accel_short_travel},
     };
@@ -82,8 +83,10 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
     throw std::logic_error("no acceleration " + std::string(name));
 }
 
-constexpr const char* kAccelerationNames[] = {"default", "walls",       "outer_wall",  "infill", "solid_infill",
-                                              "top_solid_infill", "bridges", "first_layer", "travel", "short_travel"};
+constexpr const char* kAccelerationNames[] = {"default",          "walls",       "outer_wall",
+                                              "infill",           "solid_infill", "top_solid_infill",
+                                              "bridges",          "first_layer",  "first_layer_over_raft",
+                                              "travel",           "short_travel"};
 
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
@@ -607,7 +610,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "speed",
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
-                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down"},
+                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -627,6 +630,7 @@ Settings parse_checked(std::string_view text) {
                    Speed* const share = n == "outer_wall"           ? &s.outer_wall_speed
                                         : n == "over_bridges"       ? &s.over_bridges_speed
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
+                                        : n == "first_layer_over_raft" ? &s.first_layer_over_raft
                                         : n.rfind("overhang_", 0) == 0
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
@@ -674,7 +678,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "acceleration",
                {"default", "walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "bridges", "first_layer",
-                "travel", "short_travel"},
+                "first_layer_over_raft", "travel", "short_travel"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
                    if (!(v >= 0.0 && v <= 100000.0))
@@ -704,7 +708,9 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0 to 10 mm");
                    (n == "length" ? s.retract_length : n == "lift" ? s.retract_lift : s.retract_min_travel) = d;
                });
-    read_group(root, "adhesion", {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width"},
+    read_group(root, "adhesion",
+               {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width", "raft_layers", "raft_gap", "raft_expansion",
+                "raft_first_layer_density", "raft_first_layer_expansion"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "skirt_loops" || n == "skirt_layers") {
                        const json& v = g.at(n);
@@ -713,10 +719,27 @@ Settings parse_checked(std::string_view text) {
                        (n == "skirt_loops" ? s.skirt_loops : s.skirt_layers) = static_cast<int>(v.get<long long>());
                        return;
                    }
+                   if (n == "raft_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 100)
+                           fail(k, "must be a whole number from 0 to 100");
+                       s.raft_layers = static_cast<int>(v.get<long long>());
+                       return;
+                   }
                    const double d = number(g, n, k);
-                   if (d < 0.0)
-                       fail(k, "must not be negative");
-                   (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
+                   if (n == "raft_first_layer_density") {
+                       if (!(d >= 5.0 && d <= 100.0))
+                           fail(k, "must be from 5 to 100 %");
+                       s.raft_first_layer_density = d;
+                       return;
+                   }
+                   if (d < 0.0 || (n.starts_with("raft_") && d > 100.0))
+                       fail(k, n.starts_with("raft_") ? "must be from 0 to 100 mm" : "must not be negative");
+                   (n == "skirt_distance"           ? s.skirt_distance
+                    : n == "brim_width"             ? s.brim_width
+                    : n == "raft_gap"               ? s.raft_gap
+                    : n == "raft_expansion"         ? s.raft_expansion
+                                                    : s.raft_first_layer_expansion) = d;
                });
     read_group(root, "support",
                {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
@@ -1238,6 +1261,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.over_bridges", share(s.over_bridges_speed)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
+        {"speed.first_layer_over_raft", share(s.first_layer_over_raft)},
         {"speed.dynamic_overhangs", flag(s.dynamic_overhangs)},
         {"speed.overhang_0", share(s.overhang_speeds[0])},
         {"speed.overhang_1", share(s.overhang_speeds[1])},
@@ -1253,6 +1277,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"acceleration.top_solid_infill", num(s.accel_top_solid_infill)},
         {"acceleration.bridges", num(s.accel_bridges)},
         {"acceleration.first_layer", num(s.accel_first_layer)},
+        {"acceleration.first_layer_over_raft", num(s.accel_first_layer_over_raft)},
         {"acceleration.travel", num(s.accel_travel)},
         {"acceleration.short_travel", num(s.accel_short_travel)},
         {"retraction.length", num(s.retract_length)},
@@ -1263,6 +1288,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.skirt_distance", num(s.skirt_distance)},
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
         {"adhesion.brim_width", num(s.brim_width)},
+        {"adhesion.raft_layers", std::to_string(s.raft_layers)},
+        {"adhesion.raft_gap", num(s.raft_gap)},
+        {"adhesion.raft_expansion", num(s.raft_expansion)},
+        {"adhesion.raft_first_layer_density", num(s.raft_first_layer_density)},
+        {"adhesion.raft_first_layer_expansion", num(s.raft_first_layer_expansion)},
         {"support.enabled", flag(s.support)},
         {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
@@ -1459,6 +1489,7 @@ std::string settings_json(const Settings& s) {
           {"over_bridges", share(s.over_bridges_speed)},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
           {"travel_z", speed(s.travel_z_speed)},
+          {"first_layer_over_raft", share(s.first_layer_over_raft)},
           {"dynamic_overhangs", s.dynamic_overhangs},
           {"overhang_0", share(s.overhang_speeds[0])},
           {"overhang_1", share(s.overhang_speeds[1])},
@@ -1476,7 +1507,12 @@ std::string settings_json(const Settings& s) {
          {{"skirt_loops", s.skirt_loops},
           {"skirt_distance", s.skirt_distance},
           {"skirt_layers", s.skirt_layers},
-          {"brim_width", s.brim_width}}},
+          {"brim_width", s.brim_width},
+          {"raft_layers", s.raft_layers},
+          {"raft_gap", s.raft_gap},
+          {"raft_expansion", s.raft_expansion},
+          {"raft_first_layer_density", s.raft_first_layer_density},
+          {"raft_first_layer_expansion", s.raft_first_layer_expansion}}},
         {"support",
          {{"enabled", s.support},
           {"automatic", s.support_automatic},

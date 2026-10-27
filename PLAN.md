@@ -742,7 +742,8 @@ Con el PR #23 (2026-10-26):
   - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
     2026-10-27). Falta el relleno concéntrico de ancho fijo (regla 1, último punto);
   - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
-  - [ ] balsa (`skirt_brim_raft.md`);
+  - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27). Del resto de la ficha faltan el
+    largo mínimo de falda (B1), el escudo contra corrientes (B3), los tipos de borde y su separación (B4); B2 ya;
   - [ ] cambio de color y pausas, y los extras del G-code (`gcode_extras.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
