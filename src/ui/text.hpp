@@ -492,6 +492,18 @@
     X(ByTool, "Extrusor", "Tool") \
     X(ByColorPrint, "Color por capa", "Color print") \
     X(ToolN, "Extrusor %d", "Tool %d") \
+    X(AddAtLayer, "Agregar en esta capa un cambio de color (clic derecho: más)", "Add a colour change at this layer (right click: more)") \
+    X(AddColorChange, "Cambio de color", "Colour change") \
+    X(AddPause, "Pausa…", "Pause…") \
+    X(AddCustomGcode, "G-code propio…", "Custom G-code…") \
+    X(PauseMessage, "Mensaje que muestra la impresora", "Message the printer shows") \
+    X(CustomGcodeText, "G-code al empezar la capa", "G-code at the layer's start") \
+    X(ChangeAtLayer, "Capa %d", "Layer %d") \
+    X(RemoveChange, "Quitar", "Remove") \
+    X(ColorChangeAt, "Cambio de color en la capa %d", "Colour change at layer %d") \
+    X(PauseAt, "Pausa en la capa %d", "Pause at layer %d") \
+    X(GcodeAt, "G-code propio en la capa %d", "Custom G-code at layer %d") \
+    X(MoveN, "Movimiento %d de %d", "Move %d of %d") \
     X(IconTravels, "Viajes: los movimientos sin extruir", "Travels: the moves that do not extrude") \
     X(IconWipes, "Barridos: la boquilla que barre al terminar un lazo", "Wipes: the nozzle wiping at a loop's end") \
     X(IconRetracts, "Retracciones: donde se retrae el filamento", "Retractions: where the filament is pulled back") \

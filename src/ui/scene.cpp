@@ -455,16 +455,22 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
 }
 
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
-                                           std::uint32_t kind_mask) {
+                                           std::uint32_t kind_mask, std::size_t top_shown, std::size_t top_hidden) {
     if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
         return {};
     const std::size_t layers = order.layer_shown.size() - 1;
     lo = std::min(lo, layers - 1);
     hi = std::clamp(hi, lo, layers - 1);
+    const bool cut = top_shown != kWholeLayer || top_hidden != kWholeLayer;
     const std::uint32_t kinds_drawn = kind_mask | order.hidden_kinds | (1u << unsigned(LineKind::Travel));
-    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu;
-    return {PreviewRange{order.layer_shown[lo], order.layer_shown[hi + 1] - order.layer_shown[lo]},
-            PreviewRange{order.layer_hidden[lo], whole ? 0 : order.layer_hidden[hi + 1] - order.layer_hidden[lo]}};
+    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu && !cut;
+    const std::size_t shown_end = std::min(order.layer_shown[hi + 1],
+                                           top_shown == kWholeLayer ? order.layer_shown[hi + 1] : order.layer_shown[hi] + top_shown);
+    const std::size_t hidden_end =
+        std::min(order.layer_hidden[hi + 1],
+                 top_hidden == kWholeLayer ? order.layer_hidden[hi + 1] : order.layer_hidden[hi] + top_hidden);
+    return {PreviewRange{order.layer_shown[lo], shown_end - order.layer_shown[lo]},
+            PreviewRange{order.layer_hidden[lo], whole ? 0 : hidden_end - order.layer_hidden[lo]}};
 }
 
 std::uint32_t kind_colour(LineKind kind) {

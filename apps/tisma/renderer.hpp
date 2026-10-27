@@ -36,6 +36,8 @@ struct ViewFrame {
     bool show_preview = false;
     bool show_travels = false;
     std::size_t first_layer = 0, last_layer = 0; // the preview's layers drawn, inclusive
+    // The top layer's extrusions drawn up to the move slider (shown, hidden).
+    std::size_t top_shown = std::size_t(-1), top_hidden = std::size_t(-1);
     std::uint32_t kind_mask = 0xFFFFFFFFu;        // bit k: LineKind k is drawn
     ColorMode color_mode = ColorMode::Kind;
     std::array<Vec3, kLineKinds> kind_colours{};

@@ -306,6 +306,9 @@ constexpr ViewInfo kViewInfo[kPreviewViews] = {
 constexpr std::uint32_t kMarkColours[kMarkKinds] = {0xFF5A36, 0x3FBF7F, 0xF0F0F0, 0xFFD23F, 0xE04FD0, 0x9B6BFF, 0x4FA3FF};
 constexpr std::uint32_t kWipeColour = 0x7FE0C0;
 
+// What the layer slider's «+» adds at a layer (preview.md, rule 12).
+enum class ChangeKind { Color, Pause, Gcode };
+
 enum class Purpose {
     Open,
     AddModel,
@@ -379,6 +382,7 @@ private:
     void show_preview();
     void upload_preview();
     void preview_overlay(const GcodePreview& preview);
+    void add_change_at(int layer, ChangeKind kind, std::string text = {});
     void part_labels();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
@@ -568,6 +572,16 @@ private:
     int top_layer_ = 0; // 0-based
     int bottom_layer_ = 0;
     bool only_layer_ = false;
+    // The layer slider: which handle is dragged; a pause's message or a
+    // G-code being written for a layer, and the change whose menu is open.
+    bool dragging_bottom_ = false;
+    // The move slider (preview.md, rule 4): the top layer's moves drawn, for
+    // that layer (it starts whole on another one).
+    int move_cut_ = -1, move_cut_layer_ = -1;
+    bool change_dialog_ = false;
+    int change_layer_ = 0, change_edit_ = -1;
+    ChangeKind change_kind_ = ChangeKind::Color;
+    std::string change_text_;
     bool show_travels_ = true;
     // The preview's icon row (preview.md, rule 11): wipes, the marks by kind,
     // the centre of gravity and the nozzle (travels: show_travels_).
@@ -6076,8 +6090,10 @@ void App::preview_overlay(const GcodePreview& p) {
             dl->AddLine(ImVec2(a.x, a.y - r * 1.5f), ImVec2(a.x, a.y + r * 1.5f), ink, 1.5f * scale_);
         }
     }
-    if (show_nozzle_ && hi < p.layers.size() && p.layers[hi].extrusion_count > 0) {
-        const PreviewMove& m = p.moves[p.extrusions[p.layers[hi].first_extrusion + p.layers[hi].extrusion_count - 1]];
+    if (show_nozzle_ && hi < p.layers.size() && p.layers[hi].count > 0) {
+        // At the end of the last move drawn (the move slider's).
+        const std::size_t cut = move_cut_layer_ == int(hi) && move_cut_ > 0 ? std::size_t(move_cut_) : p.layers[hi].count;
+        const PreviewMove& m = p.moves[p.layers[hi].first + std::min(cut, p.layers[hi].count) - 1];
         if (project(m.x1, m.y1, m.z1, a)) {
             // The nozzle standing on the point, and where it is when the mouse is on it.
             const float s = 16.0f * scale_;
@@ -6092,6 +6108,32 @@ void App::preview_overlay(const GcodePreview& p) {
         }
     }
     dl->PopClipRect();
+}
+
+// A colour change, a pause (with its message) or G-code at the start of a
+// layer (preview.md, rule 12): a change by height (gcode_templates.md, rule
+// 13) halfway between that layer's top and the one below it, so it starts
+// that layer; the G-code changes when sliced again.
+void App::add_change_at(int layer, ChangeKind kind, std::string text) {
+    if (!result_ || layer < 0 || std::size_t(layer) >= result_->preview.layers.size())
+        return;
+    const auto& layers = result_->preview.layers;
+    const double top = layers[std::size_t(layer)].z;
+    const double below = layer > 0 ? layers[std::size_t(layer) - 1].z : 0.0;
+    HeightChange change;
+    change.z = 0.5 * (top + below);
+    change.color_change = kind == ChangeKind::Color;
+    change.pause = kind == ChangeKind::Pause;
+    if (kind == ChangeKind::Pause && !text.empty())
+        change.gcode = "M117 " + text; // the message the printer shows
+    else if (kind == ChangeKind::Gcode)
+        change.gcode = std::move(text);
+    settings_.changes.push_back(std::move(change));
+    std::stable_sort(settings_.changes.begin(), settings_.changes.end(),
+                     [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
+    settings_changed();
+    notify(format(tr(kind == ChangeKind::Color ? T::ColorChangeAt : kind == ChangeKind::Pause ? T::PauseAt : T::GcodeAt),
+                  layer + 1));
 }
 
 // Each part's name over it (E, preview.md, rule 10).
@@ -6146,12 +6188,15 @@ void App::preview_panels() {
             top_layer_ = layers - 1;
     }
 
-    // The layer slider, on the right.
+    // The layer slider, on the right (rules 4, 9 and 12): the top and the
+    // bottom layer drawn, each with its height and number; a «+» by the top
+    // one adds a colour change there (a right click: a pause or G-code); the
+    // changes by height are marks on it.
     const float margin = 14.0f * scale_;
     const float slider_top = 64.0f * scale_;
     const ImGuiStyle& style = ImGui::GetStyle();
-    const float slider_h = view_size_.y - slider_top - margin - 2.0f * ImGui::GetTextLineHeightWithSpacing() -
-                           2.0f * style.WindowPadding.y - style.ItemSpacing.y;
+    const float line_h = ImGui::GetTextLineHeightWithSpacing();
+    const float slider_h = std::max(view_size_.y - slider_top - margin - 4.0f * line_h - 2.0f * style.WindowPadding.y, 80.0f * scale_);
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin, view_pos_.y + slider_top), ImGuiCond_Always,
                             ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.85f);
@@ -6160,28 +6205,152 @@ void App::preview_panels() {
     ImGui::Begin("##layers", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    const std::string top_text = std::to_string(top_layer_ + 1);
-    const float slider_w = 30.0f * scale_;
-    const float text_w = ImGui::CalcTextSize("00000").x;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - ImGui::CalcTextSize(top_text.c_str()).x) * 0.5f);
-    ImGui::TextUnformatted(top_text.c_str());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - slider_w) * 0.5f);
-    int shown = top_layer_ + 1;
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 18.0f * scale_);
-    if (ImGui::VSliderInt("##top_layer", ImVec2(slider_w, std::max(slider_h, 80.0f * scale_)), &shown, 1, layers, ""))
-        top_layer_ = shown - 1;
-    ImGui::PopStyleVar();
-    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
-        top_layer_ = std::clamp(top_layer_ + int(ImGui::GetIO().MouseWheel), 0, layers - 1);
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - ImGui::CalcTextSize("1").x) * 0.5f);
-    ImGui::TextDisabled("1");
+    const auto layer_text = [&](int l) {
+        return format("%.2f (%d)", p.layers[std::size_t(l)].z, l + 1);
+    };
+    const float text_w = ImGui::CalcTextSize(layer_text(layers - 1).c_str()).x + ImGui::GetFrameHeight();
+    {
+        const std::string top_text = layer_text(top_layer_);
+        ImGui::TextUnformatted(top_text.c_str());
+        // The «+» (rule 12).
+        ImGui::SameLine(text_w - ImGui::GetFrameHeight() + style.ItemSpacing.x);
+        if (!viewer_ && !result_->resin) {
+            if (ImGui::SmallButton("+"))
+                add_change_at(top_layer_, ChangeKind::Color);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tr(T::AddAtLayer));
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                ImGui::OpenPopup("##add_change");
+            if (ImGui::BeginPopup("##add_change")) {
+                if (ImGui::MenuItem(tr(T::AddColorChange)))
+                    add_change_at(top_layer_, ChangeKind::Color);
+                if (ImGui::MenuItem(tr(T::AddPause)))
+                    change_layer_ = top_layer_, change_kind_ = ChangeKind::Pause, change_text_.clear(), change_dialog_ = true;
+                if (ImGui::MenuItem(tr(T::AddCustomGcode)))
+                    change_layer_ = top_layer_, change_kind_ = ChangeKind::Gcode, change_text_.clear(), change_dialog_ = true;
+                ImGui::EndPopup();
+            }
+        } else {
+            ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), 1));
+        }
+    }
+    const int shown_lo = only_layer_ ? top_layer_ : bottom_layer_;
+    {
+        // The track and its two handles.
+        const float track_w = text_w;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##layer_track", ImVec2(track_w, slider_h));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float cx = at.x + track_w * 0.5f, grab = 9.0f * scale_;
+        const float y0 = at.y + grab, y1 = at.y + slider_h - grab;
+        const auto y_of = [&](int l) { return layers > 1 ? y1 - (y1 - y0) * float(l) / float(layers - 1) : y1; };
+        const auto layer_at = [&](float y) {
+            return layers > 1 ? std::clamp(int(std::lround((y1 - y) / (y1 - y0) * float(layers - 1))), 0, layers - 1) : 0;
+        };
+        if (ImGui::IsItemActivated()) {
+            const float my = ImGui::GetIO().MousePos.y;
+            dragging_bottom_ = !only_layer_ && std::abs(my - y_of(bottom_layer_)) < std::abs(my - y_of(top_layer_));
+        }
+        if (ImGui::IsItemActive()) {
+            const int l = layer_at(ImGui::GetIO().MousePos.y);
+            if (dragging_bottom_)
+                bottom_layer_ = std::min(l, top_layer_);
+            else
+                top_layer_ = std::max(l, only_layer_ ? 0 : bottom_layer_);
+        }
+        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+            top_layer_ = std::clamp(top_layer_ + int(ImGui::GetIO().MouseWheel), bottom_layer_, layers - 1);
+        const ImU32 track = ImGui::GetColorU32(rgb(theme_.frame)), fill = ImGui::GetColorU32(rgb(theme_.accent, 0.8f));
+        dl->AddRectFilled(ImVec2(cx - 3.0f * scale_, y0), ImVec2(cx + 3.0f * scale_, y1), track, 3.0f * scale_);
+        dl->AddRectFilled(ImVec2(cx - 3.0f * scale_, y_of(top_layer_)), ImVec2(cx + 3.0f * scale_, y_of(shown_lo)), fill,
+                          3.0f * scale_);
+        // The changes by height, as marks: what each is when the mouse is on it,
+        // and a click to remove it.
+        for (std::size_t c = 0; c < settings_.changes.size(); ++c) {
+            const HeightChange& h = settings_.changes[c];
+            if (!h.color_change && !h.pause && h.gcode.empty())
+                continue;
+            int l = 0;
+            while (l + 1 < layers && p.layers[std::size_t(l)].z < h.z)
+                ++l;
+            const float y = y_of(l);
+            const std::uint32_t colour = h.color_change ? kMarkColours[std::size_t(MarkKind::ColorChange)]
+                                         : h.pause      ? kMarkColours[std::size_t(MarkKind::Pause)]
+                                                        : kMarkColours[std::size_t(MarkKind::Custom)];
+            const ImVec2 m0(cx + 6.0f * scale_, y - 3.0f * scale_), m1(cx + 14.0f * scale_, y + 3.0f * scale_);
+            dl->AddRectFilled(m0, m1, ImGui::GetColorU32(rgb(colour)), 2.0f * scale_);
+            if (ImGui::IsMouseHoveringRect(m0, m1)) {
+                ImGui::SetTooltip("%s", (h.color_change ? format(tr(T::ColorChangeAt), l + 1)
+                                         : h.pause      ? format(tr(T::PauseAt), l + 1) + (h.gcode.empty() ? "" : "\n" + h.gcode)
+                                                        : format(tr(T::GcodeAt), l + 1) + "\n" + h.gcode)
+                                            .c_str());
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    change_edit_ = int(c), ImGui::OpenPopup("##edit_change");
+            }
+        }
+        if (ImGui::BeginPopup("##edit_change")) {
+            if (change_edit_ >= 0 && std::size_t(change_edit_) < settings_.changes.size()) {
+                HeightChange& h = settings_.changes[std::size_t(change_edit_)];
+                if (h.pause || !h.gcode.empty()) {
+                    ImGui::SetNextItemWidth(260.0f * scale_);
+                    if (ImGui::InputTextMultiline("##change_text", &h.gcode, ImVec2(260.0f * scale_, 3.0f * line_h)))
+                        settings_changed();
+                }
+                if (ImGui::Button(tr(T::RemoveChange))) {
+                    settings_.changes.erase(settings_.changes.begin() + change_edit_);
+                    change_edit_ = -1;
+                    settings_changed();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
+        for (const int l : {shown_lo, top_layer_}) {
+            const float y = y_of(l);
+            dl->AddCircleFilled(ImVec2(cx, y), grab, ImGui::GetColorU32(rgb(theme_.accent_hover)));
+            dl->AddCircle(ImVec2(cx, y), grab, ImGui::GetColorU32(rgb(0xFFFFFF)), 20, 1.5f * scale_);
+        }
+    }
+    ImGui::TextDisabled("%s", layer_text(shown_lo).c_str());
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
     if (only_layer_)
         bottom_layer_ = top_layer_;
-    else
-        bottom_layer_ = 0;
+    // The move slider (rule 4), at the bottom: the last move drawn in the
+    // top layer, with its number; left and right step it.
+    {
+        const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
+        if (move_cut_layer_ != top_layer_)
+            move_cut_ = int(top.count), move_cut_layer_ = top_layer_;
+        move_cut_ = std::clamp(move_cut_, 1, std::max(int(top.count), 1));
+        if (top.count > 1) {
+            const float w = std::min(420.0f * scale_, view_size_.x * 0.3f);
+            // Right of the legend, left of the layer slider.
+            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin - 150.0f * scale_,
+                                           view_pos_.y + view_size_.y - margin),
+                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+            ImGui::SetNextWindowBgAlpha(0.85f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+            ImGui::Begin("##moves", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+            ImGui::SetNextItemWidth(w);
+            ImGui::SliderInt("##move_cut", &move_cut_, 1, int(top.count), "");
+            ImGui::SameLine();
+            ImGui::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+            if (!ImGui::GetIO().WantTextInput) {
+                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+                    move_cut_ = std::max(move_cut_ - 1, 1);
+                if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+                    move_cut_ = std::min(move_cut_ + 1, int(top.count));
+            }
+        }
+    }
     preview_overlay(p);
     if (!show_legend_)
         return;
@@ -6966,6 +7135,31 @@ void App::dialogs() {
 
     catalog_dialog();
     choose_settings_dialog();
+    // A pause's message, or the G-code for a layer (preview.md, rule 12).
+    if (change_dialog_) {
+        ImGui::OpenPopup("###layer_change");
+        change_dialog_ = false;
+    }
+    if (ImGui::BeginPopupModal(
+            (std::string(tr(change_kind_ == ChangeKind::Pause ? T::AddPause : T::AddCustomGcode)) + "###layer_change").c_str(),
+            nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(tr(T::ChangeAtLayer), change_layer_ + 1);
+        ImGui::TextDisabled("%s", tr(change_kind_ == ChangeKind::Pause ? T::PauseMessage : T::CustomGcodeText));
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        if (change_kind_ == ChangeKind::Pause)
+            ImGui::InputText("##change_text", &change_text_);
+        else
+            ImGui::InputTextMultiline("##change_text", &change_text_, ImVec2(360.0f * scale_, 6.0f * ImGui::GetTextLineHeight()));
+        if (ImGui::Button(tr(T::Accept), ImVec2(120.0f * scale_, 0))) {
+            add_change_at(change_layer_, change_kind_, change_text_);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (about_open_) {
         ImGui::OpenPopup("###about");
@@ -7152,6 +7346,26 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);
+    // The move slider: the top layer's extrusions among its first moves, and
+    // which of them the part hides (they are drawn apart).
+    if (preview && tab_ == Tab::Preview && result_ && move_cut_layer_ == top_layer_ && move_cut_ > 0 &&
+        std::size_t(top_layer_) < result_->preview.layers.size()) {
+        const GcodePreview& p = result_->preview;
+        const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
+        if (std::size_t(move_cut_) < top.count) {
+            std::size_t extrusions = 0;
+            for (std::size_t i = top.first; i < top.first + std::size_t(move_cut_); ++i)
+                extrusions += p.moves[i].kind != LineKind::Travel;
+            std::size_t hidden = 0;
+            if (std::size_t(top_layer_) < preview_buffers_.layer_extrusions.size())
+                for (std::size_t j = 0; j < extrusions; ++j) {
+                    const std::size_t e = preview_buffers_.layer_extrusions[std::size_t(top_layer_)] + j;
+                    hidden += e < preview_buffers_.hidden.size() && preview_buffers_.hidden[e];
+                }
+            f.top_shown = extrusions - hidden;
+            f.top_hidden = hidden;
+        }
+    }
     f.last_layer = std::size_t(top_layer_);
     if (calibration_preview) {
         f.first_layer = 0;

@@ -840,3 +840,21 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
     REQUIRE(unheld.ok);
     CHECK_THAT(held_over_free(unheld), Catch::Matchers::WithinAbs(1.0, 0.15));
 }
+
+TEST_CASE("ui: the move slider draws the top layer up to a move (preview.md, rule 4)", "[ui]") {
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 10, 25};
+    order.layer_hidden = {25, 27, 30};
+    // Layers 0 and 1, the top one cut after 4 shown and 1 hidden extrusions.
+    const auto cut = preview_ranges(order, 0, 1, 0xFFFFFFFFu, 4, 1);
+    CHECK(cut[0].first == 0);
+    CHECK(cut[0].count == 14);
+    CHECK(cut[1].first == 25);
+    CHECK(cut[1].count == 3); // the hidden ones too: not all of the part is drawn
+    // Whole: the hidden ones stay out.
+    const auto whole = preview_ranges(order, 0, 1, 0xFFFFFFFFu);
+    CHECK(whole[0].count == 25);
+    CHECK(whole[1].count == 0);
+    // A cut past the layer's end draws it all.
+    CHECK(preview_ranges(order, 0, 1, 0xFFFFFFFFu, 100, 100)[0].count == 25);
+}

@@ -315,3 +315,44 @@ TEST_CASE("the preview marks as many retractions as the engine's G-code makes (P
     const auto marked = std::count_if(p.marks.begin(), p.marks.end(), [](const PreviewMark& m) { return m.kind == MarkKind::Retract; });
     CHECK(marked == retractions);
 }
+
+TEST_CASE("a change added at a layer starts that layer (preview.md, PV8 and PV9)", "[gcode][preview]") {
+    // The cube of 10 mm, 50 layers; a colour change at layer 25 and a pause
+    // with its message at layer 30, each halfway below its layer's top, as
+    // the layer slider's «+» puts them.
+    IndexedMesh cube;
+    for (const float z : {0.0f, 10.0f})
+        for (const auto& [x, y] : {std::pair{0.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}})
+            cube.vertices.push_back({x + 95.0f, y + 95.0f, z});
+    const auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+        cube.triangles.push_back({a, b, c});
+        cube.triangles.push_back({a, c, d});
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    for (std::uint32_t i = 0; i < 4; ++i)
+        quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    Settings s = test_printer();
+    s.gpu = GpuMode::Off;
+    HeightChange colour;
+    colour.z = 0.5 * (4.8 + 5.0);
+    colour.color_change = true;
+    HeightChange pause;
+    pause.z = 0.5 * (5.8 + 6.0);
+    pause.pause = true;
+    pause.gcode = "M117 Insertar tuerca";
+    s.changes = {colour, pause};
+    std::ostringstream g;
+    write_gcode(g, slice_model(cube, s), s);
+    const GcodePreview p = read_gcode_preview(g.str(), s.filament_diameter);
+    std::uint32_t colour_layer = 0, pause_layer = 0;
+    for (const PreviewMark& m : p.marks) {
+        if (m.kind == MarkKind::ColorChange)
+            colour_layer = m.layer;
+        if (m.kind == MarkKind::Pause)
+            pause_layer = m.layer;
+    }
+    CHECK(colour_layer == 24); // layer 25, from 1
+    CHECK(pause_layer == 29);
+    CHECK(g.str().find("M117 Insertar tuerca") != std::string::npos);
+}

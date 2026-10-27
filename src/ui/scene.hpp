@@ -143,12 +143,16 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
 // What a view draws of it for layers lo to hi with the kinds of kind_mask:
 // the shown range and the hidden one, which is empty when all of the part is
 // drawn (from its first layer to its last, every kind but the hidden ones and
-// the travels shown). Each as (first instance, count).
+// the travels shown). Each as (first instance, count). With the move slider
+// (preview.md, rule 4), only the first top_shown and top_hidden of the top
+// layer's shown and hidden extrusions.
 struct PreviewRange {
     std::size_t first = 0, count = 0;
 };
+inline constexpr std::size_t kWholeLayer = std::size_t(-1);
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
-                                           std::uint32_t kind_mask);
+                                           std::uint32_t kind_mask, std::size_t top_shown = kWholeLayer,
+                                           std::size_t top_hidden = kWholeLayer);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

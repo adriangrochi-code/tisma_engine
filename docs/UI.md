@@ -118,7 +118,16 @@ muestra el motivo que da el motor, en inglés como en la línea de comandos.
 
 Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído de nuevo
 (`src/gcode/preview.hpp`). Cada extrusión se dibuja como un cordón de su ancho y su alto.
-- **Barra de capas:** a la derecha; muestra hasta la capa elegida. «Solo esta capa» deja una sola.
+- **Barra de capas:** a la derecha, con dos manijas para la capa de arriba y la de abajo que se ven, cada una con su
+  altura y su número («6.00 (30)», «0.20 (1)»); la rueda y las flechas arriba y abajo mueven la de arriba. «Solo esta
+  capa» deja una sola. Un **«+»** junto a la capa de arriba agrega un cambio de color al empezar esa capa; con clic
+  derecho, un menú con cambio de color, **Pausa…** (pide el mensaje que muestra la impresora, que va como `M117`) y
+  **G-code propio…**. Cada uno es un cambio por altura (`changes`, a mitad de camino entre esa capa y la de abajo, así
+  empieza esa capa), se guarda con los ajustes y en el proyecto, cambia el G-code al laminar de nuevo y queda como una
+  marca de color en la barra: al pasar el puntero se ve qué es, y con clic se edita su texto o se quita.
+- **Barra de movimientos:** abajo, el último movimiento que se dibuja dentro de la capa de arriba, con su número
+  («Movimiento 41 de 41»); las flechas izquierda y derecha lo mueven. La boquilla se dibuja al final de ese
+  movimiento.
 - **Leyenda:** abajo a la izquierda.
   - **Color por** (ficha `preview.md`, regla 1): tipo de línea, alto de capa, ancho, velocidad, velocidad alcanzada,
     ventilador, temperatura, caudal, caudal alcanzado, tiempo de capa (lineal o logarítmico), extrusor y color por
