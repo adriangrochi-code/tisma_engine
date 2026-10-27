@@ -50,11 +50,12 @@ void add_box(IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, f
 
 std::vector<Warning> review(const IndexedMesh& m, const Settings& s) { return stability_warnings(slice_model(m, s), s); }
 
-std::vector<const Warning*> of_kind(const std::vector<Warning>& all, const std::string& kind) {
-    std::vector<const Warning*> out;
+// Copies: the review given is often a temporary.
+std::vector<Warning> of_kind(const std::vector<Warning>& all, const std::string& kind) {
+    std::vector<Warning> out;
     for (const Warning& w : all)
         if (w.kind == kind)
-            out.push_back(&w);
+            out.push_back(w);
     return out;
 }
 
@@ -73,9 +74,9 @@ TEST_CASE("stability: ST1, a part that starts in the air, critical and first", "
     const std::vector<Warning> all = review(m, plain());
     const auto air = of_kind(all, "stability_air");
     REQUIRE(air.size() == 1);
-    CHECK(air.front()->severity == "critical");
-    CHECK_THAT(air.front()->z, WithinAbs(10.2, 1e-6));
-    CHECK(&all.front() == air.front()); // the most serious first
+    CHECK(air.front().severity == "critical");
+    CHECK_THAT(air.front().z, WithinAbs(10.2, 1e-6));
+    CHECK(all.front().kind == "stability_air"); // the most serious first
     // With supports, the review is not made (print_review.md, rule 6).
     Settings supported = plain();
     supported.support = true;
@@ -87,8 +88,8 @@ TEST_CASE("stability: ST2, a bar leaning at 45 degrees tips off its footing at Z
     add_box(m, 0, 0, 10, 10, 0, 30, 30.0f);
     const auto tipping = of_kind(review(m, plain()), "stability_overturn");
     REQUIRE(tipping.size() == 1);
-    CHECK(tipping.front()->severity == "warning");
-    CHECK_THAT(tipping.front()->z, WithinAbs(10.4, 1e-6));
+    CHECK(tipping.front().severity == "warning");
+    CHECK_THAT(tipping.front().z, WithinAbs(10.4, 1e-6));
 }
 
 TEST_CASE("stability: ST3 to ST5 and ST8, columns that bend under the nozzle", "[stability]") {
@@ -98,15 +99,15 @@ TEST_CASE("stability: ST3 to ST5 and ST8, columns that bend under the nozzle", "
     // ST4: not measured, the flexibility as information: L^3 / 166 400 mm/N at Z 40.
     const auto flexible = of_kind(review(pillar, s), "stability_flexibility");
     REQUIRE(flexible.size() == 1);
-    CHECK(flexible.front()->severity == "information");
-    CHECK_THAT(flexible.front()->z, WithinAbs(40.0, 1e-6));
-    CHECK_THAT(flexible.front()->value, WithinRel(40.0 * 40.0 * 40.0 / 166400.0, 0.01));
+    CHECK(flexible.front().severity == "information");
+    CHECK_THAT(flexible.front().z, WithinAbs(40.0, 1e-6));
+    CHECK_THAT(flexible.front().value, WithinRel(40.0 * 40.0 * 40.0 / 166400.0, 0.01));
     CHECK(of_kind(review(pillar, s), "stability_bending").empty());
     // ST3: with a push of 1 N, 0.1 mm at L = 25.53: a warning from Z 25.6.
     s.review_nozzle_force = 1.0;
     const auto bending = of_kind(review(pillar, s), "stability_bending");
     REQUIRE(bending.size() == 1);
-    CHECK_THAT(bending.front()->z, WithinAbs(25.6, 1e-6));
+    CHECK_THAT(bending.front().z, WithinAbs(25.6, 1e-6));
     // ST5: a 20 mm cube does not bend, nor is listed without the push (R1).
     IndexedMesh cube;
     add_box(cube, 0, 0, 20, 20, 0, 20);
@@ -119,13 +120,13 @@ TEST_CASE("stability: ST3 to ST5 and ST8, columns that bend under the nozzle", "
     add_box(pair, 23, 3, 27, 7, 2, 40);
     const auto pair_bending = of_kind(review(pair, s), "stability_bending");
     REQUIRE(pair_bending.size() == 1);
-    CHECK_THAT(pair_bending.front()->z, WithinAbs(27.6, 1e-6));
+    CHECK_THAT(pair_bending.front().z, WithinAbs(27.6, 1e-6));
     // QA8: a 1 x 1 x 80 mm needle is reported (as information without the push).
     IndexedMesh needle;
     add_box(needle, 0, 0, 1, 1, 0, 80);
     const auto needle_flex = of_kind(review(needle, plain()), "stability_flexibility");
     REQUIRE_FALSE(needle_flex.empty());
-    CHECK(needle_flex.front()->value > 500.0); // mm per newton
+    CHECK(needle_flex.front().value > 500.0); // mm per newton
 }
 
 TEST_CASE("stability: ST7, a thin cylinder peels off the bed from Z 6.4", "[stability]") {
@@ -142,5 +143,5 @@ TEST_CASE("stability: ST7, a thin cylinder peels off the bed from Z 6.4", "[stab
     s.review_bed_adhesion = 1.0;
     const auto peel = of_kind(review(m, s), "stability_peel");
     REQUIRE(peel.size() == 1);
-    CHECK_THAT(peel.front()->z, WithinAbs(6.4, 1e-6));
+    CHECK_THAT(peel.front().z, WithinAbs(6.4, 1e-6));
 }
