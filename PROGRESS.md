@@ -6240,3 +6240,29 @@ táctil y «Girar libre»; PV1 contra Tisma Slicer (falta la pieza en voladizo d
 
 **Sigue:** `credits.md` y `assistant.md` (P1); después P2.
 
+## 2026-10-27 — Interfaz P1: créditos y fuentes (`credits.md`)
+
+**Hecho:**
+- **Un solo archivo de datos** (regla 5): `resources/credits.json` (formato `tisma-credits`) con las 11 fuentes de la
+  ficha y las del motor que ya estaban en `PROVENANCE.md` (Kuipers et al. 2020, ZigZagZ, Song et al. 2017, el «arc
+  overhang», Tricard et al. 2020, Felzenszwalb y Huttenlocher), cada una con las fichas del panel donde se ve; y las
+  bibliotecas que se distribuyen, con su licencia y sus avisos en `resources/licenses/` (los archivos de licencia de
+  cada una, sin cambios). El programa los lleva adentro.
+- **Bajo las fichas** (reglas 1 a 3): «Basado en FFF anti-aliasing (2017), de Song et al.» en gris y chico, el nombre
+  como enlace que abre la fuente; el mismo texto al pasar el puntero por el título. Paredes, Superficies inclinadas,
+  Relleno ondulado, Arcos en voladizos, Soportes de resina, Vaciado y las dos fichas de capas curvas.
+- **Más › Créditos y fuentes** (regla 4): la tabla de funciones (función, fuente con enlace, autor, licencia o tipo) y
+  la de componentes de terceros (versión, licencia y «Ver el aviso» con el texto de la licencia). Acerca de lo nombra.
+- **Idioma** (regla 7): «Basado en», «de», los títulos y las licencias se traducen; las fuentes y autores no.
+
+**Medido:** las pruebas `[credits]` (CR3: cada ficha con «Basado en» y cada fila de la tabla de `credits.md` tienen su
+crédito, y la prueba nombra la ficha que falta; cada biblioteca distribuida de `THIRD_PARTY.md` está con la misma
+licencia, URL y versión y sus avisos existen; CR4 en inglés: «Based on Support Fins, by gittrahan») y `ui_credits`
+(la página en inglés). Capturas de la página y del pie de Superficies inclinadas.
+
+**No hecho:** CR1 en su panel (las aletas de soporte todavía no existen; su crédito ya está en el archivo). Las otras
+fichas con **Fuentes:** (`aerodynamics.md`, `structural_analysis.md`, `orientation.md`, `infill_patterns.md`…) se
+revisan una por una cuando se hagan (regla 2). Algunos DOI no se pudieron confirmar: esos enlaces van a la página que
+ya cita `docs/spec/SOURCES.md` (HAL, arXiv, el PDF de los autores).
+
+**Sigue:** `assistant.md` (P1); después P2.

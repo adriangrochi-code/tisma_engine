@@ -285,6 +285,19 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   pestaña, su sección y su tarjeta, lo traen a la vista y lo resaltan 2 s; si el nivel lo esconde, se ve igual con la
   etiqueta de su nivel hasta cambiar de sección (ficha `settings_panel.md`, regla 5).
 
+### Créditos y fuentes
+
+Ficha `credits.md`. Las fichas del panel cuya función sale de otra fuente (un artículo, un proyecto, una guía) dicen al
+pie, en gris y chico, «Basado en FFF anti-aliasing (2017), de Song et al.»; el nombre es un enlace que abre la fuente,
+y el mismo texto aparece al pasar el puntero por el título de la ficha. **Más > Créditos y fuentes** junta todas las
+funciones (función, fuente, autor, licencia o tipo) y los componentes de terceros que lleva el programa, con su versión,
+su licencia y el texto del aviso que esa licencia pide repartir.
+
+Los datos están en `resources/credits.json` y los avisos en `resources/licenses/`; el programa los lleva adentro. Una
+función nueva que sale de otra fuente suma su entrada allí (con `cards`, las fichas donde se ve) y su línea
+**Basado en:** en la ficha; una biblioteca nueva, su fila en `THIRD_PARTY.md`, su entrada en `libraries` y su archivo
+de licencia. Las pruebas `[credits]` fallan si falta alguna de esas partes.
+
 ### Ayuda
 
 Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
@@ -319,7 +332,7 @@ Varios STL en la línea de comandos arman una placa: el primero la abre y los de
 move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
 `--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). `--level basic|normal|advanced|custom` elige el nivel del
 panel, `--search TEXTO` va al primer ajuste que encuentra, `--single-column` muestra todo junto y `--choose-settings`
-abre «Elegir ajustes…». `--ortho` y `--labels` hacen lo de K y E. `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
+abre «Elegir ajustes…»; `--credits` abre Créditos y fuentes. `--ortho` y `--labels` hacen lo de K y E. `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
 (`machine`, `nozzle`, `limits`, `gcode`, `calibration`, `connection`, `notes`), y `--profile "printer=Marca Modelo 0.4 mm"`
 elige también un modelo del catálogo con esa boquilla, solo para esa vez. Las capturas no muestran la ayuda salvo que se pida:
 `--tips` (los consejos), `--tour PASO` (el asistente, de 0 a 6) y `--info grupo.clave` (la tarjeta de un ajuste).

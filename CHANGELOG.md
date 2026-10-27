@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Créditos y fuentes** (ficha `credits.md`): las fichas cuya función sale de un artículo o un proyecto dicen al pie
+  «Basado en…», con un enlace a la fuente, y **Más > Créditos y fuentes** junta todas las fuentes y los componentes de
+  terceros con su licencia y el texto de su aviso.
+
 - **Resina** (ficha `resin.md`; grupo `resin` y `machine.display_*`, en Material › Resina, Impresora › Máquina ›
   Pantalla de resina y Otros › Resina: capas): `slice` con salida `.goo` lamina para impresoras de resina con pantalla
   y escribe el archivo GOO de Elegoo. Cada capa es una imagen en grises con el área exacta que la sección cubre de

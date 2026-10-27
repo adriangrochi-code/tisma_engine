@@ -704,7 +704,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   en una capa (12, PV8, PV9) y el visor con G-code binario y sin tipos (13, PV10). Falta: la pieza transparente sobre
   las trayectorias (ícono Pieza), el visor en una ventana aparte sin placa ni ajustes, el extrusor del cambio de color
   con varios extrusores, el panel táctil y «Girar libre», y medir PV1 contra Tisma Slicer con la pieza en voladizo
-- [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
+- [x] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente. Hecho (2026-10-27): los créditos en
+  `resources/credits.json`, el pie «Basado en» y su globo en el título de las fichas (reglas 1 a 3, CR1 y CR4), la
+  página Más › Créditos y fuentes con los avisos de las licencias (4, CR2) y la prueba que compara el archivo con las
+  fichas y con `THIRD_PARTY.md` (5, CR3). Las aletas de soporte, la guía de calibración, los perfiles de resina y la
+  conexión con Bambu Lab ya tienen su crédito, que se verá bajo su panel cuando existan
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla
