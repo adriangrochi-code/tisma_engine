@@ -35,10 +35,12 @@ de abajo.
 2. **Con borde:** sin escudo, la falda rodea el borde: `adhesion.skirt_distance` se mide desde la vuelta externa del
    borde (prueba B2).
 3. **Con balsa:** la falda rodea la primera capa de la balsa, a `adhesion.skirt_distance` de ella (prueba R9).
+4. **Varias piezas:** una sola falda rodea todas las piezas juntas, por la envolvente convexa, con las esquinas
+   redondeadas; no pasa entre ellas (prueba B5).
 
 ### Escudo contra corrientes
 
-4. **Qué es:** una falda que sube con la pieza y la protege de las corrientes de aire (ABS, ASA). Con escudo:
+5. **Qué es:** una falda que sube con la pieza y la protege de las corrientes de aire (ABS, ASA). Con escudo:
    - la falda se mide desde la pieza, aunque haya borde;
    - la vuelta del borde que caería donde va la falda se quita, para no imprimir dos cordones en el mismo lugar;
    - `enabled`: la falda sigue en todas las capas, hasta la última de la pieza más alta;
@@ -46,34 +48,37 @@ de abajo.
 
 ### Tipos de borde
 
-5. **`outer`:** vueltas alrededor del contorno de afuera de la pieza, hacia afuera, hasta `adhesion.brim_width`.
-6. **`inner`:** vueltas dentro de cada agujero de la primera capa, desde su borde hacia adentro, hasta
+6. **`outer`:** vueltas alrededor del contorno de afuera de la pieza, hacia afuera, hasta `adhesion.brim_width`.
+7. **`inner`:** vueltas dentro de cada agujero de la primera capa, desde su borde hacia adentro, hasta
    `adhesion.brim_width` o hasta llenar el agujero.
-7. **`outer_and_inner`:** las dos cosas (prueba B4).
-8. **Separación:** con `adhesion.brim_gap`, el borde entero se aparta ese tanto de la pieza; su ancho sigue siendo
+8. **`outer_and_inner`:** las dos cosas (prueba B4).
+9. **Separación:** con `adhesion.brim_gap`, el borde entero se aparta ese tanto de la pieza; su ancho sigue siendo
    `adhesion.brim_width` (prueba B4).
-9. **Con balsa no hay borde:** la balsa ya agranda la primera capa (`adhesion.raft_first_layer_expansion`) (prueba R8).
+10. **Piezas cercanas:** cada pieza tiene su borde; donde dos bordes se pisarían, cada uno llega hasta la mitad del
+    espacio entre las piezas y queda una separación de unos 0,64 mm entre los ejes de sus últimas vueltas
+    (prueba B6).
+11. **Con balsa no hay borde:** la balsa ya agranda la primera capa (`adhesion.raft_first_layer_expansion`) (prueba R8).
 
 ### Balsa
 
-10. **Capas:** con `adhesion.raft_layers` = N, la pieza sube N capas y debajo se imprime la balsa:
+12. **Capas:** con `adhesion.raft_layers` = N, la pieza sube N capas y debajo se imprime la balsa:
     - las de abajo son base de soporte (`;TYPE:Support material`): líneas a `support.spacing` como en el soporte
       (`supports_skirt.md`), la de más arriba a `support.line_angle` y las de debajo giradas 90° en capas alternas;
     - las de arriba, hasta `support.interface_layers` (3 por defecto), son interfaz
       (`;TYPE:Support material interface`): densas, a 45° y 135° en capas alternas, la de más arriba a 135°;
     - si N no pasa de `support.interface_layers`, todas son de interfaz; con N = 1, la única capa es de interfaz y va en
       la primera capa (prueba R2).
-11. **Alturas:** la primera capa de la balsa usa la altura de la primera capa; las demás, la altura del soporte (0,3 mm
+13. **Alturas:** la primera capa de la balsa usa la altura de la primera capa; las demás, la altura del soporte (0,3 mm
     con boquilla de 0,4 en Tisma Slicer), sin importar la altura de las capas de la pieza (prueba R3).
-12. **La pieza sobre la balsa:** su primera capa se imprime a `adhesion.raft_gap` sobre la balsa, con la altura de una
+14. **La pieza sobre la balsa:** su primera capa se imprime a `adhesion.raft_gap` sobre la balsa, con la altura de una
     capa normal. Con `adhesion.raft_gap` 0, va pegada. Sus extrusiones no pasan de `speed.first_layer_over_raft`; la
     capa siguiente vuelve a sus velocidades (pruebas R1 y R7). Es una capa como las demás: lleva relleno sólido solo si
     le toca por las capas sólidas de abajo.
-13. **Forma:** la balsa sigue la huella de la primera capa de la pieza (redonda bajo un cilindro), agrandada
+15. **Forma:** la balsa sigue la huella de la primera capa de la pieza (redonda bajo un cilindro), agrandada
     `adhesion.raft_expansion`. En Tisma Slicer el borde de la balsa se ajusta hacia afuera a la grilla de las líneas de
     la base (`support.spacing` más un cordón: 2,857 mm), así que crece a saltos; el motor puede usar el valor exacto
     (prueba R4).
-14. **Primera capa de la balsa:**
+16. **Primera capa de la balsa:**
     - se agranda además `adhesion.raft_first_layer_expansion` (prueba R5);
     - sus líneas van a `adhesion.raft_first_layer_density`: el largo es proporcional a la densidad (prueba R6).
 
@@ -89,6 +94,8 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra, con los ajustes base de `w
 | B2 | Cubo | `adhesion.brim_width` 5, falda de 1 vuelta a 3 mm, sin escudo | Borde de 14 vueltas (la externa de 110,3 mm) y la falda afuera del borde: 132,9 mm |
 | B3 | Cubo | Lo de B2 con `adhesion.draft_shield` `enabled` | Falda de 99,68 mm a 3 mm de la pieza, en todas las capas hasta la última (capa 49). El borde pierde la vuelta de 99,1 mm que caía ahí: 13 vueltas. Con `limited` y `adhesion.skirt_layers` 5: falda solo en las capas 0 a 4 |
 | B4 | Tubo | `adhesion.brim_width` 3 | `outer`: 8 vueltas afuera, ejes de radio 10,159 a 12,678. `inner`: 8 vueltas en el agujero, de radio 4,801 a 2,319. `outer_and_inner`: las dos. `outer` con `adhesion.brim_gap` 1: la primera vuelta a 11,168 y la externa a 13,673 |
+| B5 | Dos cubos a 6 mm (X 77 a 97 y 103 a 123) | Falda de 1 vuelta a 6 mm | Una vuelta de 170,5 mm alrededor de los dos: X de 70,821 a 129,179, Y de 83,821 a 116,179 (medido el 27-10-2026) |
+| B6 | Los dos cubos de B5 | `adhesion.brim_width` 5 | 2376,7 mm de borde (dos bordes sueltos sumarían 2680,8). Entre las piezas, los ejes del borde de la izquierda van de X 97,179 a 99,678 y los de la derecha de 100,322 a 102,821 |
 | R1 | Cubo, relleno al 20 %, 3 capas sólidas arriba y abajo | `adhesion.raft_layers` 3 | Capa 0 (Z 0,2, alto 0,2): base de 3039,9 mm en 2 tramos, líneas a 0°, hasta 7,26 mm más allá del cubo. Capas 1 y 2 (Z 0,5 y 0,8, alto 0,3): interfaz de 2506,9 mm a 45° y de 2343,3 mm a 135°, hasta unos 5 mm más allá del cubo. La pieza empieza en Z 1,1 (0,8 + 0,1 + 0,2), con alto de extrusión 0,2. 53 capas en total. Con `adhesion.raft_gap` 0, Z 1,0; con 0,2, Z 1,2 |
 | R2 | Cubo | `adhesion.raft_layers` 5 / 1 | 5: capas 0 y 1 de base (a 90° y a 0°; la 1 de 464,5 mm, a 2,857 mm entre líneas), capas 2 a 4 de interfaz (135°, 45°, 135°); la pieza empieza en Z 1,7. 1: una sola capa de interfaz de 2343,3 mm en Z 0,2; la pieza empieza en Z 0,5 |
 | R3 | Cubo, `adhesion.raft_layers` 3 | Capas de 0,1 / 0,3 | 0,1: balsa en Z 0,1, 0,4 y 0,7; la pieza en Z 0,9. 0,3: balsa en Z 0,3, 0,6 y 0,9; la pieza en Z 1,3 |

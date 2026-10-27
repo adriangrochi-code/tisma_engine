@@ -18,7 +18,10 @@ interfaz con «Basado en…», y una página de créditos las junta todas.
    Es aparte de **Fuentes:**, que puede listar además documentación de formatos, firmwares y normas.
 2. **Qué cuenta como «basado en»:**
    - una idea, un método o unas medidas tomados de un proyecto, un artículo, una tesis, una guía o un video;
-   - datos tomados de otro lado (perfiles, tablas de materiales).
+   - datos tomados de otro lado (perfiles, tablas de materiales);
+   - un texto, una guía o una documentación en la que se basa un texto nuestro, aunque no se copie nada. Se
+     acredita «Basado en…», nunca como «texto propio»: ese texto no es nuestro, nuestra guía se basa en él
+     (decisión del dueño, 27-10-2026).
 
    No cuentan:
    - las especificaciones de formatos (STL, 3MF, G-code) y la documentación de los firmwares: son normas, van en
@@ -44,16 +47,17 @@ interfaz con «Basado en…», y una página de créditos las junta todas.
 | Función | Ficha | Basado en | Autor | Licencia o tipo |
 |---|---|---|---|---|
 | Aletas de soporte | `support_fins.md` | Support Fins, `https://github.com/gittrahan/support-fins` | gittrahan (idea de Slant3D) | MIT |
-| Asistente y tutoriales | `assistant.md` | Guías de impresión 3D, `https://www.rafabarajas.com` | Rafa Barajas | Guías; texto propio |
-| Guías de calibración | `assistant.md` (reglas 20 a 24) | Wiki de calibración de OrcaSlicer, `https://github.com/SoftFever/OrcaSlicer/wiki/calibration_guide` | Equipo y comunidad de OrcaSlicer | Documentación; texto propio |
-| Guías de calibración | `assistant.md` (reglas 20 a 24) | Ellis' Print Tuning Guide, `https://ellis3dp.com/Print-Tuning-Guide/` | Andrew Ellis | Guía; texto propio |
-| Guías de calibración | `assistant.md` (reglas 20 a 24) | Documentación de Klipper: avance de presión y resonancias, `https://www.klipper3d.org/` | Proyecto Klipper | Documentación; texto propio |
+| Asistente y tutoriales | `assistant.md` | Guías de impresión 3D, `https://www.rafabarajas.com` | Rafa Barajas | Guías |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Wiki de calibración de OrcaSlicer, `https://github.com/SoftFever/OrcaSlicer/wiki/calibration_guide` | Equipo y comunidad de OrcaSlicer | Documentación |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Ellis' Print Tuning Guide, `https://ellis3dp.com/Print-Tuning-Guide/` | Andrew Ellis | Guía |
+| Guías de calibración | `assistant.md` (reglas 20 a 24) | Documentación de Klipper: avance de presión y resonancias, `https://www.klipper3d.org/` | Proyecto Klipper | Documentación |
 | Perfiles de resina del paquete | `profile_pack.md` | UVtools, `https://github.com/sn4k3/UVtools` | sn4k3 | AGPL-3.0 (datos, en el repositorio de perfiles) |
 | Paredes de ancho variable | `perimeters.md` | Kuipers et al. 2020, Computer-Aided Design 128:102907 | Kuipers, Doubrovski, Wu y Wang | Artículo |
 | Capas curvas en 3 ejes | `nonplanar_modes.md` | CurviSlicer, SIGGRAPH 2019 | Etienne et al. | Artículo |
 | Capas según las tensiones | `nonplanar_modes.md` | S³-Slicer, SIGGRAPH Asia 2022 | Zhang et al. | Artículo |
 | Soportes en árbol de resina | `resin_supports.md` | Clever Support, Computer Graphics Forum 33(5), 2014 | Vanek, Garcia Galicia y Benes | Artículo |
 | Impresoras Bambu Lab en red local | `printer_connections.md` | OpenBambuAPI, `https://github.com/Doridian/OpenBambuAPI` | comunidad | Documentación |
+| Arcos en voladizos | `arc_overhangs.md` | Arc Overhang, `https://github.com/stmcculloch/arc-overhang` | Steven McCulloch | GPL-3.0 (solo la idea; el código no se usa) |
 
 El resto de las fichas con **Fuentes:** (por ejemplo `aerodynamics.md`, `structural_analysis.md`, `orientation.md` e
 `infill_patterns.md`) se revisa una por una y suma su línea «Basado en» cuando corresponda (regla 2).

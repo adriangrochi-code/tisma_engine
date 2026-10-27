@@ -22,7 +22,7 @@ de abajo.
 ## Reglas
 
 1. **Orden:** se imprimen todas las capas de un objeto, después todas las del siguiente, y así. El orden es el de los
-   objetos en la cama (prueba SQ1).
+   objetos en la cama (prueba SQ1), no se ordenan por altura: un objeto más alto puede ir primero (prueba SQ5).
 2. **Acomodo:** al acomodar los objetos, la separación entre sus bordes es la mayor entre `arrange.distance` y
    `sequential.clearance_radius` (prueba SQ2).
 3. **Paso al siguiente objeto:** al terminar un objeto:
@@ -36,7 +36,9 @@ de abajo.
 4. **Altura:** según la documentación, ningún objeto salvo el último puede ser más alto que
    `sequential.clearance_height`, porque el eje X chocaría con él. En la línea de comandos de Tisma Slicer no se
    rechazó (prueba SQ4); el motor debe rechazarlo o avisar.
-5. **Modo vaso:** es la única forma de imprimir más de un objeto en modo vaso (`vase_mode.md`).
+5. **Falda:** una sola falda rodea todos los objetos y se imprime una vez, al principio, en la primera capa del primer
+   objeto (prueba SQ6).
+6. **Modo vaso:** es la única forma de imprimir más de un objeto en modo vaso (`vase_mode.md`).
 
 ## Pruebas
 
@@ -49,3 +51,5 @@ de 0,2, 2 perímetros, sin relleno, sin falda ni borde, centro en (100, 100)). *
 | SQ2 | 2 copias | `sequential.clearance_radius` 5 / 20 / 35 | Bordes separados 6 / 20 / 35 mm (la segunda copia en X 64 a 84, 50 a 70, 35 a 55). Sin `sequential.enabled`: 6 mm |
 | SQ3 | 2 copias, `sequential.enabled` | `gcode.between_objects` `;BETWEEN [current_object_idx]` / `M109 S[temperature]` (boquilla 205) | Al terminar la primera: `E` de retracción, `G1 Z10`, `G1 X60 Y100`, `M140 S0`, `M104 S200` (las de la primera capa), `;BETWEEN 1`, `M107`; capa 0 de la segunda: `G1 Z10`, viaje, `G1 Z.2`. Con `M109 S[temperature]`: solo `M109 S205`, sin `M140` ni `M104` |
 | SQ4 | 2 torres de 20 × 20 × 25 mm | `sequential.enabled`, `sequential.clearance_height` 20 | Se laminan sin aviso |
+| SQ5 | Proyecto 3MF con una torre de 20 × 20 × 18 mm (X 60 a 80) y un cubo de 20 × 20 × 6 mm (X 130 a 150), en ese orden y al revés | `sequential.enabled` | Primero el primer objeto del archivo: la torre (capas 0 a 89) y después el cubo (90 a 119); al revés, el cubo (0 a 29) y después la torre. Los objetos quedan donde están en el proyecto (medido el 27-10-2026) |
+| SQ6 | El proyecto de SQ5 | `sequential.enabled`, falda de 1 vuelta a 6 mm | Una sola falda, en Z 0,2 antes del primer objeto, alrededor de los dos: X de 53,82 a 156,18, Y de 93,82 a 126,18. El segundo objeto no lleva falda propia |
