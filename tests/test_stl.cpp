@@ -1,4 +1,5 @@
 #include "io/stl.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -170,7 +171,7 @@ TEST_CASE("ASCII and binary files of the same cube agree", "[stl]") {
     std::vector<Tri> tris;
     for (std::size_t i = 0; i < ascii.mesh.triangle_count(); ++i)
         tris.push_back({ascii.mesh.corner(i, 0), ascii.mesh.corner(i, 1), ascii.mesh.corner(i, 2)});
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_cube_binary.stl";
+    const auto path = test_temp_dir() / "tisma_test_cube_binary.stl";
     {
         std::ofstream out(path, std::ios::binary);
         const std::string bytes = make_binary(tris);

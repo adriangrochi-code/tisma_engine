@@ -6,6 +6,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "test_printer.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -222,7 +223,7 @@ TEST_CASE("templates in the G-code: an error fails the export (rule 8, T7)", "[t
     const SlicedModel model = slice_model(cube(), s);
     std::ostringstream out;
     CHECK_THROWS_WITH(write_gcode(out, model, s), ContainsSubstring("machine.start_gcode, line 2: unknown variable 'print_time'"));
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "tisma_template_error.gcode";
+    const std::filesystem::path path = test_temp_dir() / "tisma_template_error.gcode";
     std::filesystem::remove(path);
     const GcodeExport exported = export_gcode(path, model, s);
     CHECK_FALSE(exported.written);
@@ -246,7 +247,7 @@ TEST_CASE("templates: the output file's name, before and after the G-code (rule 
     s.filename_format = "[input_filename_base].gcode";
     CHECK(output_filename(s, model, std::nullopt) == "cube20.gcode");
     // The totals from a written G-code.
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "tisma_totals.gcode";
+    const std::filesystem::path path = test_temp_dir() / "tisma_totals.gcode";
     s.filament_density = 1.24;
     const GcodeExport exported = export_gcode(path, model, s);
     REQUIRE(exported.written);

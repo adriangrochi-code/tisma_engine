@@ -5737,4 +5737,16 @@ fallas. Suite: 543 pruebas pasan.
 guarda), la purga en el relleno o en el objeto (regla 13, ME8), el cono (regla 14, no medido), el extrusor propio de
 la torre en las capas sin cambio (`extruders.wipe_tower`, se lee) y el tiempo de los cambios.
 
-**Sigue:** 4b-2 (purga en el relleno y en el objeto, sin capas ralas); después 4c, la secuencia de la MMU (ME9).
+**Después, en el mismo bloque:**
+- sin capas ralas (`wipe_tower.no_sparse_layers`, regla 11, ME7): la torre tiene solo la primera capa y las de un
+  cambio, cada una sobre la anterior. En la capa del cambio la boquilla viaja a la torre a la altura de la capa, baja
+  hasta la torre (en la pieza apilada, a Z 0,4 en la capa 25), imprime ahí con el alto de la capa y sube derecho
+  antes de volver a la pieza (ni la rampa del salto ni la del cambio de capa salen de la torre). El verificador acepta
+  la torre por debajo de la capa, nunca por encima. Medido: capas 1 a 24 sin torre, como la ficha;
+- las pruebas que escriben archivos usan una carpeta temporal propia de cada proceso (`tests/test_temp.hpp`), que se
+  borra al terminar: la etapa ASan de la CI de Linux falló una vez porque la suite del árbol de trabajo corría al mismo
+  tiempo y las dos escribían `/tmp/tisma_test_profiles_store`. Sola, la prueba pasa (3 de 3).
+
+Fuzzer con capas ralas o no: 400 corridas (semilla 44), 0 fallas. Suite: 543 pruebas pasan.
+
+**Sigue:** la purga en el relleno y en el objeto (regla 13, ME8); después 4c, la secuencia de la MMU (ME9).

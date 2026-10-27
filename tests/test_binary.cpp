@@ -6,6 +6,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "test_printer.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -121,7 +122,7 @@ TEST_CASE("binary G-code: exported with gcode.binary, named .bgcode", "[binary]"
     CHECK(output_filename(s, model, std::nullopt) == "cube20.bgcode");
     s.filename_format = "{input_filename_base}.{default_output_extension}";
     CHECK(output_filename(s, model, std::nullopt) == "cube20..bgcode");
-    const std::filesystem::path path = std::filesystem::temp_directory_path() / "tisma_binary.bgcode";
+    const std::filesystem::path path = test_temp_dir() / "tisma_binary.bgcode";
     const GcodeExport exported = export_gcode(path, model, s);
     REQUIRE(exported.written);
     CHECK(exported.check.ok());

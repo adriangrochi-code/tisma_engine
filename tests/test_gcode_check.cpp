@@ -7,6 +7,7 @@
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 #include "test_printer.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -255,7 +256,7 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto path = dir / "tisma_test_export.gcode";
     auto part = path, rejected = path;
     part += ".part";

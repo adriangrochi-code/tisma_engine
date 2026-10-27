@@ -10,6 +10,7 @@
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 #include "ui/text.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -492,7 +493,7 @@ TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {
 }
 
 TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_ui_files";
+    const std::filesystem::path dir = test_temp_dir() / "tisma_ui_files";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir / "Sub");
     std::filesystem::create_directories(dir / ".hidden");
