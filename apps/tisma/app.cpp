@@ -28,6 +28,7 @@
 #include "io/stl.hpp"
 #include "project/project.hpp"
 #include "ui/camera.hpp"
+#include "ui/credits.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/help.hpp"
@@ -446,6 +447,9 @@ private:
     void go_to_setting(const std::string& key);
     // Choosing what Custom shows (rule 16).
     void choose_settings_dialog();
+    // «Based on» under a card, and the Credits and sources page (credits.md).
+    void card_credits(std::string_view card, float left, float right);
+    void credits_dialog();
     // A section in the column of sections, and a section's cards.
     bool section_button(std::string_view id, const char* title, const char* icon_name, bool selected, bool marked,
                         float column);
@@ -642,6 +646,10 @@ private:
     std::string error_title_, error_message_;
     std::vector<std::string> error_details_;
     bool about_open_ = false;
+    // Credits and sources (credits.md, rule 4): open, and the library whose
+    // license notice shows (-1: none).
+    bool credits_open_ = false;
+    int credits_notice_ = -1;
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
     int tour_step_ = -1;
@@ -774,6 +782,20 @@ bool App::icon_button(const char* id, const char* icon_name, const char* tip, fl
 const std::map<std::string, SettingDoc>& setting_docs() {
     static const std::map<std::string, SettingDoc> docs = parse_setting_docs(embedded("CONFIG.md"));
     return docs;
+}
+
+// Where the functions come from and the libraries' notices, from the copy of
+// resources/credits.json the program carries (credits.md, rule 5); none when
+// that copy does not read, which the tests rule out.
+const Credits& credits() {
+    static const Credits all = [] {
+        try {
+            return parse_credits(embedded("credits.json"));
+        } catch (const CreditsError&) {
+            return Credits{};
+        }
+    }();
+    return all;
 }
 
 // The setting each row of the panel edits, for its info button and the
@@ -1994,6 +2016,8 @@ bool App::init(std::string& error) {
         if (!hits.empty())
             go_to_setting(hits.front().key);
     }
+    if (options_.credits)
+        credits_open_ = true;
     if (options_.choose_settings) {
         choose_level(ViewLevel::Custom);
         choose_draft_ = custom_view_;
@@ -3495,6 +3519,8 @@ void App::top_bar() {
             tips_seen_.clear();
             tips_ = true;
         }
+        if (ImGui::MenuItem(tr(T::Credits)))
+            credits_open_ = true;
         if (ImGui::MenuItem(tr(T::About)))
             about_open_ = true;
         ImGui::Separator();
@@ -3847,6 +3873,16 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
         card_open_[id] = open;
     }
     const bool hovered = ImGui::IsItemHovered();
+    // Where the card's function comes from, over its title (credits.md, rule 3).
+    if (hovered && ImGui::GetMousePos().y < start.y + pad + line) {
+        const std::vector<const FeatureCredit*> from = credits_for_card(credits(), sub.id);
+        if (!from.empty()) {
+            std::string text;
+            for (const FeatureCredit* c : from)
+                text += (text.empty() ? "" : "\n") + based_on(*c);
+            ImGui::SetTooltip("%s", text.c_str());
+        }
+    }
     // The arrow, the title and the changes.
     const ImU32 strong = ImGui::GetColorU32(rgb(theme_.text)), dim = ImGui::GetColorU32(rgb(theme_.text_dim));
     const ImU32 violet = ImGui::GetColorU32(rgb(theme_.accent_hover));
@@ -3901,6 +3937,146 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
     return open;
 }
 
+// «Basado en Support Fins, de gittrahan» at a card's foot, small and grey,
+// the source's name a link to it (credits.md, rule 3).
+void App::card_credits(std::string_view card, float left, float right) {
+    const std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    if (from.empty())
+        return;
+    ImGui::Spacing();
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    // The next piece on this line when it fits before the card's edge, else
+    // on the next one.
+    const auto next = [&](const char* text, float gap) {
+        ImGui::SameLine(0.0f, gap);
+        if (ImGui::GetCursorScreenPos().x + ImGui::CalcTextSize(text).x > right) {
+            ImGui::NewLine();
+            ImGui::SetCursorScreenPos(ImVec2(left, ImGui::GetCursorScreenPos().y));
+        }
+    };
+    for (const FeatureCredit* c : from) {
+        ImGui::PushID(c);
+        ImGui::SetCursorScreenPos(ImVec2(left, ImGui::GetCursorScreenPos().y));
+        ImGui::TextDisabled("%s", tr(T::BasedOn));
+        const std::string& name = card_source(*c);
+        next(name.c_str(), ImGui::CalcTextSize(" ").x);
+        ImGui::TextLinkOpenURL(name.c_str(), c->url.c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\n%s", c->source.c_str(), c->url.c_str());
+        if (!c->author.empty()) {
+            const std::string by = std::string(tr(T::BasedOnBy)) + c->author;
+            next(by.c_str(), 0.0f);
+            ImGui::TextDisabled("%s", by.c_str());
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+}
+
+// More › Credits and sources (credits.md, rule 4): the functions taken from
+// other sources, and the third-party components with their licenses and the
+// notices those licenses ask to hand out with the program.
+void App::credits_dialog() {
+    if (credits_open_) {
+        ImGui::OpenPopup("###credits");
+        credits_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(980.0f * scale_, vp->Size.x * 0.92f), vp->Size.y * 0.85f),
+                             ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::Credits)) + "###credits";
+    if (!ImGui::BeginPopupModal(title.c_str()))
+        return;
+    const Credits& all = credits();
+    ImGui::TextWrapped("%s", tr(T::CreditsIntro));
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##credits_body", ImVec2(0, -bottom));
+    constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                                      ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX;
+    ImGui::SeparatorText(tr(T::CreditsFeatures));
+    if (ImGui::BeginTable("##features", 4, flags)) {
+        ImGui::TableSetupColumn(tr(T::CreditsFunction), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsSource), ImGuiTableColumnFlags_WidthStretch, 1.6f);
+        ImGui::TableSetupColumn(tr(T::CreditsAuthor), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableSetupColumn(tr(T::CreditsLicense), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableHeadersRow();
+        for (const FeatureCredit& c : all.features) {
+            ImGui::PushID(&c);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.feature.now().c_str());
+            ImGui::TableNextColumn();
+            // A link that wraps: a paper's title is long.
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextLink));
+            ImGui::TextWrapped("%s", c.source.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("%s", c.url.c_str());
+            }
+            if (ImGui::IsItemClicked() && ImGui::GetPlatformIO().Platform_OpenInShellFn)
+                ImGui::GetPlatformIO().Platform_OpenInShellFn(ImGui::GetCurrentContext(), c.url.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.author.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.license.now().c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    ImGui::SeparatorText(tr(T::CreditsLibraries));
+    if (ImGui::BeginTable("##libraries", 4, flags)) {
+        ImGui::TableSetupColumn(tr(T::CreditsComponent), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsVersion), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsLibraryLicense), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableSetupColumn(tr(T::CreditsNotice), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableHeadersRow();
+        for (std::size_t i = 0; i < all.libraries.size(); ++i) {
+            const LibraryCredit& lib = all.libraries[i];
+            ImGui::PushID(int(i));
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextLinkOpenURL(lib.name.c_str(), lib.url.c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", lib.url.c_str());
+            ImGui::TableNextColumn();
+            // A commit is long: its first twelve digits say which.
+            ImGui::TextUnformatted(lib.version.size() > 24 ? (lib.version.substr(0, 12) + "…").c_str()
+                                                             : lib.version.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", lib.license.c_str());
+            ImGui::TableNextColumn();
+            const bool shown = credits_notice_ == int(i);
+            if (ImGui::Selectable(tr(T::CreditsShowNotice), shown))
+                credits_notice_ = shown ? -1 : int(i);
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (credits_notice_ >= 0 && credits_notice_ < int(all.libraries.size())) {
+        const LibraryCredit& lib = all.libraries[std::size_t(credits_notice_)];
+        ImGui::SeparatorText((lib.name + " — " + tr(T::CreditsNotice)).c_str());
+        for (const std::string& notice : lib.notices) {
+            ImGui::PushID(notice.c_str());
+            ImGui::BeginChild("##notice", ImVec2(0, 220.0f * scale_), ImGuiChildFlags_Borders);
+            ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+            const std::string_view text = embedded(notice);
+            ImGui::TextUnformatted(text.data(), text.data() + text.size());
+            ImGui::PopFont();
+            ImGui::EndChild();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
 // A section in a column of sections (settings_panel.md, rule 1): its icon
 // and name, the chosen one in violet, and a dot where something differs from
 // the profile. True when clicked; the caller's tooltip asks IsItemHovered.
@@ -3942,6 +4118,7 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
             return changed_keys_.contains(std::string(e.key));
         }));
         const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float card_width = ImGui::GetContentRegionAvail().x;
         bool reset = false;
         const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
         if (reset) {
@@ -3995,6 +4172,8 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
                         show_all_cards_.insert(std::string(sub.id));
                 }
             }
+            const float pad = 9.0f * scale_;
+            card_credits(sub.id, start.x + pad, start.x + card_width - pad);
             ImGui::PopID();
         }
         const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
@@ -7152,6 +7331,7 @@ void App::dialogs() {
 
     catalog_dialog();
     choose_settings_dialog();
+    credits_dialog();
     // A pause's message, or the G-code for a layer (preview.md, rule 12).
     if (change_dialog_) {
         ImGui::OpenPopup("###layer_change");

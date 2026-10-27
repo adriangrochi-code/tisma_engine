@@ -649,8 +649,24 @@
     X(About, "Acerca de Tisma", "About Tisma")                                                                        \
     X(AboutText, "Tisma engine %s: un laminador propio, escrito desde cero.",                                         \
       "Tisma engine %s: an own slicer, written from scratch.")                                                        \
-    X(AboutLibraries, "Usa GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json y volk (THIRD_PARTY.md); la fuente es Roboto (Apache-2.0).", \
-      "Uses GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json and volk (THIRD_PARTY.md); the font is Roboto (Apache-2.0).") \
+    X(AboutLibraries, "Usa GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json y volk; la fuente es Roboto (Apache-2.0). Sus licencias y las fuentes de cada función, en Más › Créditos y fuentes.", \
+      "Uses GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json and volk; the font is Roboto (Apache-2.0). Their licenses and where each function comes from, in More › Credits and sources.") \
+    X(BasedOn, "Basado en", "Based on")                                                                               \
+    X(BasedOnBy, ", de ", ", by ")                                                                                    \
+    X(Credits, "Créditos y fuentes", "Credits and sources")                                                           \
+    X(CreditsIntro, "De dónde sale cada función y los componentes de terceros que lleva el programa, con sus licencias.", \
+      "Where each function comes from, and the third-party components the program carries, with their licenses.") \
+    X(CreditsFeatures, "Funciones", "Functions")                                                                      \
+    X(CreditsLibraries, "Componentes de terceros", "Third-party components")                                          \
+    X(CreditsFunction, "Función", "Function")                                                                         \
+    X(CreditsSource, "Basado en", "Based on")                                                                         \
+    X(CreditsAuthor, "Autor", "Author")                                                                               \
+    X(CreditsLicense, "Licencia o tipo", "License or kind")                                                           \
+    X(CreditsComponent, "Componente", "Component")                                                                    \
+    X(CreditsVersion, "Versión", "Version")                                                                           \
+    X(CreditsNotice, "Aviso de la licencia", "License notice")                                                        \
+    X(CreditsShowNotice, "Ver el aviso", "Show the notice")                                                           \
+    X(CreditsLibraryLicense, "Licencia", "License")                                                                   \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \

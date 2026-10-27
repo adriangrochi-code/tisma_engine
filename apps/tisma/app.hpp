@@ -47,6 +47,7 @@ struct AppOptions {
     bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
     bool labels = false;          // the parts' names over them (E)
     bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
+    bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

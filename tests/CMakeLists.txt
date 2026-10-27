@@ -86,10 +86,11 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
-                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs")
+                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
+                                                 TISMA_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
@@ -253,7 +254,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --section printer/calibration
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_page.png)
-    set_tests_properties(ui_printer_card ui_printer_page PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # More › Credits and sources, in English (credits.md, CR2 and CR4).
+    add_test(NAME ui_credits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --credits
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_credits.png)
+    set_tests_properties(ui_printer_card ui_printer_page ui_credits PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)
     set_tests_properties(ui_settings_custom_search PROPERTIES FIXTURES_SETUP ui_level_custom)
     set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")

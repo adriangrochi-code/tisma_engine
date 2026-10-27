@@ -26,12 +26,18 @@ if(TISMA_GPU)
   target_link_libraries(tisma_imgui PUBLIC volk::volk)
 endif()
 
-# The icons and the font travel inside the program.
+# The icons, the font and the credits travel inside the program.
 set(TISMA_EMBEDDED
   ${PROJECT_SOURCE_DIR}/assets/brand/app/tisma.svg
   ${PROJECT_SOURCE_DIR}/docs/CONFIG.md
   ${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf
+  ${PROJECT_SOURCE_DIR}/resources/credits.json
 )
+# The credits and the license notices the libraries ask to hand out with the
+# program (docs/spec/features/credits.md, rule 4).
+file(GLOB TISMA_LICENSES ${PROJECT_SOURCE_DIR}/resources/licenses/*.txt)
+list(SORT TISMA_LICENSES)
+list(APPEND TISMA_EMBEDDED ${TISMA_LICENSES})
 file(GLOB TISMA_ICONS ${PROJECT_SOURCE_DIR}/assets/brand/icons/*.svg ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)
 list(SORT TISMA_ICONS)
 list(APPEND TISMA_EMBEDDED ${TISMA_ICONS})
