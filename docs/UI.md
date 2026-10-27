@@ -319,6 +319,13 @@ información al lado de cada ajuste.
   - **Procedimientos:** las advertencias arriba, los pasos con su casilla, cómo evitarlo y las notas.
   - **Glosario:** los términos en orden alfabético. El botón (i) de un ajuste que nombra un término muestra su
     definición al pasar el puntero y en la tarjeta.
+  - **Tutoriales guiados:** los de los datos de la ayuda se ofrecen con una tarjeta («¿Te muestro cómo?»: Mostrame,
+    Después, No, gracias) al terminar el asistente del primer arranque, la primera vez que se elige un material o que
+    se abre Análisis; o desde la pestaña Tutoriales (Empezar, o Seguir donde quedó). Cada paso ilumina la parte de la
+    interfaz que nombra y oscurece el resto (sin tapar los clics), con una burbuja al lado: Atrás, Siguiente, Salir, y
+    Abrir si el paso tiene un procedimiento o una calibración. Un paso que espera algo (elegir impresora, agregar un
+    modelo, laminar) sigue solo cuando pasa. Una parte que no está en pantalla abre su panel; si no hay, la burbuja va
+    al centro. Lo visto se guarda en las preferencias (`tutorials`). `--tutorial ID[,PASO]` abre uno para las capturas.
   - **Ficha del material:** en la pestaña Material, el material del filamento elegido (por su nombre: «Generic ABS»
     es ABS) con temperaturas, cabina, ventilador, superficies, retracción y secado; lo que la impresora no tiene para
     ese material (cabina, boquilla endurecida, cama u hotend que no llegan, secado) se avisa ahí y en la barra de

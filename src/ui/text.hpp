@@ -715,6 +715,13 @@
     X(HelpStart, "Empezar", "Start")                                                                                  \
     X(HelpNothingFound, "No se encontró nada", "Nothing found")                                                       \
     X(MaterialCard, "Ficha del material: %s", "Material card: %s")                                                    \
+    X(GuideOffer, "¿Te muestro cómo?", "Shall I show you how?")                                                      \
+    X(GuideAccept, "Mostrame", "Show me")                                                                             \
+    X(GuideLater, "Después", "Later")                                                                                 \
+    X(GuideNever, "No, gracias", "No, thanks")                                                                        \
+    X(GuideWaits, "Sigue solo cuando lo hagas, o con Siguiente.", "It moves on when you do it, or with Next.")         \
+    X(GuideExit, "Salir", "Exit")                                                                                     \
+    X(GuideContinue, "Seguir", "Continue")                                                    \
     X(MaterialChamber, "Cabina", "Chamber")                                                                           \
     X(MaterialFan, "Ventilador", "Fan")                                                                               \
     X(MaterialEnclosure, "Impresora cerrada", "Enclosed printer")                                                     \
@@ -734,7 +741,6 @@
     X(HelpNotes, "Notas", "Notes")                                                                                    \
     X(HelpLimitUsed, "Se usó el límite: %s", "The limit was used: %s")                                                \
     X(HelpTutorialSteps, "%d pasos, unos %d min", "%d steps, about %d min")                                           \
-    X(HelpTutorialsSoon, "Los tutoriales guiados de la ayuda llegan en el próximo paso.", "The help's guided tutorials come in the next step.") \
     X(HelpGuidesSoon, "Las guías de calibración llegan con la página de calibraciones.", "The calibration guides come with the calibrations page.")                                                                                  \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \

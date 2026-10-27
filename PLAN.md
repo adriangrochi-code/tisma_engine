@@ -689,9 +689,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   `setting` con el valor acotado al rango (regla 7, AS4 a AS8), el orden de las causas (AS3) y la búsqueda y los avisos
   del material (reglas 13 y 14, AS9 a AS11), en `src/ui/assistant.*`. Tercer paso (2026-10-27): los archivos de
   `knowledge/` leídos (`src/ui/knowledge.*`), la búsqueda (AS2), los problemas con Aplicar y Deshacer, los
-  procedimientos, el glosario junto a cada ajuste (regla 12, AS15) y la ficha del material con sus avisos. Falta: los
-  tutoriales con anclas y eventos (reglas 15 a 19, AS12 a AS14), las guías de calibración (20 a 24, AS16 a AS19), los
-  enlaces desde la revisión previa (regla 9) y las preferencias `assistant.*`
+  procedimientos, el glosario junto a cada ajuste (regla 12, AS15) y la ficha del material con sus avisos. Cuarto
+  paso (2026-10-27): los tutoriales guiados con anclas, eventos, ofertas y progreso guardado (reglas 15 a 18, AS12 a
+  AS14). Falta: las guías de calibración (20 a 24, AS16 a AS19), los enlaces desde la revisión previa (regla 9), las
+  preferencias `assistant.*`, el idioma de los archivos por carpeta (19, hecho en el lector pero sin datos en inglés) y
+  las anclas de Ingeniería por paso (hoy todas iluminan la pestaña Análisis)
 - [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas.
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,

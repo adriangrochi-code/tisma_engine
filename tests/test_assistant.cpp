@@ -1,5 +1,6 @@
 #include "ui/assistant.hpp"
 #include "ui/knowledge.hpp"
+#include "ui/guide.hpp"
 
 #include "config/settings.hpp"
 #include "ui/text.hpp"
@@ -274,4 +275,40 @@ TEST_CASE("assistant: the knowledge's causes, actions and materials at work (AS3
     CHECK(walls->term == "Pared");
     CHECK(term_for_setting(k, "retraction.length")->term == "Hilos");
     CHECK_FALSE(term_for_setting(k, "infill.density"));
+}
+
+TEST_CASE("assistant: the guided tutorials, offered, moved on and resumed (AS12 to AS14)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    GuideMemory memory;
+    // AS12: at the end of the first start, the first_print tutorial; its
+    // first step points at the printers' list.
+    const std::vector<std::size_t> offered = tutorials_to_offer(k, "first_start", memory);
+    REQUIRE(offered.size() == 1);
+    Guide g = start_guide(k, offered.front(), memory);
+    CHECK(k.tutorials[g.tutorial].steps[std::size_t(g.step)].anchor == "printer_selector");
+    CHECK(tutorials_to_offer(k, "on_request", memory).empty());
+    CHECK(tutorials_to_offer(k, "new_filament", memory).empty());
+    // A step that waits for an event moves on with it, not with another.
+    CHECK_FALSE(guide_event(k, g, "model_added"));
+    CHECK(g.step == 0);
+    CHECK_FALSE(guide_event(k, g, "printer_selected"));
+    CHECK(g.step == 1);
+    // AS13: adding a model moves step 2 on by itself.
+    CHECK_FALSE(guide_event(k, g, "model_added"));
+    CHECK(g.step == 2);
+    // AS14: left on that step, it starts there again.
+    remember(memory, k, g, false);
+    const Guide again = start_guide(k, g.tutorial, memory);
+    CHECK(again.step == 2);
+    guide_back(g);
+    CHECK(g.step == 1);
+    // The last step's Next ends it; a finished or turned down one is not offered.
+    g.step = 2;
+    CHECK(guide_next(k, g));
+    remember(memory, k, g, true);
+    CHECK(tutorials_to_offer(k, "first_start", memory).empty());
+    CHECK(start_guide(k, g.tutorial, memory).step == 0);
+    GuideMemory no;
+    no.dismissed.insert("first_print");
+    CHECK(tutorials_to_offer(k, "first_start", no).empty());
 }

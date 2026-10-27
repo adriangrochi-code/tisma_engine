@@ -53,6 +53,8 @@ struct AppOptions {
     std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
     std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
     std::string help_open;        // with help: a problem or procedure id opened in it
+    std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
+    int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

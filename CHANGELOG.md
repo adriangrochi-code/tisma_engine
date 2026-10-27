@@ -20,7 +20,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   pedazos sueltos de una malla, cada uno como un objeto ordenado en la cama.
 - **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** o Más › Ayuda abren la ayuda con sus pestañas y su
   buscador: problemas de impresión con sus causas y arreglos que se aplican con un clic (y se deshacen), procedimientos
-  paso a paso y el glosario, que también aparece en el (i) de cada ajuste. La pestaña Material muestra la ficha del
+  paso a paso, tutoriales guiados que iluminan cada parte de la interfaz y siguen solos cuando la persona hace el paso,
+  y el glosario, que también aparece en el (i) de cada ajuste. La pestaña Material muestra la ficha del
   material elegido y avisa lo que la impresora no tiene para él. Los textos llegan con el paquete de perfiles.
 - **Créditos y fuentes** (ficha `credits.md`): las fichas cuya función sale de un artículo o un proyecto dicen al pie
   «Basado en…», con un enlace a la fuente, y **Más > Créditos y fuentes** junta todas las fuentes y los componentes de

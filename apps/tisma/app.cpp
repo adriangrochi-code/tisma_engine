@@ -42,11 +42,13 @@
 #include "ui/printer_card.hpp"
 #include "ui/measure.hpp"
 #include "ui/knowledge.hpp"
+#include "ui/guide.hpp"
 #include "slice/transform.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h> // ImGui::BringWindowToDisplayFront, for the guided tutorials
 #ifdef TISMA_VULKAN_WINDOW
 #include <imgui_impl_vulkan.h>
 #endif
@@ -468,6 +470,12 @@ private:
     void help_procedure(const KnowledgeProcedure& procedure);
     void help_action(const KnowledgeAction& action);
     void help_apply_dialog();
+    void anchor(const char* name); // the last item, as a part tutorials can point at
+    void anchor_rect(const char* name, ImVec2 min, ImVec2 max);
+    void fire(std::string_view event);
+    void offer_tutorials(std::string_view when);
+    void end_guide(bool finished);
+    void guide_overlay();
     // The chosen filament's material in the help's data, its card and its
     // warnings (assistant.md, rules 13 and 14).
     const KnowledgeMaterial* current_material() const;
@@ -696,6 +704,14 @@ private:
     std::vector<bool> help_steps_done_;
     std::optional<SettingChange> help_change_;
     bool help_change_open_ = false;
+    // The guided tutorials (assistant.md, rules 15 to 18): the parts of the
+    // interface named this frame (anchors), what is remembered of each
+    // tutorial, the one going on and those offered now.
+    std::map<std::string, std::array<float, 4>> anchors_;
+    GuideMemory guide_memory_;
+    std::optional<Guide> guide_;
+    std::vector<std::size_t> guide_offers_;
+    bool guide_opened_panel_ = false;
     std::string help_query_;
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
@@ -2091,6 +2107,12 @@ bool App::init(std::string& error) {
     for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
         if (knowledge_->procedures[i].id == options_.help_open)
             help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+    if (!options_.tutorial.empty())
+        for (std::size_t i = 0; i < knowledge_->tutorials.size(); ++i)
+            if (knowledge_->tutorials[i].id == options_.tutorial) {
+                guide_ = start_guide(*knowledge_, i, guide_memory_);
+                guide_->step = std::clamp(options_.tutorial_step, 0, int(knowledge_->tutorials[i].steps.size()) - 1);
+            }
     if (options_.credits)
         credits_open_ = true;
     if (!options_.help.empty()) {
@@ -2290,6 +2312,19 @@ void App::load_preferences() {
             for (const auto& t : j.at("tips_seen"))
                 if (t.is_string())
                     tips_seen_.insert(t.get<std::string>());
+        // Where each guided tutorial was left (assistant.md, rule 18).
+        if (const auto g = j.find("tutorials"); g != j.end() && g->is_object()) {
+            if (const auto st = g->find("step"); st != g->end() && st->is_object())
+                for (const auto& [id, n] : st->items())
+                    if (n.is_number_integer())
+                        guide_memory_.step[id] = n.get<int>();
+            for (const char* list : {"dismissed", "done"})
+                if (const auto l = g->find(list); l != g->end() && l->is_array())
+                    for (const auto& id : *l)
+                        if (id.is_string())
+                            (std::string(list) == "done" ? guide_memory_.done : guide_memory_.dismissed)
+                                .insert(id.get<std::string>());
+        }
         if (j.value("language", "es") == "en")
             set_language(Language::English);
         if (j.value("theme", "dark") == "light")
@@ -2382,6 +2417,9 @@ void App::save_preferences() {
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["tips_seen"] = tips_seen_;
+        j["tutorials"]["step"] = guide_memory_.step;
+        j["tutorials"]["dismissed"] = guide_memory_.dismissed;
+        j["tutorials"]["done"] = guide_memory_.done;
         j["ui"]["level"] = std::string(view_level_name(view_level_));
         j["ui"]["custom_base"] = std::string(view_level_name(custom_view_.base));
         j["ui"]["custom_visible"] = custom_view_.visible;
@@ -2466,6 +2504,7 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     ++revision_.model;
     objects_.clear();
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    fire("model_added");
     selected_ = 0;
     tool_ = PlateTool::Select;
     model_path_ = name;
@@ -2571,6 +2610,7 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         return;
     }
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    fire("model_added");
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
     frame_all();
@@ -2884,6 +2924,16 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
     profiles_checked_.clear();
+    if (kind == ProfileKind::Printer)
+        fire("printer_selected");
+    if (kind == ProfileKind::Filament) {
+        fire("filament_selected");
+        // A material chosen for the first time offers its tutorials (rule 15).
+        if (const KnowledgeMaterial* m = current_material(); m && !guide_memory_.done.contains("material:" + m->name)) {
+            guide_memory_.done.insert("material:" + m->name);
+            offer_tutorials("new_filament");
+        }
+    }
     if (kind == ProfileKind::Printer) {
         bed_changed();
         if (speed_fallback_.contains(profile.name))
@@ -3349,6 +3399,7 @@ void App::poll_jobs() {
         result_ = std::move(*r);
         viewer_ = false;
         stale_ = made == Fit::OutOfDate;
+        fire("sliced");
         show_preview();
         const bool calibrating = tab_ == Tab::Calibration;
         if (options_.layer > 0)
@@ -3528,6 +3579,12 @@ void App::top_bar() {
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
         if (button(tr(t.label), t.icon, tr(t.label), false, tab_ == t.tab, enabled, nullptr, button_h))
             set_tab(t.tab);
+        if (t.tab == Tab::Preview)
+            anchor("preview");
+        else if (t.tab == Tab::Calibration)
+            anchor("calibrations");
+        else if (t.tab == Tab::Analysis)
+            anchor("engineering_panel");
         ImGui::SameLine(0, 4.0f * scale_);
     }
 
@@ -3570,12 +3627,14 @@ void App::top_bar() {
     if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
                mesh_.has_value() && !slicing, tr(T::SliceTip), button_h))
         start_slice();
+    anchor("slice_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
     if (button("##export", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false, false, can_export,
                can_export ? tr(T::ExportTip) : tr(T::ExportNeedsSlice), button_h))
         begin_export();
+    anchor("send_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     if (icon_button("##more", "tisma_more", tr(T::More), button_h))
@@ -4135,6 +4194,10 @@ void App::help_panel() {
                     help_tab_ = i, help_select_ = false;
                 ImGui::EndTabItem();
             }
+            if (i == 0)
+                anchor("help_problems");
+            else if (i == 1)
+                anchor("help_procedures");
         }
         ImGui::EndTabBar();
     }
@@ -4229,12 +4292,21 @@ void App::help_body() {
             help_open_ = false;
         }
         ImGui::Separator();
-        for (const KnowledgeTutorial& t : k.tutorials) {
+        for (std::size_t i = 0; i < k.tutorials.size(); ++i) {
+            const KnowledgeTutorial& t = k.tutorials[i];
+            ImGui::PushID(int(i));
             ImGui::TextUnformatted(t.name.c_str());
             ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(t.steps.size()), t.minutes).c_str());
+            // Where it was left, if it was (rule 18).
+            const auto left = guide_memory_.step.find(t.id);
+            if (ImGui::Button(tr(left != guide_memory_.step.end() ? T::GuideContinue : T::HelpStart))) {
+                end_guide(false);
+                guide_ = start_guide(k, i, guide_memory_);
+                help_open_ = false;
+            }
+            ImGui::PopID();
+            ImGui::Spacing();
         }
-        if (!k.tutorials.empty())
-            ImGui::TextDisabled("%s", tr(T::HelpTutorialsSoon));
     }
     if (k.empty()) {
         ImGui::TextDisabled("%s", tr(T::HelpNoData));
@@ -4464,6 +4536,174 @@ void App::material_card() {
     }
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
+}
+
+void App::anchor(const char* name) { anchor_rect(name, ImGui::GetItemRectMin(), ImGui::GetItemRectMax()); }
+
+void App::anchor_rect(const char* name, ImVec2 min, ImVec2 max) { anchors_[name] = {min.x, min.y, max.x, max.y}; }
+
+// Something the tutorials wait for happened (rule 16, «Eventos»).
+void App::fire(std::string_view event) {
+    if (!guide_ || !knowledge_)
+        return;
+    if (guide_event(*knowledge_, *guide_, event))
+        end_guide(true);
+}
+
+void App::offer_tutorials(std::string_view when) {
+    if (!knowledge_)
+        return;
+    for (const std::size_t i : tutorials_to_offer(*knowledge_, when, guide_memory_))
+        if (std::find(guide_offers_.begin(), guide_offers_.end(), i) == guide_offers_.end())
+            guide_offers_.push_back(i);
+}
+
+void App::end_guide(bool finished) {
+    if (guide_ && knowledge_)
+        remember(guide_memory_, *knowledge_, *guide_, finished);
+    guide_.reset();
+}
+
+// The tutorial going on, or one offered (rules 15 to 17): the part its step
+// names stays lit and the rest goes dark, with a bubble beside it; a part
+// that is not on screen opens its panel, and without one the bubble sits in
+// the middle. The dark layer takes no clicks, so the step can be done.
+void App::guide_overlay() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float width = 360.0f * scale_;
+    if (!guide_ && !guide_offers_.empty() && knowledge_) {
+        // «¿Te muestro cómo?»: accept, later or never.
+        const std::size_t t = guide_offers_.front();
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 16.0f * scale_, vp->Pos.y + vp->Size.y - 60.0f * scale_),
+                                ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+        ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+        ImGui::Begin("##guide_offer", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::GuideOffer));
+        ImGui::TextUnformatted(knowledge_->tutorials[t].name.c_str());
+        ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(knowledge_->tutorials[t].steps.size()),
+                                         knowledge_->tutorials[t].minutes)
+                                      .c_str());
+        if (ImGui::Button(tr(T::GuideAccept))) {
+            guide_ = start_guide(*knowledge_, t, guide_memory_);
+            guide_offers_.erase(guide_offers_.begin());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideLater)))
+            guide_offers_.erase(guide_offers_.begin());
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideNever))) {
+            guide_memory_.dismissed.insert(knowledge_->tutorials[t].id);
+            guide_offers_.erase(guide_offers_.begin());
+        }
+        ImGui::End();
+        return;
+    }
+    if (!guide_ || !knowledge_ || guide_->tutorial >= knowledge_->tutorials.size())
+        return;
+    const KnowledgeTutorial& tutorial = knowledge_->tutorials[guide_->tutorial];
+    if (guide_->step >= int(tutorial.steps.size())) {
+        end_guide(true);
+        return;
+    }
+    const KnowledgeTutorial::Step& step = tutorial.steps[std::size_t(guide_->step)];
+    // A part not on screen opens its panel (rule 17).
+    auto found = anchors_.find(step.anchor);
+    if (found == anchors_.end() && !guide_opened_panel_) {
+        guide_opened_panel_ = true;
+        if (step.anchor == "filament_selector")
+            panel_tab_ = SettingsTab::Material;
+        else if (step.anchor == "help_problems" || step.anchor == "help_procedures")
+            help_open_ = true;
+        else if (step.anchor.starts_with("engineering_"))
+            set_tab(Tab::Analysis);
+        else if (step.anchor == "calibrations")
+            set_tab(Tab::Calibration);
+    } else if (found != anchors_.end()) {
+        guide_opened_panel_ = false;
+    }
+    // The dark layer around the part.
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::Begin("##guide_dim", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 dark = IM_COL32(0, 0, 0, 140);
+    const ImVec2 lo = vp->Pos, hi(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y);
+    ImVec2 a, b;
+    if (found != anchors_.end()) {
+        const float pad = 4.0f * scale_;
+        a = ImVec2(found->second[0] - pad, found->second[1] - pad), b = ImVec2(found->second[2] + pad, found->second[3] + pad);
+        dl->AddRectFilled(lo, ImVec2(hi.x, a.y), dark);
+        dl->AddRectFilled(ImVec2(lo.x, b.y), hi, dark);
+        dl->AddRectFilled(ImVec2(lo.x, a.y), ImVec2(a.x, b.y), dark);
+        dl->AddRectFilled(ImVec2(b.x, a.y), ImVec2(hi.x, b.y), dark);
+        dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover)), 6.0f * scale_, 2.5f * scale_);
+    } else {
+        dl->AddRectFilled(lo, hi, dark);
+    }
+    ImGui::End();
+    // The bubble: beside the part where it fits, else in the middle.
+    ImVec2 at(vp->Pos.x + 0.5f * vp->Size.x, vp->Pos.y + 0.5f * vp->Size.y), pivot(0.5f, 0.5f);
+    if (found != anchors_.end()) {
+        if (b.x + 12.0f * scale_ + width < hi.x)
+            at = ImVec2(b.x + 12.0f * scale_, std::max(a.y, lo.y + 60.0f * scale_)), pivot = ImVec2(0.0f, 0.0f);
+        else if (a.x - 12.0f * scale_ - width > lo.x)
+            at = ImVec2(a.x - 12.0f * scale_, std::max(a.y, lo.y + 60.0f * scale_)), pivot = ImVec2(1.0f, 0.0f);
+        else if (b.y + 200.0f * scale_ < hi.y)
+            at = ImVec2(std::min(a.x, hi.x - width - 8.0f * scale_), b.y + 12.0f * scale_), pivot = ImVec2(0.0f, 0.0f);
+    }
+    ImGui::SetNextWindowPos(at, ImGuiCond_Always, pivot);
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.accent));
+    ImGui::Begin("##guide", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImGui::TextDisabled("%s · %d / %d", tutorial.name.c_str(), guide_->step + 1, int(tutorial.steps.size()));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", step.title.c_str());
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(step.text.c_str());
+    if (!step.wait_for.empty())
+        ImGui::TextDisabled("%s", tr(T::GuideWaits));
+    ImGui::PopTextWrapPos();
+    // A step that opens something (rule 16).
+    if (!step.open_type.empty() && ImGui::Button(tr(T::HelpOpen))) {
+        if (step.open_type == "procedure") {
+            for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
+                if (knowledge_->procedures[i].id == step.open_id) {
+                    help_open_ = true;
+                    help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+                    help_steps_done_.assign(knowledge_->procedures[i].steps.size(), false);
+                }
+        } else {
+            set_tab(Tab::Calibration);
+        }
+    }
+    ImGui::Spacing();
+    const bool last = guide_->step + 1 == int(tutorial.steps.size());
+    if (guide_->step > 0) {
+        if (ImGui::Button(tr(T::Back)))
+            guide_back(*guide_);
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(last ? T::Finish : T::Next)) && guide_next(*knowledge_, *guide_)) {
+        end_guide(true);
+    } else {
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideExit)))
+            end_guide(false);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
 }
 
 // Applying a setting from the help (rule 7): the setting, its value now and
@@ -4728,6 +4968,8 @@ void App::settings_panel() {
     ImGui::Begin("##settings", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
+    anchor_rect("quick_settings", ImGui::GetWindowPos(),
+                ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y));
     refresh_profiles();
     bool changed = false, bed = false;
 
@@ -4745,7 +4987,10 @@ void App::settings_panel() {
         }
     // On top, the printer's card (rule 32); the printer's settings have a
     // page of their own, and the panel the Print and Material tabs.
+    ImGui::BeginGroup();
     printer_card();
+    ImGui::EndGroup();
+    anchor("printer_selector");
     if (panel_tab_ == SettingsTab::Printer)
         panel_tab_ = SettingsTab::Print;
 
@@ -4822,6 +5067,8 @@ void App::settings_panel() {
             choose_level(ViewLevel::Custom);
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
+    if (panel_tab_ == SettingsTab::Material)
+        anchor("filament_selector");
     if (panel_tab_ == SettingsTab::Material)
         material_card();
     // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
@@ -6185,6 +6432,7 @@ void App::plate_tools() {
                size))
         tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    anchor_rect("plate_tools", strip_min, ImVec2(strip_min.x + strip_size.x, strip_min.y + strip_size.y));
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
@@ -6964,6 +7212,9 @@ void App::help_windows() {
             ImGui::SameLine();
         if (ImGui::Button(tr(last ? T::Finish : T::Next), ImVec2(92.0f * scale_, 0)))
             tour_step_ = last ? -1 : tour_step_ + 1;
+        // The first start's tutorials, once its assistant is over (rule 15).
+        if (tour_step_ < 0 && first_run_)
+            offer_tutorials("first_start");
     } else {
         if (ImGui::Button(tr(T::GotIt))) {
             tips_seen_.insert(tip_);
@@ -8154,7 +8405,9 @@ void App::dialogs() {
 }
 
 void App::layout() {
+    anchors_.clear();
     viewport();
+    anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     top_bar();
     // The printer's page covers the panel and the view (settings_panel.md,
     // rule 37) until it goes back to the plate.
@@ -8198,12 +8451,17 @@ void App::layout() {
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
+        if (tab_ == Tab::Analysis && !guide_memory_.done.contains("opened:engineering")) {
+            guide_memory_.done.insert("opened:engineering");
+            offer_tutorials("first_open:engineering");
+        }
     }
     if (result_ && !had_result_ && !viewer_) {
         had_result_ = true;
         tip("slice");
     }
     help_windows();
+    guide_overlay();
     toasts();
     dialogs();
 

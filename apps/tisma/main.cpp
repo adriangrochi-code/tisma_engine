@@ -129,6 +129,12 @@ int main(int argc, char** argv) {
             options.credits = true;
         } else if (arg == "--knowledge") {
             options.knowledge = value();
+        } else if (arg == "--tutorial") {
+            // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
+            const std::string t = value();
+            options.tutorial = t.substr(0, t.find(','));
+            if (t.find(',') != std::string::npos)
+                options.tutorial_step = std::max(0, std::atoi(t.c_str() + t.find(',') + 1) - 1);
         } else if (arg == "--help-item") {
             options.help_open = value();
         } else if (arg == "--help-panel") {

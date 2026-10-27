@@ -6355,5 +6355,13 @@ problema de hilos, la primera capa, el secado, el glosario, el (i) de Paredes y 
 retracción directa o Bowden según la impresora (el motor todavía no sabe qué extrusor tiene: la ficha muestra las dos).
 Bajar `knowledge.tar.xz` es de `profile_pack.md`.
 
-**Sigue:** los tutoriales guiados (reglas 15 a 19).
+**Después, el mismo día (cuarto paso):** los tutoriales guiados (reglas 15 a 18, `src/ui/guide.*`): las partes de la
+interfaz con nombre (impresora, filamento, ajustes, placa, herramientas, Laminar, Exportar, Vista previa,
+Calibración, Análisis y las pestañas de la ayuda) dejan su rectángulo al dibujarse; el paso ilumina la suya y oscurece
+el resto sin tapar los clics, con la burbuja al lado. Los eventos (impresora o filamento elegido, modelo agregado,
+laminado) hacen avanzar el paso que los espera. Se ofrecen al terminar el asistente del primer arranque, con un
+material nuevo o al abrir Análisis por primera vez, y desde la pestaña Tutoriales con Empezar o Seguir; lo visto queda
+en las preferencias. Pruebas AS12 a AS14 en `[assistant]` (130 comprobaciones) y `ui_tutorial`; capturas de los tres
+pasos del tutorial de prueba.
 
+**Sigue:** las guías de calibración (reglas 20 a 24).
