@@ -955,6 +955,22 @@
     X(TurnOn, "Prender", "Turn on") \
     X(DifferentNozzles, "boquillas distintas", "different nozzles") \
     X(ExtruderNozzle, "   Extrusor %d", "   Extruder %d") \
+    X(ToolMaterialTip, "Extrusor y color del objeto", "The object's extruder and colour") \
+    X(ObjectExtruder, "Extrusor", "Extruder") \
+    X(ExtruderItem, "Extrusor %d", "Extruder %d") \
+    X(VirtualExtruder, "Extrusor virtual #%d", "Virtual extruder #%d") \
+    X(WipeIntoInfill, "Purgar en su relleno", "Purge into its infill") \
+    X(WipeIntoObject, "Purgar en el objeto", "Purge into the object") \
+    X(ColorMixingDialog, "Extrusores virtuales - Mezcla de colores", "Virtual Extruders - Color Mixing") \
+    X(AddBlend, "Agregar mezcla", "Add blend") \
+    X(MixingIntro, "Un extrusor virtual mezcla filamentos reales capa por capa para crear colores nuevos. Hacé clic en una mezcla de abajo para agregarla al proyecto.", "A virtual extruder blends physical filaments layer by layer to create new colors. Click a blend below to add it to your project.") \
+    X(TwoColorBlends, "Mezclas de dos colores", "Two-color blends") \
+    X(MixingEditorHint, "Mové el deslizador para elegir cuántas capas lleva cada filamento en el patrón que se repite.", "Drag the slider to set how many layers each filament gets in the repeating pattern.") \
+    X(AddThirdExtruder, "Agregar un tercer extrusor", "Add third extruder") \
+    X(DisplayColor, "Color que se muestra", "Display color") \
+    X(LayerSequencePreview, "Secuencia de capas", "Layer sequence preview") \
+    X(MixingTemplateError, "La plantilla de cambio de herramienta no funciona con la mezcla", "The tool change template does not work with mixing") \
+    X(OkButton, "Aceptar", "OK") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \

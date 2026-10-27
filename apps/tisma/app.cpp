@@ -21,6 +21,7 @@
 #include "fea/analysis.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
+#include "gcode/writer.hpp"
 #include "io/model.hpp"
 #include "io/stl.hpp"
 #include "project/project.hpp"
@@ -80,7 +81,7 @@ constexpr const char* kIcons[] = {
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
-    "tool_lay_flat",    "tool_arrange",     "tool_paint",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
@@ -259,7 +260,7 @@ enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
 enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
-enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint };
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint, Material };
 
 class App {
 public:
@@ -289,6 +290,9 @@ private:
     void arrange_plate();
     void plate_tools();
     void paint_card(ImVec2 at);
+    void mixing_dialog();
+    std::string filament_color(int extruder) const;
+    void objects_material_changed();
     void brush_stroke(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
@@ -408,6 +412,14 @@ private:
     std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
     const std::vector<TriangleIndex>& plate_indexes();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
+    // The project's mixed colours and each filament's colour
+    // (color_mixing.md); the dialog that edits them, what they were when it
+    // opened and the blend being edited.
+    std::vector<ColorMix> mixes_;
+    std::vector<std::string> filament_colors_;
+    bool mixing_open_ = false;
+    std::vector<ColorMix> mixes_before_;
+    int mix_edit_ = -1;
     // The Paint tool (docs/PAINTING.md): what it paints, with which mark and
     // how wide; the model a stroke started on; where the brush is now.
     PaintChannel paint_channel_ = PaintChannel::Support;
@@ -1186,7 +1198,14 @@ bool App::init(std::string& error) {
     if (!options_.tool.empty())
         tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
               : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
-                                                                                         : PlateTool::LayFlat;
+              : options_.tool == "material" || options_.tool == "mixing" ? PlateTool::Material
+                                                                          : PlateTool::LayFlat;
+    // The mixed colours' dialog open, with the project's first blend (for screenshots).
+    if (options_.tool == "mixing") {
+        mixing_open_ = true;
+        mixes_before_ = mixes_;
+        mix_edit_ = mixes_.empty() ? -1 : 0;
+    }
     // Brush strokes asked on the command line, for screenshots and tests.
     for (const AppOptions::Stroke& b : options_.strokes) {
         const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
@@ -1647,6 +1666,11 @@ void App::open_project(const std::filesystem::path& path) {
     fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
+    // The project's mixed colours; those using filaments this printer does
+    // not have are dropped (color_mixing.md, rule 5).
+    mixes_ = std::move(p.mixes);
+    std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
+    filament_colors_ = std::move(p.filament_colors);
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
@@ -1655,6 +1679,9 @@ void App::open_project(const std::filesystem::path& path) {
         for (ProjectModel& m : p.models) {
             PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
                           std::move(m.painting)};
+            o.extruder = m.extruder;
+            o.wipe_into_infill = m.wipe_into_infill;
+            o.wipe_into_object = m.wipe_into_object;
             const BoundingBox box = o.mesh.bounding_box();
             o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
             o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
@@ -1708,7 +1735,10 @@ void App::save_project_to(const std::filesystem::path& path) {
     p.profiles = chosen_profile_;
     // Each model as placed on the bed, its turn and scale applied.
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
-        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting});
+        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
+                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+    p.mixes = mixes_;
+    p.filament_colors = filament_colors_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     try {
@@ -2221,15 +2251,19 @@ void App::start_slice() {
     // Each model's triangles in the plate's mesh, as plate_mesh joins them.
     std::vector<MeshObject> objects;
     for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0});
+        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
+                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
         first += placed_meshes_[i].triangle_count();
     }
+    // The objects go to the slicer when there are several, or when each may
+    // print with its own extruder or a mixed colour.
+    const bool by_object = objects.size() > 1 || settings.extruders > 1;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
-                      painting = std::move(painting), objects = std::move(objects)]() {
+                      painting = std::move(painting), objects = std::move(objects), mixes = mixes_, by_object]() {
         return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting,
-                           objects.size() > 1 ? &objects : nullptr);
+                           by_object ? &objects : nullptr, mixes.empty() ? nullptr : &mixes);
     });
 }
 
@@ -3168,6 +3202,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (shown("multi.color_mixing")) {
             bool mixing = color_mixing_offered(s);
             if (row(T::ColorMixingRow, mixing)) {
+                // A change template that cannot render would fail the
+                // export at the first blend: said now (color_mixing.md, rule 13).
+                if (mixing)
+                    if (const std::string error = toolchange_template_error(s); !error.empty())
+                        fail(T::MixingTemplateError, error);
                 if (mixing && s.single_extruder_mmu)
                     ImGui::OpenPopup("##mixing_cost");
                 else {
@@ -3884,6 +3923,9 @@ void App::plate_tools() {
     ImGui::Separator();
     if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
+    if (button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true, tr(T::ToolMaterialTip),
+               size))
+        tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -4016,12 +4058,262 @@ void App::plate_tools() {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
         ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
         ImGui::PopTextWrapPos();
+    } else if (tool_ == PlateTool::Material) {
+        // The object's extruder, one of the machine's or a mixed colour's
+        // (multi_extruder.md, rule 1; color_mixing.md), and where a filament
+        // change may purge (rule 13).
+        bool material = false;
+        const auto name_of = [&](int e) {
+            return e <= settings_.extruders ? format(tr(T::ExtruderItem), e) : format(tr(T::VirtualExtruder), e);
+        };
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::ObjectExtruder));
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        if (ImGui::BeginCombo("##extruder", name_of(o.extruder).c_str())) {
+            std::vector<int> choices;
+            for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+                choices.push_back(e);
+            for (const ColorMix& m : mixes_)
+                if (mix_usable(m, settings_.extruders))
+                    choices.push_back(m.id);
+            for (const int e : choices)
+                if (ImGui::Selectable(name_of(e).c_str(), e == o.extruder) && e != o.extruder) {
+                    o.extruder = e;
+                    material = true;
+                }
+            ImGui::EndCombo();
+        }
+        material |= ImGui::Checkbox(tr(T::WipeIntoInfill), &o.wipe_into_infill);
+        material |= ImGui::Checkbox(tr(T::WipeIntoObject), &o.wipe_into_object);
+        // A project that brings blends keeps the button to change them (rule 9).
+        if (settings_.extruders >= 2 && (color_mixing_offered(settings_) || !mixes_.empty()) &&
+            ImGui::Button(tr(T::ColorMixingDialog))) {
+            mixing_open_ = true;
+            mixes_before_ = mixes_;
+            mix_edit_ = -1;
+        }
+        if (material)
+            objects_material_changed();
     }
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
     if (changed)
         plate_changed();
+}
+
+// A change of what the objects print with: sliced again, the plate as it was.
+void App::objects_material_changed() {
+    ++revision_.model;
+    if (result_ && !viewer_)
+        stale_ = true;
+}
+
+// Filament `extruder`'s colour (from 1): the project's, else one of eight.
+std::string App::filament_color(int extruder) const {
+    static const char* const kColors[] = {"#FCE94F", "#204A87", "#CC0000", "#4E9A06",
+                                          "#F57900", "#75507B", "#C17D11", "#555753"};
+    if (extruder >= 1 && std::size_t(extruder) <= filament_colors_.size() && !filament_colors_[std::size_t(extruder - 1)].empty())
+        return filament_colors_[std::size_t(extruder - 1)];
+    return kColors[std::size_t(std::max(extruder - 1, 0)) % 8];
+}
+
+// The project's mixed colours (color_mixing.md, rules 1 to 3): the list on
+// the left, each with its colour and shares; on the right the filaments and
+// their two-colour blends, a click adds one at 1 : 1; below, the blend being
+// edited, with a slider between two filaments and its layers.
+void App::mixing_dialog() {
+    if (!mixing_open_)
+        return;
+    const auto color_of = [](const std::string& hex) {
+        unsigned v = 0x808080;
+        if (hex.size() == 7 && hex[0] == '#')
+            std::sscanf(hex.c_str() + 1, "%6x", &v);
+        return ImVec4(float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f, 1.0f);
+    };
+    const int filaments = std::max(settings_.extruders, 1);
+    const auto recolor = [&](ColorMix& m) {
+        std::vector<std::string> colors;
+        std::vector<double> shares;
+        for (const ColorMix::Component& c : m.components)
+            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
+        m.color = mix_color(colors, shares);
+    };
+    const auto add = [&](int a, int b) {
+        ColorMix m;
+        m.id = filaments + 1;
+        for (const ColorMix& other : mixes_)
+            m.id = std::max(m.id, other.id + 1);
+        m.components = {{a, 0.5}, {b, 0.5}};
+        recolor(m);
+        mixes_.push_back(std::move(m));
+        mix_edit_ = int(mixes_.size()) - 1;
+    };
+    ImGui::SetNextWindowSize(ImVec2(720.0f * scale_, 480.0f * scale_), ImGuiCond_Appearing);
+    bool open = true;
+    if (!ImGui::Begin(tr(T::ColorMixingDialog), &open, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::End();
+        mixing_open_ = open;
+        return;
+    }
+    // The list.
+    ImGui::BeginChild("##mixes", ImVec2(260.0f * scale_, -ImGui::GetFrameHeightWithSpacing() * 1.5f), ImGuiChildFlags_Borders);
+    for (std::size_t k = 0; k < mixes_.size(); ++k) {
+        ColorMix& m = mixes_[k];
+        ImGui::PushID(int(k));
+        ImGui::ColorButton("##color", color_of(m.color), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 18.0f * scale_));
+        ImGui::SameLine();
+        std::string shares;
+        for (const ColorMix::Component& c : m.components)
+            shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
+                      std::to_string(int(std::lround(c.share * 100.0))) + " %";
+        if (ImGui::Selectable((format(tr(T::VirtualExtruder), m.id) + "\n" + shares).c_str(), mix_edit_ == int(k), 0,
+                              ImVec2(170.0f * scale_, 0)))
+            mix_edit_ = int(k);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X")) {
+            mixes_.erase(mixes_.begin() + std::ptrdiff_t(k));
+            mix_edit_ = -1;
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::Button(tr(T::AddBlend)) && filaments >= 2)
+        add(1, 2);
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##blends", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 1.5f));
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(T::MixingIntro));
+    ImGui::PopTextWrapPos();
+    // The filaments, each with its colour.
+    filament_colors_.resize(std::size_t(filaments));
+    for (int e = 1; e <= filaments; ++e) {
+        ImGui::PushID(e);
+        ImVec4 c = color_of(filament_color(e));
+        float rgb3[3] = {c.x, c.y, c.z};
+        if (ImGui::ColorEdit3("##filament", rgb3, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
+                          unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
+            filament_colors_[std::size_t(e - 1)] = hex;
+            for (ColorMix& m : mixes_)
+                recolor(m);
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(std::to_string(e).c_str());
+        if (e < filaments)
+            ImGui::SameLine();
+        ImGui::PopID();
+    }
+    ImGui::SeparatorText(tr(T::TwoColorBlends));
+    for (int a = 1; a <= filaments; ++a)
+        for (int b = a + 1; b <= filaments; ++b) {
+            ImGui::PushID(a * 64 + b);
+            const std::string c = mix_color({filament_color(a), filament_color(b)}, {0.5, 0.5});
+            if (ImGui::ColorButton("##pair", color_of(c), 0, ImVec2(36.0f * scale_, 36.0f * scale_)))
+                add(a, b);
+            ImGui::SetItemTooltip("%d+%d", a, b);
+            ImGui::SameLine();
+            ImGui::TextUnformatted((std::to_string(a) + "+" + std::to_string(b)).c_str());
+            ImGui::SameLine();
+            ImGui::PopID();
+        }
+    ImGui::NewLine();
+    // The blend being edited.
+    if (mix_edit_ >= 0 && mix_edit_ < int(mixes_.size())) {
+        ColorMix& m = mixes_[std::size_t(mix_edit_)];
+        ImGui::SeparatorText(format(tr(T::VirtualExtruder), m.id).c_str());
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", tr(T::MixingEditorHint));
+        ImGui::PopTextWrapPos();
+        bool edited = false;
+        const auto pick = [&](const char* id, int& extruder) {
+            ImGui::SetNextItemWidth(110.0f * scale_);
+            if (ImGui::BeginCombo(id, format(tr(T::ExtruderItem), extruder).c_str())) {
+                for (int e = 1; e <= filaments; ++e)
+                    if (ImGui::Selectable(format(tr(T::ExtruderItem), e).c_str(), e == extruder))
+                        extruder = e, edited = true;
+                ImGui::EndCombo();
+            }
+        };
+        if (m.components.size() >= 2) {
+            pick("##a", m.components[0].extruder);
+            ImGui::SameLine();
+            int share = int(std::lround(m.components[1].share * 100.0));
+            ImGui::SetNextItemWidth(200.0f * scale_);
+            if (ImGui::SliderInt("##share", &share, 0, 100, "%d %%")) {
+                const double rest = 1.0 - share / 100.0, others = m.components[0].share + (m.components.size() > 2 ? m.components[2].share : 0.0);
+                m.components[1].share = share / 100.0;
+                for (std::size_t c : {std::size_t(0), std::size_t(2)})
+                    if (c < m.components.size())
+                        m.components[c].share = others > 0.0 ? rest * m.components[c].share / others
+                                                              : rest / double(m.components.size() - 1);
+                edited = true;
+            }
+            ImGui::SameLine();
+            pick("##b", m.components[1].extruder);
+            ImGui::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
+                        int(std::lround(m.components[1].share * 100.0)));
+        }
+        bool third = m.components.size() > 2;
+        ImGui::BeginDisabled(filaments < 3);
+        if (ImGui::Checkbox(tr(T::AddThirdExtruder), &third)) {
+            if (third) {
+                for (ColorMix::Component& c : m.components)
+                    c.share *= 2.0 / 3.0;
+                m.components.push_back({3, 1.0 / 3.0});
+            } else if (m.components.size() > 2) {
+                const double gone = m.components[2].share;
+                m.components.pop_back();
+                for (ColorMix::Component& c : m.components)
+                    c.share += gone / 2.0;
+            }
+            edited = true;
+        }
+        ImGui::EndDisabled();
+        if (third && m.components.size() > 2)
+            pick("##c", m.components[2].extruder);
+        if (edited)
+            recolor(m);
+        ImGui::TextUnformatted(tr(T::DisplayColor));
+        ImGui::SameLine();
+        ImGui::ColorButton("##shown", color_of(m.color), 0, ImVec2(48.0f * scale_, 18.0f * scale_));
+        // The layers of its cycle, as they repeat.
+        ImGui::TextUnformatted(tr(T::LayerSequencePreview));
+        std::vector<double> shares;
+        std::vector<int> used;
+        for (const ColorMix::Component& c : m.components)
+            if (c.share > 0.0)
+                shares.push_back(c.share), used.push_back(c.extruder);
+        if (!shares.empty()) {
+            const std::vector<int> order = mix_order(mix_cycle(shares));
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float w = 12.0f * scale_, h = 18.0f * scale_;
+            for (int k = 0; k < 24; ++k) {
+                const int e = used[std::size_t(order[std::size_t(k) % order.size()])];
+                dl->AddRectFilled(ImVec2(at.x + float(k) * w, at.y), ImVec2(at.x + float(k + 1) * w - 1.0f, at.y + h),
+                                  ImGui::GetColorU32(color_of(filament_color(e))));
+            }
+            ImGui::Dummy(ImVec2(24.0f * w, h));
+        }
+    }
+    ImGui::EndChild();
+    if (ImGui::Button(tr(T::Cancel))) {
+        mixes_ = mixes_before_;
+        open = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::OkButton))) {
+        open = false;
+        if (mixes_ != mixes_before_)
+            objects_material_changed();
+    }
+    ImGui::End();
+    mixing_open_ = open;
 }
 
 // The Paint tool's card: what to paint, the mark, the brush's size.
@@ -4933,6 +5225,7 @@ void App::layout() {
     view_tools();
     if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
         plate_tools();
+    mixing_dialog();
     if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
         empty_hint();
     if (tab_ == Tab::Preview)

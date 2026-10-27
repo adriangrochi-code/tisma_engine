@@ -46,6 +46,7 @@ add_executable(tisma_tests
   test_sequential.cpp
   test_labels.cpp
   test_multi_extruder.cpp
+  test_color_mix.cpp
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp

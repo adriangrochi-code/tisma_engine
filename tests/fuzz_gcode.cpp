@@ -371,6 +371,7 @@ int main(int argc, char** argv) {
         }
         // Several extruders (multi_extruder.md): the copies each with one,
         // a kind of extrusion with another, the nozzles offset.
+        std::vector<ColorMix> mixes;
         if (pick(5) == 0) {
             s.extruders = 2 + pick(2);
             for (std::size_t k = 0; k < objects.size(); ++k)
@@ -384,6 +385,22 @@ int main(int argc, char** argv) {
             s.toolchange_length = {uni(0, 12), uni(0, 12)};
             s.toolchange_restart_extra = {uni(0, 2)};
             s.interface_shells = pick(2) == 0;
+            // Mixed colours (color_mixing.md): a blend, or a gradient, for some copies.
+            if (pick(3) == 0) {
+                ColorMix m;
+                m.id = s.extruders + 1;
+                m.gradient = pick(3) == 0;
+                const double a = uni(0, 1);
+                m.components = {{1, m.gradient ? 0.0 : a}, {2, m.gradient ? 1.0 : 1.0 - a}};
+                if (s.extruders > 2 && pick(2) == 0)
+                    m.components.push_back({3, m.gradient ? uni(0, 1) : uni(0, 1)});
+                if (m.gradient && pick(2) == 0)
+                    m.min_z = uni(0, 5), m.max_z = *m.min_z + uni(0.5, 10);
+                mixes.push_back(m);
+                for (MeshObject& o : objects)
+                    if (pick(2) == 0)
+                        o.extruder = m.id;
+            }
             // Different nozzles (multimaterial.md), where the layers fit 75 % of the finest.
             if (pick(3) == 0) {
                 const std::vector<double> nozzles = {s.nozzle_diameter, s.nozzle_diameter * uni(0.8, 1.8)};
@@ -435,7 +452,8 @@ int main(int argc, char** argv) {
         if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
             dump(run, mesh, s, {});
         try {
-            const SlicedModel model = slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects);
+            const SlicedModel model =
+                slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects, &mixes);
             if (!unprintable_reason(model, s).empty()) {
                 ++rejected;
                 continue;

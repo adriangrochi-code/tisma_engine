@@ -69,9 +69,11 @@ public:
     // stresses under it (docs/INFILL.md); with a painting (by triangle of the
     // mesh), the painted support and seams (docs/PAINTING.md).
     // With the plate's objects (their triangles in the mesh), sequential
-    // printing prints them one by one (sequential.md).
+    // printing prints them one by one (sequential.md), each with its
+    // extruder or one of the project's mixed colours (color_mixing.md).
     SliceResult run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load = nullptr,
-                    const Painting* painting = nullptr, const std::vector<MeshObject>* objects = nullptr);
+                    const Painting* painting = nullptr, const std::vector<MeshObject>* objects = nullptr,
+                    const std::vector<ColorMix>* mixes = nullptr);
 
 private:
     struct Cut;
@@ -79,7 +81,7 @@ private:
     // warnings (into out); null with out.error on a refusal.
     std::shared_ptr<const SlicedModel> cut(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
                                            const Painting* painting, const std::vector<MeshObject>* objects,
-                                           SliceResult& out);
+                                           const std::vector<ColorMix>* mixes, SliceResult& out);
     std::unique_ptr<gpu::Context> gpu_;
     bool gpu_tried_ = false;
     std::shared_ptr<const Cut> last_; // the last run's cut and what it was made from

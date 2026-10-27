@@ -456,7 +456,7 @@ TEST_CASE("wipe tower: relative E only, and where it stands (ME6)", "[extruders]
     const TowerTrace mmu = tower_box(mmu_text);
     CHECK_THAT(mmu.layer_box.at(10)[3], WithinAbs(155.0, 0.05)); // Tisma Slicer: 154.4
     const double per_layer = tower_of(trace(mmu_text)).length.at(10);
-    CHECK_THAT(per_layer, WithinAbs(2130.65, 1.0)); // Tisma Slicer: 2038.1
+    CHECK_THAT(per_layer, WithinAbs(2123.98, 1.0)); // the ramming within speed.max (80 mm/s); Tisma Slicer: 2038.1
     Settings s = tower_base(true);
     s.purge_volumes = {{0, 300}, {300, 0}};
     CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(168.6, 0.05)); // 64 lines; Tisma: 169.4

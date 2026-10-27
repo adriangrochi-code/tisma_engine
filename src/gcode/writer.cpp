@@ -2117,6 +2117,24 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     return c;
 }
 
+std::string toolchange_template_error(const Settings& s) {
+    TemplateContext c = template_context(s, SlicedModel{});
+    c.variables["layer_num"] = TemplateValue::of(0LL);
+    c.variables["layer_z"] = c.variables["toolchange_z"] = TemplateValue::of(s.first_layer_height);
+    c.variables["max_layer_z"] = TemplateValue::of(s.first_layer_height);
+    c.variables["current_extruder"] = c.variables["previous_extruder"] = TemplateValue::of(0LL);
+    c.variables["next_extruder"] = TemplateValue::of(1LL);
+    try {
+        render_template(s.filament_end_gcode, c, "extrusion.end_gcode");
+        render_template(s.gcode_toolchange, c, "gcode.toolchange");
+        c.variables["current_extruder"] = TemplateValue::of(1LL);
+        render_template(s.filament_start_gcode, c, "extrusion.start_gcode");
+    } catch (const TemplateError& e) {
+        return e.what();
+    }
+    return {};
+}
+
 bool sets_temperature(std::string_view gcode) {
     std::size_t at = 0;
     while (at < gcode.size()) {

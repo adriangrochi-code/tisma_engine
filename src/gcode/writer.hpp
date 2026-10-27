@@ -55,6 +55,13 @@ std::string machine_limits_gcode(const Settings& settings);
 // a layer change).
 TemplateContext template_context(const Settings& settings, const SlicedModel& model);
 
+// What is wrong with the tool change's templates (gcode.toolchange, and the
+// filament's end and start), rendered as for a change from the first
+// extruder to the second; empty when they render. Mixed colours change at
+// nearly every layer: this tells before slicing what the export would fail
+// on (color_mixing.md, rule 13).
+std::string toolchange_template_error(const Settings& settings);
+
 // Whether G-code sets a nozzle, bed or chamber temperature (M104, M109, M140,
 // M190, M141, M191, M116, or RepRapFirmware's G10 S): the start G-code that
 // does is left to it (gcode_firmware.md, rule 1).

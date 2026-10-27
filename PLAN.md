@@ -800,8 +800,10 @@ Con el PR #23 (2026-10-26):
   - [ ] 4f, `multimaterial.md` (MM1 a MM6) y `color_mixing.md`: hechos (2026-10-27) las boquillas distintas
     (`machine.nozzle_diameter` como lista, el 75 % de cada una, `multi.fine_walls_coarse_infill` con el relleno
     combinado de la gruesa, los anchos por boquilla), `multi.color_mixing` con su aviso de costo en la interfaz y el
-    aviso de purga después de laminar (MM1 a MM6). Falta `color_mixing.md`: las mezclas del proyecto (extrusores
-    virtuales), su ciclo de capas, los degradés y su archivo en el 3MF (FS1 a FS14)
+    aviso de purga después de laminar (MM1 a MM6); y `color_mixing.md` (2026-10-27): las mezclas del proyecto, su
+    ciclo de capas, los degradés, el proyecto, el extrusor de cada objeto en la interfaz y el diálogo de mezclas
+    (FS1 a FS14). Falta leer y escribir las mezclas y el extrusor de cada objeto en el 3MF (el motor no escribe 3MF ni
+    lee los objetos de uno por separado) y en la línea de comandos
   - [ ] F7 no planar; resina (`resin.md`, `resin_supports.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`

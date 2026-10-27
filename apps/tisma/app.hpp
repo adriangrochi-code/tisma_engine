@@ -29,7 +29,7 @@ struct AppOptions {
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
     std::vector<float> look;
-    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay or paint (for screenshots)
+    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay, paint, material, or mixing (its dialog)
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy

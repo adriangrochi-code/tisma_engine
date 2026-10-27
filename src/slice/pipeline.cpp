@@ -374,24 +374,57 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects);
 
-// Every path of a part's walls and fills (not the support) printed by `tool`.
-void tag_tool(SlicedModel& part, int tool) {
-    const auto tag = [&](std::vector<Toolpath>& paths) {
-        for (Toolpath& t : paths)
-            t.tool = std::uint8_t(tool);
-    };
-    for (LayerWalls& w : part.walls)
-        tag(w.toolpaths), tag(w.gaps);
-    for (LayerFill& f : part.fills)
-        for (std::vector<Toolpath>* list : {&f.top, &f.solid, &f.sparse, &f.bridge, &f.gaps, &f.arcs, &f.overhang_walls, &f.ironing})
-            tag(*list);
-    for (ThickLayer& t : part.thick)
-        tag(t.walls), tag(t.fill.top), tag(t.fill.solid), tag(t.fill.sparse), tag(t.fill.bridge), tag(t.fill.gaps);
+// Each list of a part's paths (walls and fills, not the support), with its layer.
+template <class F>
+void part_paths(SlicedModel& part, F&& f) {
+    for (std::size_t l = 0; l < part.walls.size(); ++l)
+        f(l, part.walls[l].toolpaths), f(l, part.walls[l].gaps);
+    for (std::size_t l = 0; l < part.fills.size(); ++l) {
+        LayerFill& fill = part.fills[l];
+        for (std::vector<Toolpath>* list : {&fill.top, &fill.solid, &fill.sparse, &fill.bridge, &fill.gaps, &fill.arcs,
+                                            &fill.overhang_walls, &fill.ironing})
+            f(l, *list);
+    }
+    for (std::size_t l = 0; l < part.thick.size(); ++l) {
+        ThickLayer& t = part.thick[l];
+        for (std::vector<Toolpath>* list : {&t.walls, &t.fill.top, &t.fill.solid, &t.fill.sparse, &t.fill.bridge, &t.fill.gaps})
+            f(l, *list);
+    }
 }
 
-// An object's extruder on this machine: one it has (the first with one).
-int object_tool(const MeshObject& o, const Settings& settings) {
-    return std::clamp(o.extruder, 1, std::max(settings.extruders, 1));
+// Every path of a part's walls and fills (not the support) printed by `tool`.
+void tag_tool(SlicedModel& part, int tool) {
+    part_paths(part, [&](std::size_t, std::vector<Toolpath>& paths) {
+        for (Toolpath& t : paths)
+            t.tool = std::uint8_t(tool);
+    });
+}
+
+// An object's extruder, as slice_model resolved it: one the machine has, or
+// a blend's number.
+int object_tool(const MeshObject& o, const Settings&) {
+    return std::max(o.extruder, 1);
+}
+
+// Mixed colours (color_mixing.md, rules 6 to 10): the paths a blend's
+// objects lay (marked with its number) each take the filament of their
+// layer, whole layers at a time.
+void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes) {
+    for (const ColorMix& mix : mixes) {
+        std::vector<char> present(model.layers.size(), 0);
+        part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+            if (l < present.size() && !present[l])
+                present[l] = std::any_of(paths.begin(), paths.end(), [&](const Toolpath& t) { return t.tool == mix.id; });
+        });
+        if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
+            continue;
+        const std::vector<int> filament = mix_layers(mix, model.layers, present);
+        part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+            for (Toolpath& t : paths)
+                if (t.tool == mix.id && l < filament.size() && filament[l] > 0)
+                    t.tool = std::uint8_t(filament[l]);
+        });
+    }
 }
 
 // Different nozzles (multimaterial.md, rule 3; own design): the line widths
@@ -434,10 +467,26 @@ bool several_tools(const std::vector<MeshObject>& objects, const Settings& setti
 } // namespace
 
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
-                        const StressField* stress, const Painting* painting, const std::vector<MeshObject>* objects) {
+                        const StressField* stress, const Painting* painting, const std::vector<MeshObject>* given,
+                        const std::vector<ColorMix>* mixes) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // Each object's extruder: one the machine has (the first with one), or
+    // the number of a blend it can print (color_mixing.md, rule 5).
+    std::vector<ColorMix> blends;
+    if (mixes && settings.extruders > 1)
+        for (const ColorMix& m : *mixes)
+            if (mix_usable(m, settings.extruders))
+                blends.push_back(m);
+    std::vector<MeshObject> resolved;
+    if (given) {
+        resolved = *given;
+        for (MeshObject& o : resolved)
+            if (std::none_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == o.extruder; }))
+                o.extruder = std::clamp(o.extruder, 1, std::max(settings.extruders, 1));
+    }
+    const std::vector<MeshObject>* objects = given ? &resolved : nullptr;
     // The plate's objects: each one sliced apart when printed one after
     // another (sequential.md, rule 1), else the plate as one, with their
     // outlines kept.
@@ -455,6 +504,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     continue;
                 if (object_tool(o, settings) != 1)
                     tag_tool(part, object_tool(o, settings));
+                apply_mixes(part, blends);
                 SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
                                     part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {},
                                     o.wipe_into_infill, o.wipe_into_object};
@@ -476,6 +526,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
+        apply_mixes(out, blends);
         for (const MeshObject& o : *objects) {
             const IndexedMesh mesh = object_mesh(input, o);
             if (mesh.triangles.empty())

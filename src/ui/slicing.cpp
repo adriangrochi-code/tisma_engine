@@ -131,6 +131,7 @@ struct Slicer::Cut {
     TriangleMesh mesh;
     std::optional<Painting> painting;
     std::vector<MeshObject> objects;
+    std::vector<ColorMix> mixes;
     std::string key; // settings_json(without_gcode_settings(settings))
     bool stressed = false; // cut with a load case's stress field
     std::shared_ptr<const SlicedModel> model;
@@ -142,9 +143,12 @@ Slicer::Slicer() = default;
 Slicer::~Slicer() = default;
 
 SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
-                        const Painting* painting, const std::vector<MeshObject>* objects) {
+                        const Painting* painting, const std::vector<MeshObject>* objects,
+                        const std::vector<ColorMix>* mixes) {
     const std::vector<MeshObject> none;
     const std::vector<MeshObject>& given = objects ? *objects : none;
+    const std::vector<ColorMix> no_mixes;
+    const std::vector<ColorMix>& blends = mixes ? *mixes : no_mixes;
     SliceResult out;
     out.settings = settings;
     try {
@@ -157,7 +161,7 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
         const std::shared_ptr<const Cut> last = std::exchange(last_, nullptr);
         if (last && last->key == key && !stressed && !last->stressed &&
             (painting ? last->painting && *last->painting == *painting : !last->painting) &&
-            last->objects == given && last->mesh.corners() == mesh.corners()) {
+            last->objects == given && last->mixes == blends && last->mesh.corners() == mesh.corners()) {
             out.model = last->model;
             out.warnings = last->warnings;
             out.gpu = last->gpu;
@@ -168,12 +172,12 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
                 return out;
             }
         } else {
-            out.model = cut(mesh, settings, load, painting, given.empty() ? nullptr : &given, out);
+            out.model = cut(mesh, settings, load, painting, given.empty() ? nullptr : &given, &blends, out);
             if (!out.error.empty())
                 return out;
             last_ = std::make_shared<const Cut>(
-                Cut{mesh, painting ? std::optional<Painting>(*painting) : std::nullopt, given, std::move(key), stressed,
-                    out.model, out.warnings, out.gpu});
+                Cut{mesh, painting ? std::optional<Painting>(*painting) : std::nullopt, given, blends, std::move(key),
+                    stressed, out.model, out.warnings, out.gpu});
         }
         out.slice_seconds = seconds_since(start);
 
@@ -204,7 +208,8 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
 
 std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const Settings& settings,
                                                const AnalysisCase* load, const Painting* painting,
-                                               const std::vector<MeshObject>* objects, SliceResult& out) {
+                                               const std::vector<MeshObject>* objects,
+                                               const std::vector<ColorMix>* mixes, SliceResult& out) {
     const IndexedMesh welded = weld_exact(mesh);
     if (std::string reason = unprintable_reason(welded, settings); !reason.empty()) {
         out.error = std::move(reason);
@@ -232,7 +237,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
     }
     auto model = std::make_shared<SlicedModel>();
     try {
-        *model = slice_model(welded, settings, gpu, &stress, painting, objects);
+        *model = slice_model(welded, settings, gpu, &stress, painting, objects, mixes);
         if (gpu)
             out.gpu = gpu->device_name();
     } catch (const std::runtime_error& e) {
@@ -241,7 +246,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         out.warnings.push_back(
             {"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
         gpu_.reset(); // do not try a failing device again
-        *model = slice_model(welded, settings, nullptr, &stress, painting, objects);
+        *model = slice_model(welded, settings, nullptr, &stress, painting, objects, mixes);
     }
     if (std::string reason = unprintable_reason(*model, settings); !reason.empty()) {
         out.error = std::move(reason);

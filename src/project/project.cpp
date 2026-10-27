@@ -77,6 +77,12 @@ std::string write_project(const Project& project) {
         models.push_back({{"name", m.name}, {"mesh", i}, {"offset", m.offset}});
         if (!m.painting.empty())
             models.back()["painting"] = paintings++;
+        if (m.extruder != 1)
+            models.back()["extruder"] = m.extruder;
+        if (m.wipe_into_infill)
+            models.back()["wipe_into_infill"] = true;
+        if (m.wipe_into_object)
+            models.back()["wipe_into_object"] = true;
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -85,6 +91,9 @@ std::string write_project(const Project& project) {
         {"profiles", profiles},
         {"models", models},
     };
+    // The blends in the file the spec gives them (color_mixing.md, rule 15).
+    if (!project.mixes.empty() || !project.filament_colors.empty())
+        root["color_mixing"] = ordered_json::parse(color_mixes_json(project.mixes, project.filament_colors));
     if (project.calibration) {
         ordered_json segments = ordered_json::array();
         for (const CalibrationSegment& s : project.calibration->segments)
@@ -214,8 +223,34 @@ static Project read_project_checked(std::string_view data) {
                     fail(what + ".painting: " + e.what());
                 }
             }
+            if (m.contains("extruder")) {
+                if (!m.at("extruder").is_number_integer() || m.at("extruder").get<int>() < 1 ||
+                    m.at("extruder").get<int>() > 255)
+                    fail(what + ".extruder: must be from 1 to 255");
+                model.extruder = m.at("extruder").get<int>();
+            }
+            for (const auto& [key, flag] : {std::pair{"wipe_into_infill", &model.wipe_into_infill},
+                                            std::pair{"wipe_into_object", &model.wipe_into_object}})
+                if (m.contains(key)) {
+                    if (!m.at(key).is_boolean())
+                        fail(what + "." + key + ": must be true or false");
+                    *flag = m.at(key).get<bool>();
+                }
             p.models.push_back(std::move(model));
         }
+    }
+    if (root.contains("color_mixing")) {
+        const ordered_json& c = root.at("color_mixing");
+        try {
+            p.mixes = parse_color_mixes(c.dump());
+        } catch (const ColorMixError& e) {
+            fail(e.what());
+        }
+        if (c.is_object() && c.contains("physical_extruders") && c.at("physical_extruders").is_array())
+            for (const ordered_json& f : c.at("physical_extruders"))
+                p.filament_colors.push_back(f.is_object() && f.contains("color") && f.at("color").is_string()
+                                                ? f.at("color").get<std::string>()
+                                                : std::string());
     }
     if (root.contains("calibration")) {
         const ordered_json& c = root.at("calibration");

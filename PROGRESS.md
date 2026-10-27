@@ -5863,3 +5863,49 @@ una lista de uno).
 
 **Sigue:** 4f, segunda parte: `color_mixing.md` (las mezclas, FS1 a FS14).
 
+## 2026-10-27 — Punto 4f, segunda parte: mezcla de colores
+
+**Hecho** (ficha `color_mixing.md`):
+- `src/slice/color_mix.*`: una mezcla (`ColorMix`) es un extrusor virtual numerado después de los reales, con hasta
+  tres filamentos y su parte, o un degradé con la posición de cada uno. El ciclo de capas (regla 7) es el más corto
+  de 2 a 64 en el que cada parte queda a menos de 3 puntos de la pedida, simplificado; el orden (regla 8) da cada capa
+  al filamento más atrasado, el primero de la mezcla en un empate; el ciclo cuenta desde la primera capa donde está la
+  mezcla (regla 9). Los degradés (regla 10) van por bandas, una cada 10 capas (2 a 11), con la mezcla del medio de la
+  banda redondeada al 10 % y su propio ciclo; la banda de una capa sale de su Z de arriba, sumando las alturas de capa
+  desde la cama.
+- En el laminado (`slice_model(..., mixes)`): un objeto con el número de una mezcla se lamina como otro extrusor y
+  `apply_mixes` le pone a cada capa el filamento que le toca, capa entera (regla 6); lo demás (plan de herramientas,
+  torre, escritor) solo ve extrusores reales, y cada capa empieza con el que dejó la anterior (regla 11). Las mezclas
+  que la impresora no puede imprimir se descartan (regla 5).
+- `toolchange_template_error` dice antes de laminar si la plantilla de cambio falla (regla 13); la interfaz lo avisa
+  al prender la mezcla.
+- El proyecto guarda el extrusor de cada pieza, sus banderas de purga y las mezclas con los colores de los
+  filamentos, en el JSON de la regla 15 (`docs/PROJECT.md`); al abrirlo en una impresora con menos filamentos se
+  descartan las mezclas que no puede imprimir.
+- En la interfaz: la herramienta «Extrusor y color del objeto» de la placa (el extrusor de cada pieza, real o
+  virtual, y dónde purga) y el diálogo «Extrusores virtuales - Mezcla de colores» (la lista con su color y partes, el
+  color de cada filamento, las mezclas de dos colores, el editor con el deslizador, el tercer extrusor, el color que
+  se muestra y la secuencia de capas). El color previsto es propio: la relación de Yule y Nielsen (1951) con n = 2 en
+  cada canal; el modelo de Prusa no se usó.
+
+**Medido** (caja de 20 × 20 × 10 mm, 50 capas, MMU con torre; entre paréntesis Tisma Slicer): FS1 1, 2, 1, 2… con 49
+cambios (49); FS2 a FS8 las secuencias de la ficha; FS9, el degradé, la secuencia exacta
+`11112111111211121121212121212212221221222212222222`; FS10 49 cambios (49); FS11 4165 mm de filamento, 12,42 g en
+total y 11,16 g en la torre, 57 min con la impresora de prueba (3753 mm, 11,19 g, 10,17 g, 55 min). Desde la interfaz,
+el mismo proyecto lamina y verifica: 3,86 m.
+
+**Nota para la ficha:** la regla 7 dice «a 3 puntos o menos», pero con eso 7 : 93 daría un ciclo de 10 (10 % está
+justo a 3 puntos de 7 %); la tabla medida da 11, así que el motor usa «a menos de 3 puntos».
+
+**Corregido** (el fuzzer, con filamento de 2,85 mm): la compresión de la MMU podía ir más rápido que `speed.max`;
+ahora no pasa de ese límite (la torre de ME7 cambia de 2130,65 a 2123,98 mm por capa con la impresora de prueba).
+
+Pruebas nuevas: `tests/test_color_mix.cpp` (9 casos: la tabla de la regla 7, FS1 a FS14 y el proyecto); fuzzer con
+mezclas y degradés: 900 corridas (semillas 50 a 52), 0 fallas. Capturas del diálogo y de la herramienta bajo Xvfb.
+
+**No hecho:** el 3MF (leer y escribir `Metadata/Prusa_Slicer_full_spectrum.json` y el extrusor de cada objeto: el
+motor no escribe 3MF y lee el plato como una sola malla); la línea de comandos no asigna extrusores ni mezclas; el
+botón de degradés no está en la interfaz (la ficha dice que Tisma Slicer tampoco lo tiene, regla 4).
+
+**Sigue:** F7 no planar; después resina (`resin.md`, `resin_supports.md`).
+

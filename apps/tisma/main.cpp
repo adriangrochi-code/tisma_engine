@@ -22,7 +22,7 @@ constexpr const char* kUsage =
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
-    "                                   [--tool move|rotate|scale|lay|paint]\n"
+    "                                   [--tool move|rotate|scale|lay|paint|material|mixing]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
@@ -90,8 +90,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--tool") {
             options.tool = value();
             if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
-                options.tool != "paint") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
+                options.tool != "paint" && options.tool != "material" && options.tool != "mixing") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, paint, material or mixing\n");
                 return 2;
             }
         } else if (arg == "--info") {

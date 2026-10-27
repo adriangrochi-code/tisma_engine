@@ -5,6 +5,7 @@
 #include "perimeters/walls.hpp"
 #include "infill/rectilinear.hpp"
 #include "surfaces/surfaces.hpp"
+#include "slice/color_mix.hpp"
 #include "slice/layers.hpp"
 #include "slice/local_layers.hpp"
 #include "slice/variable_layers.hpp"
@@ -104,10 +105,13 @@ double bridge_bead(const Settings& settings);
 // the painted enforcers and blockers and the seams their painted areas.
 // With the plate's objects (their triangles in the mesh), each one's outline
 // is kept, and with sequential.enabled and more than one, each is sliced
-// apart and their layers follow one another (sequential.md, rule 1).
+// apart and their layers follow one another (sequential.md, rule 1). An
+// object whose extruder is the number of one of `mixes` prints with that
+// blend: each layer with the filament its cycle gives (color_mixing.md);
+// a blend this machine cannot print is left out (rule 5).
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
                         const StressField* stress = nullptr, const Painting* painting = nullptr,
-                        const std::vector<MeshObject>* objects = nullptr);
+                        const std::vector<MeshObject>* objects = nullptr, const std::vector<ColorMix>* mixes = nullptr);
 
 // Object k of a model sliced object by object, as a model of its own (its
 // layers from 0), for what looks at a stack of layers (the stability review).

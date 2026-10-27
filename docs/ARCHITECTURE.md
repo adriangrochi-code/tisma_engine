@@ -132,6 +132,10 @@ volúmenes que un proyecto marca como modificadores, fuera).
   `PartFrame` que les dice qué hay en las otras partes; cada camino lleva su extrusor (`Toolpath::tool`).
 - `wipe_tower.cpp` decide el orden de los extrusores de cada capa (`plan_tools`, que usan el escritor, el
   verificador y `printable.cpp`) y arma la torre de purga: un bloque de líneas por cambio, el contorno y el relleno.
+- `color_mix.cpp` tiene las mezclas de colores (`docs/spec/features/color_mixing.md`): el ciclo de capas de cada
+  mezcla (`mix_cycle`, `mix_order`), los degradés por bandas (`mix_layers`) y su JSON. Un objeto con el número de una
+  mezcla se lamina como un extrusor más; después `apply_mixes` (en `pipeline.cpp`) le da a cada capa el filamento que
+  le toca, así el resto (plan de herramientas, torre, escritor) solo ve extrusores reales.
 
 ### `geom/`: geometría
 
