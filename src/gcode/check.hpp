@@ -19,6 +19,12 @@ struct GcodeLimits {
     double max_feed = 0.0;        // the fastest move, mm/s
     double filament_area = 1.0;   // mm2
     double retract_length = 0.0;  // mm of filament
+    // retraction_travel.md: the filament pushed past each retraction undone
+    // (rule 1), a retraction partly while the nozzle wipes (rule 3), and G10
+    // and G11 in place of E (rule 7).
+    double restart_extra = 0.0;
+    bool wipe = false;
+    bool firmware_retraction = false;
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
     // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3

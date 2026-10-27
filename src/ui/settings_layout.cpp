@@ -49,7 +49,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.min_line_width", A},
             {"walls.min_detail", A},
             {"walls.generator", A},
-            {"walls.gap_fill", A}}},
+            {"walls.gap_fill", A},
+            {"walls.clockwise", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
             {"surfaces.bottom_layers", B},
@@ -80,7 +81,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.over_bridges", A},
             {"speed.gap_fill", A}}},
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}}},
-          {"travel", T::SubTravelSpeed, {{"speed.travel", N}, {"speed.travel_z", A}}},
+          {"travel", T::SubTravelSpeed,
+           {{"speed.travel", N}, {"speed.travel_z", A}, {"travel.avoid_crossing_walls", N}, {"travel.max_detour", A}}},
           {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
           {"overhang_speeds", T::SubOverhangSpeeds,
            {{"speed.dynamic_overhangs", N},
@@ -177,8 +179,25 @@ const std::vector<SectionLayout>& material_layout() {
           {"max_flow", T::SubMaxFlow,
            {{"extrusion.max_flow", N}, {"extrusion.infill_max_speed", A}, {"extrusion.infill_max_crossing_speed", A}}}}},
         {"retraction", T::SecRetraction, "section_retraction.svg",
-         {{"retraction", T::SubRetract, {{"retraction.length", B}, {"retraction.speed", N}}},
-          {"retract_travel", T::SubRetractTravel, {{"retraction.lift", B}, {"retraction.min_travel", N}}}}},
+         {{"retraction", T::SubRetract,
+           {{"retraction.length", B},
+            {"retraction.speed", N},
+            {"retraction.unretract_speed", A},
+            {"retraction.restart_extra", A},
+            {"retraction.on_layer_change", N},
+            {"retraction.wipe", N},
+            {"retraction.before_wipe", A},
+            {"retraction.firmware", A}}},
+          {"retract_travel", T::SubRetractTravel,
+           {{"retraction.lift", B},
+            {"retraction.min_travel", N},
+            {"retraction.lift_above", A},
+            {"retraction.lift_below", A},
+            {"travel.ramping_lift", A},
+            {"travel.slope", A},
+            {"travel.max_lift", A},
+            {"travel.lift_before_obstacle", A}}},
+          {"material_retraction", T::SubMaterialRetraction, {{"extrusion.retraction", A}}}}},
         {"needs", T::SecNeeds, "section_needs.svg",
          {{"needs", T::SubNeeds, {{"extrusion.abrasive", N}, {"extrusion.needs_enclosure", N}}}}},
     };
@@ -494,6 +513,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumNoRetract);
     if (id == "retract_travel")
         return s.retract_lift > 0.0 ? format(T::SumHop, number(s.retract_lift).c_str()) : tr(T::SumNoHop);
+    if (id == "material_retraction")
+        return s.filament_retraction.empty() ? tr(T::SumPrinterValues)
+                                             : format(T::SumMaterialValues, int(s.filament_retraction.size()));
     if (id == "needs")
         return s.abrasive || s.needs_enclosure ? tr(T::SumNeeds) : tr(T::SumNoNeeds);
     // Printer

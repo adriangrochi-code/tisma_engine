@@ -137,6 +137,10 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
     // Every speed is the printer's (owner's decision, 2026-10-26).
     if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed"))
         return ProfileKind::Printer;
+    // The lift's ramp is the printer's, like the lift; the route of the
+    // travels is the print's (retraction_travel.md).
+    if (group == "travel")
+        return key == "avoid_crossing_walls" || key == "max_detour" ? ProfileKind::Print : ProfileKind::Printer;
     // The stability review's measurements: the printer's push and its bed's
     // hold; the accelerations by kind, like the speeds.
     if (group == "review" || group == "acceleration")

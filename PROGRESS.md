@@ -5469,3 +5469,53 @@ fallas.
 **Sigue:** las miniaturas (X7) con la vista 3D de la interfaz; la compresión del binario. Con eso, el punto 2 queda
 salvo esas dos; sigue el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
 
+## 2026-10-27 — Punto 3: retracción y viajes completos
+
+**Hecho** (ficha `retraction_travel.md`, reglas 1 a 10):
+- `retraction.unretract_speed` y `retraction.restart_extra` (regla 1): la vuelta a su velocidad y con su extra;
+- `retraction.on_layer_change` (regla 2): todo cambio de capa retrae antes de subir;
+- `retraction.wipe` y `retraction.before_wipe` (regla 3): la parte quieta primero, el resto mientras la boquilla vuelve
+  sobre el camino impreso desde el último viaje, al 80 % de `speed.travel`, a lo largo de resto × velocidad /
+  (0,95 × `retraction.speed`); si ese camino es más corto, lo que falta se retrae quieto al final;
+- `retraction.lift_above` y `retraction.lift_below` (regla 4), también para la rampa;
+- `travel.ramping_lift`, `travel.slope` y `travel.max_lift` (regla 5): la rampa sube desde donde está la boquilla
+  hasta la altura y baja en vertical al final; el primer viaje de una capa sube desde la capa de abajo (el movimiento
+  en Z del cambio de capa espera a la rampa, salvo que haya G-code después del cambio de capa);
+- `travel.lift_before_obstacle` (regla 6) se lee y se guarda; no cambia el G-code porque la ficha no lo midió;
+- `retraction.firmware` (regla 7): `G10` y `G11` sin E; con `retraction.wipe`, error de configuración;
+- `travel.avoid_crossing_walls` y `travel.max_detour` (regla 8, en mm o en %): el planificador de viajes va recto
+  cuando se le pide, o cuando el desvío pasa el máximo. En el motor viene prendido (`docs/spec/BEHAVIOR.md`);
+- `walls.clockwise` (regla 9): los lazos de pared, también la espiral del modo vaso, en sentido horario desde la misma
+  costura (la costura en bufanda decide antes de dar vuelta el lazo);
+- los valores propios del material, `extrusion.retraction` y `extrusion.travel` (regla 10): reemplazan a los de la
+  impresora en el escritor y en la verificación, aunque sean 0; `null` deja el de la impresora;
+- el verificador del G-code acepta la retracción en partes durante el barrido, la vuelta con su extra y `G10`/`G11`, y
+  la Z máxima con la rampa; el panel tiene las filas (Material › Retracción y Viajes, Velocidad › Viajes, Resistencia
+  › Paredes) y `docs/CONFIG.md` las claves y el grupo `travel`.
+
+**Medido** (caja negra de la ficha contra el motor, mismas piezas y ajustes; el cubo del motor tiene 20 mm de alto,
+100 capas):
+- R1: retracción `E-2` a F2400, vuelta `E2.5` a F1200 (igual que la ficha);
+- R2 (cilindro, costura alineada, sin relleno): 0 retracciones sin el ajuste y 49 con él (la ficha, 3 y 51, con
+  relleno); con relleno al 20 %, 99 en los dos casos: el viaje del relleno a la pared ya retraía;
+- R3: 5,474 mm de barrido a F6240 (5,47 en la ficha), 10,94 con retracción a 20 mm/s, 8,42 a F9600 con viajes a 200,
+  2,73 con 1 mm de retracción, y con `before_wipe` 50 %: `E-1` quieta y 1 mm en 2,73 mm, como la ficha;
+- R4: el salto solo en capas por encima de 2 mm o por debajo de 1 mm;
+- R5: la rampa sube a tan 10° hasta 1 mm y baja en vertical; el cambio de capa sube desde la capa de abajo;
+- R6: 299 `G10` y 299 `G11` en el cubo, ninguna E de retracción; el salto sigue con `G1 Z`;
+- R7 (tubo, capa 10): sin el ajuste, 6 viajes y 28,5 mm; con él, 27 tramos y 29,7 mm; con desvío máximo de 1 mm, igual
+  que sin el ajuste; con 200 %, igual que sin límite (la ficha: 8 viajes y 33,5 mm; 90 tramos y 39,0 mm);
+- R8: los cuatro lazos del tubo con área positiva, y negativa con `walls.clockwise`;
+- R9 a R11: los valores del material (largo 0,8, velocidades 25 y 10, extra 0,4, largo 0, vacío; salto 0,3 y 0 sobre
+  0 y 0,4 de la impresora: 698 y 100 movimientos en Z; viaje mínimo 20: 50 retracciones en lugar de 299; barrido del
+  material: las 299 retracciones barren).
+- 12 pruebas nuevas en `tests/test_retraction.cpp` y 2 del planificador en `tests/test_travel.cpp`; fuzzer con las
+  opciones nuevas: 300 corridas (semilla 11), 0 fallas.
+
+**Diseño propio** (la ficha no lo dice): la retracción del cambio de capa no fuerza el salto; un viaje que retrae por el
+cambio de capa barre a la altura nueva sobre la capa de abajo; con la retracción del firmware, `restart_extra` no se
+escribe y `retraction.length` 0 sigue sin retraer; `travel.max_lift` 0 usa `retraction.lift`.
+
+**No probado:** en una impresora real (G10/G11 necesitan la retracción del firmware activada).
+
+**Sigue:** el resto de `walls_extra.md` y la impresión secuencial (`sequential.md`, con las etiquetas de objetos).

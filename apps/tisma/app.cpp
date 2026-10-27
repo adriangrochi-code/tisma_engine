@@ -722,6 +722,14 @@ const char* row_key(T label) {
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
+        {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
+        {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
+        {T::BeforeWipe, "retraction.before_wipe"}, {T::FirmwareRetraction, "retraction.firmware"},
+        {T::LiftAbove, "retraction.lift_above"}, {T::LiftBelow, "retraction.lift_below"},
+        {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
+        {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
+        {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
+        {T::FilamentRetractionRow, "extrusion.retraction"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
         {T::MaxChamberTemp, "machine.max_chamber_temp"}, {T::HardenedNozzle, "machine.hardened_nozzle"},
         {T::MachineMaxFlow, "machine.max_flow"}, {T::MaxFeedX, "machine.max_feed_x"},
@@ -2892,6 +2900,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::WallGeneratorRow, s.wall_generator,
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
+        flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);
@@ -2975,6 +2984,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
            0.5f);
+        flag(T::AvoidCrossingWalls, "travel.avoid_crossing_walls", s.avoid_crossing_walls);
+        if (shown("travel.max_detour"))
+            changed |= row(T::MaxDetour, s.max_detour.value, 0.0, 10000.0,
+                           s.max_detour.value <= 0.0 ? "—" : s.max_detour.percent ? "%.0f %%" : "%.1f mm", 0.1f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
         mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
@@ -3147,9 +3160,24 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "retraction") {
         mm(T::Retraction, "retraction.length", s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
+        mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
+           s.unretract_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
+        flag(T::WipeRow, "retraction.wipe", s.wipe);
+        mm(T::BeforeWipe, "retraction.before_wipe", s.before_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
+        mm(T::LiftAbove, "retraction.lift_above", s.lift_above, 0.0, 10000.0, s.lift_above > 0.0 ? "%.2f mm" : "—", 0.05f);
+        mm(T::LiftBelow, "retraction.lift_below", s.lift_below, 0.0, 10000.0, s.lift_below > 0.0 ? "%.2f mm" : "—", 0.05f);
+        flag(T::RampingLift, "travel.ramping_lift", s.ramping_lift);
+        mm(T::TravelSlope, "travel.slope", s.travel_slope, 0.0, 89.0, "%.1f°", 0.1f);
+        mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : "—", 0.01f);
+        flag(T::LiftBeforeObstacle, "travel.lift_before_obstacle", s.lift_before_obstacle);
+    } else if (id == "material_retraction") {
+        count(T::FilamentRetractionRow, "extrusion.retraction", s.filament_retraction.size());
     } else if (id == "needs") {
         flag(T::Abrasive, "extrusion.abrasive", s.abrasive);
         flag(T::NeedsEnclosure, "extrusion.needs_enclosure", s.needs_enclosure);

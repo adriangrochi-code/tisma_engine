@@ -143,6 +143,27 @@ int main(int argc, char** argv) {
         s.retract_length = pick(4) == 0 ? 0.0 : uni(0.2, 6);
         s.retract_lift = pick(3) == 0 ? uni(0, 1) : 0.0;
         s.relative_extrusion = pick(2) == 0;
+        if (pick(3) == 0) { // retraction and travel options (retraction_travel.md)
+            s.unretract_speed = pick(2) == 0 ? uni(5, 80) : 0.0;
+            s.restart_extra = pick(2) == 0 ? uni(0, 1) : 0.0;
+            s.retract_layer_change = pick(2) == 0;
+            s.firmware_retraction = pick(4) == 0;
+            s.wipe = !s.firmware_retraction && pick(2) == 0;
+            s.before_wipe = pick(2) == 0 ? uni(0, 100) : 0.0;
+            s.lift_above = pick(3) == 0 ? uni(0, 5) : 0.0;
+            s.lift_below = pick(3) == 0 ? uni(0, 10) : 0.0;
+            s.ramping_lift = pick(2) == 0;
+            s.travel_slope = pick(4) == 0 ? 0.0 : uni(1, 60);
+            s.max_lift = pick(3) == 0 ? 0.0 : uni(0.1, 2);
+            s.avoid_crossing_walls = pick(3) != 0;
+            s.max_detour = pick(2) == 0 ? Speed{} : Speed{uni(0, 300), pick(2) == 0};
+            s.walls_clockwise = pick(2) == 0;
+            if (pick(3) == 0) // the filament's own values
+                s.filament_retraction = {{"retraction.length", pick(3) == 0 ? 0.0 : uni(0.2, 4)},
+                                         {"retraction.lift", uni(0, 0.6)},
+                                         {"retraction.min_travel", uni(0, 20)},
+                                         {"retraction.wipe", s.firmware_retraction ? 0.0 : double(pick(2))}};
+        }
         s.seam = std::array{SeamMode::Aligned, SeamMode::Nearest, SeamMode::Random, SeamMode::Rear}[std::size_t(pick(4))];
         if (pick(8) == 0 && !s.support) // vase mode, never with supports
             s.vase = true;

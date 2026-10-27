@@ -297,6 +297,28 @@ struct Settings {
     double retract_speed = 0.0;      // mm/s, from the printer's profile; 0: not set
     double retract_lift = 0.0;       // mm of Z while travelling
     double retract_min_travel = 2.0; // mm: shorter travels do not retract
+    // retraction_travel.md: the push back (rule 1), every layer change
+    // retracting (2), the wipe (3), the lift's heights (4) and the firmware's
+    // retraction (7).
+    double unretract_speed = 0.0;    // mm/s; 0: retraction.speed
+    double restart_extra = 0.0;      // mm of filament pushed past the retraction
+    bool retract_layer_change = false;
+    bool wipe = false;
+    double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
+    double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
+    bool firmware_retraction = false; // G10 and G11
+    // Travels (rules 5 and 8): a lift as a ramp, and the route inside the part.
+    bool ramping_lift = false;
+    double travel_slope = 0.0;      // degrees
+    double max_lift = 0.0;          // mm the ramp climbs at most; 0: retraction.lift
+    bool lift_before_obstacle = false; // read; not measured, not applied (rule 6)
+    bool avoid_crossing_walls = true;  // travels run inside, round holes (docs/spec/BEHAVIOR.md)
+    Speed max_detour;                  // mm or % of the straight travel a route may add; 0: no limit
+    bool walls_clockwise = false;      // every loop clockwise (rule 9)
+    // The filament's own values of these (rule 10), by name
+    // ("retraction.length", "travel.slope"...); one given replaces the
+    // printer's, 0 included. with_filament_retraction applies them.
+    std::map<std::string, double> filament_retraction;
 
     // adhesion
     int skirt_loops = 1;
@@ -480,6 +502,11 @@ double* limit_named(Settings& settings, std::string_view name);
 
 // The settings with the silent mode's limits in place of the normal ones.
 Settings silent_settings(const Settings& settings);
+
+// The settings a filament may give its own value of (retraction_travel.md,
+// rule 10), and the settings with the filament's values in place.
+extern const std::array<const char*, 14> kFilamentRetractionNames;
+Settings with_filament_retraction(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);

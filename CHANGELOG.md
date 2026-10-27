@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Retracción y viajes completos** (ficha `retraction_travel.md`): velocidad y extra de la vuelta del filamento,
+  retraer en todo cambio de capa, barrido mientras retrae (con una parte quieta antes), salto en Z solo por encima o
+  por debajo de una altura, salto en rampa con su pendiente y su altura, retracción del firmware con `G10`/`G11`,
+  viajes rectos que cruzan las paredes o con un desvío máximo, lazos de pared en sentido horario y valores propios del
+  material para la retracción y los viajes. En Material › Retracción y Viajes, Velocidad › Viajes y Resistencia ›
+  Paredes.
 - **Perímetros en voladizo** (ficha `walls_extra.md`, regla 8; `walls.detect_overhangs`, encendido por defecto, en
   Resistencia › Paredes): los tramos de pared que quedan enteros en el aire se marcan `Overhang perimeter`, van a la
   velocidad de los puentes y con su ventilador. En el Benchy, 218 mm en 34 capas.

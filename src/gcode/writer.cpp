@@ -742,6 +742,19 @@ public:
         feed_limit_ = std::max(s.max_feed_x, s.max_feed_y);
         if (!(feed_limit_ > 0.0)) // not known: no cap
             feed_limit_ = std::numeric_limits<double>::infinity();
+        // The retraction's options (retraction_travel.md).
+        unretract_feed_ = s.unretract_speed;
+        restart_extra_ = s.restart_extra;
+        layer_change_retract_ = s.retract_layer_change;
+        wipe_ = s.wipe;
+        before_wipe_ = std::clamp(s.before_wipe, 0.0, 100.0) / 100.0;
+        lift_above_ = s.lift_above, lift_below_ = s.lift_below;
+        firmware_ = s.firmware_retraction;
+        if (s.ramping_lift && s.travel_slope > 0.0) {
+            ramp_tan_ = std::tan(s.travel_slope * std::numbers::pi / 180.0);
+            if (s.max_lift > 0.0)
+                lift_ = s.max_lift;
+        }
     }
 
     // Plans the time of the moves since the last call (they end at rest), and
@@ -901,8 +914,14 @@ public:
     // before and after: the user's G-code around the move in Z
     // (gcode_templates.md, rule 11); one that moves anything makes the next
     // travel write every axis again.
+    // With retraction.on_layer_change, the filament is pulled back before
+    // (retraction_travel.md, rule 2). With a ramping lift, the move up waits
+    // for the layer's first travel, which climbs from the layer below (rule
+    // 5), unless the user's G-code after the change wants the head there.
     void new_layer(double z, double height, double travel_feed, bool keep_z = false, const std::string& before = {},
                    const std::string& after = {}) {
+        if (layer_change_retract_ && known_ && !keep_z && !resync_)
+            retract(0.8 * travel_feed);
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_ && dialect_.resets_e) {
             // A retraction carries over the layer change: E restarts at minus its length.
@@ -927,12 +946,13 @@ public:
                 type(was);
         };
         user(before);
-        if (!keep_z)
+        layer_z_pending_ = !keep_z && ramp_tan_ > 0.0 && lift_ > 0.0 && known_ && !resync_ && !commands(after);
+        if (!keep_z && !layer_z_pending_)
             move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed), {}, {}, "simple layer change");
         first_travel_ = true;
         height_ = height;
         z_value_ = z;
-        if (!keep_z)
+        if (!keep_z && !layer_z_pending_)
             z_now_ = written(z);
         clearance_ = 0.0;
         // Marlin with relative E: the extruder's position restarts at each
@@ -1014,13 +1034,9 @@ public:
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
             travel_acceleration(std::numeric_limits<double>::infinity());
-            if (retract_ > 0.0 && !retracted_) {
-                e_ = relative_ ? -retract_ : e_ - retract_;
-                move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract");
-                retracted_ = true;
-                retracted_amount_ = retract_;
-                other_time_ += retract_ / retract_feed_;
-            }
+            wiped_path_.clear(); // where the head is, the engine does not know: no wipe
+            retract(0.0);
+            layer_z_pending_ = false;
             const double cruise = written(z_value_ + clearance_);
             move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {}, "move to layer height");
             z_now_ = cruise;
@@ -1032,39 +1048,54 @@ public:
         }
         resync_ = false;
         if (!known_) {
+            wiped_path_.clear();
             travel_acceleration(std::numeric_limits<double>::infinity());
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
             x_value_ = p.x, y_value_ = p.y, known_ = true;
             return;
         }
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
-        const TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
-        const TravelPlan& plan = ready ? *planned : own;
-        const bool retract = force_retract || plan.leaves_part || plan.length > min_travel_;
-        if (plan.length > 0.0)
-            travel_acceleration(plan.length);
-        if (retract && retract_ > 0.0 && !retracted_) {
-            e_ = relative_ ? -retract_ : e_ - retract_;
-            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract");
-            retracted_ = true;
-            retracted_amount_ = retract_;
-            other_time_ += retract_ / retract_feed_;
+        TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
+        const TravelPlan* plan = ready ? planned : &own;
+        const bool retracting = force_retract || plan->leaves_part || plan->length > min_travel_;
+        if (plan->length > 0.0)
+            travel_acceleration(plan->length);
+        if (retracting) {
+            // A wipe leaves the head elsewhere: the travel from there.
+            const double x = x_value_, y = y_value_;
+            retract(0.8 * feed);
+            if (x_value_ != x || y_value_ != y) {
+                own = planner.plan({x_value_, y_value_}, p);
+                plan = &own;
+            }
         }
-        // Off the layer's top (Z anti-aliasing): back up, and over what was raised.
+        wiped_path_.clear();
         const double cruise = written(z_value_ + clearance_);
+        const double level = clearance_ > 0.0 ? cruise : z_value_;
+        const double lift = retracting ? lift_height() : 0.0;
+        other_time_ += plan->length / feed;
+        if (lift > 0.0 && ramp_tan_ > 0.0) {
+            // Up while travelling, from where the nozzle is (the layer below,
+            // when the layer's move up waited for this travel).
+            ramp(*plan, feed, std::max(z_now_ + lift, level), level, note);
+            layer_z_pending_ = false;
+            x_value_ = p.x, y_value_ = p.y;
+            return;
+        }
+        // Off the layer's top (Z anti-aliasing): back up, and over what was
+        // raised; or the layer's move up that waited for a ramp.
         if (z_now_ != cruise) {
             move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {},
-                 cruise > z_now_ ? "lift" : "lower");
+                 layer_z_pending_ ? "simple layer change" : cruise > z_now_ ? "lift" : "lower");
             z_now_ = cruise;
         }
-        const bool lift = retract && lift_ > 0.0;
-        const double level = clearance_ > 0.0 ? cruise : z_value_;
-        other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / z_feed(feed) : 0.0);
-        if (lift)
-            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, z_feed(feed), {}, {}, "lift");
-        for (const Point2d& q : plan.points)
+        layer_z_pending_ = false;
+        other_time_ += lift > 0.0 ? 2.0 * lift / z_feed(feed) : 0.0;
+        if (lift > 0.0)
+            move("G1", std::nullopt, std::nullopt, level + lift, std::nullopt, z_feed(feed), {}, {}, "lift");
+        for (const Point2d& q : plan->points)
             move("G1", q.x, q.y, std::nullopt, std::nullopt, feed, {}, {}, note);
-        if (lift)
+        if (lift > 0.0)
             move("G1", std::nullopt, std::nullopt, level, std::nullopt, z_feed(feed), {}, {}, "lower");
         x_value_ = p.x, y_value_ = p.y;
     }
@@ -1111,6 +1142,7 @@ public:
         pending_ = 0.0;
         move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced(feed), x_text,
              y_text, note_);
+        remember({x_value_, y_value_}, to.p);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
     }
@@ -1175,6 +1207,8 @@ public:
             clock(dx, dy, 0.0, path > 0.0 ? de * std::hypot(dx, dy) / path : 0.0, double(f_) / 60.0, true);
         }
         position_[0] = end.x, position_[1] = end.y, position_[3] = e_to;
+        for (std::size_t k = a.first; k < a.last; ++k)
+            remember(points[k].p, points[k + 1].p);
         x_value_ = end.x, y_value_ = end.y, known_ = true;
     }
 
@@ -1212,12 +1246,128 @@ private:
             text_ += "M101 ; extruder on\n";
             extruder_on_ = true;
         }
-        if (retracted_) {
-            e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
-            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "unretract");
-            retracted_ = false;
-            other_time_ += retracted_amount_ / retract_feed_;
+        unretract();
+    }
+
+    // The filament pulled back (retraction_travel.md, rules 3 and 7): G10
+    // with the firmware's retraction; else E back by its length, standing,
+    // or with retraction.wipe before_wipe of it standing and the rest while
+    // the nozzle goes back over the path just printed at wipe_feed, along
+    // rest * wipe_feed / (0.95 * the retraction's speed). What a shorter path
+    // cannot take is pulled standing at its end. 0: no wipe.
+    void retract(double wipe_feed) {
+        if (retracted_ || !(retract_ > 0.0))
+            return;
+        retracted_ = true;
+        if (firmware_) {
+            text_ += "G10";
+            line_end("retract");
+            retracted_amount_ = 0.0; // E stays where it is
+            clock(0.0, 0.0, 0.0, -retract_, retract_feed_, false);
+            other_time_ += retract_ / retract_feed_;
+            return;
         }
+        retracted_amount_ = retract_;
+        const auto pull = [&](double amount) {
+            if (!(amount > 1e-9))
+                return;
+            e_ = relative_ ? -amount : e_ - amount;
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract");
+            other_time_ += amount / retract_feed_;
+        };
+        if (!wipe_ || !(wipe_feed > 0.0) || wiped_path_.size() < 2) {
+            pull(retract_);
+            return;
+        }
+        const double first = retract_ * before_wipe_, rest = retract_ - first;
+        pull(first);
+        const double length = rest * wipe_feed / (0.95 * retract_feed_);
+        double done = 0.0, pulled = 0.0;
+        Point2d at{x_value_, y_value_};
+        for (std::size_t i = wiped_path_.size() - 1; i-- > 0 && done < length;) {
+            const Point2d q = wiped_path_[i];
+            const double d = std::hypot(q.x - at.x, q.y - at.y);
+            if (!(d > 0.0))
+                continue;
+            const double take = std::min(d, length - done);
+            const Point2d to = take < d ? Point2d{at.x + (q.x - at.x) * take / d, at.y + (q.y - at.y) * take / d} : q;
+            done += take;
+            const double share = done >= length ? rest - pulled : rest * take / length;
+            pulled += share;
+            e_ = relative_ ? -share : e_ - share;
+            move("G1", to.x, to.y, std::nullopt, e_, wipe_feed, {}, {}, "wipe and retract");
+            at = to;
+        }
+        x_value_ = at.x, y_value_ = at.y;
+        other_time_ += done / wipe_feed;
+        pull(rest - pulled);
+        wiped_path_.clear();
+    }
+
+    // The retraction undone (rule 1): at retraction.unretract_speed, with
+    // retraction.restart_extra more; G11 with the firmware's, which pushes
+    // back its own length.
+    void unretract() {
+        if (!retracted_)
+            return;
+        retracted_ = false;
+        const double feed = unretract_feed_ > 0.0 ? unretract_feed_ : retract_feed_;
+        if (firmware_) {
+            text_ += "G11";
+            line_end("unretract");
+            clock(0.0, 0.0, 0.0, retract_, feed, false);
+            other_time_ += retract_ / feed;
+            return;
+        }
+        const double back = retracted_amount_ + restart_extra_;
+        e_ = relative_ ? back : e_ + back;
+        total_e_ += restart_extra_;
+        move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
+        other_time_ += back / feed;
+    }
+
+    // The lift of a travel that retracts at this layer: none outside
+    // retraction.lift_above to retraction.lift_below (rule 4).
+    double lift_height() const {
+        if ((lift_above_ > 0.0 && z_value_ < lift_above_ - 1e-9) || (lift_below_ > 0.0 && z_value_ > lift_below_ + 1e-9))
+            return 0.0;
+        return lift_;
+    }
+
+    // A travel that lifts as a ramp (rule 5): up from where the nozzle is at
+    // the slope, to `top` at most, on at that height, then straight down to
+    // `level` at the end; a short travel climbs as far as it gets.
+    void ramp(const TravelPlan& plan, double feed, double top, double level, const char* note) {
+        const double base = z_now_;
+        const double climb = (top - base) / ramp_tan_; // the travel's length up to the top
+        double along = 0.0, reached = base;
+        Point2d at{x_value_, y_value_};
+        for (const Point2d& q : plan.points) {
+            const double d = std::hypot(q.x - at.x, q.y - at.y);
+            if (along < climb && along + d > climb && d > 0.0) { // the top within this piece
+                const double f = (climb - along) / d;
+                move("G1", at.x + (q.x - at.x) * f, at.y + (q.y - at.y) * f, top, std::nullopt, feed, {}, {}, "ramping lift");
+            }
+            along += d;
+            reached = std::min(top, base + along * ramp_tan_);
+            move("G1", q.x, q.y, reached, std::nullopt, feed, {}, {}, note);
+            at = q;
+        }
+        move("G1", std::nullopt, std::nullopt, level, std::nullopt, z_feed(feed), {}, {}, reached > level ? "lower" : "lift");
+        other_time_ += std::abs(reached - level) / z_feed(feed);
+        z_now_ = written(level);
+    }
+
+    // The path printed since the last travel, for a wipe: only with
+    // retraction.wipe, and its last few thousand pieces.
+    void remember(Point2d from, Point2d to) {
+        if (!wipe_)
+            return;
+        if (wiped_path_.empty())
+            wiped_path_.push_back(from);
+        wiped_path_.push_back(to);
+        if (wiped_path_.size() > 4096)
+            wiped_path_.erase(wiped_path_.begin(), wiped_path_.begin() + 2048);
     }
 
     // The feed of a bead of this section: a flow tower's exact flow, past every
@@ -1421,7 +1571,15 @@ private:
     bool marlin_;
     double accel_print_, accel_travel_;
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
-    double retracted_amount_ = 0.0;
+    double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
+    // retraction_travel.md: the push back's feed (0: the retraction's) and
+    // extra, the layer change's retraction, the wipe, the lift's heights, the
+    // firmware's retraction and the ramp's slope (0: a lift straight up).
+    double unretract_feed_ = 0.0, restart_extra_ = 0.0;
+    bool layer_change_retract_ = false, wipe_ = false, firmware_ = false;
+    double before_wipe_ = 0.0, lift_above_ = 0.0, lift_below_ = 0.0, ramp_tan_ = 0.0;
+    std::vector<Point2d> wiped_path_; // the path printed since the last travel
+    bool layer_z_pending_ = false;     // the layer's move up waits for its first travel's ramp
     double flow_ = 1.0;
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
@@ -1709,7 +1867,13 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     }
 }
 
-void write_gcode(std::ostream& target, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
+void write_gcode(std::ostream& target, const SlicedModel& model, const Settings& given, std::vector<Warning>* warnings) {
+    // The filament's own retraction and travel values in place of the
+    // printer's (retraction_travel.md, rule 10).
+    std::optional<Settings> resolved;
+    if (!given.filament_retraction.empty())
+        resolved = with_filament_retraction(given);
+    const Settings& s = resolved ? *resolved : given;
     require_speeds(s); // from the printer's profile: the writer has none of its own
     // With M73 by time (gcode_firmware.md, rule 5) the G-code is kept until
     // the times are known; else it goes out as it is written.
@@ -1882,7 +2046,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             return;
         const Polygons& region = l < model.regions.size() ? model.regions[l] : none;
         RegionPlan& p = plans[l];
-        p.planner.emplace(region, s.wall_width);
+        p.planner.emplace(region, s.wall_width,
+                          TravelRouting{s.avoid_crossing_walls, s.max_detour.value, s.max_detour.percent});
         p.pieces = split_islands(region);
         // The point-in-polygon tests run only where a box holds the point
         // (hundreds of islands made every path test them all).
@@ -1937,6 +2102,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         for (const ToolpathPoint& p : loop.points)
             if (p.dz != 0.0 || p.below != 0.0)
                 return false;
+        if (s.walls_clockwise) // the spiral turns clockwise too (retraction_travel.md, rule 9)
+            std::reverse(loop.points.begin() + 1, loop.points.end());
         if (last_end) {
             std::size_t nearest = 0;
             double best = std::numeric_limits<double>::infinity();
@@ -2686,6 +2853,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         }
         return !s.scarf_only_smooth || !has_sharp_corner(t);
     };
+    // The wall loops, which walls.clockwise turns round (retraction_travel.md,
+    // rule 9): from the same start, the other way.
+    const auto is_wall_loop = [](const Step& step) {
+        return step.path.closed && step.path.points.size() > 2 &&
+               (std::strcmp(step.type, "External perimeter") == 0 || std::strcmp(step.type, "Perimeter") == 0 ||
+                std::strcmp(step.type, "Overhang perimeter") == 0);
+    };
     // Where a path leaves the head: a closed one back at its start.
     const auto end_of = [](const Toolpath& t) {
         return t.closed && t.points.size() > 2 ? t.points.front().p : t.points.back().p;
@@ -2749,7 +2923,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                             continue;
                         }
                         step.path = simplify_toolpath(step.path, s.gcode_resolution);
-                        if (scarfed(l, step))
+                        const bool scarf = scarfed(l, step); // it reads the loop counter-clockwise
+                        if (s.walls_clockwise && is_wall_loop(step))
+                            std::reverse(step.path.points.begin() + 1, step.path.points.end());
+                        if (scarf)
                             step.path = scarf_loop(step.path, height, s.scarf_start_height / 100.0,
                                                    s.scarf_entire_loop ? std::numeric_limits<double>::infinity()
                                                                        : s.scarf_length,

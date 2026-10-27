@@ -207,6 +207,38 @@ double* limit_named(Settings& s, std::string_view n) {
     return nullptr;
 }
 
+const std::array<const char*, 14> kFilamentRetractionNames = {
+    "retraction.length",      "retraction.speed",      "retraction.unretract_speed", "retraction.restart_extra",
+    "retraction.lift",        "retraction.lift_above", "retraction.lift_below",      "retraction.min_travel",
+    "retraction.on_layer_change", "retraction.wipe",   "retraction.before_wipe",     "travel.ramping_lift",
+    "travel.slope",           "travel.max_lift"};
+
+Settings with_filament_retraction(const Settings& settings) {
+    Settings s = settings;
+    for (const auto& [key, v] : settings.filament_retraction) {
+        const std::pair<std::string_view, double*> numbers[] = {
+            {"retraction.length", &s.retract_length},        {"retraction.speed", &s.retract_speed},
+            {"retraction.unretract_speed", &s.unretract_speed}, {"retraction.restart_extra", &s.restart_extra},
+            {"retraction.lift", &s.retract_lift},            {"retraction.lift_above", &s.lift_above},
+            {"retraction.lift_below", &s.lift_below},        {"retraction.min_travel", &s.retract_min_travel},
+            {"retraction.before_wipe", &s.before_wipe},      {"travel.slope", &s.travel_slope},
+            {"travel.max_lift", &s.max_lift}};
+        for (const auto& [name, field] : numbers)
+            if (key == name)
+                *field = v;
+        if (key == "retraction.on_layer_change")
+            s.retract_layer_change = v != 0.0;
+        else if (key == "retraction.wipe")
+            s.wipe = v != 0.0;
+        else if (key == "travel.ramping_lift")
+            s.ramping_lift = v != 0.0;
+    }
+    // A speed of 0 from the filament is not a speed: the printer's stays.
+    if (!(s.retract_speed > 0.0))
+        s.retract_speed = settings.retract_speed;
+    return s;
+}
+
 Settings silent_settings(const Settings& settings) {
     Settings out = settings;
     for (const auto& [name, value] : settings.silent_limits)
@@ -304,7 +336,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "acceleration" || group == "ironing" || group == "output")
+            group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -390,7 +422,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
-                "min_detail", "generator", "gap_fill"},
+                "min_detail", "generator", "gap_fill", "clockwise"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -410,10 +442,11 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs" ||
-            n == "gap_fill") {
+            n == "gap_fill" || n == "clockwise") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "scarf_only_smooth"   ? s.scarf_only_smooth
+            (n == "clockwise"           ? s.walls_clockwise
+             : n == "scarf_only_smooth" ? s.scarf_only_smooth
              : n == "scarf_entire_loop" ? s.scarf_entire_loop
              : n == "scarf_inner"       ? s.scarf_inner
              : n == "gap_fill"          ? s.wall_gap_fill
@@ -811,8 +844,30 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0 to 100000 mm/s2");
                    *acceleration_of(s, n) = v;
                });
-    read_group(root, "retraction", {"length", "speed", "lift", "min_travel"},
+    read_group(root, "retraction",
+               {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
+                "before_wipe", "lift_above", "lift_below", "firmware"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "on_layer_change" || n == "wipe" || n == "firmware") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       (n == "wipe" ? s.wipe : n == "firmware" ? s.firmware_retraction : s.retract_layer_change) =
+                           g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "unretract_speed" || n == "restart_extra" || n == "before_wipe" || n == "lift_above" ||
+                       n == "lift_below") {
+                       const double d = number(g, n, k);
+                       const double top = n == "unretract_speed" ? 1000.0 : n == "before_wipe" ? 100.0 : n == "restart_extra" ? 10.0 : 10000.0;
+                       if (!(d >= 0.0 && d <= top))
+                           fail(k, "must be from 0 to " + std::to_string(int(top)));
+                       (n == "unretract_speed" ? s.unretract_speed
+                        : n == "restart_extra" ? s.restart_extra
+                        : n == "before_wipe"   ? s.before_wipe
+                        : n == "lift_above"    ? s.lift_above
+                                               : s.lift_below) = d;
+                       return;
+                   }
                    if (n == "speed" && g.at(n).is_null()) { // not set: from the printer's profile
                        s.retract_speed = 0.0;
                        return;
@@ -1116,6 +1171,40 @@ Settings parse_checked(std::string_view text) {
                        fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
+    read_group(root, "travel",
+               {"ramping_lift", "slope", "max_lift", "lift_before_obstacle", "avoid_crossing_walls", "max_detour"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "ramping_lift" || n == "lift_before_obstacle" || n == "avoid_crossing_walls") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            (n == "ramping_lift" ? s.ramping_lift : n == "lift_before_obstacle" ? s.lift_before_obstacle : s.avoid_crossing_walls) =
+                v.get<bool>();
+            return;
+        }
+        if (n == "max_detour") {
+            if (v.is_string()) {
+                const std::string t = v.get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || !(p <= 10000.0))
+                    fail(k, "must be a length in mm or a percentage like \"200%\"");
+                s.max_detour = {p, true};
+                return;
+            }
+            const double d = number(g, n, k);
+            if (!(d >= 0.0))
+                fail(k, "must not be negative");
+            s.max_detour = {d, false};
+            return;
+        }
+        const double d = number(g, n, k);
+        if (n == "slope" && !(d >= 0.0 && d <= 89.0))
+            fail(k, "must be from 0 to 89 degrees");
+        if (n == "max_lift" && !(d >= 0.0 && d <= 10.0))
+            fail(k, "must be from 0 to 10 mm");
+        (n == "slope" ? s.travel_slope : s.max_lift) = d;
+    });
     read_group(root, "output", {"filename_format", "post_process"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
@@ -1180,8 +1269,29 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "extrusion",
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
-                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode"},
+                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "retraction" || n == "travel") { // the filament's own values (retraction_travel.md, rule 10)
+            const json& v = g.at(n);
+            if (!v.is_object())
+                fail(k, "must be an object of setting: value");
+            for (const auto& [name, value] : v.items()) {
+                const std::string key = n + "." + name;
+                if (std::find_if(kFilamentRetractionNames.begin(), kFilamentRetractionNames.end(),
+                                 [&](const char* x) { return key == x; }) == kFilamentRetractionNames.end())
+                    fail(k + "." + name, "is not a retraction or travel setting a filament may give");
+                if (value.is_null()) { // empty: the printer's
+                    s.filament_retraction.erase(key);
+                } else if (value.is_boolean()) {
+                    s.filament_retraction[key] = value.get<bool>() ? 1.0 : 0.0;
+                } else if (value.is_number() && value.get<double>() >= 0.0 && value.get<double>() <= 1000.0) {
+                    s.filament_retraction[key] = value.get<double>();
+                } else {
+                    fail(k + "." + name, "must be a number from 0 to 1000, true or false");
+                }
+            }
+            return;
+        }
         if (n == "start_gcode" || n == "end_gcode") {
             if (!g.at(n).is_string())
                 fail(k, "must be a string");
@@ -1526,6 +1636,22 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.speed", speed(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
         {"retraction.min_travel", num(s.retract_min_travel)},
+        {"retraction.unretract_speed", num(s.unretract_speed)},
+        {"retraction.restart_extra", num(s.restart_extra)},
+        {"retraction.on_layer_change", flag(s.retract_layer_change)},
+        {"retraction.wipe", flag(s.wipe)},
+        {"retraction.before_wipe", num(s.before_wipe)},
+        {"retraction.lift_above", num(s.lift_above)},
+        {"retraction.lift_below", num(s.lift_below)},
+        {"retraction.firmware", flag(s.firmware_retraction)},
+        {"travel.ramping_lift", flag(s.ramping_lift)},
+        {"travel.slope", num(s.travel_slope)},
+        {"travel.max_lift", num(s.max_lift)},
+        {"travel.lift_before_obstacle", flag(s.lift_before_obstacle)},
+        {"travel.avoid_crossing_walls", flag(s.avoid_crossing_walls)},
+        {"travel.max_detour", num(s.max_detour.value) == "0" ? "0" : share(s.max_detour)},
+        {"walls.clockwise", flag(s.walls_clockwise)},
+        {"extrusion.retraction", json(s.filament_retraction).dump()},
         {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
         {"adhesion.skirt_distance", num(s.skirt_distance)},
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
@@ -1643,6 +1769,17 @@ std::string settings_json(const Settings& s) {
                               : ordered_json(v.value);
     };
     const ordered_json outer_wall = share(s.outer_wall_speed);
+    // The filament's own retraction and travel values, by group (retraction_travel.md, rule 10).
+    const auto filament_values = [&](const std::string& prefix) {
+        ordered_json group = ordered_json::object();
+        for (const auto& [key, v] : s.filament_retraction)
+            if (key.starts_with(prefix)) {
+                const std::string name = key.substr(prefix.size());
+                const bool flag = name == "on_layer_change" || name == "wipe" || name == "ramping_lift";
+                group[name] = flag ? ordered_json(v != 0.0) : ordered_json(v);
+            }
+        return group;
+    };
     ordered_json acceleration = ordered_json::object();
     for (const char* n : kAccelerationNames)
         acceleration[n] = *acceleration_of(s, n);
@@ -1778,7 +1915,22 @@ std::string settings_json(const Settings& s) {
          {{"length", s.retract_length},
           {"speed", speed(s.retract_speed)},
           {"lift", s.retract_lift},
-          {"min_travel", s.retract_min_travel}}},
+          {"min_travel", s.retract_min_travel},
+          {"unretract_speed", s.unretract_speed},
+          {"restart_extra", s.restart_extra},
+          {"on_layer_change", s.retract_layer_change},
+          {"wipe", s.wipe},
+          {"before_wipe", s.before_wipe},
+          {"lift_above", s.lift_above},
+          {"lift_below", s.lift_below},
+          {"firmware", s.firmware_retraction}}},
+        {"travel",
+         {{"ramping_lift", s.ramping_lift},
+          {"slope", s.travel_slope},
+          {"max_lift", s.max_lift},
+          {"lift_before_obstacle", s.lift_before_obstacle},
+          {"avoid_crossing_walls", s.avoid_crossing_walls},
+          {"max_detour", s.max_detour.value <= 0.0 ? ordered_json(0.0) : share(s.max_detour)}}},
         {"adhesion",
          {{"skirt_loops", s.skirt_loops},
           {"skirt_distance", s.skirt_distance},
@@ -1864,6 +2016,8 @@ std::string settings_json(const Settings& s) {
           {"shrinkage_z", s.shrinkage_z},
           {"start_gcode", s.filament_start_gcode},
           {"end_gcode", s.filament_end_gcode},
+          {"retraction", filament_values("retraction.")},
+          {"travel", filament_values("travel.")},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
@@ -1929,6 +2083,11 @@ void check_settings(const Settings& s) {
     // (vase_mode.md, rule 2).
     if (s.vase && s.support)
         throw SettingsError("vase.enabled: vase mode is not compatible with supports (support.enabled)");
+    // The firmware's retraction moves no E: no wipe can retract while it
+    // moves (retraction_travel.md, rule 7, R6).
+    if (s.firmware_retraction && with_filament_retraction(s).wipe)
+        throw SettingsError("retraction.wipe: the wipe retracts while the nozzle moves, which the firmware's "
+                            "retraction (retraction.firmware) cannot do");
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);

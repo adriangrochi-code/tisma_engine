@@ -950,6 +950,25 @@
     X(AccelTravel, "Viajes", "Travels") \
     X(AccelShortTravel, "Viajes cortos", "Short travels") \
     X(RetractMinTravel, "Viaje mínimo para retraer", "Shortest travel to retract") \
+    X(UnretractSpeed, "Velocidad de la vuelta", "Unretract speed") \
+    X(RestartExtra, "Extra al volver", "Extra on restart") \
+    X(RetractLayerChange, "Retraer al cambiar de capa", "Retract on layer change") \
+    X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
+    X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
+    X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
+    X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
+    X(LiftBelow, "Saltar solo por debajo de", "Lift only below") \
+    X(RampingLift, "Salto en rampa", "Ramping lift") \
+    X(TravelSlope, "Pendiente de la rampa", "Ramp slope") \
+    X(MaxLift, "Altura máxima de la rampa", "Ramp maximum height") \
+    X(LiftBeforeObstacle, "Rampa más empinada ante obstáculos", "Steeper ramp before obstacles") \
+    X(AvoidCrossingWalls, "Viajes sin cruzar paredes", "Avoid crossing walls") \
+    X(MaxDetour, "Desvío máximo", "Maximum detour") \
+    X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
+    X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
+    X(SumPrinterValues, "Los de la impresora", "The printer's") \
+    X(SumMaterialValues, "%d del material", "%d of the material's") \
+    X(FilamentRetractionRow, "Retracción y viajes del material", "The material's retraction and travel") \
     X(Abrasive, "Abrasivo", "Abrasive") \
     X(MaxChamberTemp, "Cabina máxima", "Chamber maximum") \
     X(MachineMaxFlow, "Flujo máximo del cabezal", "Hot end maximum flow") \

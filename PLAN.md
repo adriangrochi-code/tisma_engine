@@ -760,6 +760,11 @@ Con el PR #23 (2026-10-26):
     aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y
     de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`. Faltan las etiquetas de objetos (regla
     4), que piden objetos separados en el laminado (con la impresión secuencial, punto 3)
+  - [x] retracción y viajes completos (`retraction_travel.md`, reglas 1 a 10, R1 a R11; hecho 2026-10-27): la vuelta
+    con su velocidad y su extra, retraer en todo cambio de capa, el barrido, las alturas del salto, el salto en rampa,
+    la retracción del firmware (`G10`/`G11`), los viajes rectos o con desvío máximo, los lazos en sentido horario y
+    los valores propios del material. Faltan la rampa más empinada ante obstáculos (regla 6, la ficha no la midió) y
+    editar los valores del material en la interfaz (hoy se ven; se editan en el archivo)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

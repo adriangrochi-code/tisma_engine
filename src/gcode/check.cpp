@@ -242,10 +242,29 @@ private:
             }
         else if (kind == 'G' && n == 28)
             known_[0] = known_[1] = known_[2] = false; // homed: where exactly, the printer knows
+        else if (kind == 'G' && (n == 10 || n == 11) && parameters.empty() && !custom_)
+            firmware_retraction(n == 10);
         else if (kind == 'M' && n == 106 && !custom_) {
             const std::optional<double>& s = param[limits_.fan_parameter - 'A'];
             if (!s || *s < 0.0 || *s > 255.0)
                 problem("fan speed out of 0 to 255");
+        }
+    }
+
+    // The firmware's retraction (retraction_travel.md, rule 7): a bare G10
+    // pulls back, G11 undoes it, no E moves.
+    void firmware_retraction(bool pull) {
+        if (!limits_.firmware_retraction)
+            problem(std::string(pull ? "G10" : "G11") + " but the settings ask for no firmware retraction");
+        if (pull) {
+            ++out_.stats.retractions;
+            if (retracted_ > 1e-9)
+                problem("retracts again without undoing the last retraction");
+            retracted_ = target_ = std::max(retract_length_, 1e-6);
+        } else {
+            if (retracted_ <= 1e-9)
+                problem("pushes filament without a retraction to undo");
+            retracted_ = 0.0;
         }
     }
 
@@ -369,27 +388,65 @@ private:
                             text(*width_) + " and height " + text(thickness) + " ask for " + text(expected));
             }
         } else if (moves && de < -1e-9) {
-            problem("pulls the filament back during a move");
+            // With a wipe, part of the retraction comes while the nozzle goes
+            // back over its path (retraction_travel.md, rule 3).
+            if (!limits_.wipe)
+                problem("pulls the filament back during a move");
+            else
+                pull_back(-de);
         } else if (moves) {
             ++out_.stats.travels;
             out_.stats.travel_path += length;
         } else if (de < -1e-9) {
-            ++out_.stats.retractions;
-            out_.stats.filament += de;
-            if (retracted_ > 1e-9)
-                problem("retracts again without undoing the last retraction");
-            if (std::abs(-de - retract_length_) > kRetractSlack)
-                problem("retracts " + text(-de) + " mm instead of " + text(retract_length_));
-            retracted_ = -de;
+            if (limits_.wipe) {
+                pull_back(-de);
+            } else {
+                ++out_.stats.retractions;
+                out_.stats.filament += de;
+                if (retracted_ > 1e-9)
+                    problem("retracts again without undoing the last retraction");
+                if (std::abs(-de - retract_length_) > kRetractSlack)
+                    problem("retracts " + text(-de) + " mm instead of " + text(retract_length_));
+                retracted_ = target_ = -de;
+            }
         } else if (de > 1e-9) {
             out_.stats.filament += de;
+            // The retraction undone, with retraction.restart_extra more (rule 1).
             if (retracted_ <= 1e-9)
                 problem("pushes filament without a retraction to undo");
-            else if (std::abs(de - retracted_) > kRetractSlack)
-                problem("undoes " + text(de) + " mm of a " + text(retracted_) + " mm retraction");
+            else if (limits_.firmware_retraction)
+                problem("pushes filament with E after a G10 retraction");
+            else if (std::abs(de - retracted_ - limits_.restart_extra) > slack())
+                problem("undoes " + text(de) + " mm of a " + text(retracted_) + " mm retraction" +
+                        (limits_.restart_extra > 0.0 ? " and " + text(limits_.restart_extra) + " mm more" : ""));
+            if (limits_.wipe && retracted_ > 1e-9 && std::abs(retracted_ - target_) > slack())
+                problem("retracts " + text(retracted_) + " mm instead of " + text(target_));
             retracted_ = 0.0;
+            pieces_ = 0;
         }
     }
+
+    // A piece of a retraction with a wipe: standing or while wiping, until
+    // the pieces make the retraction's length.
+    void pull_back(double amount) {
+        out_.stats.filament -= amount;
+        if (retracted_ <= 1e-9) {
+            ++out_.stats.retractions;
+            target_ = retract_length_;
+            retracted_ = 0.0;
+            pieces_ = 0;
+        } else if (retracted_ >= target_ - slack()) {
+            problem("retracts again without undoing the last retraction");
+        }
+        ++pieces_;
+        retracted_ += amount;
+        if (retracted_ > target_ + slack())
+            problem("retracts " + text(retracted_) + " mm instead of " + text(target_));
+    }
+
+    // How far the pieces of a retraction may add up from its length: E is
+    // rounded to 5 decimals in each one.
+    double slack() const { return kRetractSlack + 1e-5 * double(pieces_); }
 
     const GcodeLimits& limits_;
     double retract_length_, flow_;
@@ -404,13 +461,20 @@ private:
     double position_[4] = {0.0, 0.0, 0.0, 0.0};
     bool known_[3] = {false, false, false};
     double retracted_ = 0.0;
+    double target_ = 0.0; // the length of the retraction under way
+    std::size_t pieces_ = 0; // its pieces so far (a wipe's)
     bool awaiting_z_ = false;
     std::optional<double> layer_z_, height_, width_;
 };
 
 } // namespace
 
-GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
+GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
+    // The filament's own retraction values, as the writer takes them.
+    std::optional<Settings> resolved;
+    if (!given.filament_retraction.empty())
+        resolved = with_filament_retraction(given);
+    const Settings& s = resolved ? *resolved : given;
     GcodeLimits limits;
     double lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
     double hi[2] = {-lo[0], -lo[1]};
@@ -448,7 +512,9 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         limits.min_y = std::max(limits.min_y, bed_lo[1]), limits.max_y = std::min(limits.max_y, bed_hi[1]);
     }
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
-    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + s.retract_lift;
+    // A ramping lift climbs to travel.max_lift (retraction_travel.md, rule 5).
+    const double lift = s.ramping_lift && s.travel_slope > 0.0 && s.max_lift > 0.0 ? s.max_lift : s.retract_lift;
+    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + lift;
     // machine.z_offset moves every Z (gcode_extras.md, rule 5), below the bed too.
     limits.max_z += std::max(0.0, s.z_offset);
     limits.min_z = std::min(0.0, s.z_offset);
@@ -472,7 +538,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
         limits.wave = 0.5 * waves->amplitude;
         limits.max_z += limits.wave;
     }
-    double speed_factor = 1.0, retract_speed = s.retract_speed;
+    double speed_factor = 1.0, retract_speed = std::max(s.retract_speed, s.unretract_speed);
     for (const HeightChange& c : s.changes) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);
         retract_speed = std::max(retract_speed, c.retract_speed.value_or(0.0));
@@ -506,6 +572,9 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     const double area = std::numbers::pi * r * r, e_scale = s.volumetric_e ? area : 1.0;
     limits.filament_area = s.volumetric_e ? 1.0 : area;
     limits.retract_length = s.retract_length * e_scale;
+    limits.restart_extra = s.restart_extra * e_scale;
+    limits.wipe = s.wipe;
+    limits.firmware_retraction = s.firmware_retraction;
     limits.flow = s.flow / 100.0;
     GcodeLimits::Change current{0.0, s.retract_length * e_scale, s.flow / 100.0};
     for (const HeightChange& c : s.changes) {

@@ -67,6 +67,7 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `min_detail` | número o texto | `"25%"` | 0 a 40 mm | Una pared más fina que esto, en mm o en % de la boquilla (0,1 mm con 0,4), no se imprime; si la pieza entera queda vacía, es un error |
 | `generator` | texto | `"variable"` | `variable`, `fixed` | `variable`: cordones de ancho variable que llenan la región (Kuipers et al. 2020). `fixed`: lazos de `width` a `width` de distancia, cada uno donde entra un cordón entero, y lo que queda en el medio, con relleno de huecos (ficha `walls_extra.md`, regla 1). El relleno concéntrico sigue con ancho variable |
 | `gap_fill` | booleano | `true` | — | Con `generator` `fixed`: lo que queda entre las paredes (y entre ellas y la región del relleno) de al menos medio cordón se llena con cordones de ancho variable, `;TYPE:Gap fill`, a `speed.gap_fill`; los extremos libres siguen medio ancho hasta el borde del hueco. Apagado, quedan vacíos (regla 2) |
+| `clockwise` | booleano | `false` | | Los lazos de las paredes (también los de los agujeros y la espiral del modo vaso) van en sentido horario; apagado, todos en antihorario (ficha `retraction_travel.md`, regla 9, prueba R8). Cada lazo empieza en la misma costura |
 | `detect_overhangs` | booleano | `true` | — | Los tramos de pared que quedan enteros sobre el aire (el cordón sin nada de la capa de abajo debajo) o sobre el soporte se marcan `;TYPE:Overhang perimeter` y van a la velocidad y con el ventilador de los puentes (ficha `walls_extra.md`, regla 8). Apagado, la pared se imprime entera como cualquier otra. Sobre el soporte, el tramo es igual de grueso que la capa más la separación en Z (ficha `supports_skirt.md`, regla 4) |
 
 ### `vase`
@@ -290,6 +291,27 @@ de siempre). Las partes más angostas que dos líneas no se planchan.
 | `speed` | número | — (del perfil de la impresora; respaldo 25) | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
 | `lift` | número | 0 | 0 a 10 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
+| `unretract_speed` | número | 0 | 0 a 1000 | Velocidad de la vuelta del filamento, en mm/s; 0: la de `speed` (ficha `retraction_travel.md`, regla 1, prueba R1) |
+| `restart_extra` | número | 0 | 0 a 10 | Filamento de más que empuja la vuelta, en mm: la vuelta es la retracción más esto (regla 1) |
+| `on_layer_change` | booleano | `false` | | Todo cambio de capa retrae antes de subir, aunque el viaje al primer punto de la capa sea más corto que `min_travel`; la vuelta, al empezar a extruir (regla 2, prueba R2) |
+| `wipe` | booleano | `false` | | En vez de retraer quieta, la boquilla vuelve sobre el camino recién impreso mientras retrae, al 80 % de `speed.travel`, a lo largo de lo que queda por retraer × esa velocidad / (0,95 × `speed`); después siguen el viaje, el salto y la vuelta de siempre. Si el camino desde el último viaje es más corto, lo que no alcanzó se retrae quieto al final (regla 3, prueba R3). No va con `firmware` |
+| `before_wipe` | número | 0 | 0 a 100 | Parte de la retracción, en %, que se hace quieta antes del barrido (regla 3) |
+| `lift_above`, `lift_below` | número | 0 | ≥ 0 | El salto en Z (`lift`, o la rampa de `travel`) solo en las capas cuya Z está por encima de `lift_above` y por debajo de `lift_below`, en mm; 0: sin límite (regla 4, prueba R4) |
+| `firmware` | booleano | `false` | | Cada retracción es un `G10` y cada vuelta un `G11`, sin movimientos de E: el largo y la velocidad los pone el firmware (`M207`, `M208`); `length` sigue diciendo si se retrae (0: no) y el salto en Z sigue en el G-code. `restart_extra` no se escribe (regla 7, prueba R6) |
+
+### `travel`
+
+De la ficha `docs/spec/features/retraction_travel.md`. `ramping_lift`, `slope`, `max_lift` y `lift_before_obstacle` van
+en el perfil de impresora, como el salto; `avoid_crossing_walls` y `max_detour`, en el de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `ramping_lift` | booleano | `false` | | El salto en Z de un viaje que retrae se hace en rampa, subiendo mientras viaja con la pendiente `slope` hasta `max_lift`; el resto del viaje va a esa altura y al final baja en vertical. Un viaje corto sube hasta donde llega. El primer viaje de una capa sube desde la capa de abajo: el movimiento en Z del cambio de capa espera a la rampa, salvo que haya G-code de `gcode.after_layer` (regla 5, prueba R5). Con `slope` 0, salto vertical de `retraction.lift` |
+| `slope` | número | 0 | 0 a 89 | Pendiente de la rampa, en grados |
+| `max_lift` | número | 0 | 0 a 10 | Altura de la rampa, en mm; 0: `retraction.lift` |
+| `lift_before_obstacle` | booleano | `false` | | Rampa más empinada si hay un obstáculo cerca del comienzo del viaje (regla 6). Se lee y se guarda, pero no cambia el G-code: la ficha no lo midió |
+| `avoid_crossing_walls` | booleano | `true` | | Un viaje dentro de una isla sigue un camino por dentro de la pieza, a un cordón de las paredes, que no las cruza (rodea un agujero en vez de cruzarlo; `docs/spec/BEHAVIOR.md`, «Viajes y retracción»). Apagado, todo viaje va recto, y retrae si cruza paredes o sale de la pieza (regla 8, prueba R7). Tisma Slicer lo trae apagado; en el motor viene prendido porque es el comportamiento acordado con el dueño |
+| `max_detour` | número o texto | 0 | ≥ 0, o `"N%"` | Si el camino por dentro es más largo que el recto más esto (en mm, o en % del viaje recto, como `"200%"`), el viaje va recto, cruzando las paredes, y retrae; 0: sin límite (regla 8) |
 
 ### `adhesion`
 
@@ -409,6 +431,7 @@ de la pieza de prueba.
 | `spool_weight` | número | 0 | ≥ 0 | Peso del carrete vacío, en g (para que la interfaz compare con el carrete pesado) |
 | `shrinkage_xy`, `shrinkage_z` | número | 0 | 0 a 20 | Cuánto se contrae el filamento al enfriarse, en %, a lo ancho de las capas y en Z: la pieza se lamina 100 / (100 − p) veces más grande, alrededor del centro de su base como `compensation`, para que al contraerse quede de la medida pedida (ficha `gcode_extras.md`, regla 4; con 1 %, un cubo de 99 mm se lamina de 100). Se suma a la escala de `compensation` |
 | `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin del filamento (ficha `gcode_templates.md`, reglas 9 y 12): el inicio va después del de la impresora y de la espera de la boquilla, el fin antes del de la impresora. Mismo lenguaje de plantillas |
+| `retraction`, `travel` | objeto | `{}` | | Los valores propios del filamento para la retracción y los viajes (ficha `retraction_travel.md`, regla 10, pruebas R9 a R11): `{"retraction": {"length": 0.8, "lift": 0}, "travel": {"slope": 5}}`. Se pueden dar `length`, `speed`, `unretract_speed`, `restart_extra`, `lift`, `lift_above`, `lift_below`, `min_travel`, `on_layer_change`, `wipe` y `before_wipe` de `retraction`, y `ramping_lift`, `slope` y `max_lift` de `travel`. Un valor puesto reemplaza al de la impresora para todo lo que imprime este filamento, aunque sea 0 (un salto de 0 anula el de la impresora); `null` o sin la clave, vale el de la impresora. Una `speed` de 0 deja la de la impresora |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
 
