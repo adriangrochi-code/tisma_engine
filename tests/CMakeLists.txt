@@ -261,7 +261,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --cut 4
               --export ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.png)
-    set_tests_properties(ui_cut PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Measure between the cube's bottom and top (model_tools.md, rule 20).
+    add_test(NAME ui_measure
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool measure --measure 0,2
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_measure.png)
+    set_tests_properties(ui_cut ui_measure PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # More › Credits and sources, in English (credits.md, CR2 and CR4).
     add_test(NAME ui_credits
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

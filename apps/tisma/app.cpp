@@ -40,6 +40,7 @@
 #include "ui/settings_layout.hpp"
 #include "ui/settings_view.hpp"
 #include "ui/printer_card.hpp"
+#include "ui/measure.hpp"
 #include "slice/transform.hpp"
 #include "ui/slicing.hpp"
 
@@ -89,7 +90,7 @@ constexpr const char* kIcons[] = {
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
-    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
@@ -326,7 +327,7 @@ enum class Purpose {
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
-enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Cut, Paint, Material };
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Cut, Measure, Paint, Material };
 
 class App {
 public:
@@ -360,6 +361,7 @@ private:
     void cut_selected();
     void split_selected();
     void cut_plane_overlay();
+    void measure_overlay();
     void paint_card(ImVec2 at);
     void mixing_dialog();
     std::string filament_color(int extruder) const;
@@ -545,6 +547,11 @@ private:
     // the bed, and whether the part below is turned over onto its cut face.
     double cut_height_ = 5.0;
     bool cut_flip_lower_ = false;
+    // The Measure tool (rule 20): what was picked on which object, and the
+    // distance it should be.
+    std::vector<MeasureFeature> measure_picks_;
+    int measure_object_ = -1;
+    double measure_wanted_ = 0.0;
     // The project's mixed colours and each filament's colour
     // (color_mixing.md); the dialog that edits them, what they were when it
     // opened and the blend being edited.
@@ -2099,7 +2106,15 @@ bool App::init(std::string& error) {
               : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
               : options_.tool == "material" || options_.tool == "mixing" ? PlateTool::Material
               : options_.tool == "cut"                                    ? PlateTool::Cut
+              : options_.tool == "measure"                                ? PlateTool::Measure
                                                                           : PlateTool::LayFlat;
+    if (options_.measure[0] >= 0 && !objects_.empty()) {
+        selected_ = measure_object_ = 0;
+        const TriangleMesh placed = placed_mesh(objects_.front());
+        for (const int t : options_.measure)
+            if (t >= 0 && std::size_t(t) < placed.triangle_count())
+                measure_picks_.push_back(plane_feature(placed, std::size_t(t)));
+    }
     if (options_.cut > 0.0 && !objects_.empty()) {
         selected_ = 0;
         cut_height_ = options_.cut;
@@ -5545,7 +5560,18 @@ void App::viewport() {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
             selected_ = int(hit->object);
-            if (tool_ == PlateTool::LayFlat) {
+            if (tool_ == PlateTool::Measure) {
+                // A face's plane, or with Shift its nearest vertex; another
+                // object starts again (rule 20: within one object).
+                const TriangleMesh& placed = placed_meshes_[hit->object];
+                const float t = float(hit->distance);
+                const Point3 at{e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+                if (int(hit->object) != measure_object_ || measure_picks_.size() >= 2)
+                    measure_picks_.clear();
+                measure_object_ = int(hit->object);
+                measure_picks_.push_back(io.KeyShift ? point_feature(placed, hit->triangle, at)
+                                                     : plane_feature(placed, hit->triangle));
+            } else if (tool_ == PlateTool::LayFlat) {
                 PlateObject& o = objects_[hit->object];
                 o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));
                 plate_changed();
@@ -5734,7 +5760,8 @@ void App::plate_tools() {
                  {"##rotate", "tool_rotate", T::ToolRotateTip, PlateTool::Rotate},
                  {"##scale", "tool_scale", T::ToolScaleTip, PlateTool::Scale},
                  {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat},
-                 {"##cut", "tool_cut", T::ToolCutTip, PlateTool::Cut}};
+                 {"##cut", "tool_cut", T::ToolCutTip, PlateTool::Cut},
+                 {"##measure", "tool_measure", T::ToolMeasureTip, PlateTool::Measure}};
     for (const auto& t : tools)
         if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
             tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
@@ -5767,6 +5794,8 @@ void App::plate_tools() {
             tool_ = PlateTool::LayFlat;
         if (ImGui::IsKeyPressed(ImGuiKey_C, false) && !ImGui::GetIO().KeyCtrl)
             tool_ = PlateTool::Cut;
+        if (ImGui::IsKeyPressed(ImGuiKey_U, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Measure;
         if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
             tool_ = PlateTool::Paint;
         if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl) {
@@ -5893,6 +5922,44 @@ void App::plate_tools() {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
         ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
         ImGui::PopTextWrapPos();
+    } else if (tool_ == PlateTool::Measure) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolMeasureHint));
+        if (measure_object_ != selected_)
+            measure_picks_.clear();
+        for (std::size_t i = 0; i < measure_picks_.size(); ++i)
+            ImGui::BulletText("%s", tr(measure_picks_[i].kind == MeasureFeature::Kind::Plane ? T::MeasurePlane
+                                                                                             : T::MeasurePoint));
+        if (measure_picks_.size() == 2) {
+            const Measurement m = measure(measure_picks_[0], measure_picks_[1]);
+            if (m.distance) {
+                ImGui::Text("%s: %.3f mm", tr(T::MeasureDistance), *m.distance);
+                // Writing what it should measure scales the model evenly.
+                if (measure_wanted_ <= 0.0)
+                    measure_wanted_ = *m.distance;
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(T::MeasureShouldBe));
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(field);
+                const double lo = 0.001, hi = 100000.0;
+                ImGui::DragScalar("##wanted", ImGuiDataType_Double, &measure_wanted_, 0.1f, &lo, &hi, "%.3f mm",
+                                  ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SameLine();
+                if (ImGui::Button(tr(T::MeasureScale)) && *m.distance > 0.0) {
+                    const double factor = measure_wanted_ / *m.distance;
+                    for (double& s : o.place.scale)
+                        s = std::max(s * factor, 1e-3);
+                    measure_picks_.clear();
+                    measure_wanted_ = 0.0;
+                    changed = true;
+                }
+            } else if (m.angle) {
+                ImGui::Text("%s: %.2f°", tr(T::MeasureAngle), *m.angle);
+            }
+        } else {
+            measure_wanted_ = 0.0;
+        }
+        ImGui::PopTextWrapPos();
     } else if (tool_ == PlateTool::Cut) {
         // A horizontal plane at a height over the bed (rule 13): two closed
         // objects, side by side.
@@ -5962,6 +6029,8 @@ void App::plate_tools() {
     ImGui::PopStyleVar(2);
     if (tool_ == PlateTool::Cut)
         cut_plane_overlay();
+    if (tool_ == PlateTool::Measure)
+        measure_overlay();
     if (changed)
         plate_changed();
     if (mirror_axis >= 0)
@@ -6060,6 +6129,37 @@ void App::cut_plane_overlay() {
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
     dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
     dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    dl->PopClipRect();
+}
+
+// The Measure tool's picks over the 3D view: a dot at a vertex or at the
+// face's centre, and a line between the two.
+void App::measure_overlay() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f) || measure_picks_.empty())
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const Point3& p, ImVec2& out) {
+        const float x = float(p[0]), y = float(p[1]), z = float(p[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const ImU32 colour = ImGui::GetColorU32(rgb(theme_.accent_hover));
+    ImVec2 at[2];
+    std::size_t shown = 0;
+    for (const MeasureFeature& f : measure_picks_)
+        if (project(f.point, at[shown])) {
+            dl->AddCircleFilled(at[shown], 5.0f * scale_, colour);
+            ++shown;
+        }
+    if (shown == 2)
+        dl->AddLine(at[0], at[1], colour, 2.0f * scale_);
     dl->PopClipRect();
 }
 

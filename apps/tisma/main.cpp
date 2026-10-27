@@ -93,8 +93,15 @@ int main(int argc, char** argv) {
         } else if (arg == "--tool") {
             options.tool = value();
             if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
-                options.tool != "paint" && options.tool != "material" && options.tool != "mixing" && options.tool != "cut") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, paint, material or mixing\n");
+                options.tool != "paint" && options.tool != "material" && options.tool != "mixing" && options.tool != "cut" &&
+                options.tool != "measure") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, measure, paint, material or mixing\n");
+                return 2;
+            }
+        } else if (arg == "--measure") {
+            // Two triangles of the first model picked as faces by the Measure tool.
+            if (std::sscanf(value(), "%d,%d", &options.measure[0], &options.measure[1]) != 2) {
+                std::fprintf(stderr, "error: --measure takes two triangle numbers, as 0,5\n");
                 return 2;
             }
         } else if (arg == "--cut") {

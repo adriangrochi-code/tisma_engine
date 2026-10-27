@@ -1,4 +1,5 @@
 #include "ui/plate.hpp"
+#include "ui/measure.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -224,4 +225,36 @@ TEST_CASE("plate: the triangle index finds what looking at every triangle finds"
     CHECK(near.size() < m.triangle_count() / 20);
     CHECK(TriangleIndex().near(lo, hi).empty());
     CHECK_FALSE(TriangleIndex().hit(m, {0, 0, 50}, {0, 0, -1}));
+}
+
+TEST_CASE("measure: planes, points, angles and the scale that makes a distance (MT25)", "[ui][measure]") {
+    // The box of MT14: 30 × 20 × 10 mm from (5, 7, 3).
+    TriangleMesh m;
+    const Vec3f lo{5, 7, 3}, hi{35, 27, 13};
+    const Vec3f v[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                        {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+    const int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    for (const auto& t : f)
+        m.add_triangle(v[t[0]], v[t[1]], v[t[2]]);
+    // Triangle 6 is the +X side, 10 the −X side, 2 the top, 4 the front.
+    const MeasureFeature right = plane_feature(m, 6), left = plane_feature(m, 10), top = plane_feature(m, 2);
+    CHECK(right.normal[0] > 0.99);
+    const Measurement across = measure(left, right);
+    REQUIRE(across.distance);
+    CHECK(std::abs(*across.distance - 30.0) < 1e-9);
+    CHECK_FALSE(across.angle);
+    // Writing 45: the box grows evenly to 45 × 30 × 15.
+    const double factor = 45.0 / *across.distance;
+    CHECK(std::abs(factor - 1.5) < 1e-12);
+    const Measurement corner = measure(right, top);
+    REQUIRE(corner.angle);
+    CHECK(std::abs(*corner.angle - 90.0) < 1e-9);
+    // Points: the nearest corner to the hit; a point to a plane.
+    const MeasureFeature a = point_feature(m, 2, {34.0, 26.0, 13.0});
+    CHECK(a.point == Point3{35, 27, 13});
+    const MeasureFeature b = point_feature(m, 0, {5.5, 7.5, 3.0});
+    CHECK(b.point == Point3{5, 7, 3});
+    CHECK(std::abs(*measure(a, b).distance - std::sqrt(900.0 + 400.0 + 100.0)) < 1e-9);
+    CHECK(std::abs(*measure(b, top).distance - 10.0) < 1e-9);
 }

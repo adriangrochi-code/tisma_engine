@@ -297,6 +297,7 @@ if(TISMA_BUILD_UI)
     src/ui/assistant.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
+    src/ui/measure.cpp
     src/ui/help.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)

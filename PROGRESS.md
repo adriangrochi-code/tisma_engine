@@ -6322,9 +6322,13 @@ comprobaciones), con un anillo con agujero cortado y una caja hueca separada.
   sobre la vista, su altura, «Dar vuelta la parte de abajo» y las dos mitades como piezas de la placa (reglas 13 y 18,
   el corte horizontal), con **Separar en piezas** (regla 14) en la misma tarjeta. Prueba `ui_cut`: un cubo cortado a 4 mm se lamina y se exporta con el G-code verificado.
 
+- **Medir** (tecla U, regla 20; `src/ui/measure.*`): una cara da su plano, Shift + clic el vértice más cercano; entre
+  dos, la distancia o el ángulo, y «Debería medir» con **Escalar** escala parejo (MT25 en `[measure]`: 30 mm entre
+  las caras de la caja, 45 escrito da el factor 1,5; 90° entre caras vecinas). Prueba `ui_measure`.
+
 **No hecho:** del corte de la regla 18, el plano libre (girado), los conectores, la cola de milano y «un objeto con
-dos partes»; Medir (regla 20), Separar en partes (19), las partes y modificadores, las copias en grilla, y deshacer en
+dos partes»; de Medir, las aristas y los círculos con su diámetro; Separar en partes (19), las partes y modificadores, las copias en grilla, y deshacer en
 la placa (29). La pintura de un modelo cortado no pasa a las mitades.
 
-**Sigue:** Medir y Separar en partes; los conectores del corte.
+**Sigue:** los conectores del corte y las partes de un objeto.
 

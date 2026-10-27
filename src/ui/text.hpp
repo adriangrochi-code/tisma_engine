@@ -290,6 +290,15 @@
     X(ToolCutTip, "Cortar (C): con un plano horizontal, en dos piezas", "Cut (C): with a horizontal plane, in two pieces") \
     X(ToolCutHint, "El plano corta la pieza a esta altura sobre la cama. Las dos mitades quedan cerradas, cada una como una pieza.", \
       "The plane cuts the part at this height over the bed. Both halves come out closed, each one a part.")           \
+    X(ToolMeasureTip, "Medir (U): distancias y ángulos de un modelo", "Measure (U): distances and angles of a model")  \
+    X(ToolMeasureHint, "Clic en dos caras del mismo modelo (o Shift + clic: el vértice más cercano). Entre caras paralelas o puntos, la distancia; entre caras que no lo son, el ángulo.", \
+      "Click two faces of the same model (or Shift + click: the nearest vertex). Between parallel faces or points, the distance; between faces that are not, the angle.") \
+    X(MeasurePlane, "Una cara", "A face")                                                                             \
+    X(MeasurePoint, "Un vértice", "A vertex")                                                                         \
+    X(MeasureDistance, "Distancia", "Distance")                                                                       \
+    X(MeasureAngle, "Ángulo", "Angle")                                                                                \
+    X(MeasureShouldBe, "Debería medir", "It should be")                                                               \
+    X(MeasureScale, "Escalar", "Scale")                                                                               \
     X(CutHeight, "Altura", "Height")                                                                                  \
     X(CutFlipLower, "Dar vuelta la parte de abajo", "Turn the lower part over")                                       \
     X(CutButton, "Cortar", "Cut")                                                                                     \
