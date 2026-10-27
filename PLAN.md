@@ -793,7 +793,10 @@ Con el PR #23 (2026-10-26):
     cambio (se lee)
   - [x] 4d, las vigas de entrelazado (regla 17, ME11; hecho 2026-10-27). Las regiones pintadas (regla 18) esperan a
     los colores pintados (`model_tools.md`): sus claves se leen
-  - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12)
+  - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12): el motor ya imprime
+    siempre el soporte en las capas de la pieza (lo sincronizado; `support.synchronize_layers` se lee). Faltan las
+    capas propias del soporte, más gruesas (hasta `machine.max_layer_height`, o el 75 % de la boquilla), que ME12
+    mide sin sincronizar
   - [ ] 4f, `multimaterial.md` (MM1 a MM6) y `color_mixing.md`
   - [ ] F7 no planar; resina (`resin.md`, `resin_supports.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas

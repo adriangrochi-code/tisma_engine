@@ -1216,8 +1216,15 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "support",
                {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
-                "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate"},
+                "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
+                "synchronize_layers"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "synchronize_layers") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.support_synchronize_layers = g.at(n).get<bool>();
+                       return;
+                   }
                    if (n == "style") {
                        s.support_style = choice<SupportStyle>(g, n, k, {{"grid", SupportStyle::Grid}, {"organic", SupportStyle::Organic}});
                        return;
@@ -2068,6 +2075,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.raft_first_layer_density", num(s.raft_first_layer_density)},
         {"adhesion.raft_first_layer_expansion", num(s.raft_first_layer_expansion)},
         {"support.enabled", flag(s.support)},
+        {"support.synchronize_layers", flag(s.support_synchronize_layers)},
         {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
@@ -2404,6 +2412,7 @@ std::string settings_json(const Settings& s) {
           {"raft_first_layer_expansion", s.raft_first_layer_expansion}}},
         {"support",
          {{"enabled", s.support},
+          {"synchronize_layers", s.support_synchronize_layers},
           {"automatic", s.support_automatic},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},

@@ -5817,3 +5817,11 @@ materiales; `docs/CONFIG.md`.
 Prueba nueva ME11 (12 en `tests/test_multi_extruder.cpp`); fuzzer con vigas: 300 corridas (semilla 47), 0 fallas.
 
 **Sigue:** 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12).
+
+**4e, en el mismo bloque:** el motor ya imprime siempre el soporte en las capas de la pieza, que es lo que la ficha
+llama sincronizado (ME12: 50 capas, soporte en Z 0,2, 0,4, 0,6…). `support.synchronize_layers` se lee y se guarda (en
+Soporte › Interfaz). Lo que no está: el soporte con capas propias más gruesas (ME12 sin sincronizar: 70 capas, soporte
+a 0,296 mm, o 0,247 con `machine.max_layer_height` 0,25), que pide imprimir el soporte a otras Z que la pieza; queda
+anotado en `PLAN.md`.
+
+**Sigue:** 4f, `multimaterial.md` y `color_mixing.md`.

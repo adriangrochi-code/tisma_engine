@@ -424,6 +424,9 @@ struct Settings {
     // support (docs/spec/BEHAVIOR.md, "Soportes")
     bool support = false;
     bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
+    // The support on the part's layers (multi_extruder.md, rule 19): read;
+    // the engine always prints the support on the part's layers.
+    bool support_synchronize_layers = false;
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
     // Between the support and the part beside it: mm, or percent of the

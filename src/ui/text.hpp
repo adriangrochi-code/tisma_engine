@@ -938,6 +938,7 @@
     X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
     X(MinPurgeOnTower, "Purga mínima en la torre", "Minimum purge on the tower") \
     X(SubMmu, "MMU", "MMU") \
+    X(SyncSupportLayers, "Soporte en las capas de la pieza", "Support on the part's layers") \
     X(SubInterlocking, "Entrelazado entre materiales", "Interlocking between materials") \
     X(InterlockBeams, "Vigas entre materiales", "Beams between materials") \
     X(InterlockWidth, "Ancho de las vigas", "Beam width") \

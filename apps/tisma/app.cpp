@@ -779,7 +779,7 @@ const char* row_key(T label) {
         {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
         {T::InterlockOrientation, "interlocking.orientation"}, {T::InterlockDepth, "interlocking.depth"},
         {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
-        {T::PaintInterlockingDepth, "painting.interlocking_depth"}};
+        {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3104,6 +3104,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
+        flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
