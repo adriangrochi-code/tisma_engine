@@ -247,6 +247,10 @@ Settings silent_settings(const Settings& settings) {
     return out;
 }
 
+const char* top_one_wall_name(TopOneWall where) {
+    return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
+}
+
 const char* draft_shield_name(DraftShield shield) {
     return shield == DraftShield::Enabled ? "enabled" : shield == DraftShield::Limited ? "limited" : "disabled";
 }
@@ -422,11 +426,27 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
-                "min_detail", "generator", "gap_fill", "clockwise"},
+                "min_detail", "generator", "gap_fill", "clockwise", "staggered_inner_seams", "top_one_wall",
+                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
                 choice<WallGenerator>(g, n, k, {{"variable", WallGenerator::Variable}, {"fixed", WallGenerator::Fixed}});
+            return;
+        }
+        if (n == "top_one_wall") {
+            s.top_one_wall = choice<TopOneWall>(
+                g, n, k, {{"none", TopOneWall::None}, {"top", TopOneWall::Top}, {"topmost", TopOneWall::Topmost}});
+            return;
+        }
+        if (n == "staggered_inner_seams" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
+            n == "avoid_curled_overhangs") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "staggered_inner_seams"  ? s.staggered_inner_seams
+             : n == "first_layer_one_wall" ? s.first_layer_one_wall
+             : n == "extra_if_needed"      ? s.extra_if_needed
+                                           : s.avoid_curled_overhangs) = g.at(n).get<bool>();
             return;
         }
         if (n == "seam") {
@@ -1651,6 +1671,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"travel.avoid_crossing_walls", flag(s.avoid_crossing_walls)},
         {"travel.max_detour", num(s.max_detour.value) == "0" ? "0" : share(s.max_detour)},
         {"walls.clockwise", flag(s.walls_clockwise)},
+        {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
+        {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
+        {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
+        {"walls.extra_if_needed", flag(s.extra_if_needed)},
+        {"walls.avoid_curled_overhangs", flag(s.avoid_curled_overhangs)},
         {"extrusion.retraction", json(s.filament_retraction).dump()},
         {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
         {"adhesion.skirt_distance", num(s.skirt_distance)},
@@ -1814,6 +1839,12 @@ std::string settings_json(const Settings& s) {
           {"detect_overhangs", s.detect_overhangs},
           {"generator", s.wall_generator == WallGenerator::Fixed ? "fixed" : "variable"},
           {"gap_fill", s.wall_gap_fill},
+          {"clockwise", s.walls_clockwise},
+          {"staggered_inner_seams", s.staggered_inner_seams},
+          {"top_one_wall", top_one_wall_name(s.top_one_wall)},
+          {"first_layer_one_wall", s.first_layer_one_wall},
+          {"extra_if_needed", s.extra_if_needed},
+          {"avoid_curled_overhangs", s.avoid_curled_overhangs},
           {"min_line_width", s.wall_min_line_width.percent
                                  ? ordered_json(json(s.wall_min_line_width.value).dump() + "%")
                                  : ordered_json(s.wall_min_line_width.value)},

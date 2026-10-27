@@ -692,6 +692,47 @@ const KindNotes& notes_of(const char* type) {
     return kOtherNotes;
 }
 
+// A closed loop that starts `back` mm earlier along its own way round, at a
+// point put there (walls_extra.md, rule 3: the inner walls' staggered seams).
+Toolpath start_earlier(Toolpath loop, double back) {
+    std::vector<ToolpathPoint>& p = loop.points;
+    const std::size_t n = p.size();
+    double length = 0.0;
+    for (std::size_t i = 0; i < n; ++i)
+        length += std::hypot(p[(i + 1) % n].p.x - p[i].p.x, p[(i + 1) % n].p.y - p[i].p.y);
+    if (n < 3 || !(length > 0.0))
+        return loop;
+    back = std::fmod(back, length);
+    // Back from the start: the piece from point i - 1 to point i holds it.
+    for (std::size_t i = n; i > 0; --i) {
+        const ToolpathPoint& a = p[i - 1];
+        const ToolpathPoint& b = p[i % n];
+        const double d = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        if (d < back) {
+            back -= d;
+            continue;
+        }
+        const double f = d > 0.0 ? 1.0 - back / d : 0.0; // from a towards b
+        ToolpathPoint at = a;
+        at.p = {a.p.x + (b.p.x - a.p.x) * f, a.p.y + (b.p.y - a.p.y) * f};
+        at.width = a.width + (b.width - a.width) * f;
+        at.dz = a.dz + (b.dz - a.dz) * f;
+        at.below = a.below + (b.below - a.below) * f;
+        std::vector<ToolpathPoint> out{at};
+        out.insert(out.end(), p.begin() + std::ptrdiff_t(i % n), p.end());
+        if (i % n != 0)
+            out.insert(out.end(), p.begin(), p.begin() + std::ptrdiff_t(i % n));
+        // The point where it lands is the start itself, or a's.
+        if (f >= 1.0 - 1e-12)
+            out.erase(out.begin() + 1);
+        else if (f <= 1e-12)
+            out.pop_back();
+        p = std::move(out);
+        return loop;
+    }
+    return loop;
+}
+
 // The machine's limits for the time estimate (print_time.md, rule 2): with
 // machine.limits_usage ignore, only the feeds, accelerations and corner speed.
 Kinematics kinematics_of(const Settings& s) {
@@ -2926,6 +2967,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         const bool scarf = scarfed(l, step); // it reads the loop counter-clockwise
                         if (s.walls_clockwise && is_wall_loop(step))
                             std::reverse(step.path.points.begin() + 1, step.path.points.end());
+                        // The inner walls start a bead earlier per level (walls_extra.md, rule 3).
+                        if (s.staggered_inner_seams && is_wall_loop(step) && step.path.index > 0) {
+                            const double back = step.path.index * s.wall_width;
+                            step.path = start_earlier(std::move(step.path), back);
+                        }
                         if (scarf)
                             step.path = scarf_loop(step.path, height, s.scarf_start_height / 100.0,
                                                    s.scarf_entire_loop ? std::numeric_limits<double>::infinity()

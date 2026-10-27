@@ -42,6 +42,7 @@ add_executable(tisma_tests
   test_template.cpp
   test_binary.cpp
   test_retraction.cpp
+  test_walls_extra.cpp
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp

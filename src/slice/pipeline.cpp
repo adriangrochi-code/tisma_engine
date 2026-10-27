@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <optional>
 
 namespace tisma {
 namespace {
@@ -154,6 +155,40 @@ double bridge_bead(const Settings& settings) {
     return settings.nozzle_diameter * std::sqrt(std::max(settings.bridge_flow_ratio, 0.0));
 }
 
+// The walls of a region, `count` of them, by the settings' generator.
+LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
+    if (settings.wall_generator == WallGenerator::Fixed)
+        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill);
+    beading.wall_count = count;
+    return layer_walls(region, beading);
+}
+
+// Only the outer wall over a top surface (walls_extra.md, rule 10): the
+// part of the region the layer above leaves open (wider than a bead) keeps
+// the outer wall alone; the inner walls go round what goes on up, as if it
+// were a region of its own, and the top surface takes the room they leave.
+// None when nothing is open above.
+std::optional<LayerWalls> one_wall_on_top(const Polygons& region, const Polygons& above, const Settings& settings,
+                                          const BeadingParams& beading) {
+    const double w = settings.wall_width;
+    const Polygons open = offset(offset(Clipper2Lib::Difference(region, above, Clipper2Lib::FillRule::NonZero), -w / 2.0), w / 2.0);
+    if (open.empty())
+        return std::nullopt;
+    LayerWalls out = walls_of(region, 1, settings, beading);
+    const Polygons on = Clipper2Lib::Difference(region, open, Clipper2Lib::FillRule::NonZero);
+    if (on.empty() || settings.wall_count < 2)
+        return out;
+    LayerWalls inner = walls_of(on, settings.wall_count, settings, beading);
+    for (Toolpath& t : inner.toolpaths)
+        if (t.index > 0)
+            out.toolpaths.push_back(std::move(t));
+    out.gaps.insert(out.gaps.end(), inner.gaps.begin(), inner.gaps.end());
+    // The inner walls' band, from a bead inside what goes on up to its infill.
+    const Polygons band = Clipper2Lib::Difference(offset(on, -w), inner.infill, Clipper2Lib::FillRule::NonZero);
+    out.infill = Clipper2Lib::Difference(out.infill, band, Clipper2Lib::FillRule::NonZero);
+    return out;
+}
+
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
     // The filament's shrinkage (gcode_extras.md, rule 4): the part grows so
     // that, shrunk, it measures what was asked.
@@ -278,7 +313,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     for (std::size_t l = 0; l < out.layers.size(); ++l) {
         const bool same = l > 0 && same_section[l];
         source[l] = same ? source[l - 1] : l;
-        copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1);
+        copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
+                    !(l == 1 && settings.first_layer_one_wall);
     }
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         if (copied[l])
@@ -293,10 +329,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
         if (settings.wall_count > 0) {
-            out.walls[l] = settings.wall_generator == WallGenerator::Fixed
-                               ? fixed_walls(out.regions[l], settings.wall_width, settings.wall_count,
-                                             settings.wall_gap_fill)
-                               : layer_walls(out.regions[l], beading);
+            // Only the outer wall on the first layer (walls_extra.md, rule 11).
+            out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
+                                    settings, beading);
             // What the walls leave, simplified as the contours are: each wall's
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).
@@ -313,6 +348,24 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             out.thin_area[l] = out.thin_area[l - 1];
             out.walls[l] = out.walls[l - 1];
         }
+    // Only the outer wall over the top surfaces (walls_extra.md, rule 10):
+    // every one, or the part's topmost (its last layer).
+    if (settings.top_one_wall != TopOneWall::None && settings.wall_count > 1 && !out.layers.empty()) {
+        const std::size_t last = out.layers.size() - 1;
+        const Polygons nothing;
+        tbb::parallel_for(settings.top_one_wall == TopOneWall::Topmost ? last : std::size_t(0), last + 1, [&](std::size_t l) {
+            if (out.regions[l].empty() || (l == 0 && settings.first_layer_one_wall))
+                return;
+            std::optional<LayerWalls> walls =
+                one_wall_on_top(out.regions[l], l < last ? out.regions[l + 1] : nothing, settings, beading);
+            if (!walls)
+                return;
+            walls->infill = simplify(walls->infill, settings.simplify_tolerance);
+            fuzz_walls(walls->toolpaths, out.regions[l], fuzzy,
+                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
+            out.walls[l] = std::move(*walls);
+        });
+    }
     for (std::size_t n : open)
         out.open_contours += n;
     out.open_by_layer = std::move(open);

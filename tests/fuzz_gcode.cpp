@@ -158,6 +158,9 @@ int main(int argc, char** argv) {
             s.avoid_crossing_walls = pick(3) != 0;
             s.max_detour = pick(2) == 0 ? Speed{} : Speed{uni(0, 300), pick(2) == 0};
             s.walls_clockwise = pick(2) == 0;
+            s.staggered_inner_seams = pick(2) == 0;
+            s.top_one_wall = std::array{TopOneWall::None, TopOneWall::Top, TopOneWall::Topmost}[std::size_t(pick(3))];
+            s.first_layer_one_wall = pick(3) == 0;
             if (pick(3) == 0) // the filament's own values
                 s.filament_retraction = {{"retraction.length", pick(3) == 0 ? 0.0 : uni(0.2, 4)},
                                          {"retraction.lift", uni(0, 0.6)},

@@ -53,6 +53,8 @@ enum class FuzzyMode { None, External, All };
 // that fill the region (Kuipers et al. 2020), or loops of one width with gap
 // fill between them.
 enum class WallGenerator { Variable, Fixed };
+// Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
+enum class TopOneWall { None, Top, Topmost };
 
 // Which surfaces are ironed (ironing.md): every top surface, only the highest
 // of each part, or every solid layer.
@@ -126,6 +128,16 @@ struct Settings {
     bool detect_overhangs = true;
     WallGenerator wall_generator = WallGenerator::Variable;
     bool wall_gap_fill = true; // with fixed walls, fill what is left between them
+    // docs/spec/features/walls_extra.md: the inner walls' seams staggered back
+    // a bead per level (rule 3); only the outer wall over a top surface (rule
+    // 10) or on the first layer (rule 11). extra_if_needed (rule 6) and
+    // avoid_curled_overhangs (rule 9) are read and kept: Tisma Slicer added no
+    // wall on the spec's parts, and the second was not measured.
+    bool staggered_inner_seams = false;
+    TopOneWall top_one_wall = TopOneWall::None;
+    bool first_layer_one_wall = false;
+    bool extra_if_needed = true;
+    bool avoid_curled_overhangs = false;
     // Thin walls (docs/spec/features/perimeters.md, rule 3), mm or percent of
     // machine.nozzle_diameter: a wall thinner than min_line_width is printed
     // with a bead that wide, centred; thinner than min_detail, not at all.
@@ -491,6 +503,7 @@ const char* limits_usage_name(LimitsUsage usage);
 
 // The names of a draft shield and a brim type in the settings.
 const char* draft_shield_name(DraftShield shield);
+const char* top_one_wall_name(TopOneWall where);
 const char* brim_type_name(BrimType type);
 
 // The machine's limits by name, as machine.silent names them: max_feed_x to

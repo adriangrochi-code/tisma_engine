@@ -51,6 +51,12 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.generator", A},
             {"walls.gap_fill", A},
             {"walls.clockwise", A}}},
+          {"walls_more", T::SubWallsMore,
+           {{"walls.staggered_inner_seams", A},
+            {"walls.top_one_wall", A},
+            {"walls.first_layer_one_wall", A},
+            {"walls.extra_if_needed", A},
+            {"walls.avoid_curled_overhangs", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
             {"surfaces.bottom_layers", B},
@@ -411,6 +417,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.zaa ? format(T::SumZaaOn, number(s.zaa_min_thickness, 0).c_str()) : tr(T::SumZaaOff);
     if (id == "walls")
         return s.wall_count == 0 ? tr(T::SumNoWalls) : s.wall_count == 1 ? tr(T::SumOneWall) : format(T::SumWalls, s.wall_count);
+    if (id == "walls_more")
+        return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.top_one_wall != TopOneWall::None) +
+                                           int(s.first_layer_one_wall) + int(s.extra_if_needed) +
+                                           int(s.avoid_curled_overhangs));
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
     if (id == "infill")

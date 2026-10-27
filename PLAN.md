@@ -741,6 +741,11 @@ Con el PR #23 (2026-10-26):
     purga), y el ecualizador del caudal (8 y 9, V7);
   - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
     2026-10-27). Falta el relleno concéntrico de ancho fijo (regla 1, último punto);
+  - [ ] el resto de `walls_extra.md`: hechos (2026-10-27) las costuras internas escalonadas (regla 3, W5), un solo
+    perímetro arriba (regla 10, W7) y en la primera capa (regla 11, W8); `walls.extra_if_needed` (regla 6, Tisma Slicer
+    no agregó ninguno) y `walls.avoid_curled_overhangs` (regla 9, sin medir) se leen y se guardan. Faltan los
+    perímetros extra en voladizos (regla 5, W3), el espesor de la cáscara vertical (regla 7, W4) y el relleno
+    concéntrico de ancho fijo;
   - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
   - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27), y el resto de la ficha (hecho
     2026-10-27): largo mínimo de falda (B1), escudo contra corrientes (B3), tipos de borde y su separación (B4); B2 ya;

@@ -5519,3 +5519,30 @@ escribe y `retraction.length` 0 sigue sin retraer; `travel.max_lift` 0 usa `retr
 **No probado:** en una impresora real (G10/G11 necesitan la retracción del firmware activada).
 
 **Sigue:** el resto de `walls_extra.md` y la impresión secuencial (`sequential.md`, con las etiquetas de objetos).
+
+## 2026-10-27 — Punto 3: paredes extra (W5, W7, W8)
+
+**Hecho** (ficha `walls_extra.md`):
+- `walls.staggered_inner_seams` (regla 3): cada pared interna empieza `walls.width` por nivel antes, sobre su propio
+  lazo, en el sentido en que se imprime (después de `walls.clockwise`); la de afuera queda donde dice `walls.seam`;
+- `walls.top_one_wall` (regla 10): donde la capa de arriba deja la región abierta (más ancha que un cordón) queda solo
+  la pared de afuera; las internas se hacen alrededor de lo que sigue subiendo, como si fuera una región propia, y la
+  superficie de arriba gana su lugar. `top` en cada capa; `topmost` en la última capa de la pieza;
+- `walls.first_layer_one_wall` (regla 11): la primera capa con la pared de afuera sola;
+- `walls.extra_if_needed` (regla 6) y `walls.avoid_curled_overhangs` (regla 9) se leen y se guardan, sin cambiar el
+  G-code: en la ficha, Tisma Slicer no agregó perímetros, y lo segundo no se midió;
+- la tarjeta «Más opciones de paredes» en Resistencia; `walls.clockwise` ahora también se guarda en el archivo de
+  ajustes (faltaba en la escritura).
+
+**Medido** (mismas piezas y ajustes que la ficha):
+- W5 (cilindro de 10 mm, 4 paredes, costura alineada atrás): la de afuera en X 100,000 y las internas en 100,400,
+  100,799 y 101,195 (Tisma: 0,42 mm por nivel con su ancho; el motor, 0,40 con `walls.width` 0,4);
+- W7 (escalón): capa 19, paredes internas 187,2 mm sin el ajuste y 107,2 con `top` (Tisma: 186,51 y 106,42); la
+  superficie de arriba pasa de 748 a 893 mm (Tisma: 986 a 1090, con otro espaciado); capa 39 sin paredes internas con
+  `top` y `topmost`; `topmost` deja la capa 19 como sin el ajuste;
+- W8 (cubo de 20 mm, 3 paredes): capa 0 solo la de afuera, 78,4 mm (Tisma 78,34); capa 1, las tres.
+- 3 pruebas nuevas (`tests/test_walls_extra.cpp`).
+
+**Sigue:** los perímetros extra en voladizos (W3), el espesor de la cáscara vertical (W4: antes, una pregunta de
+comportamiento al equipo de fichas, porque los números de la ficha no alcanzan para saber dónde va el relleno sólido) y
+el relleno concéntrico de ancho fijo; después la impresión secuencial.

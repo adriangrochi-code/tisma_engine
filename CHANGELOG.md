@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Más opciones de paredes** (ficha `walls_extra.md`, en Resistencia › Más opciones de paredes): costuras internas
+  escalonadas, un solo perímetro sobre las superficies de arriba (en todas o en la de más arriba) y un solo perímetro
+  en la primera capa.
 - **Retracción y viajes completos** (ficha `retraction_travel.md`): velocidad y extra de la vuelta del filamento,
   retraer en todo cambio de capa, barrido mientras retrae (con una parte quieta antes), salto en Z solo por encima o
   por debajo de una altura, salto en rampa con su pendiente y su altura, retracción del firmware con `G10`/`G11`,

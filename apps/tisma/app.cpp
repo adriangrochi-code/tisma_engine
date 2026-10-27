@@ -730,6 +730,9 @@ const char* row_key(T label) {
         {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
+        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
+        {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
+        {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
         {T::MaxChamberTemp, "machine.max_chamber_temp"}, {T::HardenedNozzle, "machine.hardened_nozzle"},
         {T::MachineMaxFlow, "machine.max_flow"}, {T::MaxFeedX, "machine.max_feed_x"},
@@ -2901,6 +2904,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
         flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
+    } else if (id == "walls_more") {
+        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        if (shown("walls.top_one_wall"))
+            changed |= row(T::TopOneWallRow, s.top_one_wall,
+                           {{TopOneWall::None, tr(T::TopOneWallNone)},
+                            {TopOneWall::Top, tr(T::TopOneWallTop)},
+                            {TopOneWall::Topmost, tr(T::TopOneWallTopmost)}});
+        flag(T::FirstLayerOneWall, "walls.first_layer_one_wall", s.first_layer_one_wall);
+        flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
+        flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);
