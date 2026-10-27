@@ -896,6 +896,10 @@
     X(MinExtrudeFeed, "Avance mínimo al extruir", "Minimum extruding feed") \
     X(MinTravelFeed, "Avance mínimo al viajar", "Minimum travel feed") \
     X(LimitsUsageRow, "Límites de la máquina", "Machine limits") \
+    X(ObjectLabelsRow, "Etiquetas de objetos", "Object labels") \
+    X(LabelsNone, "No", "No") \
+    X(LabelsOctoPrint, "Comentarios (OctoPrint)", "Comments (OctoPrint)") \
+    X(LabelsFirmware, "Del firmware (cancelar un objeto)", "The firmware's (cancel one object)") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
     X(LimitsIgnore, "No usarlos", "Do not use them") \

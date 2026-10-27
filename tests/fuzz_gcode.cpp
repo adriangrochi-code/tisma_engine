@@ -363,6 +363,7 @@ int main(int argc, char** argv) {
         if (pick(6) == 0) {
             s.sequential = pick(2) == 0;
             s.gcode_between_objects = pick(2) == 0 ? ";between [current_object_idx]" : "";
+            s.object_labels = std::array{ObjectLabels::None, ObjectLabels::OctoPrint, ObjectLabels::Firmware}[std::size_t(pick(3))];
             TriangleMesh one;
             for (const auto& t : shape.triangles)
                 one.add_triangle(shape.vertices[t[0]], shape.vertices[t[1]], shape.vertices[t[2]]);

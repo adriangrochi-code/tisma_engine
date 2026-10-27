@@ -763,8 +763,8 @@ Con el PR #23 (2026-10-26):
   - [x] el firmware (`gcode_firmware.md`; hecho 2026-10-27): temperaturas al empezar (regla 1), límites de la máquina
     con `machine.limits_usage` (regla 2; también en la estimación, `print_time.md` reglas 2 y 3, y el tope de las
     aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y
-    de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`. Faltan las etiquetas de objetos (regla
-    4): el laminado ya conoce los objetos de la placa (impresión secuencial, 2026-10-27)
+    de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`, y las etiquetas de objetos (regla 4,
+    `gcode.object_labels`, FW1, FW3, FW6 y FW8; hechas 2026-10-27)
   - [x] impresión secuencial (`sequential.md`, reglas 1 a 5, SQ1 a SQ4; hecha 2026-10-27): los objetos de la placa
     (o las copias de `slice --copies`) se laminan aparte y se imprimen uno por uno, con el paso de uno a otro de la
     regla 3, `gcode.between_objects`, la separación del cabezal al acomodar, y los objetos que chocarían se rechazan.

@@ -733,6 +733,9 @@ Toolpath start_earlier(Toolpath loop, double back) {
     return loop;
 }
 
+// A path's object label stays as it is (Step::label).
+constexpr int kKeepLabel = -2;
+
 // The machine's limits for the time estimate (print_time.md, rule 2): with
 // machine.limits_usage ignore, only the feeds, accelerations and corner speed.
 Kinematics kinematics_of(const Settings& s) {
@@ -1036,6 +1039,14 @@ public:
         }
         safe_z_ = z_now_;
         descend_ = true;
+    }
+
+    // Lines the engine writes as they are, in no type (an object's label).
+    void raw(const std::string& lines) {
+        if (lines.empty())
+            return;
+        extruder_off();
+        text_ += lines;
     }
 
     // Whether the user's G-code left the head where the engine does not know.
@@ -1985,6 +1996,72 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The machine's limits, before the start G-code (gcode_firmware.md, rule 2).
     if (s.limits_usage == LimitsUsage::Emit)
         out << machine_limits_gcode(s);
+    // Object labels (gcode_firmware.md, rule 4), as the firmware takes them:
+    // every object defined first, then each one's moves marked in each layer.
+    enum class Labels { None, M486, M486Named, Klipper, OctoPrint };
+    Labels labels = Labels::None;
+    if (!model.objects.empty() && s.object_labels == ObjectLabels::OctoPrint)
+        labels = Labels::OctoPrint;
+    else if (!model.objects.empty() && s.object_labels == ObjectLabels::Firmware)
+        labels = s.flavor == GcodeFlavor::Marlin || s.flavor == GcodeFlavor::MarlinLegacy ? Labels::M486
+                 : s.flavor == GcodeFlavor::RepRapFirmware                              ? Labels::M486Named
+                 : s.flavor == GcodeFlavor::Klipper                                     ? Labels::Klipper
+                                                                                        : Labels::None;
+    const auto klipper_name = [&](std::size_t k) {
+        std::string name = model.objects[k].label();
+        std::replace(name.begin(), name.end(), ' ', '_');
+        std::replace(name.begin(), name.end(), '.', '_');
+        return name;
+    };
+    const auto label_start = [&](std::size_t k) {
+        const SlicedObject& o = model.objects[k];
+        switch (labels) {
+        case Labels::M486:
+        case Labels::M486Named:
+            return "M486 S" + std::to_string(k) + "\n";
+        case Labels::Klipper:
+            return "EXCLUDE_OBJECT_START NAME='" + klipper_name(k) + "'\n";
+        case Labels::OctoPrint:
+            return "; printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
+        case Labels::None:
+            break;
+        }
+        return std::string();
+    };
+    const auto label_end = [&](std::size_t k) {
+        const SlicedObject& o = model.objects[k];
+        switch (labels) {
+        case Labels::M486:
+        case Labels::M486Named:
+            return std::string("M486 S-1\n");
+        case Labels::Klipper:
+            return "EXCLUDE_OBJECT_END NAME='" + klipper_name(k) + "'\n";
+        case Labels::OctoPrint:
+            return "; stop printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
+        case Labels::None:
+            break;
+        }
+        return std::string();
+    };
+    for (std::size_t k = 0; k < model.objects.size() && labels != Labels::None && labels != Labels::OctoPrint; ++k) {
+        const SlicedObject& o = model.objects[k];
+        if (labels == Labels::M486) {
+            out << "M486 S" << k << "\nM486 A" << o.label() << "\nM486 S-1\n";
+        } else if (labels == Labels::M486Named) {
+            out << "M486 S" << k << " A\"" << o.label() << "\"\n";
+        } else {
+            double lo[2] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()}, hi[2] = {-lo[0], -lo[1]};
+            std::string polygon;
+            for (const auto& q : o.outline) {
+                const double p[2] = {to_mm(q.x), to_mm(q.y)};
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+                polygon += (polygon.empty() ? "[" : ",[") + fixed(p[0], 3) + "," + fixed(p[1], 3) + "]";
+            }
+            out << "EXCLUDE_OBJECT_DEFINE NAME='" << klipper_name(k) << "' CENTER=" << fixed((lo[0] + hi[0]) / 2.0, 3) << ","
+                << fixed((lo[1] + hi[1]) / 2.0, 3) << " POLYGON=[" << polygon << "]\n";
+        }
+    }
     // The chamber the filament wants, when the machine heats one: set before
     // the start (so it heats while the nozzle does) and again after it, once
     // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
@@ -2182,6 +2259,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // hundreds of tests, and the layers are written one after another).
         std::optional<Point2d> from;
         TravelPlan travel;
+        // Object labels (gcode_firmware.md, rule 4): before this path, the
+        // label switches to this object (-1: none); kKeepLabel: no switch.
+        int label = kKeepLabel;
     };
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
@@ -2539,6 +2619,39 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                           "Gap fill",        "Internal infill",  "Support material",
                                           "Support material interface"};
         std::vector<bool> done(islands.size(), false);
+        // Object labels: each island's object (printed one after another,
+        // the layer's), and an object's islands one after another; the paths
+        // in no island in none.
+        std::vector<int> island_object(islands.size(), -1);
+        if (labels != Labels::None) {
+            for (std::size_t k = 0; k < pieces.size(); ++k) {
+                if (model.sequential) {
+                    island_object[k] = int(object_of[l]);
+                    continue;
+                }
+                const Clipper2Lib::Point64 q = pieces[k].front().front();
+                for (std::size_t o = 0; o < model.objects.size(); ++o)
+                    if (Clipper2Lib::PointInPolygon(q, model.objects[o].outline) !=
+                        Clipper2Lib::PointInPolygonResult::IsOutside) {
+                        island_object[k] = int(o);
+                        break;
+                    }
+            }
+            if (model.sequential || pieces.size() <= 1)
+                island_object.back() = island_object.front();
+        }
+        const auto slot = [&](std::size_t k) {
+            return island_object[k] < 0 ? model.objects.size() : std::size_t(island_object[k]);
+        };
+        std::vector<std::size_t> left(model.objects.size() + 1, 0);
+        for (std::size_t k = 0; k < islands.size(); ++k)
+            if (!islands[k].ends.empty())
+                ++left[slot(k)];
+        std::size_t current = model.objects.size(); // the object being printed
+        const auto eligible = [&](std::size_t k) {
+            return labels == Labels::None || current == model.objects.size() || left[current] == 0 || slot(k) == current;
+        };
+        int label_now = -1;
         // The boxes of the islands' path ends bound how near each island can be,
         // so most are not looked at: the same pick as looking at every end
         // (the nearest, and among equals the first island), without the
@@ -2572,17 +2685,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             std::size_t first_look = islands.size();
             double seed_distance = std::numeric_limits<double>::max();
             for (std::size_t k = 0; k < islands.size(); ++k)
-                if (!done[k] && !islands[k].ends.empty() && box_distance(k) < seed_distance)
+                if (!done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) < seed_distance)
                     seed_distance = box_distance(k), first_look = k;
             if (first_look == islands.size())
                 break;
             look(first_look);
             for (std::size_t k = 0; k < islands.size(); ++k)
-                if (k != first_look && !done[k] && !islands[k].ends.empty() && box_distance(k) <= nearest)
+                if (k != first_look && !done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) <= nearest)
                     look(k);
             if (next == islands.size())
                 break;
             done[next] = true;
+            current = slot(next);
+            --left[current];
+            const std::size_t first_step = steps.size();
             const Island& i = islands[next];
             auto walls = [&](int index, const std::vector<Toolpath>& paths) {
                 const bool outer = index == 0;
@@ -2612,6 +2728,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
             group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
             flush();
+            // The island's object's label from its first path on.
+            if (labels != Labels::None && island_object[next] != label_now)
+                for (std::size_t k = first_step; k < steps.size(); ++k)
+                    if (steps[k].type) {
+                        steps[k].label = label_now = island_object[next];
+                        break;
+                    }
         }
         // The thick zone of a group that ends here: the whole group's height at
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
@@ -2621,6 +2744,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             base_height = laid_height = t.height;
             in_thick = true;
             deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
+            const std::size_t first_step = steps.size();
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
                 by_index[w.index].push_back(w);
@@ -2634,6 +2758,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (std::size_t k = 0; k < 5; ++k)
                 group(*kinds[k], fill_type[k], fill_feed(k), SeamMode::Nearest);
             flush();
+            // A thick zone spans the objects: in none.
+            if (labels != Labels::None && label_now != -1)
+                for (std::size_t k = first_step; k < steps.size(); ++k)
+                    if (steps[k].type) {
+                        steps[k].label = label_now = -1;
+                        break;
+                    }
             steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
             base_height = laid_height = layer_height;
             in_thick = false;
@@ -2720,6 +2851,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     p.path.retract = st.path.retract;
                     p.from = st.from;
                     p.travel = st.travel;
+                    p.label = st.label;
                 } else if (!p.path.points.empty()) {
                     p.from = p.path.points.front().p;
                 }
@@ -2840,11 +2972,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (highest > 0.0)
                 g.set_clearance(std::max(g.clearance(), highest));
         }
+        int label = -1; // the object label open
         for (std::size_t k = 0; k < steps.size(); ++k) {
             const Step& step = steps[k];
             if (!step.type) {
                 g.set_height(step.height);
                 continue;
+            }
+            if (step.label != kKeepLabel && step.label != label) {
+                if (label >= 0)
+                    g.raw(label_end(std::size_t(label)));
+                if (step.label >= 0)
+                    g.raw(label_start(std::size_t(step.label)));
+                label = step.label;
             }
             const Toolpath& t = step.path;
             if (s.gcode_progress && k > 0)
@@ -2887,6 +3027,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (next == steps.size() || std::strcmp(steps[next].type, step.type) != 0)
                 g.reset_acceleration(s.accel_default);
         }
+        if (label >= 0)
+            g.raw(label_end(std::size_t(label)));
     };
 
     // The height changes of every layer first: the plans take their speeds.

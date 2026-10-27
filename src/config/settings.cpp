@@ -247,6 +247,10 @@ Settings silent_settings(const Settings& settings) {
     return out;
 }
 
+const char* object_labels_name(ObjectLabels labels) {
+    return labels == ObjectLabels::Firmware ? "firmware" : labels == ObjectLabels::OctoPrint ? "octoprint" : "none";
+}
+
 const char* top_one_wall_name(TopOneWall where) {
     return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
 }
@@ -1267,8 +1271,14 @@ Settings parse_checked(std::string_view text) {
         s.post_process = std::move(scripts);
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
-                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary"},
+                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "object_labels") {
+            s.object_labels = choice<ObjectLabels>(
+                g, n, k,
+                {{"none", ObjectLabels::None}, {"octoprint", ObjectLabels::OctoPrint}, {"firmware", ObjectLabels::Firmware}});
+            return;
+        }
         if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures" ||
             n == "binary") {
             if (!g.at(n).is_boolean())
@@ -1635,6 +1645,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.silent_mode", flag(s.silent_mode)},
         {"machine.silent", json(s.silent_limits).dump()},
         {"gcode.progress", flag(s.gcode_progress)},
+        {"gcode.object_labels", object_labels_name(s.object_labels)},
         {"output.filename_format", text(s.filename_format)},
         {"output.post_process", json(s.post_process).dump()},
         {"gcode.auto_temperatures", flag(s.auto_temperatures)},
@@ -2098,6 +2109,7 @@ std::string settings_json(const Settings& s) {
           {"verbose_comments", s.verbose_comments},
           {"arcs", s.gcode_arcs},
           {"progress", s.gcode_progress},
+          {"object_labels", object_labels_name(s.object_labels)},
           {"auto_temperatures", s.auto_temperatures},
           {"binary", s.gcode_binary}}},
         {"changes", changes_json(s.changes)},

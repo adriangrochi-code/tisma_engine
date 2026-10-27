@@ -5617,3 +5617,23 @@ primera en el centro); la altura de viaje es la de la capa más alta impresa has
 Fuzzer: 400 corridas (semilla 17) y 1500 con las semillas 1, 271034 y 271035, 0 fallas.
 
 **Sigue:** las etiquetas de objetos (`gcode_firmware.md`, regla 4), que ya tienen los objetos; después el punto 4.
+
+## 2026-10-27 — Punto 3: etiquetas de objetos
+
+**Hecho** (ficha `gcode_firmware.md`, regla 4): `gcode.object_labels` (`none`, `octoprint`, `firmware`). Con los
+objetos de la placa (o las copias de `slice --copies`), el G-code define cada uno al empezar (Marlin: `M486 S<n>`,
+`M486 A<nombre> (Instance <k>)`, `M486 S-1`; RepRapFirmware: `M486 S<n> A"…"`; Klipper: `EXCLUDE_OBJECT_DEFINE` con su
+centro y su envolvente) y en cada capa marca los movimientos de cada uno (`M486 S<n>` … `M486 S-1`,
+`EXCLUDE_OBJECT_START` … `EXCLUDE_OBJECT_END`, o los comentarios de OctoPrint); en RepRap genérico y los firmwares
+viejos, nada. Para eso, en cada capa las islas de un objeto van todas antes de pasar al siguiente (la más cercana
+primero, como siempre); la zona gruesa de capas locales queda fuera de los objetos. En la impresión secuencial, cada
+capa va entera con la etiqueta de su objeto. El verificador acepta esas líneas. Fila en Impresora › G-code ›
+Firmware.
+
+**Medido** (FW1, FW3, FW6 y FW8 con dos copias del cubo de 20 mm): las definiciones y las marcas como en la ficha
+(los nombres `cube20.stl (Instance 1)` y `cube20_stl_(Instance_1)`, `; printing object cube20.stl id:0 copy 0`); con
+Klipper, la segunda copia centrada en 113 (Tisma Slicer: 74, porque no centra el conjunto). 5 pruebas nuevas
+(`tests/test_labels.cpp`); fuzzer con etiquetas: 1000 corridas con las semillas 31 y 32, 0 fallas.
+
+**Sigue:** el punto 3 queda completo salvo la cáscara vertical (W4, con la pregunta al equipo de fichas). Sigue el
+punto 4 (multimaterial, F7, resina).

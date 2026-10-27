@@ -53,6 +53,8 @@ enum class FuzzyMode { None, External, All };
 // that fill the region (Kuipers et al. 2020), or loops of one width with gap
 // fill between them.
 enum class WallGenerator { Variable, Fixed };
+// How the G-code names each object (gcode_firmware.md, rule 4).
+enum class ObjectLabels { None, OctoPrint, Firmware };
 // Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
 enum class TopOneWall { None, Top, Topmost };
 
@@ -446,6 +448,8 @@ struct Settings {
     bool gcode_arcs = false;
     // M73 with the share done and the minutes left (gcode_firmware.md, rule 5).
     bool gcode_progress = false;
+    // Each object's moves marked, to cancel one while printing (gcode_firmware.md, rule 4).
+    ObjectLabels object_labels = ObjectLabels::None;
     // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
     bool gcode_binary = false;
     // The temperatures the start G-code does not set itself, written round it
@@ -512,6 +516,7 @@ const char* limits_usage_name(LimitsUsage usage);
 // The names of a draft shield and a brim type in the settings.
 const char* draft_shield_name(DraftShield shield);
 const char* top_one_wall_name(TopOneWall where);
+const char* object_labels_name(ObjectLabels labels);
 const char* brim_type_name(BrimType type);
 
 // The machine's limits by name, as machine.silent names them: max_feed_x to

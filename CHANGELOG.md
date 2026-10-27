@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Etiquetas de objetos** (ficha `gcode_firmware.md`, en Impresora › G-code › Firmware): cada objeto marcado en el
+  G-code para cancelar uno solo durante la impresión, con `M486` (Marlin y RepRapFirmware), `EXCLUDE_OBJECT`
+  (Klipper) o los comentarios de OctoPrint.
 - **Impresión secuencial** (ficha `sequential.md`, en Otros › Modos especiales): con varios objetos en la placa, cada
   uno se imprime entero antes del siguiente, con lugar para el cabezal entre ellos (Impresora › Cama y volumen) y G-code
   propio entre objetos; los objetos que el cabezal o el eje X chocarían se rechazan. Es la forma de imprimir varios

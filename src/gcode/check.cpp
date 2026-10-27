@@ -133,6 +133,10 @@ public:
         ++out_.stats.lines;
         if (p.has_comment)
             comment(p.comment);
+        // An object's label (gcode_firmware.md, rule 4): its name may hold
+        // anything.
+        if (p.head == "M486" || p.head.starts_with("EXCLUDE_OBJECT"))
+            return;
         if (p.too_many) {
             if (!custom_)
                 problem("more words than a G-code command has");

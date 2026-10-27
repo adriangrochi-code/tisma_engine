@@ -750,7 +750,7 @@ const char* row_key(T label) {
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
         {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}, {T::SequentialRow, "sequential.enabled"},
         {T::ClearanceRadius, "sequential.clearance_radius"}, {T::ClearanceHeight, "sequential.clearance_height"},
-        {T::BetweenObjectsGcode, "gcode.between_objects"}};
+        {T::BetweenObjectsGcode, "gcode.between_objects"}, {T::ObjectLabelsRow, "gcode.object_labels"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3307,6 +3307,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {LimitsUsage::Emit, tr(T::LimitsEmit)},
                             {LimitsUsage::Ignore, tr(T::LimitsIgnore)}});
         flag(T::GcodeProgress, "gcode.progress", s.gcode_progress);
+        if (shown("gcode.object_labels"))
+            changed |= row(T::ObjectLabelsRow, s.object_labels,
+                           {{ObjectLabels::None, tr(T::LabelsNone)},
+                            {ObjectLabels::OctoPrint, tr(T::LabelsOctoPrint)},
+                            {ObjectLabels::Firmware, tr(T::LabelsFirmware)}});
     } else if (id == "variables") {
         count(T::VariablesRow, "machine.variables", s.variables.size());
     } else if (id == "gcode_templates") {
