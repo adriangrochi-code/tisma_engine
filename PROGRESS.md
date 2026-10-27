@@ -5051,3 +5051,18 @@ el aire entre Z 6,2 y 18 (los techos de las ventanas) y tres columnas como infor
 material hasta que el perfil del filamento traiga el suyo.
 
 **Sigue:** QA9 (paredes más finas que la boquilla, `walls.min_line_width`) y `support.width`.
+
+## 2026-10-27 — QA9: paredes más finas que la boquilla
+
+**Hecho:** `walls.min_line_width` (85 % de `machine.nozzle_diameter`) y `walls.min_detail` (25 %), mm o porcentaje
+(ficha `perimeters.md`, regla 3): en el reparto de cordones (Kuipers et al. 2020), un espesor desde el detalle mínimo
+que daba cero cordones da uno, y una pared de un solo cordón nunca es más angosta que el ancho mínimo, centrada. En el
+panel, Resistencia › Paredes (Avanzado).
+
+**Medido:** la pared de 0,2 mm de QA9 sale con cordones de 0,34 mm en el medio (antes, «nothing would be printed»); la
+de 0,05 mm, nada. Benchy: capas con detalles perdidos 9 → 3; cráneo: 31 → 8; los dos G-code verificados.
+
+**Pruebas nuevas:** la pared de 0,2 mm (ancho, centro, `;WIDTH:0.340`, el ancho en mm), la de 0,05 mm; la lectura de
+los ajustes.
+
+**Sigue:** `support.width` (`supports_more.md`, regla 18), lo último del punto 1.

@@ -849,6 +849,39 @@ TEST_CASE("arcs: the shelf's overhang in arcs, round beads, slow, a retraction e
     }
 }
 
+TEST_CASE("walls: a wall thinner than the nozzle prints with walls.min_line_width, centred (perimeters.md, rule 3; "
+          "QA9)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    REQUIRE(s.nozzle_diameter == 0.4);
+    IndexedMesh m;
+    add_box(m, 0, 0, 0.2f, 10, 5); // a 0.2 mm wall
+    const SlicedModel model = slice_model(m, s);
+    REQUIRE_FALSE(model.walls[10].toolpaths.empty());
+    for (const Toolpath& t : model.walls[10].toolpaths)
+        for (const ToolpathPoint& p : t.points) {
+            CHECK_THAT(p.width, WithinRel(0.34, 1e-6)); // 85 % of the nozzle
+            CHECK_THAT(p.p.x, Catch::Matchers::WithinAbs(0.1, 0.02));
+        }
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    CHECK(out.str().find(";WIDTH:0.340") != std::string::npos);
+    // In mm instead.
+    s.wall_min_line_width = {0.3, false};
+    const SlicedModel narrower = slice_model(m, s);
+    for (const Toolpath& t : narrower.walls[10].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            CHECK_THAT(p.width, WithinRel(0.3, 1e-6));
+    // Thinner than walls.min_detail (0.1 mm): nothing.
+    IndexedMesh hair;
+    add_box(hair, 0, 0, 0.05f, 10, 5);
+    s = test_printer();
+    const SlicedModel none = slice_model(hair, s);
+    for (const LayerWalls& w : none.walls)
+        CHECK(w.toolpaths.empty());
+}
+
 TEST_CASE("walls: a bead that tapers to nothing writes no width of 0", "[gcode]") {
     // The tip of a variable-width bead has width 0; a piece of it that does
     // not move (a repeated point, or a cut right at the tip) is not written,

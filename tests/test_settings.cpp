@@ -132,6 +132,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
     CHECK(Settings().detect_overhangs);
+    const Settings thin = parse_settings(R"({"walls": {"min_line_width": 0.3, "min_detail": "20%"}})");
+    CHECK(thin.wall_min_line_width == Speed{0.3, false});
+    CHECK(thin.wall_min_detail == Speed{20.0, true});
+    CHECK(Settings().wall_min_line_width == Speed{85.0, true});
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"min_detail": "x"}})"), ContainsSubstring("percentage of the nozzle"));
     const Settings arcs = parse_settings(R"({"arcs": {"enabled": true, "overlap": 20, "speed": 0, "max_distance": 8}})");
     CHECK(arcs.arcs);
     CHECK(arcs.arcs_overlap == 20.0);

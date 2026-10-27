@@ -63,6 +63,8 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `scarf_entire_loop` | booleano | `false` | — | La rampa da la vuelta entera: la pared externa sube en espiral a lo largo de toda la capa y una segunda vuelta la completa |
 | `scarf_max_segment` | número | 1 | más de 0, hasta 1000 | El tramo más largo de la rampa y de su segunda pasada, en mm |
 | `scarf_inner` | booleano | `false` | — | También las paredes internas empiezan en rampa |
+| `min_line_width` | número o texto | `"85%"` | 0 a 40 mm | Ancho mínimo de un cordón, en mm o en % de `machine.nozzle_diameter` (0,34 mm con boquilla de 0,4): una pared de un solo cordón más fina que esto se imprime con un cordón de este ancho, centrado en la pared (ficha `perimeters.md`, regla 3) |
+| `min_detail` | número o texto | `"25%"` | 0 a 40 mm | Una pared más fina que esto, en mm o en % de la boquilla (0,1 mm con 0,4), no se imprime; si la pieza entera queda vacía, es un error |
 | `detect_overhangs` | booleano | `true` | — | Los tramos de pared que quedan enteros sobre el aire (el cordón sin nada de la capa de abajo debajo) o sobre el soporte se marcan `;TYPE:Overhang perimeter` y van a la velocidad y con el ventilador de los puentes (ficha `walls_extra.md`, regla 8). Apagado, la pared se imprime entera como cualquier otra. Sobre el soporte, el tramo es igual de grueso que la capa más la separación en Z (ficha `supports_skirt.md`, regla 4) |
 
 ### `vase`

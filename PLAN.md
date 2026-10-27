@@ -715,7 +715,8 @@ Con el PR #23 (2026-10-26):
   - [x] QA8: la revisión de estabilidad (`stability.md`, claves `review.*`; hecho 2026-10-27). Del resto de
     `print_review.md` faltan los detalles perdidos, los puentes largos, las capas sin tiempo (en parte, `layer_time`),
     los viajes por el aire sin retracción y las velocidades sobre el límite;
-  - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
+  - [x] QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`; hecho 2026-10-27, con
+    `walls.min_detail`);
   - segunda prueba (`docs/spec/qa/2026-10-26-segunda-prueba.md`), soporte en grilla del estante de S4. Hechos
     (2026-10-26): QA10, QA11 y QA12; QA13 el 2026-10-27, con la regla 8 de `walls_extra.md` (perímetros en voladizo,
     `walls.detect_overhangs`). Falta de esa regla el cordón redondo de los puentes (con `speed.bridges` y la ficha

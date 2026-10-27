@@ -19,6 +19,11 @@ struct BeadingParams {
     double preferred_width = 0.4; // w*, usually the nozzle diameter
     double inward_beads = 1.5;    // N in Table 1f: how many inner beads take the difference
     int wall_count = 0;           // M walls from each outline at most; 0: fill the whole region
+    // Thin walls (perimeters.md, rule 3): a feature at least min_detail thick
+    // gets a bead, and a single bead is never narrower than min_width, centred
+    // on the feature. 0: as the quantization gives (half of w*).
+    double min_detail = 0.0;
+    double min_width = 0.0;
 };
 
 // The beads across a thickness, from one outline to the other: widths[i] and

@@ -132,6 +132,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     BeadingParams beading;
     beading.preferred_width = settings.wall_width;
     beading.wall_count = settings.wall_count;
+    beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
+    beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
     std::vector<std::size_t> open(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
     // The thinnest feature that gets a bead (bead_count grows with the thickness).

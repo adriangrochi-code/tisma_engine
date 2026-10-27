@@ -275,7 +275,8 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
-                "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs"},
+                "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
+                "min_detail"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "seam") {
             s.seam = choice<SeamMode>(g, n, k,
@@ -317,6 +318,23 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                 fail(k, "must be a whole number from 0 to 1000");
             s.wall_count = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "min_line_width" || n == "min_detail") {
+            Speed& target = n == "min_line_width" ? s.wall_min_line_width : s.wall_min_detail;
+            if (g.at(n).is_string()) {
+                const std::string t = g.at(n).get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                    fail(k, "must be a number of mm or a percentage of the nozzle like \"85%\"");
+                target = {p, true};
+                return;
+            }
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 40.0))
+                fail(k, "must be from 0 to 40 mm");
+            target = {v, false};
             return;
         }
         const double v = number(g, n, k);
@@ -1013,6 +1031,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.scarf_max_segment", num(s.scarf_max_segment)},
         {"walls.scarf_inner", flag(s.scarf_inner)},
         {"walls.detect_overhangs", flag(s.detect_overhangs)},
+        {"walls.min_line_width", s.wall_min_line_width.percent ? num(s.wall_min_line_width.value) + "%"
+                                                               : num(s.wall_min_line_width.value)},
+        {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -1193,7 +1214,12 @@ std::string settings_json(const Settings& s) {
           {"scarf_entire_loop", s.scarf_entire_loop},
           {"scarf_max_segment", s.scarf_max_segment},
           {"scarf_inner", s.scarf_inner},
-          {"detect_overhangs", s.detect_overhangs}}},
+          {"detect_overhangs", s.detect_overhangs},
+          {"min_line_width", s.wall_min_line_width.percent
+                                 ? ordered_json(json(s.wall_min_line_width.value).dump() + "%")
+                                 : ordered_json(s.wall_min_line_width.value)},
+          {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
+                                                   : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
         {"placement",
          {{"arrange", s.placement_arrange}, {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)}}},
