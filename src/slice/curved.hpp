@@ -48,6 +48,9 @@ struct CurvedField {
     int nx = 0, ny = 0;
     double grid_x = 0.0, grid_y = 0.0, cell = 1.0, full = 0.0, scale = 1.0;
     bool smooth = false;
+    // Automatic (rules 19 and 20): the top faces' deformation added to the
+    // overhangs' (this one), shrunk on its own.
+    std::vector<CurvedField> added;
 
     // The shape at (x, y) (from the part's centre) and height z (from its base).
     double shape(double x, double y, double z) const;

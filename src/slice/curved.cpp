@@ -81,7 +81,10 @@ double CurvedField::offset(double x, double y, double z) const {
     const double h = z - base;
     if (h <= flat_below)
         return 0.0;
-    return shape(x - cx, y - cy, h) * ramp(h);
+    double d = shape(x - cx, y - cy, h) * ramp(h);
+    for (const CurvedField& more : added)
+        d += more.offset(x, y, z);
+    return d;
 }
 
 double CurvedField::offset_dz(double x, double y, double z) const {
@@ -119,13 +122,13 @@ double CurvedField::most() const {
         return amplitude;
     if (mode == CurvedMode::Conical && grid.empty())
         return std::abs(cone) * (std::sqrt(radius * radius + kTipRadius * kTipRadius) - kTipRadius);
-    if (!grid.empty()) {
-        double most = 0.0;
-        for (const float h : grid)
-            most = std::max(most, std::abs(double(h)));
-        return most * scale;
-    }
-    return 0.0;
+    double most = 0.0;
+    for (const float h : grid)
+        most = std::max(most, std::abs(double(h)));
+    most *= scale;
+    for (const CurvedField& more : added)
+        most += more.most();
+    return most;
 }
 
 namespace {
@@ -639,6 +642,21 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     } else if (f.mode == CurvedMode::Surface) {
         if (!fit_surface(f, mesh, b, tan_x, tan_y))
             return std::nullopt; // nothing slopes: flat layers (CO1)
+    } else if (f.mode == CurvedMode::Automatic) {
+        // The overhangs' deformation and the top faces' added (rule 19).
+        const double support = s.support_angle > 0.0 ? 90.0 - s.support_angle
+                                                      : std::atan(0.5 * s.wall_width / s.layer_height) * 180.0 / std::numbers::pi;
+        CurvedField over = f, top = f;
+        over.mode = CurvedMode::Overhangs, top.mode = CurvedMode::Surface;
+        const bool has_over = fit_overhangs(over, mesh, overhangs_of(mesh, f, s.curved_overhang_threshold), b, tan_min,
+                                            s.head_clearance_height / s.head_clearance_radius,
+                                            1.0 / std::tan(radians(support)), needs);
+        const bool has_top = fit_surface(top, mesh, b, tan_x, tan_y);
+        if (!has_over && !has_top)
+            return std::nullopt;
+        if (has_over && has_top)
+            over.added.push_back(std::move(top));
+        f = has_over ? std::move(over) : std::move(top);
     } else if (f.mode == CurvedMode::Overhangs || (f.mode == CurvedMode::Conical && s.curved_fit_head)) {
         // The support takes what is steeper than this from the vertical.
         const double support = s.support_angle > 0.0 ? 90.0 - s.support_angle
@@ -690,6 +708,23 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
                           std::min(bb.d_max - bb.d_min, bb.steepest * s.head_clearance_radius), s.head_clearance_height);
         throw CurvedError(text);
     }
+    // Automatic: only the top faces' part shrinks, while the overhangs' fits
+    // on its own (rule 20).
+    if (!f.added.empty()) {
+        CurvedField alone = f;
+        alone.added.front().scale = 0.0;
+        if (fits(alone)) {
+            double lo = 0.0, hi = 1.0;
+            for (int i = 0; i < 40; ++i) {
+                const double mid = 0.5 * (lo + hi);
+                CurvedField g = f;
+                g.added.front().scale *= mid;
+                (fits(g) ? lo : hi) = mid;
+            }
+            f.added.front().scale *= lo;
+            return helps(1.0) ? std::optional<CurvedField>(f) : std::nullopt;
+        }
+    }
     // As large as fits, by halves (rule 3).
     double lo = 0.0, hi = 1.0;
     const CurvedField full = f;
@@ -697,9 +732,13 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
         const double mid = 0.5 * (lo + hi);
         CurvedField g = full;
         g.amplitude *= mid, g.cone *= mid, g.scale *= mid;
+        for (CurvedField& more : g.added)
+            more.scale *= mid;
         (fits(g) ? lo : hi) = mid;
     }
     f.amplitude = full.amplitude * lo, f.cone = full.cone * lo, f.scale = full.scale * lo;
+    for (CurvedField& more : f.added)
+        more.scale *= lo;
     if (f.mode == CurvedMode::Surface && f.most() < 1e-3)
         return std::nullopt; // too low a part to bend (rule 17)
     if (!helps(lo))

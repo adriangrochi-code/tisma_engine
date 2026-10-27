@@ -398,7 +398,7 @@ namespace {
 // The spec's mushroom (nonplanar_modes.md): a foot of radius 8 and `foot`
 // high, a hat whose underside opens at `beta` degrees from the vertical out
 // to radius 20, a 2 mm rim and a flat top; 128 sides, centred on X 100, Y 100.
-IndexedMesh mushroom(double beta, double foot = 25.0) {
+IndexedMesh mushroom(double beta, double foot = 25.0, double dome = 0.0) {
     TriangleMesh m;
     const int sides = 128;
     const double rise = 12.0 / std::tan(beta * std::numbers::pi / 180.0);
@@ -408,7 +408,7 @@ IndexedMesh mushroom(double beta, double foot = 25.0) {
         return Vec3f{float(100.0 + rings[ring][0] * std::cos(a)), float(100.0 + rings[ring][0] * std::sin(a)),
                      float(rings[ring][1])};
     };
-    const Vec3f bottom{100, 100, 0}, top{100, 100, float(rings[3][1])};
+    const Vec3f bottom{100, 100, 0}, top{100, 100, float(rings[3][1] + dome)};
     for (int k = 0; k < sides; ++k) {
         const int n = (k + 1) % sides;
         m.add_triangle(bottom, at(0, n), at(0, k));
@@ -539,4 +539,34 @@ TEST_CASE("curved layers: overhangs bend only around their section (VO2, VO4, VO
     const std::string bent = gcode_of(slice_model(mushroom(55.0), s), s);
     const double k = radial_slope(layer_moves(bent, "32.200"));
     CHECK_THAT(k, WithinAbs(-0.42, 0.03)); // Tisma Slicer: 0.417
+}
+
+TEST_CASE("curved layers: automatic is the overhangs' and the top faces' together (AU1 to AU3)", "[curved][overhangs]") {
+    // AU1: a mushroom has no sloping top: as overhangs.
+    const std::optional<CurvedField> a = curved_field(overhang_base(CurvedMode::Automatic, true), mushroom(52.0));
+    const std::optional<CurvedField> o = curved_field(overhang_base(CurvedMode::Overhangs, true), mushroom(52.0));
+    REQUIRE(a);
+    REQUIRE(o);
+    for (const double x : {104.0, 110.0, 116.0})
+        CHECK_THAT(a->offset(x, 100.0, 34.0), WithinAbs(o->offset(x, 100.0, 34.0), 1e-9));
+    // AU2: the roof block has no overhang: as surface.
+    Settings top = overhang_base(CurvedMode::Automatic, false);
+    Settings surface = overhang_base(CurvedMode::Surface, false);
+    const std::optional<CurvedField> b = curved_field(top, roof_block(20, 24));
+    const std::optional<CurvedField> c = curved_field(surface, roof_block(20, 24));
+    REQUIRE(b);
+    REQUIRE(c);
+    CHECK_THAT(b->offset(115.0, 100.0, 23.0), WithinAbs(c->offset(115.0, 100.0, 23.0), 1e-9));
+    // AU3: the domed mushroom: the support goes with overhangs and automatic,
+    // and drops with surface (Tisma Slicer: 3065 mm flat, 1436 surface, none for the others).
+    const auto support_with = [&](CurvedMode mode) {
+        const Settings s = overhang_base(mode, true);
+        return support_length(gcode_of(slice_model(mushroom(52.0, 25.0, 3.0), s), s));
+    };
+    const double flat = support_with(CurvedMode::Disabled), over = support_with(CurvedMode::Overhangs),
+                 automatic = support_with(CurvedMode::Automatic), faces = support_with(CurvedMode::Surface);
+    WARN("AU3 support: flat " << flat << ", surface " << faces << ", overhangs " << over << ", automatic " << automatic);
+    CHECK(flat > 500.0);
+    CHECK(over < 0.05 * flat);
+    CHECK(automatic < 0.05 * flat);
 }

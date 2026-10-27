@@ -2812,9 +2812,9 @@ void check_settings(const Settings& s) {
         if (!relative_e(s))
             throw SettingsError("curved.mode: curved layers need relative E (machine.relative_extrusion, on a flavor that "
                                 "has M83)");
-        if (s.curved_mode == CurvedMode::Stress || s.curved_mode == CurvedMode::Automatic)
+        if (s.curved_mode == CurvedMode::Stress)
             throw SettingsError(std::string("curved.mode: ") + curved_mode_name(s.curved_mode) +
-                                " (nonplanar_modes.md) is not done yet: use wave, conical, overhangs or surface");
+                                " (layers from the structural analysis, nonplanar_modes.md) is not done yet");
         for (const auto& [on, key] : {std::pair{s.vase, "vase.enabled"},
                                       {s.zaa, "zaa.enabled"},
                                       {s.infill_nonplanar, "infill.nonplanar"},

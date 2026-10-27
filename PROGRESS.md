@@ -6015,3 +6015,13 @@ el hongo con cúpula (AU3) y `automatic`; `stress`.
 
 **Sigue:** `automatic` (la suma de `overhangs` y `surface`), y después resina.
 
+**`automatic`, en el mismo bloque** (reglas 19 y 20): la deformación de `overhangs` más la de `surface`; si la suma se
+pasa de `J`, la pendiente o la holgura, se achica solo la de las caras de arriba (la de voladizos ya cumple sola).
+Medido: el hongo de 52° sale igual que con `overhangs` (AU1), el bloque con techo igual que con `surface` (AU2), y en el
+hongo con cúpula (AU3, cabezal de 25°) el soporte pasa de 83,9 m de recorrido en plano a 83,4 con `surface` y a nada
+con `overhangs` y `automatic` (Tisma Slicer: 3065 mm de filamento en plano, 1436 con `surface`, nada con los otros dos):
+nuestro `surface` saca menos soporte bajo el sombrero. Prueba nueva AU1 a AU3 (13 casos en `tests/test_curved.cpp`).
+
+**Sigue:** `stress` necesita las capas calculadas por el análisis estructural (regla 21 a 23): queda para cuando el
+análisis las calcule. Siguiente punto: resina (`resin.md`, `resin_supports.md`).
+

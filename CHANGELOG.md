@@ -16,7 +16,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
   cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba
   quedan paralelas a las caras de arriba inclinadas y no se ven escalones; con `overhangs` o el cono ajustado, las
-  capas bajan bajo los voladizos y sacan el soporte que necesitarían.
+  capas bajan bajo los voladizos y sacan el soporte que necesitarían; `automatic` hace las dos cosas.
 - **Mezcla de colores** (ficha `color_mixing.md`): extrusores virtuales que alternan filamentos capa por capa para
   dar colores nuevos, con su diálogo (lista, mezclas de dos colores, editor con deslizador y secuencia de capas) y
   degradés por altura; cada pieza elige su extrusor, real o virtual, con la herramienta «Extrusor y color del
