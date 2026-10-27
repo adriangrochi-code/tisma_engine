@@ -148,4 +148,36 @@ bool filament_calibration(CalibrationKind kind) {
            kind == CalibrationKind::RetractionSpeed || kind == CalibrationKind::ResinExposure;
 }
 
+std::optional<CalibrationRecord> calibration_record(const Settings& s, std::string_view name, std::string_view printer,
+                                                    std::string_view filament) {
+    const std::string key(name);
+    if (const auto f = s.filament_calibrations.find(key);
+        f != s.filament_calibrations.end() && !f->second.date.empty() &&
+        (f->second.printer.empty() || f->second.printer == printer))
+        return CalibrationRecord{f->second.date, f->second.nozzle, std::string(filament)};
+    if (const auto p = s.printer_calibrations.find(key); p != s.printer_calibrations.end() && !p->second.date.empty())
+        return CalibrationRecord{p->second.date, p->second.nozzle, {}};
+    return std::nullopt;
+}
+
+void date_calibration(Settings& s, std::string_view name, bool filament, std::string_view date,
+                      std::string_view printer) {
+    const std::string key(name);
+    if (filament)
+        s.filament_calibrations[key] = {std::string(date), s.nozzle_diameter, std::string(printer)};
+    else
+        s.printer_calibrations[key] = {std::string(date), s.nozzle_diameter, {}};
+}
+
+std::set<std::string> calibrations_dated(const Settings& s, std::string_view printer) {
+    std::set<std::string> out;
+    for (const auto& [name, d] : s.printer_calibrations)
+        if (!d.date.empty())
+            out.insert(name);
+    for (const auto& [name, d] : s.filament_calibrations)
+        if (!d.date.empty() && (d.printer.empty() || d.printer == printer))
+            out.insert(name);
+    return out;
+}
+
 } // namespace tisma::ui

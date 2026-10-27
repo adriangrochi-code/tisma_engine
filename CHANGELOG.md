@@ -25,6 +25,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Las fechas de las calibraciones van en los perfiles:** las de la impresora en el perfil de la impresora
+  (`machine.calibrations`) y las del filamento en el del filamento (`extrusion.calibrations`, con la impresora en que
+  se hicieron), en lugar de las preferencias de la interfaz. Las que ya estaban en las preferencias se siguen
+  mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
 
 ## [0.10.0-alpha.2] - 2026-10-27

@@ -1563,7 +1563,13 @@ void App::choose_nozzle(double diameter, const std::string& profile) {
 // A calibration's result applied: its day, the nozzle and the filament, for
 // the printer page (rule 38).
 void App::record_calibration(CalibrationKind kind) {
-    record_calibration(std::string(calibration_kind_name(kind)));
+    const std::string name(calibration_kind_name(kind));
+    record_calibration(name);
+    // Its guides too, by their id (assistant.md, rule 22).
+    if (knowledge_)
+        for (const KnowledgeCalibration& g : knowledge_->calibrations)
+            if (test_for_guide(g.id) == name)
+                record_calibration(g.id);
 }
 
 void App::record_calibration(const std::string& name) {
@@ -1574,8 +1580,14 @@ void App::record_calibration(const std::string& name) {
     char date[16] = "";
     if (const std::tm* t = std::localtime(&now))
         std::strftime(date, sizeof date, "%Y-%m-%d", t);
-    calibration_records_[printer][name] =
-        CalibrationRecord{date, settings_.nozzle_diameter, chosen_profile_[std::size_t(ProfileKind::Filament)]};
+    // In the profile the result belongs to (assistant.md, rule 22): a
+    // filament guide's or test's in the filament's, the rest in the printer's.
+    bool filament = false;
+    if (const KnowledgeCalibration* g = knowledge_ ? find_guide(*knowledge_, name) : nullptr)
+        filament = g->group == "filament";
+    else if (const auto kind = calibration_kind_from_name(name))
+        filament = filament_calibration(*kind);
+    date_calibration(settings_, name, filament, date, printer);
 }
 
 // The printer's own page (rules 37 to 40), the whole width: back to the
@@ -1669,12 +1681,20 @@ void App::printer_page() {
         // Each calibration this printer takes: what it fixes, its value now,
         // whether it was made and with what (rule 38).
         const std::vector<CalibrationKind> kinds = printer_calibrations(settings_);
+        // The profiles' dates; those an older version kept in the
+        // preferences, while the profiles have none.
         const auto records = calibration_records_.find(printer);
+        std::map<CalibrationKind, CalibrationRecord> found;
+        for (const CalibrationKind kind : kinds)
+            if (const std::optional<CalibrationRecord> r = calibration_record(
+                    settings_, calibration_kind_name(kind), printer, chosen_profile_[std::size_t(ProfileKind::Filament)]))
+                found[kind] = *r;
+            else if (records != calibration_records_.end())
+                if (const auto it = records->second.find(calibration_kind_name(kind)); it != records->second.end())
+                    found[kind] = it->second;
         const auto record_of = [&](CalibrationKind kind) -> const CalibrationRecord* {
-            if (records == calibration_records_.end())
-                return nullptr;
-            const auto it = records->second.find(calibration_kind_name(kind));
-            return it == records->second.end() ? nullptr : &it->second;
+            const auto it = found.find(kind);
+            return it == found.end() ? nullptr : &it->second;
         };
         int done = 0;
         std::optional<CalibrationKind> next;
@@ -4517,13 +4537,14 @@ void App::open_guide(std::string_view id) {
 // The guides done on this printer (rule 22): those with a date in its
 // Calibration section, by their test's name or by their own id.
 std::set<std::string> App::guides_done() const {
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    std::set<std::string> dated = calibrations_dated(settings_, printer);
+    if (const auto records = calibration_records_.find(printer); records != calibration_records_.end())
+        for (const auto& [name, record] : records->second)
+            if (!record.date.empty())
+                dated.insert(name);
     std::set<std::string> done;
-    const auto records = calibration_records_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
-    if (records == calibration_records_.end())
-        return done;
-    for (const auto& [name, record] : records->second) {
-        if (record.date.empty())
-            continue;
+    for (const std::string& name : dated) {
         done.insert(name);
         // A test dated on the calibration page does its guides.
         if (knowledge_)
@@ -5000,18 +5021,19 @@ void App::help_apply_dialog() {
             try {
                 const Settings before = settings_;
                 settings_ = apply_setting(settings_, c);
-                settings_changed();
-                notify_undo(key_label(c.key) + ": " + c.before + " » " + c.after, [this, before] {
-                    settings_ = before;
-                    settings_changed();
-                });
-                // A guide's result dates its test, as the calibration page does (rule 22).
+                // A guide's result dates the guide and its test, as the
+                // calibration page does (rule 22); Undo takes the date back too.
                 if (!help_change_guide_.empty()) {
                     record_calibration(help_change_guide_);
                     if (const std::string_view test = test_for_guide(help_change_guide_);
                         calibration_kind_from_name(test))
                         record_calibration(std::string(test));
                 }
+                settings_changed();
+                notify_undo(key_label(c.key) + ": " + c.before + " » " + c.after, [this, before] {
+                    settings_ = before;
+                    settings_changed();
+                });
             } catch (const std::exception& e) {
                 notify(e.what(), true);
             }

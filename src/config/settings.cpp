@@ -1181,6 +1181,20 @@ Settings parse_checked(std::string_view text) {
             s.infill_angle = v;
         }
     });
+    // machine.calibrations and extrusion.calibrations: name → {date, nozzle[, printer]}.
+    const auto read_calibrations = [&](const json& v, const std::string& k, std::map<std::string, CalibrationDate>& out) {
+        const char* what = "must be an object of name: {\"date\": \"YYYY-MM-DD\", \"nozzle\": mm, \"printer\": name}";
+        if (!v.is_object())
+            fail(k, what);
+        out.clear();
+        for (const auto& [name, d] : v.items()) {
+            if (!d.is_object() || !d.contains("date") || !d.at("date").is_string() ||
+                (d.contains("nozzle") && !d.at("nozzle").is_number()) ||
+                (d.contains("printer") && !d.at("printer").is_string()))
+                fail(k + "." + name, what);
+            out[name] = {d.at("date").get<std::string>(), d.value("nozzle", 0.0), d.value("printer", std::string())};
+        }
+    };
     read_group(root, "machine",
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
@@ -1189,9 +1203,13 @@ Settings parse_checked(std::string_view text) {
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
-                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology"},
+                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "calibrations") {
+                       read_calibrations(v, k, s.printer_calibrations);
+                       return;
+                   }
                    if (n == "technology") {
                        s.machine_technology = choice<MachineTechnology>(
                            g, n, k, {{"fdm", MachineTechnology::Fdm}, {"msla", MachineTechnology::Msla}});
@@ -1935,8 +1953,12 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "calibrations") {
+            read_calibrations(g.at(n), k, s.filament_calibrations);
+            return;
+        }
         // An MMU's change (multi_extruder.md, rule 15).
         if (n == "ramming") {
             const json& v = g.at(n);
@@ -2636,6 +2658,16 @@ std::string settings_json(const Settings& s) {
                        : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random"
                                                      : "rear";
+    const auto calibrations = [](const std::map<std::string, CalibrationDate>& dates) {
+        ordered_json out = ordered_json::object();
+        for (const auto& [name, d] : dates) {
+            ordered_json item = {{"date", d.date}, {"nozzle", d.nozzle}};
+            if (!d.printer.empty())
+                item["printer"] = d.printer;
+            out[name] = std::move(item);
+        }
+        return out;
+    };
     ordered_json variables = ordered_json::object();
     // Values are kept as text (numbers keep their JSON text), so they go back
     // as strings: parse_settings reads a string as that same text.
@@ -2903,6 +2935,7 @@ std::string settings_json(const Settings& s) {
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
           {"technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+          {"calibrations", calibrations(s.printer_calibrations)},
           {"display_pixels_x", s.display_pixels_x},
           {"display_pixels_y", s.display_pixels_y},
           {"display_width", s.display_width},
@@ -3064,7 +3097,8 @@ std::string settings_json(const Settings& s) {
           {"travel", filament_values("travel.")},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
-          {"needs_enclosure", s.needs_enclosure}}},
+          {"needs_enclosure", s.needs_enclosure},
+          {"calibrations", calibrations(s.filament_calibrations)}}},
         {"output", {{"filename_format", s.filename_format}, {"post_process", s.post_process}}},
         {"gcode",
          {{"resolution", s.gcode_resolution},

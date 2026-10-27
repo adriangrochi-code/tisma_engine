@@ -105,6 +105,16 @@ struct Speed {
 };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
+// When a calibration's result was applied (assistant.md, rule 22;
+// settings_panel.md, rule 38): the date (YYYY-MM-DD), the nozzle it was done
+// with, and for a filament's, on which printer.
+struct CalibrationDate {
+    std::string date;
+    double nozzle = 0.0;
+    std::string printer;
+    friend bool operator==(const CalibrationDate&, const CalibrationDate&) = default;
+};
+
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
@@ -615,6 +625,9 @@ struct Settings {
     double shrinkage_xy = 0.0, shrinkage_z = 0.0;
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
+    // The calibrations done, by guide id or test name: the printer's in
+    // machine.calibrations, the filament's in extrusion.calibrations.
+    std::map<std::string, CalibrationDate> printer_calibrations, filament_calibrations;
     // The share of the purge each filament asks for (multi_extruder.md, rule
     // 12), %, by extruder; a shorter list repeats its last value.
     std::vector<double> purge_multiplier{100.0};

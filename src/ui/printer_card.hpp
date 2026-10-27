@@ -6,6 +6,7 @@
 
 #include <array>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,5 +80,17 @@ std::string_view calibration_key(CalibrationKind kind);
 // Whether its result is the filament's (temperature, flow, pressure advance,
 // retraction): the section says which filament it was made with.
 bool filament_calibration(CalibrationKind kind);
+
+// Where the dates live (assistant.md, rule 22): a filament's calibration in
+// the filament profile (extrusion.calibrations, with the printer), a
+// printer's in the printer profile (machine.calibrations), by guide id or by
+// test name. `filament` names the record's filament (the profile chosen).
+std::optional<CalibrationRecord> calibration_record(const Settings& settings, std::string_view name,
+                                                    std::string_view printer, std::string_view filament);
+// A result applied today (`date`) on this printer with its nozzle now.
+void date_calibration(Settings& settings, std::string_view name, bool filament, std::string_view date,
+                      std::string_view printer);
+// The names dated for this printer.
+std::set<std::string> calibrations_dated(const Settings& settings, std::string_view printer);
 
 } // namespace tisma::ui

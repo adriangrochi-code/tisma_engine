@@ -6421,4 +6421,10 @@ variable de máquina que el perfil no tenía (`[temperature]`) se crea al fijarl
 (AS17, AS20, AS22). Avisado al equipo de especificaciones: el motor no tiene `material.nozzle_temp` (usa
 `machine.variables.temperature`) y su torre de flujo máximo por defecto no es la de `calibration_models.md`.
 
-**Sigue:** las fechas por guía en los perfiles (regla 22), AS18 y la regla 24.
+**Después (séptimo paso):** las fechas de las calibraciones pasan a los perfiles, como pide la regla 22:
+`machine.calibrations` en el de la impresora y `extrusion.calibrations` en el del filamento, con la impresora; una
+fecha de filamento cuenta solo en su impresora. Se guardan por id de guía y por nombre de prueba (la sección
+Calibración de la impresora sigue leyendo por prueba), y Deshacer también saca la fecha. Las fechas viejas de las
+preferencias se siguen leyendo mientras el perfil no tenga. Prueba nueva en `[printer_card]` (AS21).
+
+**Sigue:** AS18 (mandar el comando del firmware) y la regla 24.
