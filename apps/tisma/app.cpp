@@ -262,6 +262,45 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
+// The preview's views (preview.md, rule 1), in its order: what colours the
+// lines, the shader's way to colour them, and the number the instances carry.
+enum class PreviewView {
+    Kind,
+    Height,
+    Width,
+    Speed,
+    ActualSpeed,
+    Fan,
+    Temperature,
+    Flow,
+    ActualFlow,
+    LayerTime,
+    LayerTimeLog,
+    Tool,
+    ColorPrint
+};
+inline constexpr int kPreviewViews = 13;
+struct ViewInfo {
+    T name;
+    ColorMode shader;
+    PreviewValue value;
+};
+constexpr ViewInfo kViewInfo[kPreviewViews] = {
+    {T::ByKind, ColorMode::Kind, PreviewValue::Feed},
+    {T::ByHeight, ColorMode::Height, PreviewValue::Feed},
+    {T::ByWidth, ColorMode::Width, PreviewValue::Feed},
+    {T::BySpeed, ColorMode::Speed, PreviewValue::Feed},
+    {T::ByActualSpeed, ColorMode::Speed, PreviewValue::ActualFeed},
+    {T::ByFan, ColorMode::Speed, PreviewValue::Fan},
+    {T::ByTemperature, ColorMode::Speed, PreviewValue::Temperature},
+    {T::ByFlow, ColorMode::Speed, PreviewValue::Flow},
+    {T::ByActualFlow, ColorMode::Speed, PreviewValue::ActualFlow},
+    {T::ByLayerTime, ColorMode::Speed, PreviewValue::LayerTime},
+    {T::ByLayerTimeLog, ColorMode::Speed, PreviewValue::LayerTimeLog},
+    {T::ByTool, ColorMode::Speed, PreviewValue::Tool},
+    {T::ByColorPrint, ColorMode::Speed, PreviewValue::ColorPrint},
+};
+
 enum class Purpose {
     Open,
     AddModel,
@@ -333,6 +372,7 @@ private:
     void start_slice();
     void poll_jobs();
     void show_preview();
+    void upload_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
@@ -522,7 +562,8 @@ private:
     int bottom_layer_ = 0;
     bool only_layer_ = false;
     bool show_travels_ = false;
-    ColorMode color_mode_ = ColorMode::Kind;
+    ColorMode color_mode_ = ColorMode::Kind; // the shader's, from the view
+    PreviewView preview_view_ = PreviewView::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
     float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0}, height_range_[2] = {0, 0};
     PreviewBuffers preview_buffers_;
@@ -1938,8 +1979,10 @@ bool App::init(std::string& error) {
         fxaa_ = options_.fxaa != 0;
     if (options_.moire >= 0)
         moire_ = options_.moire != 0;
-    if (options_.color >= 0)
-        color_mode_ = static_cast<ColorMode>(options_.color);
+    if (options_.color >= 0 && options_.color < kPreviewViews) {
+        preview_view_ = static_cast<PreviewView>(options_.color);
+        color_mode_ = kViewInfo[options_.color].shader;
+    }
     device_ports_ = device::list_serial_ports();
     if (!options_.device.empty()) {
         device_port_ = options_.device;
@@ -2433,6 +2476,7 @@ void App::load_gcode(const std::filesystem::path& path) {
     r.settings = settings_;
     r.gcode = std::move(text).str();
     r.preview = read_gcode_preview(r.gcode, settings_.filament_diameter);
+    time_preview(r.preview, machine_kinematics(settings_), settings_.filament_diameter);
     if (r.preview.extrusions.empty()) {
         fail(T::CannotOpen, utf8(path) + ": no extrusions found");
         return;
@@ -3177,8 +3221,15 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
+    upload_preview();
+    top_layer_ = int(result_->preview.layers.size()) - 1;
+    bottom_layer_ = 0;
+}
+
+// The preview's buffers with the view's numbers, to the GPU.
+void App::upload_preview() {
     const auto start = std::chrono::steady_clock::now();
-    preview_buffers_ = preview_buffers(result_->preview);
+    preview_buffers_ = preview_buffers(result_->preview, 0xFF4FA3FF, kViewInfo[int(preview_view_)].value);
     preview_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     const PreviewBuffers& buffers = preview_buffers_;
     ++scene_version_;
@@ -3187,8 +3238,6 @@ void App::show_preview() {
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     vk_view_.set_preview(buffers);
-    top_layer_ = int(result_->preview.layers.size()) - 1;
-    bottom_layer_ = 0;
 }
 
 void App::settings_changed() {
@@ -6038,51 +6087,122 @@ void App::preview_panels() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(T::ColorBy));
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByKind)).x + ImGui::GetFrameHeight() * 2.0f);
-    int mode = int(color_mode_);
-    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth), tr(T::ByHeight)};
-    if (ImGui::Combo("##colour_mode", &mode, modes, 4))
-        color_mode_ = static_cast<ColorMode>(mode);
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByLayerTimeLog)).x + ImGui::GetFrameHeight() * 2.0f);
+    if (ImGui::BeginCombo("##colour_mode", tr(kViewInfo[int(preview_view_)].name), ImGuiComboFlags_HeightLargest)) {
+        for (int v = 0; v < kPreviewViews; ++v)
+            if (ImGui::Selectable(tr(kViewInfo[v].name), v == int(preview_view_)) && v != int(preview_view_)) {
+                preview_view_ = static_cast<PreviewView>(v);
+                color_mode_ = kViewInfo[v].shader;
+                upload_preview(); // the instances carry the view's number
+            }
+        ImGui::EndCombo();
+    }
     const float swatch = ImGui::GetTextLineHeight();
-    if (color_mode_ == ColorMode::Kind) {
-        for (std::size_t k = 1; k < kLineKinds; ++k) {
-            if (p.kind_moves[k] == 0)
-                continue;
-            bool visible = (kind_mask_ >> k) & 1u;
-            ImGui::PushID(int(k));
-            if (ImGui::Checkbox("##visible", &visible))
-                kind_mask_ = visible ? kind_mask_ | (1u << k) : kind_mask_ & ~(1u << k);
-            ImGui::SameLine();
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            const float y = at.y + (ImGui::GetFrameHeight() - swatch) * 0.5f;
-            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x, y), ImVec2(at.x + swatch, y + swatch),
-                                                      ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))), 3.0f * scale_);
-            ImGui::Dummy(ImVec2(swatch, swatch));
-            ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
-            ImGui::PopID();
+    if (preview_view_ == PreviewView::Kind) {
+        // Each kind: its colour, its time and share of the moves' time, and
+        // its filament (rule 2).
+        const double all = p.moves_seconds;
+        const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter * result_->settings.filament_diameter;
+        const double density = result_->settings.filament_density > 0.0 ? result_->settings.filament_density : 1.24;
+        if (ImGui::BeginTable("##kinds", 4, ImGuiTableFlags_SizingFixedFit)) {
+            for (std::size_t k = 1; k < kLineKinds; ++k) {
+                if (p.kind_moves[k] == 0)
+                    continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool visible = (kind_mask_ >> k) & 1u;
+                ImGui::PushID(int(k));
+                if (ImGui::Checkbox("##visible", &visible))
+                    kind_mask_ = visible ? kind_mask_ | (1u << k) : kind_mask_ & ~(1u << k);
+                ImGui::SameLine();
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                const float y = at.y + (ImGui::GetFrameHeight() - swatch) * 0.5f;
+                ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x, y), ImVec2(at.x + swatch, y + swatch),
+                                                          ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))), 3.0f * scale_);
+                ImGui::Dummy(ImVec2(swatch, swatch));
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                if (all > 0.0)
+                    ImGui::TextDisabled("%s", format_duration(p.kind_seconds[k]).c_str());
+                ImGui::TableNextColumn();
+                if (all > 0.0) {
+                    const double share = p.kind_seconds[k] / all;
+                    const ImVec2 b = ImGui::GetCursorScreenPos();
+                    const float bar = 40.0f * scale_, by = b.y + ImGui::GetFrameHeight() * 0.5f - 2.0f * scale_;
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(b.x, by), ImVec2(b.x + bar, by + 4.0f * scale_),
+                                                              ImGui::GetColorU32(rgb(theme_.frame)));
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(b.x, by), ImVec2(b.x + bar * float(share), by + 4.0f * scale_),
+                                                              ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))));
+                    ImGui::Dummy(ImVec2(bar, 1));
+                    ImGui::SameLine();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextDisabled("%.1f %%", 100.0 * share);
+                }
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                if (p.kind_filament[k] > 0.0)
+                    ImGui::TextDisabled("%.2f m · %.2f g", p.kind_filament[k] / 1000.0,
+                                        p.kind_filament[k] * area / 1000.0 * density);
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
         }
     } else {
-        // The colour ramp with its ends.
-        const float w = 200.0f * scale_;
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const ImU32 stops[5] = {IM_COL32(43, 84, 242, 255), IM_COL32(26, 204, 217, 255), IM_COL32(77, 217, 89, 255),
-                                IM_COL32(250, 217, 51, 255), IM_COL32(235, 56, 51, 255)};
-        for (int i = 0; i < 4; ++i)
-            ImGui::GetWindowDrawList()->AddRectFilledMultiColor(
-                ImVec2(at.x + w * float(i) / 4.0f, at.y), ImVec2(at.x + w * float(i + 1) / 4.0f, at.y + swatch),
-                stops[i], stops[i + 1], stops[i + 1], stops[i]);
-        ImGui::Dummy(ImVec2(w, swatch));
-        const bool speed = color_mode_ == ColorMode::Speed;
-        const float* range = speed ? feed_range_ : color_mode_ == ColorMode::Height ? height_range_ : width_range_;
-        const char* unit = speed ? "%.0f mm/s" : "%.2f mm";
-        const std::string low = format(unit, double(range[0]));
-        const std::string high = format(unit, double(range[1]));
-        const float left = ImGui::GetCursorPosX();
-        ImGui::TextUnformatted(low.c_str());
-        ImGui::SameLine(left + w - ImGui::CalcTextSize(high.c_str()).x);
-        ImGui::TextUnformatted(high.c_str());
+        // Eleven steps from the least to the most (rule 7), or each tool or
+        // colour.
+        const PreviewView v = preview_view_;
+        const float* range = v == PreviewView::Height ? height_range_ : v == PreviewView::Width ? width_range_ : feed_range_;
+        const bool log = v == PreviewView::LayerTimeLog;
+        const bool discrete = v == PreviewView::Tool || v == PreviewView::ColorPrint;
+        std::vector<double> steps;
+        if (discrete)
+            for (int i = int(std::lround(range[0])); i <= int(std::lround(range[1])); ++i)
+                steps.push_back(i);
+        else
+            steps = legend_steps(range[0], range[1], log);
+        const auto text_of = [&](double value) -> std::string {
+            switch (v) {
+            case PreviewView::Height:
+            case PreviewView::Width: return format("%.3f mm", value);
+            case PreviewView::Speed:
+            case PreviewView::ActualSpeed: return format("%.1f mm/s", value);
+            case PreviewView::Fan: return format("%.0f %%", value);
+            case PreviewView::Temperature: return format("%.0f °C", value);
+            case PreviewView::Flow:
+            case PreviewView::ActualFlow: return format("%.2f mm³/s", value);
+            case PreviewView::LayerTime:
+            case PreviewView::LayerTimeLog: return format_duration(value);
+            case PreviewView::Tool: return format(tr(T::ToolN), int(value) + 1);
+            case PreviewView::ColorPrint: return format(tr(T::ColorN), int(value) + 1);
+            case PreviewView::Kind: break;
+            }
+            return {};
+        };
+        // The shader's ramp, from blue to red.
+        const auto ramp = [](double s) {
+            static const float stops[5][3] = {
+                {0.17f, 0.33f, 0.95f}, {0.10f, 0.80f, 0.85f}, {0.30f, 0.85f, 0.35f}, {0.98f, 0.85f, 0.20f}, {0.92f, 0.22f, 0.20f}};
+            const float u = float(std::clamp(s, 0.0, 1.0)) * 4.0f;
+            const int i = std::min(int(u), 3);
+            const float f = u - float(i);
+            return ImGui::GetColorU32(ImVec4(stops[i][0] + (stops[i + 1][0] - stops[i][0]) * f,
+                                             stops[i][1] + (stops[i + 1][1] - stops[i][1]) * f,
+                                             stops[i][2] + (stops[i + 1][2] - stops[i][2]) * f, 1.0f));
+        };
+        // Largest first, as a scale reads from top to bottom.
+        for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
+            const double step = *it;
+            const double value = log ? std::log10(std::max(step, 0.01)) : step;
+            const double s = range[1] > range[0] ? (value - range[0]) / (range[1] - range[0]) : 0.0;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + swatch, at.y + swatch), ramp(s), 3.0f * scale_);
+            ImGui::Dummy(ImVec2(swatch, swatch));
+            ImGui::SameLine();
+            ImGui::TextUnformatted(text_of(step).c_str());
+        }
     }
     bool travel = show_travels_;
     if (ImGui::Checkbox("##travel", &travel))
@@ -6109,6 +6229,8 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
+        if (p.first_layer_seconds > 0.0)
+            line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
         if (result_->resin) {
             // A resin print: the resin it takes, by its bottle (gcode_extras.md, rule 2).
             line(tr(T::ResinUsed), format("%.1f ml  ·  %.1f g", result_->resin->volume / 1000.0, result_->resin->weight));

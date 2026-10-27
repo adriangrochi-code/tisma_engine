@@ -25,7 +25,7 @@ struct AppOptions {
     int msaa = -1;                  // multisampling samples; -1: the preference
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
-    int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
+    int color = -1;                 // the preview's view (PreviewView, preview.md rule 1); -1: by kind
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
     std::vector<float> look;

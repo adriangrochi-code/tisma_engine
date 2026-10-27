@@ -8,6 +8,9 @@
 #include <cmath>
 #include <numbers>
 #include <optional>
+#include <vector>
+
+#include <oneapi/tbb/parallel_for.h>
 
 namespace tisma {
 namespace {
@@ -100,8 +103,13 @@ public:
                     i = j;
                     continue;
                 }
+                if (letter == 'T') { // the extruder from now on
+                    if (v && *v >= 0.0 && *v < 256.0)
+                        tool_ = static_cast<std::uint8_t>(*v);
+                    return;
+                }
                 if (letter != 'G' && letter != 'M')
-                    return; // T or anything else: nothing to draw
+                    return; // anything else: nothing to draw
                 head = letter;
                 code = v.value_or(-1.0);
             } else {
@@ -113,7 +121,7 @@ public:
         if (head == 'G')
             g(code, word);
         else if (head == 'M')
-            m(code);
+            m(code, word);
     }
 
     GcodePreview finish() {
@@ -165,11 +173,22 @@ private:
         out_.layers.push_back(layer);
     }
 
-    void m(double code) {
-        if (code == 82)
+    void m(double code, const Words& w) {
+        const auto at = [&](char letter) -> const std::optional<double>& { return w.value[letter - 'A']; };
+        if (code == 82) {
             absolute_e_ = true;
-        else if (code == 83)
+        } else if (code == 83) {
             absolute_e_ = false;
+        } else if (code == 106 && (!at('P') || *at('P') == 0.0)) {
+            // The part fan, S of 255 (the first one when there are several).
+            fan_ = static_cast<std::uint8_t>(std::lround(std::clamp(at('S').value_or(255.0) / 255.0, 0.0, 1.0) * 100.0));
+        } else if (code == 107 && (!at('P') || *at('P') == 0.0)) {
+            fan_ = 0;
+        } else if ((code == 104 || code == 109) && at('S') && (!at('T') || *at('T') == double(tool_))) {
+            temperature_ = static_cast<std::uint16_t>(std::lround(std::clamp(*at('S'), 0.0, 1000.0)));
+        } else if (code == 600) {
+            ++color_;
+        }
     }
 
     void g(double code, const Words& w) {
@@ -257,6 +276,7 @@ private:
         mv.x0 = float(x_), mv.y0 = float(y_), mv.z0 = float(z_);
         mv.x1 = float(x), mv.y1 = float(y), mv.z1 = float(z);
         mv.feed = float(feed_);
+        mv.fan = fan_, mv.tool = tool_, mv.temperature = temperature_, mv.color = color_;
         mv.layer = static_cast<std::uint32_t>(out_.layers.size() - 1);
         PreviewLayer& layer = out_.layers.back();
         if (extrudes) {
@@ -274,6 +294,7 @@ private:
             mv.height = float(height);
             out_.extrusions.push_back(static_cast<std::uint32_t>(out_.moves.size()));
             ++layer.extrusion_count;
+            out_.kind_filament[static_cast<std::size_t>(kind_)] += de;
             out_.extruded += length;
             const float lo[3] = {std::min(mv.x0, mv.x1), std::min(mv.y0, mv.y1), std::min(mv.z0, mv.z1)};
             const float hi[3] = {std::max(mv.x0, mv.x1), std::max(mv.y0, mv.y1), std::max(mv.z0, mv.z1)};
@@ -301,6 +322,8 @@ private:
     bool layer_comments_ = false, width_comments_ = false;
     bool nonplanar_ = false; // in a ;NONPLANAR block
     LineKind kind_ = LineKind::Other;
+    std::uint8_t fan_ = 0, tool_ = 0;
+    std::uint16_t temperature_ = 0, color_ = 0;
 };
 
 } // namespace
@@ -352,6 +375,44 @@ GcodePreview read_gcode_preview(std::string_view text, double filament_diameter,
         start = end + 1;
     }
     return reader.finish();
+}
+
+void time_preview(GcodePreview& preview, const Kinematics& kinematics, double filament_diameter) {
+    const double area = std::numbers::pi * 0.25 * filament_diameter * filament_diameter;
+    // Each layer from rest to rest, as the estimate plans them: the layers
+    // apart, in parallel.
+    tbb::parallel_for(std::size_t(0), preview.layers.size(), [&](std::size_t l) {
+        PreviewLayer& layer = preview.layers[l];
+        PrintTime time(kinematics);
+        std::vector<std::size_t> marks;
+        marks.reserve(layer.count + 1);
+        marks.push_back(time.mark());
+        for (std::size_t i = layer.first; i < layer.first + layer.count; ++i) {
+            const PreviewMove& m = preview.moves[i];
+            const double dx = double(m.x1) - m.x0, dy = double(m.y1) - m.y0, dz = double(m.z1) - m.z0;
+            const bool extruding = m.kind != LineKind::Travel;
+            const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
+            const double de = extruding && area > 0.0 ? double(m.width) * m.height * length / area : 0.0;
+            // A move with no feed of its own (a file that never sets one): 50 mm/s.
+            time.add(dx, dy, dz, de, m.feed > 0.0f ? double(m.feed) : 50.0, extruding);
+            marks.push_back(time.mark());
+        }
+        layer.seconds = time.flush();
+        for (std::size_t j = 0; j < layer.count; ++j)
+            preview.moves[layer.first + j].seconds = float(time.time_at(marks[j + 1]) - time.time_at(marks[j]));
+    });
+    preview.kind_seconds = {};
+    preview.moves_seconds = preview.first_layer_seconds = 0.0;
+    bool first = true;
+    for (const PreviewLayer& layer : preview.layers) {
+        for (std::size_t i = layer.first; i < layer.first + layer.count; ++i)
+            preview.kind_seconds[static_cast<std::size_t>(preview.moves[i].kind)] += preview.moves[i].seconds;
+        preview.moves_seconds += layer.seconds;
+        if (first && layer.extrusion_count > 0) {
+            preview.first_layer_seconds = layer.seconds;
+            first = false;
+        }
+    }
 }
 
 } // namespace tisma

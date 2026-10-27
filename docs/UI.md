@@ -120,9 +120,17 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
 (`src/gcode/preview.hpp`). Cada extrusión se dibuja como un cordón de su ancho y su alto.
 - **Barra de capas:** a la derecha; muestra hasta la capa elegida. «Solo esta capa» deja una sola.
 - **Leyenda:** abajo a la izquierda.
-  - **Color por:** tipo de línea, velocidad, ancho o alto de capa.
-  - Cada tipo de línea se puede ocultar, y los viajes se pueden mostrar.
-  - Los números: tiempo estimado, filamento (metros y cm³), capas y líneas del G-code.
+  - **Color por** (ficha `preview.md`, regla 1): tipo de línea, alto de capa, ancho, velocidad, velocidad alcanzada,
+    ventilador, temperatura, caudal, caudal alcanzado, tiempo de capa (lineal o logarítmico), extrusor y color por
+    capa. Cada movimiento lleva lo que el G-code fijó al pasar (M106/M107, M104/M109, T, M600) y su tiempo con las
+    velocidades y aceleraciones de la impresora (`time_preview`, el mismo cálculo que el tiempo estimado, capa por capa
+    desde parado); la velocidad alcanzada es el largo sobre ese tiempo.
+  - Por tipo de línea: cada tipo con su casilla para ocultarlo, su tiempo, una barra con su parte del tiempo de los
+    movimientos y su filamento en metros y gramos (con `extrusion.density`, o 1,24 g/cm³ si no se sabe). En las vistas
+    con números, una escala de 11 pasos iguales de azul (lo menos) a rojo (lo más); en la logarítmica, iguales en
+    logaritmo; el extrusor y el color, uno por fila.
+  - Los viajes se pueden mostrar.
+  - Los números: tiempo estimado, primera capa, filamento (metros y cm³), capas y líneas del G-code.
 
 **Abrir** un `.gcode` lo muestra igual, también si no lo escribió el motor: el lector entiende G-code sin los
 comentarios del motor. Ese G-code no se puede volver a laminar ni exportar.
@@ -297,7 +305,8 @@ elige también un modelo del catálogo con esa boquilla, solo para esa vez. Las 
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
-`--view calibration` muestra su pestaña. `--color kind|speed|width|height` elige el color de la vista previa (por alto
+`--view calibration` muestra su pestaña. `--color kind|height|width|speed|actual_speed|fan|temperature|flow|actual_flow|layer_time|layer_time_log|tool|color_print`
+elige el color de la vista previa (por alto
 de capa: la altura por zona, `docs/LOCAL_LAYERS.md`). `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin
 multimuestreo, con y sin el filtro de moiré, y termina con 1 si donde el filtro actúa los píxeles vecinos no se

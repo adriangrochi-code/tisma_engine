@@ -482,6 +482,19 @@
     X(BySpeed, "Velocidad", "Speed")                                                                                  \
     X(ByWidth, "Ancho", "Width")                                                                                      \
     X(ByHeight, "Alto de capa", "Layer height")                                                                       \
+    X(ByActualSpeed, "Velocidad alcanzada", "Actual speed") \
+    X(ByFan, "Ventilador", "Fan speed") \
+    X(ByTemperature, "Temperatura", "Temperature") \
+    X(ByFlow, "Caudal", "Volumetric flow") \
+    X(ByActualFlow, "Caudal alcanzado", "Actual volumetric flow") \
+    X(ByLayerTime, "Tiempo de capa (lineal)", "Layer time (linear)") \
+    X(ByLayerTimeLog, "Tiempo de capa (logarítmico)", "Layer time (logarithmic)") \
+    X(ByTool, "Extrusor", "Tool") \
+    X(ByColorPrint, "Color por capa", "Color print") \
+    X(ToolN, "Extrusor %d", "Tool %d") \
+    X(ColorN, "Color %d", "Color %d") \
+    X(FirstLayerTime, "Primera capa", "First layer") \
+    X(MovesTime, "Movimientos", "Moves") \
     X(Layer, "Capa", "Layer")                                                                                         \
     X(LayerOf, "Capa %d de %d  ·  Z %.2f mm", "Layer %d of %d  ·  Z %.2f mm")                                         \
     X(OnlyThisLayer, "Solo esta capa", "This layer only")                                                             \

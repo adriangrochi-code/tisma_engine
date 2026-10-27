@@ -213,6 +213,8 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
             [&] {
                 const auto begin = std::chrono::steady_clock::now();
                 out.preview = read_gcode_preview(out.gcode, settings.filament_diameter, dialect_of(settings.flavor).e_axis);
+                // Each move's time, for the views by time and reached speed (preview.md).
+                time_preview(out.preview, machine_kinematics(settings), settings.filament_diameter);
                 // A belt printer's G-code is on the machine's axes: the part
                 // back where it lies on the belt (belt_printer.md).
                 if (settings.belt_enabled) {

@@ -3926,4 +3926,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     target.write(text.data() + from, std::streamsize(text.size() - from));
 }
 
+Kinematics machine_kinematics(const Settings& settings) {
+    return kinematics_of(settings);
+}
+
 } // namespace tisma

@@ -15,7 +15,7 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color VIEW]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
     "                            resin_exposure|resin_measure|extruder]\n"
@@ -217,9 +217,18 @@ int main(int argc, char** argv) {
             options.moire_check = true;
         } else if (arg == "--color") {
             const std::string_view c = value();
-            options.color = c == "kind" ? 0 : c == "speed" ? 1 : c == "width" ? 2 : c == "height" ? 3 : -2;
+            // The preview's views, in the order of preview.md (rule 1).
+            static constexpr std::string_view views[] = {"kind",        "height",     "width",          "speed",
+                                                         "actual_speed", "fan",        "temperature",    "flow",
+                                                         "actual_flow", "layer_time", "layer_time_log", "tool",
+                                                         "color_print"};
+            options.color = -2;
+            for (int k = 0; k < int(std::size(views)); ++k)
+                if (c == views[k])
+                    options.color = k;
             if (options.color == -2) {
-                std::fprintf(stderr, "error: --color must be kind, speed, width or height\n");
+                std::fprintf(stderr, "error: --color must be kind, height, width, speed, actual_speed, fan, temperature, "
+                                     "flow, actual_flow, layer_time, layer_time_log, tool or color_print\n");
                 return 2;
             }
         } else if (arg == "--device") {

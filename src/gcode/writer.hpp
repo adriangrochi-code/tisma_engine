@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/settings.hpp"
+#include "gcode/print_time.hpp"
 #include "gcode/template.hpp"
 #include "report/warnings.hpp"
 #include "slice/pipeline.hpp"
@@ -91,5 +92,10 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value);
 // speed must be set (require_speeds): the writer has none of its own.
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& settings,
                  std::vector<Warning>* warnings = nullptr);
+
+// The machine's limits the time estimate uses (print_time.md, rule 2): the
+// feeds, accelerations and corner speed, and with machine.limits_usage other
+// than ignore the axes' accelerations, jerks and the rest.
+Kinematics machine_kinematics(const Settings& settings);
 
 } // namespace tisma

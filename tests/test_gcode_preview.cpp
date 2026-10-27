@@ -190,3 +190,49 @@ TEST_CASE("line kinds have names and ids", "[gcode][preview]") {
     CHECK(std::string(line_kind_id(LineKind::TopSolidInfill)) == "top_solid_infill");
     CHECK(std::string(line_kind_id(LineKind::Travel)) == "travel");
 }
+
+TEST_CASE("the preview keeps each move's fan, temperature, tool and colour (preview.md, rule 6)", "[gcode][preview]") {
+    const GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:Perimeter\n;WIDTH:0.45\n"
+                                              "M104 S215\nM106 S127.5\nG1 X10 Y0 Z0.2 E1 F1200\n"
+                                              "M106 P1 S255\nM104 T1 S250\nT1\nG1 X20 E2\nM107\nM600\nM109 S230\n"
+                                              "G1 X30 E3\n");
+    REQUIRE(p.moves.size() == 3);
+    CHECK(p.moves[0].fan == 50);
+    CHECK(p.moves[0].temperature == 215);
+    CHECK(p.moves[0].tool == 0);
+    CHECK(p.moves[0].color == 0);
+    // Another fan, and another tool's temperature, change nothing here.
+    CHECK(p.moves[1].fan == 50);
+    CHECK(p.moves[1].temperature == 215);
+    CHECK(p.moves[1].tool == 1);
+    CHECK(p.moves[2].fan == 0);
+    CHECK(p.moves[2].temperature == 230);
+    CHECK(p.moves[2].color == 1);
+    // The filament by kind: 3 mm of perimeter.
+    CHECK_THAT(p.kind_filament[std::size_t(LineKind::InnerWall)], WithinAbs(3.0, 1e-9));
+}
+
+TEST_CASE("the preview's moves take their time with the accelerations (preview.md, rules 6 and 8)", "[gcode][preview]") {
+    GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:External perimeter\n;WIDTH:0.4\n"
+                                        "G1 X100 Y0 Z0.2 E5 F3000\n;TYPE:Internal infill\nG1 X100 Y100 E10\n"
+                                        ";LAYER_CHANGE\n;Z:0.4\n;HEIGHT:0.2\n;TYPE:External perimeter\nG1 X0 Y100 Z0.4 E15\n");
+    Kinematics k;
+    k.acceleration = 1000.0;
+    k.corner_speed = 0.0;
+    time_preview(p, k);
+    REQUIRE(p.layers.size() == 2);
+    // 100 mm at 50 mm/s from rest to rest at 1000 mm/s2: 1.95 s at speed and
+    // 0.05 s each to speed up and slow down.
+    CHECK_THAT(p.layers[1].seconds, WithinAbs(2.05, 1e-4)); // and 0.2 mm up in Z
+    CHECK_THAT(double(p.moves[p.layers[1].first].seconds), WithinAbs(2.05, 1e-4));
+    double sum = 0.0;
+    for (const PreviewMove& m : p.moves)
+        sum += m.seconds;
+    CHECK_THAT(p.moves_seconds, WithinAbs(sum, 1e-4));
+    CHECK_THAT(p.layers[0].seconds + p.layers[1].seconds, WithinAbs(p.moves_seconds, 1e-9));
+    CHECK_THAT(p.first_layer_seconds, WithinAbs(p.layers[0].seconds, 1e-12));
+    CHECK_THAT(p.kind_seconds[std::size_t(LineKind::OuterWall)] + p.kind_seconds[std::size_t(LineKind::SparseInfill)],
+               WithinAbs(p.moves_seconds, 1e-4));
+    // A move slowed by the turn takes longer than at its feed.
+    CHECK(p.moves[0].seconds > 2.0f);
+}

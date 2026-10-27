@@ -265,6 +265,42 @@ int hidden_of(const PreviewBuffers& b, std::size_t l, LineKind kind) {
 
 } // namespace
 
+TEST_CASE("ui: the preview's numeric views and their 11 steps (preview.md, rules 1 and 7, PV2, PV3)", "[ui]") {
+    // PV2 and PV3: 11 steps between the least and the most.
+    const std::vector<double> speed = legend_steps(0.0, 230.0, false);
+    REQUIRE(speed.size() == 11);
+    for (std::size_t i = 0; i < speed.size(); ++i)
+        CHECK_THAT(speed[i], Catch::Matchers::WithinAbs(23.0 * double(i), 1e-9));
+    const std::vector<double> width = legend_steps(0.38, 0.76, false);
+    CHECK_THAT(width[1] - width[0], Catch::Matchers::WithinAbs(0.038, 1e-12));
+    // In equal steps of the logarithm; one value alone, one step.
+    const std::vector<double> log = legend_steps(std::log10(20.0), std::log10(62.0), true);
+    CHECK_THAT(log.front(), Catch::Matchers::WithinRel(20.0, 1e-9));
+    CHECK_THAT(log.back(), Catch::Matchers::WithinRel(62.0, 1e-9));
+    CHECK_THAT(log[2] / log[1], Catch::Matchers::WithinRel(log[1] / log[0], 1e-9));
+    CHECK(legend_steps(5.0, 5.0, false) == std::vector<double>{5.0});
+    // The instances carry the view's number.
+    GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:Perimeter\n;WIDTH:0.5\n"
+                                        "M106 S255\nM104 S210\nG1 Z0.2 F600\nG1 X10 Y0 E1\nT1\nG1 X20 E2 F1200\n");
+    time_preview(p, Kinematics{});
+    const PreviewBuffers fan = preview_buffers(p, 0xFF0000FF, PreviewValue::Fan);
+    CHECK(fan.min_feed == 100.0f);
+    const PreviewBuffers flow = preview_buffers(p, 0xFF0000FF, PreviewValue::Flow);
+    CHECK_THAT(double(flow.min_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 10.0, 1e-5));
+    CHECK_THAT(double(flow.max_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 20.0, 1e-5));
+    const PreviewBuffers tool = preview_buffers(p, 0xFF0000FF, PreviewValue::Tool);
+    CHECK(tool.min_feed == 0.0f);
+    CHECK(tool.max_feed == 1.0f);
+    // The reached speed is never above the asked one (here the move starts
+    // at the corner's speed, its feed).
+    const PreviewMove& first = p.moves[p.extrusions.front()];
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) <= 10.0f + 1e-4f);
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) > 9.0f);
+    CHECK(preview_value(p, first, PreviewValue::Temperature) == 210.0f);
+    CHECK_THAT(double(preview_value(p, first, PreviewValue::LayerTime)),
+               Catch::Matchers::WithinAbs(p.layers[first.layer].seconds, 1e-5));
+}
+
 TEST_CASE("ui: the preview leaves out what the part hides when all of it shows", "[ui]") {
     // Six equal layers of a 20 mm square: inside the layers between the
     // first and the last, the inner wall and the infill are covered from

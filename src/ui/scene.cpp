@@ -154,7 +154,39 @@ std::vector<float> bed_triangles(const BedPolygon& bed) {
     return out;
 }
 
-PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb) {
+float preview_value(const GcodePreview& preview, const PreviewMove& m, PreviewValue value) {
+    const auto actual = [&] {
+        const double length = std::hypot(double(m.x1) - m.x0, double(m.y1) - m.y0, double(m.z1) - m.z0);
+        return m.seconds > 0.0f ? float(length / m.seconds) : m.feed;
+    };
+    const auto layer_seconds = [&] { return m.layer < preview.layers.size() ? preview.layers[m.layer].seconds : 0.0; };
+    switch (value) {
+    case PreviewValue::Feed: return m.feed;
+    case PreviewValue::ActualFeed: return actual();
+    case PreviewValue::Fan: return float(m.fan);
+    case PreviewValue::Temperature: return float(m.temperature);
+    case PreviewValue::Flow: return m.width * m.height * m.feed;
+    case PreviewValue::ActualFlow: return m.width * m.height * actual();
+    case PreviewValue::LayerTime: return float(layer_seconds());
+    case PreviewValue::LayerTimeLog: return float(std::log10(std::max(layer_seconds(), 0.01)));
+    case PreviewValue::Tool: return float(m.tool);
+    case PreviewValue::ColorPrint: return float(m.color);
+    }
+    return m.feed;
+}
+
+std::vector<double> legend_steps(double lo, double hi, bool log) {
+    if (!(hi > lo))
+        return {log ? std::pow(10.0, lo) : lo};
+    std::vector<double> out;
+    for (int i = 0; i <= 10; ++i) {
+        const double v = lo + (hi - lo) * i / 10.0;
+        out.push_back(log ? std::pow(10.0, v) : v);
+    }
+    return out;
+}
+
+PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb, PreviewValue value) {
     PreviewBuffers out;
     out.extrusions.reserve(preview.extrusions.size());
     out.layer_extrusions.reserve(preview.layers.size() + 1);
@@ -196,14 +228,14 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
             PreviewInstance p;
             p.x0 = m.x0, p.y0 = m.y0, p.z0 = m.z0;
             p.x1 = m.x1, p.y1 = m.y1, p.z1 = m.z1;
-            p.width = m.width, p.height = m.height, p.feed = m.feed;
+            p.width = m.width, p.height = m.height, p.feed = preview_value(preview, m, value);
             p.kind_layer = static_cast<std::uint32_t>(m.kind) | (m.layer << 8);
             if (joinable)
                 join(out.extrusions.back(), p);
             out.extrusions.push_back(p);
             joinable = true;
-            out.min_feed = first ? m.feed : std::min(out.min_feed, m.feed);
-            out.max_feed = first ? m.feed : std::max(out.max_feed, m.feed);
+            out.min_feed = first ? p.feed : std::min(out.min_feed, p.feed);
+            out.max_feed = first ? p.feed : std::max(out.max_feed, p.feed);
             out.min_width = first ? m.width : std::min(out.min_width, m.width);
             out.max_width = first ? m.width : std::max(out.max_width, m.width);
             out.min_height = first ? m.height : std::min(out.min_height, m.height);

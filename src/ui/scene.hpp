@@ -81,7 +81,7 @@ struct PreviewBuffers {
     std::vector<std::size_t> layer_extrusions; // layer l is extrusions[layer_extrusions[l], layer_extrusions[l + 1])
     std::vector<LineVertex> travels;           // pairs for GL_LINES, in layer order
     std::vector<std::size_t> layer_travels;    // the same, in vertices
-    float min_feed = 0, max_feed = 0;          // of the extrusions, mm/s
+    float min_feed = 0, max_feed = 0;          // of the extrusions' `feed`: mm/s, or the view's value
     float min_width = 0, max_width = 0;        // of the extrusions, mm
     float min_height = 0, max_height = 0;      // of the extrusions, mm (layer heights by zone vary them)
     // Per extrusion, 1 when the part hides it from every side as long as all
@@ -89,7 +89,31 @@ struct PreviewBuffers {
     std::vector<std::uint8_t> hidden;
 };
 
-PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF);
+// The number the preview's numeric views colour by (preview.md, rule 1),
+// which the instances carry in `feed`: the feed asked and reached (mm/s), the
+// fan (%), the nozzle's temperature (C), the flow asked and reached (mm3/s),
+// the layer's time (s, or its log10), the extruder and the colour change.
+enum class PreviewValue {
+    Feed,
+    ActualFeed,
+    Fan,
+    Temperature,
+    Flow,
+    ActualFlow,
+    LayerTime,
+    LayerTimeLog,
+    Tool,
+    ColorPrint
+};
+float preview_value(const GcodePreview& preview, const PreviewMove& move, PreviewValue value);
+
+PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF,
+                               PreviewValue value = PreviewValue::Feed);
+
+// A numeric view's legend (rule 7): 11 values in equal steps from the least
+// to the most (in equal steps of the logarithm when `log`, the ends given as
+// their log10); a single one when they are equal.
+std::vector<double> legend_steps(double lo, double hi, bool log);
 
 // Which extrusions the part itself hides from every side when all of it is
 // drawn (docs/LARGE_MODELS.md): the inner walls and the sparse infill that
