@@ -293,6 +293,10 @@
     X(CutHeight, "Altura", "Height")                                                                                  \
     X(CutFlipLower, "Dar vuelta la parte de abajo", "Turn the lower part over")                                       \
     X(CutButton, "Cortar", "Cut")                                                                                     \
+    X(SplitButton, "Separar en piezas", "Split into pieces")                                                          \
+    X(SplitTip, "Cada pedazo suelto del modelo pasa a ser una pieza, con los huecos que tiene adentro",               \
+      "Each loose piece of the model becomes a part, with the cavities inside it")                                    \
+    X(SplitOnePiece, "El modelo es una sola pieza", "The model is a single piece")                                                                                     \
     X(ScaleTogether, "Los tres ejes juntos", "All three axes together")                                               \
     X(ResetScale, "Tamaño original", "Original size")                                                                 \
     X(Models, "modelos", "models")                                                                                    \

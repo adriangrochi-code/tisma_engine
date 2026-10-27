@@ -358,6 +358,7 @@ private:
     // The chosen object mirrored, or cut in two (model_tools.md, rules 13 and 16).
     void mirror_selected(int axis);
     void cut_selected();
+    void split_selected();
     void cut_plane_overlay();
     void paint_card(ImVec2 at);
     void mixing_dialog();
@@ -5806,7 +5807,7 @@ void App::plate_tools() {
     const float field = 110.0f * scale_;
     bool changed = false;
     int mirror_axis = -1; // done after the card, as they change the plate's objects
-    bool cut = false;
+    bool cut = false, split = false;
     const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
@@ -5912,6 +5913,12 @@ void App::plate_tools() {
         if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
             cut = true;
         ImGui::EndDisabled();
+        // Its loose pieces, each a model (rule 14).
+        ImGui::Separator();
+        if (ImGui::Button(tr(T::SplitButton)))
+            split = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::SplitTip));
     } else if (tool_ == PlateTool::Material) {
         // The object's extruder, one of the machine's or a mixed colour's
         // (multi_extruder.md, rule 1; color_mixing.md), and where a filament
@@ -5961,6 +5968,30 @@ void App::plate_tools() {
         mirror_selected(mirror_axis);
     if (cut)
         cut_selected();
+    if (split)
+        split_selected();
+}
+
+void App::split_selected() {
+    const std::size_t index = std::size_t(selected_);
+    const PlateObject& o = objects_[index];
+    std::vector<TriangleMesh> pieces = split_mesh(placed_mesh(o));
+    if (pieces.size() < 2) {
+        notify(tr(T::SplitOnePiece));
+        return;
+    }
+    std::vector<PlateObject> parts;
+    for (std::size_t k = 0; k < pieces.size(); ++k) {
+        PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
+        p.extruder = o.extruder;
+        p.wipe_into_infill = o.wipe_into_infill, p.wipe_into_object = o.wipe_into_object;
+        parts.push_back(std::move(p));
+    }
+    objects_.erase(objects_.begin() + std::ptrdiff_t(index));
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), std::make_move_iterator(parts.begin()),
+                    std::make_move_iterator(parts.end()));
+    tool_ = PlateTool::Select;
+    arrange_plate();
 }
 
 void App::mirror_selected(int axis) {

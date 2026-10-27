@@ -73,7 +73,7 @@ izquierda de la vista 3D, una columna con:
 | **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
 | **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original**, y **Espejar** en X, Y o Z alrededor del centro de su caja (un modelo girado toma su giro y su tamaño en la malla antes) |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
-| **Cortar** (C) | Un plano horizontal a la altura que se escribe, dibujado sobre la vista; **Cortar** deja dos piezas cerradas, una al lado de la otra, con el extrusor del modelo (la pintura no pasa a las mitades). «Dar vuelta la parte de abajo» la apoya sobre la cara del corte (ficha `model_tools.md`, reglas 13 y 18). `--cut Z` corta el primer modelo al abrirse |
+| **Cortar** (C) | Un plano horizontal a la altura que se escribe, dibujado sobre la vista; **Cortar** deja dos piezas cerradas, una al lado de la otra, con el extrusor del modelo (la pintura no pasa a las mitades). «Dar vuelta la parte de abajo» la apoya sobre la cara del corte (ficha `model_tools.md`, reglas 13 y 18). `--cut Z` corta el primer modelo al abrirse. **Separar en piezas** deja cada pedazo suelto del modelo como una pieza, con los huecos que tiene adentro (regla 14) |
 | **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
 | **Pintar** (P) | Soportes, costura (Forzar o Bloquear) o piel difusa, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Colores aparece apagado hasta que el motor tenga varios extrusores |
 

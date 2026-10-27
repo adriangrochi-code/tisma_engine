@@ -6320,7 +6320,7 @@ comprobaciones), con un anillo con agujero cortado y una caja hueca separada.
 - **En la interfaz:** Espejar en X, Y o Z en la tarjeta de Escalar (regla 16), que ya escalaba por medidas con los tres
   ejes juntos o cada uno (regla 17, MT21), y la herramienta **Cortar** (tecla C) con el plano horizontal dibujado
   sobre la vista, su altura, «Dar vuelta la parte de abajo» y las dos mitades como piezas de la placa (reglas 13 y 18,
-  el corte horizontal). Prueba `ui_cut`: un cubo cortado a 4 mm se lamina y se exporta con el G-code verificado.
+  el corte horizontal), con **Separar en piezas** (regla 14) en la misma tarjeta. Prueba `ui_cut`: un cubo cortado a 4 mm se lamina y se exporta con el G-code verificado.
 
 **No hecho:** del corte de la regla 18, el plano libre (girado), los conectores, la cola de milano y «un objeto con
 dos partes»; Medir (regla 20), Separar en partes (19), las partes y modificadores, las copias en grilla, y deshacer en
