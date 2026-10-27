@@ -667,6 +667,15 @@
     X(CreditsNotice, "Aviso de la licencia", "License notice")                                                        \
     X(CreditsShowNotice, "Ver el aviso", "Show the notice")                                                           \
     X(CreditsLibraryLicense, "Licencia", "License")                                                                   \
+    X(WarnEnclosure, "Este material necesita una impresora cerrada", "This material needs an enclosed printer")       \
+    X(WarnAbrasive, "Este material gasta las boquillas de latón: usá una de acero endurecido",                         \
+      "This material wears brass nozzles out: use a hardened steel one")                                              \
+    X(WarnBedTemperature, "Tu cama no llega a la temperatura de este material",                                       \
+      "Your bed does not reach this material's temperature")                                                          \
+    X(WarnNozzleTemperature, "Tu hotend no llega a la temperatura de este material",                                  \
+      "Your hot end does not reach this material's temperature")                                                      \
+    X(WarnDry, "Conviene secarlo antes de imprimir", "Better dry it before printing")                                 \
+    X(RangeTo, " a ", " to ")                                                                                         \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \
