@@ -10,11 +10,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.10.0-alpha.1] - 2026-10-27
+
 ### Agregado
 
 - **Espejar y Cortar en la placa** (ficha `model_tools.md`): Espejar en X, Y o Z en la herramienta Escalar, y la
-  herramienta Cortar (C) con un plano horizontal que deja dos piezas cerradas, Separar en piezas, y Medir (U) distancias y ángulos entre caras y vértices, con escalar la pieza a la medida que
-  debería tener.
+  herramienta Cortar (C) con un plano horizontal que deja dos piezas cerradas, Separar en piezas, y Medir (U) distancias y ángulos entre caras y vértices, el diámetro de un agujero o un cilindro
+  y el ángulo de un cono con un clic, y escalar la pieza a la medida que debería tener.
 - **Escalar, girar, cortar y separar desde la línea de comandos** (ficha `model_tools.md`; grupo `transform`): escala o
   porcentaje, encajar en una caja, giros en X, Y y Z, un corte horizontal que deja dos piezas cerradas y separar los
   pedazos sueltos de una malla, cada uno como un objeto ordenado en la cama.
@@ -849,7 +851,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.1...HEAD
+[0.10.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.1
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
