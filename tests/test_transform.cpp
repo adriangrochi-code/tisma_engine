@@ -39,12 +39,14 @@ TriangleMesh box(Vec3f lo, Vec3f hi) {
     return m;
 }
 
+constexpr double kPi = 3.14159265358979323846;
+
 // A cone of radius r and height h on z = 0, with n sides.
 TriangleMesh cone(double r, double h, int n) {
     TriangleMesh m;
     const Vec3f apex{0, 0, float(h)}, centre{0, 0, 0};
     for (int i = 0; i < n; ++i) {
-        const double a0 = 2.0 * M_PI * i / n, a1 = 2.0 * M_PI * ((i + 1) % n) / n;
+        const double a0 = 2.0 * kPi * i / n, a1 = 2.0 * kPi * ((i + 1) % n) / n;
         const Vec3f p0{float(r * std::cos(a0)), float(r * std::sin(a0)), 0};
         const Vec3f p1{float(r * std::cos(a1)), float(r * std::sin(a1)), 0};
         m.add_triangle(p0, p1, apex);
