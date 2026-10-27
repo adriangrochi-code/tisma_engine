@@ -600,9 +600,16 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "speed",
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
-                "overhang_1", "overhang_2", "overhang_3"},
+                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 1000.0))
+                           fail(k, "must be from 0 to 1000 mm3/s2");
+                       (n == "flow_slope_up" ? s.flow_slope_up : s.flow_slope_down) = d;
+                       return;
+                   }
                    if (n == "dynamic_overhangs") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -1078,7 +1085,9 @@ void require_speeds(const Settings& settings) {
 double fastest_extrusion(const Settings& s) {
     const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
                                      s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
-                                     s.first_layer_speed});
+                                     s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
+                                     s.over_bridges_speed.of(s.solid_infill_speed),
+                                     s.first_layer_infill_speed.of(s.solid_infill_speed)});
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
 }
 
@@ -1189,6 +1198,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.overhang_1", share(s.overhang_speeds[1])},
         {"speed.overhang_2", share(s.overhang_speeds[2])},
         {"speed.overhang_3", share(s.overhang_speeds[3])},
+        {"speed.flow_slope_up", num(s.flow_slope_up)},
+        {"speed.flow_slope_down", num(s.flow_slope_down)},
         {"acceleration.default", num(s.accel_default)},
         {"acceleration.walls", num(s.accel_walls)},
         {"acceleration.outer_wall", num(s.accel_outer_wall)},
@@ -1405,7 +1416,9 @@ std::string settings_json(const Settings& s) {
           {"overhang_0", share(s.overhang_speeds[0])},
           {"overhang_1", share(s.overhang_speeds[1])},
           {"overhang_2", share(s.overhang_speeds[2])},
-          {"overhang_3", share(s.overhang_speeds[3])}}},
+          {"overhang_3", share(s.overhang_speeds[3])},
+          {"flow_slope_up", s.flow_slope_up},
+          {"flow_slope_down", s.flow_slope_down}}},
         {"acceleration", acceleration},
         {"retraction",
          {{"length", s.retract_length},

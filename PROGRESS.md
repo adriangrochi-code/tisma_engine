@@ -5136,3 +5136,25 @@ como en la ficha (salvo la balsa). Costo con todo encendido (mediana de 5): Benc
 Los dos G-code verificados. Fuzzer con las opciones nuevas: 700 corridas, 0 fallas.
 
 **Sigue:** el ecualizador del caudal (reglas 8 y 9, V7); después, el relleno de huecos (V1, W6).
+
+## 2026-10-27 — Punto 2: ecualizador del caudal (fin de `speeds_accels.md`)
+
+**Hecho** (ficha `speeds_accels.md`, reglas 8 y 9): `speed.flow_slope_down` y `speed.flow_slope_up` (mm³/s²). Donde
+el caudal (sección del cordón por su velocidad) baja de una extrusión a la siguiente, el final de la primera se parte
+en pedazos cada vez más lentos, con el caudal bajando a ese ritmo hasta el de la siguiente; donde sube, el comienzo de
+la segunda, salvo después de una retracción. Hasta 16 pedazos, cada uno al caudal de su mitad; si el camino es más
+corto que la rampa, la rampa se aprieta. En el panel, Velocidad › Topes (Avanzado).
+
+**Corregido:** el verificador del G-code no contaba las velocidades nuevas al calcular la más rápida permitida (el
+fuzzer lo encontró con un puente más rápido que los viajes): `fastest_extrusion` las suma. Era del commit anterior,
+ya subido; prueba nueva que falla sin el arreglo.
+
+**Medido:** V7: el perímetro interno baja de 60 a 30,x mm/s en 16 pedazos que duran 1,36 s (la ficha: 16 pedazos,
+unos 1,4 s); la subida empieza a menos de 33 mm/s y llega a 60; el relleno después de una retracción, directo a 80.
+Costo con las dos rampas (mediana de 5): Benchy 0,65 → 0,69 s, cráneo 2,77 → 2,92 s; los dos G-code verificados.
+Fuzzer: 800 corridas con semillas nuevas, 0 fallas (después del arreglo).
+
+**`speeds_accels.md` terminada**, salvo lo que espera a otras funciones (V1 al relleno de huecos; el tope de las
+aceleraciones por los límites de la máquina; las aceleraciones de la balsa y la torre de purga).
+
+**Sigue:** el relleno de huecos (`walls_extra.md`, W6 y V1).

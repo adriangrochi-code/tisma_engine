@@ -69,7 +69,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.gap_fill", A}}},
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}}},
           {"travel", T::SubTravelSpeed, {{"speed.travel", N}, {"speed.travel_z", A}}},
-          {"limits", T::SubSpeedCap, {{"speed.max", N}}},
+          {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
           {"overhang_speeds", T::SubOverhangSpeeds,
            {{"speed.dynamic_overhangs", N},
             {"speed.overhang_0", A},

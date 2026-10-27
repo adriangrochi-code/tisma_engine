@@ -664,7 +664,8 @@ const char* row_key(T label) {
         {T::AccelFirstLayer, "acceleration.first_layer"}, {T::AccelTravel, "acceleration.travel"},
         {T::AccelShortTravel, "acceleration.short_travel"}, {T::DynamicOverhangs, "speed.dynamic_overhangs"},
         {T::Overhang0, "speed.overhang_0"}, {T::Overhang1, "speed.overhang_1"}, {T::Overhang2, "speed.overhang_2"},
-        {T::Overhang3, "speed.overhang_3"},
+        {T::Overhang3, "speed.overhang_3"}, {T::FlowSlopeUp, "speed.flow_slope_up"},
+        {T::FlowSlopeDown, "speed.flow_slope_down"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
         {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
@@ -2936,6 +2937,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
            0.5f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
+           s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
+        mm(T::FlowSlopeDown, "speed.flow_slope_down", s.flow_slope_down, 0.0, 1000.0,
+           s.flow_slope_down > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
     } else if (id == "overhang_speeds") {
         flag(T::DynamicOverhangs, "speed.dynamic_overhangs", s.dynamic_overhangs);
         const T labels[4] = {T::Overhang0, T::Overhang1, T::Overhang2, T::Overhang3};

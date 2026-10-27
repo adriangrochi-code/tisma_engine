@@ -3,6 +3,7 @@
 // bridge bead of gcode_motion.md, M2).
 
 #include "config/settings.hpp"
+#include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
@@ -11,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -505,4 +507,88 @@ TEST_CASE("speeds: walls slower the less of their bead rests on the layer below 
         if (extrudes(m) && m.z == "6.200" && m.type == "External perimeter")
             outer.insert(m.feed / 60.0);
     CHECK(outer == std::set<double>{30.0});
+}
+
+TEST_CASE("flow equalizer: the flow changes at most speed.flow_slope_down or _up per second (speeds_accels.md, rules "
+          "8 and 9; V7)",
+          "[gcode][speeds]") {
+    // V7: the inner wall (60 mm/s) ends in pieces down to the outer wall's
+    // 30, 2.44 mm3/s lower, over about 1.4 s at 1.8 mm3/s2.
+    Settings s = test_printer();
+    s.flow_slope_down = 1.8;
+    std::vector<Move> inner; // the layer's inner wall, up to the outer
+    bool seen_outer = false;
+    for (const Move& m : moves_of(gcode_of(cube(20.0f, 4.0f), s)))
+        if (m.z == "1.400" && extrudes(m) && !seen_outer) {
+            if (m.type == "Perimeter")
+                inner.push_back(m);
+            seen_outer = m.type == "External perimeter";
+        }
+    REQUIRE(inner.size() > 8);
+    // From 60 down, never up, to just over 30.
+    double time = 0.0, last = 60.0;
+    int pieces = 0;
+    for (const Move& m : inner) {
+        const double v = m.feed / 60.0;
+        CHECK(v <= last + 1e-9);
+        if (v < 60.0)
+            time += m.length() / v, pieces += v < last;
+        last = v;
+    }
+    CHECK(last > 30.0);
+    CHECK(last < 32.0);
+    CHECK(pieces >= 10);
+    CHECK_THAT(time, WithinAbs(2.443 / 1.8, 0.15));
+
+    // Up: the outer wall at 60 after the inner at 30 starts low and climbs.
+    s.flow_slope_down = 0.0;
+    s.flow_slope_up = 1.8;
+    s.wall_speed = 30.0;
+    s.outer_wall_speed = {60.0, false};
+    std::vector<double> outer;
+    for (const Move& m : moves_of(gcode_of(cube(20.0f, 4.0f), s)))
+        if (m.z == "1.400" && extrudes(m) && m.type == "External perimeter")
+            outer.push_back(m.feed / 60.0);
+    REQUIRE(outer.size() > 8);
+    CHECK(outer.front() > 30.0);
+    CHECK(outer.front() < 33.0);
+    CHECK(std::is_sorted(outer.begin(), outer.end()));
+    CHECK(outer.back() == 60.0);
+
+    // Rule 9: after a retraction, no ramp up: the sparse infill starts at its 80.
+    s = test_printer();
+    s.flow_slope_up = 1.8;
+    s.retract_min_travel = 0.5;
+    bool retracted = false;
+    int checked = 0;
+    std::istringstream in(gcode_of(cube(20.0f, 4.0f), s));
+    std::string type;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        else if (line.rfind("G1 E-", 0) == 0)
+            retracted = true;
+        else if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos) {
+            if (retracted && type == "Internal infill") {
+                INFO(line);
+                CHECK(line.find(" F4800") != std::string::npos);
+                ++checked;
+            }
+            retracted = false;
+        }
+    }
+    CHECK(checked > 3);
+}
+
+TEST_CASE("speeds: the check takes the new speeds as the fastest a G-code may ask", "[gcode][speeds]") {
+    // A bridge faster than every other speed (the fuzzer's run 211, seed 20261030).
+    Settings s = test_printer();
+    s.max_speed = 0.0;
+    s.bridge_speed = 150.0; // past the travels' 130 too
+    s.relative_extrusion = true;
+    const SlicedModel model = slice_model(table(), s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    REQUIRE(out.str().find(" F9000") != std::string::npos);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
 }

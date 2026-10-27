@@ -850,6 +850,8 @@
     X(Overhang2, "Apoyado al 50 %", "50 % supported") \
     X(Overhang3, "Apoyado al 75 %", "75 % supported") \
     X(SumBySupport, "Según el apoyo", "By support") \
+    X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
+    X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubAccelTravel, "Aceleración de los viajes", "Travel acceleration") \
     X(AccelDefault, "Por defecto", "Default") \
     X(AccelWalls, "Paredes internas", "Inner walls") \

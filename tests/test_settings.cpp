@@ -309,7 +309,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "speed": {"walls": 55, "outer_wall": 35, "infill": 90, "solid_infill": 70, "top_solid_infill": 45, "support": 60,
                   "travel": 150, "first_layer": 25, "max": 120, "bridges": 30, "gap_fill": 15, "over_bridges": "60%",
                   "first_layer_infill": 35, "travel_z": 8, "dynamic_overhangs": true, "overhang_0": "40%",
-                  "overhang_1": 12, "overhang_2": 18, "overhang_3": "90%"},
+                  "overhang_1": 12, "overhang_2": 18, "overhang_3": "90%", "flow_slope_up": 1.5, "flow_slope_down": 2.5},
         "acceleration": {"default": 2000, "walls": 1000, "outer_wall": 800, "infill": 3000, "solid_infill": 2500,
                          "top_solid_infill": 1500, "bridges": 500, "first_layer": 700, "travel": 4000,
                          "short_travel": 600},
@@ -333,6 +333,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
     CHECK(s.accel_short_travel == 600.0);
     CHECK(s.overhang_speeds[0] == Speed{40.0, true});
     CHECK(s.overhang_speeds[3] == Speed{90.0, true});
+    CHECK(s.flow_slope_down == 2.5);
     CHECK(s.changes[0].z == 5.0); // sorted by height
     CHECK(s.changes[1].gcode == "M117 hi");
     CHECK(!s.changes[1].fan.has_value());

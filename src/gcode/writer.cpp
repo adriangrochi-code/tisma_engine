@@ -463,6 +463,30 @@ std::vector<std::pair<Toolpath, double>> by_support(const Toolpath& wall, const 
     return out;
 }
 
+// The part of an open path from `from` to `to` mm along it.
+Toolpath stretch(const Toolpath& t, double from, double to) {
+    Toolpath out;
+    out.index = t.index;
+    out.gap = t.gap;
+    out.wavy = t.wavy;
+    double walked = 0.0;
+    for (std::size_t i = 1; i < t.points.size(); ++i) {
+        const ToolpathPoint& a = t.points[i - 1];
+        const ToolpathPoint& b = t.points[i];
+        const double length = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        const double end = walked + length;
+        if (end > from && walked < to && length > 0.0) {
+            if (out.points.empty())
+                out.points.push_back(between(a, b, std::max(0.0, (from - walked) / length)));
+            out.points.push_back(end <= to ? b : between(a, b, (to - walked) / length));
+        }
+        walked = end;
+        if (walked >= to)
+            break;
+    }
+    return out;
+}
+
 // Z anti-aliasing (docs/ZAA.md): the pieces of a path where its points go from
 // below the layer's top to on it, or above it; each piece lies on one side,
 // and the piece after a change starts at the last point before it.
@@ -1761,8 +1785,120 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         return steps;
     };
 
+    // The flow equalizer (speeds_accels.md, rules 8 and 9): where the flow
+    // (mm3/s, the bead's section by its feed) drops from one extrusion to the
+    // next, the end of the first is cut into pieces whose flow falls at
+    // speed.flow_slope_down per second down to the next one's; where it rises,
+    // the start of the second, at flow_slope_up, unless a retraction comes
+    // between (the pressure is down already). Up to 16 pieces of about a
+    // millimetre or more, each at the flow of its middle; a path too short for
+    // its ramps has them squeezed in.
+    const bool equalize = s.flow_slope_up > 0.0 || s.flow_slope_down > 0.0;
+    const auto equalized = [&](const std::vector<Step>& steps, double layer_height) {
+        std::vector<double> section(steps.size(), 0.0);
+        std::vector<std::size_t> order; // the extrusions
+        std::vector<char> retracts(steps.size(), 0);
+        double h = layer_height;
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            const Step& st = steps[k];
+            if (!st.type) {
+                h = st.height;
+                continue;
+            }
+            if (st.path.points.size() < 2)
+                continue;
+            double w = 0.0;
+            for (const ToolpathPoint& p : st.path.points)
+                w += p.width;
+            section[k] = w / double(st.path.points.size()) * h;
+            retracts[k] = st.path.retract || !st.from || st.travel.leaves_part || st.travel.length > s.retract_min_travel;
+            order.push_back(k);
+        }
+        // Each extrusion's ramps: the flow it starts from, the one it ends at.
+        std::vector<double> ramp_in(steps.size(), -1.0), ramp_out(steps.size(), -1.0);
+        for (std::size_t i = 1; i < order.size(); ++i) {
+            const std::size_t a = order[i - 1], b = order[i];
+            const double qa = section[a] * steps[a].feed, qb = section[b] * steps[b].feed;
+            if (qb < qa && s.flow_slope_down > 0.0)
+                ramp_out[a] = qb;
+            else if (qb > qa && s.flow_slope_up > 0.0 && !retracts[b])
+                ramp_in[b] = qa;
+        }
+        std::vector<Step> result;
+        result.reserve(steps.size());
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            const Step& st = steps[k];
+            if (ramp_in[k] < 0.0 && ramp_out[k] < 0.0) {
+                result.push_back(st);
+                continue;
+            }
+            Toolpath path = st.path;
+            if (path.closed && path.points.size() > 2) {
+                path.points.push_back(path.points.front());
+                path.closed = false;
+            }
+            double length = 0.0;
+            for (std::size_t i = 1; i < path.points.size(); ++i)
+                length += std::hypot(path.points[i].p.x - path.points[i - 1].p.x, path.points[i].p.y - path.points[i - 1].p.y);
+            const double q = section[k] * st.feed;
+            // A ramp's length: its mean speed for the time the flow takes to change.
+            const auto ramp_length = [&](double q0, double q1, double slope) {
+                return (q0 + q1) / 2.0 / section[k] * std::abs(q1 - q0) / slope;
+            };
+            double in = ramp_in[k] < 0.0 ? 0.0 : ramp_length(ramp_in[k], q, s.flow_slope_up);
+            double out_length = ramp_out[k] < 0.0 ? 0.0 : ramp_length(q, ramp_out[k], s.flow_slope_down);
+            if (in + out_length > length) {
+                const double squeeze = length / (in + out_length);
+                in *= squeeze, out_length *= squeeze;
+            }
+            bool first = true;
+            double at = 0.0;
+            const auto piece = [&](double to, double feed) {
+                if (to - at <= 1e-6)
+                    return;
+                Step p;
+                p.path = stretch(path, at, to);
+                p.type = st.type;
+                p.feed = feed;
+                if (first) {
+                    p.path.retract = st.path.retract;
+                    p.from = st.from;
+                    p.travel = st.travel;
+                } else if (!p.path.points.empty()) {
+                    p.from = p.path.points.front().p;
+                }
+                if (p.path.points.size() > 1)
+                    result.push_back(std::move(p)), first = false;
+                at = to;
+            };
+            const auto ramp = [&](double q0, double q1, double distance) {
+                const int n = std::clamp(int(distance), 1, 16);
+                double total = 0.0;
+                for (int j = 0; j < n; ++j)
+                    total += q0 + (q1 - q0) * (j + 0.5) / n;
+                const double start = at;
+                double done = 0.0;
+                for (int j = 0; j < n; ++j) {
+                    const double qj = q0 + (q1 - q0) * (j + 0.5) / n;
+                    done += qj / total * distance; // each piece as long as its speed
+                    piece(start + done, qj / section[k]);
+                }
+            };
+            if (in > 0.0)
+                ramp(ramp_in[k], q, in);
+            piece(length - out_length, st.feed);
+            if (out_length > 0.0)
+                ramp(q, ramp_out[k], out_length);
+        }
+        return result;
+    };
+
     // A layer's G-code from its plan, the paths already simplified.
-    auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& steps) {
+    auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& planned) {
+        std::vector<Step> ramped;
+        if (equalize)
+            ramped = equalized(planned, model.layers[l].top - model.layers[l].bottom);
+        const std::vector<Step>& steps = equalize ? ramped : planned;
         const Layer& layer = model.layers[l];
         g.open_layer_fan();
         const bool turn = l < continues.size() && continues[l];

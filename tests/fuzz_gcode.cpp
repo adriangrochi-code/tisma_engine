@@ -170,6 +170,10 @@ int main(int argc, char** argv) {
             for (Speed& v : s.overhang_speeds)
                 v = pick(2) == 0 ? Speed{uni(10, 120), true} : Speed{uni(2, 60), false};
         }
+        if (pick(4) == 0) { // the flow equalizer
+            s.flow_slope_up = pick(2) == 0 ? 0.0 : uni(0.2, 20);
+            s.flow_slope_down = pick(2) == 0 ? 0.0 : uni(0.2, 20);
+        }
         if (pick(3) == 0) { // accelerations by kind
             s.accel_default = pick(3) == 0 ? 0.0 : uni(500, 5000);
             for (double* a : {&s.accel_walls, &s.accel_outer_wall, &s.accel_infill, &s.accel_solid_infill,

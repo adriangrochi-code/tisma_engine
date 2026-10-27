@@ -204,6 +204,9 @@ struct Settings {
     // and 75 %, their own with 100 %, in a straight line in between. Each in
     // mm/s or a share of the outer wall's; the spec's, not the printer's.
     bool dynamic_overhangs = false;
+    // How fast the flow may change from one extrusion to the next
+    // (speeds_accels.md, rules 8 and 9), mm3/s per second; 0: free.
+    double flow_slope_up = 0.0, flow_slope_down = 0.0;
     std::array<Speed, 4> overhang_speeds = {Speed{15.0, false}, Speed{15.0, false}, Speed{20.0, false}, Speed{25.0, false}};
 
     // Accelerations by kind (speeds_accels.md, rules 10 to 13), mm/s2, set

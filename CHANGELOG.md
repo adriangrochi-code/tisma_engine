@@ -51,9 +51,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   para cada tipo de extrusión, la primera capa y los viajes (también los cortos), con `M204` según el firmware.
 - **Paredes más lentas en los voladizos** (`speed.dynamic_overhangs`, en Velocidad › Voladizos): cuanto menos de su
   cordón se apoya en la capa de abajo, más lenta va la pared, entre `speed.overhang_0` y `_3`.
+- **Ecualizador del caudal** (`speed.flow_slope_up` y `speed.flow_slope_down`, en Velocidad › Topes): el caudal
+  cambia de a poco entre una extrusión y la siguiente, en rampas de hasta 16 pedazos.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.
+
+### Corregido
+
+- El verificador del G-code rechazaba un G-code válido cuando una velocidad nueva (puentes, relleno de huecos, sobre
+  los puentes, relleno de la primera capa) era más rápida que todas las demás.
 
 ### Cambiado
 
