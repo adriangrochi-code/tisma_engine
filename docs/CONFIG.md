@@ -101,7 +101,7 @@ sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arco
 |---|---|---|---|---|
 | `enabled` | booleano | `false` | | Activa los arcos |
 | `overlap` | número | 10 | 0 a 90 | Cuánto pisa cada arco al anterior, en % del ancho: los arcos van a `walls.width × (1 − overlap)` (0,36 mm con 0,4) |
-| `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.solid_infill`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
+| `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.bridges`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
 | `max_distance` | número | 0 | 0 a 1000 | Hasta qué distancia del centro llegan los arcos, en mm; más allá, el voladizo se imprime como siempre. 0: sin límite |
 
 ### `review`
@@ -180,7 +180,7 @@ Estas claves las llena el catálogo (`docs/CATALOG.md`, «Capacidades») con los
 
 ### `speed`
 
-Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ninguna pasa de `first_layer`.
+Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ninguna pasa de `first_layer`, salvo el relleno con `first_layer_infill`.
 
 **Velocidades** (decisión del dueño, 2026-10-26): ninguna velocidad tiene un valor por defecto en el motor. Todas
 salen del perfil de la impresora elegida, porque dependen de la impresora: las de este grupo, `retraction.speed`,
@@ -215,12 +215,17 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `walls` | número | — (del perfil de la impresora; respaldo 40) | Paredes internas |
 | `outer_wall` | número o texto | — (del perfil de la impresora; respaldo 30) | Pared externa: mm/s, o un porcentaje de `walls` como `"50%"` |
 | `infill` | número | — (del perfil de la impresora; respaldo 60) | Relleno disperso |
-| `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, puentes y relleno de huecos |
+| `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, y puentes y relleno de huecos sin velocidad propia |
 | `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
 | `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
 | `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
 | `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
 | `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |
+| `bridges` | número | — (sin valor: `solid_infill`) | Puentes y perímetros en voladizo (`gcode_motion.md`, `walls_extra.md`, regla 8); los arcos sobre voladizos sin `arcs.speed` |
+| `gap_fill` | número | — (sin valor: `solid_infill`) | Relleno de huecos (`speeds_accels.md`, regla 1) |
+| `over_bridges` | número o texto | — (sin valor: `solid_infill`) | Relleno sólido de la capa que va justo encima de un puente sobre el aire, en mm/s o un porcentaje de `solid_infill` como `"50%"`; no la capa sobre las capas sólidas puestas sobre el relleno (`infill.solid_every`) (`speeds_accels.md`, regla 2). Los tramos de cada línea sobre el puente van a esta velocidad, el resto a la suya |
+| `first_layer_infill` | número o texto | — (sin valor: `first_layer`) | Relleno sólido y superficie de la primera capa, en mm/s o un porcentaje de `solid_infill`; no queda topado por `first_layer` (`speeds_accels.md`, regla 3) |
+| `travel_z` | número | — (sin valor: `travel`) | Movimientos en Z: cambios de capa, saltos de `retraction.lift` y las subidas del Z anti-aliasing (`speeds_accels.md`, regla 4) |
 
 ### `retraction`
 
@@ -330,6 +335,9 @@ de la pieza de prueba.
 | `flow` | número | 100 | 10 a 300 | Flujo en %: la E de cada extrusión es ancho × alto × largo / sección del filamento × flujo |
 | `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del filamento, en mm³/s (como `machine.max_flow`; vale el menor de los dos). 0: sin límite propio |
+| `infill_max_speed` | número | 0 | 0 a 1000 | Tope del relleno disperso con este filamento, en mm/s, para los patrones cuyas líneas no se cruzan en la capa (`rectilinear`, `gyroid`, `honeycomb` y los demás). 0: sin tope (`speeds_accels.md`, regla 5; la `material.infill_max_speed` de la ficha) |
+| `infill_max_crossing_speed` | número | 0 | 0 a 1000 | Ídem para los patrones cuyas líneas se cruzan en la misma capa: `grid`, `triangles`, `stars`, `cubic`, `adaptive_cubic`, `support_cubic` |
+| `bridge_flow_ratio` | número | 1 | 0,1 a 2 | Multiplica la sección del cordón redondo de los puentes y de los perímetros sobre el aire. El cordón es redondo, de diámetro `machine.nozzle_diameter` × √`bridge_flow_ratio` (con 0,4 de boquilla, 0,052245 mm de filamento por mm), y las líneas del puente van a esa distancia: con menos flujo, más juntas (`speeds_accels.md`, regla 14; `gcode_motion.md`, regla 1) |
 | `chamber_temperature` | número | 0 | 0 a 200 | Temperatura de cámara que pide el filamento, en °C. Si la impresora calienta la cámara (`machine.max_chamber_temp`), se escribe después del G-code de inicio, sin pasar de su máximo: `M141 S…`, o `SET_HEATER_TEMPERATURE HEATER=chamber TARGET=…` en Klipper; al final se apaga. Si no la calienta o no llega, hay un aviso. 0: ninguna |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |

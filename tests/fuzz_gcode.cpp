@@ -155,6 +155,16 @@ int main(int argc, char** argv) {
             s.arcs_speed = pick(3) == 0 ? 0.0 : uni(2, 30);
             s.arcs_max_distance = pick(2) == 0 ? 0.0 : uni(1, 20);
         }
+        // Speeds of their own and the bridges' flow (speeds_accels.md).
+        if (pick(3) == 0) {
+            s.bridge_speed = pick(2) == 0 ? 0.0 : uni(5, 120);
+            s.over_bridges_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
+            s.first_layer_infill_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
+            s.travel_z_speed = pick(2) == 0 ? 0.0 : uni(2, 60);
+            s.infill_max_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
+            s.infill_max_crossing_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
+            s.bridge_flow_ratio = uni(0.5, 1.5);
+        }
         s.min_layer_time = uni(0, 30);
         s.filament_diameter = pick(4) == 0 ? 2.85 : 1.75;
         s.xy_offset = pick(4) == 0 ? uni(-0.2, 0.2) : 0.0;

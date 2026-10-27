@@ -653,6 +653,11 @@ const char* row_key(T label) {
         {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
+        {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
+        {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
+        {T::BridgeFlowRatio, "extrusion.bridge_flow_ratio"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
         {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
@@ -2772,6 +2777,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (shown(key))
             changed |= row(label, v, tip);
     };
+    // A speed in mm/s or a share of another (as the file gives it); 0: the other's.
+    const auto share_row = [&](T label, const char* key, Speed& v) {
+        if (shown(key))
+            changed |= row(label, v.value, 0.0, 1000.0, v.value <= 0.0 ? "—" : v.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
+    };
     const auto count = [&](T label, const char* key, std::size_t n) {
         if (!shown(key))
             return;
@@ -2897,6 +2907,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
     else if (id == "first_layer") {
         mm(T::SpeedFirstLayer, "speed.first_layer", s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        share_row(T::SpeedFirstLayerInfill, "speed.first_layer_infill", s.first_layer_infill_speed);
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
@@ -2904,11 +2915,18 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        // 0: the solid infill's.
+        mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        share_row(T::SpeedOverBridges, "speed.over_bridges", s.over_bridges_speed);
+        mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : "—",
+           0.5f);
     } else if (id == "infill_support") {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
+           0.5f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
     }
@@ -3003,11 +3021,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
     } else if (id == "flow") {
         mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
+        mm(T::BridgeFlowRatio, "extrusion.bridge_flow_ratio", s.bridge_flow_ratio, 0.1, 2.0, "%.2f", 0.01f);
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {
         mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 200.0,
            s.filament_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+        mm(T::InfillMaxSpeed, "extrusion.infill_max_speed", s.infill_max_speed, 0.0, 1000.0,
+           s.infill_max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed", s.infill_max_crossing_speed, 0.0, 1000.0,
+           s.infill_max_crossing_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
     } else if (id == "retraction") {
         mm(T::Retraction, "retraction.length", s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);

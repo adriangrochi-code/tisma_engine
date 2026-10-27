@@ -39,6 +39,10 @@ struct SlicedModel {
     // layer's bottom that top is (mm: the Z gap).
     std::vector<Polygons> on_support;
     std::vector<double> support_gap;
+    // One per layer: its bridges over the air or the support (find_bridges),
+    // not the solid layers over the sparse infill, for the solid infill right
+    // above them (speeds_accels.md, rule 2).
+    std::vector<Polygons> air_bridges;
     // Painted seams (docs/PAINTING.md), one area per layer; empty when none was painted.
     std::vector<Polygons> seam_enforce, seam_block;
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
@@ -56,6 +60,11 @@ struct SlicedModel {
 // bottom, so it stays where it was on the bed. The mesh itself when the
 // scales are all 100 %.
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
+
+// The diameter of the round bead of bridges and overhang perimeters
+// (gcode_motion.md, rule 1, "unos 0,40 mm" with a 0.4 nozzle): the nozzle's,
+// times the root of extrusion.bridge_flow_ratio (speeds_accels.md, rule 14).
+double bridge_bead(const Settings& settings);
 
 // Slices a welded mesh with the given settings: layer plan, level-set
 // contours with gap closing, simplification, regions by fill mode, XY offset,

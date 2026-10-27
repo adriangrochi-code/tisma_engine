@@ -103,7 +103,7 @@ struct Settings {
     // Arcs over overhangs held from one side (docs/spec/features/arc_overhangs.md).
     bool arcs = false;
     double arcs_overlap = 10.0;     // percent of the width each arc lies on the one before
-    double arcs_speed = 5.0;        // mm/s; 0: the bridges' (speed.solid_infill)
+    double arcs_speed = 5.0;        // mm/s; 0: the bridges' (speed.bridges)
     double arcs_max_distance = 0.0; // mm from the arcs' centre; 0: no limit
     // The stability review (docs/spec/features/stability.md): measured with
     // its calibration piece; 0 is not measured yet.
@@ -191,6 +191,14 @@ struct Settings {
     double travel_speed = 0.0;
     double first_layer_speed = 0.0;
     double max_speed = 0.0; // no extrusion goes faster; 0: no cap
+    // Speeds of their own (gcode_motion.md; speeds_accels.md, rules 1 to 4),
+    // also from the printer's profile; 0: the one in brackets.
+    double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)
+    double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
+    Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
+    Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
+                                    // solid_infill (speed.first_layer)
+    double travel_z_speed = 0.0;    // moves in Z (speed.travel)
 
     // retraction
     double retract_length = 2.0;     // mm of filament
@@ -257,6 +265,13 @@ struct Settings {
     // command (M900 K, SET_PRESSURE_ADVANCE, M572); 0: not written.
     double pressure_advance = 0.0;
     double filament_max_flow = 0.0;    // mm3/s the filament takes; 0: no limit of its own
+    // The sparse infill's caps for this filament (speeds_accels.md, rule 5):
+    // patterns whose lines do not cross in a layer, and those whose lines do; 0: none.
+    double infill_max_speed = 0.0;
+    double infill_max_crossing_speed = 0.0;
+    // Of the round bead of bridges and overhang perimeters (speeds_accels.md,
+    // rule 14): its section times this, its diameter times the root.
+    double bridge_flow_ratio = 1.0;
     double chamber_temperature = 0.0;  // C the filament wants in the chamber; 0: none
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;

@@ -43,8 +43,20 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Ancho de las líneas del soporte** (`support.width`, ficha `supports_more.md`, regla 18; en Soportes › Patrón): en
   mm o en % de la altura de capa; 0, el de las paredes, como hasta ahora. Vale para la base, la interfaz y los árboles.
 
+- **Velocidades propias** (ficha `speeds_accels.md`; en la sección Velocidad): `speed.bridges` para puentes y
+  perímetros en voladizo, `speed.over_bridges` para el relleno sólido justo encima de un puente,
+  `speed.first_layer_infill` para el relleno de la primera capa (puede pasar la velocidad de la primera capa),
+  `speed.gap_fill` y `speed.travel_z` para los movimientos en Z. Sin valor, la de siempre.
+- **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
+  Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
+  otro para los demás.
+
 ### Cambiado
 
+- **Puentes con cordón redondo** (fichas `gcode_motion.md`, regla 1, y `speeds_accels.md`, regla 14): los puentes y
+  los tramos de pared sobre el aire se extruyen como un cordón redondo del ancho de la boquilla (con 0,4 mm, 0,0522 mm
+  de filamento por mm), y las líneas del puente van a esa distancia; `extrusion.bridge_flow_ratio` (1 por defecto)
+  achica la sección y junta las líneas.
 - **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las
   vecinas se enlazan de a pares, con el soporte entre las dos, y se acercan hasta juntarse; las ramas juntadas
   engordan menos. En el estante de la ficha, las piezas por capa bajando: 21, 11, 12, 10, 5, 5 y 4 (la ficha: 22, 13,

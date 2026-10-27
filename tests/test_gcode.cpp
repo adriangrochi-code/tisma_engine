@@ -949,7 +949,11 @@ TEST_CASE("walls: the stretches over the air are overhang perimeters at the brid
         const bool overhang = x.type == "Overhang perimeter";
         if (overhang) {
             CHECK(x.z == "8.200");
-            CHECK(x.height == "0.200"); // over the air: no gap to fill
+            // The bridges' round bead, 0.4 mm across (pi/4 of 0.4 squared):
+            // W2's 0.05224 mm of filament per mm.
+            CHECK(x.height == "0.314");
+            if (x.length() > 0.5)
+                CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.05224, 0.0002));
             CHECK(x.feed == 25.0 * 60.0);
             if (!in_run)
                 pieces.push_back(0.0);

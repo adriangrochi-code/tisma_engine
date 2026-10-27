@@ -51,6 +51,7 @@ add_executable(tisma_tests
   test_tree_support.cpp
   test_arcs.cpp
   test_stability.cpp
+  test_speeds.cpp
   test_formats.cpp
   test_bitgrid.cpp
   test_voronoi.cpp

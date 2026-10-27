@@ -719,8 +719,7 @@ Con el PR #23 (2026-10-26):
     `walls.min_detail`);
   - segunda prueba (`docs/spec/qa/2026-10-26-segunda-prueba.md`), soporte en grilla del estante de S4. Hechos
     (2026-10-26): QA10, QA11 y QA12; QA13 el 2026-10-27, con la regla 8 de `walls_extra.md` (perímetros en voladizo,
-    `walls.detect_overhangs`). Falta de esa regla el cordón redondo de los puentes (con `speed.bridges` y la ficha
-    `gcode_motion.md`, en el paso 2 de la cobertura):
+    `walls.detect_overhangs`); el cordón redondo de los puentes, con `speed.bridges`, el 2026-10-27 (paso 2):
     - QA10: la zona de soporte unos 1,6 mm más allá de lo que cuelga (`supports_skirt.md`, regla 2); hoy termina
       0,15 mm adentro, y en piezas orgánicas sale en pedazos sueltos. La más importante;
     - QA11: la separación XY medida desde la cara de la pieza (el eje de la línea a 0,425 mm de la cara, no a 0,8);
@@ -731,6 +730,17 @@ Con el PR #23 (2026-10-26):
   - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): la primera capa sólida sobre el relleno ralo es un puente
     (regla 6). Hecho (2026-10-26): solo la capa de arriba de todo es «Top solid infill» (regla 2);
   - `cooling.enabled`
+- [ ] Paso 2 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27):
+  - [ ] `speeds_accels.md`. Hecho (2026-10-27): `speed.bridges` (y el cordón redondo de los puentes y de los
+    perímetros en voladizo, `gcode_motion.md` regla 1, con `extrusion.bridge_flow_ratio`, regla 14), `speed.gap_fill`,
+    `speed.over_bridges`, `speed.first_layer_infill`, `speed.travel_z` y los topes del relleno por filamento
+    (`extrusion.infill_max_speed` y `_crossing_speed`): reglas 1 a 5 y 14, pruebas V2 a V5, V10 y M2. Faltan las
+    velocidades dinámicas en voladizos (6 y 7, V6), el ecualizador del caudal (8 y 9, V7) y las aceleraciones por tipo
+    (10 a 13, V8 y V9). V1 espera al relleno de huecos;
+  - [ ] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1);
+  - [ ] planchado (`ironing.md`);
+  - [ ] balsa (`skirt_brim_raft.md`);
+  - [ ] cambio de color y pausas, y los extras del G-code (`gcode_extras.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

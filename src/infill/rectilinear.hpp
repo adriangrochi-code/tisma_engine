@@ -61,6 +61,7 @@ struct FillParams {
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
+    double bridge_width = 0.0;  // the bridges' round beads, and how far apart their lines are; 0: width
     const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
     Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
 };

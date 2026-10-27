@@ -246,7 +246,8 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
                             params.width);
     }
     // Bridge lines stay straight: a join along the edge would hang in the air.
-    out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
+    const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
+    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, false, true);
     if (params.density <= 0.0)
         return out;
     switch (params.pattern) {

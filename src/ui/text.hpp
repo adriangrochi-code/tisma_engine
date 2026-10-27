@@ -834,6 +834,14 @@
     X(MinSpeed, "Velocidad mínima", "Minimum speed") \
     X(PressureAdvance, "Avance de presión", "Pressure advance") \
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
+    X(SpeedBridges, "Puentes", "Bridges") \
+    X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
+    X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
+    X(SpeedTravelZ, "Viajes en Z", "Travel in Z") \
+    X(InfillMaxSpeed, "Tope del relleno", "Infill speed cap") \
+    X(InfillMaxCrossingSpeed, "Tope del relleno que se cruza", "Crossing infill speed cap") \
+    X(BridgeFlowRatio, "Flujo de los puentes", "Bridge flow") \
     X(RetractMinTravel, "Viaje mínimo para retraer", "Shortest travel to retract") \
     X(Abrasive, "Abrasivo", "Abrasive") \
     X(MaxChamberTemp, "Cabina máxima", "Chamber maximum") \

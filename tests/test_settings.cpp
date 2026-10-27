@@ -138,6 +138,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(Settings().wall_min_line_width == Speed{85.0, true});
     CHECK(parse_settings(R"({"support": {"width": "150%"}})").support_width == Speed{150.0, true});
     CHECK(parse_settings(R"({"support": {"width": 0.6}})").support_width == Speed{0.6, false});
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"over_bridges": "fast"}})"), ContainsSubstring("speed.over_bridges: must be"));
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel_z": 0}})"), ContainsSubstring("speed.travel_z: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"bridge_flow_ratio": 3}})"),
+                      ContainsSubstring("extrusion.bridge_flow_ratio: must be from 0.1 to 2"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"infill_max_speed": -1}})"),
+                      ContainsSubstring("extrusion.infill_max_speed: must be from 0 to 1000"));
+    CHECK(parse_settings(R"({"speed": {"first_layer_infill": null}})").first_layer_infill_speed == Speed{});
     CHECK_THROWS_WITH(parse_settings(R"({"support": {"width": "0%"}})"), ContainsSubstring("percentage of the layer"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"min_detail": "x"}})"), ContainsSubstring("percentage of the nozzle"));
     const Settings arcs = parse_settings(R"({"arcs": {"enabled": true, "overlap": 20, "speed": 0, "max_distance": 8}})");
@@ -297,7 +304,8 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
                     "max_height": 250, "max_flow": 24, "max_nozzle_temp": 300, "max_bed_temp": 110,
                     "max_chamber_temp": 60, "enclosed": true, "hardened_nozzle": true},
         "speed": {"walls": 55, "outer_wall": 35, "infill": 90, "solid_infill": 70, "top_solid_infill": 45, "support": 60,
-                  "travel": 150, "first_layer": 25, "max": 120},
+                  "travel": 150, "first_layer": 25, "max": 120, "bridges": 30, "gap_fill": 15, "over_bridges": "60%",
+                  "first_layer_infill": 35, "travel_z": 8},
         "retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
         "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5},
         "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
@@ -305,12 +313,16 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "compute": {"gpu": "off"},
         "compensation": {"scale_x": 99.6, "scale_y": 100.4, "scale_z": 99.9, "hole_offset": 0.08},
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
-                      "needs_enclosure": true},
+                      "needs_enclosure": true, "infill_max_speed": 50, "infill_max_crossing_speed": 35,
+                      "bridge_flow_ratio": 0.8},
         "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
                      "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65, "volumetric_flow": 12,
                      "acceleration": 3000}]
     })");
     REQUIRE(s.changes.size() == 2);
+    CHECK(s.over_bridges_speed == Speed{60.0, true});
+    CHECK(s.first_layer_infill_speed == Speed{35.0, false});
+    CHECK(s.bridge_flow_ratio == 0.8);
     CHECK(s.changes[0].z == 5.0); // sorted by height
     CHECK(s.changes[1].gcode == "M117 hi");
     CHECK(!s.changes[1].fan.has_value());

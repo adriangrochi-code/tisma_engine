@@ -99,10 +99,17 @@ namespace {
 // (supports_skirt.md, rule 4). Without `detect`, only the latter. The wall is
 // cut where its stretches change, keeping its order from its start (a loop's
 // seam), into open pieces; a wall all of one kind stays whole. Each piece says
-// whether it is an overhang perimeter.
+// whether it is an overhang perimeter; over the air, its bead is the bridges'
+// round one (`round`, when given: walls_extra.md, rule 8). The same cuts split
+// the solid infill right over a bridge (speeds_accels.md, rule 2).
 struct WallPiece {
     Toolpath path;
     bool overhang = false;
+    bool air = false; // over the air
+};
+struct RoundBead {
+    double width = 0.0; // mm, the bead's diameter
+    double gap = 0.0;   // mm the bead is thicker than the layer
 };
 // A region prepared for many tests along a layer's walls: each polygon's box
 // for the point tests, and the edges in a grid of cells for the crossings.
@@ -249,7 +256,7 @@ Toolpath cut_at(const Toolpath& t, AreaIndex& areas) {
 }
 
 std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, const AreaIndex& on_support, double gap,
-                                   bool detect) {
+                                   bool detect, const RoundBead* round = nullptr) {
     if (wall.points.size() < 2)
         return {{wall, false}};
     // Most walls are nowhere near what hangs.
@@ -279,16 +286,26 @@ std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, con
     const auto piece_of = [&](unsigned char k) {
         WallPiece piece;
         piece.path.index = t.index;
-        piece.path.gap = k == 2 ? gap : 0.0;
+        piece.path.gap = k == 2 ? gap : k == 1 && round ? round->gap : 0.0;
         piece.overhang = detect && k != 0;
+        piece.air = k == 1;
         return piece;
     };
+    // Over the air, the round bead all along.
+    const auto rounded = [&](std::vector<WallPiece>& pieces) {
+        if (round)
+            for (WallPiece& piece : pieces)
+                if (piece.air)
+                    for (ToolpathPoint& p : piece.path.points)
+                        p.width = round->width;
+        return std::move(pieces);
+    };
     if (std::all_of(kind.begin(), kind.end(), [&](unsigned char k) { return k == kind.front(); })) {
-        WallPiece whole = piece_of(kind.front());
-        whole.path.points = t.points;
-        whole.path.closed = t.closed;
-        whole.path.wavy = t.wavy;
-        return {std::move(whole)};
+        std::vector<WallPiece> whole(1, piece_of(kind.front()));
+        whole.front().path.points = t.points;
+        whole.front().path.closed = t.closed;
+        whole.front().path.wavy = t.wavy;
+        return rounded(whole);
     }
     std::vector<WallPiece> out;
     WallPiece piece = piece_of(kind.front());
@@ -302,7 +319,7 @@ std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, con
         piece.path.points.push_back(t.points[(i + 1) % n]);
     }
     out.push_back(std::move(piece));
-    return out;
+    return rounded(out);
 }
 
 // Z anti-aliasing (docs/ZAA.md): the pieces of a path where its points go from
@@ -467,7 +484,7 @@ public:
                            s.travel_acceleration,
                            s.corner_speed}),
           retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
-          min_travel_(s.retract_min_travel) {
+          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         // The melt limit: the lower of the hot end's and the filament's (0: none).
@@ -623,7 +640,7 @@ public:
             e_text_.clear();
         }
         if (!keep_z)
-            move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
+            move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed));
         height_ = height;
         z_value_ = z;
         if (!keep_z)
@@ -660,7 +677,7 @@ public:
                 other_time_ += retract_ / retract_feed_;
             }
             const double cruise = written(z_value_ + clearance_);
-            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed));
             z_now_ = cruise;
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
             other_time_ += std::hypot(p.x - x_value_, p.y - y_value_) / feed;
@@ -688,18 +705,18 @@ public:
         // Off the layer's top (Z anti-aliasing): back up, and over what was raised.
         const double cruise = written(z_value_ + clearance_);
         if (z_now_ != cruise) {
-            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed));
             z_now_ = cruise;
         }
         const bool lift = retract && lift_ > 0.0;
         const double level = clearance_ > 0.0 ? cruise : z_value_;
-        other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / feed : 0.0);
+        other_time_ += plan.length / feed + (lift ? 2.0 * lift_ / z_feed(feed) : 0.0);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, level + lift_, std::nullopt, z_feed(feed));
         for (const Point2d& q : plan.points)
             move("G1", q.x, q.y, std::nullopt, std::nullopt, feed);
         if (lift)
-            move("G1", std::nullopt, std::nullopt, level, std::nullopt, feed);
+            move("G1", std::nullopt, std::nullopt, level, std::nullopt, z_feed(feed));
         x_value_ = p.x, y_value_ = p.y;
     }
 
@@ -788,6 +805,9 @@ private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
 
+    // The feed of a move in Z, beside travels at `travel`.
+    double z_feed(double travel) const { return z_feed_ > 0.0 ? z_feed_ : travel; }
+
     // A fan in percent as M106 writes it, S0-255.
     static long fan_value(double percent) {
         const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 255.0 / 100.0); // 50 % is S128
@@ -854,6 +874,7 @@ private:
     bool bridge_ = false;        // the current type is a bridge
     double filament_area_ = 1.0;
     double retract_, retract_feed_, lift_, min_travel_;
+    double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
     double retracted_amount_ = 0.0;
     double flow_ = 1.0;
     double height_ = 0.2;
@@ -1047,6 +1068,22 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
 
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
+    // Each kind's speed (gcode_motion.md; speeds_accels.md, rules 1 and 5):
+    // bridges and gap fill at their own or the solid infill's; the sparse
+    // infill within the filament's cap for its pattern, whose lines cross in
+    // the layer (two or three directions at once) or do not.
+    const double bridge_feed = s.bridge_speed > 0.0 ? s.bridge_speed : s.solid_infill_speed;
+    const double gap_feed = s.gap_fill_speed > 0.0 ? s.gap_fill_speed : s.solid_infill_speed;
+    const bool crossing = s.infill_pattern == InfillPattern::Grid || s.infill_pattern == InfillPattern::Triangles ||
+                          s.infill_pattern == InfillPattern::Stars || s.infill_pattern == InfillPattern::Cubic ||
+                          s.infill_pattern == InfillPattern::AdaptiveCubic ||
+                          s.infill_pattern == InfillPattern::SupportCubic;
+    const double infill_cap = crossing ? s.infill_max_crossing_speed : s.infill_max_speed;
+    const double sparse_feed = infill_cap > 0.0 ? std::min(s.infill_speed, infill_cap) : s.infill_speed;
+    const double fill_speed[7] = {s.solid_infill_speed, s.top_solid_infill_speed, bridge_feed, gap_feed,
+                                  sparse_feed,          s.support_speed,          s.support_speed};
+    // The bridges' round bead, for the walls over the air.
+    const double bead = bridge_bead(s);
 
     // Every layer's travel planner and islands first, in parallel: they
     // depend on the layer's region alone, and the layers are written one after
@@ -1177,6 +1214,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         auto speed = [&](double v) {
             return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
+        // The fills' feeds; the first layer's solid infill at its own speed,
+        // past speed.first_layer (speeds_accels.md, rule 3).
+        auto fill_feed = [&](std::size_t k) {
+            if (first && k <= 1 && s.first_layer_infill_speed.value > 0.0)
+                return capped(s.first_layer_infill_speed.of(s.solid_infill_speed)) * a.speed;
+            return speed(fill_speed[k]);
+        };
+        const double over_feed = s.over_bridges_speed.value > 0.0 ? speed(s.over_bridges_speed.of(s.solid_infill_speed)) : 0.0;
         // A path that fills the support's Z gap (supports_skirt.md, rule 4) is
         // as thick as the layer and the gap: the height changes around it.
         const double layer_height = layer.top - layer.bottom;
@@ -1201,6 +1246,13 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         std::optional<AreaIndex> hanging, on_support;
         if (split_walls)
             hanging.emplace(*hanging_area), on_support.emplace(on_support_area);
+        const RoundBead round{bead, std::max(0.0, std::numbers::pi / 4.0 * bead - layer_height)};
+        // The solid infill right over a bridge, at speed.over_bridges
+        // (speeds_accels.md, rule 2).
+        std::optional<AreaIndex> over_bridge, nowhere;
+        if (s.over_bridges_speed.value > 0.0 && l > 0 && l - 1 < model.air_bridges.size() &&
+            !model.air_bridges[l - 1].empty())
+            over_bridge.emplace(model.air_bridges[l - 1]), nowhere.emplace(none);
         bool in_thick = false;
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -1228,21 +1280,29 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             painted.enforce = &model.seam_enforce[l];
         if (l < model.seam_block.size())
             painted.block = &model.seam_block[l];
+        // over: the feed of what lies over a bridge (solid infill).
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam,
-                         bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {}) {
+                         bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {},
+                         double over = 0.0) {
             std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams,
                                                         walls && !painted.empty() ? &painted : nullptr, candidates);
             std::vector<Pending> typed;
             typed.reserve(ordered.size());
             for (Toolpath& t : ordered) {
+                if (over > 0.0 && over_bridge && !in_thick) {
+                    for (WallPiece& piece : wall_pieces(t, *over_bridge, *nowhere, 0.0, true))
+                        typed.push_back({std::move(piece.path), type, piece.overhang ? over : feed});
+                    continue;
+                }
                 if (!walls || in_thick || !split_walls) {
                     typed.push_back({std::move(t), type, feed});
                     continue;
                 }
-                // Overhang perimeters at the bridges' speed (walls_extra.md, rule 8).
-                for (WallPiece& piece : wall_pieces(t, *hanging, *on_support, support_gap, s.detect_overhangs))
+                // Overhang perimeters at the bridges' speed, with their round
+                // bead over the air (walls_extra.md, rule 8).
+                for (WallPiece& piece : wall_pieces(t, *hanging, *on_support, support_gap, s.detect_overhangs, &round))
                     typed.push_back({std::move(piece.path), piece.overhang ? "Overhang perimeter" : type,
-                                     piece.overhang ? speed(s.solid_infill_speed) : feed});
+                                     piece.overhang ? speed(bridge_feed) : feed});
             }
             if (deferring) {
                 for (Pending& p : typed) {
@@ -1357,9 +1417,6 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
                                           "Gap fill",        "Internal infill",  "Support material",
                                           "Support material interface"};
-        const double fill_speed[7] = {s.solid_infill_speed, s.top_solid_infill_speed, s.solid_infill_speed,
-                                      s.solid_infill_speed, s.infill_speed,          s.support_speed,
-                                      s.support_speed};
         std::vector<bool> done(islands.size(), false);
         // The boxes of the islands' path ends bound how near each island can be,
         // so most are not looked at: the same pick as looking at every end
@@ -1422,11 +1479,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             // out: the walls round them then rest on their ends
             // (arc_overhangs.md, rule 4).
             for (Toolpath t : i.arcs)
-                lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : s.solid_infill_speed));
+                lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
             for (const auto& [index, paths] : i.walls)
                 walls(index, paths);
             for (std::size_t k = 0; k < 7; ++k)
-                group(i.fills[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+                group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
             flush();
         }
         // The thick zone of a group that ends here: the whole group's height at
@@ -1448,7 +1505,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             const std::vector<Toolpath>* kinds[5] = {&t.fill.solid, &t.fill.top, &t.fill.bridge, &t.fill.gaps,
                                                      &t.fill.sparse};
             for (std::size_t k = 0; k < 5; ++k)
-                group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
+                group(*kinds[k], fill_type[k], fill_feed(k), SeamMode::Nearest);
             flush();
             steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
             base_height = laid_height = layer_height;

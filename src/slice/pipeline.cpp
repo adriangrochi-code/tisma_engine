@@ -52,7 +52,20 @@ void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double 
     }
 }
 
+// The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
+// are wide, their section pi/4 of the width squared, the height past the
+// layer's in each path's gap. The ones resting on the support get its gap after.
+void round_bridges(std::vector<Toolpath>& bridges, double width, double layer_height) {
+    const double gap = std::max(0.0, std::numbers::pi / 4.0 * width - layer_height);
+    for (Toolpath& t : bridges)
+        t.gap = gap;
+}
+
 } // namespace
+
+double bridge_bead(const Settings& settings) {
+    return settings.nozzle_diameter * std::sqrt(std::max(settings.bridge_flow_ratio, 0.0));
+}
 
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
     if (mesh.vertices.empty() || (settings.scale_x == 100.0 && settings.scale_y == 100.0 && settings.scale_z == 100.0))
@@ -212,6 +225,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                        : classify_surfaces(out.regions, infill, top_count * ratio, bottom_count * ratio,
                                            settings.wall_width);
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    out.air_bridges.resize(out.surfaces.size());
+    for (std::size_t l = 0; l < out.surfaces.size(); ++l)
+        out.air_bridges[l] = out.surfaces[l].bridge;
     // A solid layer every N (infill_patterns.md, rule 21): layers N, 2N...
     // fill all their sparse infill solid, as bridges over the sparse infill
     // below.
@@ -445,6 +461,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     });
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
+    fill.bridge_width = bridge_bead(settings);
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
@@ -499,6 +516,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           if (repeats[l])
                               return;
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
                                               kBridgeAnchor + settings.wall_width);
@@ -563,8 +581,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                               rectilinear_fill(interface, bead, settings.support_line_angle + 90.0, width, true);
                       });
     for (std::size_t l = period; l < out.layers.size(); ++l)
-        if (repeats[l])
+        if (repeats[l]) {
             out.fills[l] = out.fills[l - period];
+            round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
+        }
     // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
     // beads stack, in patterns that repeat layer to layer, and not with thick
     // layers or stress bands.

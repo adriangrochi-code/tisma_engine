@@ -5080,3 +5080,35 @@ voladizos, PL15, QA8, QA9 y `support.width`.
 
 **Sigue (punto 2, en el orden aprobado):** velocidades y aceleraciones por tipo, relleno de huecos, planchado, balsa,
 cambio de color y pausas, y los extras del G-code.
+
+## 2026-10-27 — Punto 2: velocidades propias, topes del relleno y el cordón redondo de los puentes
+
+**Hecho** (ficha `speeds_accels.md`, reglas 1 a 5 y 14; `gcode_motion.md`, regla 1; `walls_extra.md`, regla 8):
+- `speed.bridges` para los puentes y los perímetros en voladizo (y los arcos sin `arcs.speed`); sin valor, la del
+  relleno sólido, como antes;
+- el cordón de los puentes y de los tramos de pared sobre el aire es redondo, del diámetro de la boquilla por la raíz
+  de `extrusion.bridge_flow_ratio`: su sección es π/4 del diámetro al cuadrado (0,052245 mm de filamento por mm con
+  boquilla de 0,4) y las líneas del puente van a esa distancia. Los puentes sobre el soporte siguen con la altura de la
+  capa más la separación (QA13);
+- `speed.gap_fill` (el relleno de huecos, cuando lo haya), `speed.over_bridges` (mm/s o % del sólido: los tramos de
+  relleno sólido justo encima de un puente sobre el aire, cortados en el borde del puente; no encima de las capas
+  sólidas sobre el relleno), `speed.first_layer_infill` (mm/s o % del sólido, sin el tope de la primera capa),
+  `speed.travel_z` (cambios de capa, saltos y subidas del ZAA);
+- `extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`: el tope del relleno disperso según si sus
+  líneas se cruzan en la capa (`grid`, `triangles`, `stars`, los cúbicos) o no;
+- todo en el panel (Velocidad y Filamento › Flujo, nivel Avanzado salvo `speed.bridges`) y en `docs/CONFIG.md`; las
+  velocidades nuevas rehacen solo el G-code (V11).
+
+**Corregido:** las pruebas de estabilidad guardaban punteros a los avisos de una revisión temporal (ASan, en la CI de
+Linux de la sesión); ahora guardan copias.
+
+**Medido:** M2/W2: 0,052245 mm/mm en puentes y perímetros en voladizo (la ficha: 0,052735 y 0,05224); con
+`bridge_flow_ratio` 0,8, 0,8 de eso y el puente 1,10 veces más largo (la ficha: 1,098). V2 a V5 como en la ficha.
+Benchy 0,65 → 0,68 s y cráneo 2,92 → 2,91 s (mediana de 5; sin cambio); los dos G-code verificados, también con todos
+los ajustes nuevos puestos. Fuzzer con los ajustes nuevos: 400 corridas, 0 fallas.
+
+**Pruebas nuevas:** `tests/test_speeds.cpp` (M2 y V10, V2, V3, V4, V5), W2 con el cordón redondo, y la lectura de las
+claves nuevas.
+
+**Sigue:** del mismo punto, las velocidades dinámicas en voladizos (V6), el ecualizador del caudal (V7) y las
+aceleraciones por tipo (V8, V9); después, el relleno de huecos (V1, W6).

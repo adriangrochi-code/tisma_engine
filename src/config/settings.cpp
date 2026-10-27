@@ -49,6 +49,9 @@ auto speed_of(S& s, std::string_view key) -> decltype(&s.wall_speed) {
         {"speed.travel", &s.travel_speed},
         {"speed.first_layer", &s.first_layer_speed},
         {"speed.max", &s.max_speed},
+        {"speed.bridges", &s.bridge_speed},
+        {"speed.gap_fill", &s.gap_fill_speed},
+        {"speed.travel_z", &s.travel_z_speed},
         {"retraction.speed", &s.retract_speed},
         {"cooling.min_speed", &s.min_print_speed},
     };
@@ -570,17 +573,23 @@ Settings parse_checked(std::string_view text) {
                    }
                });
     read_group(root, "speed",
-               {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max"},
+               {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
+                "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   // The speeds that may be a share of another.
+                   Speed* const share = n == "outer_wall"           ? &s.outer_wall_speed
+                                        : n == "over_bridges"       ? &s.over_bridges_speed
+                                        : n == "first_layer_infill" ? &s.first_layer_infill_speed
+                                                                    : nullptr;
                    if (v.is_null()) { // not set: from the printer's profile
-                       if (n == "outer_wall")
-                           s.outer_wall_speed = {};
+                       if (share)
+                           *share = {};
                        else
                            *speed_of(s, "speed." + n) = 0.0;
                        return;
                    }
-                   if (n == "outer_wall" && v.is_string()) {
+                   if (share && v.is_string()) {
                        const std::string t = v.get<std::string>();
                        char* end = nullptr;
                        const double p = std::strtod(t.c_str(), &end);
@@ -588,16 +597,18 @@ Settings parse_checked(std::string_view text) {
                        if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) ||
                            !(p <= 1000.0))
                            fail(k, "must be a number of mm/s or a percentage from 0 to 1000 like \"50%\"");
-                       s.outer_wall_speed = {p, true};
+                       *share = {p, true};
                        return;
                    }
                    const double d = number(g, n, k);
                    if (!(d > 0.0))
                        fail(k, "must be greater than 0");
-                   if (n == "walls")
+                   if (share)
+                       *share = {d, false};
+                   else if (n == "bridges" || n == "gap_fill" || n == "travel_z")
+                       *speed_of(s, "speed." + n) = d;
+                   else if (n == "walls")
                        s.wall_speed = d;
-                   else if (n == "outer_wall")
-                       s.outer_wall_speed = {d, false};
                    else if (n == "infill")
                        s.infill_speed = d;
                    else if (n == "solid_infill")
@@ -866,7 +877,9 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be a percentage from 50 to 200");
                    (n == "scale_x" ? s.scale_x : n == "scale_y" ? s.scale_y : s.scale_z) = v;
                });
-    read_group(root, "extrusion", {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure"},
+    read_group(root, "extrusion",
+               {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
+                "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "abrasive" || n == "needs_enclosure") {
             if (!g.at(n).is_boolean())
@@ -885,6 +898,18 @@ Settings parse_checked(std::string_view text) {
             if (v < 0.0 || v > 2.0)
                 fail(k, "must be from 0 to 2");
             s.pressure_advance = v;
+            return;
+        }
+        if (n == "infill_max_speed" || n == "infill_max_crossing_speed") {
+            if (v < 0.0 || v > 1000.0)
+                fail(k, "must be from 0 to 1000 mm/s");
+            (n == "infill_max_speed" ? s.infill_max_speed : s.infill_max_crossing_speed) = v;
+            return;
+        }
+        if (n == "bridge_flow_ratio") {
+            if (v < 0.1 || v > 2.0)
+                fail(k, "must be from 0.1 to 2");
+            s.bridge_flow_ratio = v;
             return;
         }
         if (v < 10.0 || v > 300.0)
@@ -1017,6 +1042,7 @@ double fastest_extrusion(const Settings& s) {
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
     auto speed = [](double v) { return v > 0.0 ? json(v).dump() : std::string("null"); }; // 0: not set
+    auto share = [&](const Speed& v) { return v.value <= 0.0 ? std::string("null") : num(v.value) + (v.percent ? "%" : ""); };
     auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
@@ -1102,9 +1128,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", speed(s.wall_speed)},
-        {"speed.outer_wall", s.outer_wall_speed.value <= 0.0 ? std::string("null")
-                             : s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%"
-                                                          : num(s.outer_wall_speed.value)},
+        {"speed.outer_wall", share(s.outer_wall_speed)},
         {"speed.infill", speed(s.infill_speed)},
         {"speed.solid_infill", speed(s.solid_infill_speed)},
         {"speed.top_solid_infill", speed(s.top_solid_infill_speed)},
@@ -1112,6 +1136,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.travel", speed(s.travel_speed)},
         {"speed.first_layer", speed(s.first_layer_speed)},
         {"speed.max", speed(s.max_speed)},
+        {"speed.bridges", speed(s.bridge_speed)},
+        {"speed.gap_fill", speed(s.gap_fill_speed)},
+        {"speed.over_bridges", share(s.over_bridges_speed)},
+        {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
+        {"speed.travel_z", speed(s.travel_z_speed)},
         {"retraction.length", num(s.retract_length)},
         {"retraction.speed", speed(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
@@ -1158,6 +1187,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.flow", num(s.flow)},
         {"extrusion.pressure_advance", num(s.pressure_advance)},
         {"extrusion.max_flow", num(s.filament_max_flow)},
+        {"extrusion.infill_max_speed", num(s.infill_max_speed)},
+        {"extrusion.infill_max_crossing_speed", num(s.infill_max_crossing_speed)},
+        {"extrusion.bridge_flow_ratio", num(s.bridge_flow_ratio)},
         {"extrusion.chamber_temperature", num(s.chamber_temperature)},
         {"extrusion.abrasive", flag(s.abrasive)},
         {"extrusion.needs_enclosure", flag(s.needs_enclosure)},
@@ -1200,9 +1232,13 @@ std::string settings_json(const Settings& s) {
     ordered_json layer_heights = ordered_json::array();
     for (const auto& p : s.layer_heights)
         layer_heights.push_back({p[0], p[1]});
-    const ordered_json outer_wall = s.outer_wall_speed.value <= 0.0 ? ordered_json(nullptr)
-                                    : s.outer_wall_speed.percent    ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
-                                                                    : ordered_json(s.outer_wall_speed.value);
+    // A speed that may be a share: mm/s, or a text like "50%".
+    const auto share = [](const Speed& v) {
+        return v.value <= 0.0 ? ordered_json(nullptr)
+               : v.percent    ? ordered_json(json(v.value).dump() + "%")
+                              : ordered_json(v.value);
+    };
+    const ordered_json outer_wall = share(s.outer_wall_speed);
     // A speed not set is null: the printer's profile gives it (docs/CONFIG.md).
     const auto speed = [](double v) { return v > 0.0 ? ordered_json(v) : ordered_json(nullptr); };
     const ordered_json root = {
@@ -1298,7 +1334,12 @@ std::string settings_json(const Settings& s) {
           {"support", speed(s.support_speed)},
           {"travel", speed(s.travel_speed)},
           {"first_layer", speed(s.first_layer_speed)},
-          {"max", speed(s.max_speed)}}},
+          {"max", speed(s.max_speed)},
+          {"bridges", speed(s.bridge_speed)},
+          {"gap_fill", speed(s.gap_fill_speed)},
+          {"over_bridges", share(s.over_bridges_speed)},
+          {"first_layer_infill", share(s.first_layer_infill_speed)},
+          {"travel_z", speed(s.travel_z_speed)}}},
         {"retraction",
          {{"length", s.retract_length},
           {"speed", speed(s.retract_speed)},
@@ -1361,6 +1402,9 @@ std::string settings_json(const Settings& s) {
          {{"flow", s.flow},
           {"pressure_advance", s.pressure_advance},
           {"max_flow", s.filament_max_flow},
+          {"infill_max_speed", s.infill_max_speed},
+          {"infill_max_crossing_speed", s.infill_max_crossing_speed},
+          {"bridge_flow_ratio", s.bridge_flow_ratio},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
