@@ -6,6 +6,7 @@
 #include "ui/text.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
@@ -349,8 +350,12 @@ TEST_CASE("assistant: the calibration guides read, in order (rules 20, 21, AS19)
     // An engine test has its guide, and back (rule 20).
     CHECK(guide_for_test("temperature") == "temperature_tower");
     CHECK(test_for_guide("max_flow") == "max_flow");
+    CHECK(test_for_guide("stringing_temperature") == "temperature");
+    CHECK(guide_for_test("dimensions") == "dimensional");
+    // AS22: a test without a guide.
+    CHECK(guide_for_test("acceleration").empty());
     CHECK(guide_for_test("fit").empty());
-    CHECK(test_for_guide("vfa").empty());
+    CHECK(test_for_guide("cooling").empty());
 }
 
 TEST_CASE("assistant: a guide before the others and its result (AS16, AS17)", "[ui][assistant]") {
@@ -358,18 +363,47 @@ TEST_CASE("assistant: a guide before the others and its result (AS16, AS17)", "[
     CHECK(guides_missing({"pressure_advance"}, {}) == std::vector<std::string>{"pressure_advance"});
     CHECK(guides_missing({"pressure_advance"}, {"pressure_advance"}).empty());
     CHECK(guides_missing({"a", "b", "c"}, {"b"}) == std::vector<std::string>{"a", "c"});
-    // AS17: 19 mm with start 5 and step 0.5 is 14.5 mm³/s; 10 % less is offered.
-    const std::optional<GuideOutcome> r = guide_result("max_flow", {5.0, 0.5, 19.0});
+    // AS17: 19 mm with start 5 and step 0.5 (bands of 1 mm) is 14.5 mm³/s; 10 % less is offered.
+    const std::optional<GuideOutcome> r = guide_result("max_flow", {5.0, 0.5, 1.0, 19.0}, 0.2);
     REQUIRE(r);
     CHECK_THAT(r->value, Catch::Matchers::WithinAbs(14.5, 1e-9));
     CHECK_THAT(r->proposed, Catch::Matchers::WithinAbs(13.05, 1e-9));
+    // AS20: the tower 5 to 25 by 1 in bands of 2 mm, 19 mm: 14, proposed 12.6.
+    const std::optional<GuideOutcome> tower = guide_result("max_flow", {5.0, 1.0, 2.0, 19.0}, 0.2);
+    REQUIRE(tower);
+    CHECK_THAT(tower->value, Catch::Matchers::WithinAbs(14.0, 1e-9));
+    CHECK_THAT(tower->proposed, Catch::Matchers::WithinAbs(12.6, 1e-9));
+    // A band's edge belongs to the band above.
+    CHECK_THAT(band_value(5.0, 1.0, 2.0, 18.0), Catch::Matchers::WithinAbs(14.0, 1e-9));
+    CHECK_THAT(band_value(5.0, 1.0, 0.0, 3.0), Catch::Matchers::WithinAbs(8.0, 1e-9));
     // Applied to extrusion.max_flow as a set action (rule 7).
     Settings s;
-    const std::optional<SettingChange> change =
-        plan_setting(s, {"extrusion.max_flow", SettingOp::Set, "13.05", {}});
+    const std::optional<SettingChange> change = plan_setting(s, {"extrusion.max_flow", SettingOp::Set, "13.05", {}});
     REQUIRE(change);
     CHECK(apply_setting(s, *change).filament_max_flow == 13.05);
-    CHECK_FALSE(guide_result("input_shaping", {}));
+    // The rest of rule 23's table: the band's value as it is, a value read,
+    // layers times the layer height.
+    CHECK(guide_result("pressure_advance", {0.0, 0.01, 1.0, 4.5}, 0.2)->proposed == Catch::Approx(0.04));
+    CHECK(guide_formula("retraction")->key == "retraction.length");
+    CHECK(guide_result("flow", {0, 0, 1, 97.0}, 0.2)->proposed == 97.0);
+    CHECK(guide_result("supports", {0, 0, 1, 2.0}, 0.2)->proposed == Catch::Approx(0.4));
+    CHECK(guide_formula("temperature_tower")->measure == GuideMeasure::Value);
+    CHECK(guide_formula("cornering")->measure == GuideMeasure::Height);
+    // Every key of the table is an engine setting.
+    for (const char* id : {"temperature_tower", "stringing_temperature", "max_flow", "pressure_advance", "retraction",
+                           "cornering", "flow", "cooling", "overhang_angle", "supports", "vfa"}) {
+        INFO(id);
+        const std::optional<SettingChange> c = plan_setting(s, {std::string(guide_formula(id)->key), SettingOp::Set, "10", {}});
+        CHECK(c);
+    }
+    // The tower's temperature goes in a [temperature] the profile did not have.
+    const std::optional<SettingChange> t = plan_setting(s, {"machine.variables.temperature", SettingOp::Set, "215", {}});
+    REQUIRE(t);
+    CHECK(t->profile == ProfileKind::Filament);
+    CHECK(apply_setting(s, *t).variables.at("temperature") == std::vector<std::string>{"215"});
+    // The firmware's and the measuring block's have no formula here.
+    CHECK_FALSE(guide_result("input_shaping", {}, 0.2));
+    CHECK_FALSE(guide_result("dimensional", {}, 0.2));
 }
 
 TEST_CASE("assistant: the review's warnings lead to their problems (rule 9)", "[ui][assistant]") {

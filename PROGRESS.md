@@ -6411,3 +6411,14 @@ de este push.
 comando del firmware con la impresora conectada (AS18), el orden de las guías en `new_material` (regla 24), y los
 avisos de hilos y esquinas que la revisión del motor todavía no da. Después, `model_tools.md` (partes, modificadores,
 ajustes por objeto).
+
+**Después, el mismo día (sexto paso):** el equipo de especificaciones respondió los tipos de `calibrations.json` y la
+tabla de cuentas (ficha en `spec/next` 7c5cfca). Cada guía con cuenta toma lo que escribe la persona: en las torres
+(flujo máximo, avance de presión, retracción, esquinas) la altura, con inicio + paso × ⌊altura / franja⌋, un 10 %
+menos en flujo máximo; en temperatura, flujo, enfriamiento, ángulo y VFA el valor leído; en soportes, capas × altura
+de capa. Inicio, paso y franja vienen de la última prueba generada; el valor propuesto se corrige antes de aplicar. Una
+variable de máquina que el perfil no tenía (`[temperature]`) se crea al fijarla. `[assistant]`: 199 comprobaciones
+(AS17, AS20, AS22). Avisado al equipo de especificaciones: el motor no tiene `material.nozzle_temp` (usa
+`machine.variables.temperature`) y su torre de flujo máximo por defecto no es la de `calibration_models.md`.
+
+**Sigue:** las fechas por guía en los perfiles (regla 22), AS18 y la regla 24.

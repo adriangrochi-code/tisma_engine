@@ -708,6 +708,8 @@ private:
     std::vector<bool> help_steps_done_;
     // What the person writes in a guide's result (rule 23).
     GuideInput guide_input_;
+    GuideInput guide_from_;               // what the proposal was computed from
+    std::optional<double> guide_proposed_; // the proposal, as corrected
     // The assistant's preferences (assistant.md, «Ajustes»).
     bool assistant_tutorials_ = true, assistant_glossary_ = true, assistant_material_ = true;
     std::optional<SettingChange> help_change_;
@@ -4500,6 +4502,14 @@ void App::open_guide(std::string_view id) {
             help_tab_ = 4, help_select_ = true, help_page_ = HelpPage::Guide, help_item_ = i;
             help_steps_done_.assign(knowledge_->calibrations[i].steps.size(), false);
             guide_input_ = {};
+            guide_proposed_.reset();
+            // Start, step and band from the last test of this guide the
+            // engine generated (rule 23); the person types them otherwise.
+            if (const auto kind = calibration_kind_from_name(test_for_guide(id))) {
+                const TowerRange& r = ranges_[int(*kind)];
+                if (r.start != 0.0 || r.end != 0.0)
+                    guide_input_.start = r.start, guide_input_.step = r.step, guide_input_.band = r.segment;
+            }
             help_query_.clear();
         }
 }
@@ -4515,8 +4525,11 @@ std::set<std::string> App::guides_done() const {
         if (record.date.empty())
             continue;
         done.insert(name);
-        if (const std::string_view guide = guide_for_test(name); !guide.empty())
-            done.insert(std::string(guide));
+        // A test dated on the calibration page does its guides.
+        if (knowledge_)
+            for (const KnowledgeCalibration& g : knowledge_->calibrations)
+                if (test_for_guide(g.id) == name)
+                    done.insert(g.id);
     }
     return done;
 }
@@ -4597,42 +4610,60 @@ void App::help_guide(const KnowledgeCalibration& g) {
         ImGui::TextUnformatted(g.result_text.c_str());
     if (g.result_where == "printer_firmware") {
         ImGui::TextColored(rgb(kWarningColour), "%s", tr(T::GuideFirmware));
-    } else if (!g.result_key.empty()) {
+    } else if (const std::optional<GuideFormula> f = guide_formula(g.id)) {
+        // The setting comes from rule 23's table, in the engine's names.
+        const std::string key(f->key);
         std::optional<SettingChange> now;
         try {
-            now = plan_setting(settings_, {g.result_key, SettingOp::Multiply, "1", {}});
+            now = plan_setting(settings_, {key, SettingOp::Multiply, "1", {}});
         } catch (const std::exception&) {
         }
         if (now)
-            ImGui::TextDisabled(tr(T::GuideNow), (key_label(g.result_key) + " " + now->before).c_str());
-        if (guide_result(g.id, {1.0, 1.0, 1.0})) {
-            const float field = ImGui::GetFontSize() * 7.0f;
-            const auto input = [&](T label, double& v) {
-                ImGui::SetNextItemWidth(field);
-                ImGui::InputDouble(tr(label), &v, 0.0, 0.0, "%g");
-            };
+            ImGui::TextDisabled(tr(T::GuideNow), (key_label(key) + " " + now->before).c_str());
+        const float field = ImGui::GetFontSize() * 7.0f;
+        const auto input = [&](T label, double& v) {
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputDouble(tr(label), &v, 0.0, 0.0, "%g");
+        };
+        if (f->measure == GuideMeasure::Height) {
             input(T::GuideStart, guide_input_.start);
-            input(T::GuideStepPerMm, guide_input_.step);
-            input(T::GuideHeight, guide_input_.measured);
-            if (const std::optional<GuideOutcome> r = guide_result(g.id, guide_input_); r && guide_input_.measured > 0.0) {
-                char value[32], proposed[32];
-                std::snprintf(value, sizeof value, "%.2f", r->value);
-                std::snprintf(proposed, sizeof proposed, "%.2f", r->proposed);
-                ImGui::TextColored(rgb(theme_.accent_hover), tr(T::GuideRead), value, proposed);
-                std::optional<SettingChange> change;
-                try {
-                    const auto& docs = setting_docs();
-                    const auto doc = docs.find(g.result_key);
-                    change = plan_setting(settings_, {g.result_key, SettingOp::Set, proposed, {}},
-                                          doc == docs.end() ? SettingRange{} : parse_range(doc->second.range));
-                } catch (const std::exception&) {
-                }
-                if (change && ImGui::Button(tr(T::HelpApply))) {
-                    help_change_ = change;
-                    help_change_open_ = true;
-                    help_change_guide_ = g.id;
-                }
+            input(T::GuideStepPerBand, guide_input_.step);
+            input(T::GuideBand, guide_input_.band);
+        }
+        input(f->measure == GuideMeasure::Height   ? T::GuideHeight
+              : f->measure == GuideMeasure::Layers ? T::GuideLayers
+                                                   : T::GuideValue,
+              guide_input_.measured);
+        const std::optional<GuideOutcome> r = guide_result(g.id, guide_input_, settings_.layer_height);
+        if (r && guide_input_.measured > 0.0) {
+            // The proposal follows what was written, and can be corrected before Apply.
+            if (!guide_proposed_ || guide_from_.start != guide_input_.start || guide_from_.step != guide_input_.step ||
+                guide_from_.band != guide_input_.band || guide_from_.measured != guide_input_.measured) {
+                guide_proposed_ = r->proposed;
+                guide_from_ = guide_input_;
             }
+            char value[32];
+            std::snprintf(value, sizeof value, "%g", std::round(r->value * 1e4) / 1e4);
+            ImGui::TextColored(rgb(theme_.accent_hover), tr(T::GuideReadValue), value);
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputDouble(tr(T::GuideProposed), &*guide_proposed_, 0.0, 0.0, "%g");
+            std::optional<SettingChange> change;
+            try {
+                char proposed[32];
+                std::snprintf(proposed, sizeof proposed, "%.6g", *guide_proposed_);
+                const auto& docs = setting_docs();
+                const auto doc = docs.find(key);
+                change = plan_setting(settings_, {key, SettingOp::Set, proposed, {}},
+                                      doc == docs.end() ? SettingRange{} : parse_range(doc->second.range));
+            } catch (const std::exception&) {
+            }
+            if (change && ImGui::Button(tr(T::HelpApply))) {
+                help_change_ = change;
+                help_change_open_ = true;
+                help_change_guide_ = g.id;
+            }
+        } else {
+            guide_proposed_.reset();
         }
     }
     if (!g.tips.empty()) {
@@ -4976,8 +5007,10 @@ void App::help_apply_dialog() {
                 });
                 // A guide's result dates its test, as the calibration page does (rule 22).
                 if (!help_change_guide_.empty()) {
-                    const std::string_view test = test_for_guide(help_change_guide_);
-                    record_calibration(test.empty() ? help_change_guide_ : std::string(test));
+                    record_calibration(help_change_guide_);
+                    if (const std::string_view test = test_for_guide(help_change_guide_);
+                        calibration_kind_from_name(test))
+                        record_calibration(std::string(test));
                 }
             } catch (const std::exception& e) {
                 notify(e.what(), true);

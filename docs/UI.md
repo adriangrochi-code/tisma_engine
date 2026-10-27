@@ -324,8 +324,10 @@ información al lado de cada ajuste.
     otro problema (con **Volver**) o la calibración, o un consejo. Una clave que el motor no tiene no da botón.
   - **Calibraciones:** las guías en orden, del filamento y de la impresora. Una guía dice para qué sirve, cuándo
     repetirla, la prueba que conviene hacer antes si no tiene fecha en la sección Calibración (con Abrir; no impide
-    seguir), **Calibrar**, los pasos, la tabla «Lo que ves / Qué significa», el resultado con el valor de ahora y, en
-    Flujo máximo, los campos para calcular el valor nuevo y **Aplicar** (que fecha la prueba); si el resultado va en la
+    seguir), **Calibrar** (si el motor tiene esa prueba), los pasos, la tabla «Lo que ves / Qué significa», el resultado
+    con el valor de ahora y los campos para calcular el valor nuevo: en las torres, inicio, paso y alto de franja
+    (tomados de la última prueba generada) y la altura medida; en las demás, el valor leído o las capas. El valor
+    propuesto se puede corregir antes de **Aplicar** (que fecha la guía y su prueba); si el resultado va en la
     impresora, lo avisa. Al pie, «Basado en» con sus fuentes, en lugar del pie del panel. **Cómo se hace** abre la
     guía desde la página de calibraciones y desde la sección Calibración de la impresora.
   - **Procedimientos:** las advertencias arriba, los pasos con su casilla, cómo evitarlo y las notas.

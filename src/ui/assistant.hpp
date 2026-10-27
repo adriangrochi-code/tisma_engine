@@ -115,30 +115,47 @@ std::string material_warning_text(MaterialWarning warning, const MaterialInfo& m
 // kinds without one.
 std::string_view review_problem(std::string_view warning_kind);
 
-// The guide of an engine calibration test (rule 20), by the test's name
-// (calibration_kind_name: "max_flow" → "max_flow", "temperature" →
-// "temperature_tower"); empty for the tests without one.
+// The guide of an engine calibration test (rule 20's table), by the test's
+// name (calibration_kind_name: "max_flow" → "max_flow", "temperature" →
+// "temperature_tower"); empty for the tests without one (AS22).
 std::string_view guide_for_test(std::string_view test_name);
-// The test a guide's «Calibrar» opens: the reverse of guide_for_test.
+// The test a guide's «Calibrar» opens ("stringing_temperature" →
+// "temperature"); empty for the guides the engine has no test for.
 std::string_view test_for_guide(std::string_view guide_id);
 
 // The guides of `before` not done yet (rule 22), in the order given: `done`
 // holds the ids of the guides with a date.
 std::vector<std::string> guides_missing(const std::vector<std::string>& before, const std::set<std::string>& done);
 
-// What the person writes after a guide's test (rule 23): the test's start
-// and step per millimetre of height, and what was measured (the height in
-// mm where the print failed, or the block chosen).
+// Rule 23's table: the setting a guide's result goes to, and what the person
+// writes after the test: a height in mm read on a tower of bands, a value
+// read on the print (a block's temperature, a patch's flow, seconds, an
+// angle, a speed), or a number of layers.
+enum class GuideMeasure { Height, Value, Layers };
+struct GuideFormula {
+    std::string_view key;
+    GuideMeasure measure = GuideMeasure::Value;
+};
+// None for the guides without a computation (the firmware's, the
+// measuring block's, which the calibration page computes).
+std::optional<GuideFormula> guide_formula(std::string_view guide_id);
+
+// The band's value at a height: start + step × ⌊height / band⌋
+// (calibration_models.md, rule 4); a band of 0 or less counts 1 mm.
+double band_value(double start, double step, double band, double height);
+
+// What the person writes: the tower's start, step and band height (filled
+// in from the last test generated, editable) and what was measured.
 struct GuideInput {
-    double start = 0.0, step = 0.0, measured = 0.0;
+    double start = 0.0, step = 0.0, band = 1.0, measured = 0.0;
 };
 // The value read from the print and the one proposed for the setting.
 struct GuideOutcome {
     double value = 0.0, proposed = 0.0;
 };
-// The guide's formula: today max_flow, the flow where the print failed
-// (start + height × step) and 10 % less (AS17). None for the guides whose
-// formula the engine does not compute yet.
-std::optional<GuideOutcome> guide_result(std::string_view guide_id, const GuideInput& input);
+// The guide's computation (rule 23): the band's value, 10 % less for the
+// maximum flow (AS17, AS20); the value written; the layers times the layer
+// height. None for a guide without a formula.
+std::optional<GuideOutcome> guide_result(std::string_view guide_id, const GuideInput& input, double layer_height);
 
 } // namespace tisma::ui

@@ -754,9 +754,13 @@
     X(GuideResult, "Resultado", "Result")                                                                             \
     X(GuideNow, "Ahora: %s", "Now: %s")                                                                               \
     X(GuideStart, "Inicio de la prueba", "Test start")                                                                \
-    X(GuideStepPerMm, "Paso por mm de altura", "Step per mm of height")                                               \
+    X(GuideStepPerBand, "Paso por franja", "Step per band")                                                           \
+    X(GuideBand, "Alto de franja (mm)", "Band height (mm)")                                                           \
     X(GuideHeight, "Altura medida (mm)", "Measured height (mm)")                                                      \
-    X(GuideRead, "Leído: %s · se propone %s", "Read: %s · proposed %s")                                              \
+    X(GuideValue, "Valor leído en la pieza", "Value read on the print")                                               \
+    X(GuideLayers, "Capas de separación", "Layers of gap")                                                            \
+    X(GuideReadValue, "Leído: %s", "Read: %s")                                                                        \
+    X(GuideProposed, "Valor propuesto", "Proposed value")                                                             \
     X(GuideFirmware, "Este resultado no va en el perfil: se guarda en la impresora.",                                 \
       "This result does not go in the profile: it is saved in the printer.")                                          \
     X(GuideTips, "Consejos", "Tips")                                                                                  \

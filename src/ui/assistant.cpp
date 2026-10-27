@@ -206,11 +206,17 @@ std::optional<SettingChange> plan_setting(const Settings& settings, const Settin
                                           const SettingRange& range) {
     ordered_json root = ordered_json::parse(settings_json(settings));
     const ordered_json* now = find_value(root, action.key);
+    const std::size_t dot = action.key.find('.');
+    const std::string group = dot == std::string::npos ? std::string() : action.key.substr(0, dot);
+    const std::string name = dot == std::string::npos ? std::string() : action.key.substr(dot + 1);
+    const bool variable = group == "machine" && name.starts_with("variables.");
+    // A machine variable the profile does not have yet is set as a new text
+    // (the temperature guides' [temperature]).
+    const ordered_json unset;
+    if (!now && variable && (action.op == SettingOp::Set || action.op == SettingOp::SetRelative))
+        now = &unset;
     if (!now)
         return std::nullopt;
-    const std::size_t dot = action.key.find('.');
-    const std::string group = action.key.substr(0, dot), name = action.key.substr(dot + 1);
-    const bool variable = group == "machine" && name.starts_with("variables.");
     const std::optional<ProfileKind> profile =
         setting_kind(group, variable ? "variables" : name, variable ? name.substr(10) : std::string());
     if (!profile)
@@ -243,6 +249,16 @@ std::optional<SettingChange> plan_setting(const Settings& settings, const Settin
     } else {
         after = changed(*now, action, value, of, range, change.clamped);
     }
+    if (variable && after.is_number()) {
+        char buffer[64];
+        std::snprintf(buffer, sizeof buffer, "%.4f", after.get<double>());
+        std::string text = buffer;
+        while (text.back() == '0')
+            text.pop_back();
+        if (text.back() == '.')
+            text.pop_back();
+        after = text;
+    }
     change.after = value_text(after);
     change.json = after.dump();
     return change;
@@ -251,6 +267,9 @@ std::optional<SettingChange> plan_setting(const Settings& settings, const Settin
 Settings apply_setting(const Settings& settings, const SettingChange& change) {
     ordered_json root = ordered_json::parse(settings_json(settings));
     ordered_json* now = find_value(root, change.key);
+    if (!now && change.key.starts_with("machine.variables.") && root.contains("machine") &&
+        root.at("machine").contains("variables"))
+        now = &root.at("machine").at("variables")[change.key.substr(18)];
     if (!now)
         throw SettingsError("settings: " + change.key + ": no such setting");
     *now = ordered_json::parse(change.json);
@@ -344,10 +363,13 @@ std::string_view review_problem(std::string_view kind) {
 }
 
 namespace {
+// Rule 20's table, the engine's test first; a test with two guides opens
+// the first («Cómo se hace» of the temperature tower).
 constexpr std::pair<std::string_view, std::string_view> kTestGuides[] = {
-    {"temperature", "temperature_tower"}, {"max_flow", "max_flow"},   {"pressure_advance", "pressure_advance"},
-    {"flow", "flow"},                     {"retraction", "retraction"}, {"first_layer", "first_layer"},
-    {"dimensions", "dimensional"},
+    {"first_layer", "first_layer"},       {"temperature", "temperature_tower"}, {"temperature", "stringing_temperature"},
+    {"max_flow", "max_flow"},             {"pressure_advance", "pressure_advance"}, {"flow", "flow"},
+    {"retraction", "retraction"},         {"corners", "cornering"},             {"vibrations", "input_shaping"},
+    {"vfa", "vfa"},                       {"dimensions", "dimensional"},
 };
 } // namespace
 
@@ -373,12 +395,48 @@ std::vector<std::string> guides_missing(const std::vector<std::string>& before, 
     return out;
 }
 
-std::optional<GuideOutcome> guide_result(std::string_view id, const GuideInput& in) {
-    if (id == "max_flow") {
-        const double value = in.start + in.measured * in.step;
-        return GuideOutcome{value, value * 0.9};
-    }
+std::optional<GuideFormula> guide_formula(std::string_view id) {
+    // The nozzle temperature is the start G-code's [temperature] variable,
+    // the filament's (docs/CONFIG.md, machine.variables).
+    static constexpr std::pair<std::string_view, GuideFormula> table[] = {
+        {"temperature_tower", {"machine.variables.temperature", GuideMeasure::Value}},
+        {"stringing_temperature", {"machine.variables.temperature", GuideMeasure::Value}},
+        {"max_flow", {"extrusion.max_flow", GuideMeasure::Height}},
+        {"pressure_advance", {"extrusion.pressure_advance", GuideMeasure::Height}},
+        {"retraction", {"retraction.length", GuideMeasure::Height}},
+        {"cornering", {"machine.corner_speed", GuideMeasure::Height}},
+        {"flow", {"extrusion.flow", GuideMeasure::Value}},
+        {"cooling", {"cooling.min_layer_time", GuideMeasure::Value}},
+        {"overhang_angle", {"support.threshold_angle", GuideMeasure::Value}},
+        {"supports", {"support.z_gap", GuideMeasure::Layers}},
+        {"vfa", {"speed.outer_wall", GuideMeasure::Value}},
+    };
+    for (const auto& [guide, formula] : table)
+        if (guide == id)
+            return formula;
     return std::nullopt;
+}
+
+double band_value(double start, double step, double band, double height) {
+    return start + step * std::floor(height / (band > 0.0 ? band : 1.0) + 1e-9);
+}
+
+std::optional<GuideOutcome> guide_result(std::string_view id, const GuideInput& in, double layer_height) {
+    const std::optional<GuideFormula> f = guide_formula(id);
+    if (!f)
+        return std::nullopt;
+    switch (f->measure) {
+    case GuideMeasure::Height: {
+        const double value = band_value(in.start, in.step, in.band, in.measured);
+        // The low end of the guide's 10 to 20 % margin.
+        return GuideOutcome{value, id == "max_flow" ? value * 0.9 : value};
+    }
+    case GuideMeasure::Layers:
+        return GuideOutcome{in.measured, in.measured * layer_height};
+    case GuideMeasure::Value:
+        break;
+    }
+    return GuideOutcome{in.measured, in.measured};
 }
 
 } // namespace tisma::ui

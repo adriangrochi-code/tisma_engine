@@ -695,9 +695,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   dos grupos, la página de cada guía con «Basado en» al pie, «Cómo se hace» en la página de calibraciones y en la
   sección Calibración de la impresora, el aviso de la prueba que va antes (regla 22, AS16), el resultado de Flujo
   máximo con Aplicar (AS17) y el aviso de que el resultado va en la impresora (regla 23); los enlaces «¿Cómo lo
-  arreglo?» desde los avisos (regla 9) y las preferencias `assistant.*`. Falta: las fórmulas de las demás guías y
-  los tipos exactos de `calibrations.json` (preguntados al equipo de especificaciones), mandar el comando del
-  firmware con la impresora conectada (AS18), el orden de las guías en el tutorial `new_material` (regla 24), los
+  arreglo?» desde los avisos (regla 9) y las preferencias `assistant.*`. Sexto paso (2026-10-27): las cuentas de la
+  tabla de la regla 23 para todas las guías (franja, valor leído, capas), inicio, paso y franja tomados de la última
+  prueba generada, el valor propuesto editable y la relación guía-prueba de la regla 20 (AS20 a AS22; ficha en
+  `spec/next` 7c5cfca). Falta: guardar las fechas por guía en los perfiles de impresora y filamento (hoy en las
+  preferencias, por impresora y prueba), mandar el comando del firmware con la impresora conectada (AS18), el orden de las guías en el tutorial `new_material` (regla 24), los
   avisos de la revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
   hecho en el lector pero sin datos en inglés) y las anclas de Ingeniería por paso (hoy todas iluminan la pestaña
   Análisis)
