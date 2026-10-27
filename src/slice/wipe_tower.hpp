@@ -58,6 +58,10 @@ inline constexpr int kPrimeLines = 5;
 struct WipeTowerLayer {
     std::vector<std::vector<Toolpath>> blocks; // one per change of the layer, in order
     std::vector<Toolpath> shell;               // the brim, the outline and the fill
+    // With wipe_tower.no_sparse_layers (rule 11) only the first layer and
+    // those with a change have the tower, each on the one before: its top
+    // lies this far under the layer's, where the nozzle goes down to it.
+    double drop = 0.0;
 };
 
 struct WipeTower {

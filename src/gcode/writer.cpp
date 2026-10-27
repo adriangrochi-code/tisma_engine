@@ -985,6 +985,11 @@ public:
         height_ = height;
     }
 
+    // The wipe tower under the layer's top (multi_extruder.md, rule 11): the
+    // extrusions that follow are this far down, as thick as the layer; 0:
+    // at the layer's top again.
+    void set_drop(double drop) { drop_ = drop; }
+
     // Above the layer's top the nozzle travels this high (Z anti-aliasing that
     // raises paths, docs/ZAA.md), so it clears them.
     void set_clearance(double clearance) { clearance_ = clearance; }
@@ -1042,7 +1047,9 @@ public:
                 type(was);
         };
         user(before);
-        layer_z_pending_ = !keep_z && ramp_tan_ > 0.0 && lift_ > 0.0 && known_ && !resync_ && !commands(after) && !descend_;
+        layer_z_pending_ = !keep_z && ramp_tan_ > 0.0 && lift_ > 0.0 && known_ && !resync_ && !commands(after) && !descend_ &&
+                           !on_tower_;
+        on_tower_ = false; // the move up to the layer leaves the tower
         if (!keep_z && !layer_z_pending_ && !descend_)
             move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed), {}, {}, "simple layer change");
         first_travel_ = true;
@@ -1210,6 +1217,15 @@ public:
             x_value_ = p.x, y_value_ = p.y;
             return;
         }
+        // Down on the wipe tower (rule 11): straight back up first, clear of the part.
+        if (on_tower_ && !(drop_ > 0.0)) {
+            retract(0.0);
+            const double up = written(z_value_ + clearance_);
+            move("G1", std::nullopt, std::nullopt, up, std::nullopt, z_feed(feed), {}, {}, "lift");
+            other_time_ += (up - z_now_) / z_feed(feed);
+            z_now_ = up;
+            on_tower_ = false;
+        }
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
         TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan* plan = ready ? planned : &own;
@@ -1262,7 +1278,9 @@ public:
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
         // as thick as what is left down to the layer's bottom, by the Z written.
-        const double z_layer = written(z_value_), z_from = written(z_value_ + from.dz), z_to = written(z_value_ + to.dz);
+        const double z_layer = written(z_value_ - drop_), z_from = written(z_value_ - drop_ + from.dz),
+                     z_to = written(z_value_ - drop_ + to.dz);
+        on_tower_ = drop_ > 0.0;
         if (z_now_ != z_from) {
             move("G1", std::nullopt, std::nullopt, z_from, std::nullopt, feed, {}, {}, z_from > z_now_ ? "lift" : "lower");
             z_now_ = z_from;
@@ -1313,7 +1331,7 @@ public:
     // gcode.resolution of.
     void arc(std::span<const ToolpathPoint> points, const ArcRun& a, double feed) {
         start_extrusion();
-        const double z_layer = written(z_value_);
+        const double z_layer = written(z_value_ - drop_);
         if (z_now_ != z_layer) {
             move("G1", std::nullopt, std::nullopt, z_layer, std::nullopt, feed, {}, {}, z_layer > z_now_ ? "lift" : "lower");
             z_now_ = z_layer;
@@ -1752,6 +1770,8 @@ private:
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
     double tower_e_ = 0.0;   // mm of filament laid on the wipe tower
+    double drop_ = 0.0;      // mm the extrusions lie under the layer's top (the wipe tower's)
+    bool on_tower_ = false;  // the nozzle is down on the wipe tower
     bool tower_ = false;     // the current type is the wipe tower's
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
     double z_now_ = 0.0;     // the nozzle's Z as written: off the layer's top with Z anti-aliasing
@@ -2466,6 +2486,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         int label = kKeepLabel;
         // The extruder that lays it (multi_extruder.md); 0: whichever is printing.
         int tool = 0;
+        // How far under the layer's top it lies (the wipe tower's, rule 11).
+        double drop = 0.0;
     };
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
@@ -2748,6 +2770,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const std::size_t first_step = steps.size();
             for (const Toolpath& t : paths)
                 lay(t, "Wipe tower", speed(s.infill_speed));
+            for (std::size_t k = first_step; k < steps.size(); ++k)
+                steps[k].drop = tower_layer->drop;
             if (labels != Labels::None && label_now != -1)
                 for (std::size_t k = first_step; k < steps.size(); ++k)
                     if (steps[k].type) {
@@ -3101,6 +3125,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 p.type = st.type;
                 p.feed = feed;
                 p.tool = st.tool;
+                p.drop = st.drop;
                 if (first) {
                     p.path.retract = st.path.retract;
                     p.from = st.from;
@@ -3282,6 +3307,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 g.progress_mark();
             // A vase's turn starts where the one below ended: no travel, unless
             // the user's G-code moved the head.
+            g.set_drop(step.drop);
             if (!turn || g.lost())
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract, step.type);

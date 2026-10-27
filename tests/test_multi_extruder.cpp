@@ -506,6 +506,20 @@ TEST_CASE("wipe tower: the change over the tower, sparse up to the last change (
     const std::size_t move = text.rfind("\nG1 X", change);
     REQUIRE(move != std::string::npos);
     CHECK(std::atof(text.c_str() + move + 5) >= 180.0);
+    // Without sparse layers: only the first layer and the change's; the
+    // nozzle goes down to the tower's second layer, at Z 0.4, and back up.
+    Settings no_sparse = tower_base(true);
+    no_sparse.wipe_tower_no_sparse_layers = true;
+    const std::string compact = gcode_of(stacked(), no_sparse);
+    const TowerTrace c = tower_of(trace(compact));
+    CHECK(c.length.count(0));
+    for (int l = 1; l <= 24; ++l)
+        CHECK(c.length.count(l) == 0);
+    REQUIRE(c.length.count(25));
+    const std::size_t down = compact.find("\nG1 Z0.400", compact.find("\nT1\n"));
+    REQUIRE(down != std::string::npos);
+    CHECK(down < compact.find(";LAYER_CHANGE", compact.find("\nT1\n")));
+    CHECK(compact.find("\nG1 Z5.200", down) < compact.find(";LAYER_CHANGE", compact.find("\nT1\n")));
     // A tower that would stand on the part is refused.
     Settings over = tower_base(true);
     over.wipe_tower_x = 95.0;

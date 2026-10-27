@@ -281,7 +281,7 @@ struct Settings {
     // (degrees about the corner), how wide, its brim, the longest span of its
     // lines over the sparse layers, the cone at its base (read; not measured,
     // not applied), its lines' spacing and flow (%), no tower on the layers
-    // without a change (read; not applied yet), and the purge between each
+    // without a change (the nozzle goes down to it), and the purge between each
     // pair of filaments, mm3 (row: from, column: to; empty: 140 between
     // different ones). extruder_wipe_tower prints the tower where no change
     // does (0: whichever is printing).

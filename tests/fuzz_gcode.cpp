@@ -402,6 +402,7 @@ int main(int argc, char** argv) {
                 s.wipe_tower_bridging = uni(3, 15);
                 s.wipe_tower_extra_spacing = uni(80, 200);
                 s.wipe_tower_extra_flow = uni(80, 200);
+                s.wipe_tower_no_sparse_layers = pick(3) == 0;
                 s.purge_multiplier = {uni(30, 150)};
                 if (pick(2) == 0)
                     s.purge_volumes = {{0, uni(0, 300), uni(0, 300)}, {uni(0, 300), 0, uni(0, 300)}, {uni(0, 300), uni(0, 300), 0}};

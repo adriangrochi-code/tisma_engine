@@ -444,7 +444,7 @@ Va en el perfil de impresión.
 | `cone_angle` | número | 0 | 0 a 90 | Base en cono (regla 14): se lee y se guarda; la ficha no lo midió y el motor no la hace |
 | `extra_spacing` | número | 100 | 50 a 500 | Separación de las líneas de la torre, en % de su ancho: más, torre más honda |
 | `extra_flow` | número | 100 | 50 a 500 | Ancho de las líneas de la torre, en % del de las paredes: más, menos largo para el mismo volumen |
-| `no_sparse_layers` | booleano | `false` | | Sin torre en las capas sin cambio (regla 11): se lee y se guarda; todavía no se aplica (las capas ralas se imprimen) |
+| `no_sparse_layers` | booleano | `false` | | Sin torre en las capas sin cambio (regla 11, ME7): la torre tiene solo la primera capa y las de un cambio, cada una sobre la anterior; en una capa con cambio, la boquilla viaja a la torre a la altura de la capa, baja hasta la torre y, al terminar ahí, sube derecho antes de volver a la pieza. Cuidado: baja al lado de la pieza |
 | `purge_volumes` | número o lista de listas | 140 entre distintos, 0 en la diagonal | 0 a 10000 | Cuánto purgar al pasar de un filamento a otro, en mm³: un número para todos los pares distintos, o una fila por extrusor que sale con una columna por el que entra. Se multiplica por `extrusion.purge_multiplier` del que entra |
 
 ### `compute`

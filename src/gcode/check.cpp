@@ -180,6 +180,7 @@ private:
         };
         if (c.starts_with("TYPE:")) {
             custom_ = c.substr(5) == "Custom";
+            tower_ = c.substr(5) == "Wipe tower";
         } else if (c == "LAYER_CHANGE") {
             ++out_.stats.layers;
             awaiting_z_ = true;
@@ -414,7 +415,13 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("extrudes while the filament is retracted");
-            const bool at_layer = layer_z_ && known_[2];
+            // The wipe tower down under the layer (rule 11): anywhere from the
+            // bed up to the layer, as thick as the layer.
+            const bool lowered = tower_ && limits_.tower_below;
+            const bool at_layer = layer_z_ && known_[2] && !lowered;
+            if (lowered && layer_z_ && known_[2] && std::max(position_[2], to[2]) > *layer_z_ + kPositionSlack)
+                problem("extrudes the wipe tower at Z" + text(std::max(position_[2], to[2])) + ", above the layer's Z" +
+                        text(*layer_z_));
             if (at_layer) {
                 const double h = height_.value_or(0.0);
                 // Off the layer's Z (Z anti-aliasing) the bound comes from the
@@ -541,6 +548,7 @@ private:
     std::size_t tool_ = 0;        // the extruder printing, from 0
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
     bool tool_back_ = false;      // the tool came back from a change: its own extra
+    bool tower_ = false;          // in the wipe tower's lines
     bool awaiting_z_ = false;
     bool new_object_ = false; // after ;NEXT_OBJECT, until the next object's first ;Z:
     std::optional<double> layer_z_, height_, width_;
@@ -659,6 +667,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     limits.restart_extra = s.restart_extra * e_scale;
     limits.wipe = s.wipe;
     limits.firmware_retraction = s.firmware_retraction;
+    limits.tower_below = s.wipe_tower && s.wipe_tower_no_sparse_layers;
     if (s.extruders > 1) {
         for (int e = 0; e < s.extruders; ++e) {
             limits.toolchange_length.push_back(per_extruder(s.toolchange_length, std::size_t(e), 10.0) * e_scale);

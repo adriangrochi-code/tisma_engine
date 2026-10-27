@@ -29,6 +29,9 @@ struct GcodeLimits {
     // retraction and the extra when the tool comes back, by extruder from 0;
     // empty with one extruder.
     std::vector<double> toolchange_length, toolchange_restart_extra;
+    // The wipe tower without sparse layers (rule 11): its extrusions may lie
+    // under the layer's Z, as thick as the layer.
+    bool tower_below = false;
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
     // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3

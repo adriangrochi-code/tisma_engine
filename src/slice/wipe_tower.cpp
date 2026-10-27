@@ -197,8 +197,16 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
             tower.outline.push_back({to_units(p.p.x), to_units(p.p.y)});
     }
     tower.layers.resize(last + 1);
+    double top = model.layers.front().bottom; // the tower's top so far
     for (std::size_t l = 0; l <= last; ++l) {
         WipeTowerLayer& layer = tower.layers[l];
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        if (s.wipe_tower_no_sparse_layers) {
+            if (l > 0 && counts[l].empty())
+                continue; // no change: no tower on this layer
+            top += h;
+            layer.drop = std::max(0.0, model.layers[l].top - top);
+        }
         double y = f.w;
         for (const int n : counts[l]) {
             layer.blocks.push_back({place(f.lines(y, n))});
