@@ -3,8 +3,10 @@
 **Qué hace:** imprime un voladizo sin soporte con arcos concéntricos que crecen desde el borde apoyado. Cada arco
 apoya en el anterior, así que el voladizo se sostiene solo, aunque sea plano.
 
-**Fase:** después de F5. Es la idea conocida como «arc overhang» (Steven McCulloch, 2023), descrita en sus
-publicaciones; su código no se usa.
+**Basado en:** Arc Overhang, de Steven McCulloch (GPL-3.0), `https://github.com/stmcculloch/arc-overhang`. Se toma
+la idea, descrita en sus publicaciones de 2023; su código no se usa.
+
+**Fase:** después de F5.
 
 ## Ajustes
 

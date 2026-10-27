@@ -13,8 +13,8 @@ guías que entregó.
 **Datos:**
 - vienen en `knowledge.tar.xz` del paquete libre (`profile_pack.md`, regla 21);
 - su formato está en `docs/KNOWLEDGE.md` del repositorio de perfiles;
-- son texto propio escrito a partir de las guías de Rafa Barajas (`https://www.rafabarajas.com`): problemas,
-  materiales, glosario y tablas de parámetros y secado.
+- están basados en las guías de Rafa Barajas (`https://www.rafabarajas.com`), sin copiar su texto: problemas,
+  materiales, glosario y tablas de parámetros y secado. Se acreditan «Basado en…» (`credits.md`, regla 2).
 
 **Diseño propio:** ningún laminador tiene este asistente; las reglas son de esta ficha.
 
