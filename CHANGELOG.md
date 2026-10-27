@@ -29,6 +29,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   hueco redondeado, con barras interiores que se sostienen solas; el motor acepta agujeros de drenaje. Los soportes
   y la base vienen activados, como en Tisma Slicer. El peso y el costo de la resina salen del frasco
   (`resin.bottle_*`).
+- **Relleno ondulado entrelazado** (ficha `interlock_infill.md`; `infill.waves`, en Impresión › Relleno › Relleno
+  ondulado): el relleno poco denso sube y baja como un cartón de huevos, igual en cada capa, para que las capas
+  encajen en vez de apoyarse en planos lisos. Funciona con cualquier patrón.
+- **Impresoras de cinta** (ficha `belt_printer.md`; grupo `belt`, en Impresora › Máquina › Impresora de cinta): para
+  impresoras con el pórtico inclinado sobre una cinta (BlackBelt, Creality CR-30, IdeaFormer IR3). Se lamina en
+  planos paralelos al pórtico y el G-code va en los ejes de la máquina, con la cinta en Z o en Y; la vista previa
+  muestra la pieza sobre la cinta con las capas inclinadas.
 - **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
   en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
   cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba

@@ -277,6 +277,9 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
 - **`slice/variable_layers.*`:** la altura variable por Z (`docs/VARIABLE_LAYERS.md`): planea la pila de capas con
   la lista de tramos, la pendiente (escalón máximo) y las subcapas de la altura por zona, y cuenta las pieles en capas
   gruesas.
+- **`slice/belt.*`:** las impresoras de cinta (`belt_printer.md`): la pieza girada sobre X para que los planos del
+  pórtico queden planos, el paso del G-code a los ejes de la máquina al final de `write_gcode` y la vista previa con
+  la pieza sobre la cinta. `slice_model` lamina la pieza girada; el verificador hace la cuenta inversa.
 - **`device/`:** las impresoras conectadas (`docs/DEVICE.md`): la interfaz `Printer`, el puerto serie, el host de
   G-code por USB en su propio hilo y la impresora simulada de las pruebas.
 

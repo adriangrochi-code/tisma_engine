@@ -823,6 +823,15 @@ Con el PR #23 (2026-10-26):
       (`machine.technology`): el panel con solo los ajustes de resina, laminar, la vista previa con los contornos de
       cada capa, exportar `.goo` y las dos calibraciones de resina en Calibrar. Faltan las uniones entre pilares a
       `resin.support_critical_angle` (los pilares bajan rectos) y poner los drenajes desde la interfaz
+- [x] Punto 5 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27): lo propio de Tisma.
+  - [x] los arcos en voladizos (S1) y el relleno denso (`dense_infill.md`), hechos antes;
+  - [x] el relleno ondulado entrelazado (`interlock_infill.md`, IL1; hecho 2026-10-27): `infill.waves`, el relleno
+    poco denso sobre el cartón de huevos `a · sin(2πX/λ) · sin(2πY/λ)`, con las herramientas del relleno ondulado
+    (N1) para apagarlo cerca de paredes y relleno sólido y seguir el espesor real;
+  - [x] las impresoras de cinta (`belt_printer.md`, B1 a B3; hecho 2026-10-27): `belt.*`, la pieza girada sobre X,
+    laminada como en una cama y su G-code pasado a los ejes de la máquina; el verificador lo devuelve a los planos de
+    corte, y la vista previa de la interfaz muestra la pieza sobre la cinta. Falta que el visor dibuje el alto del
+    cordón perpendicular a la capa inclinada (hoy va vertical, y la cara lateral se ve con huecos)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

@@ -6127,3 +6127,33 @@ la imagen de una capa como imagen (la vista previa muestra contornos).
 **Sigue:** subir R2, R3a y R3b cuando pase la verificación de Linux; después, el punto 5 del orden (lo propio de
 Tisma) y la interfaz P1.
 
+## 2026-10-27 — Punto 5: relleno ondulado entrelazado e impresoras de cinta
+
+**Hecho:**
+- Relleno ondulado entrelazado (ficha `interlock_infill.md`): `infill.waves`, `infill.wave_amplitude` (50 % de la
+  altura de capa) e `infill.wave_length` (10 mm), en Impresión › Relleno › Relleno ondulado. El relleno poco denso va
+  sobre `a · sin(2πX/λ) · sin(2πY/λ)` con X e Y de la cama, la misma fase en todas las capas. Usa lo del relleno
+  ondulado (N1): la onda se apaga cerca de las paredes y del relleno sólido, y el material sigue el espesor real hasta
+  la capa de abajo; vale con cualquier patrón. No va con `infill.nonplanar`, `gcode.arcs`, el modo espiral, las capas
+  curvas ni la cinta (un error lo dice).
+- Impresoras de cinta (ficha `belt_printer.md`): `belt.enabled`, `belt.angle` y `belt.belt_is_z`, en Impresora ›
+  Máquina › Impresora de cinta. La pieza se gira sobre X para que los planos paralelos al pórtico queden planos
+  (`s = y · sin α + z · cos α`), se lamina como siempre y el G-code pasa al final a los ejes de la máquina: la cinta
+  a `s / sin α`, el pórtico a `z / sin α`; `;Z:` sigue llevando `s`. El verificador del G-code hace la cuenta inversa
+  y revisa las capas como en una cama; la cama solo limita X. En la cinta, soportes, balsa, borde, torre de purga,
+  impresión secuencial, modo espiral, arcos, capas curvas y ondas son un error; la falda no se imprime. La vista previa
+  de la interfaz lee el G-code y devuelve la pieza a donde está sobre la cinta, con las capas inclinadas.
+
+**Medido:**
+- IL1 (cubo de 20 × 20 × 10 mm en X 100, Y 100): capa 11, 633 puntos del relleno, error mediano 0,000 mm, el 90 %
+  por debajo de 0,016 mm, de −0,096 a +0,100; capa 12, el 90 % por debajo de 0,020 mm, de −0,098 a +0,100 (Tisma
+  Slicer: 0,001, 0,036, de −0,094 a +0,1).
+- B1 (α 45°, cinta en Z): 106 capas; capa 11, Z 3,111 e Y de 0,325 a 4,075; capa 53, Z 14,991; Y máximo 14,129;
+  los mismos números que Tisma Slicer. X de 90,217 a 109,9 (Tisma: 90,1 a 109,9). B2 (cinta en Y): lo mismo con Y y
+  Z cambiados. B3 (α 30°): 93 capas, capa 11 en Z 4,4, Y máximo 19,988, como Tisma.
+- La vista previa de la cinta, comprobada con una captura de la interfaz.
+
+**No hecho:** el visor dibuja el alto de cada cordón en vertical; con las capas inclinadas de la cinta, la cara
+lateral de la pieza se ve con huecos entre capas.
+
+**Sigue:** subir R3b y el punto 5 cuando pase la verificación de Linux; después, la interfaz P1.
