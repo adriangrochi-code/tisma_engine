@@ -65,6 +65,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Las etiquetas de las velocidades en voladizos tenían un «%» que la prueba de textos leía como formato.
 - El verificador del G-code rechazaba un G-code válido cuando una velocidad nueva (puentes, relleno de huecos, sobre
   los puentes, relleno de la primera capa) era más rápida que todas las demás.
 
