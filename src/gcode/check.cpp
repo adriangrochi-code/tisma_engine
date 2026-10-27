@@ -286,7 +286,7 @@ private:
         };
         at(pulled_, tool_) = retracted_;
         tool_ = std::size_t(n);
-        retracted_ = at(pulled_, tool_);
+        retracted_ = limits_.mmu ? 0.0 : at(pulled_, tool_);
         at(pulled_, tool_) = 0.0;
         target_ = retracted_;
         tool_back_ = retracted_ > 1e-9;
@@ -668,6 +668,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     limits.wipe = s.wipe;
     limits.firmware_retraction = s.firmware_retraction;
     limits.tower_below = s.wipe_tower && s.wipe_tower_no_sparse_layers;
+    limits.mmu = s.single_extruder_mmu;
     if (s.extruders > 1) {
         for (int e = 0; e < s.extruders; ++e) {
             limits.toolchange_length.push_back(per_extruder(s.toolchange_length, std::size_t(e), 10.0) * e_scale);
@@ -675,9 +676,10 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         }
         // Each nozzle's offset comes off its X and Y (rule 8).
         double off_lo[2] = {0.0, 0.0}, off_hi[2] = {0.0, 0.0};
-        for (const auto& o : s.extruder_offset)
+        for (int e = 0; e < s.extruders; ++e)
             for (int a = 0; a < 2; ++a)
-                off_lo[a] = std::min(off_lo[a], o[std::size_t(a)]), off_hi[a] = std::max(off_hi[a], o[std::size_t(a)]);
+                off_lo[a] = std::min(off_lo[a], extruder_offset_of(s, std::size_t(e))[std::size_t(a)]),
+                off_hi[a] = std::max(off_hi[a], extruder_offset_of(s, std::size_t(e))[std::size_t(a)]);
         limits.min_x -= off_hi[0], limits.max_x -= off_lo[0];
         limits.min_y -= off_hi[1], limits.max_y -= off_lo[1];
     }

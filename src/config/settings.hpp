@@ -277,6 +277,12 @@ struct Settings {
     // One extruder that changes filaments (an MMU): a change purges the
     // filament (rule 12).
     bool single_extruder_mmu = false;
+    // The MMU's change on the wipe tower (rule 15), mm: its cooling tube
+    // (how long, how far from the nozzle), where a filament parks, and the
+    // correction of the load; more motor current during the swap (read).
+    double mmu_cooling_tube_length = 5.0, mmu_cooling_tube_position = 91.5;
+    double mmu_parking_position = 92.0, mmu_extra_loading_move = -2.0;
+    bool mmu_high_current_on_swap = false;
     // The wipe tower (rules 9 to 14): where (its corner, mm), turned how much
     // (degrees about the corner), how wide, its brim, the longest span of its
     // lines over the sparse layers, the cone at its base (read; not measured,
@@ -480,6 +486,17 @@ struct Settings {
     // What a change purges on the wipe tower at least before it purges into
     // objects (rule 13), mm3, by extruder.
     std::vector<double> min_purge_on_tower{0.0};
+    // The filament in an MMU's change (rule 15): its loading and unloading
+    // speeds (the start's and the rest's, mm/s), the cooling moves in the
+    // tube (how many, the filament's speed at the first and the last, mm/s),
+    // the ramming's flow at each quarter of a second before unloading
+    // (mm3/s), the wait after unloading, and the times the load and the
+    // unload take for the estimate (s).
+    double loading_speed = 28.0, loading_speed_start = 3.0, unloading_speed = 90.0, unloading_speed_start = 100.0;
+    int cooling_moves = 4;
+    double cooling_initial_speed = 2.2, cooling_final_speed = 3.4;
+    std::vector<double> ramming{7.0, 7.4, 7.8, 8.2, 8.6, 9.0, 9.4, 9.8, 10.2, 10.6, 11.0};
+    double toolchange_delay = 0.0, load_time = 0.0, unload_time = 0.0;
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;
@@ -580,7 +597,8 @@ Settings silent_settings(const Settings& settings);
 // A value of a list by extruder (from 0): a shorter list repeats its last
 // value; an empty one gives `fallback`.
 double per_extruder(const std::vector<double>& values, std::size_t extruder, double fallback = 0.0);
-// Extruder `extruder`'s nozzle offset (machine.extruder_offset), mm.
+// Extruder `extruder`'s nozzle offset (machine.extruder_offset), mm; none
+// with a single-extruder MMU, which has one nozzle.
 std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t extruder);
 
 // The settings a filament may give its own value of (retraction_travel.md,

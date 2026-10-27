@@ -72,6 +72,11 @@ inline constexpr int kPrimeLines = 5;
 struct WipeTowerLayer {
     std::vector<std::vector<Toolpath>> blocks; // one per change of the layer, in order
     std::vector<Toolpath> shell;               // the brim, the outline and the fill
+    // With a single-extruder MMU (rule 15), before each block: the leaving
+    // filament's ramming, lines 1.5 walls wide in pieces of a quarter of a
+    // second, each at its feed (mm/s) for extrusion.ramming's flow.
+    std::vector<std::vector<Toolpath>> ramming;
+    std::vector<std::vector<double>> ramming_feed;
     // With wipe_tower.no_sparse_layers (rule 11) only the first layer and
     // those with a change have the tower, each on the one before: its top
     // lies this far under the layer's, where the nozzle goes down to it.

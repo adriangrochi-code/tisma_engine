@@ -32,6 +32,9 @@ struct GcodeLimits {
     // The wipe tower without sparse layers (rule 11): its extrusions may lie
     // under the layer's Z, as thick as the layer.
     bool tower_below = false;
+    // A single-extruder MMU (rule 15): the change's G-code unloads and loads
+    // the filament; the new one comes with its tip at the nozzle.
+    bool mmu = false;
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
     // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3

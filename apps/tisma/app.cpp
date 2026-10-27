@@ -767,7 +767,15 @@ const char* row_key(T label) {
         {T::WipeTowerSpacing, "wipe_tower.extra_spacing"}, {T::WipeTowerFlow, "wipe_tower.extra_flow"},
         {T::WipeTowerCone, "wipe_tower.cone_angle"}, {T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers"},
         {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"},
-        {T::MinPurgeOnTower, "extrusion.min_purge_on_tower"}};
+        {T::MinPurgeOnTower, "extrusion.min_purge_on_tower"}, {T::CoolingTubeLength, "mmu.cooling_tube_length"},
+        {T::CoolingTubePosition, "mmu.cooling_tube_position"}, {T::ParkingPosition, "mmu.parking_position"},
+        {T::ExtraLoadingMove, "mmu.extra_loading_move"}, {T::HighCurrentOnSwap, "mmu.high_current_on_swap"},
+        {T::LoadingSpeed, "extrusion.loading_speed"}, {T::LoadingSpeedStart, "extrusion.loading_speed_start"},
+        {T::UnloadingSpeed, "extrusion.unloading_speed"}, {T::UnloadingSpeedStart, "extrusion.unloading_speed_start"},
+        {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
+        {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
+        {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
+        {T::UnloadTime, "extrusion.unload_time"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3146,6 +3154,28 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "mmu") {
+        // A single-extruder MMU's change (multi_extruder.md, rule 15).
+        mm(T::CoolingTubeLength, "mmu.cooling_tube_length", s.mmu_cooling_tube_length, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::CoolingTubePosition, "mmu.cooling_tube_position", s.mmu_cooling_tube_position, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::ParkingPosition, "mmu.parking_position", s.mmu_parking_position, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::ExtraLoadingMove, "mmu.extra_loading_move", s.mmu_extra_loading_move, -1000.0, 1000.0, "%.1f mm", 0.1f);
+        flag(T::HighCurrentOnSwap, "mmu.high_current_on_swap", s.mmu_high_current_on_swap);
+    } else if (id == "mmu_load") {
+        mm(T::LoadingSpeed, "extrusion.loading_speed", s.loading_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::LoadingSpeedStart, "extrusion.loading_speed_start", s.loading_speed_start, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::UnloadingSpeed, "extrusion.unloading_speed", s.unloading_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::UnloadingSpeedStart, "extrusion.unloading_speed_start", s.unloading_speed_start, 0.1, 1000.0, "%.1f mm/s",
+           0.1f);
+        whole(T::CoolingMoves, "extrusion.cooling_moves", s.cooling_moves, 0, 100);
+        mm(T::CoolingInitialSpeed, "extrusion.cooling_initial_speed", s.cooling_initial_speed, 0.1, 1000.0, "%.1f mm/s",
+           0.1f);
+        mm(T::CoolingFinalSpeed, "extrusion.cooling_final_speed", s.cooling_final_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        count(T::RammingRow, "extrusion.ramming", s.ramming.size());
+    } else if (id == "mmu_times") {
+        mm(T::ToolchangeDelay, "extrusion.toolchange_delay", s.toolchange_delay, 0.0, 1000.0, "%.1f s", 0.1f);
+        mm(T::LoadTime, "extrusion.load_time", s.load_time, 0.0, 1000.0, "%.1f s", 0.1f);
+        mm(T::UnloadTime, "extrusion.unload_time", s.unload_time, 0.0, 1000.0, "%.1f s", 0.1f);
     } else if (id == "wipe_tower") {
         // The wipe tower (multi_extruder.md, rules 9 to 14).
         flag(T::WipeTowerRow, "wipe_tower.enabled", s.wipe_tower);

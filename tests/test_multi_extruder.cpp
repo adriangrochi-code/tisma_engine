@@ -449,15 +449,16 @@ TEST_CASE("wipe tower: relative E only, and where it stands (ME6)", "[extruders]
     Settings more = tower_base(false);
     more.purge_volumes = {{0, 300}, {300, 0}};
     CHECK_THAT(at10(gcode_of(two_colours(), more))[3], WithinAbs(142.6, 0.05));
-    // A single-extruder MMU purges 140 mm3 a change: 30 lines of 58.8 mm.
+    // A single-extruder MMU rams (4 lines 0.6 mm apart), then purges 140 mm3
+    // a change: 30 lines of 58.8 mm.
     const std::string mmu_text = gcode_of(two_colours(), tower_base(true));
     const TowerTrace mmu = tower_box(mmu_text);
-    CHECK_THAT(mmu.layer_box.at(10)[3], WithinAbs(152.6, 0.05)); // Tisma Slicer: 154.4
+    CHECK_THAT(mmu.layer_box.at(10)[3], WithinAbs(155.0, 0.05)); // Tisma Slicer: 154.4
     const double per_layer = tower_of(trace(mmu_text)).length.at(10);
-    CHECK_THAT(per_layer, WithinAbs(30 * 58.8 + 29 * 0.4 + 2 * (59.6 + 12.4) + 7 * 0.0, 60.0)); // and a little fill
+    CHECK_THAT(per_layer, WithinAbs(2130.65, 1.0)); // Tisma Slicer: 2038.1
     Settings s = tower_base(true);
     s.purge_volumes = {{0, 300}, {300, 0}};
-    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(166.2, 0.05)); // 64 lines; Tisma: 169.4
+    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(168.6, 0.05)); // 64 lines; Tisma: 169.4
     s = tower_base(true);
     s.wipe_tower_width = 40.0;
     const std::array<double, 4> narrow = at10(gcode_of(two_colours(), s));
@@ -477,7 +478,7 @@ TEST_CASE("wipe tower: relative E only, and where it stands (ME6)", "[extruders]
     CHECK(tower_of(trace(gcode_of(two_colours(), s))).length.at(10) < 0.75 * per_layer);
     s = tower_base(true);
     s.purge_multiplier = {50.0};
-    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(146.6, 0.05)); // 15 lines; Tisma: 147.9
+    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(149.0, 0.05)); // 15 lines; Tisma: 147.9
 }
 
 TEST_CASE("wipe tower: the change over the tower, sparse up to the last change (ME7)", "[extruders][tower]") {
@@ -561,4 +562,42 @@ TEST_CASE("wipe tower: the purge goes into the objects' infill or the whole obje
     // At least extrusion.min_purge_on_tower on the tower first.
     s.min_purge_on_tower = {10000.0};
     CHECK_THAT(tower_at(infill, s), WithinAbs(plain, 0.5));
+}
+
+TEST_CASE("wipe tower: an MMU rams, unloads, cools and loads at each change (ME9)", "[extruders][tower]") {
+    const std::string text = gcode_of(two_colours(), tower_base(true));
+    const std::size_t change = text.find("\nT1\n");
+    REQUIRE(change != std::string::npos);
+    // The ramming before it: lines 0.6 wide on the tower, faster and faster.
+    const std::size_t ram = text.rfind(";WIDTH:0.600", change);
+    REQUIRE(ram != std::string::npos);
+    std::vector<double> feeds;
+    for (std::size_t at = text.find(" F", ram); at < text.find(";TYPE:Custom", ram); at = text.find(" F", at + 1))
+        feeds.push_back(std::atof(text.c_str() + at + 2));
+    REQUIRE(feeds.size() >= 5);
+    CHECK(feeds.back() > feeds.front() * 1.4);
+    // Out to the middle of the cooling tube (94 mm, with the travel's
+    // retraction), in four pieces; no retraction between the ramming's.
+    const std::size_t swap = text.rfind(";TYPE:Custom", change);
+    CHECK(text.find("G1 E-", ram) == text.rfind("G1 E-", swap));
+    const std::size_t last_ram = text.rfind("G1 E-", swap);
+    std::istringstream in(text.substr(last_ram, change - last_ram));
+    std::string line;
+    double out = 0.0, cooling = 0.0;
+    int cooled = 0;
+    while (std::getline(in, line)) {
+        if (line.rfind("G1 E-", 0) == 0)
+            out += -std::atof(line.c_str() + 4);
+        if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos) {
+            ++cooled;
+            cooling += std::atof(line.c_str() + line.find(" E") + 2);
+        }
+    }
+    CHECK_THAT(out, WithinAbs(94.0 + 10.0, 0.01)); // and the change's 10 mm retraction
+    CHECK(cooled == 8);                            // 4 moves out and back in the tube
+    CHECK_THAT(cooling, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(text, ContainsSubstring("G1 E-13.00000 F6000")); // the first 15 mm, 2 of them pulled already
+    // In: 90 mm, a fifth slowly, then fast, the last tenth slowly.
+    const std::string load = "\nT1\nG1 E18.00000 F180\nG1 E63.00000 F1680\nG1 E9.00000 F180\n";
+    CHECK(text.compare(change, load.size(), load) == 0);
 }

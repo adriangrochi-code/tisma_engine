@@ -5762,3 +5762,40 @@ Fuzzer con capas ralas o no: 400 corridas (semilla 44), 0 fallas. Suite: 543 pru
 Fuzzer con objetos que reciben la purga y mínimos: 300 corridas (semilla 45), 0 fallas.
 
 **Sigue:** 4c, la secuencia de la MMU (regla 15, ME9).
+
+## 2026-10-27 — Punto 4c: la MMU de un extrusor
+
+**Hecho** (ficha `multi_extruder.md`, regla 15): con `machine.single_extruder_mmu` y la torre, cada cambio:
+- comprime la punta con el filamento que sale: líneas de 0,6 mm (1,5 veces las paredes) sobre la torre, antes del
+  bloque de purga, un tramo por cada cuarto de segundo de `extrusion.ramming` a la velocidad de su caudal;
+- descarga hasta el medio del tubo de enfriamiento (`mmu.cooling_tube_position` más medio
+  `cooling_tube_length`): los primeros 15 mm a `unloading_speed_start`, lo del medio a `unloading_speed`, el último
+  cuarto más lento (lo que ya retrajo cuenta); espera `toolchange_delay` (`G4`);
+- enfría la punta con `cooling_moves` idas y vueltas de `cooling_tube_length`, el filamento de `cooling_initial_speed`
+  a `cooling_final_speed`, la boquilla a lo largo de la primera línea de purga mientras tanto;
+- retrae lo del cambio, escribe el fin del filamento, `gcode.toolchange`, `T<n>` y el inicio del nuevo, y carga
+  `parking_position` más `extra_loading_move` (un quinto lento, siete décimos rápido, el último décimo lento);
+- purga en la torre. Todo eso va como G-code propio del cambio (`;TYPE:Custom`); el verificador toma la punta del
+  filamento nuevo en la boquilla después del `T`. `load_time` y `unload_time` suman a la estimación.
+Con una MMU no se usan los desfases de boquilla (hay una sola). Un viaje que no se mueve (un camino que sigue donde
+terminó el anterior, como los tramos de la compresión) ya no retrae. En la interfaz: Impresora › MMU, Material ›
+Carga y descarga en la MMU y Tiempos del cambio; `docs/CONFIG.md`.
+
+**Medido** (ME9, dos colores con MMU y torre; entre paréntesis Tisma Slicer): la compresión a F 4900 a 5500 en la
+primera capa con cordón de 0,6 (F 3554 a 5385); la descarga `E-13` (15 menos los 2 de la retracción del viaje) a
+F6000, `E-55.5` a F5400, `E-15.67` a F2700 y `E-7.83` a F1620: 94 mm (`E-15`, `E-55.3`, `E-15.8`, `E-7.9`: 94); 4
+idas y vueltas `E5`/`E-5` a lo largo de 58,8 mm, de F1552 a F2399 (sobre 49,3 mm, de F1302 a F2013); `E-10`, `T1`;
+la carga `E18 F180`, `E63 F1680`, `E9 F180` (`E18 F180`, `E63`, `E9`: 90 mm). Con la compresión, la torre de ME6 llega
+a Y 155,0 (154,4), con 300 mm³ a 168,6 (169,4), con el multiplicador al 50 % a 149,0 (147,9); 2130,7 mm por capa
+(2038,1). La ficha muestra también `E2` antes de la retracción de cambio; el motor no lo escribe.
+
+**Corregido** (el fuzzer): con una MMU y desfases de boquilla, la primera línea después del cambio salía en diagonal;
+ahora una MMU no tiene desfases y, si los hubiera, la boquilla se mueve antes.
+
+Prueba nueva ME9 (`tests/test_multi_extruder.cpp`, 11 en total); fuzzer con MMU: 300 corridas (semilla 46), 0
+fallas.
+
+**No hecho:** la corriente del motor durante el cambio (`mmu.high_current_on_swap`, se lee); los ajustes de carga y
+descarga son uno para todos los filamentos (no por extrusor).
+
+**Sigue:** 4d, las vigas de entrelazado (regla 17, ME11).

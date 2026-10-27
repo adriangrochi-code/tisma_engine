@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **MMU de un extrusor** (ficha `multi_extruder.md`, en Impresora › MMU y Material › Carga y descarga en la MMU): cada
+  cambio comprime la punta sobre la torre, descarga el filamento hasta el tubo de enfriamiento, lo enfría con idas y
+  vueltas, cambia, carga el nuevo y purga.
 - **Torre de purga** (ficha `multi_extruder.md`, en Otros › Torre de purga): los cambios de herramienta se hacen sobre
   una torre al costado de la pieza, con su posición, giro, ancho y borde; con una MMU de un extrusor cada cambio purga
   el volumen que pide ese par de filamentos (`wipe_tower.purge_volumes`, por el multiplicador de cada filamento); con

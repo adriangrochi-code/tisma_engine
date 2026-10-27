@@ -760,6 +760,21 @@ Kinematics kinematics_of(const Settings& s) {
     return k;
 }
 
+// A single-extruder MMU's change (multi_extruder.md, rule 15): the old
+// filament out in pieces (mm, mm/s), the wait, its tip cooled in the tube by
+// moves of `tube` mm and back, the filament's speed going from `cool_from`
+// to `cool_to` (the head goes to `across` and back meanwhile, when known),
+// and the new filament loaded in pieces; the load and unload times add to
+// the estimate.
+struct MmuSwap {
+    std::vector<std::pair<double, double>> unload, load;
+    double delay = 0.0;
+    int cooling_moves = 0;
+    double tube = 0.0, cool_from = 0.0, cool_to = 0.0;
+    std::optional<Point2d> across;
+    double extra_time = 0.0;
+};
+
 class Emitter {
 public:
     explicit Emitter(const Settings& s)
@@ -806,6 +821,72 @@ public:
         pulled_.assign(std::size_t(std::max(s.extruders, 1)) + 1, 0.0);
     }
 
+    // An MMU's change (rule 15), as the user's G-code goes (;TYPE:Custom):
+    // the unloading, the wait, the cooling moves, the change's retraction
+    // and lines, the loading; the new filament's tip is then at the nozzle.
+    void swap(int next, double length, const std::string& lines, bool user, std::array<double, 2> offset,
+              const MmuSwap& mmu) {
+        const char* was = type_;
+        type("Custom");
+        const auto push = [&](double amount, double speed, const char* note, std::optional<Point2d> to = std::nullopt) {
+            e_ = relative_ ? amount : e_ + amount;
+            move("G1", to ? std::optional<double>(to->x) : std::nullopt, to ? std::optional<double>(to->y) : std::nullopt,
+                 std::nullopt, e_, speed, {}, {}, note);
+            if (to) {
+                x_value_ = to->x, y_value_ = to->y;
+            } else {
+                other_time_ += std::abs(amount) / speed;
+            }
+        };
+        double out = retracted_ ? retracted_amount_ : 0.0; // already pulled back
+        for (const auto& [amount, speed] : mmu.unload) {
+            const double take = std::max(0.0, amount - out);
+            out = std::max(0.0, out - amount);
+            if (take > 1e-9)
+                push(-take, speed, "unload");
+        }
+        if (mmu.delay > 0.0) {
+            text_ += "G4 S" + trimmed(mmu.delay, 3);
+            line_end("wait");
+            other_time_ += mmu.delay;
+        }
+        const Point2d home{x_value_, y_value_};
+        for (int k = 0; k < mmu.cooling_moves; ++k) {
+            const double v = mmu.cooling_moves > 1 ? mmu.cool_from + (mmu.cool_to - mmu.cool_from) * k / (mmu.cooling_moves - 1)
+                                                   : mmu.cool_from;
+            for (const double sign : {1.0, -1.0}) {
+                if (mmu.across) {
+                    // The head along the line, as long as the filament's move takes.
+                    const Point2d to = sign > 0.0 ? *mmu.across : home;
+                    const double d = std::hypot(to.x - x_value_, to.y - y_value_);
+                    const double head = d > 0.0 ? d * v / mmu.tube : v;
+                    push(sign * mmu.tube, head, "cool the tip", to);
+                    other_time_ += d > 0.0 ? d / head : mmu.tube / v;
+                } else {
+                    push(sign * mmu.tube, v, "cool the tip");
+                }
+            }
+        }
+        if (length > 0.0)
+            push(-length, retract_feed_, "retract for the tool change");
+        if (!lines.empty())
+            text_ += lines;
+        if (user)
+            resync();
+        const std::array<double, 2> before = offset_;
+        set_tool(next, offset);
+        if (known_ && !resync_ && offset != before)
+            move("G1", x_value_, y_value_, std::nullopt, std::nullopt, retract_feed_, {}, {}, "move the new nozzle over the point");
+        for (const auto& [amount, speed] : mmu.load)
+            push(amount, speed, "load");
+        other_time_ += mmu.extra_time;
+        retracted_ = false;
+        retracted_amount_ = 0.0;
+        tool_back_ = false;
+        if (was && std::string_view(was) != "Custom")
+            type(was);
+    }
+
     // The extruder printing (from 1; 0: the only one) and its nozzle's
     // offset, subtracted from every X and Y written (multi_extruder.md, rule 8).
     int tool() const { return tool_; }
@@ -823,9 +904,13 @@ public:
     // when it left and `restart` more (a tool not used yet: nothing). A
     // nozzle with another offset moves over the same point, at `feed`.
     void tool_change(int next, double length, double restart, const std::string& lines, bool user,
-                     std::array<double, 2> offset, double feed) {
+                     std::array<double, 2> offset, double feed, const MmuSwap* mmu = nullptr) {
         extruder_off();
         wiped_path_.clear();
+        if (mmu) {
+            swap(next, length, lines, user, offset, *mmu);
+            return;
+        }
         double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
         if (firmware_) {
             retract(0.0);
@@ -1228,6 +1313,10 @@ public:
             z_now_ = up;
             on_tower_ = false;
         }
+        // Already there (one path going on from where the last ended, like a
+        // ramming's pieces): no travel, no retraction.
+        if (!force_retract && p.x == x_value_ && p.y == y_value_ && z_now_ == written(z_value_ - drop_ + clearance_))
+            return;
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
         TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan* plan = ready ? planned : &own;
@@ -2187,6 +2276,28 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     const int initial_tool = tool_plan.initial;
     const std::array<bool, kMaxExtruders + 1>& tools_used = tool_plan.used;
     const WipeTower tower = plan_wipe_tower(model, s, tool_plan);
+    // A single-extruder MMU's change (rule 15; own design on the spec's
+    // ME9): out to the cooling tube's middle, the first 15 mm at the
+    // unloading's start speed, the last quarter slower (two thirds at half
+    // the speed, the rest at 30 %); in by the parking position and the
+    // correction, a fifth slowly, seven tenths fast, the last tenth slowly.
+    MmuSwap mmu_swap;
+    {
+        const double unload = s.mmu_cooling_tube_position + 0.5 * s.mmu_cooling_tube_length;
+        const double first = std::min(15.0, unload), tail = 0.25 * unload, middle = std::max(0.0, unload - first - tail);
+        mmu_swap.unload = {{first, s.unloading_speed_start},
+                           {middle, s.unloading_speed},
+                           {tail * 2.0 / 3.0, 0.5 * s.unloading_speed},
+                           {tail / 3.0, 0.3 * s.unloading_speed}};
+        const double load = std::max(0.0, s.mmu_parking_position + s.mmu_extra_loading_move);
+        mmu_swap.load = {{0.2 * load, s.loading_speed_start}, {0.7 * load, s.loading_speed}, {0.1 * load, s.loading_speed_start}};
+        mmu_swap.delay = s.toolchange_delay;
+        mmu_swap.cooling_moves = s.mmu_cooling_tube_length > 0.0 ? s.cooling_moves : 0;
+        mmu_swap.tube = s.mmu_cooling_tube_length;
+        mmu_swap.cool_from = s.cooling_initial_speed;
+        mmu_swap.cool_to = s.cooling_final_speed;
+        mmu_swap.extra_time = s.load_time + s.unload_time;
+    }
     // The extruders.* of each kind of fill (solid, top, bridge, gaps, sparse,
     // support, support interface).
     const int fill_tool[7] = {s.extruder_solid_infill, s.extruder_solid_infill, s.extruder_solid_infill,
@@ -2823,6 +2934,23 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const int tool = order[group_index];
             const bool first_group = group_index == 0;
             if (tower_layer && change_from[group_index] > 0 && next_block < tower_layer->blocks.size()) {
+                // An MMU's ramming first, by the leaving filament, each piece
+                // at its own feed (rule 15).
+                if (next_block < tower_layer->ramming.size()) {
+                    laying_tool = change_from[group_index];
+                    const std::vector<Toolpath>& ram = tower_layer->ramming[next_block];
+                    const std::size_t first_step = steps.size();
+                    for (std::size_t k = 0; k < ram.size(); ++k)
+                        lay(ram[k], "Wipe tower", tower_layer->ramming_feed[next_block][k]);
+                    for (std::size_t k = first_step; k < steps.size(); ++k)
+                        steps[k].drop = tower_layer->drop;
+                    if (labels != Labels::None && label_now != -1)
+                        for (std::size_t k = first_step; k < steps.size(); ++k)
+                            if (steps[k].type) {
+                                steps[k].label = label_now = -1;
+                                break;
+                            }
+                }
                 lay_tower(tower_layer->blocks[next_block++], tool);
                 if (!shell_laid) {
                     lay_tower(tower_layer->shell, tool);
@@ -3324,9 +3452,17 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const auto change_tool = [&] {
                 const int from = g.tool();
                 const auto [lines, user] = toolchange_text(from, step.tool, true);
+                // A single-extruder MMU unloads, cools and loads (rule 15);
+                // over the tower its cooling moves go along the first line.
+                std::optional<MmuSwap> swap;
+                if (s.single_extruder_mmu) {
+                    swap = mmu_swap;
+                    if (at_tower && step.path.points.size() > 1)
+                        swap->across = step.path.points[1].p;
+                }
                 g.tool_change(step.tool, per_extruder(s.toolchange_length, std::size_t(std::max(from - 1, 0)), 10.0),
                               per_extruder(s.toolchange_restart_extra, std::size_t(step.tool - 1)), lines, user,
-                              extruder_offset_of(s, std::size_t(step.tool - 1)), s.travel_speed);
+                              extruder_offset_of(s, std::size_t(step.tool - 1)), s.travel_speed, swap ? &*swap : nullptr);
             };
             if (change) {
                 if (label >= 0)

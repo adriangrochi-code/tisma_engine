@@ -206,15 +206,20 @@ struct Frame {
     Toolpath loop(double d) const {
         return path({{d, d}, {width - d, d}, {width - d, depth - d}, {d, depth - d}}, true);
     }
-    // `n` lines across the inside from y0, `spacing` apart, one zig-zag.
-    Toolpath lines(double y0, int n) const {
+    // `n` lines across the inside from y0, `gap` apart (the spacing), one
+    // zig-zag of beads `bead` wide (the tower's).
+    Toolpath lines(double y0, int n, double bead = 0.0, double gap = 0.0) const {
         Toolpath t;
+        if (!(bead > 0.0))
+            bead = w;
+        if (!(gap > 0.0))
+            gap = spacing;
         const double a = 1.5 * w, b = width - 1.5 * w;
         for (int k = 0; k < n; ++k) {
-            const double y = y0 + spacing * (k + 0.5);
+            const double y = y0 + gap * (k + 0.5);
             const bool forward = k % 2 == 0;
-            t.points.push_back({{forward ? a : b, y}, w});
-            t.points.push_back({{forward ? b : a, y}, w});
+            t.points.push_back({{forward ? a : b, y}, bead});
+            t.points.push_back({{forward ? b : a, y}, bead});
         }
         return t;
     }
@@ -237,6 +242,34 @@ struct Frame {
     }
 };
 
+// A path cut into consecutive pieces of these lengths (what is left of the
+// path past them is dropped).
+std::vector<Toolpath> cut(const Toolpath& path, const std::vector<double>& lengths) {
+    std::vector<Toolpath> pieces;
+    std::size_t k = 1;
+    Point2d at = path.points.empty() ? Point2d{} : path.points.front().p;
+    const double width = path.points.empty() ? 0.0 : path.points.front().width;
+    for (const double length : lengths) {
+        Toolpath piece;
+        piece.points.push_back({at, width});
+        double left = length;
+        while (left > 1e-9 && k < path.points.size()) {
+            const Point2d to = path.points[k].p;
+            const double d = std::hypot(to.x - at.x, to.y - at.y);
+            if (d <= left) {
+                at = to, left -= d, ++k;
+            } else {
+                at = {at.x + (to.x - at.x) * left / d, at.y + (to.y - at.y) * left / d};
+                left = 0.0;
+            }
+            piece.points.push_back({at, width});
+        }
+        if (piece.points.size() > 1)
+            pieces.push_back(std::move(piece));
+    }
+    return pieces;
+}
+
 } // namespace
 
 WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const ToolPlan& tools) {
@@ -256,8 +289,12 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
     const double line = f.width - 3.0 * f.w;
     if (!(line > f.w))
         return tower; // too narrow for anything inside
-    // Each change's lines: what its purge fills, or a few to prime.
-    std::vector<std::vector<int>> counts(last + 1);
+    // Each change's lines: what its purge fills, or a few to prime; with an
+    // MMU, the ramming's first (rule 15): beads 1.5 walls wide, each quarter
+    // of a second as long as its flow asks.
+    std::vector<std::vector<int>> counts(last + 1), ram_lines(last + 1);
+    std::vector<std::vector<std::vector<double>>> ram_lengths(last + 1), ram_feeds(last + 1);
+    const double ram_bead = 1.5 * s.wall_width;
     double deepest = kPrimeLines * f.spacing;
     for (std::size_t l = 0; l <= last; ++l) {
         const double h = model.layers[l].top - model.layers[l].bottom;
@@ -271,6 +308,20 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
             const int n = s.single_extruder_mmu ? std::max(0, int(std::ceil(volume / (f.w * h * line) - 1e-9))) : kPrimeLines;
             counts[l].push_back(n);
             used += n * f.spacing;
+            std::vector<double> lengths, feeds;
+            double total = 0.0;
+            if (s.single_extruder_mmu)
+                for (const double flow : s.ramming)
+                    if (flow > 0.0) {
+                        feeds.push_back(flow / (ram_bead * h));
+                        lengths.push_back(0.25 * feeds.back());
+                        total += lengths.back();
+                    }
+            const int rams = total > 0.0 ? int(std::ceil(total / line - 1e-9)) : 0;
+            ram_lines[l].push_back(rams);
+            ram_lengths[l].push_back(std::move(lengths));
+            ram_feeds[l].push_back(std::move(feeds));
+            used += rams * ram_bead;
         }
         deepest = std::max(deepest, used);
     }
@@ -304,9 +355,15 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
             layer.drop = std::max(0.0, model.layers[l].top - top);
         }
         double y = f.w;
-        for (const int n : counts[l]) {
-            layer.blocks.push_back({place(f.lines(y, n))});
-            y += n * f.spacing;
+        for (std::size_t b = 0; b < counts[l].size(); ++b) {
+            std::vector<Toolpath> ram;
+            for (Toolpath& piece : cut(f.lines(y, ram_lines[l][b], ram_bead, ram_bead), ram_lengths[l][b]))
+                ram.push_back(place(std::move(piece)));
+            layer.ramming.push_back(std::move(ram));
+            layer.ramming_feed.push_back(ram_feeds[l][b]);
+            y += ram_lines[l][b] * ram_bead;
+            layer.blocks.push_back({place(f.lines(y, counts[l][b]))});
+            y += counts[l][b] * f.spacing;
         }
         if (l == 0)
             for (int k = brim; k-- > 0;) // the brim from the outside in, to the tower

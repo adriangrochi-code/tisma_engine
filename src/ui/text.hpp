@@ -937,6 +937,25 @@
     X(PurgeVolumesRow, "Volúmenes de purga", "Purge volumes") \
     X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
     X(MinPurgeOnTower, "Purga mínima en la torre", "Minimum purge on the tower") \
+    X(SubMmu, "MMU", "MMU") \
+    X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
+    X(SubMmuTimes, "Tiempos del cambio", "Change times") \
+    X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \
+    X(CoolingTubePosition, "Posición del tubo de enfriamiento", "Cooling tube position") \
+    X(ParkingPosition, "Posición de estacionamiento", "Parking position") \
+    X(ExtraLoadingMove, "Corrección de la carga", "Loading correction") \
+    X(HighCurrentOnSwap, "Más corriente durante el cambio", "More current during the swap") \
+    X(LoadingSpeed, "Velocidad de carga", "Loading speed") \
+    X(LoadingSpeedStart, "Velocidad al empezar a cargar", "Loading start speed") \
+    X(UnloadingSpeed, "Velocidad de descarga", "Unloading speed") \
+    X(UnloadingSpeedStart, "Velocidad al empezar a descargar", "Unloading start speed") \
+    X(CoolingMoves, "Movimientos de enfriamiento", "Cooling moves") \
+    X(CoolingInitialSpeed, "Velocidad del primero", "First move's speed") \
+    X(CoolingFinalSpeed, "Velocidad del último", "Last move's speed") \
+    X(RammingRow, "Compresión antes de descargar", "Ramming before unloading") \
+    X(ToolchangeDelay, "Espera después de descargar", "Wait after unloading") \
+    X(LoadTime, "Tiempo de carga", "Load time") \
+    X(UnloadTime, "Tiempo de descarga", "Unload time") \
     X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \

@@ -135,7 +135,8 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         return ProfileKind::Printer;
     }
     // Every speed is the printer's (owner's decision, 2026-10-26).
-    if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed"))
+    if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed") ||
+        group == "mmu")
         return ProfileKind::Printer;
     // The lift's ramp is the printer's, like the lift; the route of the
     // travels is the print's (retraction_travel.md).

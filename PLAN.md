@@ -788,7 +788,9 @@ Con el PR #23 (2026-10-26):
     separación y flujo de sus líneas, el multiplicador de purga, el cambio sobre la torre y los errores (E absoluta,
     fuera de la cama, sobre la pieza), sin capas ralas (regla 11, la boquilla baja a la torre) y la purga en el
     relleno o el objeto (regla 13, ME8). Faltan el cono (regla 14, no medido) y marcar los objetos en la interfaz
-  - [ ] 4c, la MMU de un extrusor (regla 15, ME9)
+  - [x] 4c, la MMU de un extrusor (regla 15, ME9; hecho 2026-10-27): compresión, descarga, enfriamiento, carga y
+    purga sobre la torre, con el grupo `mmu` y los ajustes del filamento. Falta la corriente del motor durante el
+    cambio (se lee)
   - [ ] 4d, las vigas de entrelazado (regla 17, ME11) y las regiones pintadas (regla 18)
   - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12)
   - [ ] 4f, `multimaterial.md` (MM1 a MM6) y `color_mixing.md`

@@ -231,7 +231,18 @@ const std::vector<SectionLayout>& material_layout() {
             {"travel.slope", A},
             {"travel.max_lift", A},
             {"travel.lift_before_obstacle", A}}},
-          {"material_retraction", T::SubMaterialRetraction, {{"extrusion.retraction", A}}}}},
+          {"material_retraction", T::SubMaterialRetraction, {{"extrusion.retraction", A}}},
+          {"mmu_load", T::SubMmuLoad,
+           {{"extrusion.loading_speed", A},
+            {"extrusion.loading_speed_start", A},
+            {"extrusion.unloading_speed", A},
+            {"extrusion.unloading_speed_start", A},
+            {"extrusion.cooling_moves", A},
+            {"extrusion.cooling_initial_speed", A},
+            {"extrusion.cooling_final_speed", A},
+            {"extrusion.ramming", A}}},
+          {"mmu_times", T::SubMmuTimes,
+           {{"extrusion.toolchange_delay", A}, {"extrusion.load_time", A}, {"extrusion.unload_time", A}}}}},
         {"needs", T::SecNeeds, "section_needs.svg",
          {{"needs", T::SubNeeds, {{"extrusion.abrasive", N}, {"extrusion.needs_enclosure", N}}}}},
     };
@@ -264,7 +275,13 @@ const std::vector<SectionLayout>& printer_layout() {
             {"retraction.toolchange_length", A},
             {"retraction.toolchange_restart_extra", A},
             {"gcode.toolchange", A},
-            {"machine.single_extruder_mmu", A}}}}},
+            {"machine.single_extruder_mmu", A}}},
+          {"mmu", T::SubMmu,
+           {{"mmu.cooling_tube_length", A},
+            {"mmu.cooling_tube_position", A},
+            {"mmu.parking_position", A},
+            {"mmu.extra_loading_move", A},
+            {"mmu.high_current_on_swap", A}}}}},
         {"limits", T::SecLimits, "section_limits.svg",
          {{"speeds", T::SubSpeedLimits,
            {{"machine.max_feed_x", N},
@@ -537,6 +554,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumByKind);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
+    if (id == "mmu")
+        return s.single_extruder_mmu ? format(T::SumMm, number(s.mmu_parking_position).c_str()) : tr(T::SumOff);
+    if (id == "mmu_load")
+        return number(s.loading_speed, 0) + " / " + number(s.unloading_speed, 0) + " mm/s";
+    if (id == "mmu_times")
+        return number(s.toolchange_delay + s.load_time + s.unload_time, 1) + " s";
     if (id == "wipe_tower")
         return s.wipe_tower ? format(T::SumMm, number(s.wipe_tower_width).c_str()) : tr(T::SumOff);
     if (id == "wipe_tower_more")

@@ -221,7 +221,8 @@ double per_extruder(const std::vector<double>& values, std::size_t extruder, dou
 }
 
 std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t extruder) {
-    if (extruder >= settings.extruder_offset.size())
+    // A single-extruder MMU has one nozzle (multi_extruder.md): no offsets.
+    if (settings.single_extruder_mmu || extruder >= settings.extruder_offset.size())
         return {0.0, 0.0};
     return settings.extruder_offset[extruder];
 }
@@ -357,7 +358,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "sequential" || group == "extruders" || group == "wipe_tower" ||
+            group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -667,6 +668,25 @@ Settings parse_checked(std::string_view text) {
                 fail(k, "must be from 50 to 500 %");
             (n == "extra_spacing" ? s.wipe_tower_extra_spacing : s.wipe_tower_extra_flow) = d;
         }
+    });
+    // The MMU's change (multi_extruder.md, rule 15).
+    read_group(root, "mmu",
+               {"cooling_tube_length", "cooling_tube_position", "parking_position", "extra_loading_move",
+                "high_current_on_swap"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "high_current_on_swap") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.mmu_high_current_on_swap = g.at(n).get<bool>();
+            return;
+        }
+        const double d = number(g, n, k);
+        if (!(d >= (n == "extra_loading_move" ? -1000.0 : 0.0) && d <= 1000.0))
+            fail(k, n == "extra_loading_move" ? "must be from -1000 to 1000 mm" : "must be from 0 to 1000 mm");
+        (n == "cooling_tube_length"     ? s.mmu_cooling_tube_length
+         : n == "cooling_tube_position" ? s.mmu_cooling_tube_position
+         : n == "parking_position"      ? s.mmu_parking_position
+                                        : s.mmu_extra_loading_move) = d;
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -1491,8 +1511,50 @@ Settings parse_checked(std::string_view text) {
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
-                "purge_multiplier", "min_purge_on_tower"},
+                "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
+                "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
+                "toolchange_delay", "load_time", "unload_time"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        // An MMU's change (multi_extruder.md, rule 15).
+        if (n == "ramming") {
+            const json& v = g.at(n);
+            const char* what = "must be a list of up to 100 flows from 0 to 100 mm3/s, one per quarter of a second";
+            if (!v.is_array() || v.size() > 100)
+                fail(k, what);
+            std::vector<double> list;
+            for (const json& x : v) {
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 100.0))
+                    fail(k, what);
+                list.push_back(x.get<double>());
+            }
+            s.ramming = std::move(list);
+            return;
+        }
+        if (n == "cooling_moves") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 100)
+                fail(k, "must be a whole number from 0 to 100");
+            s.cooling_moves = int(v.get<long long>());
+            return;
+        }
+        if (n == "loading_speed" || n == "loading_speed_start" || n == "unloading_speed" || n == "unloading_speed_start" ||
+            n == "cooling_initial_speed" || n == "cooling_final_speed" || n == "toolchange_delay" || n == "load_time" ||
+            n == "unload_time") {
+            const double d = number(g, n, k);
+            const bool speed = n.find("speed") != std::string::npos;
+            if (!(speed ? d > 0.0 && d <= 1000.0 : d >= 0.0 && d <= 1000.0))
+                fail(k, speed ? "must be more than 0 and at most 1000 mm/s" : "must be from 0 to 1000 s");
+            (n == "loading_speed"           ? s.loading_speed
+             : n == "loading_speed_start"   ? s.loading_speed_start
+             : n == "unloading_speed"       ? s.unloading_speed
+             : n == "unloading_speed_start" ? s.unloading_speed_start
+             : n == "cooling_initial_speed" ? s.cooling_initial_speed
+             : n == "cooling_final_speed"   ? s.cooling_final_speed
+             : n == "toolchange_delay"      ? s.toolchange_delay
+             : n == "load_time"             ? s.load_time
+                                            : s.unload_time) = d;
+            return;
+        }
         // multi_extruder.md, rules 12 and 13: one value, or one per extruder.
         if (n == "purge_multiplier" || n == "min_purge_on_tower") {
             const json& v = g.at(n);
@@ -1791,6 +1853,22 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"wipe_tower.purge_volumes", json(s.purge_volumes).dump()},
         {"extrusion.purge_multiplier", json(s.purge_multiplier).dump()},
         {"extrusion.min_purge_on_tower", json(s.min_purge_on_tower).dump()},
+        {"mmu.cooling_tube_length", num(s.mmu_cooling_tube_length)},
+        {"mmu.cooling_tube_position", num(s.mmu_cooling_tube_position)},
+        {"mmu.parking_position", num(s.mmu_parking_position)},
+        {"mmu.extra_loading_move", num(s.mmu_extra_loading_move)},
+        {"mmu.high_current_on_swap", flag(s.mmu_high_current_on_swap)},
+        {"extrusion.loading_speed", num(s.loading_speed)},
+        {"extrusion.loading_speed_start", num(s.loading_speed_start)},
+        {"extrusion.unloading_speed", num(s.unloading_speed)},
+        {"extrusion.unloading_speed_start", num(s.unloading_speed_start)},
+        {"extrusion.cooling_moves", std::to_string(s.cooling_moves)},
+        {"extrusion.cooling_initial_speed", num(s.cooling_initial_speed)},
+        {"extrusion.cooling_final_speed", num(s.cooling_final_speed)},
+        {"extrusion.ramming", json(s.ramming).dump()},
+        {"extrusion.toolchange_delay", num(s.toolchange_delay)},
+        {"extrusion.load_time", num(s.load_time)},
+        {"extrusion.unload_time", num(s.unload_time)},
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -2124,6 +2202,12 @@ std::string settings_json(const Settings& s) {
           {"bed_temperature_from", s.bed_temperature_from},
           {"ooze_prevention", s.ooze_prevention},
           {"standby_delta", s.standby_delta}}},
+        {"mmu",
+         {{"cooling_tube_length", s.mmu_cooling_tube_length},
+          {"cooling_tube_position", s.mmu_cooling_tube_position},
+          {"parking_position", s.mmu_parking_position},
+          {"extra_loading_move", s.mmu_extra_loading_move},
+          {"high_current_on_swap", s.mmu_high_current_on_swap}}},
         {"wipe_tower",
          {{"enabled", s.wipe_tower},
           {"x", s.wipe_tower_x},
@@ -2339,6 +2423,17 @@ std::string settings_json(const Settings& s) {
           {"end_gcode", s.filament_end_gcode},
           {"purge_multiplier", s.purge_multiplier},
           {"min_purge_on_tower", s.min_purge_on_tower},
+          {"loading_speed", s.loading_speed},
+          {"loading_speed_start", s.loading_speed_start},
+          {"unloading_speed", s.unloading_speed},
+          {"unloading_speed_start", s.unloading_speed_start},
+          {"cooling_moves", s.cooling_moves},
+          {"cooling_initial_speed", s.cooling_initial_speed},
+          {"cooling_final_speed", s.cooling_final_speed},
+          {"ramming", s.ramming},
+          {"toolchange_delay", s.toolchange_delay},
+          {"load_time", s.load_time},
+          {"unload_time", s.unload_time},
           {"retraction", filament_values("retraction.")},
           {"travel", filament_values("travel.")},
           {"chamber_temperature", s.chamber_temperature},

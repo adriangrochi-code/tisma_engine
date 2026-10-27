@@ -189,7 +189,7 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
 | `extruders` | entero | 1 | 1 a 16 | Cantidad de extrusores (ficha `multi_extruder.md`). Cada objeto de la placa se imprime con el suyo (en la interfaz, en el objeto; por omisión el 1) y cada tipo de extrusión con el de `extruders`. Con más de uno: cada extrusor que se usa se calienta al empezar (`M104 S… T<n>` con `variables.temperature[n]`, esperado con `M109 S… T<n>` después del inicio), se corre `gcode.toolchange` con `previous_extruder` −1 y se elige el primero (`T<n>`); cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un cambio por extrusor (reglas 3 y 6, ME1). La cama de la primera capa es la `first_layer_bed_temperature` (o `bed_temperature`) del primer extrusor que imprime, y desde la segunda capa la `bed_temperature` del primero que imprime en ella, con `M140` (regla 4, ME3). Los objetos de cada extrusor se laminan aparte sobre las capas de la placa: cada uno lleva sus perímetros donde toca a otro; lo de un extrusor anterior queda de ese. Sin `layers.detail_height` |
 | `single_extruder_mmu` | booleano | `false` | | Un solo extrusor que cambia de filamento (MMU): cada cambio purga en la torre el volumen de `wipe_tower.purge_volumes` (ficha `multi_extruder.md`, regla 12); sin esto, con varias boquillas, la torre solo ceba |
-| `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5) |
+| `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5); al cambiar, la boquilla nueva se mueve primero sobre el mismo punto. Con `single_extruder_mmu` (una sola boquilla) no se usa |
 | `z_offset` | número | 0 | −10 a 10 | Se suma a todas las Z de la pieza en el G-code, también al comentario `;Z:` (ficha `gcode_extras.md`, regla 5); puede dar Z negativas. No toca el G-code de inicio. Los cambios por altura (`changes`) van por esa Z escrita |
 | `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del hot end, en mm³/s. Ninguna extrusión lo pasa: su velocidad baja a flujo / (ancho × alto × `extrusion.flow`), redondeada hacia abajo a mm/min enteros. Con `extrusion.max_flow` vale el menor de los dos. 0: sin límite |
@@ -428,6 +428,30 @@ el perfil de impresión.
 | `standby_delta` | número | −5 | −300 a 300 | Cuánto cambia la temperatura de los que esperan, en °C |
 | `wipe_tower` | entero | 0 | 0 a 16 | Extrusor que imprime la torre de purga en las capas sin cambio; 0: el que esté imprimiendo |
 
+### `mmu`
+
+De la ficha `docs/spec/features/multi_extruder.md` (regla 15): un solo extrusor que cambia de filamento
+(`machine.single_extruder_mmu`), con la torre de purga. Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `cooling_tube_length` | número | 5 | 0 a 1000 | Largo del tubo de enfriamiento, en mm: los movimientos de enfriamiento van y vuelven esto |
+| `cooling_tube_position` | número | 91,5 | 0 a 1000 | Distancia de la boquilla al tubo, en mm: la descarga saca el filamento hasta el medio del tubo (esto más medio tubo) |
+| `parking_position` | número | 92 | 0 a 1000 | Hasta dónde sale un filamento para estacionarlo, en mm: la carga lo empuja esto más `extra_loading_move` |
+| `extra_loading_move` | número | −2 | −1000 a 1000 | Corrección de la carga, en mm |
+| `high_current_on_swap` | booleano | `false` | | Más corriente en el motor durante el cambio: se lee y se guarda; el motor no escribe el comando |
+
+Cada cambio, sobre la torre (ficha, regla 15, ME9; diseño propio sobre las medidas de la ficha): la compresión con el
+filamento que sale (líneas de 1,5 veces el ancho de las paredes, un tramo por cuarto de segundo de
+`extrusion.ramming`, cada uno a la velocidad de su caudal); la descarga hasta el medio del tubo (los primeros 15 mm a
+`extrusion.unloading_speed_start`, el último cuarto más lento, dos tercios a la mitad de `unloading_speed` y el resto
+al 30 %, lo demás a `unloading_speed`; lo que ya retrajo cuenta); la espera de `extrusion.toolchange_delay` (`G4`);
+`extrusion.cooling_moves` idas y vueltas de `cooling_tube_length` en el tubo con la velocidad del filamento de
+`cooling_initial_speed` a `cooling_final_speed`, la boquilla moviéndose a lo largo de la torre mientras tanto; la
+retracción de cambio, el fin del filamento, `gcode.toolchange`, `T<n>` y el inicio del filamento nuevo; la carga
+(un quinto a `loading_speed_start`, siete décimos a `loading_speed`, el último décimo a `loading_speed_start`), y la
+purga en la torre. Sin la torre, el cambio no hace compresión ni movimientos sobre ella.
+
 ### `wipe_tower`
 
 De la ficha `docs/spec/features/multi_extruder.md` (reglas 9 a 14): la torre de purga, con `machine.extruders` mayor que 1.
@@ -482,6 +506,13 @@ de la pieza de prueba.
 | `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del filamento, en mm³/s (como `machine.max_flow`; vale el menor de los dos). 0: sin límite propio |
 | `min_purge_on_tower` | número o lista | 0 | 0 a 10000 | Con una MMU y objetos que reciben la purga (en la interfaz y la API, por objeto: purgar en su relleno o en todo el objeto), lo que se purga igual en la torre antes, en mm³, por extrusor que entra. Después del cambio, el filamento nuevo imprime primero el relleno ralo (o todo) de esos objetos que todavía no se imprimió en esa capa, y la torre recibe solo lo que falta (ficha `multi_extruder.md`, regla 13, ME8) |
+| `loading_speed`, `loading_speed_start` | número | 28, 3 | más de 0 a 1000 | Velocidades de carga del filamento en una MMU, en mm/s (ver `mmu`) |
+| `unloading_speed`, `unloading_speed_start` | número | 90, 100 | más de 0 a 1000 | Velocidades de descarga, en mm/s (ver `mmu`) |
+| `cooling_moves` | entero | 4 | 0 a 100 | Idas y vueltas de enfriamiento de la punta en el tubo de la MMU |
+| `cooling_initial_speed`, `cooling_final_speed` | número | 2,2, 3,4 | más de 0 a 1000 | Velocidad del filamento en el primero y el último movimiento de enfriamiento, en mm/s |
+| `ramming` | lista | de 7 a 11 en 11 pasos | hasta 100 caudales de 0 a 100 | Caudal de la compresión antes de descargar, en mm³/s, uno por cada cuarto de segundo (los valores por defecto son propios del motor) |
+| `toolchange_delay` | número | 0 | 0 a 1000 | Espera después de descargar, en s (`G4`) |
+| `load_time`, `unload_time` | número | 0 | 0 a 1000 | Tiempo que tarda la carga y la descarga, en s, para la estimación del tiempo (no se escribe nada) |
 | `purge_multiplier` | número o lista | 100 | 0 a 1000 | % del volumen de purga (`wipe_tower.purge_volumes`) que pide el filamento al entrar, uno para todos o uno por extrusor (ficha `multi_extruder.md`, regla 12) |
 | `infill_max_speed` | número | 0 | 0 a 1000 | Tope del relleno disperso con este filamento, en mm/s, para los patrones cuyas líneas no se cruzan en la capa (`rectilinear`, `gyroid`, `honeycomb` y los demás). 0: sin tope (`speeds_accels.md`, regla 5; la `material.infill_max_speed` de la ficha) |
 | `infill_max_crossing_speed` | número | 0 | 0 a 1000 | Ídem para los patrones cuyas líneas se cruzan en la misma capa: `grid`, `triangles`, `stars`, `cubic`, `adaptive_cubic`, `support_cubic` |
