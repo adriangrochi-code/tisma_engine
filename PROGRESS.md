@@ -6317,8 +6317,14 @@ tutoriales con anclas y eventos (reglas 15 a 19) y los enlaces desde la revisió
 mitades cerradas), MT18 (sin separar, X de 80,2 a 119,8; separadas, de 87,2 a 112,8) y MT20, en `[transform]` (462
 comprobaciones), con un anillo con agujero cortado y una caja hueca separada.
 
-**No hecho:** las herramientas de la interfaz (Cortar con plano libre, conectores y cola de milano; Medir; Espejar;
-Escalar por medidas con candado; Separar en partes), las partes y modificadores, y las copias en grilla.
+- **En la interfaz:** Espejar en X, Y o Z en la tarjeta de Escalar (regla 16), que ya escalaba por medidas con los tres
+  ejes juntos o cada uno (regla 17, MT21), y la herramienta **Cortar** (tecla C) con el plano horizontal dibujado
+  sobre la vista, su altura, «Dar vuelta la parte de abajo» y las dos mitades como piezas de la placa (reglas 13 y 18,
+  el corte horizontal). Prueba `ui_cut`: un cubo cortado a 4 mm se lamina y se exporta con el G-code verificado.
 
-**Sigue:** Espejar, Escalar por medidas y Cortar en la interfaz.
+**No hecho:** del corte de la regla 18, el plano libre (girado), los conectores, la cola de milano y «un objeto con
+dos partes»; Medir (regla 20), Separar en partes (19), las partes y modificadores, las copias en grilla, y deshacer en
+la placa (29). La pintura de un modelo cortado no pasa a las mitades.
+
+**Sigue:** Medir y Separar en partes; los conectores del corte.
 

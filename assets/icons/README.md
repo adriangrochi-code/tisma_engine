@@ -14,6 +14,7 @@ of `assets/brand/icons/`: 24×24, one gray (`#808080`) that the interface recolo
 | `tool_lay_flat` | Lay on a face |
 | `tool_arrange` | Arrange the plate |
 | `tool_paint` | Paint (supports, seam), still to come |
+| `tool_cut` | Cut with a horizontal plane (a box and a dashed line across it, 2026-10-27) |
 | `tool_material` | The object's extruder and mixed colours (two circles, 2026-10-27) |
 | `section_quality` | Settings panel, section Quality (thin layers) |
 | `section_strength` | Section Strength (a shield) |

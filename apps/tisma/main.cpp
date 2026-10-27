@@ -93,10 +93,12 @@ int main(int argc, char** argv) {
         } else if (arg == "--tool") {
             options.tool = value();
             if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
-                options.tool != "paint" && options.tool != "material" && options.tool != "mixing") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, paint, material or mixing\n");
+                options.tool != "paint" && options.tool != "material" && options.tool != "mixing" && options.tool != "cut") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, paint, material or mixing\n");
                 return 2;
             }
+        } else if (arg == "--cut") {
+            options.cut = std::atof(value()); // cut the first object at this height over the bed
         } else if (arg == "--info") {
             options.info = value();
         } else if (arg == "--level") {

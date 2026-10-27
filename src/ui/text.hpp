@@ -286,6 +286,13 @@
     X(ToolMoveHint, "El centro de su caja en la cama", "The centre of its box on the bed")                            \
     X(ToolLayFlatHint, "Hacé clic en una cara del modelo: queda apoyada en la cama.", "Click a face of the model: it goes down on the bed.") \
     X(ResetRotation, "Sin giro", "No rotation")                                                                       \
+    X(Mirror, "Espejar", "Mirror")                                                                                    \
+    X(ToolCutTip, "Cortar (C): con un plano horizontal, en dos piezas", "Cut (C): with a horizontal plane, in two pieces") \
+    X(ToolCutHint, "El plano corta la pieza a esta altura sobre la cama. Las dos mitades quedan cerradas, cada una como una pieza.", \
+      "The plane cuts the part at this height over the bed. Both halves come out closed, each one a part.")           \
+    X(CutHeight, "Altura", "Height")                                                                                  \
+    X(CutFlipLower, "Dar vuelta la parte de abajo", "Turn the lower part over")                                       \
+    X(CutButton, "Cortar", "Cut")                                                                                     \
     X(ScaleTogether, "Los tres ejes juntos", "All three axes together")                                               \
     X(ResetScale, "Tamaño original", "Original size")                                                                 \
     X(Models, "modelos", "models")                                                                                    \

@@ -40,6 +40,7 @@
 #include "ui/settings_layout.hpp"
 #include "ui/settings_view.hpp"
 #include "ui/printer_card.hpp"
+#include "slice/transform.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
@@ -88,7 +89,7 @@ constexpr const char* kIcons[] = {
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
-    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
@@ -325,7 +326,7 @@ enum class Purpose {
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
-enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint, Material };
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Cut, Paint, Material };
 
 class App {
 public:
@@ -354,6 +355,10 @@ private:
     void plate_changed();
     void arrange_plate();
     void plate_tools();
+    // The chosen object mirrored, or cut in two (model_tools.md, rules 13 and 16).
+    void mirror_selected(int axis);
+    void cut_selected();
+    void cut_plane_overlay();
     void paint_card(ImVec2 at);
     void mixing_dialog();
     std::string filament_color(int extruder) const;
@@ -535,6 +540,10 @@ private:
     std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
     const std::vector<TriangleIndex>& plate_indexes();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
+    // The Cut tool (model_tools.md, rules 13 and 18): the plane's height over
+    // the bed, and whether the part below is turned over onto its cut face.
+    double cut_height_ = 5.0;
+    bool cut_flip_lower_ = false;
     // The project's mixed colours and each filament's colour
     // (color_mixing.md); the dialog that edits them, what they were when it
     // opened and the blend being edited.
@@ -2088,7 +2097,13 @@ bool App::init(std::string& error) {
         tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
               : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
               : options_.tool == "material" || options_.tool == "mixing" ? PlateTool::Material
+              : options_.tool == "cut"                                    ? PlateTool::Cut
                                                                           : PlateTool::LayFlat;
+    if (options_.cut > 0.0 && !objects_.empty()) {
+        selected_ = 0;
+        cut_height_ = options_.cut;
+        cut_selected();
+    }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
     if (options_.tool == "mixing") {
         mixing_open_ = true;
@@ -5717,7 +5732,8 @@ void App::plate_tools() {
     } tools[] = {{"##move", "tool_move", T::ToolMoveTip, PlateTool::Move},
                  {"##rotate", "tool_rotate", T::ToolRotateTip, PlateTool::Rotate},
                  {"##scale", "tool_scale", T::ToolScaleTip, PlateTool::Scale},
-                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat}};
+                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat},
+                 {"##cut", "tool_cut", T::ToolCutTip, PlateTool::Cut}};
     for (const auto& t : tools)
         if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
             tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
@@ -5748,6 +5764,8 @@ void App::plate_tools() {
             tool_ = PlateTool::Scale;
         if (ImGui::IsKeyPressed(ImGuiKey_F, false))
             tool_ = PlateTool::LayFlat;
+        if (ImGui::IsKeyPressed(ImGuiKey_C, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Cut;
         if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
             tool_ = PlateTool::Paint;
         if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl) {
@@ -5787,6 +5805,8 @@ void App::plate_tools() {
     ImGui::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
     const float field = 110.0f * scale_;
     bool changed = false;
+    int mirror_axis = -1; // done after the card, as they change the plate's objects
+    bool cut = false;
     const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
@@ -5860,10 +5880,38 @@ void App::plate_tools() {
             o.place.scale = {1.0, 1.0, 1.0};
             changed = true;
         }
+        // Mirror on an axis of the bed (rule 16).
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::Mirror));
+        for (int k = 0; k < 3; ++k) {
+            ImGui::SameLine();
+            if (ImGui::Button(axes[k], ImVec2(36.0f * scale_, 0)))
+                mirror_axis = k;
+        }
     } else if (tool_ == PlateTool::LayFlat) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
         ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
         ImGui::PopTextWrapPos();
+    } else if (tool_ == PlateTool::Cut) {
+        // A horizontal plane at a height over the bed (rule 13): two closed
+        // objects, side by side.
+        const double tall = placed_size(o)[2];
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolCutHint));
+        ImGui::PopTextWrapPos();
+        cut_height_ = std::clamp(cut_height_, 0.0, tall);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::CutHeight));
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(field);
+        const double lo = 0.0;
+        ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, "%.2f mm",
+                          ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
+        ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
+        if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
+            cut = true;
+        ImGui::EndDisabled();
     } else if (tool_ == PlateTool::Material) {
         // The object's extruder, one of the machine's or a mixed colour's
         // (multi_extruder.md, rule 1; color_mixing.md), and where a filament
@@ -5905,8 +5953,83 @@ void App::plate_tools() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+    if (tool_ == PlateTool::Cut)
+        cut_plane_overlay();
     if (changed)
         plate_changed();
+    if (mirror_axis >= 0)
+        mirror_selected(mirror_axis);
+    if (cut)
+        cut_selected();
+}
+
+void App::mirror_selected(int axis) {
+    PlateObject& o = objects_[std::size_t(selected_)];
+    if (o.place.rotation == kNoRotation) {
+        // On the model's own axis, which is the bed's: its scale stays.
+        mirror_mesh(o.mesh, axis);
+    } else {
+        // Turned, the model takes its turn and size into its mesh first.
+        TriangleMesh m = placed_mesh(o);
+        mirror_mesh(m, axis);
+        o.mesh = std::move(m);
+        o.place.rotation = kNoRotation;
+        o.place.scale = {1.0, 1.0, 1.0};
+    }
+    plate_changed();
+}
+
+void App::cut_selected() {
+    const std::size_t index = std::size_t(selected_);
+    const PlateObject& o = objects_[index];
+    CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
+    if (halves.below.empty() || halves.above.empty())
+        return;
+    if (cut_flip_lower_)
+        rotate_mesh(halves.below, 180.0, 0.0, 0.0); // its cut face down on the bed
+    // The halves keep the object's extruder; its painting was by triangle and
+    // stays with the whole.
+    PlateObject below{o.name + " (1)", std::move(halves.below), {}, {}};
+    PlateObject above{o.name + " (2)", std::move(halves.above), {}, {}};
+    for (PlateObject* half : {&below, &above}) {
+        half->extruder = o.extruder;
+        half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
+    }
+    objects_.erase(objects_.begin() + std::ptrdiff_t(index));
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
+    tool_ = PlateTool::Select;
+    arrange_plate();
+}
+
+// The Cut tool's plane over the chosen object, drawn over the 3D view.
+void App::cut_plane_overlay() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f) || selected_ < 0 ||
+        std::size_t(selected_) >= placed_meshes_.size())
+        return;
+    const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+    if (box.empty)
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](float x, float y, float z, ImVec2& out) {
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    const float mx = 0.15f * (box.max.x - box.min.x) + 2.0f, my = 0.15f * (box.max.y - box.min.y) + 2.0f;
+    const float z = box.min.z + float(cut_height_);
+    ImVec2 c[4];
+    if (!project(box.min.x - mx, box.min.y - my, z, c[0]) || !project(box.max.x + mx, box.min.y - my, z, c[1]) ||
+        !project(box.max.x + mx, box.max.y + my, z, c[2]) || !project(box.min.x - mx, box.max.y + my, z, c[3]))
+        return;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
+    dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    dl->PopClipRect();
 }
 
 // A change of what the objects print with: sliced again, the plate as it was.
