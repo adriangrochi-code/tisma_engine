@@ -12,6 +12,7 @@
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
+#include "slice/wipe_tower.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
 #include <oneapi/tbb/parallel_pipeline.h>
@@ -681,6 +682,7 @@ constexpr KindNotes kKindNotes[] = {
     {"Skirt/Brim", "skirt", "move to first skirt point"},
     {"Support material", "support material", "move to first support material point"},
     {"Support material interface", "support material interface", "move to first support material point"},
+    {"Wipe tower", "wipe tower", "move to the wipe tower"},
 };
 constexpr KindNotes kOtherNotes{"", "extrude", "travel"};
 
@@ -816,9 +818,10 @@ public:
     // counts), standing; `lines` as they are (the change's G-code, its user
     // part `user` when that has commands of its own); then the next tool,
     // whose filament comes back at its first extrusion by what it was pulled
-    // when it left and `restart` more (a tool not used yet: nothing).
+    // when it left and `restart` more (a tool not used yet: nothing). A
+    // nozzle with another offset moves over the same point, at `feed`.
     void tool_change(int next, double length, double restart, const std::string& lines, bool user,
-                     std::array<double, 2> offset) {
+                     std::array<double, 2> offset, double feed) {
         extruder_off();
         wiped_path_.clear();
         double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
@@ -836,7 +839,12 @@ public:
             pulled = std::max(length, now);
         }
         custom(lines, user);
+        const std::array<double, 2> before = offset_;
         set_tool(next, offset);
+        if (known_ && !resync_ && offset != before) {
+            move("G1", x_value_, y_value_, std::nullopt, std::nullopt, feed, {}, {}, "move the new nozzle over the point");
+            other_time_ += std::hypot(offset[0] - before[0], offset[1] - before[1]) / feed;
+        }
         double& back = pulled_[std::size_t(std::clamp(next, 0, int(pulled_.size()) - 1))];
         retracted_ = back > 1e-9;
         retracted_amount_ = firmware_ ? 0.0 : back;
@@ -1140,6 +1148,7 @@ public:
             text_ += '\n';
             type_ = t;
             note_ = notes_of(t).extrude;
+            tower_ = std::strcmp(t, "Wipe tower") == 0;
             outer_ = std::strcmp(t, "External perimeter") == 0;
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
             bridge_ = std::strcmp(t, "Bridge infill") == 0 || std::strcmp(t, "Overhang perimeter") == 0;
@@ -1275,6 +1284,8 @@ public:
         if (outer_)
             outer_extruded_[feed] += length;
         total_e_ += e;
+        if (tower_)
+            tower_e_ += e;
         pending_ += e;
         // A piece that rounds to no move at 3 decimals is not written; its E
         // (next to nothing) goes with the next piece.
@@ -1314,6 +1325,8 @@ public:
         if (outer_)
             outer_extruded_[feed] += length;
         total_e_ += e;
+        if (tower_)
+            tower_e_ += e;
         pending_ += e;
         show_width(width);
         e_ = relative_ ? pending_ : e_ + pending_;
@@ -1361,6 +1374,7 @@ public:
     }
 
     double total_e() const { return total_e_; }
+    double tower_e() const { return tower_e_; } // of it, on the wipe tower
 
     // MakerWare's M103 after the extrusions (before a travel, and at the end).
     void extruder_off() {
@@ -1737,6 +1751,8 @@ private:
     double flow_ = 1.0;
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
+    double tower_e_ = 0.0;   // mm of filament laid on the wipe tower
+    bool tower_ = false;     // the current type is the wipe tower's
     double x_value_ = 0.0, y_value_ = 0.0, z_value_ = 0.0;
     double z_now_ = 0.0;     // the nozzle's Z as written: off the layer's top with Z anti-aliasing
     double clearance_ = 0.0; // mm above the layer's top that travels keep
@@ -2142,58 +2158,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 << fixed((lo[1] + hi[1]) / 2.0, 3) << " POLYGON=[" << polygon << "]\n";
         }
     }
-    // Several extruders (multi_extruder.md, rule 2): a path's extruder is its
-    // kind's (extruders.walls...), else its part's (1 when it has none); the
-    // support's, else whichever is printing (0). One extruder: all 0.
+    // Several extruders (multi_extruder.md): each layer's extruders in
+    // order, the first one and those used (rules 2 and 3), and the wipe
+    // tower where they change (rules 9 to 13).
+    const ToolPlan tool_plan = plan_tools(model, s);
+    const int initial_tool = tool_plan.initial;
+    const std::array<bool, kMaxExtruders + 1>& tools_used = tool_plan.used;
+    const WipeTower tower = plan_wipe_tower(model, s, tool_plan);
+    // The extruders.* of each kind of fill (solid, top, bridge, gaps, sparse,
+    // support, support interface).
     const int fill_tool[7] = {s.extruder_solid_infill, s.extruder_solid_infill, s.extruder_solid_infill,
                               s.extruder_solid_infill, s.extruder_infill,       s.extruder_support,
                               s.extruder_support_interface};
-    const auto tool_of = [&](const Toolpath& t, int chosen, bool part) {
-        if (s.extruders <= 1)
-            return 0;
-        return std::clamp(chosen > 0 ? chosen : t.tool > 0 ? int(t.tool) : part ? 1 : 0, 0, kMaxExtruders);
-    };
-    // The extruders a layer's paths ask for (0: any).
-    const auto layer_tools = [&](std::size_t l) {
-        std::array<bool, kMaxExtruders + 1> used{};
-        if (s.extruders <= 1)
-            return used;
-        const auto note = [&](const std::vector<Toolpath>& paths, int chosen, bool part) {
-            for (const Toolpath& t : paths)
-                if (!t.points.empty())
-                    used[std::size_t(tool_of(t, chosen, part))] = true;
-        };
-        if (l < model.walls.size())
-            note(model.walls[l].toolpaths, s.extruder_walls, true), note(model.walls[l].gaps, s.extruder_walls, true);
-        if (l < model.fills.size()) {
-            const LayerFill& f = model.fills[l];
-            const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,
-                                                     &f.support_interface};
-            for (std::size_t k = 0; k < 7; ++k)
-                note(*kinds[k], fill_tool[k], k < 5);
-            note(f.arcs, s.extruder_walls, true), note(f.overhang_walls, s.extruder_walls, true);
-            note(f.ironing, s.extruder_solid_infill, true);
-        }
-        return used;
-    };
-    // The extruders the print uses, and the first (rule 3): the lowest of
-    // the first layer that asks for one.
-    std::array<bool, kMaxExtruders + 1> tools_used{};
-    int initial_tool = 0;
-    if (s.extruders > 1) {
-        for (std::size_t l = 0; l < model.layers.size(); ++l) {
-            const std::array<bool, kMaxExtruders + 1> used = layer_tools(l);
-            for (int e = 1; e <= kMaxExtruders; ++e)
-                if (used[std::size_t(e)]) {
-                    tools_used[std::size_t(e)] = true;
-                    if (initial_tool == 0)
-                        initial_tool = e;
-                }
-        }
-        if (initial_tool == 0)
-            initial_tool = 1;
-        tools_used[std::size_t(initial_tool)] = true;
-    }
     // The chamber the filament wants, when the machine heats one: set before
     // the start (so it heats while the nozzle does) and again after it, once
     // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
@@ -2491,8 +2467,6 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The extruder that lays it (multi_extruder.md); 0: whichever is printing.
         int tool = 0;
     };
-    // The extruder the plans are at: the one the last layer planned ended with.
-    int planned_tool = initial_tool;
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
     // the plans, which only pick among them (perimeters.md, rule 8).
@@ -2754,27 +2728,50 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The layer's extruders one after another (multi_extruder.md, rule
         // 3): the one the layer below ended with first, the rest in order;
         // what any extruder may print goes with the first.
-        std::vector<int> order;
-        {
-            const std::array<bool, kMaxExtruders + 1> used = layer_tools(l);
-            if (planned_tool > 0 && used[std::size_t(planned_tool)])
-                order.push_back(planned_tool);
-            for (int e = 1; e <= kMaxExtruders; ++e)
-                if (used[std::size_t(e)] && e != planned_tool)
-                    order.push_back(e);
-            if (order.empty())
-                order.push_back(0);
-        }
+        const std::vector<int>& order = tool_plan.order[l];
         const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
                                           "Gap fill",        "Internal infill",  "Support material",
                                           "Support material interface"};
         int label_now = -1;
+        // The wipe tower (multi_extruder.md, rules 10 to 12): on a layer with
+        // no change, and on the first, its brim, outline and fill first, by
+        // the extruder printing; each change's block right at the change, by
+        // the next extruder, the layer's first change bringing the outline
+        // and fill after it. No tower path is in an object's label.
+        const WipeTowerLayer* tower_layer = l < tower.layers.size() ? &tower.layers[l] : nullptr;
+        const std::vector<int>& change_from = tool_plan.change_from[l];
+        const bool changes = std::any_of(change_from.begin(), change_from.end(), [](int f) { return f > 0; });
+        std::size_t next_block = 0;
+        bool shell_laid = tower_layer == nullptr;
+        const auto lay_tower = [&](const std::vector<Toolpath>& paths, int tool) {
+            laying_tool = tool;
+            const std::size_t first_step = steps.size();
+            for (const Toolpath& t : paths)
+                lay(t, "Wipe tower", speed(s.infill_speed));
+            if (labels != Labels::None && label_now != -1)
+                for (std::size_t k = first_step; k < steps.size(); ++k)
+                    if (steps[k].type) {
+                        steps[k].label = label_now = -1;
+                        break;
+                    }
+        };
+        if (tower_layer && (l == 0 || !changes)) {
+            lay_tower(tower_layer->shell, order.front());
+            shell_laid = true;
+        }
         for (std::size_t group_index = 0; group_index < order.size(); ++group_index) {
             const int tool = order[group_index];
             const bool first_group = group_index == 0;
+            if (tower_layer && change_from[group_index] > 0 && next_block < tower_layer->blocks.size()) {
+                lay_tower(tower_layer->blocks[next_block++], tool);
+                if (!shell_laid) {
+                    lay_tower(tower_layer->shell, tool);
+                    shell_laid = true;
+                }
+            }
             laying_tool = tool;
             const auto mine = [&](const Toolpath& t, int chosen, bool part) {
-                const int e = tool_of(t, chosen, part);
+                const int e = path_tool(t, chosen, part, s);
                 return e == tool || (first_group && e == 0);
             };
             // Skirt, then brim, before the part, at the first layer's speed.
@@ -2991,8 +2988,6 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         }
             }
         }
-        if (order.back() > 0)
-            planned_tool = order.back();
         laying_tool = 0;
         // The thick zone of a group that ends here: the whole group's height at
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
@@ -3257,16 +3252,23 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (step.label != kKeepLabel)
                 wanted = step.label;
             // Another extruder (multi_extruder.md, rule 5), outside any
-            // object's label: cancelling an object keeps the change.
-            if (step.tool > 0 && step.tool != g.tool()) {
-                if (label >= 0)
-                    g.raw(label_end(std::size_t(label)));
-                label = -1;
+            // object's label: cancelling an object keeps the change. With
+            // the wipe tower, the change is over it, after the travel there.
+            const bool change = step.tool > 0 && step.tool != g.tool();
+            const bool at_tower = change && std::strcmp(step.type, "Wipe tower") == 0;
+            const auto change_tool = [&] {
                 const int from = g.tool();
                 const auto [lines, user] = toolchange_text(from, step.tool, true);
                 g.tool_change(step.tool, per_extruder(s.toolchange_length, std::size_t(std::max(from - 1, 0)), 10.0),
                               per_extruder(s.toolchange_restart_extra, std::size_t(step.tool - 1)), lines, user,
-                              extruder_offset_of(s, std::size_t(step.tool - 1)));
+                              extruder_offset_of(s, std::size_t(step.tool - 1)), s.travel_speed);
+            };
+            if (change) {
+                if (label >= 0)
+                    g.raw(label_end(std::size_t(label)));
+                label = -1;
+                if (!at_tower)
+                    change_tool();
             }
             if (wanted != label) {
                 if (label >= 0)
@@ -3283,6 +3285,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (!turn || g.lost())
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract, step.type);
+            if (at_tower) {
+                change_tool();
+                if (g.lost()) // the change's G-code moved the head: back to the tower
+                    g.travel(t.points.front().p, s.travel_speed, planner, nullptr, nullptr, false, step.type);
+            }
             g.type(step.type);
             g.print_acceleration(acceleration_of(step.type, local(l) == 0, raft_of(l) > 0 && local(l) == raft_of(l)));
             g.nonplanar(t.wavy);
@@ -3591,7 +3598,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << "; filament cost = " << fixed(cost, 2) << "\n";
         out << "; total filament used [g] = " << fixed(grams, 2) << "\n";
         out << "; total filament cost = " << fixed(cost, 2) << "\n";
-        out << "; total filament used for wipe tower [g] = 0.00\n";
+        out << "; total filament used for wipe tower [g] = "
+            << fixed(g.tower_e() * std::numbers::pi * r * r / 1000.0 * s.filament_density, 2) << "\n";
     }
     // Each setting on one comment line: a line break in a value (a start
     // G-code variable, say) would otherwise end the comment and run the rest

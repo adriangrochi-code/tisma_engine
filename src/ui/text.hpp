@@ -920,6 +920,23 @@
     X(SumOneExtruder, "Un extrusor", "One extruder") \
     X(SumObjectExtruder, "El de cada objeto", "Each object's own") \
     X(SumByKind, "Por tipo de extrusión", "By kind of extrusion") \
+    X(SubWipeTower, "Torre de purga", "Wipe tower") \
+    X(SubWipeTowerMore, "Más de la torre de purga", "More of the wipe tower") \
+    X(WipeTowerRow, "Torre de purga", "Wipe tower") \
+    X(WipeTowerX, "Posición en X", "X position") \
+    X(WipeTowerY, "Posición en Y", "Y position") \
+    X(WipeTowerRotation, "Giro", "Rotation") \
+    X(WipeTowerWidth, "Ancho", "Width") \
+    X(WipeTowerBrim, "Borde de la torre", "Tower brim") \
+    X(WipeTowerBridging, "Distancia entre apoyos", "Distance between supports") \
+    X(WipeTowerExtruder, "Extrusor de la torre", "Tower extruder") \
+    X(WipeTowerSpacing, "Separación de las líneas", "Line spacing") \
+    X(WipeTowerFlow, "Flujo de las líneas", "Line flow") \
+    X(WipeTowerCone, "Ángulo del cono de la base", "Base cone angle") \
+    X(WipeTowerNoSparse, "Sin torre en las capas sin cambio", "No tower on layers without a change") \
+    X(PurgeVolumesRow, "Volúmenes de purga", "Purge volumes") \
+    X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
+    X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
     X(LimitsIgnore, "No usarlos", "Do not use them") \

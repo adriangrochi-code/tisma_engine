@@ -219,6 +219,7 @@ add_library(tisma_core
   src/report/warnings.cpp
   src/slice/printable.cpp
   src/slice/placement.cpp
+  src/slice/wipe_tower.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
   src/support/tree.cpp

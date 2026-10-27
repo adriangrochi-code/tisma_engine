@@ -274,6 +274,24 @@ struct Settings {
     // G-code, with previous_extruder, next_extruder and toolchange_z.
     std::vector<double> toolchange_length{10.0}, toolchange_restart_extra{0.0};
     std::string gcode_toolchange;
+    // One extruder that changes filaments (an MMU): a change purges the
+    // filament (rule 12).
+    bool single_extruder_mmu = false;
+    // The wipe tower (rules 9 to 14): where (its corner, mm), turned how much
+    // (degrees about the corner), how wide, its brim, the longest span of its
+    // lines over the sparse layers, the cone at its base (read; not measured,
+    // not applied), its lines' spacing and flow (%), no tower on the layers
+    // without a change (read; not applied yet), and the purge between each
+    // pair of filaments, mm3 (row: from, column: to; empty: 140 between
+    // different ones). extruder_wipe_tower prints the tower where no change
+    // does (0: whichever is printing).
+    bool wipe_tower = false;
+    double wipe_tower_x = 180.0, wipe_tower_y = 140.0, wipe_tower_rotation = 0.0;
+    double wipe_tower_width = 60.0, wipe_tower_brim = 2.0, wipe_tower_bridging = 10.0, wipe_tower_cone_angle = 0.0;
+    double wipe_tower_extra_spacing = 100.0, wipe_tower_extra_flow = 100.0;
+    bool wipe_tower_no_sparse_layers = false;
+    std::vector<std::vector<double>> purge_volumes;
+    int extruder_wipe_tower = 0;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -456,6 +474,9 @@ struct Settings {
     double shrinkage_xy = 0.0, shrinkage_z = 0.0;
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
+    // The share of the purge each filament asks for (multi_extruder.md, rule
+    // 12), %, by extruder; a shorter list repeats its last value.
+    std::vector<double> purge_multiplier{100.0};
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;

@@ -188,6 +188,7 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
 | `extruders` | entero | 1 | 1 a 16 | Cantidad de extrusores (ficha `multi_extruder.md`). Cada objeto de la placa se imprime con el suyo (en la interfaz, en el objeto; por omisión el 1) y cada tipo de extrusión con el de `extruders`. Con más de uno: cada extrusor que se usa se calienta al empezar (`M104 S… T<n>` con `variables.temperature[n]`, esperado con `M109 S… T<n>` después del inicio), se corre `gcode.toolchange` con `previous_extruder` −1 y se elige el primero (`T<n>`); cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un cambio por extrusor (reglas 3 y 6, ME1). La cama de la primera capa es la `first_layer_bed_temperature` (o `bed_temperature`) del primer extrusor que imprime, y desde la segunda capa la `bed_temperature` del primero que imprime en ella, con `M140` (regla 4, ME3). Los objetos de cada extrusor se laminan aparte sobre las capas de la placa: cada uno lleva sus perímetros donde toca a otro; lo de un extrusor anterior queda de ese. Sin `layers.detail_height` |
+| `single_extruder_mmu` | booleano | `false` | | Un solo extrusor que cambia de filamento (MMU): cada cambio purga en la torre el volumen de `wipe_tower.purge_volumes` (ficha `multi_extruder.md`, regla 12); sin esto, con varias boquillas, la torre solo ceba |
 | `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5) |
 | `z_offset` | número | 0 | −10 a 10 | Se suma a todas las Z de la pieza en el G-code, también al comentario `;Z:` (ficha `gcode_extras.md`, regla 5); puede dar Z negativas. No toca el G-code de inicio. Los cambios por altura (`changes`) van por esa Z escrita |
 | `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
@@ -425,6 +426,26 @@ el perfil de impresión.
 | `bed_temperature_from` | entero | 0 | 0 a 16 | Extrusor cuyas temperaturas de cama valen; 0: el primero que imprime en la primera capa (para la primera) y en la segunda (para el resto) (regla 4, ME3) |
 | `ooze_prevention` | booleano | `false` | | Los extrusores que esperan bajan a su temperatura más `standby_delta`: al empezar (sin esperarlos) y antes de cada cambio la que se deja (`M104 … ;cooldown`); la que entra espera su temperatura con `M109` (regla 7, ME4) |
 | `standby_delta` | número | −5 | −300 a 300 | Cuánto cambia la temperatura de los que esperan, en °C |
+| `wipe_tower` | entero | 0 | 0 a 16 | Extrusor que imprime la torre de purga en las capas sin cambio; 0: el que esté imprimiendo |
+
+### `wipe_tower`
+
+De la ficha `docs/spec/features/multi_extruder.md` (reglas 9 a 14): la torre de purga, con `machine.extruders` mayor que 1.
+Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | | Torre de purga: los cambios de herramienta se hacen sobre ella. Solo con E relativa (`machine.relative_extrusion`; regla 9). Es un rectángulo con la esquina en (`x`, `y`), de `width` de ancho y tan hondo como pide la capa con más purga; en cada capa hasta la del último cambio: un lazo alrededor, un bloque de líneas a lo ancho por cada cambio, impreso por la herramienta que entra (con `machine.single_extruder_mmu`, las que hacen el volumen de `purge_volumes`; con varias boquillas, 5 líneas para cebar), y el resto de adentro lleno: denso en la primera capa, con columnas cada `bridging` arriba. En la primera capa también su borde. Antes de cada cambio el cabezal viaja a la torre; el cambio se hace ahí (regla 10 a 12, ME6 y ME7). Una torre fuera de la cama o sobre la pieza, su falda o su borde es un error |
+| `x`, `y` | número | 180, 140 | −10000 a 10000 | La esquina de la torre en la cama, en mm |
+| `rotation` | número | 0 | −360 a 360 | Giro de la torre, en grados, alrededor de su esquina |
+| `width` | número | 60 | 1 a 1000 | Ancho de la torre, en mm |
+| `brim_width` | número | 2 | 0 a 100 | Borde de la torre en la primera capa, en mm (en lazos de un cordón) |
+| `bridging` | número | 10 | 1 a 100 | Distancia máxima entre las columnas de las capas ralas, en mm: las líneas de purga de arriba van de una a otra |
+| `cone_angle` | número | 0 | 0 a 90 | Base en cono (regla 14): se lee y se guarda; la ficha no lo midió y el motor no la hace |
+| `extra_spacing` | número | 100 | 50 a 500 | Separación de las líneas de la torre, en % de su ancho: más, torre más honda |
+| `extra_flow` | número | 100 | 50 a 500 | Ancho de las líneas de la torre, en % del de las paredes: más, menos largo para el mismo volumen |
+| `no_sparse_layers` | booleano | `false` | | Sin torre en las capas sin cambio (regla 11): se lee y se guarda; todavía no se aplica (las capas ralas se imprimen) |
+| `purge_volumes` | número o lista de listas | 140 entre distintos, 0 en la diagonal | 0 a 10000 | Cuánto purgar al pasar de un filamento a otro, en mm³: un número para todos los pares distintos, o una fila por extrusor que sale con una columna por el que entra. Se multiplica por `extrusion.purge_multiplier` del que entra |
 
 ### `compute`
 
@@ -460,6 +481,7 @@ de la pieza de prueba.
 | `flow` | número | 100 | 10 a 300 | Flujo en %: la E de cada extrusión es ancho × alto × largo / sección del filamento × flujo |
 | `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del filamento, en mm³/s (como `machine.max_flow`; vale el menor de los dos). 0: sin límite propio |
+| `purge_multiplier` | número o lista | 100 | 0 a 1000 | % del volumen de purga (`wipe_tower.purge_volumes`) que pide el filamento al entrar, uno para todos o uno por extrusor (ficha `multi_extruder.md`, regla 12) |
 | `infill_max_speed` | número | 0 | 0 a 1000 | Tope del relleno disperso con este filamento, en mm/s, para los patrones cuyas líneas no se cruzan en la capa (`rectilinear`, `gyroid`, `honeycomb` y los demás). 0: sin tope (`speeds_accels.md`, regla 5; la `material.infill_max_speed` de la ficha) |
 | `infill_max_crossing_speed` | número | 0 | 0 a 1000 | Ídem para los patrones cuyas líneas se cruzan en la misma capa: `grid`, `triangles`, `stars`, `cubic`, `adaptive_cubic`, `support_cubic` |
 | `bridge_flow_ratio` | número | 1 | 0,1 a 2 | Multiplica la sección del cordón redondo de los puentes y de los perímetros sobre el aire. El cordón es redondo, de diámetro `machine.nozzle_diameter` × √`bridge_flow_ratio` (con 0,4 de boquilla, 0,052245 mm de filamento por mm), y las líneas del puente van a esa distancia: con menos flujo, más juntas (`speeds_accels.md`, regla 14; `gcode_motion.md`, regla 1) |

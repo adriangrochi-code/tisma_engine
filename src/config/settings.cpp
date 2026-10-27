@@ -2,6 +2,7 @@
 // (MIT). Own design; see PROVENANCE.md.
 
 #include "config/settings.hpp"
+#include "gcode/dialect.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -356,7 +357,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "sequential" || group == "extruders" ||
+            group == "sequential" || group == "extruders" || group == "wipe_tower" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -572,7 +573,7 @@ Settings parse_checked(std::string_view text) {
     });
     // Which extruder prints what (multi_extruder.md, rules 2, 4 and 7).
     read_group(root, "extruders",
-               {"walls", "infill", "solid_infill", "support", "support_interface", "bed_temperature_from",
+               {"walls", "infill", "solid_infill", "support", "support_interface", "wipe_tower", "bed_temperature_from",
                 "ooze_prevention", "standby_delta"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "ooze_prevention") {
@@ -595,7 +596,77 @@ Settings parse_checked(std::string_view text) {
          : n == "solid_infill"       ? s.extruder_solid_infill
          : n == "support"            ? s.extruder_support
          : n == "support_interface"  ? s.extruder_support_interface
+         : n == "wipe_tower"         ? s.extruder_wipe_tower
                                      : s.bed_temperature_from) = int(d);
+    });
+    // The wipe tower (multi_extruder.md, rules 9 to 14).
+    read_group(root, "wipe_tower",
+               {"enabled", "x", "y", "rotation", "width", "brim_width", "bridging", "cone_angle", "extra_spacing",
+                "extra_flow", "no_sparse_layers", "purge_volumes"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "enabled" || n == "no_sparse_layers") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            (n == "enabled" ? s.wipe_tower : s.wipe_tower_no_sparse_layers) = v.get<bool>();
+            return;
+        }
+        if (n == "purge_volumes") {
+            // One volume between every two different filaments, or a square
+            // list of lists (row: from, column: to).
+            const char* what = "must be a volume from 0 to 10000 mm3, or a list of rows of them, one per extruder";
+            const auto volume = [&](const json& x) {
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 10000.0))
+                    fail(k, what);
+                return x.get<double>();
+            };
+            std::vector<std::vector<double>> rows;
+            if (v.is_number()) {
+                const double each = volume(v);
+                for (int i = 0; i < kMaxExtruders; ++i) {
+                    rows.emplace_back(std::size_t(kMaxExtruders), each);
+                    rows.back()[std::size_t(i)] = 0.0;
+                }
+            } else {
+                if (!v.is_array() || v.size() > std::size_t(kMaxExtruders))
+                    fail(k, what);
+                for (const json& row : v) {
+                    if (!row.is_array() || row.size() != v.size())
+                        fail(k, what);
+                    rows.emplace_back();
+                    for (const json& x : row)
+                        rows.back().push_back(volume(x));
+                }
+            }
+            s.purge_volumes = std::move(rows);
+            return;
+        }
+        const double d = number(g, n, k);
+        if (n == "x" || n == "y") {
+            if (!(d >= -10000.0 && d <= 10000.0))
+                fail(k, "must be from -10000 to 10000 mm");
+            (n == "x" ? s.wipe_tower_x : s.wipe_tower_y) = d;
+        } else if (n == "rotation") {
+            if (!(d >= -360.0 && d <= 360.0))
+                fail(k, "must be from -360 to 360 degrees");
+            s.wipe_tower_rotation = d;
+        } else if (n == "width") {
+            if (!(d >= 1.0 && d <= 1000.0))
+                fail(k, "must be from 1 to 1000 mm");
+            s.wipe_tower_width = d;
+        } else if (n == "brim_width" || n == "bridging") {
+            if (!(d >= 0.0 && d <= 100.0) || (n == "bridging" && !(d >= 1.0)))
+                fail(k, n == "bridging" ? "must be from 1 to 100 mm" : "must be from 0 to 100 mm");
+            (n == "brim_width" ? s.wipe_tower_brim : s.wipe_tower_bridging) = d;
+        } else if (n == "cone_angle") {
+            if (!(d >= 0.0 && d <= 90.0))
+                fail(k, "must be from 0 to 90 degrees");
+            s.wipe_tower_cone_angle = d;
+        } else {
+            if (!(d >= 50.0 && d <= 500.0))
+                fail(k, "must be from 50 to 500 %");
+            (n == "extra_spacing" ? s.wipe_tower_extra_spacing : s.wipe_tower_extra_flow) = d;
+        }
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -726,7 +797,7 @@ Settings parse_checked(std::string_view text) {
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
-                "extruders", "extruder_offset"},
+                "extruders", "extruder_offset", "single_extruder_mmu"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    // Several extruders (multi_extruder.md): as many as the
@@ -736,6 +807,12 @@ Settings parse_checked(std::string_view text) {
                        if (!(d >= 1.0 && d <= double(kMaxExtruders)) || d != std::floor(d))
                            fail(k, "must be a whole number from 1 to " + std::to_string(kMaxExtruders));
                        s.extruders = int(d);
+                       return;
+                   }
+                   if (n == "single_extruder_mmu") {
+                       if (!v.is_boolean())
+                           fail(k, "must be true or false");
+                       s.single_extruder_mmu = v.get<bool>();
                        return;
                    }
                    if (n == "extruder_offset") {
@@ -1413,8 +1490,22 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "extrusion",
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
-                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel"},
+                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
+                "purge_multiplier"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "purge_multiplier") { // multi_extruder.md, rule 12: one value, or one per extruder
+            const json& v = g.at(n);
+            std::vector<double> list;
+            for (const json& x : v.is_array() ? v : json::array({v})) {
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 1000.0))
+                    fail(k, "must be from 0 to 1000 %, or a list of them by extruder");
+                list.push_back(x.get<double>());
+            }
+            if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                fail(k, "must be from 0 to 1000 %, or a list of them by extruder");
+            s.purge_multiplier = std::move(list);
+            return;
+        }
         if (n == "retraction" || n == "travel") { // the filament's own values (retraction_travel.md, rule 10)
             const json& v = g.at(n);
             if (!v.is_object())
@@ -1680,6 +1771,21 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.toolchange_length", json(s.toolchange_length).dump()},
         {"retraction.toolchange_restart_extra", json(s.toolchange_restart_extra).dump()},
         {"gcode.toolchange", text(s.gcode_toolchange)},
+        {"machine.single_extruder_mmu", flag(s.single_extruder_mmu)},
+        {"extruders.wipe_tower", std::to_string(s.extruder_wipe_tower)},
+        {"wipe_tower.enabled", flag(s.wipe_tower)},
+        {"wipe_tower.x", num(s.wipe_tower_x)},
+        {"wipe_tower.y", num(s.wipe_tower_y)},
+        {"wipe_tower.rotation", num(s.wipe_tower_rotation)},
+        {"wipe_tower.width", num(s.wipe_tower_width)},
+        {"wipe_tower.brim_width", num(s.wipe_tower_brim)},
+        {"wipe_tower.bridging", num(s.wipe_tower_bridging)},
+        {"wipe_tower.cone_angle", num(s.wipe_tower_cone_angle)},
+        {"wipe_tower.extra_spacing", num(s.wipe_tower_extra_spacing)},
+        {"wipe_tower.extra_flow", num(s.wipe_tower_extra_flow)},
+        {"wipe_tower.no_sparse_layers", flag(s.wipe_tower_no_sparse_layers)},
+        {"wipe_tower.purge_volumes", json(s.purge_volumes).dump()},
+        {"extrusion.purge_multiplier", json(s.purge_multiplier).dump()},
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -2009,9 +2115,23 @@ std::string settings_json(const Settings& s) {
           {"solid_infill", s.extruder_solid_infill},
           {"support", s.extruder_support},
           {"support_interface", s.extruder_support_interface},
+          {"wipe_tower", s.extruder_wipe_tower},
           {"bed_temperature_from", s.bed_temperature_from},
           {"ooze_prevention", s.ooze_prevention},
           {"standby_delta", s.standby_delta}}},
+        {"wipe_tower",
+         {{"enabled", s.wipe_tower},
+          {"x", s.wipe_tower_x},
+          {"y", s.wipe_tower_y},
+          {"rotation", s.wipe_tower_rotation},
+          {"width", s.wipe_tower_width},
+          {"brim_width", s.wipe_tower_brim},
+          {"bridging", s.wipe_tower_bridging},
+          {"cone_angle", s.wipe_tower_cone_angle},
+          {"extra_spacing", s.wipe_tower_extra_spacing},
+          {"extra_flow", s.wipe_tower_extra_flow},
+          {"no_sparse_layers", s.wipe_tower_no_sparse_layers},
+          {"purge_volumes", s.purge_volumes}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
@@ -2074,6 +2194,7 @@ std::string settings_json(const Settings& s) {
           {"z_offset", s.z_offset},
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
+          {"single_extruder_mmu", s.single_extruder_mmu},
           {"max_flow", s.machine_max_flow},
           {"max_nozzle_temp", s.max_nozzle_temp},
           {"max_bed_temp", s.max_bed_temp},
@@ -2211,6 +2332,7 @@ std::string settings_json(const Settings& s) {
           {"shrinkage_z", s.shrinkage_z},
           {"start_gcode", s.filament_start_gcode},
           {"end_gcode", s.filament_end_gcode},
+          {"purge_multiplier", s.purge_multiplier},
           {"retraction", filament_values("retraction.")},
           {"travel", filament_values("travel.")},
           {"chamber_temperature", s.chamber_temperature},
@@ -2286,10 +2408,15 @@ void check_settings(const Settings& s) {
     if (s.firmware_retraction && with_filament_retraction(s).wipe)
         throw SettingsError("retraction.wipe: the wipe retracts while the nozzle moves, which the firmware's "
                             "retraction (retraction.firmware) cannot do");
+    // The wipe tower takes relative E (multi_extruder.md, rule 9, ME6).
+    if (s.wipe_tower && s.extruders > 1 && !relative_e(s))
+        throw SettingsError("wipe_tower.enabled: the wipe tower needs relative E (machine.relative_extrusion, on a "
+                            "flavor that has M83)");
     // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
     for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
                                  {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
                                  {"extruders.support_interface", s.extruder_support_interface},
+                                 {"extruders.wipe_tower", s.extruder_wipe_tower},
                                  {"extruders.bed_temperature_from", s.bed_temperature_from}})
         if (e > s.extruders) {
             std::snprintf(text, sizeof text, "%s: extruder %d, but the machine has %d (machine.extruders)", key, e,

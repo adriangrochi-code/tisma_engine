@@ -5691,3 +5691,50 @@ objetos); los colores pintados (regla 1, con `model_tools.md`); el tiempo de los
 previa no colorea por extrusor.
 
 **Sigue:** 4b, la torre de purga (reglas 9 a 14, ME6 a ME8).
+
+## 2026-10-27 — Punto 4b: la torre de purga
+
+**Hecho** (ficha `multi_extruder.md`, reglas 9 a 12):
+- el orden de los extrusores de cada capa salió del escritor a `plan_tools` (`src/slice/wipe_tower.*`), para que la
+  torre, el verificador y la revisión de imprimibilidad vean los mismos cambios;
+- `plan_wipe_tower`: un rectángulo de `wipe_tower.width` con la esquina en (`x`, `y`), girado `rotation` alrededor de
+  ella, tan hondo como la capa que más purga. En cada capa hasta la del último cambio: el lazo de contorno, un bloque
+  de líneas en zigzag a lo ancho por cada cambio, impreso por la herramienta que entra (con
+  `machine.single_extruder_mmu`, las que hacen el volumen de `wipe_tower.purge_volumes` por el
+  `extrusion.purge_multiplier` del filamento que entra; con varias boquillas, 5 líneas para cebar), y el resto de
+  adentro: denso en la primera capa, en columnas a lo sumo `bridging` aparte arriba, de las que cuelgan los bloques.
+  En la primera capa, el borde (`brim_width`, en lazos de un cordón). `extra_spacing` separa las líneas y `extra_flow`
+  las ensancha;
+- el escritor: antes de cada cambio viaja a la torre y cambia ahí; el bloque y, en el primer cambio de la capa, el
+  contorno y el relleno, con la herramienta nueva; en las capas sin cambio (y en la primera) la torre va primero, con
+  la que está imprimiendo. Ningún camino de la torre queda dentro de la etiqueta de un objeto;
+- errores: la torre con E absoluta (regla 9), fuera de la cama, o sobre la pieza, su falda o su borde;
+- el verificador cuenta la torre en el área permitida, y el resumen del final dice los gramos de filamento de la
+  torre (`; total filament used for wipe tower [g]`, antes siempre 0);
+- en la interfaz: Otros › Torre de purga y Más de la torre de purga, el multiplicador en Material › Flujo y la MMU en
+  Impresora › Extrusores; `docs/CONFIG.md`.
+
+**Medido** (las piezas de la ficha; entre paréntesis, Tisma Slicer):
+- varias boquillas: la torre de X 180,2 a 239,8 e Y 140,2 a 142,6 en la capa 10 (180 a 240, 140 a 143), 419,6 mm por
+  capa (303,6), igual con volúmenes de 300;
+- MMU: hasta Y 152,6 (154,4), 1919,6 mm por capa (2038,1); con 300 mm³ hasta 166,2 (169,4), 3959,6 mm (3840,4); ancho
+  40: X hasta 219,8 (220); borde 5: la capa 0 desde X 175,0 (175,0), con 2 desde 178,2 (178,2); separación 150 %: 5 mm
+  más honda o más; flujo 150 %: 1379,4 mm (1561,7); multiplicador 50 %: hasta 146,6 (147,9), 1019,6 mm (1257,7);
+- ME7 (apilada, MMU): 2687,6 mm en la capa 0 (2388), 284,0 mm ralos en las capas 1 a 24 (387,4), 1919,6 en la 25
+  (2089,6), nada encima; el `T1` después del viaje a la torre.
+Las diferencias vienen del diseño propio de la torre (líneas del ancho de las paredes con el volumen como sección
+rectangular, 5 líneas para cebar, columnas en vez de un zigzag ralo); los comportamientos de la ficha se cumplen.
+
+**Corregido** (el fuzzer, con la torre y desfases): al cambiar sobre la torre a una boquilla con otro desfase, la
+primera línea salía en diagonal desde donde había quedado la anterior. Ahora la boquilla nueva se mueve sobre el mismo
+punto con sus coordenadas antes de extruir.
+
+2 pruebas nuevas de la torre y una de desfase con torre (`tests/test_multi_extruder.cpp`, 9 en total); fuzzer con la
+torre (MMU o boquillas, giro, ancho, borde, separación, flujo, multiplicador, volúmenes): 400 corridas (semilla 43), 0
+fallas. Suite: 543 pruebas pasan.
+
+**No hecho:** sin capas ralas (`no_sparse_layers`, regla 11: la boquilla tendría que bajar a la torre; se lee y se
+guarda), la purga en el relleno o en el objeto (regla 13, ME8), el cono (regla 14, no medido), el extrusor propio de
+la torre en las capas sin cambio (`extruders.wipe_tower`, se lee) y el tiempo de los cambios.
+
+**Sigue:** 4b-2 (purga en el relleno y en el objeto, sin capas ralas); después 4c, la secuencia de la MMU (ME9).

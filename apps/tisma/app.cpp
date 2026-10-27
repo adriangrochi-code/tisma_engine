@@ -759,7 +759,14 @@ const char* row_key(T label) {
         {T::SolidInfillExtruder, "extruders.solid_infill"}, {T::SupportExtruder, "extruders.support"},
         {T::SupportInterfaceExtruder, "extruders.support_interface"},
         {T::BedTemperatureFrom, "extruders.bed_temperature_from"}, {T::OozePrevention, "extruders.ooze_prevention"},
-        {T::StandbyDelta, "extruders.standby_delta"}, {T::InterfaceShells, "surfaces.interface_shells"}};
+        {T::StandbyDelta, "extruders.standby_delta"}, {T::InterfaceShells, "surfaces.interface_shells"},
+        {T::WipeTowerRow, "wipe_tower.enabled"}, {T::WipeTowerWidth, "wipe_tower.width"},
+        {T::WipeTowerBrim, "wipe_tower.brim_width"}, {T::WipeTowerX, "wipe_tower.x"}, {T::WipeTowerY, "wipe_tower.y"},
+        {T::WipeTowerRotation, "wipe_tower.rotation"}, {T::WipeTowerBridging, "wipe_tower.bridging"},
+        {T::WipeTowerExtruder, "extruders.wipe_tower"}, {T::PurgeVolumesRow, "wipe_tower.purge_volumes"},
+        {T::WipeTowerSpacing, "wipe_tower.extra_spacing"}, {T::WipeTowerFlow, "wipe_tower.extra_flow"},
+        {T::WipeTowerCone, "wipe_tower.cone_angle"}, {T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers"},
+        {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3138,6 +3145,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "wipe_tower") {
+        // The wipe tower (multi_extruder.md, rules 9 to 14).
+        flag(T::WipeTowerRow, "wipe_tower.enabled", s.wipe_tower);
+        mm(T::WipeTowerWidth, "wipe_tower.width", s.wipe_tower_width, 1.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerBrim, "wipe_tower.brim_width", s.wipe_tower_brim, 0.0, 100.0, "%.1f mm", 0.05f);
+        mm(T::WipeTowerX, "wipe_tower.x", s.wipe_tower_x, -10000.0, 10000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerY, "wipe_tower.y", s.wipe_tower_y, -10000.0, 10000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerRotation, "wipe_tower.rotation", s.wipe_tower_rotation, -360.0, 360.0, "%.0f°", 0.5f);
+        mm(T::WipeTowerBridging, "wipe_tower.bridging", s.wipe_tower_bridging, 1.0, 100.0, "%.1f mm", 0.05f);
+        whole(T::WipeTowerExtruder, "extruders.wipe_tower", s.extruder_wipe_tower, 0, kMaxExtruders);
+    } else if (id == "wipe_tower_more") {
+        count(T::PurgeVolumesRow, "wipe_tower.purge_volumes", s.purge_volumes.size());
+        mm(T::WipeTowerSpacing, "wipe_tower.extra_spacing", s.wipe_tower_extra_spacing, 50.0, 500.0, "%.0f %%", 0.5f);
+        mm(T::WipeTowerFlow, "wipe_tower.extra_flow", s.wipe_tower_extra_flow, 50.0, 500.0, "%.0f %%", 0.5f);
+        mm(T::WipeTowerCone, "wipe_tower.cone_angle", s.wipe_tower_cone_angle, 0.0, 90.0, "%.0f°", 0.5f);
+        flag(T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers", s.wipe_tower_no_sparse_layers);
     } else if (id == "fuzzy") {
         if (shown("fuzzy.mode"))
             changed |= row(T::FuzzySkin, s.fuzzy_mode,
@@ -3196,6 +3219,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "flow") {
         mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
         mm(T::BridgeFlowRatio, "extrusion.bridge_flow_ratio", s.bridge_flow_ratio, 0.1, 2.0, "%.2f", 0.01f);
+        // The share of the purge this filament asks for (multi_extruder.md, rule 12).
+        if (s.purge_multiplier.size() == 1)
+            mm(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.front(), 0.0, 1000.0, "%.0f %%", 0.5f);
+        else
+            count(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.size());
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {
@@ -3274,6 +3302,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         // here while it holds one value for all.
         whole(T::ExtrudersRow, "machine.extruders", s.extruders, 1, kMaxExtruders);
         count(T::ExtruderOffsetRow, "machine.extruder_offset", s.extruder_offset.size());
+        flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
         for (const auto& [label, key, list, top] :
              {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
               std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {

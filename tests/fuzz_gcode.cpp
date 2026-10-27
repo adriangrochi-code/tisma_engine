@@ -390,6 +390,22 @@ int main(int argc, char** argv) {
                                             "T{next_extruder} ; own"}[std::size_t(pick(3))];
             s.variables["temperature"] = {"200", "215", "230"};
             s.variables["bed_temperature"] = {"60", "70"};
+            // The wipe tower, away from the models (centred on the origin).
+            if (pick(2) == 0) {
+                s.wipe_tower = true;
+                s.relative_extrusion = true;
+                s.single_extruder_mmu = pick(2) == 0;
+                s.wipe_tower_x = uni(80, 100), s.wipe_tower_y = uni(80, 100);
+                s.wipe_tower_rotation = pick(2) == 0 ? 0.0 : uni(-90, 90);
+                s.wipe_tower_width = uni(20, 60);
+                s.wipe_tower_brim = uni(0, 4);
+                s.wipe_tower_bridging = uni(3, 15);
+                s.wipe_tower_extra_spacing = uni(80, 200);
+                s.wipe_tower_extra_flow = uni(80, 200);
+                s.purge_multiplier = {uni(30, 150)};
+                if (pick(2) == 0)
+                    s.purge_volumes = {{0, uni(0, 300), uni(0, 300)}, {uni(0, 300), 0, uni(0, 300)}, {uni(0, 300), uni(0, 300), 0}};
+            }
         }
         // With TISMA_FUZZ_RUN set to a run's number, that run's model and
         // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).

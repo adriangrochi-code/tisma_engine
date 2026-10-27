@@ -783,7 +783,11 @@ Con el PR #23 (2026-10-26):
     temperatura, la cama por extrusor y las cáscaras entre materiales (`surfaces.interface_shells`). Falta asignar el
     extrusor de cada objeto desde la línea de comandos y la interfaz, y los colores pintados (regla 1, con
     `model_tools.md`)
-  - [ ] 4b, la torre de purga (reglas 9 a 14, ME6 a ME8)
+  - [ ] 4b, la torre de purga (reglas 9 a 14, ME6 a ME8): hechos (2026-10-27) la torre con su contorno, un bloque por
+    cambio (purga con MMU, cebado con varias boquillas), relleno denso abajo y en columnas arriba, borde, giro,
+    separación y flujo de sus líneas, el multiplicador de purga, el cambio sobre la torre y los errores (E absoluta,
+    fuera de la cama, sobre la pieza). Faltan sin capas ralas (regla 11), la purga en el relleno o el objeto (regla
+    13, ME8) y el cono (regla 14, no medido)
   - [ ] 4c, la MMU de un extrusor (regla 15, ME9)
   - [ ] 4d, las vigas de entrelazado (regla 17, ME11) y las regiones pintadas (regla 18)
   - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12)

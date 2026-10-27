@@ -153,6 +153,21 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.bed_temperature_from", A},
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
+          {"wipe_tower", T::SubWipeTower,
+           {{"wipe_tower.enabled", N},
+            {"wipe_tower.width", N},
+            {"wipe_tower.brim_width", N},
+            {"wipe_tower.x", A},
+            {"wipe_tower.y", A},
+            {"wipe_tower.rotation", A},
+            {"wipe_tower.bridging", A},
+            {"extruders.wipe_tower", A}}},
+          {"wipe_tower_more", T::SubWipeTowerMore,
+           {{"wipe_tower.purge_volumes", A},
+            {"wipe_tower.extra_spacing", A},
+            {"wipe_tower.extra_flow", A},
+            {"wipe_tower.cone_angle", A},
+            {"wipe_tower.no_sparse_layers", A}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
@@ -192,7 +207,7 @@ const std::vector<SectionLayout>& material_layout() {
           {"short_layers", T::SubShortLayers,
            {{"cooling.min_layer_time", N}, {"cooling.min_speed", N}, {"cooling.keep_outer_speed", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
-         {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}}},
+         {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}, {"extrusion.purge_multiplier", A}}},
           {"pressure", T::SubPressure, {{"extrusion.pressure_advance", A}}},
           {"max_flow", T::SubMaxFlow,
            {{"extrusion.max_flow", N}, {"extrusion.infill_max_speed", A}, {"extrusion.infill_max_crossing_speed", A}}}}},
@@ -247,7 +262,8 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.extruder_offset", A},
             {"retraction.toolchange_length", A},
             {"retraction.toolchange_restart_extra", A},
-            {"gcode.toolchange", A}}}}},
+            {"gcode.toolchange", A},
+            {"machine.single_extruder_mmu", A}}}}},
         {"limits", T::SecLimits, "section_limits.svg",
          {{"speeds", T::SubSpeedLimits,
            {{"machine.max_feed_x", N},
@@ -520,6 +536,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumByKind);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
+    if (id == "wipe_tower")
+        return s.wipe_tower ? format(T::SumMm, number(s.wipe_tower_width).c_str()) : tr(T::SumOff);
+    if (id == "wipe_tower_more")
+        return number(s.wipe_tower_extra_spacing, 0) + " % · " + number(s.wipe_tower_extra_flow, 0) + " %";
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)

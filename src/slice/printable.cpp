@@ -4,6 +4,7 @@
 #include "slice/printable.hpp"
 
 #include "slice/pipeline.hpp"
+#include "slice/wipe_tower.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -153,6 +154,31 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
                                       paths == &model.skirt ? "skirt_distance" : "brim_width");
                         return text;
                     }
+    // The wipe tower (multi_extruder.md, rule 10): on the bed, clear of the
+    // part's first layer and its skirt and brim.
+    if (const WipeTower tower = plan_wipe_tower(model, s, plan_tools(model, s)); !tower.empty()) {
+        char text[240];
+        for (const auto& q : tower.outline)
+            if (!s.bed.empty() && !on_bed(s.bed, to_mm(q.x), to_mm(q.y))) {
+                std::snprintf(text, sizeof text,
+                              "the wipe tower goes off the bed (machine.bed) at x %.3f, y %.3f: move it "
+                              "(wipe_tower.x, wipe_tower.y) or make it narrower",
+                              to_mm(q.x), to_mm(q.y));
+                return text;
+            }
+        // The skirt's and the brim's loops with what they go round.
+        Polygons first = model.regions.empty() ? Polygons{} : model.regions.front();
+        for (const auto* paths : {&model.skirt, &model.brim})
+            for (const Toolpath& t : *paths) {
+                Polygon loop;
+                for (const ToolpathPoint& p : t.points)
+                    loop.push_back({to_units(p.p.x), to_units(p.p.y)});
+                if (loop.size() >= 3)
+                    first.push_back(std::move(loop));
+            }
+        if (!Clipper2Lib::Intersect(Polygons{tower.outline}, first, Clipper2Lib::FillRule::NonZero).empty())
+            return "the wipe tower lies on the part, its skirt or its brim: move it (wipe_tower.x, wipe_tower.y)";
+    }
     // Something to extrude: a wall, infill of any kind, or gap fill. (The
     // skirt and the brim alone are not a print.)
     auto has = [](const std::vector<Toolpath>& paths) {

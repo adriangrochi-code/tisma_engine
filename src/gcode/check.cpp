@@ -10,6 +10,7 @@
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/wipe_tower.hpp"
 
 #include <oneapi/tbb/parallel_pipeline.h>
 
@@ -564,6 +565,11 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
                     lo[0] = std::min(lo[0], to_mm(p.x)), hi[0] = std::max(hi[0], to_mm(p.x));
                     lo[1] = std::min(lo[1], to_mm(p.y)), hi[1] = std::max(hi[1], to_mm(p.y));
                 }
+    // The wipe tower with its brim (multi_extruder.md, rule 10).
+    for (const auto& p : plan_wipe_tower(model, s, plan_tools(model, s)).outline) {
+        lo[0] = std::min(lo[0], to_mm(p.x)), hi[0] = std::max(hi[0], to_mm(p.x));
+        lo[1] = std::min(lo[1], to_mm(p.y)), hi[1] = std::max(hi[1], to_mm(p.y));
+    }
     // Around them: the brim, the skirt beyond it, and slack for half a bead
     // and the travels that go round the outside.
     // The brim and skirt are mitred offsets (offset(), miter limit 2): at a

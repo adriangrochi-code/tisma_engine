@@ -153,7 +153,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
         group == "vase" || group == "placement" || group == "arcs" || group == "ironing" || group == "output" ||
-        group == "extruders")
+        group == "extruders" || group == "wipe_tower")
         return ProfileKind::Print;
     return std::nullopt;
 }
