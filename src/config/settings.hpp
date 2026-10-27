@@ -199,6 +199,26 @@ struct Settings {
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
     double travel_z_speed = 0.0;    // moves in Z (speed.travel)
+    // Walls by how much of their bead rests on the layer below
+    // (speeds_accels.md, rules 6 and 7): at overhang_speeds[k] with 0, 25, 50
+    // and 75 %, their own with 100 %, in a straight line in between. Each in
+    // mm/s or a share of the outer wall's; the spec's, not the printer's.
+    bool dynamic_overhangs = false;
+    std::array<Speed, 4> overhang_speeds = {Speed{15.0, false}, Speed{15.0, false}, Speed{20.0, false}, Speed{25.0, false}};
+
+    // Accelerations by kind (speeds_accels.md, rules 10 to 13), mm/s2, set
+    // before each extrusion and travel; 0: the one in brackets. Without
+    // accel_default, only the travels' (and the extrusions go on with it).
+    double accel_default = 0.0;
+    double accel_walls = 0.0;            // inner walls (accel_default)
+    double accel_outer_wall = 0.0;       // (accel_walls)
+    double accel_infill = 0.0;           // sparse infill (accel_default)
+    double accel_solid_infill = 0.0;     // (accel_infill)
+    double accel_top_solid_infill = 0.0; // (accel_solid_infill)
+    double accel_bridges = 0.0;          // bridges and overhang perimeters (accel_default)
+    double accel_first_layer = 0.0;      // everything on the first layer (each kind's)
+    double accel_travel = 0.0;           // travels (none)
+    double accel_short_travel = 0.0;     // travels shorter than retraction.min_travel (accel_travel)
 
     // retraction
     double retract_length = 2.0;     // mm of filament

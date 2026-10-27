@@ -734,9 +734,10 @@ Con el PR #23 (2026-10-26):
   - [ ] `speeds_accels.md`. Hecho (2026-10-27): `speed.bridges` (y el cordón redondo de los puentes y de los
     perímetros en voladizo, `gcode_motion.md` regla 1, con `extrusion.bridge_flow_ratio`, regla 14), `speed.gap_fill`,
     `speed.over_bridges`, `speed.first_layer_infill`, `speed.travel_z` y los topes del relleno por filamento
-    (`extrusion.infill_max_speed` y `_crossing_speed`): reglas 1 a 5 y 14, pruebas V2 a V5, V10 y M2. Faltan las
-    velocidades dinámicas en voladizos (6 y 7, V6), el ecualizador del caudal (8 y 9, V7) y las aceleraciones por tipo
-    (10 a 13, V8 y V9). V1 espera al relleno de huecos;
+    (`extrusion.infill_max_speed` y `_crossing_speed`): reglas 1 a 5 y 14, pruebas V2 a V5, V10 y M2. También
+    (2026-10-27) las velocidades dinámicas en voladizos (6 y 7, V6) y las aceleraciones por tipo (10 a 13, V8 y V9;
+    sin el tope de los límites de la máquina, que espera a `gcode_firmware.md`, ni las de la balsa y la torre de
+    purga). Falta el ecualizador del caudal (8 y 9, V7). V1 espera al relleno de huecos;
   - [ ] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1);
   - [ ] planchado (`ironing.md`);
   - [ ] balsa (`skirt_brim_raft.md`);

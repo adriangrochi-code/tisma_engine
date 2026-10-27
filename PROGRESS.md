@@ -5112,3 +5112,27 @@ claves nuevas.
 
 **Sigue:** del mismo punto, las velocidades dinámicas en voladizos (V6), el ecualizador del caudal (V7) y las
 aceleraciones por tipo (V8, V9); después, el relleno de huecos (V1, W6).
+
+## 2026-10-27 — Punto 2: aceleraciones por tipo y velocidades dinámicas en voladizos
+
+**Hecho** (ficha `speeds_accels.md`, reglas 6, 7 y 10 a 13):
+- grupo `acceleration` (perfil de la impresora): `default`, `walls`, `outer_wall`, `infill`, `solid_infill`,
+  `top_solid_infill`, `bridges`, `first_layer`, `travel` y `short_travel`, con los reemplazos de la tabla. Antes de
+  cada extrusión, la de su tipo; al terminar el tipo, se vuelve a `default`; antes de cada viaje, la de los viajes (la
+  de los cortos si es más corto que `retraction.min_travel`). Sin `default`, solo la de los viajes. `M204 S` en
+  RepRapFirmware y Klipper; en Marlin `M204 P` al imprimir y `M204 T` para los viajes, cada uno cuando cambia. El
+  tiempo estimado sigue cada cambio;
+- `speed.dynamic_overhangs` y `speed.overhang_0` a `_3` (mm/s o % del perímetro externo; 15, 15, 20 y 25): la parte
+  apoyada de cada tramo de pared sale de la arista más cercana del contorno de la capa de abajo (distancia y lado), cada
+  0,5 mm cerca de ese contorno; la velocidad se interpola entre los cinco puntos de la regla 7, nunca más rápida que la
+  de la pared; los tramos con velocidades a menos de 1 % se juntan, a su media. Los tramos en el aire, a `overhang_0`;
+- en el panel, Velocidad › Voladizos, Aceleraciones y Aceleración de los viajes (Avanzado).
+
+**Medido:** V6 con paredes de 0,45 como en la ficha: embudos de 20°, 30°, 40°, 45°, 55° y 60° con el perímetro externo
+a 26,76, 24,87, 22,54, 21,11, 17,30 y 15,0 mm/s de media (la ficha: 27,0, 24,9, 22,6, 21,1, 17,31 y 15,0); de un
+tramo a otro varía ±0,3 mm/s porque el contorno de cada capa se simplifica (`slicing.simplify_tolerance`). V8 y V9
+como en la ficha (salvo la balsa). Costo con todo encendido (mediana de 5): Benchy 0,68 → 0,82 s, cráneo 2,83 → 4,02 s
+(el cráneo cambia de apoyo en todas partes: 966 000 líneas contra 649 000); las aceleraciones solas no cuestan nada.
+Los dos G-code verificados. Fuzzer con las opciones nuevas: 700 corridas, 0 fallas.
+
+**Sigue:** el ecualizador del caudal (reglas 8 y 9, V7); después, el relleno de huecos (V1, W6).

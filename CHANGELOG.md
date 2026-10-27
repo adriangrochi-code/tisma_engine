@@ -47,6 +47,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   perímetros en voladizo, `speed.over_bridges` para el relleno sólido justo encima de un puente,
   `speed.first_layer_infill` para el relleno de la primera capa (puede pasar la velocidad de la primera capa),
   `speed.gap_fill` y `speed.travel_z` para los movimientos en Z. Sin valor, la de siempre.
+- **Aceleraciones por tipo** (ficha `speeds_accels.md`; grupo `acceleration`, en Velocidad › Aceleraciones): una
+  para cada tipo de extrusión, la primera capa y los viajes (también los cortos), con `M204` según el firmware.
+- **Paredes más lentas en los voladizos** (`speed.dynamic_overhangs`, en Velocidad › Voladizos): cuanto menos de su
+  cordón se apoya en la capa de abajo, más lenta va la pared, entre `speed.overhang_0` y `_3`.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.

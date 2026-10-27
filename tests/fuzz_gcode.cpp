@@ -165,6 +165,18 @@ int main(int argc, char** argv) {
             s.infill_max_crossing_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
             s.bridge_flow_ratio = uni(0.5, 1.5);
         }
+        if (pick(4) == 0) { // walls by how much rests on the layer below
+            s.dynamic_overhangs = true;
+            for (Speed& v : s.overhang_speeds)
+                v = pick(2) == 0 ? Speed{uni(10, 120), true} : Speed{uni(2, 60), false};
+        }
+        if (pick(3) == 0) { // accelerations by kind
+            s.accel_default = pick(3) == 0 ? 0.0 : uni(500, 5000);
+            for (double* a : {&s.accel_walls, &s.accel_outer_wall, &s.accel_infill, &s.accel_solid_infill,
+                              &s.accel_top_solid_infill, &s.accel_bridges, &s.accel_first_layer, &s.accel_travel,
+                              &s.accel_short_travel})
+                *a = pick(2) == 0 ? 0.0 : uni(300, 10000);
+        }
         s.min_layer_time = uni(0, 30);
         s.filament_diameter = pick(4) == 0 ? 2.85 : 1.75;
         s.xy_offset = pick(4) == 0 ? uni(-0.2, 0.2) : 0.0;

@@ -121,9 +121,13 @@ public:
         for (const Polygon& poly : region) {
             std::array<double, 4> b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
                                        std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+            const auto first = std::uint32_t(edges_.size());
             for (std::size_t i = 0; i < poly.size(); ++i) {
                 const Point2d p{to_mm(poly[i].x), to_mm(poly[i].y)};
                 const Point2d q{to_mm(poly[(i + 1) % poly.size()].x), to_mm(poly[(i + 1) % poly.size()].y)};
+                const auto k = std::uint32_t(edges_.size());
+                prev_.push_back(i == 0 ? first + std::uint32_t(poly.size()) - 1 : k - 1);
+                next_.push_back(i + 1 == poly.size() ? first : k + 1);
                 edges_.push_back({p, q});
                 b = {std::min(b[0], p.x), std::min(b[1], p.y), std::max(b[2], p.x), std::max(b[3], p.y)};
             }
@@ -171,6 +175,64 @@ public:
         return winding != 0;
     }
 
+    // The outline's nearest point to p within `reach`: how far, and whether p
+    // is inside. The region lies left of its edges (Clipper's orientation);
+    // nearest to a corner, p is outside a convex corner and inside a reflex one.
+    struct Nearest {
+        double distance;
+        bool inside;
+    };
+    std::optional<Nearest> nearest(const Point2d& p, double reach) const {
+        if (edges_.empty())
+            return std::nullopt;
+        double best = reach;
+        std::optional<Nearest> out;
+        const auto [x0, y0, x1, y1] = cell_box({p.x - reach, p.y - reach}, {p.x + reach, p.y + reach});
+        const auto turn = [&](std::uint32_t in, std::uint32_t out_edge) { // left turn: convex
+            const Edge &a = edges_[in], &b = edges_[out_edge];
+            return (a.b.x - a.a.x) * (b.b.y - b.a.y) - (a.b.y - a.a.y) * (b.b.x - b.a.x) > 0.0;
+        };
+        for (std::size_t y = y0; y <= y1; ++y)
+            for (std::size_t x = x0; x <= x1; ++x)
+                for (const std::uint32_t k : cells_[y * nx_ + x]) {
+                    const Edge& e = edges_[k];
+                    const double ex = e.b.x - e.a.x, ey = e.b.y - e.a.y;
+                    const double l2 = ex * ex + ey * ey;
+                    if (!(l2 > 0.0))
+                        continue;
+                    const double u = ((p.x - e.a.x) * ex + (p.y - e.a.y) * ey) / l2;
+                    const double c = std::clamp(u, 0.0, 1.0);
+                    const double d = std::hypot(e.a.x + c * ex - p.x, e.a.y + c * ey - p.y);
+                    if (out ? d >= best : d > best)
+                        continue;
+                    best = d;
+                    const bool inside = u <= 0.0   ? !turn(prev_[k], k)
+                                        : u >= 1.0 ? !turn(k, next_[k])
+                                                   : ex * (p.y - e.a.y) - ey * (p.x - e.a.x) > 0.0;
+                    out = Nearest{d, inside};
+                }
+        return out;
+    }
+
+    // The distance from p to the region's outline when it is under `reach`;
+    // else `reach`.
+    double distance(const Point2d& p, double reach) const {
+        double best = reach;
+        if (edges_.empty())
+            return best;
+        const auto [x0, y0, x1, y1] = cell_box({p.x - reach, p.y - reach}, {p.x + reach, p.y + reach});
+        for (std::size_t y = y0; y <= y1; ++y)
+            for (std::size_t x = x0; x <= x1; ++x)
+                for (const std::uint32_t k : cells_[y * nx_ + x]) {
+                    const Edge& e = edges_[k];
+                    const double ex = e.b.x - e.a.x, ey = e.b.y - e.a.y;
+                    const double l2 = ex * ex + ey * ey;
+                    const double u = l2 > 0.0 ? std::clamp(((p.x - e.a.x) * ex + (p.y - e.a.y) * ey) / l2, 0.0, 1.0) : 0.0;
+                    best = std::min(best, std::hypot(e.a.x + u * ex - p.x, e.a.y + u * ey - p.y));
+                }
+        return best;
+    }
+
     // Where along the segment from a to b (0 to 1, ends left out) it crosses
     // the region's outline, added to `at`.
     void crossings(const Point2d& a, const Point2d& b, std::vector<double>& at) {
@@ -213,6 +275,7 @@ private:
     std::vector<std::array<double, 4>> boxes_;
     std::array<double, 4> box_{};
     std::vector<Edge> edges_;
+    std::vector<std::uint32_t> prev_, next_; // each edge's neighbours on its polygon
     double cell_ = 1.0;
     std::size_t nx_ = 1, ny_ = 1;
     std::vector<std::vector<std::uint32_t>> cells_;
@@ -320,6 +383,84 @@ std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, con
     }
     out.push_back(std::move(piece));
     return rounded(out);
+}
+
+// A point between a and b, at u from a: width and heights in between.
+ToolpathPoint between(const ToolpathPoint& a, const ToolpathPoint& b, double u) {
+    ToolpathPoint p = a;
+    p.p = {a.p.x + u * (b.p.x - a.p.x), a.p.y + u * (b.p.y - a.p.y)};
+    p.width = a.width + u * (b.width - a.width);
+    p.dz = a.dz + u * (b.dz - a.dz);
+    p.below = a.below + u * (b.below - a.below);
+    return p;
+}
+
+// A wall by how much of its bead rests on the layer below (`below`, its
+// region; speeds_accels.md, rules 6 and 7): every stretch's share, from 0 (in
+// the air) to 1, from how far its middle lies inside or out of that region
+// against its width; the wall cut every 0.5 mm near the region's outline, and
+// the stretches whose feeds (feed_of the share) are within 1 % of their run's
+// joined, at the run's mean by length (an organic surface would otherwise
+// change speed every half millimetre). Away from the outline a stretch rests
+// all or nothing: `in_air` says which. A wall at one feed all along stays
+// whole.
+template <typename InAir, typename FeedOf>
+std::vector<std::pair<Toolpath, double>> by_support(const Toolpath& wall, const AreaIndex& below, InAir in_air,
+                                                    FeedOf feed_of) {
+    const std::size_t n = wall.points.size();
+    if (n < 2)
+        return {{wall, feed_of(1.0)}};
+    const std::size_t segments = wall.closed && n > 2 ? n : n - 1;
+    constexpr double kPiece = 0.5; // mm
+    constexpr double kChunk = 4.0; // mm looked at for the outline at once
+    std::vector<std::pair<Toolpath, double>> out;
+    Toolpath run; // the stretch being joined, at run_feed
+    run.index = wall.index;
+    run.gap = wall.gap;
+    double run_feed = 0.0, run_length = 0.0;
+    constexpr double kJoin = 0.01; // of the run's feed
+    for (std::size_t i = 0; i < segments; ++i) {
+        const ToolpathPoint& a = wall.points[i];
+        const ToolpathPoint& b = wall.points[(i + 1) % n];
+        const double length = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        const double w = std::max((a.width + b.width) / 2.0, 1e-3);
+        const auto at = [&](double u) { return Point2d{a.p.x + u * (b.p.x - a.p.x), a.p.y + u * (b.p.y - a.p.y)}; };
+        const std::size_t chunks = std::max<std::size_t>(1, std::size_t(std::ceil(length / kChunk)));
+        for (std::size_t ch = 0; ch < chunks; ++ch) {
+            const double ua = double(ch) / double(chunks), ub = double(ch + 1) / double(chunks);
+            const double reach = length / double(chunks) / 2.0 + w;
+            const bool near = below.distance(at((ua + ub) / 2.0), reach) < reach;
+            const std::size_t parts =
+                near ? std::clamp<std::size_t>(std::size_t(std::ceil(length / double(chunks) / kPiece)), 1, 400) : 1;
+            for (std::size_t j = 0; j < parts; ++j) {
+                const double u0 = ua + (ub - ua) * double(j) / double(parts);
+                const double u1 = ua + (ub - ua) * double(j + 1) / double(parts);
+                const Point2d c = at((u0 + u1) / 2.0);
+                double share = 1.0;
+                if (const auto hit = near ? below.nearest(c, w) : std::nullopt)
+                    share = std::clamp((w / 2.0 + (hit->inside ? hit->distance : -hit->distance)) / w, 0.0, 1.0);
+                else
+                    share = in_air(c) ? 0.0 : 1.0;
+                const double feed = feed_of(share);
+                const double piece = (u1 - u0) * length;
+                if (run.points.empty() || std::abs(feed - run_feed) > kJoin * run_feed) {
+                    if (run.points.size() > 1)
+                        out.push_back({run, run_feed});
+                    run.points.assign(1, between(a, b, u0));
+                    run_feed = feed, run_length = 0.0;
+                }
+                if (run_length + piece > 0.0)
+                    run_feed = (run_feed * run_length + feed * piece) / (run_length + piece);
+                run_length += piece;
+                run.points.push_back(between(a, b, u1));
+            }
+        }
+    }
+    if (out.empty())
+        return {{wall, run_feed}};
+    if (run.points.size() > 1)
+        out.push_back({std::move(run), run_feed});
+    return out;
 }
 
 // Z anti-aliasing (docs/ZAA.md): the pieces of a path where its points go from
@@ -484,7 +625,9 @@ public:
                            s.travel_acceleration,
                            s.corner_speed}),
           retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
-          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed) {
+          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed), marlin_(s.flavor == GcodeFlavor::Marlin),
+          accel_print_(s.acceleration), accel_travel_(s.travel_acceleration), travel_accel_(s.accel_travel),
+          short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         // The melt limit: the lower of the hot end's and the filament's (0: none).
@@ -648,6 +791,26 @@ public:
         clearance_ = 0.0;
     }
 
+    // After a kind's extrusions: back to `a` (0: none). With M204 S and an
+    // acceleration of the travels, the next travel sets its own anyway.
+    void reset_acceleration(double a) {
+        if (marlin_ || !(travel_accel_ > 0.0))
+            print_acceleration(a);
+    }
+
+    // Before an extrusion: its kind's acceleration; 0 leaves it as it is.
+    void print_acceleration(double a) {
+        if (!(a > 0.0) || (a == accel_print_ && (marlin_ || a == accel_travel_)))
+            return;
+        text_ += marlin_ ? "M204 P" : "M204 S";
+        append_integer(text_, std::lround(a));
+        text_ += '\n';
+        accel_print_ = a;
+        if (!marlin_)
+            accel_travel_ = a;
+        time_.set_accelerations(accel_print_, accel_travel_);
+    }
+
     void type(const char* t) {
         if (type_ != t) {
             text_ += ";TYPE:";
@@ -669,6 +832,7 @@ public:
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
+            travel_acceleration(std::numeric_limits<double>::infinity());
             if (retract_ > 0.0 && !retracted_) {
                 e_ = relative_ ? -retract_ : e_ - retract_;
                 move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
@@ -687,6 +851,7 @@ public:
         }
         resync_ = false;
         if (!known_) {
+            travel_acceleration(std::numeric_limits<double>::infinity());
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed);
             x_value_ = p.x, y_value_ = p.y, known_ = true;
             return;
@@ -695,6 +860,8 @@ public:
         const TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
         const TravelPlan& plan = ready ? *planned : own;
         const bool retract = force_retract || plan.leaves_part || plan.length > min_travel_;
+        if (plan.length > 0.0)
+            travel_acceleration(plan.length);
         if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
@@ -805,6 +972,21 @@ private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
 
+    // Before a travel of `length` mm: the travels' acceleration, or the short
+    // ones' (speeds_accels.md, rule 11).
+    void travel_acceleration(double length) {
+        const double a = length < min_travel_ ? short_travel_accel_ : travel_accel_;
+        if (!(a > 0.0) || (a == accel_travel_ && (marlin_ || a == accel_print_)))
+            return;
+        text_ += marlin_ ? "M204 T" : "M204 S";
+        append_integer(text_, std::lround(a));
+        text_ += '\n';
+        accel_travel_ = a;
+        if (!marlin_)
+            accel_print_ = a;
+        time_.set_accelerations(accel_print_, accel_travel_);
+    }
+
     // The feed of a move in Z, beside travels at `travel`.
     double z_feed(double travel) const { return z_feed_ > 0.0 ? z_feed_ : travel; }
 
@@ -875,6 +1057,11 @@ private:
     double filament_area_ = 1.0;
     double retract_, retract_feed_, lift_, min_travel_;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
+    // Accelerations (speeds_accels.md, rules 10 to 13): Marlin's M204 P for
+    // printing and T for travels, or M204 S for both; as last set.
+    bool marlin_;
+    double accel_print_, accel_travel_;
+    double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0;
     double flow_ = 1.0;
     double height_ = 0.2;
@@ -1084,6 +1271,29 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                   sparse_feed,          s.support_speed,          s.support_speed};
     // The bridges' round bead, for the walls over the air.
     const double bead = bridge_bead(s);
+    // Each kind's acceleration (speeds_accels.md, rules 10 and 12): with the
+    // replacements of the spec's table; none without acceleration.default.
+    const auto or_else = [](double v, double fallback) { return v > 0.0 ? v : fallback; };
+    const double accel_walls = or_else(s.accel_walls, s.accel_default);
+    const double accel_outer = or_else(s.accel_outer_wall, accel_walls);
+    const double accel_infill = or_else(s.accel_infill, s.accel_default);
+    const double accel_solid = or_else(s.accel_solid_infill, accel_infill);
+    const double accel_top = or_else(s.accel_top_solid_infill, accel_solid);
+    const double accel_bridges = or_else(s.accel_bridges, s.accel_default);
+    const auto acceleration_of = [&](const char* type, bool first) {
+        if (!(s.accel_default > 0.0))
+            return 0.0;
+        if (first && s.accel_first_layer > 0.0)
+            return s.accel_first_layer;
+        const auto is = [&](const char* name) { return std::strcmp(type, name) == 0; };
+        return is("External perimeter")                             ? accel_outer
+               : is("Perimeter")                                    ? accel_walls
+               : is("Overhang perimeter") || is("Bridge infill")    ? accel_bridges
+               : is("Internal infill")                              ? accel_infill
+               : is("Solid infill")                                 ? accel_solid
+               : is("Top solid infill")                             ? accel_top
+                                                                    : s.accel_default; // support, skirt, gap fill
+    };
 
     // Every layer's travel planner and islands first, in parallel: they
     // depend on the layer's region alone, and the layers are written one after
@@ -1253,6 +1463,28 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         if (s.over_bridges_speed.value > 0.0 && l > 0 && l - 1 < model.air_bridges.size() &&
             !model.air_bridges[l - 1].empty())
             over_bridge.emplace(model.air_bridges[l - 1]), nowhere.emplace(none);
+        // The walls by how much of their bead rests on the layer below
+        // (speeds_accels.md, rules 6 and 7); a vase's wall stays one turn.
+        std::optional<AreaIndex> below_outline, air;
+        if (s.dynamic_overhangs && !s.vase && l > 0 && l - 1 < model.regions.size() && !model.regions[l - 1].empty()) {
+            below_outline.emplace(model.regions[l - 1]);
+            if (hanging_area)
+                air.emplace(*hanging_area);
+        }
+        const auto in_air = [&](const Point2d& p) { return air && air->contains(p.x, p.y); };
+        // The feed of a wall at `normal` with `share` of its bead held: the
+        // overhang speeds at 0, 25, 50 and 75 %, in a straight line between,
+        // never faster than its own.
+        const auto dynamic_feed = [&](double share, double normal) {
+            const double outer = s.outer_wall_speed.of(s.wall_speed);
+            std::array<double, 5> at{};
+            for (std::size_t k = 0; k < 4; ++k)
+                at[k] = s.overhang_speeds[k].value > 0.0 ? speed(s.overhang_speeds[k].of(outer)) : normal;
+            at[4] = normal;
+            const double x = std::clamp(share, 0.0, 1.0) * 4.0;
+            const std::size_t k = std::min<std::size_t>(3, std::size_t(x));
+            return std::min(normal, at[k] + (x - double(k)) * (at[k + 1] - at[k]));
+        };
         bool in_thick = false;
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -1294,15 +1526,30 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                         typed.push_back({std::move(piece.path), type, piece.overhang ? over : feed});
                     continue;
                 }
-                if (!walls || in_thick || !split_walls) {
+                if (!walls || in_thick || (!split_walls && !below_outline)) {
                     typed.push_back({std::move(t), type, feed});
                     continue;
                 }
                 // Overhang perimeters at the bridges' speed, with their round
                 // bead over the air (walls_extra.md, rule 8).
-                for (WallPiece& piece : wall_pieces(t, *hanging, *on_support, support_gap, s.detect_overhangs, &round))
-                    typed.push_back({std::move(piece.path), piece.overhang ? "Overhang perimeter" : type,
-                                     piece.overhang ? speed(bridge_feed) : feed});
+                std::vector<WallPiece> pieces =
+                    split_walls ? wall_pieces(t, *hanging, *on_support, support_gap, s.detect_overhangs, &round)
+                                : std::vector<WallPiece>(1, WallPiece{std::move(t)});
+                for (WallPiece& piece : pieces) {
+                    const char* kind = piece.overhang ? "Overhang perimeter" : type;
+                    if (!below_outline || (piece.overhang && !piece.air)) { // over the support: as a bridge
+                        typed.push_back({std::move(piece.path), kind, piece.overhang ? speed(bridge_feed) : feed});
+                        continue;
+                    }
+                    // By how much rests on the layer below: in the air, overhang_0.
+                    if (piece.air) {
+                        typed.push_back({std::move(piece.path), kind, dynamic_feed(0.0, feed)});
+                        continue;
+                    }
+                    for (auto& [path, f] : by_support(piece.path, *below_outline, in_air,
+                                                      [&](double share) { return dynamic_feed(share, feed); }))
+                        typed.push_back({std::move(path), kind, f});
+                }
             }
             if (deferring) {
                 for (Pending& p : typed) {
@@ -1551,7 +1798,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             if (highest > 0.0)
                 g.set_clearance(std::max(g.clearance(), highest));
         }
-        for (const Step& step : steps) {
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            const Step& step = steps[k];
             if (!step.type) {
                 g.set_height(step.height);
                 continue;
@@ -1562,12 +1810,20 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract);
             g.type(step.type);
+            g.print_acceleration(acceleration_of(step.type, l == 0));
             g.nonplanar(t.wavy);
             for (std::size_t i = 1; i < t.points.size(); ++i)
                 g.extrude(t.points[i - 1], t.points[i], step.feed);
             if (t.closed && t.points.size() > 2)
                 g.extrude(t.points.back(), t.points.front(), step.feed);
             g.nonplanar(false);
+            // After each kind, back to acceleration.default (speeds_accels.md,
+            // the table): not between paths of the same kind.
+            std::size_t next = k + 1;
+            while (next < steps.size() && !steps[next].type)
+                ++next;
+            if (next == steps.size() || std::strcmp(steps[next].type, step.type) != 0)
+                g.reset_acceleration(s.accel_default);
         }
     };
 

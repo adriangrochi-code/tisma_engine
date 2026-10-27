@@ -31,6 +31,12 @@ public:
     // their time to the total. Returns that time in seconds.
     double flush();
 
+    // The accelerations of the moves added from now on (a command changed them).
+    void set_accelerations(double print, double travel) {
+        k_.acceleration = print;
+        k_.travel_acceleration = travel;
+    }
+
     double total() const { return total_; }
 
 private:

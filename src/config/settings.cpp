@@ -61,6 +61,30 @@ auto speed_of(S& s, std::string_view key) -> decltype(&s.wall_speed) {
     throw std::logic_error("no speed " + std::string(key));
 }
 
+// The acceleration a key of the acceleration group names.
+template <typename S>
+auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) {
+    const std::pair<std::string_view, decltype(&s.accel_default)> accelerations[] = {
+        {"default", &s.accel_default},
+        {"walls", &s.accel_walls},
+        {"outer_wall", &s.accel_outer_wall},
+        {"infill", &s.accel_infill},
+        {"solid_infill", &s.accel_solid_infill},
+        {"top_solid_infill", &s.accel_top_solid_infill},
+        {"bridges", &s.accel_bridges},
+        {"first_layer", &s.accel_first_layer},
+        {"travel", &s.accel_travel},
+        {"short_travel", &s.accel_short_travel},
+    };
+    for (const auto& [n, target] : accelerations)
+        if (n == name)
+            return target;
+    throw std::logic_error("no acceleration " + std::string(name));
+}
+
+constexpr const char* kAccelerationNames[] = {"default", "walls",       "outer_wall",  "infill", "solid_infill",
+                                              "top_solid_infill", "bridges", "first_layer", "travel", "short_travel"};
+
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
 }
@@ -193,7 +217,8 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review")
+            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
+            group == "acceleration")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -574,14 +599,23 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "speed",
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
-                "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z"},
+                "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
+                "overhang_1", "overhang_2", "overhang_3"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "dynamic_overhangs") {
+                       if (!v.is_boolean())
+                           fail(k, "must be true or false");
+                       s.dynamic_overhangs = v.get<bool>();
+                       return;
+                   }
                    // The speeds that may be a share of another.
                    Speed* const share = n == "outer_wall"           ? &s.outer_wall_speed
                                         : n == "over_bridges"       ? &s.over_bridges_speed
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
-                                                                    : nullptr;
+                                        : n.rfind("overhang_", 0) == 0
+                                            ? &s.overhang_speeds[std::size_t(n.back() - '0')]
+                                            : nullptr;
                    if (v.is_null()) { // not set: from the printer's profile
                        if (share)
                            *share = {};
@@ -623,6 +657,15 @@ Settings parse_checked(std::string_view text) {
                        s.first_layer_speed = d;
                    else
                        s.max_speed = d;
+               });
+    read_group(root, "acceleration",
+               {"default", "walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "bridges", "first_layer",
+                "travel", "short_travel"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   const double v = number(g, n, k);
+                   if (!(v >= 0.0 && v <= 100000.0))
+                       fail(k, "must be from 0 to 100000 mm/s2");
+                   *acceleration_of(s, n) = v;
                });
     read_group(root, "retraction", {"length", "speed", "lift", "min_travel"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -1141,6 +1184,21 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.over_bridges", share(s.over_bridges_speed)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
+        {"speed.dynamic_overhangs", flag(s.dynamic_overhangs)},
+        {"speed.overhang_0", share(s.overhang_speeds[0])},
+        {"speed.overhang_1", share(s.overhang_speeds[1])},
+        {"speed.overhang_2", share(s.overhang_speeds[2])},
+        {"speed.overhang_3", share(s.overhang_speeds[3])},
+        {"acceleration.default", num(s.accel_default)},
+        {"acceleration.walls", num(s.accel_walls)},
+        {"acceleration.outer_wall", num(s.accel_outer_wall)},
+        {"acceleration.infill", num(s.accel_infill)},
+        {"acceleration.solid_infill", num(s.accel_solid_infill)},
+        {"acceleration.top_solid_infill", num(s.accel_top_solid_infill)},
+        {"acceleration.bridges", num(s.accel_bridges)},
+        {"acceleration.first_layer", num(s.accel_first_layer)},
+        {"acceleration.travel", num(s.accel_travel)},
+        {"acceleration.short_travel", num(s.accel_short_travel)},
         {"retraction.length", num(s.retract_length)},
         {"retraction.speed", speed(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
@@ -1239,6 +1297,9 @@ std::string settings_json(const Settings& s) {
                               : ordered_json(v.value);
     };
     const ordered_json outer_wall = share(s.outer_wall_speed);
+    ordered_json acceleration = ordered_json::object();
+    for (const char* n : kAccelerationNames)
+        acceleration[n] = *acceleration_of(s, n);
     // A speed not set is null: the printer's profile gives it (docs/CONFIG.md).
     const auto speed = [](double v) { return v > 0.0 ? ordered_json(v) : ordered_json(nullptr); };
     const ordered_json root = {
@@ -1339,7 +1400,13 @@ std::string settings_json(const Settings& s) {
           {"gap_fill", speed(s.gap_fill_speed)},
           {"over_bridges", share(s.over_bridges_speed)},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
-          {"travel_z", speed(s.travel_z_speed)}}},
+          {"travel_z", speed(s.travel_z_speed)},
+          {"dynamic_overhangs", s.dynamic_overhangs},
+          {"overhang_0", share(s.overhang_speeds[0])},
+          {"overhang_1", share(s.overhang_speeds[1])},
+          {"overhang_2", share(s.overhang_speeds[2])},
+          {"overhang_3", share(s.overhang_speeds[3])}}},
+        {"acceleration", acceleration},
         {"retraction",
          {{"length", s.retract_length},
           {"speed", speed(s.retract_speed)},

@@ -96,6 +96,12 @@ Settings without_gcode_settings(Settings s) {
     s.bridge_speed = d.bridge_speed, s.gap_fill_speed = d.gap_fill_speed, s.over_bridges_speed = d.over_bridges_speed;
     s.first_layer_infill_speed = d.first_layer_infill_speed, s.travel_z_speed = d.travel_z_speed;
     s.infill_max_speed = d.infill_max_speed, s.infill_max_crossing_speed = d.infill_max_crossing_speed;
+    s.accel_default = d.accel_default, s.accel_walls = d.accel_walls, s.accel_outer_wall = d.accel_outer_wall;
+    s.accel_infill = d.accel_infill, s.accel_solid_infill = d.accel_solid_infill;
+    s.accel_top_solid_infill = d.accel_top_solid_infill, s.accel_bridges = d.accel_bridges;
+    s.accel_first_layer = d.accel_first_layer, s.accel_travel = d.accel_travel;
+    s.accel_short_travel = d.accel_short_travel;
+    s.dynamic_overhangs = d.dynamic_overhangs, s.overhang_speeds = d.overhang_speeds;
     s.acceleration = d.acceleration, s.travel_acceleration = d.travel_acceleration;
     s.max_feed_x = d.max_feed_x, s.max_feed_y = d.max_feed_y, s.max_feed_z = d.max_feed_z, s.max_feed_e = d.max_feed_e;
     s.retract_length = d.retract_length, s.retract_speed = d.retract_speed, s.retract_lift = d.retract_lift;

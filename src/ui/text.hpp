@@ -842,6 +842,25 @@
     X(InfillMaxSpeed, "Tope del relleno", "Infill speed cap") \
     X(InfillMaxCrossingSpeed, "Tope del relleno que se cruza", "Crossing infill speed cap") \
     X(BridgeFlowRatio, "Flujo de los puentes", "Bridge flow") \
+    X(SubAccelerations, "Aceleraciones", "Accelerations") \
+    X(SubOverhangSpeeds, "Voladizos", "Overhangs") \
+    X(DynamicOverhangs, "Más lento según el apoyo", "Slower by support") \
+    X(Overhang0, "Sin apoyo (0 %)", "Unsupported (0 %)") \
+    X(Overhang1, "Apoyado al 25 %", "25 % supported") \
+    X(Overhang2, "Apoyado al 50 %", "50 % supported") \
+    X(Overhang3, "Apoyado al 75 %", "75 % supported") \
+    X(SumBySupport, "Según el apoyo", "By support") \
+    X(SubAccelTravel, "Aceleración de los viajes", "Travel acceleration") \
+    X(AccelDefault, "Por defecto", "Default") \
+    X(AccelWalls, "Paredes internas", "Inner walls") \
+    X(AccelOuterWall, "Pared externa", "Outer wall") \
+    X(AccelInfill, "Relleno", "Infill") \
+    X(AccelSolid, "Relleno sólido", "Solid infill") \
+    X(AccelTop, "Superficie de arriba", "Top surface") \
+    X(AccelBridges, "Puentes", "Bridges") \
+    X(AccelFirstLayer, "Primera capa", "First layer") \
+    X(AccelTravel, "Viajes", "Travels") \
+    X(AccelShortTravel, "Viajes cortos", "Short travels") \
     X(RetractMinTravel, "Viaje mínimo para retraer", "Shortest travel to retract") \
     X(Abrasive, "Abrasivo", "Abrasive") \
     X(MaxChamberTemp, "Cabina máxima", "Chamber maximum") \

@@ -14,6 +14,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <map>
+#include <numbers>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -280,4 +282,227 @@ TEST_CASE("speeds: the sparse infill within the filament's cap for its pattern (
         if (extrudes(m) && m.type == "Internal infill")
             feeds.insert(m.feed / 60.0);
     CHECK(feeds == std::set<double>{80.0});
+}
+
+namespace {
+
+// The accelerations each kind of extrusion and the travels run at: M204 S
+// for both, or Marlin's P for printing and T for travels. By layer (its Z).
+struct Accelerations {
+    std::map<std::string, std::set<long>> by_type;  // "<z> <type>"
+    std::set<long> travel, short_travel;            // travels longer and shorter than 1 mm
+    int commands = 0;
+};
+Accelerations accelerations_of(const std::string& gcode) {
+    Accelerations out;
+    std::string z, type;
+    long print = -1, travel = -1;
+    double x = 0.0, y = 0.0;
+    std::istringstream in(gcode);
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";Z:", 0) == 0)
+            z = line.substr(3);
+        else if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        else if (line.rfind("M204 ", 0) == 0) {
+            ++out.commands;
+            const long v = std::stol(line.substr(6));
+            if (line[5] == 'S')
+                print = travel = v;
+            else if (line[5] == 'P')
+                print = v;
+            else if (line[5] == 'T')
+                travel = v;
+        } else if (line.rfind("G1 ", 0) == 0) {
+            double nx = x, ny = y;
+            bool e = false;
+            std::istringstream words(line.substr(3));
+            for (std::string w; words >> w;) {
+                if (w[0] == 'X')
+                    nx = std::stod(w.substr(1));
+                else if (w[0] == 'Y')
+                    ny = std::stod(w.substr(1));
+                else if (w[0] == 'E')
+                    e = true;
+            }
+            const double length = std::hypot(nx - x, ny - y);
+            if (length > 0.0 && e)
+                out.by_type[z + " " + type].insert(print);
+            else if (length > 0.0)
+                (length < 1.0 ? out.short_travel : out.travel).insert(travel);
+            x = nx, y = ny;
+        }
+    }
+    return out;
+}
+
+Settings accelerated() {
+    Settings s = test_printer();
+    s.flavor = GcodeFlavor::RepRap;
+    s.accel_outer_wall = 800.0;
+    s.accel_walls = 1000.0;
+    s.accel_infill = 3000.0;
+    s.accel_solid_infill = 2500.0;
+    s.accel_top_solid_infill = 1500.0;
+    s.accel_bridges = 500.0;
+    s.accel_first_layer = 700.0;
+    s.accel_travel = 4000.0;
+    s.accel_default = 2000.0;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("accelerations: each kind's before its extrusions, the travels' before them (speeds_accels.md, rules 10 to "
+          "12; V8)",
+          "[gcode][speeds]") {
+    Settings s = accelerated();
+    const Accelerations a = accelerations_of(gcode_of(cube(20.0f, 10.0f), s));
+    const auto at = [&](const char* key) {
+        const auto it = a.by_type.find(key);
+        return it == a.by_type.end() ? std::set<long>{} : it->second;
+    };
+    // Layer 0: all at 700.
+    for (const auto& [key, values] : a.by_type)
+        if (key.rfind("0.200 ", 0) == 0) {
+            INFO(key);
+            CHECK(values == std::set<long>{700});
+        }
+    CHECK(at("0.600 Perimeter") == std::set<long>{1000});
+    CHECK(at("0.600 External perimeter") == std::set<long>{800});
+    CHECK(at("0.600 Solid infill") == std::set<long>{2500});
+    CHECK(at("1.200 Internal infill") == std::set<long>{3000});
+    CHECK(at("10.000 Top solid infill") == std::set<long>{1500});
+    CHECK(a.travel == std::set<long>{4000});
+    // A short travel at its own (V8: 0.6 mm at 600).
+    s.accel_short_travel = 600.0;
+    s.retract_min_travel = 1.0;
+    const Accelerations shorter = accelerations_of(gcode_of(cube(20.0f, 10.0f), s));
+    CHECK(shorter.travel == std::set<long>{4000});
+    REQUIRE_FALSE(shorter.short_travel.empty());
+    CHECK(shorter.short_travel == std::set<long>{600});
+
+    // Only the inner walls and the infill (and the default): the outer wall
+    // at the inner walls', the solid and top at the infill's.
+    Settings few = test_printer();
+    few.flavor = GcodeFlavor::RepRap;
+    few.accel_walls = 1000.0;
+    few.accel_infill = 3000.0;
+    few.accel_default = 2000.0;
+    const Accelerations b = accelerations_of(gcode_of(cube(20.0f, 10.0f), few));
+    CHECK(b.by_type.at("0.600 External perimeter") == std::set<long>{1000});
+    CHECK(b.by_type.at("0.600 Solid infill") == std::set<long>{3000});
+    CHECK(b.by_type.at("10.000 Top solid infill") == std::set<long>{3000});
+    CHECK(b.by_type.at("0.200 Solid infill") == std::set<long>{3000}); // no first layer's
+
+    // Without acceleration.default: only the travels', which the extrusions keep.
+    s.accel_default = 0.0;
+    s.accel_short_travel = 0.0;
+    const Accelerations c = accelerations_of(gcode_of(cube(20.0f, 10.0f), s));
+    for (const auto& [key, values] : c.by_type) {
+        INFO(key);
+        CHECK(values == std::set<long>{4000});
+    }
+
+    // The table's overhang perimeters at the bridges'.
+    const Accelerations t = accelerations_of(gcode_of(table(), accelerated()));
+    CHECK(t.by_type.at("5.200 Overhang perimeter") == std::set<long>{500});
+    CHECK(t.by_type.at("5.200 Bridge infill") == std::set<long>{500});
+
+    // None set: no command at all.
+    CHECK(accelerations_of(gcode_of(cube(20.0f, 4.0f), test_printer())).commands == 1); // the start's
+}
+
+TEST_CASE("accelerations: Marlin prints with M204 P and sets the travels' once with M204 T (speeds_accels.md, rule "
+          "13; V9)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.flavor = GcodeFlavor::Marlin;
+    s.accel_walls = 1000.0;
+    s.accel_infill = 3000.0;
+    s.accel_travel = 4000.0;
+    s.accel_default = 2000.0;
+    s.acceleration = 0.0; // nothing written at the start
+    const std::string gcode = gcode_of(cube(20.0f, 4.0f), s);
+    std::set<std::string> commands;
+    int travels = 0;
+    std::istringstream in(gcode);
+    for (std::string line; std::getline(in, line);)
+        if (line.rfind("M204 ", 0) == 0) {
+            commands.insert(line);
+            travels += line == "M204 T4000";
+        }
+    CHECK(commands == std::set<std::string>{"M204 P1000", "M204 P2000", "M204 P3000", "M204 T4000"});
+    CHECK(travels == 1);
+    const Accelerations a = accelerations_of(gcode);
+    CHECK(a.travel == std::set<long>{4000});
+    CHECK(a.by_type.at("1.000 Internal infill") == std::set<long>{3000});
+}
+
+namespace {
+
+// A solid funnel 10 mm high: radius 5 on the bed, opening upward at `angle`
+// degrees from the vertical (speeds_accels.md, V6).
+IndexedMesh funnel(double angle) {
+    constexpr int kSides = 128;
+    const double r0 = 5.0, r1 = 5.0 + 10.0 * std::tan(angle * std::numbers::pi / 180.0);
+    IndexedMesh m;
+    for (const auto& [r, z] : {std::pair{r0, 0.0}, std::pair{r1, 10.0}})
+        for (int k = 0; k < kSides; ++k) {
+            const double a = 2.0 * std::numbers::pi * k / kSides;
+            m.vertices.push_back({float(r * std::cos(a)), float(r * std::sin(a)), float(z)});
+        }
+    m.vertices.push_back({0.0f, 0.0f, 0.0f});
+    m.vertices.push_back({0.0f, 0.0f, 10.0f});
+    const auto bottom = std::uint32_t(2 * kSides), top = bottom + 1;
+    for (std::uint32_t i = 0; i < kSides; ++i) {
+        const std::uint32_t j = (i + 1) % kSides;
+        m.triangles.push_back({i, j, kSides + j});
+        m.triangles.push_back({i, kSides + j, kSides + i});
+        m.triangles.push_back({bottom, j, i});
+        m.triangles.push_back({top, kSides + i, kSides + j});
+    }
+    return m;
+}
+
+} // namespace
+
+TEST_CASE("speeds: walls slower the less of their bead rests on the layer below (speeds_accels.md, rules 6 and 7; V6)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.dynamic_overhangs = true; // 15, 15, 20 and 25 mm/s; the outer wall at 30
+    s.detect_overhangs = false;
+    s.wall_width = 0.45; // as measured
+    // Rule 7 with w = 0.45 and d = 0.2 tan(angle): V6's 26.8, 24.87, 22.54,
+    // 21.11, 17.30 and 15.0 (Tisma Slicer: 27.0, 24.9, 22.6, 21.1, 17.31, 15.0).
+    for (const auto& [angle, expected] : {std::pair{20.0, 26.76}, {30.0, 24.87}, {40.0, 22.54}, {45.0, 21.11},
+                                          {55.0, 17.30}, {60.0, 15.0}}) {
+        INFO(angle << " degrees");
+        std::set<double> outer, inner;
+        double length = 0.0, sum = 0.0;
+        for (const Move& m : moves_of(gcode_of(funnel(angle), s)))
+            if (extrudes(m) && m.z == "6.200" && m.length() > 0.05) {
+                if (m.type == "External perimeter") {
+                    outer.insert(m.feed / 60.0);
+                    length += m.length(), sum += m.length() * m.feed / 60.0;
+                } else if (m.type == "Perimeter") {
+                    inner.insert(m.feed / 60.0);
+                }
+            }
+        REQUIRE(length > 0.0);
+        // The outline of each layer, simplified within slicing.simplify_tolerance,
+        // moves the wall a little: Tisma Slicer's spread is 0.2 mm/s.
+        CHECK_THAT(sum / length, WithinAbs(expected, 0.15));
+        CHECK_THAT(*outer.begin(), WithinAbs(expected, 0.4));
+        CHECK_THAT(*outer.rbegin(), WithinAbs(expected, 0.4));
+        // The inner wall rests on the inner wall below.
+        CHECK(inner == std::set<double>{60.0});
+    }
+    // Without it, the outer wall at its own.
+    s.dynamic_overhangs = false;
+    std::set<double> outer;
+    for (const Move& m : moves_of(gcode_of(funnel(45.0), s)))
+        if (extrudes(m) && m.z == "6.200" && m.type == "External perimeter")
+            outer.insert(m.feed / 60.0);
+    CHECK(outer == std::set<double>{30.0});
 }

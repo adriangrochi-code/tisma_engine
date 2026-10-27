@@ -225,7 +225,32 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `gap_fill` | número | — (sin valor: `solid_infill`) | Relleno de huecos (`speeds_accels.md`, regla 1) |
 | `over_bridges` | número o texto | — (sin valor: `solid_infill`) | Relleno sólido de la capa que va justo encima de un puente sobre el aire, en mm/s o un porcentaje de `solid_infill` como `"50%"`; no la capa sobre las capas sólidas puestas sobre el relleno (`infill.solid_every`) (`speeds_accels.md`, regla 2). Los tramos de cada línea sobre el puente van a esta velocidad, el resto a la suya |
 | `first_layer_infill` | número o texto | — (sin valor: `first_layer`) | Relleno sólido y superficie de la primera capa, en mm/s o un porcentaje de `solid_infill`; no queda topado por `first_layer` (`speeds_accels.md`, regla 3) |
+| `dynamic_overhangs` | booleano | `false` | Las paredes más lentas cuanto menos de su cordón se apoya en la capa de abajo (`speeds_accels.md`, reglas 6 y 7): la parte apoyada sale de cuánto queda el centro del cordón adentro o afuera de la capa de abajo, contra su ancho; a 0, 25, 50 y 75 % van a `overhang_0` a `overhang_3`, apoyadas del todo a la suya, y en línea recta entre esos puntos, nunca más rápido que la suya. Los tramos en el aire (`Overhang perimeter`) van a `overhang_0`. No en el modo vaso |
+| `overhang_0`, `overhang_1`, `overhang_2`, `overhang_3` | número o texto | 15, 15, 20, 25 | mm/s, o un porcentaje de `outer_wall` como `"50%"`; los de la ficha, no de la impresora |
 | `travel_z` | número | — (sin valor: `travel`) | Movimientos en Z: cambios de capa, saltos de `retraction.lift` y las subidas del Z anti-aliasing (`speeds_accels.md`, regla 4) |
+
+### `acceleration`
+
+Aceleraciones por tipo, en mm/s² (ficha `speeds_accels.md`, reglas 10 a 13). Antes de cada extrusión se fija la de
+su tipo y, al terminar el tipo, se vuelve a `default`; antes de cada viaje, la de los viajes. El comando es
+`M204 S…` (RepRapFirmware y Klipper), o en Marlin `M204 P…` para imprimir y `M204 T…` para los viajes, escrito solo
+cuando cambia. Con `default` en 0 no se usan las de los tipos: solo se fija la de los viajes y las extrusiones siguen
+con ella. Todas en 0 (lo de siempre): nada más que la `machine.acceleration` del comienzo. El tiempo estimado sigue
+cada cambio. Todavía no hay topes por los límites de la máquina (se escriben en el G-code con `gcode_firmware.md`,
+que falta), ni las de la balsa y la torre de purga.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `default` | número | 0 | 0 a 100 000 | A la que se vuelve después de cada tipo, y la del soporte, la falda y el relleno de huecos. 0: sin aceleraciones por tipo |
+| `walls` | número | 0 | 0 a 100 000 | Paredes internas; 0: `default` |
+| `outer_wall` | número | 0 | 0 a 100 000 | Pared externa; 0: `walls` |
+| `infill` | número | 0 | 0 a 100 000 | Relleno disperso; 0: `default` |
+| `solid_infill` | número | 0 | 0 a 100 000 | Relleno sólido; 0: `infill` |
+| `top_solid_infill` | número | 0 | 0 a 100 000 | Superficie de arriba; 0: `solid_infill` |
+| `bridges` | número | 0 | 0 a 100 000 | Puentes y perímetros en voladizo; 0: `default` |
+| `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa; 0: la de cada tipo |
+| `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |
+| `short_travel` | número | 0 | 0 a 100 000 | Viajes más cortos que `retraction.min_travel`; 0: `travel` |
 
 ### `retraction`
 

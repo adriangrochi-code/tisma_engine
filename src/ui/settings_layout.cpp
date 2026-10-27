@@ -69,7 +69,23 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.gap_fill", A}}},
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}}},
           {"travel", T::SubTravelSpeed, {{"speed.travel", N}, {"speed.travel_z", A}}},
-          {"limits", T::SubSpeedCap, {{"speed.max", N}}}}},
+          {"limits", T::SubSpeedCap, {{"speed.max", N}}},
+          {"overhang_speeds", T::SubOverhangSpeeds,
+           {{"speed.dynamic_overhangs", N},
+            {"speed.overhang_0", A},
+            {"speed.overhang_1", A},
+            {"speed.overhang_2", A},
+            {"speed.overhang_3", A}}},
+          {"accel_kinds", T::SubAccelerations,
+           {{"acceleration.default", A},
+            {"acceleration.walls", A},
+            {"acceleration.outer_wall", A},
+            {"acceleration.infill", A},
+            {"acceleration.solid_infill", A},
+            {"acceleration.top_solid_infill", A},
+            {"acceleration.bridges", A},
+            {"acceleration.first_layer", A}}},
+          {"accel_travel", T::SubAccelTravel, {{"acceleration.travel", A}, {"acceleration.short_travel", A}}}}},
         {"support", T::SecSupport, "section_support.svg",
          {{"support", T::SubSupport,
            {{"support.enabled", B}, {"support.automatic", B}, {"support.style", N}, {"support.threshold_angle", N}}},
@@ -351,6 +367,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumSpeed, speed_text(s.travel_speed).c_str());
     if (id == "limits")
         return format(T::SumSpeed, speed_text(s.max_speed).c_str());
+    if (id == "overhang_speeds")
+        return s.dynamic_overhangs ? tr(T::SumBySupport) : tr(T::SumOff);
+    if (id == "accel_kinds")
+        return s.accel_default > 0.0 ? format(T::SumAccel, number(s.accel_default, 0).c_str()) : tr(T::SumOff);
+    if (id == "accel_travel")
+        return s.accel_travel > 0.0 ? format(T::SumAccel, number(s.accel_travel, 0).c_str()) : tr(T::SumOff);
     if (id == "support")
         return !s.support                ? tr(T::SumNoSupport)
                : !s.support_automatic    ? tr(T::SumPaintedSupport)

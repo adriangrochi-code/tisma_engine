@@ -657,7 +657,14 @@ const char* row_key(T label) {
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
-        {T::BridgeFlowRatio, "extrusion.bridge_flow_ratio"},
+        {T::BridgeFlowRatio, "extrusion.bridge_flow_ratio"}, {T::AccelDefault, "acceleration.default"},
+        {T::AccelWalls, "acceleration.walls"}, {T::AccelOuterWall, "acceleration.outer_wall"},
+        {T::AccelInfill, "acceleration.infill"}, {T::AccelSolid, "acceleration.solid_infill"},
+        {T::AccelTop, "acceleration.top_solid_infill"}, {T::AccelBridges, "acceleration.bridges"},
+        {T::AccelFirstLayer, "acceleration.first_layer"}, {T::AccelTravel, "acceleration.travel"},
+        {T::AccelShortTravel, "acceleration.short_travel"}, {T::DynamicOverhangs, "speed.dynamic_overhangs"},
+        {T::Overhang0, "speed.overhang_0"}, {T::Overhang1, "speed.overhang_1"}, {T::Overhang2, "speed.overhang_2"},
+        {T::Overhang3, "speed.overhang_3"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
         {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
@@ -2929,6 +2936,30 @@ bool App::card_rows(std::string_view id, bool& bed) {
            0.5f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+    } else if (id == "overhang_speeds") {
+        flag(T::DynamicOverhangs, "speed.dynamic_overhangs", s.dynamic_overhangs);
+        const T labels[4] = {T::Overhang0, T::Overhang1, T::Overhang2, T::Overhang3};
+        const char* keys[4] = {"speed.overhang_0", "speed.overhang_1", "speed.overhang_2", "speed.overhang_3"};
+        for (std::size_t k = 0; k < 4; ++k)
+            share_row(labels[k], keys[k], s.overhang_speeds[k]);
+    } else if (id == "accel_kinds" || id == "accel_travel") {
+        // 0: the one it falls back to, or none (speeds_accels.md, rule 10).
+        const auto accel = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 100000.0, v > 0.0 ? "%.0f mm/s²" : "—", 10.0f);
+        };
+        if (id == "accel_kinds") {
+            accel(T::AccelDefault, "acceleration.default", s.accel_default);
+            accel(T::AccelWalls, "acceleration.walls", s.accel_walls);
+            accel(T::AccelOuterWall, "acceleration.outer_wall", s.accel_outer_wall);
+            accel(T::AccelInfill, "acceleration.infill", s.accel_infill);
+            accel(T::AccelSolid, "acceleration.solid_infill", s.accel_solid_infill);
+            accel(T::AccelTop, "acceleration.top_solid_infill", s.accel_top_solid_infill);
+            accel(T::AccelBridges, "acceleration.bridges", s.accel_bridges);
+            accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
+        } else {
+            accel(T::AccelTravel, "acceleration.travel", s.accel_travel);
+            accel(T::AccelShortTravel, "acceleration.short_travel", s.accel_short_travel);
+        }
     }
     // Print: Supports and Adhesion.
     else if (id == "support") {
