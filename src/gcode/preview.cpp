@@ -190,7 +190,28 @@ private:
                 e_ = absolute_e_ ? *e : e_ + *e;
             }
             out_.filament += de;
-            move(x, y, z, de);
+            if (code >= 2 && (at('I') || at('J'))) {
+                // An arc around (I, J) from here: in pieces of 5 degrees at most,
+                // each with its share of E and of any move in Z.
+                const double cx = x_ + at('I').value_or(0.0), cy = y_ + at('J').value_or(0.0);
+                const double r = std::hypot(x_ - cx, y_ - cy);
+                const double a0 = std::atan2(y_ - cy, x_ - cx), a1 = std::atan2(y - cy, x - cx);
+                double sweep = code == 3 ? a1 - a0 : a0 - a1;
+                while (sweep <= 1e-12)
+                    sweep += 2.0 * std::numbers::pi;
+                while (sweep > 2.0 * std::numbers::pi)
+                    sweep -= 2.0 * std::numbers::pi;
+                const int pieces = std::clamp(int(std::ceil(sweep / (std::numbers::pi / 36.0))), 1, 72);
+                const double z0 = z_;
+                for (int k = 1; k <= pieces; ++k) {
+                    const double a = a0 + (code == 3 ? 1.0 : -1.0) * sweep * k / pieces;
+                    const bool last = k == pieces;
+                    move(last ? x : cx + r * std::cos(a), last ? y : cy + r * std::sin(a), z0 + (z - z0) * k / pieces,
+                         de / pieces);
+                }
+            } else {
+                move(x, y, z, de);
+            }
         } else if (code == 90) {
             absolute_ = true;
         } else if (code == 91) {

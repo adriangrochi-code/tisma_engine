@@ -993,12 +993,12 @@ Settings parse_checked(std::string_view text) {
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
-                               "verbose_comments"},
+                               "verbose_comments", "arcs"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "volumetric_e" || n == "verbose_comments") {
+        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "volumetric_e" ? s.volumetric_e : s.verbose_comments) = g.at(n).get<bool>();
+            (n == "volumetric_e" ? s.volumetric_e : n == "arcs" ? s.gcode_arcs : s.verbose_comments) = g.at(n).get<bool>();
             return;
         }
         if (n != "resolution") {
@@ -1409,6 +1409,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.after_layer", text(s.gcode_after_layer)},
         {"gcode.volumetric_e", flag(s.volumetric_e)},
         {"gcode.verbose_comments", flag(s.verbose_comments)},
+        {"gcode.arcs", flag(s.gcode_arcs)},
         {"machine.z_offset", num(s.z_offset)},
         {"extrusion.chamber_min_temperature", num(s.chamber_min_temperature)},
         {"extrusion.density", num(s.filament_density)},
@@ -1671,7 +1672,8 @@ std::string settings_json(const Settings& s) {
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
           {"volumetric_e", s.volumetric_e},
-          {"verbose_comments", s.verbose_comments}}},
+          {"verbose_comments", s.verbose_comments},
+          {"arcs", s.gcode_arcs}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

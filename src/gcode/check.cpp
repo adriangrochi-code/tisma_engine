@@ -27,6 +27,9 @@ namespace tisma {
 namespace {
 
 constexpr double kPositionSlack = 1e-3; // mm: coordinates are written with 3 decimals
+// mm an arc's end may be off the circle its start and centre make: the three
+// are written with 3 decimals each.
+constexpr double kArcRadiusSlack = 0.01;
 constexpr double kRetractSlack = 1e-4;  // mm of filament: E is written with 5 decimals
 constexpr double kFlowShare = 0.02;     // a move's E may differ from width x height x length by this share...
 constexpr double kFlowLength = 0.005;   // ...plus the E of this much path (pieces too short to write ride along)
@@ -221,7 +224,7 @@ private:
         for (const Parameter& q : parameters)
             param[q.letter - 'A'] = q.value;
         const int n = p.code;
-        if (kind == 'G' && (n == 0 || n == 1))
+        if (kind == 'G' && n >= 0 && n <= 3)
             move(n, param);
         else if (kind == 'G' && n == 90)
             absolute_ = true;
@@ -264,16 +267,48 @@ private:
                 problem("feed rate " + text(*f / 60.0) + " mm/s is above the fastest allowed, " +
                         text(limits_.max_feed) + " mm/s");
         }
+        // An arc (G2 clockwise, G3 counter-clockwise, gcode_extras.md, rule
+        // 10): its length along the circle around (I, J) from its start, and
+        // the area checked along it.
+        std::optional<double> path;
+        bool off_area = false;
+        if (g >= 2) {
+            const std::optional<double>&i = param['I' - 'A'], &j = param['J' - 'A'];
+            if (!i && !j) {
+                if (!custom_)
+                    problem("an arc without I and J");
+            } else if (known_[0] && known_[1]) {
+                const double cx = position_[0] + i.value_or(0.0), cy = position_[1] + j.value_or(0.0);
+                const double r0 = std::hypot(position_[0] - cx, position_[1] - cy), r1 = std::hypot(to[0] - cx, to[1] - cy);
+                if (!custom_ && std::abs(r0 - r1) > kArcRadiusSlack)
+                    problem("an arc that starts " + text(r0) + " mm from its centre and ends " + text(r1) + " mm from it");
+                const double a0 = std::atan2(position_[1] - cy, position_[0] - cx), a1 = std::atan2(to[1] - cy, to[0] - cx);
+                double sweep = g == 3 ? a1 - a0 : a0 - a1;
+                while (sweep <= 1e-12)
+                    sweep += 2.0 * std::numbers::pi; // the same point: a whole turn
+                while (sweep > 2.0 * std::numbers::pi)
+                    sweep -= 2.0 * std::numbers::pi;
+                path = (r0 + r1) / 2.0 * sweep;
+                for (int k = 1; k < 16; ++k) {
+                    const double a = a0 + (g == 3 ? 1.0 : -1.0) * sweep * k / 16.0;
+                    const double x = cx + r0 * std::cos(a), y = cy + r0 * std::sin(a);
+                    off_area = off_area || x < limits_.min_x - kPositionSlack || x > limits_.max_x + kPositionSlack ||
+                               y < limits_.min_y - kPositionSlack || y > limits_.max_y + kPositionSlack;
+                }
+            }
+        }
         if (!custom_) {
             if (g == 0 && given[3])
                 problem("G0 moves the extruder");
+            if (off_area)
+                problem("an arc to X" + text(to[0]) + " Y" + text(to[1]) + " leaves the allowed area");
             if ((given[0] && (to[0] < limits_.min_x - kPositionSlack || to[0] > limits_.max_x + kPositionSlack)) ||
                 (given[1] && (to[1] < limits_.min_y - kPositionSlack || to[1] > limits_.max_y + kPositionSlack)))
                 problem("move to X" + text(to[0]) + " Y" + text(to[1]) +
                         " leaves the allowed area (the part with its skirt and brim, on the bed)");
             if (given[2] && (to[2] < limits_.min_z - kPositionSlack || to[2] > limits_.max_z + kPositionSlack))
                 problem("move to Z" + text(to[2]) + " is out of " + text(limits_.min_z) + " to " + text(limits_.max_z));
-            classify(to, given);
+            classify(to, given, path);
         }
         for (int a = 0; a < 4; ++a) {
             if (given[a] && a < 3)
@@ -286,11 +321,12 @@ private:
 
     // What an engine move is, by its E: an extrusion, a travel, a retraction
     // or the move that undoes one.
-    void classify(const double to[4], const bool given[4]) {
+    // path: an arc's length.
+    void classify(const double to[4], const bool given[4], std::optional<double> path) {
         const double de = to[3] - position_[3];
         const double dx = to[0] - position_[0], dy = to[1] - position_[1];
-        const bool moves = (given[0] || given[1]) && (std::abs(dx) > 1e-9 || std::abs(dy) > 1e-9);
-        const double length = moves && known_[0] && known_[1] ? std::hypot(dx, dy) : 0.0;
+        const bool moves = path ? *path > 1e-9 : (given[0] || given[1]) && (std::abs(dx) > 1e-9 || std::abs(dy) > 1e-9);
+        const double length = path ? *path : moves && known_[0] && known_[1] ? std::hypot(dx, dy) : 0.0;
         if (moves && de > 1e-9) {
             ++out_.stats.extrusions;
             out_.stats.extruded_path += length;

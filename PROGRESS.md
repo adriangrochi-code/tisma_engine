@@ -5317,3 +5317,27 @@ pruebas pasan; fuzzer con los once sabores: 600 corridas (semilla 1) y 1000 (sem
 **Sigue:** el modo silencioso (X6), que pide los límites de la máquina de `gcode_firmware.md`; los arcos (X10); el
 G-code binario (X8); las miniaturas (X7, con la interfaz).
 
+## 2026-10-27 — Punto 2: arcos `G2`/`G3`
+
+**Hecho** (ficha `gcode_extras.md`, regla 10, X10): `gcode.arcs`. El ajuste (`src/gcode/arcs.*`, diseño propio) busca,
+en cada trayectoria plana de un solo ancho, tramos de 3 movimientos o más cuyos puntos queden a menos de
+`gcode.resolution` del círculo por el primero, el del medio y el último (los medios de los movimientos, a menos del
+doble: la simplificación ya los dejó apartarse esa tolerancia), que giren siempre hacia el mismo lado y no pasen de
+media vuelta; cada arco crece lo más que puede. El emisor los escribe como `G2`/`G3 X Y I J E F`, con la E del largo
+del arco y el centro relativo al inicio tal como quedó escrito; el tiempo estimado sigue los movimientos que el arco
+reemplaza. El verificador lee los arcos (largo por el círculo, el final sobre el círculo del inicio a 0,01 mm, el área
+a lo largo del arco) y la vista previa los dibuja en tramos de 5° como mucho (antes, recta hasta el final).
+
+**Medido:** cilindro de 10 mm de radio y 5 de alto (X10, 128 lados, relleno al 20 %): sin arcos 6341 `G1` y 179 kB;
+con arcos 925 `G1`, 76 `G2` y 228 `G3`, 46 kB; con `resolution` 0,05, 1218 `G1` y 152 `G3` (cada vuelta de pared en
+dos medias vueltas; la simplificación más gruesa deja menos arcos en las uniones del relleno). El mismo tiempo
+estimado (4m 54s) y el mismo filamento al 0,2 %. Benchy local: 209 027 `G1` → 189 139 `G1`, 736 `G2` y 2 149 `G3`;
+7,39 → 6,95 MB; el mismo tiempo estimado; el laminado tarda lo mismo dentro del ruido (con la CI de Linux corriendo
+al lado). 470 pruebas pasan; fuzzer con arcos: 600 corridas (semilla 1) y 1500 (semilla 271029), 0 fallas.
+
+**No probado:** en una impresora (Marlin necesita `ARC_SUPPORT`, Klipper `[gcode_arcs]`).
+
+**Sigue:** de `gcode_extras.md` quedan el modo silencioso (X6), que pide los límites de la máquina de
+`gcode_firmware.md`, las miniaturas (X7, con la vista 3D) y el G-code binario (X8). Con eso cierra el punto 2; sigue
+el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
+

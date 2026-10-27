@@ -856,6 +856,7 @@
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
+    X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(ChamberMinTemp, "Esperar la cámara a", "Wait for the chamber at") \
     X(SubPrice, "Peso y costo", "Weight and cost") \

@@ -1,138 +1,178 @@
-#include "infill/arcs.hpp"
+#include "config/settings.hpp"
+#include "gcode/arcs.hpp"
+#include "gcode/check.hpp"
+#include "gcode/preview.hpp"
+#include "gcode/writer.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
-#include <set>
+#include <cstdint>
+#include <numbers>
+#include <sstream>
+#include <string>
+#include <vector>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace {
 
-Polygon rect(double x0, double y0, double x1, double y1) {
-    return {{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)}, {to_units(x0), to_units(y1)}};
+// n + 1 points on a circle of radius r around (cx, cy), from angle a0 over
+// sweep (negative: clockwise).
+std::vector<ToolpathPoint> on_circle(double cx, double cy, double r, double a0, double sweep, int n, double width = 0.4) {
+    std::vector<ToolpathPoint> out;
+    for (int i = 0; i <= n; ++i) {
+        const double a = a0 + sweep * i / n;
+        out.push_back({{cx + r * std::cos(a), cy + r * std::sin(a)}, width});
+    }
+    return out;
 }
 
-// The column of arc_overhangs.md (A1 to A5): X 90 to 100, Y 90 to 110.
-const Polygons kColumn = {rect(90, 90, 100, 110)};
-
-double length(const std::vector<Toolpath>& paths) {
-    double sum = 0.0;
-    for (const Toolpath& t : paths)
-        for (std::size_t i = 1; i < t.points.size(); ++i)
-            sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
-    return sum;
+// A cylinder of radius r and height h around the origin, as `sides` facets.
+IndexedMesh cylinder(double r, double h, int sides) {
+    IndexedMesh m;
+    m.vertices.push_back({0.0f, 0.0f, 0.0f});
+    m.vertices.push_back({0.0f, 0.0f, float(h)});
+    for (int i = 0; i < sides; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / sides;
+        const float x = float(r * std::cos(a)), y = float(r * std::sin(a));
+        m.vertices.push_back({x, y, 0.0f});
+        m.vertices.push_back({x, y, float(h)});
+    }
+    for (std::uint32_t i = 0; i < std::uint32_t(sides); ++i) {
+        const std::uint32_t j = (i + 1) % std::uint32_t(sides);
+        const std::uint32_t b0 = 2 + 2 * i, t0 = b0 + 1, b1 = 2 + 2 * j, t1 = b1 + 1;
+        m.triangles.push_back({0, b1, b0});
+        m.triangles.push_back({1, t0, t1});
+        m.triangles.push_back({b0, b1, t1});
+        m.triangles.push_back({b0, t1, t0});
+    }
+    return m;
 }
 
-double radius(const Toolpath& t, const Point2d& c) { return std::hypot(t.points.front().p.x - c.x, t.points.front().p.y - c.y); }
+std::size_t count_of(const std::string& gcode, const std::string& start) {
+    std::size_t n = 0;
+    for (std::size_t at = 0; at < gcode.size();) {
+        const std::size_t end = gcode.find('\n', at);
+        n += gcode.compare(at, start.size(), start) == 0;
+        at = end == std::string::npos ? gcode.size() : end + 1;
+    }
+    return n;
+}
 
 } // namespace
 
-TEST_CASE("arcs: A1, one group from 1.2 mm inside the column, round to the far corners", "[arcs]") {
-    const std::vector<ArcZone> zones = overhang_arcs({rect(90, 90, 110, 110)}, kColumn, ArcParams{});
-    REQUIRE(zones.size() == 1);
-    const ArcZone& z = zones.front();
-    // Rule 7: 1.2 mm inside, facing the middle of the edge at X 100.
-    CHECK_THAT(z.centre.x, WithinAbs(98.8, 1e-6));
-    CHECK_THAT(z.centre.y, WithinAbs(100.0, 1e-6));
-    // Each arc on its circle, the radii 0.36 apart (rule 2), from the
-    // smallest out; the whole ones at 0.686, 1.407...
-    std::set<long> radii;
-    double last = 0.0;
-    for (const Toolpath& t : z.arcs) {
-        const double r = radius(t, z.centre);
-        for (const ToolpathPoint& p : t.points)
-            CHECK_THAT(std::hypot(p.p.x - z.centre.x, p.p.y - z.centre.y), WithinAbs(r, 1e-6));
-        CHECK(r >= last - 1e-9);
-        last = r;
-        radii.insert(std::lround(r * 1000.0));
-        // Within the outline, half a bead in, and in the zone or the bite of
-        // the column.
-        for (const ToolpathPoint& p : t.points) {
-            CHECK(p.p.x >= 98.8 - 1e-6);
-            CHECK(p.p.x <= 109.8 + 1e-3);
-            CHECK(p.p.y >= 90.2 - 1e-3);
-            CHECK(p.p.y <= 109.8 + 1e-3);
-        }
+TEST_CASE("arcs: points on a circle make arcs of half a turn at most", "[arcs]") {
+    // A whole counter-clockwise turn in 64 moves, back to its start.
+    const std::vector<ToolpathPoint> turn = on_circle(5.0, -3.0, 10.0, 0.3, 2.0 * std::numbers::pi, 64);
+    const std::vector<ArcRun> arcs = fit_arcs(turn, 0.0125);
+    REQUIRE(arcs.size() == 2);
+    CHECK(arcs[0].first == 0);
+    CHECK(arcs[0].last == arcs[1].first);
+    CHECK(arcs[1].last == 64);
+    for (const ArcRun& a : arcs) {
+        CHECK(a.ccw);
+        CHECK_THAT(a.center.x, WithinAbs(5.0, 1e-9));
+        CHECK_THAT(a.center.y, WithinAbs(-3.0, 1e-9));
+        CHECK_THAT(a.radius, WithinAbs(10.0, 1e-9));
+        CHECK(a.sweep <= kArcMaxSweep + 1e-9);
     }
-    // (to 5 microns: the spec's are measured)
-    const auto has = [&](long r) { return radii.lower_bound(r - 5) != radii.upper_bound(r + 5); };
-    CHECK(has(686));
-    CHECK(has(1407));
-    CHECK(has(2128));
-    CHECK(has(2849));
-    // Rule 8: as far as the farthest corner, (109.8, 109.8).
-    CHECK(last > std::hypot(109.8 - 98.8, 109.8 - 100.0) - 0.4);
-    // Rule 10: every other arc in two pieces, split on Y 100 where one ends
-    // and the next starts; one way round, then back.
-    std::size_t split = 0, whole = 0;
-    for (std::size_t i = 0; i + 1 < z.arcs.size(); ++i) {
-        const double r = radius(z.arcs[i], z.centre);
-        // (farther out the slab's sides cut them too)
-        if (r < 9.0 && std::fabs(radius(z.arcs[i + 1], z.centre) - r) < 1e-6) {
-            ++split;
-            CHECK_THAT(z.arcs[i].points.back().p.y, WithinAbs(100.0, 1e-6));
-            CHECK_THAT(z.arcs[i + 1].points.front().p.y, WithinAbs(100.0, 1e-6));
-        }
-    }
-    // Each arc starts on the side where the one before ended.
-    for (std::size_t i = 1; i < z.arcs.size(); ++i)
-        if (std::fabs(radius(z.arcs[i], z.centre) - radius(z.arcs[i - 1], z.centre)) > 1e-6 && radius(z.arcs[i], z.centre) < 9.0)
-            CHECK((z.arcs[i].points.front().p.y - 100.0) * (z.arcs[i - 1].points.back().p.y - 100.0) > 0.0);
-    for (const Toolpath& t : z.arcs)
-        whole += radius(t, z.centre) < 9.0 && std::fabs(t.points.front().p.y - 100.0) > 1e-3 &&
-                 std::fabs(t.points.back().p.y - 100.0) > 1e-3;
-    // The whole ones are those of A1's radii.
-    for (const Toolpath& t : z.arcs)
-        if (std::fabs(radius(t, z.centre) - 0.686) < 0.01 || std::fabs(radius(t, z.centre) - 1.407) < 0.01)
-            CHECK(std::fabs(t.points.front().p.y - 100.0) > 1e-3);
-    CHECK(split >= 10);
-    CHECK(whole >= 10);
-    // About as much as the spec's 606 mm over the 200 mm2 and the bite.
-    CHECK(length(z.arcs) > 520.0);
-    CHECK(length(z.arcs) < 700.0);
+    CHECK_THAT(arcs[0].length() + arcs[1].length(), WithinRel(2.0 * std::numbers::pi * 10.0, 1e-9));
+    // Clockwise: G2.
+    const std::vector<ArcRun> cw = fit_arcs(on_circle(0.0, 0.0, 3.0, 0.0, -1.0, 20), 0.0125);
+    REQUIRE(cw.size() == 1);
+    CHECK_FALSE(cw[0].ccw);
+    CHECK_THAT(cw[0].sweep, WithinAbs(1.0, 1e-9));
 }
 
-TEST_CASE("arcs: A2 to A4, an L, a hole and a strip keep one group; a bridge has none", "[arcs]") {
-    // A2: the slab and 10 x 10 more in +Y: one group, its centre near the
-    // middle of the L-shaped edge (98.8, 103.8 in the spec).
-    const Polygons l_slab = Clipper2Lib::Union(Polygons{rect(90, 90, 110, 110)}, Polygons{rect(90, 110, 100, 120)},
-                                               Clipper2Lib::FillRule::NonZero);
-    const std::vector<ArcZone> l_zones = overhang_arcs(l_slab, kColumn, ArcParams{});
-    REQUIRE(l_zones.size() == 1);
-    CHECK(std::hypot(l_zones.front().centre.x - 98.8, l_zones.front().centre.y - 103.8) < 1.5);
-    // A3: a 4 x 4 hole cuts the arcs into pieces, less of them.
-    Polygons holed = {rect(90, 90, 110, 110)};
-    Polygon hole = rect(103, 98, 107, 102);
-    std::reverse(hole.begin(), hole.end());
-    holed.push_back(hole);
-    const std::vector<ArcZone> a1 = overhang_arcs({rect(90, 90, 110, 110)}, kColumn, ArcParams{});
-    const std::vector<ArcZone> a3 = overhang_arcs(holed, kColumn, ArcParams{});
-    REQUIRE(a3.size() == 1);
-    CHECK_THAT(a3.front().centre.x, WithinAbs(98.8, 1e-6));
-    CHECK(length(a3.front().arcs) < length(a1.front().arcs) - 30.0);
-    CHECK(length(a3.front().arcs) > length(a1.front().arcs) - 80.0);
-    for (const Toolpath& t : a3.front().arcs)
-        for (const ToolpathPoint& p : t.points)
-            CHECK_FALSE((p.p.x > 103.2 && p.p.x < 106.8 && p.p.y > 98.2 && p.p.y < 101.8));
-    // A4: a strip 15 x 3 in +X: across it, nearly straight.
-    const Polygons strip = Clipper2Lib::Union(kColumn, Polygons{rect(100, 98.5, 115, 101.5)}, Clipper2Lib::FillRule::NonZero);
-    const std::vector<ArcZone> a4 = overhang_arcs(strip, kColumn, ArcParams{});
-    REQUIRE(a4.size() == 1);
-    CHECK(length(a4.front().arcs) > 80.0);
-    CHECK(length(a4.front().arcs) < 160.0);
-    // A table on two legs bridges: held on two sides, no arcs.
-    const Polygons legs = {rect(90, 90, 95, 110), rect(105, 90, 110, 110)};
-    CHECK(overhang_arcs({rect(90, 90, 110, 110)}, legs, ArcParams{}).empty());
-    // A ring round a column, held all round: no arcs either.
-    CHECK(overhang_arcs({rect(80, 80, 120, 120)}, {rect(95, 95, 105, 105)}, ArcParams{}).empty());
-    // arcs.max_distance: no arc reaches past it.
-    ArcParams near;
-    near.max_distance = 5.0;
-    const std::vector<ArcZone> short_arcs = overhang_arcs({rect(90, 90, 110, 110)}, kColumn, near);
-    REQUIRE(short_arcs.size() == 1);
-    for (const Toolpath& t : short_arcs.front().arcs)
-        CHECK(radius(t, short_arcs.front().centre) <= 5.0 + 1e-6);
+TEST_CASE("arcs: what is not one circle stays straight", "[arcs]") {
+    // A hexagon's corners lie on a circle, but its sides are far from it.
+    CHECK(fit_arcs(on_circle(0.0, 0.0, 10.0, 0.0, 2.0 * std::numbers::pi, 6), 0.0125).empty());
+    // A line, and a zigzag.
+    std::vector<ToolpathPoint> line, zigzag;
+    for (int i = 0; i < 10; ++i) {
+        line.push_back({{double(i), 0.0}, 0.4});
+        zigzag.push_back({{double(i), i % 2 ? 0.5 : 0.0}, 0.4});
+    }
+    CHECK(fit_arcs(line, 0.0125).empty());
+    CHECK(fit_arcs(zigzag, 0.0125).empty());
+    // Too few moves.
+    CHECK(fit_arcs(on_circle(0.0, 0.0, 10.0, 0.0, 0.3, 2), 0.0125).empty());
+    // Off the circle by more than the tolerance in the middle: two arcs, or
+    // none, but never one through it.
+    std::vector<ToolpathPoint> bump = on_circle(0.0, 0.0, 10.0, 0.0, 1.0, 20);
+    bump[10].p.x *= 1.01, bump[10].p.y *= 1.01;
+    for (const ArcRun& a : fit_arcs(bump, 0.0125))
+        CHECK((a.last <= 10 || a.first >= 10));
+    // A change of width, a Z offset (Z anti-aliasing) or a wavy bead below
+    // ends an arc there.
+    for (int what = 0; what < 3; ++what) {
+        std::vector<ToolpathPoint> p = on_circle(0.0, 0.0, 10.0, 0.0, 1.0, 20);
+        (what == 0 ? p[12].width : what == 1 ? p[12].dz : p[12].below) += 0.05;
+        for (const ArcRun& a : fit_arcs(p, 0.0125))
+            CHECK((a.last < 12 || a.first > 12));
+    }
+}
+
+TEST_CASE("arcs: G2 and G3 in the G-code (gcode_extras.md, rule 10, X10)", "[arcs][gcode]") {
+    // X10: a cylinder of 10 mm radius, 5 mm high.
+    const IndexedMesh m = cylinder(10.0, 5.0, 128);
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream plain_out;
+    write_gcode(plain_out, model, s);
+    const std::string plain = plain_out.str();
+    s.gcode_arcs = true;
+    std::ostringstream arcs_out;
+    write_gcode(arcs_out, model, s);
+    const std::string arcs = arcs_out.str();
+    const std::size_t g1 = count_of(arcs, "G1 "), g2 = count_of(arcs, "G2 "), g3 = count_of(arcs, "G3 ");
+    INFO("G1 " << g1 << " G2 " << g2 << " G3 " << g3 << ", without arcs G1 " << count_of(plain, "G1 "));
+    CHECK(count_of(plain, "G2 ") + count_of(plain, "G3 ") == 0);
+    CHECK(g3 >= 2 * 3 * model.layers.size()); // every wall loop in two halves at least
+    CHECK(g1 * 3 < count_of(plain, "G1 "));
+    // The check reads the arcs, and finds the same filament along the same path.
+    const GcodeCheck a = check_gcode(arcs, gcode_limits(model, s)), p = check_gcode(plain, gcode_limits(model, s));
+    CHECK(a.ok());
+    CHECK_THAT(a.stats.filament, WithinRel(p.stats.filament, 0.002));
+    CHECK_THAT(a.stats.extruded_path, WithinRel(p.stats.extruded_path, 0.002));
+    // So does the preview, and the time hardly changes (the arcs keep to the path's moves).
+    const GcodePreview pa = read_gcode_preview(arcs), pp = read_gcode_preview(plain);
+    CHECK_THAT(pa.extruded, WithinRel(pp.extruded, 0.002));
+    CHECK(pa.arcs == g2 + g3);
+    CHECK_THAT(pa.estimated_seconds, WithinRel(pp.estimated_seconds, 0.02));
+    // With more tolerance, no more arcs (X10: fewer and longer).
+    s.gcode_resolution = 0.05;
+    std::ostringstream loose;
+    write_gcode(loose, model, s);
+    CHECK(count_of(loose.str(), "G2 ") + count_of(loose.str(), "G3 ") <= g2 + g3);
+    CHECK(check_gcode(loose.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("arcs: the check finds an arc that ends off its circle", "[arcs][check]") {
+    const IndexedMesh m = cylinder(10.0, 1.0, 64);
+    Settings s = test_printer();
+    s.gcode_arcs = true;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::string gcode = out.str();
+    const GcodeLimits limits = gcode_limits(model, s);
+    REQUIRE(check_gcode(gcode, limits).ok());
+    const std::size_t at = gcode.find("\nG3 ");
+    REQUIRE(at != std::string::npos);
+    const std::size_t j = gcode.find(" J", at), end = gcode.find(' ', j + 1);
+    // The centre moved 0.2 mm: the end is no longer on the start's circle.
+    std::string off = gcode;
+    off.replace(j + 2, end - j - 2, std::to_string(std::stod(gcode.substr(j + 2, end - j - 2)) + 0.2));
+    const GcodeCheck c = check_gcode(off, limits);
+    REQUIRE_FALSE(c.ok());
+    CHECK(c.problems.front().message.find("an arc that starts") != std::string::npos);
 }

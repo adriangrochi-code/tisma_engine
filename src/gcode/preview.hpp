@@ -68,12 +68,13 @@ struct GcodePreview {
     double travelled = 0.0; // mm of travel path
     double estimated_seconds = -1.0; // from "; estimated printing time = 1h 7m 36s"; -1 when absent
     std::size_t lines = 0;
-    std::size_t arcs = 0; // G2/G3 moves, drawn as straight lines to their end
+    std::size_t arcs = 0; // G2/G3 moves (with I and J, drawn along their circle)
     std::array<std::size_t, kLineKinds> kind_moves{}; // extrusions per kind (travels for Travel)
 };
 
 // Reads G-code for display. Lenient: it opens any planar G-code, not only the
-// engine's. It follows G0/G1 (G2/G3 as straight moves), G90/G91, M82/M83, G92,
+// engine's. It follows G0/G1, G2/G3 with I and J (in pieces of 5 degrees at
+// most; with R, as straight moves), G90/G91, M82/M83, G92,
 // G28, the comments ;LAYER_CHANGE, ;Z:, ;HEIGHT:, ;TYPE: and ;WIDTH:, and the
 // estimated printing time (docs/spec/GCODE_OUTPUT.md, "Tiempos"). A
 // move extrudes when E grows. Without ;LAYER_CHANGE comments a new layer starts

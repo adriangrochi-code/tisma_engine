@@ -203,6 +203,7 @@ add_library(tisma_core
   src/infill/stress_density.cpp
   src/gcode/writer.cpp
   src/gcode/resolution.cpp
+  src/gcode/arcs.cpp
   src/gcode/scarf.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp

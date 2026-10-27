@@ -2,6 +2,7 @@
 
 #include "gcode/writer.hpp"
 
+#include "gcode/arcs.hpp"
 #include "gcode/cooling.hpp"
 #include "gcode/dialect.hpp"
 #include "gcode/order.hpp"
@@ -1006,20 +1007,7 @@ public:
     }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
-        if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
-            fan_marks_.push_back({text_.size(), bridge_});
-            marked_bridge_ = bridge_;
-        }
-        if (dialect_.extruder_on_off && !extruder_on_) {
-            text_ += "M101 ; extruder on\n";
-            extruder_on_ = true;
-        }
-        if (retracted_) { // unretract: back to where E was (a length changed since stays the old one)
-            e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
-            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "unretract");
-            retracted_ = false;
-            other_time_ += retracted_amount_ / retract_feed_;
-        }
+        start_extrusion();
         const double width = (from.width + to.width) / 2.0;
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
@@ -1041,17 +1029,7 @@ public:
             }
         }
         const double e = width * height * length / filament_area_ * flow_;
-        if (forced_flow_ > 0.0 && width * height * flow_ > 0.0) {
-            // A flow tower: exactly this flow, past every cap (it looks for the
-            // limit), as far as the machine moves.
-            feed = std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height * flow_) * 60.0)) / 60.0);
-        } else if (max_flow_ > 0.0 && width * height * flow_ > 0.0) {
-            // No faster than the hot end and the filament can melt: the feed is
-            // capped at the volumetric limit, rounded down to whole mm/min.
-            const double cap = max_flow_ / (width * height * flow_);
-            if (feed > cap)
-                feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
-        }
+        feed = melt_feed(feed, width, height);
         extruded_[feed] += length;
         if (outer_)
             outer_extruded_[feed] += length;
@@ -1065,27 +1043,76 @@ public:
             return;
         // The width of the moves that follow, written only before one (the
         // tip of a bead that tapers to nothing has no move of its own).
-        if (width != width_value_) { // the same width writes the same text
-            width_value_ = width;
-            char w[kNumberCapacity];
-            const std::string_view width_text(w, format_fixed(w, width, 3));
-            if (width_text != width_) {
-                text_ += ";WIDTH:";
-                text_ += width_text;
-                text_ += '\n';
-                width_.assign(width_text);
-            }
-        }
+        show_width(width);
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
-        // A slowed-down feed is rounded down to whole mm/min (as F is written), so
-        // the layer lasts at least the minimum time.
-        const double paced =
-            pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
-        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced, x_text,
+        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced(feed), x_text,
              y_text, note_);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
+    }
+
+    // An arc of a flat path of one width (gcode_extras.md, rule 10): G2
+    // clockwise or G3 counter-clockwise to points[a.last], its centre (I, J)
+    // from where it starts as written, and the E of its length. The time
+    // estimate follows the path's own moves, which the arc stays within
+    // gcode.resolution of.
+    void arc(std::span<const ToolpathPoint> points, const ArcRun& a, double feed) {
+        start_extrusion();
+        const double z_layer = written(z_value_);
+        if (z_now_ != z_layer) {
+            move("G1", std::nullopt, std::nullopt, z_layer, std::nullopt, feed, {}, {}, z_layer > z_now_ ? "lift" : "lower");
+            z_now_ = z_layer;
+        }
+        const double width = points[a.first].width, length = a.length();
+        const double e = width * height_ * length / filament_area_ * flow_;
+        feed = melt_feed(feed, width, height_);
+        extruded_[feed] += length;
+        if (outer_)
+            outer_extruded_[feed] += length;
+        total_e_ += e;
+        pending_ += e;
+        show_width(width);
+        e_ = relative_ ? pending_ : e_ + pending_;
+        pending_ = 0.0;
+        const Point2d& end = points[a.last].p;
+        char tx[kNumberCapacity], ty[kNumberCapacity], buffer[kNumberCapacity];
+        const std::string_view x_text(tx, format_fixed(tx, end.x, 3)), y_text(ty, format_fixed(ty, end.y, 3));
+        text_ += a.ccw ? "G3 X" : "G2 X";
+        text_ += x_text;
+        text_ += " Y";
+        text_ += y_text;
+        text_ += " I";
+        text_.append(buffer, format_fixed(buffer, a.center.x - written(x_value_), 3));
+        text_ += " J";
+        text_.append(buffer, format_fixed(buffer, a.center.y - written(y_value_), 3));
+        if (dialect_.e_axis != 0) {
+            const std::string_view e_text(buffer, format_fixed(buffer, e_ * e_scale_, 5));
+            text_ += ' ';
+            text_ += dialect_.e_axis;
+            text_ += e_text;
+            e_text_.assign(e_text);
+        }
+        const double f = paced(feed);
+        if (std::lround(f * 60.0) != f_) {
+            f_ = std::lround(f * 60.0);
+            text_ += " F";
+            append_integer(text_, f_);
+        }
+        line_end(note_);
+        x_.assign(x_text);
+        y_.assign(y_text);
+        // The time, along the path's moves, each with its share of E.
+        const double e_to = relative_ ? position_[3] + e_ : e_, de = e_to - position_[3];
+        double path = 0.0;
+        for (std::size_t k = a.first; k < a.last; ++k)
+            path += std::hypot(points[k + 1].p.x - points[k].p.x, points[k + 1].p.y - points[k].p.y);
+        for (std::size_t k = a.first; k < a.last; ++k) {
+            const double dx = points[k + 1].p.x - points[k].p.x, dy = points[k + 1].p.y - points[k].p.y;
+            time_.add(dx, dy, 0.0, path > 0.0 ? de * std::hypot(dx, dy) / path : 0.0, double(f_) / 60.0, true);
+        }
+        position_[0] = end.x, position_[1] = end.y, position_[3] = e_to;
+        x_value_ = end.x, y_value_ = end.y, known_ = true;
     }
 
     double total_e() const { return total_e_; }
@@ -1110,6 +1137,60 @@ public:
 private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
+
+    // Before an extrusion: a bridge's fan mark, MakerWare's M101, and the
+    // retraction undone (back to where E was; a length changed since stays the old one).
+    void start_extrusion() {
+        if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
+            fan_marks_.push_back({text_.size(), bridge_});
+            marked_bridge_ = bridge_;
+        }
+        if (dialect_.extruder_on_off && !extruder_on_) {
+            text_ += "M101 ; extruder on\n";
+            extruder_on_ = true;
+        }
+        if (retracted_) {
+            e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
+            move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "unretract");
+            retracted_ = false;
+            other_time_ += retracted_amount_ / retract_feed_;
+        }
+    }
+
+    // The feed of a bead of this section: a flow tower's exact flow, past every
+    // cap (it looks for the limit) as far as the machine moves; else no faster
+    // than the hot end and the filament melt, rounded down to whole mm/min.
+    double melt_feed(double feed, double width, double height) const {
+        if (forced_flow_ > 0.0 && width * height * flow_ > 0.0)
+            return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height * flow_) * 60.0)) / 60.0);
+        if (max_flow_ > 0.0 && width * height * flow_ > 0.0) {
+            const double cap = max_flow_ / (width * height * flow_);
+            if (feed > cap)
+                return std::max(1.0, std::floor(cap * 60.0)) / 60.0;
+        }
+        return feed;
+    }
+
+    // ;WIDTH: before the moves of another width (the same width writes the same text).
+    void show_width(double width) {
+        if (width == width_value_)
+            return;
+        width_value_ = width;
+        char w[kNumberCapacity];
+        const std::string_view width_text(w, format_fixed(w, width, 3));
+        if (width_text != width_) {
+            text_ += ";WIDTH:";
+            text_ += width_text;
+            text_ += '\n';
+            width_.assign(width_text);
+        }
+    }
+
+    // A slowed-down feed is rounded down to whole mm/min (as F is written), so
+    // the layer lasts at least the minimum time.
+    double paced(double feed) const {
+        return pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
+    }
 
     // Before a travel of `length` mm: the travels' acceleration, or the short
     // ones' (speeds_accels.md, rule 11).
@@ -1441,6 +1522,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
     // The dialect of the firmware (gcode_extras.md, rule 6).
     const Dialect dialect = dialect_of(s.flavor);
+    // How far an arc may stray from the path (gcode.resolution; with every
+    // point kept, a thousandth).
+    const double arc_tolerance = s.gcode_resolution > 0.0 ? s.gcode_resolution : 0.001;
     const bool relative = relative_e(s);
     if (s.pressure_advance > 0.0 && dialect.accelerations)
         out << pressure_advance_gcode(s.flavor, s.pressure_advance) << "\n";
@@ -2193,10 +2277,27 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             g.type(step.type);
             g.print_acceleration(acceleration_of(step.type, l == 0, model.raft_layers > 0 && l == model.raft_layers));
             g.nonplanar(t.wavy);
-            for (std::size_t i = 1; i < t.points.size(); ++i)
-                g.extrude(t.points[i - 1], t.points[i], step.feed);
-            if (t.closed && t.points.size() > 2)
-                g.extrude(t.points.back(), t.points.front(), step.feed);
+            if (s.gcode_arcs && !t.wavy && t.points.size() > kArcMinSegments) {
+                // Arcs where the path follows a circle (gcode_extras.md, rule
+                // 10), straight moves between them; a closed path back to its start.
+                std::vector<ToolpathPoint> points = t.points;
+                if (t.closed && points.size() > 2)
+                    points.push_back(t.points.front());
+                std::size_t at = 0;
+                for (const ArcRun& run : fit_arcs(points, arc_tolerance)) {
+                    for (; at < run.first; ++at)
+                        g.extrude(points[at], points[at + 1], step.feed);
+                    g.arc(points, run, step.feed);
+                    at = run.last;
+                }
+                for (; at + 1 < points.size(); ++at)
+                    g.extrude(points[at], points[at + 1], step.feed);
+            } else {
+                for (std::size_t i = 1; i < t.points.size(); ++i)
+                    g.extrude(t.points[i - 1], t.points[i], step.feed);
+                if (t.closed && t.points.size() > 2)
+                    g.extrude(t.points.back(), t.points.front(), step.feed);
+            }
             g.nonplanar(false);
             // After each kind, back to acceleration.default (speeds_accels.md,
             // the table): not between paths of the same kind.

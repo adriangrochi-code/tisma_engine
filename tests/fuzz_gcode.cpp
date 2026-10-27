@@ -163,6 +163,7 @@ int main(int argc, char** argv) {
             s.shrinkage_xy = pick(2) == 0 ? uni(0, 3) : 0.0;
             s.shrinkage_z = pick(2) == 0 ? uni(0, 3) : 0.0;
             s.verbose_comments = pick(2) == 0;
+            s.gcode_arcs = pick(2) == 0;
         }
         if (pick(5) == 0) { // a raft
             s.raft_layers = 1 + pick(5);

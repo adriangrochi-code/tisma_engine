@@ -682,7 +682,7 @@ const char* row_key(T label) {
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -3066,6 +3066,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         count(T::HeightChanges, "changes", s.changes.size());
         flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
         flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
+        flag(T::GcodeArcs, "gcode.arcs", s.gcode_arcs);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
             changed |= row(T::FillModeRow, s.fill_mode,

@@ -363,6 +363,9 @@ struct Settings {
     bool volumetric_e = false;
     // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).
     bool verbose_comments = false;
+    // Runs of a path that follow a circle within gcode_resolution become G2
+    // and G3 (gcode_extras.md, rule 10).
+    bool gcode_arcs = false;
     // Templates (gcode_templates.md, rules 11 and 13), with the variables of
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";
