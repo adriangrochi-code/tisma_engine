@@ -1112,9 +1112,14 @@ Settings parse_checked(std::string_view text) {
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
-                "display_width", "display_height", "display_mirror_x", "display_mirror_y"},
+                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "technology") {
+                       s.machine_technology = choice<MachineTechnology>(
+                           g, n, k, {{"fdm", MachineTechnology::Fdm}, {"msla", MachineTechnology::Msla}});
+                       return;
+                   }
                    // A resin printer's display (resin.md).
                    if (n == "display_mirror_x" || n == "display_mirror_y") {
                        if (!v.is_boolean())
@@ -2029,6 +2034,8 @@ Settings parse_checked(std::string_view text) {
                     c.volumetric_flow = ranged(n, 0.5, 1000.0, "must be from 0.5 to 1000 mm3/s");
                 else if (n == "acceleration")
                     c.acceleration = ranged(n, 100.0, 100000.0, "must be from 100 to 100000 mm/s2");
+                else if (n == "exposure")
+                    c.exposure = ranged(n, 0.1, 600.0, "must be from 0.1 to 600 s");
                 else if (n == "gcode") {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
@@ -2059,7 +2066,8 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
             {"fan", &c.fan},                         {"retraction_length", &c.retract_length},
             {"retraction_speed", &c.retract_speed}, {"flow", &c.flow},
             {"speed", &c.speed},                     {"pressure_advance", &c.pressure_advance},
-            {"volumetric_flow", &c.volumetric_flow}, {"acceleration", &c.acceleration}};
+            {"volumetric_flow", &c.volumetric_flow}, {"acceleration", &c.acceleration},
+            {"exposure", &c.exposure}};
         for (const auto& [name, v] : values)
             if (*v)
                 j[name] = **v;
@@ -2324,6 +2332,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
+        {"machine.technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
         {"machine.display_pixels_x", std::to_string(s.display_pixels_x)},
         {"machine.display_pixels_y", std::to_string(s.display_pixels_y)},
         {"machine.display_width", num(s.display_width)},
@@ -2791,6 +2800,7 @@ std::string settings_json(const Settings& s) {
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
+          {"technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
           {"display_pixels_x", s.display_pixels_x},
           {"display_pixels_y", s.display_pixels_y},
           {"display_width", s.display_width},

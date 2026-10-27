@@ -334,7 +334,8 @@ const std::vector<SectionLayout>& printer_layout() {
     static const std::vector<SectionLayout> layout = {
         {"machine", T::SecMachine, "section_machine.svg",
          {{"bed_volume", T::SubBedVolume,
-           {{"machine.bed", B},
+           {{"machine.technology", N},
+            {"machine.bed", B},
             {"machine.max_height", B},
             {"machine.z_offset", A},
             {"sequential.clearance_radius", A},

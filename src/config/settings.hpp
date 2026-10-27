@@ -65,6 +65,9 @@ enum class IroningSurfaces { Top, Topmost, Solid };
 enum class CurvedMode { Disabled, Wave, Conical, Overhangs, Stress, Surface, Automatic };
 enum class CurvedPattern { Egg, Ridges, Twisted };
 enum class CurvedFlow { Preserve, Uniform, Off };
+// What the printer is: one that extrudes filament, or a resin printer with
+// a display (resin.md).
+enum class MachineTechnology { Fdm, Msla };
 
 // The most extruders a machine has: as many as the colour channel of the
 // painting tells apart (kPaintMaxMark, docs/PAINTING.md).
@@ -85,6 +88,7 @@ struct HeightChange {
     std::optional<double> pressure_advance; // the firmware's pressure advance (0 included)
     std::optional<double> volumetric_flow; // mm3/s: every extrusion runs at this flow, past every cap (a flow tower)
     std::optional<double> acceleration;    // mm/s2, written in the flavor's command (M204, SET_VELOCITY_LIMIT)
+    std::optional<double> exposure;        // s, a resin printer's normal layers from there (the exposure tower)
     std::string gcode;                     // G-code put at that layer's start, with variables
     // A colour change or a pause at that height (gcode_templates.md, rule
     // 13): gcode.color_change or gcode.pause at the layer's start.
@@ -351,6 +355,9 @@ struct Settings {
     double head_free_angle_x = 0.0, head_free_angle_y = 0.0;
     double head_clearance_height = 3.0, head_clearance_radius = 15.0;
     std::vector<std::array<double, 2>> head_profile;
+    // The printer's kind: the interface shows the settings of that kind and
+    // slices for it (an MSLA printer gets a GOO file).
+    MachineTechnology machine_technology = MachineTechnology::Fdm;
     // An MSLA resin printer (docs/spec/features/resin.md): its display's
     // pixels, the size of the area it lights (mm), and whether the images are
     // mirrored. The defaults are an Elegoo Mars 5's.

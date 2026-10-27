@@ -615,6 +615,30 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
     CHECK(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
 }
 
+TEST_CASE("ui: a resin printer slices into layer images and a preview of their outlines", "[ui][resin]") {
+    Settings settings = default_settings();
+    settings.machine_technology = MachineTechnology::Msla;
+    settings.bed = {{0.0, 0.0}, {settings.display_width, 0.0}, {settings.display_width, settings.display_height},
+                    {0.0, settings.display_height}};
+    const TriangleMesh cube = read_cube();
+    const TriangleMesh placed = translated(cube, centre_on_bed(cube.bounding_box(), settings.bed));
+    Slicer slicer;
+    const SliceResult r = slicer.run(placed, settings);
+    REQUIRE(r.ok);
+    REQUIRE(r.resin);
+    CHECK_FALSE(r.model);
+    CHECK(r.gcode.empty());
+    // On supports over the pad by default: 2 + 5 mm under the part.
+    CHECK_THAT(r.resin->layers.back().z, WithinAbs(7.0 + cube.bounding_box().max.z - cube.bounding_box().min.z, 1e-3));
+    CHECK(r.preview.layers.size() == r.resin->layers.size());
+    CHECK(r.preview.kind_moves[std::size_t(LineKind::Support)] > 0);
+    CHECK(r.preview.estimated_seconds == r.resin->seconds);
+    // What does not fit on the display is refused with the engine's reason.
+    const SliceResult off = slicer.run(translated(cube, {-500, 0, 0}), settings);
+    CHECK_FALSE(off.ok);
+    CHECK_THAT(off.error, ContainsSubstring("display"));
+}
+
 TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     Settings settings = default_settings();
     settings.gpu = GpuMode::Off;

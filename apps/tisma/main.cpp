@@ -17,7 +17,8 @@ constexpr const char* kUsage =
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
-    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
+    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
+    "                            resin_exposure|resin_measure|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
@@ -222,7 +223,8 @@ int main(int argc, char** argv) {
             const std::string& c = options.calibration;
             if (c != "extruder" && !tisma::calibration_kind_from_name(c)) {
                 std::fprintf(stderr, "error: --calibration must be dimensions, first_layer, temperature, flow, retraction, "
-                                     "retraction_speed, pressure_advance, speed, fit or extruder\n");
+                                     "retraction_speed, pressure_advance, speed, fit, max_flow, acceleration, "
+                                     "elephant_foot, resin_exposure, resin_measure or extruder\n");
                 return 2;
             }
         } else if (arg == "--light") {

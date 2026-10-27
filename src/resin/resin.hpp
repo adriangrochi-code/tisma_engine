@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/settings.hpp"
+#include "gcode/preview.hpp"
 #include "geom/polygons.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "report/warnings.hpp"
@@ -121,6 +122,9 @@ struct ResinPrint {
     double seconds = 0.0;         // the print's estimated time
     double max_height = 150.0;    // the printer's, mm
     double bar_width = 0.0;       // the hollow's inner bars, mm; 0: none
+    // With ResinOptions::keep_sections, each layer's part (hollowed and
+    // drained) and supports with the pad, before the corrections.
+    std::vector<Polygons> part, supports;
     // Previews (116 by 116 and 290 by 290 pixels, RGB565, row by row from
     // the top): the part seen from above, shaded by its height.
     std::vector<std::uint16_t> small_preview, big_preview;
@@ -131,20 +135,31 @@ struct ResinPrint {
 // centre in x and y and from its base, laid on the platform.
 std::vector<Polygons> resin_sections(const IndexedMesh& mesh, const Settings& settings);
 
+// What else a resin print takes besides the part and the settings.
+struct ResinOptions {
+    // The exposure of the normal layer whose middle is at z (the exposure
+    // tower); empty: resin.exposure.
+    std::function<double(double z)> exposure;
+    std::vector<ResinDrain> drains; // drain holes (resin_supports.md, rule 6)
+    bool keep_sections = false;     // keep ResinPrint::part and ::supports, for a preview
+};
+
 // The part's print (rules 1 to 8 and 20 to 22): the sections grown by
 // resin.absolute_correction, the bottom layers shrunk against the
 // elephant's foot, what hangs left dark for resin.z_correction_layers
 // layers; coded images, exposures and moves; and the cups. With
 // resin.supports the part stands on supports over the pad (and its cups are
 // open underneath), hollowed with resin.hollow, with the drain holes taken
-// out (docs/spec/features/resin_supports.md). exposure(z) gives the
-// exposure of the normal layer whose middle is at z (the exposure tower),
-// else resin.exposure. Throws ResinError when the part (or its supports and
-// pad) does not fit on the display or under machine.max_height (150 mm when
-// 0), or when the pad has nothing to stand under or around.
-ResinPrint slice_resin(const IndexedMesh& mesh, const Settings& settings,
-                       const std::function<double(double z)>& exposure = {},
-                       const std::vector<ResinDrain>& drains = {});
+// out (docs/spec/features/resin_supports.md). Throws ResinError when the
+// part (or its supports and pad) does not fit on the display or under
+// machine.max_height (150 mm when 0), or when the pad has nothing to stand
+// under or around.
+ResinPrint slice_resin(const IndexedMesh& mesh, const Settings& settings, const ResinOptions& options = {});
+
+// The print for the interface's 3D preview: each layer's outlines as
+// extrusions at its height, the part's as outer walls and the supports' and
+// pad's as support, with the print's time. Needs the sections kept.
+GcodePreview resin_preview(const ResinPrint& print);
 
 // The print's warnings, for the warnings' JSON: each cup (resin.md, rule
 // 15) with the part, the heights and the largest section, and how to fix

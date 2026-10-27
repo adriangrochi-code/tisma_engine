@@ -2,6 +2,8 @@
 
 #include "calibration/calibration.hpp"
 
+#include "resin/resin.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -199,6 +201,7 @@ std::pair<double, double> calibration_range(CalibrationKind kind) {
     case CalibrationKind::PressureAdvance: return {0.0, 2.0};
     case CalibrationKind::MaxFlow: return {0.5, 1000.0};
     case CalibrationKind::Acceleration: return {100.0, 100000.0};
+    case CalibrationKind::ResinExposure: return {0.1, 600.0};
     default: return {-1e9, 1e9};
     }
 }
@@ -564,6 +567,8 @@ const char* calibration_kind_name(CalibrationKind kind) {
     case CalibrationKind::MaxFlow: return "max_flow";
     case CalibrationKind::Acceleration: return "acceleration";
     case CalibrationKind::ElephantFoot: return "elephant_foot";
+    case CalibrationKind::ResinExposure: return "resin_exposure";
+    case CalibrationKind::ResinMeasure: return "resin_measure";
     }
     return "dimensions";
 }
@@ -577,7 +582,29 @@ std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name)
 
 bool is_tower(CalibrationKind kind) {
     return kind != CalibrationKind::Dimensions && kind != CalibrationKind::FirstLayer && kind != CalibrationKind::Fit &&
-           kind != CalibrationKind::ElephantFoot;
+           kind != CalibrationKind::ElephantFoot && kind != CalibrationKind::ResinMeasure;
+}
+
+bool is_resin_calibration(CalibrationKind kind) {
+    return kind == CalibrationKind::ResinExposure || kind == CalibrationKind::ResinMeasure;
+}
+
+CalibrationPrint resin_exposure_tower(double start, double end, double step, double segment) {
+    CalibrationPrint out;
+    out.kind = "resin_exposure";
+    out.unit = "s";
+    const ResinTower tower{start, end, step, segment};
+    out.mesh = resin_tower_mesh(tower);
+    // Band 0 is the base, at resin.exposure; band i tries the i-th value.
+    const std::vector<double> values = tower_exposures(tower);
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        HeightChange c;
+        c.z = double(i + 1) * segment;
+        c.exposure = values[i];
+        out.changes.push_back(c);
+        out.segments.push_back({double(i + 1) * segment, double(i + 2) * segment, values[i]});
+    }
+    return out;
 }
 
 CalibrationPrint calibration_tower(CalibrationKind kind, double start, double end, double step, double segment) {
@@ -590,6 +617,7 @@ CalibrationPrint calibration_tower(CalibrationKind kind, double start, double en
     case CalibrationKind::PressureAdvance: return pressure_advance_tower(start, end, step, segment);
     case CalibrationKind::MaxFlow: return max_flow_tower(start, end, step, segment);
     case CalibrationKind::Acceleration: return acceleration_tower(start, end, step, segment);
+    case CalibrationKind::ResinExposure: return resin_exposure_tower(start, end, step, segment);
     default: return {};
     }
 }
@@ -610,6 +638,15 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         return fit_test();
     case CalibrationKind::ElephantFoot:
         return elephant_foot_test();
+    case CalibrationKind::ResinExposure: // calibration_models.md's defaults
+        return resin_exposure_tower(1.5, 3.5, 0.25, 2.0);
+    case CalibrationKind::ResinMeasure: {
+        CalibrationPrint out;
+        out.kind = "resin_measure";
+        out.unit = "mm";
+        out.mesh = resin_measure_block();
+        return out;
+    }
     case CalibrationKind::MaxFlow: {
         // Around the known limit, half to one and a half times; else the
         // range of common hot ends.
@@ -652,7 +689,11 @@ bool apply_calibration(CalibrationKind kind, double value, Settings& s) {
     case CalibrationKind::FirstLayer:
     case CalibrationKind::Fit:
     case CalibrationKind::ElephantFoot:
+    case CalibrationKind::ResinMeasure:
         return false;
+    case CalibrationKind::ResinExposure: // the band that printed best (resin.md, rule 18)
+        s.resin_exposure = value;
+        break;
     case CalibrationKind::MaxFlow:
         s.machine_max_flow = value;
         break;

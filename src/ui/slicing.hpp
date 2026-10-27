@@ -5,6 +5,7 @@
 #include "gcode/preview.hpp"
 #include "mesh/mesh.hpp"
 #include "report/warnings.hpp"
+#include "resin/resin.hpp"
 #include "slice/pipeline.hpp"
 
 #include <atomic>
@@ -41,6 +42,9 @@ struct SliceResult {
     GcodeCheck check;   // the check of that text
     GcodePreview preview;
     std::vector<Warning> warnings;
+    // A resin printer's print (machine.technology msla, resin.md), in place
+    // of the model and the G-code; the preview shows its layers' outlines.
+    std::shared_ptr<const ResinPrint> resin;
     std::string gpu;    // the device used, or empty for the CPU
     double slice_seconds = 0.0, gcode_seconds = 0.0, check_seconds = 0.0, preview_seconds = 0.0;
 };

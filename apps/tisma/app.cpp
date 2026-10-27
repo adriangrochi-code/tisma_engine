@@ -20,6 +20,7 @@
 #include "device/simulator.hpp"
 #include "fea/analysis.hpp"
 #include "gcode/export.hpp"
+#include "resin/goo.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
@@ -525,6 +526,7 @@ private:
     DimensionTest dimension_test_;
     Measurements measured_{30.0, 20.0, 15.0, 10.0};
     double elephant_bottom_ = 20.0, elephant_body_ = 20.0; // the elephant's foot block, measured
+    double resin_measured_[3] = {30.0, 30.0, 10.0};       // the resin measuring block, measured
     struct TowerRange {
         double start = 0.0, end = 0.0, step = 1.0, segment = 5.0;
     };
@@ -2215,8 +2217,33 @@ void App::add_catalog_profile(const Profile& catalog) {
 void App::export_gcode_to(const std::filesystem::path& path) {
     // The result can go while the dialog is open: say so instead of writing
     // nothing, or an old result, without a word.
-    if (!result_ || !result_->ok || !result_->model || viewer_ || stale_) {
+    if (!result_ || !result_->ok || (!result_->model && !result_->resin) || viewer_ || stale_) {
         fail(T::ExportFailed, tr(T::Stale));
+        return;
+    }
+    // A resin printer's GOO file (resin.md), written whole or not at all.
+    if (result_->resin) {
+        const std::filesystem::path part = path.string() + ".part";
+        bool written = false;
+        {
+            std::ofstream out(part, std::ios::binary);
+            if (out) {
+                write_goo(out, *result_->resin, result_->settings, goo_time_now());
+                out.close();
+                written = bool(out);
+            }
+        }
+        std::error_code ec;
+        if (written)
+            std::filesystem::rename(part, path, ec);
+        if (!written || ec) {
+            std::filesystem::remove(part, ec);
+            fail(T::ExportFailed, "cannot write " + utf8(path));
+            return;
+        }
+        last_folder_ = path.parent_path();
+        notify(format(tr(T::Exported), utf8(path.filename()).c_str()) + " · " +
+               format(tr(T::ResinLayersN), int(result_->resin->layers.size())));
         return;
     }
     std::vector<Warning> warnings;
@@ -2235,8 +2262,10 @@ void App::export_gcode_to(const std::filesystem::path& path) {
 
 void App::begin_export() {
     purpose_ = Purpose::SaveGcode;
-    const std::string name = model_path_.empty() ? "tisma.gcode" : utf8(model_path_.stem()) + ".gcode";
-    browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {".gcode"}, last_folder_, name);
+    // A resin printer's file is a GOO (resin.md).
+    const std::string ext = result_ && result_->resin ? ".goo" : ".gcode";
+    const std::string name = (model_path_.empty() ? std::string("tisma") : utf8(model_path_.stem())) + ext;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {ext}, last_folder_, name);
 }
 
 void App::start_slice() {
@@ -2257,6 +2286,10 @@ void App::start_slice() {
     }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
+    // The resin tests print on the platform, without supports, pad or
+    // hollowing (calibration_models.md, "Resina").
+    if (calibration_ && is_resin_calibration(calibration_kind_))
+        settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
     Painting painting = plate_painting(objects_);
     // Each model's triangles in the plate's mesh, as plate_mesh joins them.
     std::vector<MeshObject> objects;
@@ -2497,7 +2530,7 @@ void App::top_bar() {
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
-    if (button("##export", "tisma_save", tr(T::Export), false, false, can_export,
+    if (button("##export", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false, false, can_export,
                can_export ? tr(T::ExportTip) : tr(T::ExportNeedsSlice), button_h))
         begin_export();
     ImGui::SameLine(0, gap);
@@ -2554,6 +2587,13 @@ void App::top_bar() {
 // that hang on a switch hide while it is off (settings_panel.md, rule 6).
 bool App::setting_applies(std::string_view key) const {
     const Settings& s = settings_;
+    // A resin printer's settings, or the rest (interface.md, «Con una
+    // impresora de resina»; settings_panel.md, rule 1).
+    if (key == "machine.technology" || key == "machine.max_height")
+        return true;
+    const bool resin = key.starts_with("resin.") || key.starts_with("machine.display_");
+    if (resin != (s.machine_technology == MachineTechnology::Msla))
+        return false;
     if (key.starts_with("support.tree_"))
         return s.support && s.support_style == SupportStyle::Organic;
     if (key.starts_with("support.") && key != "support.enabled")
@@ -3427,6 +3467,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
     }
     // Printer.
     else if (id == "bed_volume") {
+        // Filament or resin: the panel shows that kind's settings, and a
+        // resin printer's plate is its display (resin.md).
+        if (shown("machine.technology") &&
+            row(T::Technology, s.machine_technology,
+                {{MachineTechnology::Fdm, tr(T::TechnologyFdm)}, {MachineTechnology::Msla, tr(T::TechnologyMsla)}})) {
+            if (s.machine_technology == MachineTechnology::Msla)
+                s.bed = {{0.0, 0.0}, {s.display_width, 0.0}, {s.display_width, s.display_height}, {0.0, s.display_height}};
+            bed = changed = true;
+        }
         if (shown("machine.bed")) {
             double width = 0, depth = 0;
             if (rectangle_bed(s, width, depth)) {
@@ -3459,8 +3508,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
         // A resin printer's display (resin.md).
         whole(T::DisplayPixelsX, "machine.display_pixels_x", s.display_pixels_x, 1, 32767);
         whole(T::DisplayPixelsY, "machine.display_pixels_y", s.display_pixels_y, 1, 32767);
+        const double width = s.display_width, height = s.display_height;
         mm(T::DisplayWidth, "machine.display_width", s.display_width, 1.0, 1000.0, "%.2f mm", 0.01f);
         mm(T::DisplayHeight, "machine.display_height", s.display_height, 1.0, 1000.0, "%.2f mm", 0.01f);
+        if (s.display_width != width || s.display_height != height) {
+            s.bed = {{0.0, 0.0}, {s.display_width, 0.0}, {s.display_width, s.display_height}, {0.0, s.display_height}};
+            bed = true;
+        }
         flag(T::DisplayMirrorX, "machine.display_mirror_x", s.display_mirror_x);
         flag(T::DisplayMirrorY, "machine.display_mirror_y", s.display_mirror_y);
     } else if (id == "resin_layers") {
@@ -3754,7 +3808,12 @@ void App::status_bar() {
         const double total = result_->slice_seconds + result_->gcode_seconds + result_->check_seconds;
         ImGui::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
         ImGui::SameLine(0, 16.0f * scale_);
-        if (result_->check.ok())
+        if (result_->resin)
+            ImGui::TextColored(rgb(0x3FBF7F), "%s",
+                               format(tr(T::ResinSliced), int(result_->resin->layers.size()), result_->resin->volume / 1000.0,
+                                      result_->resin->weight)
+                                   .c_str());
+        else if (result_->check.ok())
             ImGui::TextColored(rgb(0x3FBF7F), "%s",
                                format(tr(T::GcodeOk), number_text(result_->check.stats.lines).c_str()).c_str());
         else
@@ -4824,12 +4883,20 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
-        const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
-                            result_->settings.filament_diameter;
-        line(tr(T::FilamentUsed),
-             format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
-        line(tr(T::Layers), std::to_string(layers));
-        line(tr(T::Lines), number_text(p.lines));
+        if (result_->resin) {
+            // A resin print: the resin it takes, by its bottle (gcode_extras.md, rule 2).
+            line(tr(T::ResinUsed), format("%.1f ml  ·  %.1f g", result_->resin->volume / 1000.0, result_->resin->weight));
+            if (result_->resin->cost > 0.0)
+                line(tr(T::ResinCost), format("%.2f", result_->resin->cost));
+            line(tr(T::Layers), std::to_string(layers));
+        } else {
+            const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
+                                result_->settings.filament_diameter;
+            line(tr(T::FilamentUsed),
+                 format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
+            line(tr(T::Layers), std::to_string(layers));
+            line(tr(T::Lines), number_text(p.lines));
+        }
         ImGui::EndTable();
     }
     ImGui::End();
@@ -4957,6 +5024,8 @@ void App::calibration_panel() {
         {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
         {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
+        {CalibrationKind::ResinExposure, T::CalResinExposure, T::CalResinExposureWhat, T::CalResinExposureHint},
+        {CalibrationKind::ResinMeasure, T::CalResinMeasure, T::CalResinMeasureWhat, T::CalResinMeasureHint},
     };
     const float button_h = 30.0f * scale_;
     // A card's title and what it is for, with its button on the right.
@@ -4992,6 +5061,9 @@ void App::calibration_panel() {
         }
     };
     for (const Card& card : cards) {
+        // With a resin printer, only the resin tests (interface.md); else the others.
+        if (is_resin_calibration(card.kind) != (settings_.machine_technology == MachineTechnology::Msla))
+            continue;
         ImGui::PushID(int(card.kind));
         ImGui::Separator();
         const bool active = calibration_ && calibration_kind_ == card.kind;
@@ -5015,7 +5087,8 @@ void App::calibration_panel() {
                     ImGui::TextDisabled(tr(T::PartReady), time.c_str());
             }
             const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
-            if (button("##export_calibration", "tisma_save", tr(T::Export), false, false, can_export, tr(T::ExportTip),
+            if (button("##export_calibration", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false,
+                       false, can_export, tr(T::ExportTip),
                        button_h))
                 begin_export();
             // 2: print and look.
@@ -5080,6 +5153,24 @@ void App::calibration_panel() {
                     settings_changed();
                     notify(format(tr(T::ShrinkApplied), next));
                 }
+            } else if (card.kind == CalibrationKind::ResinMeasure) {
+                // 3: measure the block; the scale corrections follow (resin.md, rule 19).
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                number(T::MeasuredX, resin_measured_[0], 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredY, resin_measured_[1], 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredZ, resin_measured_[2], 1.0, 1000.0, "%.3f mm", 0.005f);
+                const std::array<double, 3> next =
+                    resin_scale_from(settings_, resin_measured_[0], resin_measured_[1], resin_measured_[2]);
+                ImGui::Text("%s: %.4f · %.4f · %.4f", tr(T::New), next[0], next[1], next[2]);
+                if (button("##apply_scale", nullptr, tr(T::ApplyCompensation), true, false, true, nullptr, button_h)) {
+                    settings_.resin_scale_x = std::clamp(next[0], 0.5, 2.0);
+                    settings_.resin_scale_y = std::clamp(next[1], 0.5, 2.0);
+                    settings_.resin_scale_z = std::clamp(next[2], 0.5, 2.0);
+                    resin_measured_[0] = resin_measured_[1] = 30.0;
+                    resin_measured_[2] = 10.0;
+                    settings_changed();
+                    notify(tr(T::ResinScaleApplied));
+                }
             } else if (card.kind == CalibrationKind::FirstLayer) {
                 // 3: what each look means; the height is set on the printer.
                 ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
@@ -5139,42 +5230,45 @@ void App::calibration_panel() {
         ImGui::PopID();
     }
 
-    // The extruder's steps: no part to slice, a G-code to run and a sum.
-    ImGui::PushID("extruder");
-    ImGui::Separator();
-    if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
-        extruder_open_ = !extruder_open_;
-        extruder_scroll_ = extruder_open_;
-    }
-    if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
-        ImGui::SetScrollHereY(0.0f);
-        extruder_scroll_ = false;
-    }
-    if (extruder_open_) {
-        const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
-        if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
-            purpose_ = Purpose::SaveExtruderTest;
-            browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
-                          "tisma_extruder_steps.gcode");
+    // The extruder's steps: no part to slice, a G-code to run and a sum (FDM only).
+    if (settings_.machine_technology != MachineTechnology::Msla) {
+        ImGui::PushID("extruder");
+        ImGui::Separator();
+        if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
+            extruder_open_ = !extruder_open_;
+            extruder_scroll_ = extruder_open_;
         }
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
-        number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
-        number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
-        const double extruded = 120.0 - extruder_left_;
-        const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
-        ImGui::Text(tr(T::ExtruderResult), extruded, value);
-        std::string text = extruder_steps_text(settings_.flavor, value);
-        const float two_lines = ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
-        ImGui::InputTextMultiline("##steps_text", &text, ImVec2(-FLT_MIN, two_lines), ImGuiInputTextFlags_ReadOnly);
-        if (button("##copy", nullptr, tr(T::Copy), false, false, true, nullptr, button_h)) {
-            ImGui::SetClipboardText(text.c_str());
-            notify(tr(T::Copied));
+        if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
+            ImGui::SetScrollHereY(0.0f);
+            extruder_scroll_ = false;
         }
-        ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+        if (extruder_open_) {
+            const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
+            if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
+                purpose_ = Purpose::SaveExtruderTest;
+                browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
+                              "tisma_extruder_steps.gcode");
+            }
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
+            number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
+            number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
+            const double extruded = 120.0 - extruder_left_;
+            const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
+            ImGui::Text(tr(T::ExtruderResult), extruded, value);
+            std::string text = extruder_steps_text(settings_.flavor, value);
+            const float two_lines =
+                ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
+            ImGui::InputTextMultiline("##steps_text", &text, ImVec2(-FLT_MIN, two_lines), ImGuiInputTextFlags_ReadOnly);
+            if (button("##copy", nullptr, tr(T::Copy), false, false, true, nullptr, button_h)) {
+                ImGui::SetClipboardText(text.c_str());
+                notify(tr(T::Copied));
+            }
+            ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+        }
+        ImGui::PopID();
     }
-    ImGui::PopID();
     ImGui::Separator();
     if (ImGui::CollapsingHeader(tr(T::MoreCalibrations)))
         ImGui::TextDisabled("%s", tr(T::MoreCalibrationsList));

@@ -488,8 +488,19 @@ std::vector<Polygons> resin_sections(const IndexedMesh& mesh, const Settings& s)
     return sections_of(scaled, s, resin_layers(scaled, s));
 }
 
-ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::function<double(double z)>& exposure,
-                       const std::vector<ResinDrain>& drains) {
+ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const ResinOptions& options) {
+    // The exposure by height: the options', else the settings' changes
+    // (the exposure tower made by the interface).
+    std::function<double(double z)> exposure = options.exposure;
+    if (!exposure && std::any_of(s.changes.begin(), s.changes.end(), [](const HeightChange& c) { return c.exposure; }))
+        exposure = [&s](double z) {
+            double e = s.resin_exposure;
+            for (const HeightChange& c : s.changes)
+                if (c.exposure && c.z <= z + 1e-9)
+                    e = *c.exposure;
+            return e;
+        };
+    const std::vector<ResinDrain>& drains = options.drains;
     if (input.triangles.empty())
         throw ResinError("the model is empty");
     // The pad stands under the supports or around the part (resin_supports.md, rule 2, RS3).
@@ -574,11 +585,15 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     }
     // Everything printed: the part, the supports and the pad.
     std::vector<Polygons> all = part;
+    if (options.keep_sections)
+        print.supports.resize(count);
     if (!pillars.empty() || !pad.empty())
         tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
             Polygons more = support_section(pillars, pad, s, layers[l].slice_z());
             if (more.empty())
                 return;
+            if (options.keep_sections)
+                print.supports[l] = more;
             more.insert(more.end(), part[l].begin(), part[l].end());
             all[l] = Clipper2Lib::Union(more, Clipper2Lib::FillRule::NonZero);
         });
@@ -656,6 +671,8 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     const double* view = all_box[2] >= all_box[0] ? all_box : box;
     print.small_preview = preview(all, layers, 116, view);
     print.big_preview = preview(all, layers, 290, view);
+    if (options.keep_sections)
+        print.part = std::move(part);
     return print;
 }
 
@@ -835,6 +852,55 @@ std::array<double, 3> resin_scale_from(const Settings& s, double x, double y, do
     if (!(x > 0.0 && y > 0.0 && z > 0.0))
         throw ResinError("the measured sizes must be above 0");
     return {s.resin_scale_x * 30.0 / x, s.resin_scale_y * 30.0 / y, s.resin_scale_z * 10.0 / z};
+}
+
+GcodePreview resin_preview(const ResinPrint& print) {
+    GcodePreview out;
+    constexpr float kWidth = 0.1f; // the outlines are drawn this wide
+    bool any = false;
+    for (std::size_t l = 0; l < print.layers.size(); ++l) {
+        const ResinLayer& layer = print.layers[l];
+        const double height = l == 0 ? layer.z : layer.z - print.layers[l - 1].z;
+        PreviewLayer pl;
+        pl.z = layer.z;
+        pl.height = height;
+        pl.first = out.moves.size();
+        pl.first_extrusion = out.extrusions.size();
+        auto outline = [&](const Polygons& region, LineKind kind) {
+            for (const Polygon& poly : region)
+                for (std::size_t i = 0, n = poly.size(); i < n && n >= 3; ++i) {
+                    const Clipper2Lib::Point64& a = poly[i];
+                    const Clipper2Lib::Point64& b = poly[(i + 1) % n];
+                    PreviewMove m;
+                    m.x0 = float(to_mm(a.x)), m.y0 = float(to_mm(a.y)), m.z0 = float(layer.z);
+                    m.x1 = float(to_mm(b.x)), m.y1 = float(to_mm(b.y)), m.z1 = float(layer.z);
+                    m.width = kWidth;
+                    m.height = float(height);
+                    m.kind = kind;
+                    m.layer = std::uint32_t(l);
+                    out.extrusions.push_back(std::uint32_t(out.moves.size()));
+                    out.moves.push_back(m);
+                    ++out.kind_moves[std::size_t(kind)];
+                    out.extruded += std::hypot(double(m.x1 - m.x0), double(m.y1 - m.y0));
+                    const float p[2][3] = {{m.x0, m.y0, m.z0}, {m.x1, m.y1, m.z1}};
+                    for (const auto& q : p)
+                        for (int k = 0; k < 3; ++k) {
+                            out.min[std::size_t(k)] = any ? std::min(out.min[std::size_t(k)], q[k]) : q[k];
+                            out.max[std::size_t(k)] = any ? std::max(out.max[std::size_t(k)], q[k]) : q[k];
+                        }
+                    any = true;
+                }
+        };
+        if (l < print.part.size())
+            outline(print.part[l], LineKind::OuterWall);
+        if (l < print.supports.size())
+            outline(print.supports[l], LineKind::Support);
+        pl.count = out.moves.size() - pl.first;
+        pl.extrusion_count = out.extrusions.size() - pl.first_extrusion;
+        out.layers.push_back(pl);
+    }
+    out.estimated_seconds = print.seconds;
+    return out;
 }
 
 } // namespace tisma

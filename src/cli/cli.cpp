@@ -347,6 +347,11 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    // A resin printer prints a GOO file (resin.md); a .goo file is for one.
+    if (settings.machine_technology == MachineTechnology::Msla && !goo_output(parsed->output)) {
+        err << "error: machine.technology is msla: the output must be a .goo file\n";
+        return kExitInput;
+    }
     if (goo_output(parsed->output)) {
         ModelFile model;
         double seconds = 0.0;

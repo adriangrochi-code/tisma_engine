@@ -153,6 +153,20 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
     out.settings = settings;
     try {
         auto start = std::chrono::steady_clock::now();
+        // A resin printer (resin.md): its layers' images, and no G-code.
+        if (settings.machine_technology == MachineTechnology::Msla) {
+            ResinOptions keep;
+            keep.keep_sections = true;
+            auto print = std::make_shared<ResinPrint>(slice_resin(weld_exact(mesh), settings, keep));
+            out.slice_seconds = seconds_since(start);
+            out.warnings = resin_warnings(*print, given.empty() ? std::string("the part") : given.front().name);
+            start = std::chrono::steady_clock::now();
+            out.preview = resin_preview(*print);
+            out.preview_seconds = seconds_since(start);
+            out.resin = std::move(print);
+            out.ok = true;
+            return out;
+        }
         // The same cut as last time: only the G-code again. A load case
         // cannot be compared, so stress-guided infill always cuts anew, and
         // its cut serves no other run.

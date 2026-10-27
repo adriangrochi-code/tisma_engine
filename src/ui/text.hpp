@@ -398,6 +398,13 @@
     X(CalElephantFoot, "Pata de elefante", "Elephant's foot")                                                          \
     X(CalElephantFootWhat, "Cuánto se ensancha la primera capa, para achicarla.", "How much the first layer widens, to shrink it.") \
     X(CalElephantFootHint, "Un bloque de 20 × 20 × 6 mm. Medí con calibre el ancho del borde de abajo (la primera capa) y el del cuerpo, en el mismo lado.", "A 20 × 20 × 6 mm block. Measure with calipers the width of the bottom edge (the first layer) and the body's, on the same side.") \
+    X(CalResinExposure, "Torre de exposición", "Exposure tower") \
+    X(CalResinExposureWhat, "Qué exposición deja los agujeros abiertos y las aletas firmes", "Which exposure keeps the holes open and the fins standing") \
+    X(CalResinExposureHint, "Una franja por exposición, sobre una base. Elegí la más baja cuyas aletas finas salieron derechas y cuyos agujeros chicos no se cerraron.", "A band per exposure, over a base. Pick the lowest whose thin fins came out straight and whose small holes did not close.") \
+    X(CalResinMeasure, "Bloque de medidas", "Measuring block") \
+    X(CalResinMeasureWhat, "La corrección de escala de la resina", "The resin's scale correction") \
+    X(CalResinMeasureHint, "Un bloque de 30 × 30 × 10 mm. Medilo lejos del borde de abajo, que se ensancha.", "A 30 × 30 × 10 mm block. Measure it away from its bottom edge, which spreads.") \
+    X(ResinScaleApplied, "Corrección de escala de la resina aplicada", "Resin scale correction applied") \
     X(MeasuredBottom, "Ancho abajo", "Width at the bottom")                                                             \
     X(MeasuredBody, "Ancho del cuerpo", "Body width")                                                                   \
     X(FirstLayerShrink, "Achique de la primera capa", "First layer shrink")                                             \
@@ -1053,6 +1060,14 @@
     X(SumLift, "%s mm a %s mm/s", "%s mm at %s mm/s") \
     X(SumResinDensity, "%s g/ml", "%s g/ml") \
     X(SubResinSupports, "Resina: soportes", "Resin: supports") \
+    X(Technology, "Tipo de impresora", "Printer type") \
+    X(TechnologyFdm, "Filamento (FDM)", "Filament (FDM)") \
+    X(TechnologyMsla, "Resina (MSLA)", "Resin (MSLA)") \
+    X(ResinLayersN, "%d capas", "%d layers") \
+    X(ExportGoo, "Exportar GOO", "Export GOO") \
+    X(ResinUsed, "Resina", "Resin") \
+    X(ResinCost, "Costo", "Cost") \
+    X(ResinSliced, "%d capas · %.1f ml · %.1f g", "%d layers · %.1f ml · %.1f g") \
     X(SubResinPad, "Resina: base", "Resin: pad") \
     X(SubResinHollow, "Resina: vaciado", "Resin: hollowing") \
     X(ResinSupports, "Soportes", "Supports") \

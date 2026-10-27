@@ -2,6 +2,7 @@
 // file and the corrections, against the spec's tests RE1 to RE10 (measured
 // on Tisma Slicer as a black box).
 
+#include "calibration/calibration.hpp"
 #include "cli/cli.hpp"
 #include "config/settings.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -623,8 +625,9 @@ TEST_CASE("resin CR1: the exposure tower's bands", "[resin]") {
     s.resin_bottom_layers = 5;
     const ResinTower tower; // 1.5 to 3.5 s by 0.25, bands of 2 mm
     CHECK(tower_exposures(tower).size() == 9);
-    const ResinPrint p =
-        slice_resin(cube(), s, [&](double z) { return tower_exposure(tower, s.resin_exposure, z); });
+    ResinOptions by_band;
+    by_band.exposure = [&](double z) { return tower_exposure(tower, s.resin_exposure, z); };
+    const ResinPrint p = slice_resin(cube(), s, by_band);
     REQUIRE(p.layers.size() == 200);
     for (std::size_t l = 0; l < 5; ++l)
         CHECK(p.layers[l].exposure == 30.0);
@@ -645,6 +648,50 @@ TEST_CASE("resin CR1: the exposure tower's bands", "[resin]") {
     // The engine turns the advanced mode on, so that the printer takes each
     // layer's exposure (rule 12; Tisma Slicer writes 0).
     CHECK(f.header.advanced);
+}
+
+TEST_CASE("resin: the exposure tower and the measuring block as calibrations", "[resin][calibration]") {
+    // The tower made as the interface makes it: its bands' exposures as
+    // height changes in the settings, which slice_resin follows (CR1).
+    const CalibrationPrint tower = automatic_calibration(CalibrationKind::ResinExposure, Settings{});
+    CHECK(tower.kind == "resin_exposure");
+    CHECK(tower.unit == "s");
+    REQUIRE(tower.segments.size() == 9);
+    CHECK(tower.segments.front().z0 == 2.0);
+    CHECK(tower.segments.front().value == 1.5);
+    CHECK(tower.segments.back().value == 3.5);
+    CHECK(is_tower(CalibrationKind::ResinExposure));
+    CHECK(is_resin_calibration(CalibrationKind::ResinExposure));
+    Settings s = base();
+    s.resin_bottom_layers = 5;
+    s.changes = tower.changes;
+    // On the RE1 cube, as in CR1.
+    const ResinPrint p = slice_resin(cube(), s);
+    CHECK(p.layers[39].exposure == 2.5);
+    CHECK(p.layers[40].exposure == 1.5);
+    CHECK(p.layers[80].exposure == 1.75);
+    CHECK(p.layers[199].exposure == 2.25);
+    // The tower's part slices too.
+    TriangleMesh m = tower.mesh;
+    m.translate(71.7f, 44.8f, 0.0f);
+    const ResinPrint printed = slice_resin(weld_exact(m), s);
+    CHECK(printed.layers.size() == 400);
+    CHECK(printed.layers[399].exposure == 3.5);
+    CHECK(goo_of(printed, s).header.advanced);
+    // The band that printed best becomes resin.exposure.
+    REQUIRE(apply_calibration(CalibrationKind::ResinExposure, 2.25, s));
+    CHECK(s.resin_exposure == 2.25);
+    CHECK(s.changes.empty());
+    // The measuring block sets nothing by itself: resin_scale_from does.
+    const CalibrationPrint block = automatic_calibration(CalibrationKind::ResinMeasure, Settings{});
+    CHECK(block.changes.empty());
+    CHECK_FALSE(is_tower(CalibrationKind::ResinMeasure));
+    CHECK_FALSE(apply_calibration(CalibrationKind::ResinMeasure, 1.0, s));
+    // The changes read and written.
+    const Settings back = parse_settings(R"({"changes": [{"z": 2, "exposure": 1.5}]})");
+    REQUIRE(back.changes.size() == 1);
+    CHECK(*back.changes[0].exposure == 1.5);
+    CHECK(*parse_settings(settings_json(back)).changes[0].exposure == 1.5);
 }
 
 TEST_CASE("resin: the exposure tower's part and the measuring block", "[resin]") {
@@ -730,6 +777,35 @@ TEST_CASE("resin RS1: supports and a pad under a cube", "[resin][resin_supports]
     CHECK_THAT(double(lit_of(pixels(bare, 20, s), s).count) * px, WithinAbs(19.6, 3.0));
 }
 
+TEST_CASE("resin: the preview of a print, the outlines of each layer", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_supports = true;
+    s.resin_pad = true;
+    ResinOptions keep;
+    keep.keep_sections = true;
+    const ResinPrint p = slice_resin(cube(), s, keep);
+    REQUIRE(p.part.size() == p.layers.size());
+    const GcodePreview v = resin_preview(p);
+    REQUIRE(v.layers.size() == 340);
+    CHECK(v.layers[20].extrusion_count > 0); // the pad
+    CHECK(v.kind_moves[std::size_t(LineKind::OuterWall)] > 0);
+    CHECK(v.kind_moves[std::size_t(LineKind::Support)] > 0);
+    // The cube's layer: its square at its height, four sides.
+    const PreviewLayer& layer = v.layers[200];
+    CHECK_THAT(layer.z, WithinAbs(10.05, 1e-9));
+    double walls = 0.0;
+    for (std::size_t i = 0; i < layer.extrusion_count; ++i) {
+        const PreviewMove& m = v.moves[v.extrusions[layer.first_extrusion + i]];
+        if (m.kind == LineKind::OuterWall)
+            walls += std::hypot(double(m.x1 - m.x0), double(m.y1 - m.y0));
+    }
+    CHECK_THAT(walls, WithinAbs(80.0, 0.01));
+    CHECK_THAT(v.max[2], WithinAbs(17.0, 1e-4));
+    CHECK(v.estimated_seconds == p.seconds);
+    // Without keeping the sections, nothing to show.
+    CHECK(slice_resin(cube(), s).part.empty());
+}
+
 TEST_CASE("resin RS3: a pad with nothing to hold is an error", "[resin][resin_supports]") {
     Settings s = base();
     s.resin_pad = true;
@@ -789,7 +865,9 @@ TEST_CASE("resin: the hollow's inner bars and the drain holes", "[resin][resin_s
     s.resin_pad = true;
     CHECK(slice_resin(cube(), s).cups.size() == 1);
     const ResinDrain drain{143.43 / 2, 89.6 / 2, 7.0, 0.0, 0.0, -1.0, 3.0, 4.0};
-    const ResinPrint drained = slice_resin(cube(), s, {}, {drain});
+    ResinOptions with_drain;
+    with_drain.drains = {drain};
+    const ResinPrint drained = slice_resin(cube(), s, with_drain);
     CHECK(drained.cups.empty());
     // The hole goes through the floor: the cube's first layer has it (7 mm2).
     const ResinPrint whole = slice_resin(cube(), s);
@@ -850,5 +928,12 @@ TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
     const std::string json{std::istreambuf_iterator<char>(report), std::istreambuf_iterator<char>()};
     CHECK_THAT(json, ContainsSubstring("\"cupping\""));
     CHECK_THAT(json, ContainsSubstring("cup.stl: a cup from z"));
+    // A resin printer asks for a .goo file.
+    std::ofstream(dir / "msla.json") << R"({"machine": {"technology": "msla"}})";
+    const std::string msla = (dir / "msla.json").string(), gcode = (dir / "cube.gcode").string();
+    std::ostringstream out3, err3;
+    const std::vector<std::string_view> wrong = {"slice", model, "--config", msla, "-o", gcode};
+    CHECK(run_cli(wrong, out3, err3) == 2);
+    CHECK_THAT(err3.str(), ContainsSubstring("must be a .goo file"));
     std::filesystem::remove_all(dir);
 }
