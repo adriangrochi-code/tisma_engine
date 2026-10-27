@@ -126,6 +126,23 @@ documentación pública de cada firmware):
 El valor elegido queda en `extrusion.pressure_advance`, que se escribe una vez al empezar cada impresión. Con 0 no
 se escribe nada y vale lo que tenga la impresora.
 
+### De resina
+
+De la ficha `docs/spec/features/resin.md` (reglas 16 a 19). Están en el motor (`src/resin/resin.*`); la interfaz
+todavía no las ofrece.
+
+- **Torre de exposición** (`ResinTower`, `resin_tower_mesh`, `tower_exposure`): un bloque de 24 × 8 mm con una base
+  y una franja por exposición, de 1,5 a 3,5 s cada 0,25 s, franjas de 2 mm. Cada franja tiene cinco agujeros que la
+  cruzan a lo largo de Y (cuadrados de 0,4, 0,6, 0,8, 1,0 y 1,4 mm), que se cierran con exposición de más, y atrás
+  cuatro aletas de 0,15, 0,25, 0,35 y 0,5 mm de espesor que salen 2 mm, que faltan o se doblan con exposición de
+  menos; una ranura al frente separa las franjas. Se imprime sobre la plataforma. La franja `i` empieza en
+  `Z = i · alto`; la 0 es la base, con `resin.exposure`, y la `i ≥ 1` prueba `inicio + (i − 1) · paso`, sin pasar del
+  final; las capas de fondo mantienen su exposición. Solo en formatos que guardan la exposición de cada capa (GOO): el
+  archivo lleva el modo avanzado. La exposición de la franja que salió mejor pasa a `resin.exposure`.
+- **Bloque de medidas** (`resin_measure_block`, `resin_scale_from`): un bloque de 30 × 30 × 10 mm. Con X, Y y Z
+  medidos, cada corrección nueva es la actual por la medida deseada sobre la impresa (`resin.scale_x`, `scale_y`,
+  `scale_z`).
+
 ### Siguientes (estándar)
 
 | Prueba | Pieza o G-code | Qué ajusta |

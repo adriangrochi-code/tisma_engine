@@ -17,7 +17,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   y escribe el archivo GOO de Elegoo. Cada capa es una imagen en grises con el área exacta que la sección cubre de
   cada píxel; las capas de fondo se exponen más y se achican contra el pie de elefante; hay corrección de escala,
   corrección absoluta del contorno, corrección de Z bajo lo que cuelga y gamma de los bordes. Por defecto, una Elegoo
-  Mars 5 con resina estándar.
+  Mars 5 con resina estándar. Avisa de las ventosas (huecos que el film sella al despegar cada capa) y dice cómo
+  arreglarlas. El motor trae además la torre de exposición y el bloque de medidas de resina (todavía sin menú).
+- **Soportes, base y vaciado de resina** (ficha `resin_supports.md`, en Otros › Resina: soportes, base y vaciado):
+  la pieza queda elevada sobre pilares con puntas finas en las caras que miran hacia abajo, sobre una base pegada a
+  la plataforma (o con la base alrededor de la pieza apoyada); puede vaciarse con paredes de un espesor mínimo y el
+  hueco redondeado, con barras interiores que se sostienen solas; el motor acepta agujeros de drenaje. Los soportes
+  y la base vienen activados, como en Tisma Slicer.
 - **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
   en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
   cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba

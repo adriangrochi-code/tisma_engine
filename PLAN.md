@@ -813,9 +813,15 @@ Con el PR #23 (2026-10-26):
       (`machine.display_*`, grupo `resin`), las imágenes con el área exacta de cada píxel, el pie de elefante, las
       correcciones de escala, absoluta y de Z, la gamma, el archivo GOO (escritura y lectura) y la salida `.goo` de la
       línea de comandos, con sus tarjetas en el panel
-    - [ ] R2, las ventosas (reglas 13 a 15, VE1 a VE9) y las calibraciones de resina (reglas 16 a 19, CR1)
+    - [x] R2, las ventosas (reglas 13 a 15, VE1 a VE9) y las calibraciones de resina (reglas 16 a 19, CR1; hecho
+      2026-10-27): el aviso de ventosas en el JSON de avisos; la torre de exposición y el bloque de medidas en el
+      motor, todavía sin menú en la interfaz
     - [ ] R3, los soportes de resina (`resin_supports.md`) y la resina en la interfaz (laminar, vista previa de las
-      imágenes, exportar `.goo`)
+      imágenes, exportar `.goo`): hechos (2026-10-27) los soportes (puntos, puntas, pilares, aterrizaje sobre la
+      pieza), la base (también alrededor de la pieza), el vaciado con su redondeo, las barras interiores y los
+      drenajes en el motor, con sus tarjetas en el panel (RS1 a RS4). Faltan las uniones entre pilares a
+      `resin.support_critical_angle` (los pilares bajan rectos), poner los drenajes desde la interfaz y la resina en
+      la interfaz
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

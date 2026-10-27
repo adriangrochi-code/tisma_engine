@@ -147,8 +147,16 @@ volúmenes que un proyecto marca como modificadores, fuera).
   corrección de Z como intersección con las de abajo) y la pasa a la imagen de la pantalla: `coverage_rows` da, fila
   por fila, la parte exacta de cada píxel que cubre la sección (cada borde suma, con signo, el área entre él y el lado
   derecho del píxel; la suma a lo largo de la fila da la cobertura), `resin_grey` la pasa a gris y
-  `GooImageEncoder` la codifica sin guardar la imagen entera. Las capas van en paralelo.
+  `GooImageEncoder` la codifica sin guardar la imagen entera. Las capas van en paralelo. `find_cups` busca las
+  ventosas: los huecos de cada sección y cuánto de cada uno queda sobre la sección de abajo y sobre cada hueco de abajo
+  se calculan para todas las capas a la vez; después una pasada desde la plataforma decide cuáles quedan cerrados y
+  los une en ventosas. También están las calibraciones de resina (la torre de exposición y el bloque de medidas).
 - **`goo.*`:** el archivo GOO de Elegoo (cabecera, capas y final, todo en big-endian), su escritura y su lectura.
+- **`supports.*`:** los soportes y la base de resina (`docs/spec/features/resin_supports.md`): los puntos de apoyo,
+  un pilar bajo cada uno que baja hasta la base o hasta la pieza (con una grilla de ocupación por capa para saber
+  dónde la pieza lo tapa), el radio de cada pilar a cada altura y el contorno de la base.
+- **`hollow.*`:** el vaciado con la transformada de distancia exacta sobre una grilla de celdas, las barras
+  interiores y los agujeros de drenaje. `slice_resin` junta la pieza vaciada, los soportes y la base en cada capa.
 
 ### `geom/`: geometría
 

@@ -6062,3 +6062,40 @@ comandos).
 
 **Sigue:** R2, las ventosas (VE1 a VE9) y la torre de exposición con el bloque de medidas (CR1).
 
+
+## 2026-10-27 — Resina, R2 y R3a: ventosas, calibraciones, soportes, base y vaciado
+
+**Hecho:**
+- Ventosas (`resin.md`, reglas 13 a 15): `find_cups` recorre las capas desde la plataforma; un hueco de la sección
+  queda ventilado si al menos 3 mm² de él están sobre aire ventilado en la capa de abajo (el aire alrededor de la
+  pieza o un hueco ventilado); en la primera capa lo cierra la plataforma o la base, salvo que la pieza esté elevada.
+  Los huecos cerrados que se superponen de una capa a la otra son una ventosa, y desde 4 mm² van al JSON de avisos
+  (`cupping`) con las alturas, el área y cómo arreglarlo. Las superposiciones se calculan para todas las capas a la
+  vez; la pasada en orden solo suma áreas.
+- Calibraciones de resina (reglas 16 a 19): la torre de exposición (`ResinTower`, `tower_exposure`,
+  `resin_tower_mesh`: base, una franja por exposición, agujeros que cruzan cada franja, aletas atrás y ranuras al
+  frente) y el bloque de medidas con su corrección de escala. Todavía sin menú en la interfaz.
+- Soportes y base (`resin_supports.md`, reglas 1 a 3): puntos en los nodos de una grilla de 4 mm (a densidad 100 %)
+  sobre las caras que miran hacia abajo a menos de 45° de la horizontal, más uno en cada isla que empieza en el aire;
+  bajo cada punto, una punta que entra en la pieza, un pilar recto y un ensanche al pie, o un aterrizaje sobre la
+  pieza cuando ella lo tapa; la base cubre los pies con su margen, cerrada entre ellos, o rodea la pieza apoyada.
+  Sin soportes ni base alrededor, la base es un error (RS3).
+- Vaciado (reglas 4 a 6): transformada de distancia exacta (Felzenszwalb y Huttenlocher) sobre una grilla de 0,1 a
+  1 mm; el hueco es la pieza achicada por la pared y el redondeo y crecida por el redondeo, que se acota para que
+  siempre quede un hueco donde cabe (RS4). Barras interiores en cinco direcciones y agujeros de drenaje (en el motor;
+  la interfaz todavía no los pone). Un hueco cerrado avisa como ventosa.
+- Panel: tarjetas Resina: soportes, base y vaciado.
+
+**Medido:** VE1 a VE9 y CR1 como en la ficha (CR1 con modo avanzado 1, a propósito). RS1: 340 capas, el cubo desde
+Z 7,05, 25 pilares (unos 20 mm² por capa a media altura, como Tisma Slicer). RS2 (pared de 2 mm): pared de 2 mm a
+media altura; RS4: el cubo con pared de 3 mm queda hueco (Tisma Slicer lo deja macizo, no se copia). Benchy local
+(solo para medir), 4 núcleos: 0,86 a 1,03 s sin soportes (960 capas, con la búsqueda de ventosas: el texto grabado
+en la base, la bodega y la chimenea) y 1,30 s con soportes y base (1100 capas, archivo de 14,9 MB).
+
+Pruebas nuevas en `tests/test_resin.cpp` (21 casos en total).
+
+**No hecho:** las uniones entre pilares a `resin.support_critical_angle` (los pilares bajan rectos); poner los
+drenajes y lanzar las calibraciones de resina desde la interfaz; laminar resina, ver sus imágenes y exportar `.goo`
+desde la interfaz.
+
+**Sigue:** R3b, la resina en la interfaz.
