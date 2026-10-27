@@ -27,6 +27,8 @@ enum class GcodeFlavor {
     Marlin,
     Klipper,
     RepRap,
+    MarlinLegacy,   // Marlin 1 (gcode_firmware.md)
+    RepRapFirmware, // Duet's (gcode_firmware.md)
     Repetier,
     Smoothie,
     Teacup,
@@ -37,6 +39,9 @@ enum class GcodeFlavor {
     NoExtrusion
 };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+// What the machine's limits are for (gcode_firmware.md, rule 2): written at
+// the start and used for the time, used for the time only, or neither.
+enum class LimitsUsage { TimeOnly, Emit, Ignore };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic };
 enum class FuzzyMode { None, External, All };
@@ -196,6 +201,22 @@ struct Settings {
     double acceleration = 1000.0;        // mm/s2, moves that extrude
     double travel_acceleration = 1250.0; // mm/s2, travels and retractions
     double corner_speed = 0.0;           // mm/s through a sharp corner, from the printer's profile; 0: not set
+    // The rest of the machine's limits (gcode_firmware.md, rule 2;
+    // print_time.md): the most each axis accelerates (M201), the retractions'
+    // acceleration (M204 R; 0: the travels'), each axis' jerk (M205 X Y Z E)
+    // or the junction deviation (M205 J, which takes its place), and the
+    // slowest feeds extruding and travelling (M205 S T). 0: not known, not used.
+    double max_accel_x = 0.0, max_accel_y = 0.0, max_accel_z = 0.0, max_accel_e = 0.0; // mm/s2
+    double retract_acceleration = 0.0;                                                  // mm/s2
+    double jerk_x = 0.0, jerk_y = 0.0, jerk_z = 0.0, jerk_e = 0.0;                     // mm/s
+    double junction_deviation = 0.0;                                                    // mm
+    double min_extrude_feed = 0.0, min_travel_feed = 0.0;                               // mm/s
+    LimitsUsage limits_usage = LimitsUsage::TimeOnly;
+    // A printer with a silent mode (gcode_extras.md, rule 7): a second time
+    // estimate with the limits of that mode, by name (those of kLimitNames);
+    // one not given is the normal one.
+    bool silent_mode = false;
+    std::map<std::string, double> silent_limits;
     // Where the command line puts the model (docs/spec/features/placement.md,
     // rules 2 and 4): with a bed, the centre of its box goes to `center`, or
     // to the centre of the bed's box; without one, it stays where it is. The
@@ -366,6 +387,8 @@ struct Settings {
     // Runs of a path that follow a circle within gcode_resolution become G2
     // and G3 (gcode_extras.md, rule 10).
     bool gcode_arcs = false;
+    // M73 with the share done and the minutes left (gcode_firmware.md, rule 5).
+    bool gcode_progress = false;
     // Templates (gcode_templates.md, rules 11 and 13), with the variables of
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";
@@ -414,6 +437,19 @@ const char* infill_pattern_name(InfillPattern pattern);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);
+
+// The name of a limits usage in the settings ("time_only", "emit", "ignore").
+const char* limits_usage_name(LimitsUsage usage);
+
+// The machine's limits by name, as machine.silent names them: max_feed_x to
+// _e, max_accel_x to _e, acceleration, travel_acceleration,
+// retract_acceleration, jerk_x to _e, junction_deviation, min_extrude_feed,
+// min_travel_feed and corner_speed.
+extern const std::array<const char*, 19> kLimitNames;
+double* limit_named(Settings& settings, std::string_view name);
+
+// The settings with the silent mode's limits in place of the normal ones.
+Settings silent_settings(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);

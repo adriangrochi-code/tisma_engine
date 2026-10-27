@@ -750,9 +750,14 @@ Con el PR #23 (2026-10-26):
     a 17);
   - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
     cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4), la E volumétrica (regla 11, X11), la contracción
-    (regla 4, X3), los comentarios detallados (regla 12, X12), los dialectos antiguos (regla 6, X5) y los arcos
-    (regla 10, X10). Faltan el modo silencioso (X6, con los límites de la máquina de `gcode_firmware.md`), las
-    miniaturas (X7, con la vista 3D de la interfaz) y el G-code binario (X8)
+    (regla 4, X3), los comentarios detallados (regla 12, X12), los dialectos antiguos (regla 6, X5), los arcos
+    (regla 10, X10) y el modo silencioso (regla 7, X6). Faltan las miniaturas (X7, con la vista 3D de la interfaz) y
+    el G-code binario (X8)
+  - [x] el firmware (`gcode_firmware.md`; hecho 2026-10-27): temperaturas al empezar (regla 1), límites de la máquina
+    con `machine.limits_usage` (regla 2; también en la estimación, `print_time.md` reglas 2 y 3, y el tope de las
+    aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y
+    de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`. Faltan las etiquetas de objetos (regla
+    4), que piden objetos separados en el laminado (con la impresión secuencial, punto 3)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

@@ -724,6 +724,13 @@ const char* row_key(T label) {
         {T::MaxFeedY, "machine.max_feed_y"}, {T::MaxFeedZ, "machine.max_feed_z"},
         {T::MaxFeedE, "machine.max_feed_e"}, {T::CornerSpeed, "machine.corner_speed"},
         {T::AccelerationRow, "machine.acceleration"}, {T::TravelAcceleration, "machine.travel_acceleration"},
+        {T::RetractAcceleration, "machine.retract_acceleration"}, {T::MaxAccelX, "machine.max_accel_x"},
+        {T::MaxAccelY, "machine.max_accel_y"}, {T::MaxAccelZ, "machine.max_accel_z"},
+        {T::MaxAccelE, "machine.max_accel_e"}, {T::JerkX, "machine.jerk_x"}, {T::JerkY, "machine.jerk_y"},
+        {T::JerkZ, "machine.jerk_z"}, {T::JerkE, "machine.jerk_e"}, {T::JunctionDeviation, "machine.junction_deviation"},
+        {T::MinExtrudeFeed, "machine.min_extrude_feed"}, {T::MinTravelFeed, "machine.min_travel_feed"},
+        {T::LimitsUsageRow, "machine.limits_usage"}, {T::GcodeProgress, "gcode.progress"},
+        {T::SilentModeRow, "machine.silent_mode"}, {T::SilentLimitsRow, "machine.silent"},
         {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
         {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}};
@@ -3175,14 +3182,39 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
            10.0f);
+        const auto accel = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 100000.0, v > 0.0 ? "%.0f mm/s²" : "—", 10.0f);
+        };
+        accel(T::RetractAcceleration, "machine.retract_acceleration", s.retract_acceleration);
+        accel(T::MaxAccelX, "machine.max_accel_x", s.max_accel_x);
+        accel(T::MaxAccelY, "machine.max_accel_y", s.max_accel_y);
+        accel(T::MaxAccelZ, "machine.max_accel_z", s.max_accel_z);
+        accel(T::MaxAccelE, "machine.max_accel_e", s.max_accel_e);
+    } else if (id == "jerk") {
+        const auto feed = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 1000.0, v > 0.0 ? "%.2f mm/s" : "—", 0.05f);
+        };
+        feed(T::JerkX, "machine.jerk_x", s.jerk_x);
+        feed(T::JerkY, "machine.jerk_y", s.jerk_y);
+        feed(T::JerkZ, "machine.jerk_z", s.jerk_z);
+        feed(T::JerkE, "machine.jerk_e", s.jerk_e);
+        mm(T::JunctionDeviation, "machine.junction_deviation", s.junction_deviation, 0.0, 1.0,
+           s.junction_deviation > 0.0 ? "%.3f mm" : "—", 0.001f);
+        feed(T::MinExtrudeFeed, "machine.min_extrude_feed", s.min_extrude_feed);
+        feed(T::MinTravelFeed, "machine.min_travel_feed", s.min_travel_feed);
+    } else if (id == "silent") {
+        flag(T::SilentModeRow, "machine.silent_mode", s.silent_mode);
+        count(T::SilentLimitsRow, "machine.silent", s.silent_limits.size());
     } else if (id == "max_temps") {
         mm(T::MaxNozzleTemp, "machine.max_nozzle_temp", s.max_nozzle_temp, 0.0, 600.0, "%.0f °C", 0.5f);
         mm(T::MaxBedTemp, "machine.max_bed_temp", s.max_bed_temp, 0.0, 200.0, "%.0f °C", 0.5f);
     } else if (id == "firmware") {
         if (shown("machine.flavor"))
             changed |= row(T::Flavor, s.flavor,
-                           {{GcodeFlavor::Marlin, "Marlin"},
+                           {{GcodeFlavor::Marlin, "Marlin 2"},
+                            {GcodeFlavor::MarlinLegacy, "Marlin 1"},
                             {GcodeFlavor::Klipper, "Klipper"},
+                            {GcodeFlavor::RepRapFirmware, "RepRapFirmware (Duet)"},
                             {GcodeFlavor::RepRap, "RepRap"},
                             {GcodeFlavor::Repetier, "Repetier"},
                             {GcodeFlavor::Smoothie, "Smoothieware"},
@@ -3192,6 +3224,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
                             {GcodeFlavor::Machinekit, "Machinekit"},
                             {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
+        if (shown("machine.limits_usage"))
+            changed |= row(T::LimitsUsageRow, s.limits_usage,
+                           {{LimitsUsage::TimeOnly, tr(T::LimitsTimeOnly)},
+                            {LimitsUsage::Emit, tr(T::LimitsEmit)},
+                            {LimitsUsage::Ignore, tr(T::LimitsIgnore)}});
+        flag(T::GcodeProgress, "gcode.progress", s.gcode_progress);
     } else if (id == "variables") {
         count(T::VariablesRow, "machine.variables", s.variables.size());
     }

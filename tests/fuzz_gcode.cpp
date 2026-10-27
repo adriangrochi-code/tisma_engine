@@ -273,7 +273,23 @@ int main(int argc, char** argv) {
         s.flavor = pick(4) == 0 ? std::array{GcodeFlavor::Repetier, GcodeFlavor::Smoothie, GcodeFlavor::Teacup,
                                              GcodeFlavor::MakerWare, GcodeFlavor::Sailfish, GcodeFlavor::Mach3,
                                              GcodeFlavor::Machinekit, GcodeFlavor::NoExtrusion}[std::size_t(pick(8))]
-                                : std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
+                                : std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap,
+                                             GcodeFlavor::MarlinLegacy, GcodeFlavor::RepRapFirmware}[std::size_t(pick(5))];
+        if (pick(4) == 0) { // the firmware's limits, a silent mode, M73
+            s.limits_usage = std::array{LimitsUsage::TimeOnly, LimitsUsage::Emit, LimitsUsage::Ignore}[std::size_t(pick(3))];
+            if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
+                s.limits_usage = LimitsUsage::TimeOnly;
+            s.max_accel_x = s.max_accel_y = pick(2) == 0 ? uni(200, 5000) : 0.0;
+            s.retract_acceleration = pick(2) == 0 ? uni(200, 5000) : 0.0;
+            s.jerk_x = s.jerk_y = pick(2) == 0 ? uni(1, 20) : 0.0;
+            s.junction_deviation = pick(3) == 0 ? uni(0.005, 0.1) : 0.0;
+            s.min_extrude_feed = pick(3) == 0 ? uni(0, 5) : 0.0;
+            s.silent_mode = pick(2) == 0;
+            if (s.silent_mode)
+                s.silent_limits = {{"acceleration", uni(100, 1000)}, {"max_feed_x", uni(50, 200)}};
+            s.gcode_progress = pick(2) == 0;
+            s.variables["temperature"] = {std::to_string(int(uni(180, 260)))};
+        }
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
         s.filament_max_flow = pick(4) == 0 ? uni(2, 30) : 0.0;
         s.pressure_advance = pick(4) == 0 ? uni(0, 0.1) : 0.0;

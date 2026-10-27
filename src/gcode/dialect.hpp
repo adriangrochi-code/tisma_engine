@@ -5,9 +5,17 @@
 namespace tisma {
 
 // How a flavor's G-code differs from RepRap's in what the engine writes
-// (gcode_extras.md, rule 6, test X5). Repetier and Smoothie write as RepRap.
+// (gcode_extras.md, rule 6, test X5; gcode_firmware.md). Repetier and
+// Smoothie write as RepRap.
 struct Dialect {
     enum class Fan { M106, M106OffS0, OnOff, M106P };
+    // How the machine's limits are written (gcode_firmware.md, rule 2): not at
+    // all, Marlin 2's M201 M203 M204 P R T M205, Marlin 1's (M204 S T), or
+    // RepRapFirmware's (M203 and M566 in mm/min).
+    enum class Limits { None, Marlin2, Marlin1, RepRapFirmware };
+    // How the start waits for the nozzle (rule 1): M109, M116 after the set
+    // temperature, or not at all.
+    enum class Wait { M109, M116, None };
 
     char e_axis = 'E';         // 'A' on Mach3 and Machinekit; 0: no E at all (no_extrusion)
     bool resets_e = true;      // absolute E restarts with G92 at each layer
@@ -21,20 +29,44 @@ struct Dialect {
     // M204 and pressure advance: firmwares that know them. The old dialects
     // get neither (own choice: the spec does not measure them there).
     bool accelerations = true;
+    Limits limits = Limits::None;
+    bool m204_print_travel = false; // the kinds' accelerations as M204 P and T; else M204 S
+    Wait wait = Wait::M109;
+    bool g10 = false;               // the nozzle's temperature as G10 S<t> P0 (RepRapFirmware)
+    bool g92_relative = false;      // relative E restarts with G92 E0 at each layer (Marlin, rule 3)
+    bool silent_progress = true;    // M73 Q S for the silent mode too (not on generic RepRap)
 };
 
 inline Dialect dialect_of(GcodeFlavor flavor) {
     Dialect d;
     switch (flavor) {
     case GcodeFlavor::Marlin:
+        d.limits = Dialect::Limits::Marlin2;
+        d.m204_print_travel = true;
+        d.g92_relative = true;
+        break;
+    case GcodeFlavor::MarlinLegacy:
+        d.limits = Dialect::Limits::Marlin1;
+        d.g92_relative = true;
+        break;
+    case GcodeFlavor::RepRapFirmware:
+        d.limits = Dialect::Limits::RepRapFirmware;
+        d.m204_print_travel = true;
+        d.wait = Dialect::Wait::M116;
+        d.g10 = true;
+        break;
     case GcodeFlavor::Klipper:
+        break;
     case GcodeFlavor::RepRap:
     case GcodeFlavor::Repetier:
     case GcodeFlavor::Smoothie:
+        d.silent_progress = false;
         break;
     case GcodeFlavor::Teacup:
         d.fan = Dialect::Fan::M106OffS0;
         d.accelerations = false;
+        d.wait = Dialect::Wait::M116;
+        d.silent_progress = false;
         break;
     case GcodeFlavor::MakerWare:
     case GcodeFlavor::Sailfish:
@@ -45,6 +77,8 @@ inline Dialect dialect_of(GcodeFlavor flavor) {
         d.progress = true;
         d.extruder_on_off = flavor == GcodeFlavor::MakerWare;
         d.accelerations = false;
+        d.wait = Dialect::Wait::None;
+        d.silent_progress = false;
         break;
     case GcodeFlavor::Mach3:
     case GcodeFlavor::Machinekit:
@@ -54,11 +88,13 @@ inline Dialect dialect_of(GcodeFlavor flavor) {
         d.fan = Dialect::Fan::M106P;
         d.ends_m2 = flavor == GcodeFlavor::Machinekit;
         d.accelerations = false;
+        d.silent_progress = false;
         break;
     case GcodeFlavor::NoExtrusion:
         d.e_axis = 0;
         d.resets_e = false;
         d.accelerations = false;
+        d.silent_progress = false;
         break;
     }
     return d;

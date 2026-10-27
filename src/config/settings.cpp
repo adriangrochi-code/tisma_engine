@@ -169,8 +169,54 @@ const std::map<std::string, GcodeFlavor>& flavors() {
         {"smoothie", GcodeFlavor::Smoothie},   {"teacup", GcodeFlavor::Teacup},
         {"makerware", GcodeFlavor::MakerWare}, {"sailfish", GcodeFlavor::Sailfish},
         {"mach3", GcodeFlavor::Mach3},         {"machinekit", GcodeFlavor::Machinekit},
-        {"no_extrusion", GcodeFlavor::NoExtrusion}};
+        {"no_extrusion", GcodeFlavor::NoExtrusion}, {"marlin_legacy", GcodeFlavor::MarlinLegacy},
+        {"reprapfirmware", GcodeFlavor::RepRapFirmware}};
     return names;
+}
+
+const std::array<const char*, 19> kLimitNames = {
+    "max_feed_x",       "max_feed_y",      "max_feed_z",   "max_feed_e",          "max_accel_x",
+    "max_accel_y",      "max_accel_z",     "max_accel_e",  "acceleration",        "travel_acceleration",
+    "retract_acceleration", "jerk_x",      "jerk_y",       "jerk_z",              "jerk_e",
+    "junction_deviation", "min_extrude_feed", "min_travel_feed", "corner_speed"};
+
+double* limit_named(Settings& s, std::string_view n) {
+    const std::pair<std::string_view, double*> limits[] = {
+        {"max_feed_x", &s.max_feed_x},
+        {"max_feed_y", &s.max_feed_y},
+        {"max_feed_z", &s.max_feed_z},
+        {"max_feed_e", &s.max_feed_e},
+        {"max_accel_x", &s.max_accel_x},
+        {"max_accel_y", &s.max_accel_y},
+        {"max_accel_z", &s.max_accel_z},
+        {"max_accel_e", &s.max_accel_e},
+        {"acceleration", &s.acceleration},
+        {"travel_acceleration", &s.travel_acceleration},
+        {"retract_acceleration", &s.retract_acceleration},
+        {"jerk_x", &s.jerk_x},
+        {"jerk_y", &s.jerk_y},
+        {"jerk_z", &s.jerk_z},
+        {"jerk_e", &s.jerk_e},
+        {"junction_deviation", &s.junction_deviation},
+        {"min_extrude_feed", &s.min_extrude_feed},
+        {"min_travel_feed", &s.min_travel_feed},
+        {"corner_speed", &s.corner_speed}};
+    for (const auto& [name, value] : limits)
+        if (name == n)
+            return value;
+    return nullptr;
+}
+
+Settings silent_settings(const Settings& settings) {
+    Settings out = settings;
+    for (const auto& [name, value] : settings.silent_limits)
+        if (double* limit = limit_named(out, name))
+            *limit = value;
+    return out;
+}
+
+const char* limits_usage_name(LimitsUsage usage) {
+    return usage == LimitsUsage::Emit ? "emit" : usage == LimitsUsage::Ignore ? "ignore" : "time_only";
 }
 
 const char* flavor_name(GcodeFlavor flavor) {
@@ -535,9 +581,46 @@ Settings parse_checked(std::string_view text) {
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
-                "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset"},
+                "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
+                "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
+                "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "limits_usage") {
+                       s.limits_usage = choice<LimitsUsage>(
+                           g, n, k,
+                           {{"time_only", LimitsUsage::TimeOnly}, {"emit", LimitsUsage::Emit}, {"ignore", LimitsUsage::Ignore}});
+                       return;
+                   }
+                   if (n == "silent_mode") {
+                       if (!v.is_boolean())
+                           fail(k, "must be true or false");
+                       s.silent_mode = v.get<bool>();
+                       return;
+                   }
+                   if (n == "silent") { // the silent mode's limits, by name
+                       if (!v.is_object())
+                           fail(k, "must be an object of limit: value");
+                       Settings probe;
+                       std::map<std::string, double> limits;
+                       for (const auto& [name, value] : v.items()) {
+                           if (!limit_named(probe, name))
+                               fail(k + "." + name, "is not a machine limit");
+                           if (!value.is_number() || !(value.get<double>() >= 0.0))
+                               fail(k + "." + name, "must be a number, 0 or more");
+                           limits[name] = value.get<double>();
+                       }
+                       s.silent_limits = std::move(limits);
+                       return;
+                   }
+                   if (n.starts_with("max_accel_") || n.starts_with("jerk_") || n == "retract_acceleration" ||
+                       n == "junction_deviation" || n == "min_extrude_feed" || n == "min_travel_feed") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0))
+                           fail(k, "must not be negative");
+                       *limit_named(s, n) = d;
+                       return;
+                   }
                    if (n == "z_offset") {
                        const double d = number(g, n, k);
                        if (!(d >= -10.0 && d <= 10.0))
@@ -993,12 +1076,15 @@ Settings parse_checked(std::string_view text) {
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
-                               "verbose_comments", "arcs"},
+                               "verbose_comments", "arcs", "progress"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs") {
+        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "volumetric_e" ? s.volumetric_e : n == "arcs" ? s.gcode_arcs : s.verbose_comments) = g.at(n).get<bool>();
+            (n == "volumetric_e" ? s.volumetric_e
+             : n == "arcs"       ? s.gcode_arcs
+             : n == "progress"   ? s.gcode_progress
+                                 : s.verbose_comments) = g.at(n).get<bool>();
             return;
         }
         if (n != "resolution") {
@@ -1307,6 +1393,22 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.max_feed_e", speed(s.max_feed_e)},
         {"machine.acceleration", num(s.acceleration)},
         {"machine.travel_acceleration", num(s.travel_acceleration)},
+        {"machine.max_accel_x", num(s.max_accel_x)},
+        {"machine.max_accel_y", num(s.max_accel_y)},
+        {"machine.max_accel_z", num(s.max_accel_z)},
+        {"machine.max_accel_e", num(s.max_accel_e)},
+        {"machine.retract_acceleration", num(s.retract_acceleration)},
+        {"machine.jerk_x", num(s.jerk_x)},
+        {"machine.jerk_y", num(s.jerk_y)},
+        {"machine.jerk_z", num(s.jerk_z)},
+        {"machine.jerk_e", num(s.jerk_e)},
+        {"machine.junction_deviation", num(s.junction_deviation)},
+        {"machine.min_extrude_feed", num(s.min_extrude_feed)},
+        {"machine.min_travel_feed", num(s.min_travel_feed)},
+        {"machine.limits_usage", json(limits_usage_name(s.limits_usage)).dump()},
+        {"machine.silent_mode", flag(s.silent_mode)},
+        {"machine.silent", json(s.silent_limits).dump()},
+        {"gcode.progress", flag(s.gcode_progress)},
         {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
@@ -1543,6 +1645,21 @@ std::string settings_json(const Settings& s) {
           {"acceleration", s.acceleration},
           {"travel_acceleration", s.travel_acceleration},
           {"corner_speed", speed(s.corner_speed)},
+          {"max_accel_x", s.max_accel_x},
+          {"max_accel_y", s.max_accel_y},
+          {"max_accel_z", s.max_accel_z},
+          {"max_accel_e", s.max_accel_e},
+          {"retract_acceleration", s.retract_acceleration},
+          {"jerk_x", s.jerk_x},
+          {"jerk_y", s.jerk_y},
+          {"jerk_z", s.jerk_z},
+          {"jerk_e", s.jerk_e},
+          {"junction_deviation", s.junction_deviation},
+          {"min_extrude_feed", s.min_extrude_feed},
+          {"min_travel_feed", s.min_travel_feed},
+          {"limits_usage", limits_usage_name(s.limits_usage)},
+          {"silent_mode", s.silent_mode},
+          {"silent", s.silent_limits},
           {"bed", bed},
           {"max_height", s.max_height},
           {"min_layer_height", s.min_layer_height},
@@ -1673,7 +1790,8 @@ std::string settings_json(const Settings& s) {
           {"after_layer", s.gcode_after_layer},
           {"volumetric_e", s.volumetric_e},
           {"verbose_comments", s.verbose_comments},
-          {"arcs", s.gcode_arcs}}},
+          {"arcs", s.gcode_arcs},
+          {"progress", s.gcode_progress}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";
@@ -1715,6 +1833,10 @@ void check_settings(const Settings& s) {
             throw SettingsError(text);
         }
     }
+    // Klipper takes its limits from its own configuration (gcode_firmware.md, rule 2, FW4).
+    if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
+        throw SettingsError("machine.limits_usage: Klipper takes the machine's limits from its own configuration; they "
+                            "cannot be written in the G-code (emit)");
     // Vase mode lays one wall in a spiral: nothing can stand under it
     // (vase_mode.md, rule 2).
     if (s.vase && s.support)

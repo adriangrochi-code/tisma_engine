@@ -5341,3 +5341,43 @@ al lado). 470 pruebas pasan; fuzzer con arcos: 600 corridas (semilla 1) y 1500 (
 `gcode_firmware.md`, las miniaturas (X7, con la vista 3D) y el G-code binario (X8). Con eso cierra el punto 2; sigue
 el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
 
+## 2026-10-27 — Punto 2: firmware, límites de la máquina y modo silencioso
+
+**Hecho** (fichas `gcode_firmware.md`, `gcode_extras.md` regla 7, `print_time.md` reglas 2, 3 y 7):
+- límites nuevos en `machine`: aceleración máxima por eje (`max_accel_*`), de retracción, tirón por eje (`jerk_*`),
+  desviación de unión y avances mínimos al extruir y al viajar; `machine.limits_usage` (`time_only`, `emit`,
+  `ignore`). Con `emit` se escriben antes del G-code de inicio (Marlin 2: `M201`, `M203`, `M204 P R T`, `M205 X Y Z E`
+  o `M205 J`, `M205 S T`; Marlin 1: `M204 S T`; RepRapFirmware: `M203` y `M566` en mm/min; Klipper: error) y ninguna
+  aceleración por tipo los pasa (V9);
+- la estimación usa esos límites: la aceleración y el avance de cada movimiento acotados por los de cada eje, la
+  velocidad en las esquinas por la desviación de unión (el círculo que redondea la esquina a esa distancia) o por el
+  tirón de cada eje, los avances mínimos y la aceleración de las retracciones; con `ignore`, no;
+- `machine.silent_mode` y `machine.silent` (los límites de ese modo, por nombre): una segunda estimación; al final,
+  `; estimated printing time (normal mode)` y `(silent mode)`, y los de la primera capa (la línea de siempre sigue);
+- temperaturas al empezar (regla 1): con `variables.temperature`, `M104` antes del G-code de inicio y `M109` después
+  (RepRapFirmware: `G10 S… P0` y `M116`; cada dialecto antiguo con lo suyo), salvo que el inicio ya tenga comandos de
+  temperatura;
+- Marlin con E relativa: `G92 E0` después del salto en Z de cada capa (regla 3);
+- `gcode.progress` (regla 5): `M73 P R` por el tiempo estimado, al empezar y cada vez que cambia el porcentaje o los
+  minutos, hasta `P100 R0`; con modo silencioso, `M73 Q S` (no en RepRap genérico). El G-code se guarda en memoria
+  con marcas al empezar cada capa y cada trayectoria, y al final las marcas se cambian por los `M73`;
+- sabores `marlin_legacy` (Marlin 1) y `reprapfirmware` (Duet), propuestos en la ficha;
+- en el panel: Impresora › Límites (aceleraciones, tirones y esquinas, modo silencioso) y Firmware (uso de los
+  límites, avance).
+
+**Corregido:** el commit de los arcos `G2`/`G3` (470e2ee) había escrito sus pruebas encima de `tests/test_arcs.cpp`,
+que tenía las de los arcos en voladizos (A1 a A4). Volvieron tal cual (10dea1e) y las de `G2`/`G3` pasaron a
+`tests/test_gcode_arcs.cpp`. Lo noté al sumar el archivo de pruebas nuevo: estaba dos veces en `tests/CMakeLists.txt`.
+
+**Medido:** FW1, FW2, FW4, FW5, FW7, FW8, FW9, X6 y V9 como pruebas. Benchy local con Marlin (aceleración 1500): sin
+límites 1h 10m 17s; con los tirones de FW1 1h 14m 29s; con desviación de unión 0,013 mm 1h 14m 2s; modo silencioso
+(960 mm/s², 100 mm/s en X e Y) 1h 19m 54s; primera capa 1m 8s (normal) y 1m 12s (silencioso); 350 líneas `M73`. El
+laminado tarda lo mismo (0,93 a 0,98 s, con la CI de Linux al lado). 484 pruebas pasan; fuzzer con los límites, el
+modo silencioso, `M73` y los sabores nuevos: 600 corridas (semilla 1) y 1500 (semilla 271030), 0 fallas.
+
+**No probado:** contra una impresora (PT6 de `print_time.md` sigue pendiente).
+
+**Sigue:** las etiquetas de objetos (regla 4) con la impresión secuencial; de `print_time.md`, leer los comandos de
+movimiento y las esperas del G-code (reglas 8, 9, 13), el calentamiento (10, 14) y las esquinas como cada firmware
+(12; Klipper). De `gcode_extras.md`, las miniaturas (X7) y el G-code binario (X8).
+

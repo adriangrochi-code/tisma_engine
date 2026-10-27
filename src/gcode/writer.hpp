@@ -37,6 +37,18 @@ std::vector<Warning> capability_warnings(const Settings& settings);
 // assumes, and by a height change (an acceleration tower).
 std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel);
 
+// The machine's limits as the firmware takes them (gcode_firmware.md, rule 2),
+// one command per line: Marlin 2's M201, M203, M204 P R T, M205 X Y Z E (or J
+// with a junction deviation) and M205 S T; Marlin 1's, with M204 S T;
+// RepRapFirmware's M201, M203 and M566 (mm/min) and M204 P T. Nothing for
+// the other flavors. Values not known (0) are left out.
+std::string machine_limits_gcode(const Settings& settings);
+
+// Whether G-code sets a nozzle, bed or chamber temperature (M104, M109, M140,
+// M190, M141, M191, M116, or RepRapFirmware's G10 S): the start G-code that
+// does is left to it (gcode_firmware.md, rule 1).
+bool sets_temperature(std::string_view gcode);
+
 // The command that sets the firmware's pressure advance: M900 K (Marlin's
 // linear advance), SET_PRESSURE_ADVANCE ADVANCE= (Klipper) or M572 D0 S
 // (RepRapFirmware), from each firmware's public documentation.

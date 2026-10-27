@@ -858,6 +858,30 @@
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
+    X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
+    X(SubSilent, "Modo silencioso", "Silent mode") \
+    X(RetractAcceleration, "Aceleración al retraer", "Retraction acceleration") \
+    X(MaxAccelX, "Aceleración máxima en X", "Maximum acceleration in X") \
+    X(MaxAccelY, "Aceleración máxima en Y", "Maximum acceleration in Y") \
+    X(MaxAccelZ, "Aceleración máxima en Z", "Maximum acceleration in Z") \
+    X(MaxAccelE, "Aceleración máxima del extrusor", "Maximum extruder acceleration") \
+    X(JerkX, "Tirón en X", "Jerk in X") \
+    X(JerkY, "Tirón en Y", "Jerk in Y") \
+    X(JerkZ, "Tirón en Z", "Jerk in Z") \
+    X(JerkE, "Tirón del extrusor", "Extruder jerk") \
+    X(JunctionDeviation, "Desviación de unión", "Junction deviation") \
+    X(MinExtrudeFeed, "Avance mínimo al extruir", "Minimum extruding feed") \
+    X(MinTravelFeed, "Avance mínimo al viajar", "Minimum travel feed") \
+    X(LimitsUsageRow, "Límites de la máquina", "Machine limits") \
+    X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
+    X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
+    X(LimitsIgnore, "No usarlos", "Do not use them") \
+    X(GcodeProgress, "Avance de la impresión (M73)", "Print progress (M73)") \
+    X(SilentModeRow, "Tiene modo silencioso", "Has a silent mode") \
+    X(SilentLimitsRow, "Límites del modo silencioso", "Silent mode limits") \
+    X(SumJunction, "Desviación %s mm", "Deviation %s mm") \
+    X(SumJerk, "Tirón %s mm/s", "Jerk %s mm/s") \
+    X(SumSilent, "%d límites propios", "%d limits of its own") \
     X(ChamberMinTemp, "Esperar la cámara a", "Wait for the chamber at") \
     X(SubPrice, "Peso y costo", "Weight and cost") \
     X(FilamentDensity, "Densidad", "Density") \

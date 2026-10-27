@@ -144,7 +144,8 @@ private:
                 if (!out_.layers.empty())
                     out_.layers.back().height = *v;
             }
-        } else if (c.starts_with("estimated printing time")) {
+        } else if (c.starts_with("estimated printing time") && c.find("silent mode") == std::string_view::npos) {
+            // The normal mode's: a silent mode's estimate follows it (gcode_extras.md, rule 7).
             if (const std::size_t eq = c.find('='); eq != std::string_view::npos)
                 out_.estimated_seconds = parse_duration(c.substr(eq + 1));
         } else if (c.starts_with("WIDTH:")) {

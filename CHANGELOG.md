@@ -72,6 +72,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
   grande para que, al contraerse, quede de la medida pedida.
+- **Límites de la máquina y firmware** (ficha `gcode_firmware.md`): aceleraciones por eje y de retracción, tirones o
+  desviación de unión y avances mínimos (`machine.*`, en Impresora › Límites), que la estimación del tiempo usa y que,
+  con `machine.limits_usage` `emit`, se escriben al empezar (Marlin 1 y 2, RepRapFirmware); la temperatura de la
+  boquilla antes y después del G-code de inicio; `G92 E0` en cada capa con E relativa en Marlin; `M73` con el
+  porcentaje y los minutos restantes (`gcode.progress`); sabores `marlin_legacy` y `reprapfirmware`.
+- **Modo silencioso** (`machine.silent_mode`, `machine.silent`): una segunda estimación con sus límites, y la del
+  tiempo de la primera capa.
 - **Arcos `G2`/`G3`** (`gcode.arcs`, en Otros › Salida del G-code): los tramos que siguen un círculo se escriben
   como arcos; el G-code de una pieza redonda pesa hasta cuatro veces menos. La vista previa y el verificador los leen.
 - **Firmwares antiguos** (`machine.flavor`, ficha `gcode_extras.md`): `repetier`, `smoothie`, `teacup`, `makerware`,
@@ -83,6 +90,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   otro para los demás.
 
 ### Corregido
+
+- Las pruebas de los arcos en voladizos (A1 a A4) volvieron: el commit de los arcos `G2`/`G3` había escrito las suyas
+  encima.
 
 - En el modo vaso, después de G-code del usuario que mueve el cabezal, la vuelta siguiente salía desde donde el cabezal ya no estaba.
 - El verificador del G-code no contaba los cordones finos del planchado al calcular el avance de un flujo forzado.

@@ -137,7 +137,7 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
                 g.pop_back();
         },
         "cut short");
-    damaged([](std::string& g) { g.resize(g.rfind("; estimated printing time")); }, "closing summary is missing");
+    damaged([](std::string& g) { g.resize(g.find("; estimated printing time")); }, "closing summary is missing");
     damaged([&](std::string& g) { g.insert(layer, "G1 X500 Y500\n"); }, "leaves the allowed area");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 Ynan\n"); }, "unreadable parameter 'Ynan'");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 F99999\n"); }, "above the fastest allowed");

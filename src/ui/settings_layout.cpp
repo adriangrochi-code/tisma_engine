@@ -195,10 +195,26 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.max_feed_z", N},
             {"machine.max_feed_e", N},
             {"machine.corner_speed", N}}},
-          {"accelerations", T::SubAccel, {{"machine.acceleration", N}, {"machine.travel_acceleration", N}}},
+          {"accelerations", T::SubAccel,
+           {{"machine.acceleration", N},
+            {"machine.travel_acceleration", N},
+            {"machine.retract_acceleration", A},
+            {"machine.max_accel_x", A},
+            {"machine.max_accel_y", A},
+            {"machine.max_accel_z", A},
+            {"machine.max_accel_e", A}}},
+          {"jerk", T::SubJerk,
+           {{"machine.jerk_x", A},
+            {"machine.jerk_y", A},
+            {"machine.jerk_z", A},
+            {"machine.jerk_e", A},
+            {"machine.junction_deviation", A},
+            {"machine.min_extrude_feed", A},
+            {"machine.min_travel_feed", A}}},
+          {"silent", T::SubSilent, {{"machine.silent_mode", A}, {"machine.silent", A}}},
           {"max_temps", T::SubMaxTemps, {{"machine.max_nozzle_temp", N}, {"machine.max_bed_temp", N}}}}},
         {"gcode", T::SecGcode, "section_gcode.svg",
-         {{"firmware", T::SubFirmware, {{"machine.flavor", N}}},
+         {{"firmware", T::SubFirmware, {{"machine.flavor", N}, {"machine.limits_usage", N}, {"gcode.progress", N}}},
           {"start_end", T::SubStartEnd, {{"machine.start_gcode", N}, {"machine.end_gcode", N}}},
           {"variables", T::SubVariables, {{"machine.variables", A}}}}},
     };
@@ -503,6 +519,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
             return "Klipper";
         case GcodeFlavor::RepRap:
             return "RepRap";
+        case GcodeFlavor::MarlinLegacy:
+            return "Marlin 1";
+        case GcodeFlavor::RepRapFirmware:
+            return "RepRapFirmware";
         case GcodeFlavor::Repetier:
             return "Repetier";
         case GcodeFlavor::Smoothie:
@@ -533,6 +553,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     }
     if (id == "variables")
         return format(T::SumVariables, int(s.variables.size()));
+    if (id == "jerk")
+        return s.junction_deviation > 0.0 ? format(T::SumJunction, number(s.junction_deviation, 3).c_str())
+               : s.jerk_x > 0.0          ? format(T::SumJerk, number(s.jerk_x, 1).c_str())
+                                         : std::string("—");
+    if (id == "silent")
+        return s.silent_mode ? format(T::SumSilent, int(s.silent_limits.size())) : tr(T::SumOff);
     return {};
 }
 

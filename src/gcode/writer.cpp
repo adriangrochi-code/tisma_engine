@@ -16,6 +16,7 @@
 #include <oneapi/tbb/parallel_pipeline.h>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <array>
 #include <cstdint>
@@ -30,6 +31,7 @@
 #include <set>
 #include <numbers>
 #include <optional>
+#include <sstream>
 #include <string_view>
 #include <thread>
 
@@ -88,6 +90,10 @@ std::string fixed(double v, int decimals) {
     char buffer[kNumberCapacity];
     return std::string(buffer, format_fixed(buffer, v, decimals));
 }
+
+// The start of a line that holds an M73's place (Emitter::progress_mark):
+// no G-code has this byte.
+constexpr char kProgressMark[] = "\x01M73 ";
 
 // v with up to `decimals` decimals and no zeros at the end ("252.45", "255").
 std::string trimmed(double v, int decimals) {
@@ -684,21 +690,45 @@ const KindNotes& notes_of(const char* type) {
     return kOtherNotes;
 }
 
+// The machine's limits for the time estimate (print_time.md, rule 2): with
+// machine.limits_usage ignore, only the feeds, accelerations and corner speed.
+Kinematics kinematics_of(const Settings& s) {
+    Kinematics k{{s.max_feed_x, s.max_feed_y, s.max_feed_z, s.max_feed_e},
+                 s.acceleration,
+                 s.travel_acceleration,
+                 s.corner_speed};
+    if (s.limits_usage == LimitsUsage::Ignore)
+        return k;
+    k.retract_acceleration = s.retract_acceleration;
+    const double accel[4] = {s.max_accel_x, s.max_accel_y, s.max_accel_z, s.max_accel_e};
+    const double jerk[4] = {s.jerk_x, s.jerk_y, s.jerk_z, s.jerk_e};
+    std::copy(accel, accel + 4, k.max_accel);
+    std::copy(jerk, jerk + 4, k.jerk);
+    k.junction_deviation = s.junction_deviation;
+    k.min_extrude_feed = s.min_extrude_feed;
+    k.min_travel_feed = s.min_travel_feed;
+    return k;
+}
+
 class Emitter {
 public:
     explicit Emitter(const Settings& s)
-        : relative_(relative_e(s)), dialect_(dialect_of(s.flavor)),
-          time_(Kinematics{{s.max_feed_x, s.max_feed_y, s.max_feed_z, s.max_feed_e},
-                           s.acceleration,
-                           s.travel_acceleration,
-                           s.corner_speed}),
+        : relative_(relative_e(s)), dialect_(dialect_of(s.flavor)), time_(kinematics_of(s)),
           retract_(s.retract_length), retract_feed_(s.retract_speed), lift_(s.retract_lift),
-          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed), marlin_(s.flavor == GcodeFlavor::Marlin),
+          min_travel_(s.retract_min_travel), z_feed_(s.travel_z_speed), marlin_(dialect_of(s.flavor).m204_print_travel),
           accel_print_(s.acceleration), accel_travel_(s.travel_acceleration), travel_accel_(s.accel_travel),
           short_travel_accel_(s.accel_short_travel > 0.0 ? s.accel_short_travel : s.accel_travel) {
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
+        // A silent mode: a second estimate with its limits (gcode_extras.md, rule 7).
+        if (s.silent_mode)
+            silent_.emplace(kinematics_of(silent_settings(s)));
+        // With the limits written, no acceleration passes them (speeds_accels.md, V9).
+        if (s.limits_usage == LimitsUsage::Emit && dialect_.limits != Dialect::Limits::None) {
+            cap_print_ = s.acceleration;
+            cap_travel_ = s.travel_acceleration;
+        }
         // Volumetric E (gcode_extras.md, rule 11): every E in mm3 of
         // plastic, retractions too; the engine counts filament as ever.
         if (s.volumetric_e)
@@ -712,9 +742,29 @@ public:
             feed_limit_ = std::numeric_limits<double>::infinity();
     }
 
-    // Plans the time of the moves since the last call (they end at rest).
-    void end_layer() { time_.flush(); }
+    // Plans the time of the moves since the last call (they end at rest), and
+    // returns it; the silent mode's too.
+    double end_layer() {
+        const double seconds = time_.flush();
+        last_silent_ = silent_ ? silent_->flush() : seconds;
+        return seconds;
+    }
+    double last_silent_layer() const { return last_silent_; }
     double print_time() const { return time_.total(); }
+    double silent_time() const { return silent_ ? silent_->total() : time_.total(); }
+
+    // A mark for M73 (gcode_firmware.md, rule 5): a line that holds its
+    // place in the G-code until the times are known (resolve_progress).
+    void progress_mark() {
+        const std::size_t id = time_.mark();
+        if (silent_)
+            silent_->mark();
+        text_ += kProgressMark;
+        append_integer(text_, long(id));
+        text_ += '\n';
+    }
+    double time_at(std::size_t mark) const { return time_.time_at(mark); }
+    double silent_time_at(std::size_t mark) const { return silent_ ? silent_->time_at(mark) : time_.time_at(mark); }
 
     void flush(std::ostream& out) {
         out.write(text_.data(), std::streamsize(text_.size()));
@@ -883,6 +933,13 @@ public:
         if (!keep_z)
             z_now_ = written(z);
         clearance_ = 0.0;
+        // Marlin with relative E: the extruder's position restarts at each
+        // layer, so it keeps its precision (gcode_firmware.md, rule 3).
+        if (relative_ && dialect_.g92_relative) {
+            text_ += "G92 E0";
+            line_end("reset extrusion distance");
+            position_[3] = 0.0;
+        }
         user(after);
         if (commands(before) || commands(after))
             resync();
@@ -913,6 +970,8 @@ public:
 
     // Before an extrusion: its kind's acceleration; 0 leaves it as it is.
     void print_acceleration(double a) {
+        if (cap_print_ > 0.0)
+            a = std::min(a, cap_print_);
         if (!dialect_.accelerations || !(a > 0.0) || (a == accel_print_ && (marlin_ || a == accel_travel_)))
             return;
         text_ += marlin_ ? "M204 P" : "M204 S";
@@ -922,6 +981,8 @@ public:
         if (!marlin_)
             accel_travel_ = a;
         time_.set_accelerations(accel_print_, accel_travel_);
+        if (silent_)
+            silent_->set_accelerations(accel_print_, accel_travel_);
     }
 
     void type(const char* t) {
@@ -1109,7 +1170,7 @@ public:
             path += std::hypot(points[k + 1].p.x - points[k].p.x, points[k + 1].p.y - points[k].p.y);
         for (std::size_t k = a.first; k < a.last; ++k) {
             const double dx = points[k + 1].p.x - points[k].p.x, dy = points[k + 1].p.y - points[k].p.y;
-            time_.add(dx, dy, 0.0, path > 0.0 ? de * std::hypot(dx, dy) / path : 0.0, double(f_) / 60.0, true);
+            clock(dx, dy, 0.0, path > 0.0 ? de * std::hypot(dx, dy) / path : 0.0, double(f_) / 60.0, true);
         }
         position_[0] = end.x, position_[1] = end.y, position_[3] = e_to;
         x_value_ = end.x, y_value_ = end.y, known_ = true;
@@ -1195,7 +1256,9 @@ private:
     // Before a travel of `length` mm: the travels' acceleration, or the short
     // ones' (speeds_accels.md, rule 11).
     void travel_acceleration(double length) {
-        const double a = length < min_travel_ ? short_travel_accel_ : travel_accel_;
+        double a = length < min_travel_ ? short_travel_accel_ : travel_accel_;
+        if (cap_travel_ > 0.0)
+            a = std::min(a, cap_travel_);
         if (!dialect_.accelerations || !(a > 0.0) || (a == accel_travel_ && (marlin_ || a == accel_print_)))
             return;
         text_ += marlin_ ? "M204 T" : "M204 S";
@@ -1205,6 +1268,8 @@ private:
         if (!marlin_)
             accel_print_ = a;
         time_.set_accelerations(accel_print_, accel_travel_);
+        if (silent_)
+            silent_->set_accelerations(accel_print_, accel_travel_);
     }
 
     // The feed of a move in Z, beside travels at `travel`.
@@ -1253,6 +1318,13 @@ private:
         // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
         // there. S2 is the same breeze (0.8 %) on every firmware.
         return value == 1 ? 2 : value;
+    }
+
+    // A move for the time estimates.
+    void clock(double dx, double dy, double dz, double de, double feed, bool extruding) {
+        time_.add(dx, dy, dz, de, feed, extruding);
+        if (silent_)
+            silent_->add(dx, dy, dz, de, feed, extruding);
     }
 
     // The end of a line, with what it does when the comments are verbose.
@@ -1311,7 +1383,7 @@ private:
         const double to[4] = {x.value_or(position_[0]), y.value_or(position_[1]), z.value_or(position_[2]),
                               e ? (relative_ ? position_[3] + *e : *e) : position_[3]};
         const double de = to[3] - position_[3];
-        time_.add(to[0] - position_[0], to[1] - position_[1], to[2] - position_[2], de, double(f_) / 60.0,
+        clock(to[0] - position_[0], to[1] - position_[1], to[2] - position_[2], de, double(f_) / 60.0,
                   de > 0.0 && (x || y));
         std::copy(to, to + 4, position_);
     }
@@ -1319,6 +1391,9 @@ private:
     std::string text_;
     bool relative_;
     Dialect dialect_;
+    std::optional<PrintTime> silent_; // the silent mode's estimate
+    double last_silent_ = 0.0;        // its time of the last layer
+    double cap_print_ = 0.0, cap_travel_ = 0.0; // the written limits no acceleration passes; 0: none
     bool extruder_on_ = false;        // after MakerWare's M101
     bool verbose_ = false;            // gcode.verbose_comments
     const char* note_ = "extrude";    // what the current kind's extrusions are, for them
@@ -1485,17 +1560,85 @@ std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel) 
     const std::string p = std::to_string(std::lround(print)), t = std::to_string(std::lround(travel));
     if (flavor == GcodeFlavor::Klipper)
         return "SET_VELOCITY_LIMIT ACCEL=" + p;
+    if (flavor == GcodeFlavor::MarlinLegacy) // Marlin 1: S for printing, T for retractions
+        return "M204 S" + p + " ; acceleration";
     return "M204 P" + p + " T" + t + " ; acceleration";
+}
+
+std::string machine_limits_gcode(const Settings& s) {
+    const Dialect d = dialect_of(s.flavor);
+    if (d.limits == Dialect::Limits::None)
+        return {};
+    const bool rrf = d.limits == Dialect::Limits::RepRapFirmware;
+    std::string out;
+    // A command with the known values of X, Y, Z and E (0: not known, left out).
+    const auto axes = [&](const char* command, std::array<double, 4> values, double scale, int decimals) {
+        std::string line = command;
+        for (int i = 0; i < 4; ++i)
+            if (values[std::size_t(i)] > 0.0) {
+                line += ' ';
+                line += "XYZE"[i];
+                line += decimals > 0 ? fixed(values[std::size_t(i)] * scale, decimals)
+                                     : trimmed(values[std::size_t(i)] * scale, 2);
+            }
+        if (line.size() > std::strlen(command))
+            out += line + "\n";
+    };
+    axes("M201", {s.max_accel_x, s.max_accel_y, s.max_accel_z, s.max_accel_e}, 1.0, 0);
+    // RepRapFirmware's M203 and M566 are in mm/min.
+    axes("M203", {s.max_feed_x, s.max_feed_y, s.max_feed_z, s.max_feed_e}, rrf ? 60.0 : 1.0, 0);
+    const std::string print = trimmed(s.acceleration, 2), travel = trimmed(s.travel_acceleration, 2);
+    const std::string retract = trimmed(s.retract_acceleration > 0.0 ? s.retract_acceleration : s.travel_acceleration, 2);
+    if (d.limits == Dialect::Limits::Marlin2)
+        out += "M204 P" + print + " R" + retract + " T" + travel + "\n";
+    else if (d.limits == Dialect::Limits::Marlin1)
+        out += "M204 S" + print + " T" + retract + "\n";
+    else
+        out += "M204 P" + print + " T" + travel + "\n";
+    const std::array<double, 4> jerks = {s.jerk_x, s.jerk_y, s.jerk_z, s.jerk_e};
+    if (rrf) {
+        axes("M566", jerks, 60.0, 2);
+    } else {
+        if (s.junction_deviation > 0.0)
+            out += "M205 J" + fixed(s.junction_deviation, 3) + "\n";
+        else
+            axes("M205", jerks, 1.0, 2);
+        out += "M205 S" + trimmed(s.min_extrude_feed, 2) + " T" + trimmed(s.min_travel_feed, 2) + "\n";
+    }
+    return out;
+}
+
+bool sets_temperature(std::string_view gcode) {
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        line = line.substr(std::min(line.find_first_not_of(" \t"), line.size()));
+        const std::string_view word = line.substr(0, line.find_first_of(" \t;\r"));
+        std::string command(word);
+        for (char& c : command)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        if (command == "M104" || command == "M109" || command == "M140" || command == "M190" || command == "M141" ||
+            command == "M191" || command == "M116")
+            return true;
+        // RepRapFirmware's G10 with S sets a tool's temperature (a bare G10 retracts).
+        if (command == "G10" && line.find_first_of("Ss", word.size()) != std::string_view::npos)
+            return true;
+    }
+    return false;
 }
 
 std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     const std::string v = fixed(value, 4);
     switch (flavor) {
     case GcodeFlavor::Marlin:
+    case GcodeFlavor::MarlinLegacy:
         return "M900 K" + v + " ; pressure advance";
     case GcodeFlavor::Klipper:
         return "SET_PRESSURE_ADVANCE ADVANCE=" + v;
     case GcodeFlavor::RepRap:
+    case GcodeFlavor::RepRapFirmware:
     case GcodeFlavor::Repetier:
     case GcodeFlavor::Smoothie:
         return "M572 D0 S" + v + " ; pressure advance";
@@ -1504,13 +1647,24 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     }
 }
 
-void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
+void write_gcode(std::ostream& target, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
     require_speeds(s); // from the printer's profile: the writer has none of its own
+    // With M73 by time (gcode_firmware.md, rule 5) the G-code is kept until
+    // the times are known; else it goes out as it is written.
+    std::ostringstream held;
+    std::ostream& out = s.gcode_progress ? static_cast<std::ostream&>(held) : target;
     out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+    // The dialect of the firmware (gcode_extras.md, rule 6; gcode_firmware.md).
+    const Dialect dialect = dialect_of(s.flavor);
     Emitter g(s);
     g.set_flow(s.flow / 100.0);
     g.type("Custom");
+    if (s.gcode_progress)
+        g.progress_mark();
     g.flush(out);
+    // The machine's limits, before the start G-code (gcode_firmware.md, rule 2).
+    if (s.limits_usage == LimitsUsage::Emit)
+        out << machine_limits_gcode(s);
     // The chamber the filament wants, when the machine heats one: set before
     // the start (so it heats while the nozzle does) and again after it, once
     // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
@@ -1518,10 +1672,23 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     const bool heat_chamber = s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0;
     if (heat_chamber)
         out << chamber_gcode(s.flavor, chamber) << "\n";
-    if (!s.start_gcode.empty())
-        out << substitute_variables(s.start_gcode, s.variables) << "\n";
-    // The dialect of the firmware (gcode_extras.md, rule 6).
-    const Dialect dialect = dialect_of(s.flavor);
+    // The nozzle's temperature, set before the start G-code and waited for
+    // after it, unless the start sets temperatures itself (gcode_firmware.md, rule 1).
+    const std::string start_gcode = substitute_variables(s.start_gcode, s.variables);
+    double nozzle = 0.0;
+    if (const auto it = s.variables.find("temperature"); it != s.variables.end() && !it->second.empty())
+        nozzle = std::atof(it->second.front().c_str());
+    const bool heat_nozzle = nozzle > 0.0 && !sets_temperature(start_gcode);
+    const std::string celsius = std::to_string(std::lround(nozzle));
+    if (heat_nozzle)
+        out << (dialect.g10 ? "G10 S" + celsius + " P0"
+                            : std::string("M104 ") + dialect.temperature + celsius + (dialect.tool_on_m104 ? " T0" : ""))
+            << "\n";
+    if (!start_gcode.empty())
+        out << start_gcode << "\n";
+    if (heat_nozzle && dialect.wait != Dialect::Wait::None)
+        out << (dialect.wait == Dialect::Wait::M116 ? std::string("M116") : std::string("M109 ") + dialect.temperature + celsius)
+            << "\n";
     // How far an arc may stray from the path (gcode.resolution; with every
     // point kept, a thousandth).
     const double arc_tolerance = s.gcode_resolution > 0.0 ? s.gcode_resolution : 0.001;
@@ -2230,7 +2397,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             after = substitute_variables(s.gcode_after_layer, vars);
         }
         g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn, before, after);
-        g.progress(long(l * 100 / model.layers.size()));
+        if (s.gcode_progress)
+            g.progress_mark();
+        else
+            g.progress(long(l * 100 / model.layers.size()));
         g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -2269,6 +2439,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 continue;
             }
             const Toolpath& t = step.path;
+            if (s.gcode_progress && k > 0)
+                g.progress_mark();
             // A vase's turn starts where the one below ended: no travel, unless
             // the user's G-code moved the head.
             if (!turn || g.lost())
@@ -2364,6 +2536,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // minimum layer time is built again from the same state with its
     // extrusions slowed down and the fan at its maximum
     // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
+    std::array<double, 2> first_layer = {0.0, 0.0}; // its time, normal and silent
     const auto write = [&](std::size_t l, const std::vector<Step>& steps) {
         const Active& a = actives[l];
         const Emitter emitter_before = g;
@@ -2400,7 +2573,9 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                                                         s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
                                                         s.fan_always);
         g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
-        g.end_layer();
+        const double seconds = g.end_layer();
+        if (l == 0)
+            first_layer = {seconds, g.last_silent_layer()};
         g.flush(out);
     };
 
@@ -2515,6 +2690,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             }));
 
     g.extruder_off();
+    if (s.gcode_progress) {
+        g.progress_mark(); // the end: 100 %
+        g.end_layer();
+    }
     g.type("Custom");
     g.flush(out);
     if (!s.end_gcode.empty())
@@ -2523,8 +2702,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     if (dialect.ends_m2)
         out << "M2\n";
-    // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
+    // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not
+    // counted); the same by mode and for the first layer, as hosts read them
+    // (gcode_firmware.md, rule 6; print_time.md, rule 7).
     out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
+    out << "; estimated printing time (normal mode) = " << format_duration(g.print_time()) << "\n";
+    if (s.silent_mode)
+        out << "; estimated printing time (silent mode) = " << format_duration(g.silent_time()) << "\n";
+    out << "; estimated first layer printing time (normal mode) = " << format_duration(first_layer[0]) << "\n";
+    if (s.silent_mode)
+        out << "; estimated first layer printing time (silent mode) = " << format_duration(first_layer[1]) << "\n";
     // The filament, its weight and cost (gcode_extras.md, rule 1).
     {
         const double r = s.filament_diameter / 2.0;
@@ -2559,6 +2746,34 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     };
     for (const auto& [key, value] : describe(s))
         out << "; " << one_line(key) << " = " << one_line(value) << "\n";
+    if (!s.gcode_progress)
+        return;
+    // The marks become M73 P<share done> R<minutes left>, and Q S for the
+    // silent mode, where either changes (gcode_firmware.md, rule 5).
+    const std::string text = std::move(held).str();
+    const bool silent = s.silent_mode && dialect.silent_progress;
+    const auto share = [](double t, double all) {
+        return all > 0.0 ? std::min(100L, long(std::floor(100.0 * t / all + 1e-9))) : 100L;
+    };
+    const auto minutes = [](double t, double all) { return long(std::floor(std::max(0.0, all - t) / 60.0 + 1e-9)); };
+    const std::string_view mark(kProgressMark);
+    const char* note = s.verbose_comments ? " ; update progress\n" : "\n";
+    long shown[4] = {-1, -1, -1, -1};
+    std::size_t from = 0;
+    for (std::size_t at = text.find(mark); at != std::string::npos; at = text.find(mark, from)) {
+        target.write(text.data() + from, std::streamsize(at - from));
+        const std::size_t end = text.find('\n', at);
+        const std::size_t id = std::stoul(text.substr(at + mark.size(), end - at - mark.size()));
+        const long now[4] = {share(g.time_at(id), g.print_time()), minutes(g.time_at(id), g.print_time()),
+                             share(g.silent_time_at(id), g.silent_time()), minutes(g.silent_time_at(id), g.silent_time())};
+        if (now[0] != shown[0] || now[1] != shown[1])
+            target << "M73 P" << now[0] << " R" << now[1] << note;
+        if (silent && (now[2] != shown[2] || now[3] != shown[3]))
+            target << "M73 Q" << now[2] << " S" << now[3] << note;
+        std::copy(now, now + 4, shown);
+        from = end + 1;
+    }
+    target.write(text.data() + from, std::streamsize(text.size() - from));
 }
 
 } // namespace tisma
