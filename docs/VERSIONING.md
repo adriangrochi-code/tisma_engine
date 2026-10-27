@@ -32,7 +32,7 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.7.0 | P1 (empezada): la interfaz `tisma`, calibraciones guiadas, perfiles y proyectos; publicada como 0.7.0-alpha.1 |
 | 0.8.0 | P2 y P3 (empezadas) y más de F5: catálogo y capacidades, altura de capa variable y por zona, Z anti-aliasing, rellenos nuevos, la pestaña Impresora, la revisión profunda; publicada como 0.8.0-alpha.1 |
 | 0.9.0 | Más de F5, P1 y la cobertura: soportes en árbol, OBJ y 3MF, costura en bufanda, modo vaso, el panel de ajustes nuevo, herramientas de la placa y pintura; publicada como 0.9.0-alpha.1 |
-| 0.10.0 | Más de P1 y la cobertura: resina, impresoras de cinta, capas curvas, multimaterial, el panel de ajustes con búsqueda y Personalizado, la tarjeta y la página de la impresora, la vista previa completa, créditos, la ayuda con sus datos y tutoriales, cortar, separar, espejar y medir; publicada como 0.10.0-alpha.1 |
+| 0.10.0 | Más de P1 y la cobertura: resina, impresoras de cinta, capas curvas, multimaterial, el panel de ajustes con búsqueda y Personalizado, la tarjeta y la página de la impresora, la vista previa completa, créditos, la ayuda con sus datos y tutoriales, cortar, separar, espejar y medir; publicada como 0.10.0-alpha.2 (la alpha.1 no llegó a publicarse: sus pruebas no corrieron en Windows) |
 
 ## Las ramas (decisión del dueño, 2026-10-24)
 

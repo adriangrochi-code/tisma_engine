@@ -10,7 +10,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
-## [0.10.0-alpha.1] - 2026-10-27
+## [0.10.0-alpha.2] - 2026-10-27
 
 ### Agregado
 
@@ -851,8 +851,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.1...HEAD
-[0.10.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.1
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...HEAD
+[0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
