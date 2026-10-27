@@ -799,7 +799,8 @@ const char* row_key(T label) {
         {T::CurvedFlatBelow, "curved.flat_below"}, {T::CurvedRampHeight, "curved.ramp_height"},
         {T::CurvedFlatTop, "curved.flat_top"}, {T::CurvedSegment, "curved.segment_length"},
         {T::CurvedMaxSlope, "curved.max_slope"}, {T::CurvedFlowPolicy, "curved.flow_policy"},
-        {T::CurvedUniformFlow, "curved.uniform_flow"}, {T::HeadFreeAngleX, "head.free_angle_x"},
+        {T::CurvedUniformFlow, "curved.uniform_flow"}, {T::CurvedOverhangThreshold, "curved.overhang_threshold"},
+        {T::HeadFreeAngleX, "head.free_angle_x"},
         {T::HeadFreeAngleY, "head.free_angle_y"}, {T::HeadClearanceHeight, "head.clearance_height"},
         {T::HeadClearanceRadius, "head.clearance_radius"}, {T::HeadProfile, "head.profile"}};
     const auto it = keys.find(label);
@@ -3273,6 +3274,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {CurvedFlow::Off, tr(T::CurvedFlowOff)}});
         mm(T::CurvedUniformFlow, "curved.uniform_flow", s.curved_uniform_flow, 0.0, 1000.0,
            s.curved_uniform_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+        mm(T::CurvedOverhangThreshold, "curved.overhang_threshold", s.curved_overhang_threshold, 10.0, 80.0, "%.0f°", 0.5f);
     } else if (id == "interlocking") {
         // Beams between materials (multi_extruder.md, rules 17 and 18).
         flag(T::InterlockBeams, "interlocking.beams", s.interlock_beams);

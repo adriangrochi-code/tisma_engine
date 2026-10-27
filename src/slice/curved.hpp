@@ -42,12 +42,17 @@ struct CurvedField {
     // ny nodes `cell` mm apart from (grid_x, grid_y), bilinear between and
     // level past its edges, by `scale`; ramped in evenly from flat_below up
     // to `full` (from the base), where the sloping top faces start.
+    // The cone and the overhangs from the part (rules 3 to 13) use the grid
+    // too, ramped in smoothly (S) up to where the lowest overhang starts.
     std::vector<float> grid;
     int nx = 0, ny = 0;
     double grid_x = 0.0, grid_y = 0.0, cell = 1.0, full = 0.0, scale = 1.0;
+    bool smooth = false;
 
     // The shape at (x, y) (from the part's centre) and height z (from its base).
     double shape(double x, double y, double z) const;
+    // h on the grid at (x, y) from the part's centre, by `scale`.
+    double on_grid(double x, double y) const;
     // From 0 under curved.flat_below up to 1 (rule 2), z from the part's base.
     double ramp(double z) const;
     // D at a point of the bed's coordinates.

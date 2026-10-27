@@ -21,7 +21,7 @@ namespace {
 constexpr double kTipRadius = 2.0; // mm: the cone's rounded tip (rule 1)
 constexpr double kMinJ = 0.6, kMaxJ = 1.4;
 
-double smooth(double t) {
+double smooth_step(double t) {
     t = std::clamp(t, 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
 }
@@ -30,22 +30,26 @@ double radians(double degrees) { return degrees * std::numbers::pi / 180.0; }
 
 } // namespace
 
+double CurvedField::on_grid(double x, double y) const {
+    // Bilinear between the nodes, level past the grid's edges.
+    const double gx = std::clamp((x + cx - grid_x) / cell, 0.0, double(nx - 1));
+    const double gy = std::clamp((y + cy - grid_y) / cell, 0.0, double(ny - 1));
+    const int i = std::min(int(gx), nx - 2), j = std::min(int(gy), ny - 2);
+    const double u = gx - i, v = gy - j;
+    const auto at = [&](int a, int b) { return double(grid[std::size_t(b) * std::size_t(nx) + std::size_t(a)]); };
+    return scale * ((1 - u) * (1 - v) * at(i, j) + u * (1 - v) * at(i + 1, j) + (1 - u) * v * at(i, j + 1) +
+                    u * v * at(i + 1, j + 1));
+}
+
 double CurvedField::shape(double x, double y, double z) const {
     switch (mode) {
     case CurvedMode::Conical:
+        if (!grid.empty()) // from the part's overhangs: on the grid
+            return on_grid(x, y);
         return cone * (std::sqrt(x * x + y * y + kTipRadius * kTipRadius) - kTipRadius);
-    case CurvedMode::Surface: {
-        if (grid.empty())
-            return 0.0;
-        // Bilinear between the nodes, level past the grid's edges.
-        const double gx = std::clamp((x + cx - grid_x) / cell, 0.0, double(nx - 1));
-        const double gy = std::clamp((y + cy - grid_y) / cell, 0.0, double(ny - 1));
-        const int i = std::min(int(gx), nx - 2), j = std::min(int(gy), ny - 2);
-        const double u = gx - i, v = gy - j;
-        const auto at = [&](int a, int b) { return double(grid[std::size_t(b) * std::size_t(nx) + std::size_t(a)]); };
-        return scale * ((1 - u) * (1 - v) * at(i, j) + u * (1 - v) * at(i + 1, j) + (1 - u) * v * at(i, j + 1) +
-                        u * v * at(i + 1, j + 1));
-    }
+    case CurvedMode::Surface:
+    case CurvedMode::Overhangs:
+        return grid.empty() ? 0.0 : on_grid(x, y);
     case CurvedMode::Wave:
         if (pattern == CurvedPattern::Egg)
             return amplitude * std::sin(k * x) * std::sin(k * y);
@@ -59,12 +63,17 @@ double CurvedField::shape(double x, double y, double z) const {
 }
 
 double CurvedField::ramp(double z) const {
-    // Top faces: evenly over the whole height up to them (rule 15, SU3).
-    if (mode == CurvedMode::Surface)
-        return full > flat_below ? std::clamp((z - flat_below) / (full - flat_below), 0.0, 1.0) : 1.0;
-    double r = smooth((z - flat_below) / ramp_height);
+    // On the grid: up to `full`, evenly for the top faces (rule 15, SU3),
+    // smoothly for the overhangs (rules 6 and 12, CO6).
+    if (!grid.empty()) {
+        if (!(full > flat_below))
+            return 1.0;
+        const double t = (z - flat_below) / (full - flat_below);
+        return smooth ? smooth_step(t) : std::clamp(t, 0.0, 1.0);
+    }
+    double r = smooth_step((z - flat_below) / ramp_height);
     if (flat_top)
-        r *= 1.0 - smooth((z - (height - ramp_height)) / ramp_height);
+        r *= 1.0 - smooth_step((z - (height - ramp_height)) / ramp_height);
     return r;
 }
 
@@ -108,9 +117,9 @@ double CurvedField::real_z(double x, double y, double flat) const {
 double CurvedField::most() const {
     if (mode == CurvedMode::Wave)
         return amplitude;
-    if (mode == CurvedMode::Conical)
+    if (mode == CurvedMode::Conical && grid.empty())
         return std::abs(cone) * (std::sqrt(radius * radius + kTipRadius * kTipRadius) - kTipRadius);
-    if (mode == CurvedMode::Surface) {
+    if (!grid.empty()) {
         double most = 0.0;
         for (const float h : grid)
             most = std::max(most, std::abs(double(h)));
@@ -145,32 +154,104 @@ struct Bounds {
     double steepest = 0.0;
 };
 
-Bounds bounds_of(const CurvedField& f, const Box& b, double tan_x, double tan_y) {
-    Bounds out;
-    const int nxy = 48;
+// Points of the part where the bounds are taken: in it, not in its box's
+// corners. Columns on a grid over its box, each kept where a ray along Z
+// finds it inside the part, at the heights the ramps need; and points over
+// its faces, a millimetre or so apart, for what is thinner than the grid.
+std::vector<Vec3f> samples_of(const IndexedMesh& mesh, const Box& b, const CurvedField& f) {
+    std::vector<Vec3f> out;
     // Heights: through the whole part, and closer in the ramps.
     std::vector<double> zs;
     for (int i = 0; i <= 64; ++i)
         zs.push_back(b.z0 + (b.z1 - b.z0) * i / 64.0);
-    for (int i = 0; i <= 32; ++i) {
-        zs.push_back(b.z0 + f.flat_below + f.ramp_height * i / 32.0);
+    const double up_to = f.grid.empty() ? f.flat_below + f.ramp_height : f.full;
+    for (int i = 0; i <= 48; ++i) {
+        zs.push_back(b.z0 + f.flat_below + (up_to - f.flat_below) * i / 48.0);
         if (f.flat_top)
-            zs.push_back(b.z0 + f.height - f.ramp_height * i / 32.0);
+            zs.push_back(b.z0 + f.height - f.ramp_height * i / 48.0);
     }
-    for (const double z : zs) {
-        if (z < b.z0 || z > b.z1)
-            continue;
-        for (int i = 0; i <= nxy; ++i)
-            for (int j = 0; j <= nxy; ++j) {
-                const double x = b.x0 + (b.x1 - b.x0) * i / nxy, y = b.y0 + (b.y1 - b.y0) * j / nxy;
-                const double jj = f.thickness(x, y, z);
-                out.j_min = std::min(out.j_min, jj), out.j_max = std::max(out.j_max, jj);
-                const double d = f.offset(x, y, z);
-                out.d_min = std::min(out.d_min, d), out.d_max = std::max(out.d_max, d);
-                const auto [gx, gy] = f.slope(x, y, z);
-                out.head = std::max(out.head, std::sqrt((gx / tan_x) * (gx / tan_x) + (gy / tan_y) * (gy / tan_y)));
-                out.steepest = std::max(out.steepest, std::hypot(gx, gy));
+    std::sort(zs.begin(), zs.end());
+    // The triangles by the columns they may cross.
+    const int n = 48;
+    const double sx = (b.x1 - b.x0) / n, sy = (b.y1 - b.y0) / n;
+    std::vector<std::vector<std::uint32_t>> bins(std::size_t((n + 1) * (n + 1)));
+    const auto col = [&](double v, double lo, double step) { return std::clamp(int(std::floor((v - lo) / step + 0.5)), 0, n); };
+    for (std::uint32_t t = 0; t < mesh.triangles.size(); ++t) {
+        const auto& tri = mesh.triangles[t];
+        double x0 = 1e300, x1 = -1e300, y0 = 1e300, y1 = -1e300;
+        for (const std::uint32_t v : tri) {
+            x0 = std::min(x0, double(mesh.vertices[v].x)), x1 = std::max(x1, double(mesh.vertices[v].x));
+            y0 = std::min(y0, double(mesh.vertices[v].y)), y1 = std::max(y1, double(mesh.vertices[v].y));
+        }
+        for (int j = col(y0, b.y0, sy); j <= col(y1, b.y0, sy); ++j)
+            for (int i = col(x0, b.x0, sx); i <= col(x1, b.x0, sx); ++i)
+                bins[std::size_t(j * (n + 1) + i)].push_back(t);
+    }
+    for (int j = 0; j <= n; ++j)
+        for (int i = 0; i <= n; ++i) {
+            const double x = b.x0 + i * sx, y = b.y0 + j * sy;
+            // Where the ray up the column crosses the faces.
+            std::vector<double> hits;
+            for (const std::uint32_t t : bins[std::size_t(j * (n + 1) + i)]) {
+                const Vec3f& a = mesh.vertices[mesh.triangles[t][0]];
+                const Vec3f& p = mesh.vertices[mesh.triangles[t][1]];
+                const Vec3f& q = mesh.vertices[mesh.triangles[t][2]];
+                const double d = (double(p.x) - a.x) * (double(q.y) - a.y) - (double(q.x) - a.x) * (double(p.y) - a.y);
+                if (std::abs(d) < 1e-12)
+                    continue;
+                const double u = ((x - a.x) * (double(q.y) - a.y) - (double(q.x) - a.x) * (y - a.y)) / d;
+                const double v = ((double(p.x) - a.x) * (y - a.y) - (x - a.x) * (double(p.y) - a.y)) / d;
+                if (u < 0.0 || v < 0.0 || u + v > 1.0)
+                    continue;
+                hits.push_back(a.z + u * (double(p.z) - a.z) + v * (double(q.z) - a.z));
             }
+            std::sort(hits.begin(), hits.end());
+            for (std::size_t k = 0; k + 1 < hits.size(); k += 2)
+                for (const double z : zs)
+                    if (z >= hits[k] && z <= hits[k + 1])
+                        out.push_back({float(x), float(y), float(z)});
+        }
+    // Over the faces.
+    double area = 0.0;
+    for (const auto& tri : mesh.triangles) {
+        const Vec3f& a = mesh.vertices[tri[0]];
+        const Vec3f& p = mesh.vertices[tri[1]];
+        const Vec3f& q = mesh.vertices[tri[2]];
+        const double ux = double(p.x) - a.x, uy = double(p.y) - a.y, uz = double(p.z) - a.z;
+        const double vx = double(q.x) - a.x, vy = double(q.y) - a.y, vz = double(q.z) - a.z;
+        area += 0.5 * std::sqrt((uy * vz - uz * vy) * (uy * vz - uz * vy) + (uz * vx - ux * vz) * (uz * vx - ux * vz) +
+                                (ux * vy - uy * vx) * (ux * vy - uy * vx));
+    }
+    const double spacing = std::max(1.0, std::sqrt(area / 60000.0));
+    for (const auto& tri : mesh.triangles) {
+        const Vec3f& a = mesh.vertices[tri[0]];
+        const Vec3f& p = mesh.vertices[tri[1]];
+        const Vec3f& q = mesh.vertices[tri[2]];
+        const double longest = std::max({std::hypot(double(p.x) - a.x, double(p.y) - a.y, double(p.z) - a.z),
+                                         std::hypot(double(q.x) - a.x, double(q.y) - a.y, double(q.z) - a.z),
+                                         std::hypot(double(q.x) - p.x, double(q.y) - p.y, double(q.z) - p.z)});
+        const int m = std::max(1, int(std::ceil(longest / spacing)));
+        for (int i = 0; i <= m; ++i)
+            for (int k = 0; i + k <= m; ++k) {
+                const float u = float(i) / float(m), v = float(k) / float(m);
+                out.push_back({a.x + u * (p.x - a.x) + v * (q.x - a.x), a.y + u * (p.y - a.y) + v * (q.y - a.y),
+                               a.z + u * (p.z - a.z) + v * (q.z - a.z)});
+            }
+    }
+    return out;
+}
+
+Bounds bounds_of(const CurvedField& f, const std::vector<Vec3f>& points, double tan_x, double tan_y) {
+    Bounds out;
+    for (const Vec3f& p : points) {
+        const double x = p.x, y = p.y, z = p.z;
+        const double jj = f.thickness(x, y, z);
+        out.j_min = std::min(out.j_min, jj), out.j_max = std::max(out.j_max, jj);
+        const double d = f.offset(x, y, z);
+        out.d_min = std::min(out.d_min, d), out.d_max = std::max(out.d_max, d);
+        const auto [gx, gy] = f.slope(x, y, z);
+        out.head = std::max(out.head, std::sqrt((gx / tan_x) * (gx / tan_x) + (gy / tan_y) * (gy / tan_y)));
+        out.steepest = std::max(out.steepest, std::hypot(gx, gy));
     }
     return out;
 }
@@ -316,6 +397,202 @@ bool fit_surface(CurvedField& f, const IndexedMesh& mesh, const Box& b, double t
     return true;
 }
 
+// The overhangs that count (nonplanar_modes.md, rules 1 and 2): faces
+// looking down more than curved.overhang_threshold (u) from the vertical and
+// less than 80 degrees, above curved.flat_below; each with the slope the
+// layers need to bring it to u - 5 degrees (`target`) and the least that
+// still helps (u - 2 degrees, `enough`).
+struct Overhang {
+    double x, y, low;    // its centre in XY and its lowest point
+    double out_x, out_y; // the way it sticks out, horizontally (unit)
+    double cot_beta;     // its slope from the vertical, as a cotangent
+    double target, enough;
+    std::array<Vec3f, 3> corners;
+};
+
+std::vector<Overhang> overhangs_of(const IndexedMesh& mesh, const CurvedField& f, double threshold) {
+    std::vector<Overhang> out;
+    const double cot_target = 1.0 / std::tan(radians(threshold - 5.0)), cot_enough = 1.0 / std::tan(radians(threshold - 2.0));
+    for (const auto& tri : mesh.triangles) {
+        const Vec3f& a = mesh.vertices[tri[0]];
+        const Vec3f& p = mesh.vertices[tri[1]];
+        const Vec3f& q = mesh.vertices[tri[2]];
+        const double ux = double(p.x) - a.x, uy = double(p.y) - a.y, uz = double(p.z) - a.z;
+        const double vx = double(q.x) - a.x, vy = double(q.y) - a.y, vz = double(q.z) - a.z;
+        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const double length = std::sqrt(nx * nx + ny * ny + nz * nz), across = std::hypot(nx, ny);
+        if (length <= 0.0 || nz >= 0.0 || across <= 0.0)
+            continue;
+        const double beta = std::asin(std::min(1.0, -nz / length)) * 180.0 / std::numbers::pi;
+        const double low = std::min({double(a.z), double(p.z), double(q.z)});
+        if (beta <= threshold || beta >= 80.0 || low - f.base <= f.flat_below)
+            continue;
+        const double cot_beta = across / -nz;
+        out.push_back({(a.x + p.x + q.x) / 3.0, (a.y + p.y + q.y) / 3.0, low, nx / across, ny / across, cot_beta,
+                       cot_target - cot_beta, cot_enough - cot_beta, {a, p, q}});
+    }
+    return out;
+}
+
+// The part's section at height z, as the segments where the plane cuts its
+// triangles (each [x0, y0, x1, y1]).
+std::vector<std::array<double, 4>> section_at(const IndexedMesh& mesh, double z) {
+    std::vector<std::array<double, 4>> out;
+    for (const auto& tri : mesh.triangles) {
+        std::array<double, 2> cut[2];
+        int n = 0;
+        for (int e = 0; e < 3 && n < 2; ++e) {
+            const Vec3f& a = mesh.vertices[tri[std::size_t(e)]];
+            const Vec3f& b = mesh.vertices[tri[std::size_t((e + 1) % 3)]];
+            if ((a.z > z) == (b.z > z))
+                continue;
+            const double w = (z - a.z) / (double(b.z) - a.z);
+            cut[n++] = {a.x + w * (double(b.x) - a.x), a.y + w * (double(b.y) - a.y)};
+        }
+        if (n == 2)
+            out.push_back({cut[0][0], cut[0][1], cut[1][0], cut[1][1]});
+    }
+    return out;
+}
+
+// Signed distance from a point to a section (inside by the crossings of a
+// ray along X, below 0).
+double signed_distance(const std::vector<std::array<double, 4>>& section, double x, double y) {
+    bool inside = false;
+    double best = 1e300;
+    for (const auto& [ax, ay, bx, by] : section) {
+        if ((ay > y) != (by > y) && x < ax + (bx - ax) * (y - ay) / (by - ay))
+            inside = !inside;
+        const double dx = bx - ax, dy = by - ay, dd = dx * dx + dy * dy;
+        const double w = dd > 0.0 ? std::clamp(((x - ax) * dx + (y - ay) * dy) / dd, 0.0, 1.0) : 0.0;
+        best = std::min(best, std::hypot(x - ax - w * dx, y - ay - w * dy));
+    }
+    return inside ? -best : best;
+}
+
+// A grid over the part's box, for h.
+void grid_over(CurvedField& f, const Box& b) {
+    const double dx = b.x1 - b.x0, dy = b.y1 - b.y0;
+    f.cell = std::max({0.5, dx / 127.0, dy / 127.0});
+    f.nx = int(std::ceil(dx / f.cell)) + 3, f.ny = int(std::ceil(dy / f.cell)) + 3;
+    f.grid_x = b.x0 - f.cell, f.grid_y = b.y0 - f.cell;
+    f.grid.assign(std::size_t(f.nx * f.ny), 0.0f);
+    f.scale = 1.0;
+    f.smooth = true;
+}
+
+// The cone from the part (rules 3 to 6): each overhang asks, at every radius
+// it covers, for its slope's radial part (down outwards for a mushroom, up
+// for the rim of a bowl upside down), at most the head's free slope or not
+// at all if that is not enough (rule 2). The slope is 0 at the centre, grows
+// evenly over max(R / 4, 5 mm) before the first radius that asks, and keeps
+// the last asked further out; ramped in up to the lowest overhang that asks.
+// `needs` gets each request's slope and the least that takes its overhang
+// off the support.
+bool fit_conical(CurvedField& f, const std::vector<Overhang>& overhangs, const Box& b, double tan_free,
+                 double support_cot, std::vector<std::array<double, 3>>& needs) {
+    const double reach = std::hypot(std::max(f.cx - b.x0, b.x1 - f.cx), std::max(f.cy - b.y0, b.y1 - f.cy));
+    const double dr = 0.25;
+    const int bins = int(std::ceil(reach / dr)) + 2;
+    std::vector<double> asked(std::size_t(bins), 0.0);
+    double lowest = 1e300;
+    for (const Overhang& o : overhangs) {
+        const double r = std::hypot(o.x - f.cx, o.y - f.cy);
+        if (r < 1e-6)
+            continue;
+        const double c = (o.out_x * (o.x - f.cx) + o.out_y * (o.y - f.cy)) / r; // radial part
+        if (std::abs(c) < 0.3)
+            continue;
+        const double want = std::min(o.target, tan_free);
+        if (want < o.enough)
+            continue; // the head does not let it: left to the support
+        double r_lo = 1e300, r_hi = 0.0;
+        for (const Vec3f& v : o.corners) {
+            const double rv = std::hypot(v.x - f.cx, v.y - f.cy);
+            r_lo = std::min(r_lo, rv), r_hi = std::max(r_hi, rv);
+        }
+        const double slope = c > 0.0 ? -want : want; // a mushroom's layers go down outwards
+        for (int k = std::max(0, int(r_lo / dr)); k <= std::min(bins - 1, int(r_hi / dr)); ++k)
+            if (std::abs(slope) > std::abs(asked[std::size_t(k)]))
+                asked[std::size_t(k)] = slope;
+        lowest = std::min(lowest, o.low);
+        needs.push_back({want, o.cot_beta, support_cot});
+    }
+    int first = -1;
+    for (int k = 0; k < bins && first < 0; ++k)
+        if (asked[std::size_t(k)] != 0.0)
+            first = k;
+    if (first < 0)
+        return false;
+    // The profile of slopes along the radius, then heights.
+    std::vector<double> slope(std::size_t(bins), 0.0), height(std::size_t(bins) + 1, 0.0);
+    const double grow = std::max(reach / 4.0, 5.0), r1 = first * dr;
+    double last = asked[std::size_t(first)];
+    for (int k = 0; k < bins; ++k) {
+        const double r = (k + 0.5) * dr;
+        if (k < first)
+            slope[std::size_t(k)] = r < r1 - grow ? 0.0 : last * (r - (r1 - grow)) / grow;
+        else {
+            if (asked[std::size_t(k)] != 0.0)
+                last = asked[std::size_t(k)];
+            slope[std::size_t(k)] = last;
+        }
+        slope[std::size_t(k)] = std::clamp(slope[std::size_t(k)], -tan_free, tan_free);
+        height[std::size_t(k) + 1] = height[std::size_t(k)] + slope[std::size_t(k)] * dr;
+    }
+    grid_over(f, b);
+    for (int j = 0; j < f.ny; ++j)
+        for (int i = 0; i < f.nx; ++i) {
+            const double r = std::hypot(f.grid_x + i * f.cell - f.cx, f.grid_y + j * f.cell - f.cy);
+            const double k = std::min(r / dr, double(bins));
+            const int k0 = std::min(int(k), bins - 1);
+            const double u = k - k0;
+            f.grid[std::size_t(j * f.nx + i)] = float(height[std::size_t(k0)] * (1 - u) + height[std::size_t(k0) + 1] * u);
+        }
+    f.full = std::max(lowest - f.base, f.flat_below + 1.0);
+    return true;
+}
+
+// The overhangs' zone (rules 9 to 13): flat inside the section the overhang
+// starts from, going down `slope` per mm of distance from it out to the
+// overhang's farthest point, the edge eased over about a millimetre; the
+// slope its target, at most 90 % of what the head lets (its free slope and
+// its clearance), and none if that is not enough; ramped in up to the
+// overhang and kept above it.
+bool fit_overhangs(CurvedField& f, const IndexedMesh& mesh, const std::vector<Overhang>& overhangs, const Box& b,
+                   double tan_free, double tan_clear, double support_cot, std::vector<std::array<double, 3>>& needs) {
+    const double most = 0.9 * std::min(tan_free, tan_clear);
+    double lowest = 1e300, want = 0.0;
+    for (const Overhang& o : overhangs) {
+        const double w = std::min(o.target, most);
+        if (w < o.enough)
+            continue;
+        lowest = std::min(lowest, o.low);
+        want = std::max(want, w);
+        needs.push_back({w, o.cot_beta, support_cot});
+    }
+    if (needs.empty())
+        return false;
+    const auto base = section_at(mesh, lowest - 0.05);
+    if (base.empty())
+        return false;
+    // How far out the overhangs reach from the section.
+    double farthest = 0.0;
+    for (const Overhang& o : overhangs)
+        for (const Vec3f& v : o.corners)
+            farthest = std::max(farthest, signed_distance(base, v.x, v.y));
+    grid_over(f, b);
+    for (int j = 0; j < f.ny; ++j)
+        for (int i = 0; i < f.nx; ++i) {
+            const double d = signed_distance(base, f.grid_x + i * f.cell, f.grid_y + j * f.cell);
+            // Eased from 1 mm inside to 0.5 mm outside, then straight.
+            const double eased = d < -1.0 ? 0.0 : d < 0.5 ? (d + 1.0) * (d + 1.0) / 3.0 : d + 0.25;
+            f.grid[std::size_t(j * f.nx + i)] = float(-want * std::min(eased, farthest + 0.25));
+        }
+    f.full = std::max(lowest - f.base, f.flat_below + 1.0);
+    return true;
+}
+
 } // namespace
 
 std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& mesh) {
@@ -342,6 +619,7 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     const double tan_x = std::tan(radians(s.head_free_angle_x > 0.0 ? s.head_free_angle_x : s.curved_max_slope));
     const double tan_y = std::tan(radians(s.head_free_angle_y > 0.0 ? s.head_free_angle_y : s.curved_max_slope));
     const double tan_min = std::min(tan_x, tan_y);
+    std::vector<std::array<double, 3>> needs; // the overhangs' slopes asked, cot β and the support's
     if (f.mode == CurvedMode::Wave) {
         if (s.curved_fit_head) {
             const double wavelength = std::clamp(std::numbers::pi * s.head_clearance_height / tan_min, 4.0, 100.0);
@@ -361,18 +639,40 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     } else if (f.mode == CurvedMode::Surface) {
         if (!fit_surface(f, mesh, b, tan_x, tan_y))
             return std::nullopt; // nothing slopes: flat layers (CO1)
+    } else if (f.mode == CurvedMode::Overhangs || (f.mode == CurvedMode::Conical && s.curved_fit_head)) {
+        // The support takes what is steeper than this from the vertical.
+        const double support = s.support_angle > 0.0 ? 90.0 - s.support_angle
+                                                      : std::atan(0.5 * s.wall_width / s.layer_height) * 180.0 / std::numbers::pi;
+        const std::vector<Overhang> overhangs = overhangs_of(mesh, f, s.curved_overhang_threshold);
+        const bool asked = f.mode == CurvedMode::Conical
+                               ? fit_conical(f, overhangs, b, tan_min, 1.0 / std::tan(radians(support)), needs)
+                               : fit_overhangs(f, mesh, overhangs, b, tan_min, s.head_clearance_height / s.head_clearance_radius,
+                                               1.0 / std::tan(radians(support)), needs);
+        if (!asked)
+            return std::nullopt; // no overhang asks: flat layers (CO1)
     } else {
         f.cone = std::tan(radians(s.curved_cone_angle));
     }
+    // Whether, shrunk by `share`, the layers still take an overhang off the
+    // support (rules 8 and 12): else they are left flat.
+    const auto helps = [&](double share) {
+        if (needs.empty())
+            return true;
+        for (const auto& [want, cot_beta, support_cot] : needs)
+            if (cot_beta + share * want >= support_cot - 1e-9)
+                return true;
+        return false;
+    };
+    const std::vector<Vec3f> points = samples_of(mesh, b, f);
     const auto fits = [&](const CurvedField& g) {
-        const Bounds bb = bounds_of(g, b, tan_x, tan_y);
+        const Bounds bb = bounds_of(g, points, tan_x, tan_y);
         return bb.j_min >= kMinJ - 1e-9 && bb.j_max <= kMaxJ + 1e-9 && bb.head <= 1.0 + 1e-9 &&
                clearance_use(bb, s) <= 1.0 + 1e-9;
     };
     if (fits(f))
-        return f;
-    if (!s.curved_fit_head && f.mode != CurvedMode::Surface) {
-        const Bounds bb = bounds_of(f, b, tan_x, tan_y);
+        return helps(1.0) ? std::optional<CurvedField>(f) : std::nullopt;
+    if (!s.curved_fit_head && f.mode != CurvedMode::Surface && f.mode != CurvedMode::Overhangs) {
+        const Bounds bb = bounds_of(f, points, tan_x, tan_y);
         char text[300];
         if (bb.j_min < kMinJ - 1e-9 || bb.j_max > kMaxJ + 1e-9)
             std::snprintf(text, sizeof text,
@@ -402,6 +702,8 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     f.amplitude = full.amplitude * lo, f.cone = full.cone * lo, f.scale = full.scale * lo;
     if (f.mode == CurvedMode::Surface && f.most() < 1e-3)
         return std::nullopt; // too low a part to bend (rule 17)
+    if (!helps(lo))
+        return std::nullopt; // shrunk, it takes no overhang off the support (rules 8 and 12)
     return f;
 }
 

@@ -787,7 +787,7 @@ Settings parse_checked(std::string_view text) {
     // Curved layers (nonplanar.md) and the print head around the nozzle.
     read_group(root, "curved",
                {"mode", "pattern", "amplitude", "wavelength", "angle", "twist", "cone_angle", "fit_head", "flat_below",
-                "ramp_height", "flat_top", "segment_length", "max_slope", "flow_policy", "uniform_flow"},
+                "ramp_height", "flat_top", "segment_length", "max_slope", "flow_policy", "uniform_flow", "overhang_threshold"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
         if (n == "mode") {
@@ -813,7 +813,8 @@ Settings parse_checked(std::string_view text) {
                 {"angle", {&s.curved_angle, -360.0, 360.0}},           {"twist", {&s.curved_twist, -360.0, 360.0}},
                 {"cone_angle", {&s.curved_cone_angle, -60.0, 60.0}},   {"flat_below", {&s.curved_flat_below, 0.0, 1000.0}},
                 {"ramp_height", {&s.curved_ramp_height, 0.1, 1000.0}}, {"segment_length", {&s.curved_segment_length, 0.05, 50.0}},
-                {"max_slope", {&s.curved_max_slope, 1.0, 80.0}},       {"uniform_flow", {&s.curved_uniform_flow, 0.0, 1000.0}}};
+                {"max_slope", {&s.curved_max_slope, 1.0, 80.0}},       {"uniform_flow", {&s.curved_uniform_flow, 0.0, 1000.0}},
+                {"overhang_threshold", {&s.curved_overhang_threshold, 10.0, 80.0}}};
             const auto& [target, lo, hi] = targets.at(n);
             if (!(d >= lo && d <= hi)) {
                 char range[96];
@@ -2130,6 +2131,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
                                : s.curved_flow == CurvedFlow::Uniform ? "uniform"
                                                                       : "off"},
         {"curved.uniform_flow", num(s.curved_uniform_flow)},
+        {"curved.overhang_threshold", num(s.curved_overhang_threshold)},
         {"head.free_angle_x", num(s.head_free_angle_x)},
         {"head.free_angle_y", num(s.head_free_angle_y)},
         {"head.clearance_height", num(s.head_clearance_height)},
@@ -2467,7 +2469,8 @@ std::string settings_json(const Settings& s) {
           {"segment_length", s.curved_segment_length},
           {"max_slope", s.curved_max_slope},
           {"flow_policy", s.curved_flow == CurvedFlow::Preserve ? "preserve" : s.curved_flow == CurvedFlow::Uniform ? "uniform" : "off"},
-          {"uniform_flow", s.curved_uniform_flow}}},
+          {"uniform_flow", s.curved_uniform_flow},
+          {"overhang_threshold", s.curved_overhang_threshold}}},
         {"head",
          {{"free_angle_x", s.head_free_angle_x},
           {"free_angle_y", s.head_free_angle_y},
@@ -2809,14 +2812,9 @@ void check_settings(const Settings& s) {
         if (!relative_e(s))
             throw SettingsError("curved.mode: curved layers need relative E (machine.relative_extrusion, on a flavor that "
                                 "has M83)");
-        if (s.curved_mode != CurvedMode::Wave && s.curved_mode != CurvedMode::Conical &&
-            s.curved_mode != CurvedMode::Surface)
+        if (s.curved_mode == CurvedMode::Stress || s.curved_mode == CurvedMode::Automatic)
             throw SettingsError(std::string("curved.mode: ") + curved_mode_name(s.curved_mode) +
-                                " (layers from the part, nonplanar_modes.md) is not done yet: use wave, surface, or "
-                                "conical without curved.fit_head");
-        if (s.curved_mode == CurvedMode::Conical && s.curved_fit_head)
-            throw SettingsError("curved.fit_head: the cone from the part's overhangs (nonplanar_modes.md) is not done "
-                                "yet; a cone of curved.cone_angle needs curved.fit_head false");
+                                " (nonplanar_modes.md) is not done yet: use wave, conical, overhangs or surface");
         for (const auto& [on, key] : {std::pair{s.vase, "vase.enabled"},
                                       {s.zaa, "zaa.enabled"},
                                       {s.infill_nonplanar, "infill.nonplanar"},

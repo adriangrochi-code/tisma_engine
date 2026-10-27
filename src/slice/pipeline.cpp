@@ -479,6 +479,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (painting && !painting->empty())
             throw CurvedError("curved layers do not take painted faces yet (curved.mode)");
         std::optional<CurvedField> field = curved_field(settings, input);
+        if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
+            Settings flat = settings;
+            flat.curved_mode = CurvedMode::Disabled;
+            return slice_model(input, flat, gpu, stress, painting, given, mixes);
+        }
         const double longest =
             field->mode == CurvedMode::Wave ? std::clamp(2.0 * std::numbers::pi / field->k / 20.0, 0.25, 1.0) : 1.0;
         std::vector<std::uint32_t> origin;

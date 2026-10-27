@@ -340,6 +340,7 @@ struct Settings {
     bool curved_flat_top = false;
     double curved_segment_length = 0.5; // mm
     double curved_max_slope = 20.0;     // degrees, without a measured head
+    double curved_overhang_threshold = 45.0; // degrees from the vertical a flat layer still prints well (nonplanar_modes.md)
     CurvedFlow curved_flow = CurvedFlow::Preserve;
     double curved_uniform_flow = 0.0; // mm3/s; 0: 80 % of machine.max_flow
     // The print head around the nozzle (nonplanar.md, rule 6): the steepest

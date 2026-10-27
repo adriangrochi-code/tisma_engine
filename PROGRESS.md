@@ -5978,3 +5978,40 @@ corridas (semillas 56 y 57), 0 fallas.
 
 **Sigue:** F7, `overhangs` y el cono según los voladizos (reglas 1 a 13, CO1 a VO7); después `automatic`.
 
+## 2026-10-27 — F7: el cono según la pieza y los voladizos (`conical`, `overhangs`)
+
+**Hecho** (ficha `nonplanar_modes.md`, reglas 1 a 13):
+- Los voladizos que cuentan: caras que miran hacia abajo entre `curved.overhang_threshold` (nuevo, 45°) y 80° desde la
+  vertical, arriba de `flat_below`; cada uno pide `s(u − 5°)`, o al menos `s(u − 2°)` si la cabeza no deja más, o
+  nada.
+- `conical` con `fit_head`: la pendiente por radio sale de esos pedidos (su parte radial; un hongo baja hacia afuera,
+  el borde de un cuenco dado vuelta sube), cero en el centro, pareja a lo largo de max(R/4, 5 mm) antes del primer
+  radio que pide y la última pedida más afuera; sube con la rampa `S` hasta el voladizo más bajo.
+- `overhangs`: plana dentro de la sección donde empieza el voladizo (cortada por segmentos) y bajando afuera con la
+  distancia a ella, el borde suavizado de 1 mm adentro a 0,5 mm afuera, hasta lo más lejano del voladizo; la pendiente
+  como mucho el 90 % de lo que deja la cabeza (ángulo libre y holgura).
+- Las dos van en la grilla de `surface`, y los límites (`J`, pendiente, holgura) se toman ahora en puntos de la pieza:
+  columnas de una grilla donde un rayo en Z la encuentra adentro, y sus caras; no en las esquinas de su caja. Si ya
+  achicada la deformación no saca ningún voladizo del soporte (con el ángulo del soporte del motor), la pieza va
+  plana.
+- Corregido: una pieza sin nada que curvar (CO1) ya no usa un campo vacío; se lamina plana.
+
+**Medido** (hongos de la ficha; entre paréntesis Tisma Slicer): con el cabezal de 25°, `conical` 0,291 (48°), 0,410
+(52°) y 0,4663 (55°) (0,291, 0,410, 0,4665), y 60° plano; `overhangs` 0,291, 0,41 y 0,42 (0,29, 0,41, 0,42), 60°
+plano, y una capa bajo el sombrero de 55° con pendiente 0,42 (0,417); con el cabezal por defecto, `conical` 0,2 a 48°
+(0,21) y `overhangs` 0,18 (0,18), y 52° plano en `overhangs` (plano). Soporte del hongo de 52° con el cabezal de 25°:
+83,9 m de recorrido en plano (unos 2,8 m de filamento; 3,07 m) y nada con `conical` ni con `overhangs` (nada). Hongo de
+48° con el cabezal por defecto: de 86,0 m a 8,2 m con `overhangs`.
+
+**Distinto de Tisma Slicer:** con el cabezal por defecto, `conical` deja plano el hongo de 52° (CO2 lo curva): con
+0,2 de pendiente el voladizo queda a 45,5° de la vertical, y el soporte automático del motor (medio cordón de 0,4 mm
+por capa de 0,2, 45°) todavía lo toma; el de Tisma Slicer arranca a 48,4° (cordón de 0,45).
+
+Pruebas nuevas en `tests/test_curved.cpp` (12 casos: CO1, CO2, CO4, VO2, VO4 y VO5); fuzzer con los cuatro modos:
+600 corridas (semillas 58 y 59), 0 fallas.
+
+**No hecho:** varias zonas de voladizos a distintas alturas (`overhangs` toma una sola, desde el voladizo más bajo);
+el hongo con cúpula (AU3) y `automatic`; `stress`.
+
+**Sigue:** `automatic` (la suma de `overhangs` y `surface`), y después resina.
+

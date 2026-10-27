@@ -392,3 +392,151 @@ TEST_CASE("curved layers: a low part bends little (SU4)", "[curved][surface]") {
     CHECK(top > 0.02);
     CHECK(top < 0.1); // Tisma Slicer: 0.087
 }
+
+namespace {
+
+// The spec's mushroom (nonplanar_modes.md): a foot of radius 8 and `foot`
+// high, a hat whose underside opens at `beta` degrees from the vertical out
+// to radius 20, a 2 mm rim and a flat top; 128 sides, centred on X 100, Y 100.
+IndexedMesh mushroom(double beta, double foot = 25.0) {
+    TriangleMesh m;
+    const int sides = 128;
+    const double rise = 12.0 / std::tan(beta * std::numbers::pi / 180.0);
+    const double rings[4][2] = {{8.0, 0.0}, {8.0, foot}, {20.0, foot + rise}, {20.0, foot + rise + 2.0}};
+    const auto at = [&](int ring, int k) {
+        const double a = 2.0 * std::numbers::pi * k / sides;
+        return Vec3f{float(100.0 + rings[ring][0] * std::cos(a)), float(100.0 + rings[ring][0] * std::sin(a)),
+                     float(rings[ring][1])};
+    };
+    const Vec3f bottom{100, 100, 0}, top{100, 100, float(rings[3][1])};
+    for (int k = 0; k < sides; ++k) {
+        const int n = (k + 1) % sides;
+        m.add_triangle(bottom, at(0, n), at(0, k));
+        for (int r = 0; r < 3; ++r) {
+            m.add_triangle(at(r, k), at(r, n), at(r + 1, n));
+            m.add_triangle(at(r, k), at(r + 1, n), at(r + 1, k));
+        }
+        m.add_triangle(at(3, k), at(3, n), top);
+    }
+    return weld_exact(m);
+}
+
+Settings overhang_base(CurvedMode mode, bool head25) {
+    Settings s = base();
+    s.curved_mode = mode;
+    s.infill_density = 20.0;
+    s.wall_count = 2;
+    s.top_layers = s.bottom_layers = 3;
+    s.support = true;
+    if (head25) {
+        s.head_free_angle_x = s.head_free_angle_y = 25.0;
+        s.head_clearance_height = 7.0;
+        s.head_clearance_radius = 15.0;
+    }
+    return s;
+}
+
+// The layers' slope along the radius under the hat: the least squares
+// line of z against r through a layer's extruded points between r 9 and 19.
+double radial_slope(const std::vector<Move>& moves) {
+    double sr = 0, sz = 0, srr = 0, srz = 0, n = 0;
+    for (const Move& m : moves) {
+        const double r = std::hypot(m.x1 - 100.0, m.y1 - 100.0);
+        if (r < 9.0 || r > 19.0)
+            continue;
+        sr += r, sz += m.z1, srr += r * r, srz += r * m.z1, ++n;
+    }
+    return n < 3 ? 0.0 : (n * srz - sr * sz) / (n * srr - sr * sr);
+}
+
+double support_length(const std::string& text) {
+    double total = 0.0, x = 0.0, y = 0.0;
+    std::string type;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            if (w[0] == ';')
+                break;
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        if (e > 0.0 && type.find("upport") != std::string::npos)
+            total += std::hypot(nx - x, ny - y);
+        x = nx, y = ny;
+    }
+    return total;
+}
+
+} // namespace
+
+TEST_CASE("curved layers: a part without overhangs stays flat (CO1)", "[curved][overhangs]") {
+    for (const CurvedMode mode : {CurvedMode::Conical, CurvedMode::Overhangs}) {
+        const Settings s = overhang_base(mode, true);
+        CHECK_FALSE(curved_field(s, block()).has_value());
+    }
+}
+
+TEST_CASE("curved layers: the cone from a mushroom's overhang (CO2, CO4)", "[curved][overhangs]") {
+    // The 25 degree head: the slope each overhang asks, the steepest at tan 25 (CO4).
+    for (const auto& [beta, slope] : {std::pair{48.0, 0.291}, {52.0, 0.410}, {55.0, 0.4663}}) {
+        INFO(beta);
+        const std::optional<CurvedField> f = curved_field(overhang_base(CurvedMode::Conical, true), mushroom(beta));
+        REQUIRE(f);
+        // Drop per mm along the radius at the top, between r 9 and 19.
+        const double z = f->base + f->height;
+        const double drop = (f->offset(119.0, 100.0, z) - f->offset(109.0, 100.0, z)) / 10.0;
+        CHECK_THAT(-drop, WithinAbs(slope, 0.01));
+    }
+    CHECK_FALSE(curved_field(overhang_base(CurvedMode::Conical, true), mushroom(60.0)).has_value()); // left to the support
+    // The default head: the clearance (3 mm at 15) bounds the slope at 0.2;
+    // 48 degrees then comes off the support, 55 does not (CO2).
+    const std::optional<CurvedField> f = curved_field(overhang_base(CurvedMode::Conical, false), mushroom(48.0));
+    REQUIRE(f);
+    const double z = f->base + f->height;
+    CHECK_THAT(-(f->offset(119.0, 100.0, z) - f->offset(109.0, 100.0, z)) / 10.0, WithinAbs(0.2, 0.012));
+    CHECK_FALSE(curved_field(overhang_base(CurvedMode::Conical, false), mushroom(55.0)).has_value());
+    // Sliced: the layers go down outwards under the hat, and the support goes.
+    Settings s = overhang_base(CurvedMode::Conical, true);
+    Settings flat = s;
+    flat.curved_mode = CurvedMode::Disabled;
+    const std::string bent = gcode_of(slice_model(mushroom(52.0), s), s);
+    const std::string plain = gcode_of(slice_model(mushroom(52.0), flat), flat);
+    CHECK(support_length(plain) > 500.0);
+    CHECK(support_length(bent) < 0.1 * support_length(plain));
+}
+
+TEST_CASE("curved layers: overhangs bend only around their section (VO2, VO4, VO5)", "[curved][overhangs]") {
+    // The 25 degree head: 0.29, 0.41, and 0.42 (90 % of tan 25) for 55; 60 flat (VO4).
+    for (const auto& [beta, slope] : {std::pair{48.0, 0.291}, {52.0, 0.410}, {55.0, 0.42}}) {
+        INFO(beta);
+        const std::optional<CurvedField> f = curved_field(overhang_base(CurvedMode::Overhangs, true), mushroom(beta));
+        REQUIRE(f);
+        const double z = f->base + f->height;
+        CHECK_THAT(-(f->offset(119.0, 100.0, z) - f->offset(110.0, 100.0, z)) / 9.0, WithinAbs(slope, 0.01));
+        // Flat inside the foot's section (VO5: up to r 7).
+        CHECK_THAT(f->offset(106.0, 100.0, z), WithinAbs(0.0, 1e-6));
+    }
+    CHECK_FALSE(curved_field(overhang_base(CurvedMode::Overhangs, true), mushroom(60.0)).has_value());
+    // The default head: 0.18 for 48 degrees (90 % of the clearance's 0.2); 52 flat (VO2).
+    const std::optional<CurvedField> f = curved_field(overhang_base(CurvedMode::Overhangs, false), mushroom(48.0));
+    REQUIRE(f);
+    const double z = f->base + f->height;
+    CHECK_THAT(-(f->offset(119.0, 100.0, z) - f->offset(110.0, 100.0, z)) / 9.0, WithinAbs(0.18, 0.01));
+    CHECK_FALSE(curved_field(overhang_base(CurvedMode::Overhangs, false), mushroom(52.0)).has_value());
+    // Sliced: a layer under the hat is a straight slope out from the foot.
+    Settings s = overhang_base(CurvedMode::Overhangs, true);
+    const std::string bent = gcode_of(slice_model(mushroom(55.0), s), s);
+    const double k = radial_slope(layer_moves(bent, "32.200"));
+    CHECK_THAT(k, WithinAbs(-0.42, 0.03)); // Tisma Slicer: 0.417
+}

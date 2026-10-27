@@ -1001,6 +1001,7 @@
     X(CurvedFlowUniform, "Parejo", "Uniform") \
     X(CurvedFlowOff, "Sin tocar", "Leave as is") \
     X(CurvedUniformFlow, "Caudal parejo", "Uniform flow") \
+    X(CurvedOverhangThreshold, "Voladizo sin capas curvas", "Overhang without curved layers") \
     X(HeadFreeAngleX, "Ángulo libre a lo largo de X", "Free angle along X") \
     X(HeadFreeAngleY, "Ángulo libre a lo largo de Y", "Free angle along Y") \
     X(HeadClearanceHeight, "Altura libre", "Clearance height") \

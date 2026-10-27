@@ -523,7 +523,8 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
       con el material por `J` y el tope de velocidad de Z, el verificador sobre la curva y la vista previa. Faltan
       suavizar las capas donde la cabeza chocaría (hoy es un error), el tope de aceleración de Z y el caudal `uniform`
     - [ ] `surface` con la superficie de arriba (hecho 2026-10-27, SU1 a SU5 y CO1), y el Z anti-aliasing encima
-    - [ ] `overhangs` con la superficie de abajo; `automatic`; `conical`
+    - [ ] `overhangs` con la superficie de abajo y `conical` según la pieza (hechos 2026-10-27, CO1 a CO4, VO2 a
+      VO5); falta `automatic`
     - [ ] `stress`, solo si el análisis «como impresa» muestra ganancia
   - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
     - [x] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
@@ -806,8 +807,8 @@ Con el PR #23 (2026-10-26):
     ciclo de capas, los degradés, el proyecto, el extrusor de cada objeto en la interfaz y el diálogo de mezclas
     (FS1 a FS14). Falta leer y escribir las mezclas y el extrusor de cada objeto en el 3MF (el motor no escribe 3MF ni
     lee los objetos de uno por separado) y en la línea de comandos
-  - [ ] F7 no planar (la base y `surface` hechos, 2026-10-27; siguen `overhangs`, el cono según la pieza y
-    `automatic`); resina (`resin.md`, `resin_supports.md`)
+  - [ ] F7 no planar (la base, `surface`, `overhangs` y el cono según la pieza hechos, 2026-10-27; sigue
+    `automatic`, después `stress` con el análisis); resina (`resin.md`, `resin_supports.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
