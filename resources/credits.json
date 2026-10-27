@@ -15,9 +15,9 @@
     {
       "feature": {"es": "Asistente y tutoriales", "en": "Assistant and tutorials"},
       "spec": "assistant.md",
-      "source": "Guías de impresión 3D",
+      "source": "Guías de impresión 3D (PDF)",
       "author": "Rafa Barajas",
-      "license": {"es": "Guías; texto propio", "en": "Guides; own text"},
+      "license": {"es": "Basado en sus guías en PDF (problemas, materiales, glosario, parámetros y secado)", "en": "Based on the PDF guides (problems, materials, glossary, parameters and drying)"},
       "url": "https://www.rafabarajas.com",
       "cards": []
     },
