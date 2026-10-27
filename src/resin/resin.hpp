@@ -117,6 +117,7 @@ struct ResinPrint {
     int bottom_layers = 1;        // the layers exposed as bottom ones, at least 1 (rule 7)
     double volume = 0.0;          // mm3 of the part (scaled)
     double weight = 0.0;          // g
+    double cost = 0.0;            // the resin's, by its bottle
     double seconds = 0.0;         // the print's estimated time
     double max_height = 150.0;    // the printer's, mm
     double bar_width = 0.0;       // the hollow's inner bars, mm; 0: none
@@ -161,12 +162,16 @@ std::vector<double> tower_exposures(const ResinTower& tower);
 // starts at i · band; band 0, the base, keeps `base`; band i from 1 tries
 // start + (i - 1) · step, never past the end.
 double tower_exposure(const ResinTower& tower, double base, double z);
-// The tower's part, standing on z = 0 and centred on the origin: a 24 by 8 mm
-// block, a band per exposure over a base band. Each band has five holes
-// across it along Y (0.4, 0.6, 0.8, 1.0 and 1.4 mm square), which close with
-// too much light; four fins at the back (0.15, 0.25, 0.35 and 0.5 mm
-// thick, 2 mm out), which go missing or bend with too little; and a groove
-// in the front between bands.
+// The tower's part (calibration_models.md, "Resina"), standing on z = 0 and
+// centred on the origin: 30 mm wide and 4 mm deep, a band per exposure over a
+// base band. Each band has a slot in front at its foot (0.3 mm high, 0.8 mm
+// deep); round holes from front to back at its middle (0.4, 0.6, 0.8, 1.0
+// and 1.4 mm across, 3, 7, 11, 15 and 19 mm from the left; each only if it
+// leaves 0.3 mm above and below), which close with too much light; and fins
+// at the back (0.15, 0.25, 0.35 and 0.5 mm thick, 22 to 28 mm from the left,
+// 1.5 mm out, from 0.2 mm over the band's foot to 0.2 mm under the next),
+// which go missing or bend with too little. Throws ResinError when the step
+// or the band's height is 0.
 TriangleMesh resin_tower_mesh(const ResinTower& tower);
 
 // The measuring block (rule 19): 30 by 30 by 10 mm, centred on the origin.

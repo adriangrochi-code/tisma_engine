@@ -881,7 +881,7 @@ Settings parse_checked(std::string_view text) {
                 "profile_name", "supports", "support_tip_diameter", "support_tip_penetration", "support_pillar_diameter",
                 "support_elevation", "support_critical_angle", "support_density", "pad", "pad_thickness", "pad_margin",
                 "pad_wall_slope", "pad_around_object", "hollow", "hollow_wall", "hollow_closing", "hollow_infill",
-                "hollow_infill_cell"},
+                "hollow_infill_cell", "bottle_cost", "bottle_volume", "bottle_weight"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "printer_name" || n == "profile_name") {
             // Into a 32-byte field of the file, ended by a zero.
@@ -973,6 +973,12 @@ Settings parse_checked(std::string_view text) {
             s.resin_hollow_infill = in(0.0, 60.0);
         else if (n == "hollow_infill_cell")
             s.resin_hollow_infill_cell = in(2.0, 50.0);
+        else if (n == "bottle_cost")
+            s.resin_bottle_cost = in(0.0, 1e6);
+        else if (n == "bottle_volume")
+            s.resin_bottle_volume = above(1e6, "ml");
+        else if (n == "bottle_weight")
+            s.resin_bottle_weight = above(1000.0, "kg");
         else
             s.resin_absolute_correction = in(-1.0, 1.0);
     });
@@ -2366,6 +2372,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"resin.hollow_closing", num(s.resin_hollow_closing)},
         {"resin.hollow_infill", num(s.resin_hollow_infill)},
         {"resin.hollow_infill_cell", num(s.resin_hollow_infill_cell)},
+        {"resin.bottle_cost", num(s.resin_bottle_cost)},
+        {"resin.bottle_volume", num(s.resin_bottle_volume)},
+        {"resin.bottle_weight", num(s.resin_bottle_weight)},
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", speed(s.wall_speed)},
@@ -2687,7 +2696,10 @@ std::string settings_json(const Settings& s) {
           {"hollow_wall", s.resin_hollow_wall},
           {"hollow_closing", s.resin_hollow_closing},
           {"hollow_infill", s.resin_hollow_infill},
-          {"hollow_infill_cell", s.resin_hollow_infill_cell}}},
+          {"hollow_infill_cell", s.resin_hollow_infill_cell},
+          {"bottle_cost", s.resin_bottle_cost},
+          {"bottle_volume", s.resin_bottle_volume},
+          {"bottle_weight", s.resin_bottle_weight}}},
         {"head",
          {{"free_angle_x", s.head_free_angle_x},
           {"free_angle_y", s.head_free_angle_y},

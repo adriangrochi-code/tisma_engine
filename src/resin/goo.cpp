@@ -162,7 +162,7 @@ void write_goo(std::ostream& stream, const ResinPrint& print, const Settings& s,
     out.i32(std::llround(print.seconds));
     out.f32(print.volume);
     out.f32(print.weight);
-    out.f32(0.0); // price
+    out.f32(print.cost);
     out.text("$", 8);
     out.i32(std::int64_t(kGooHeaderSize));
     out.flag(true); // greys from 0 to 255

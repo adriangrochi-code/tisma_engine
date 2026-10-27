@@ -318,7 +318,12 @@ const std::vector<SectionLayout>& material_layout() {
             {"resin.z_correction_layers", A},
             {"resin.gamma", A},
             {"resin.antialiasing", A}}},
-          {"resin_material", T::SubResinMaterial, {{"resin.density", N}, {"resin.profile_name", A}}}}},
+          {"resin_material", T::SubResinMaterial,
+           {{"resin.density", N},
+            {"resin.bottle_cost", N},
+            {"resin.bottle_volume", N},
+            {"resin.bottle_weight", A},
+            {"resin.profile_name", A}}}}},
         {"needs", T::SecNeeds, "section_needs.svg",
          {{"needs", T::SubNeeds, {{"extrusion.abrasive", N}, {"extrusion.needs_enclosure", N}}}}},
     };

@@ -202,6 +202,17 @@ TEST_CASE("resin RE1: the GOO file of a cube", "[resin]") {
     }
 }
 
+TEST_CASE("resin: the weight and cost by the bottle (gcode_extras.md, X9)", "[resin]") {
+    Settings s = base();
+    s.resin_bottle_cost = 50.0;
+    s.resin_bottle_volume = 500.0;
+    s.resin_density = 1.2;
+    const ResinPrint p = slice_resin(cube(), s);
+    CHECK_THAT(p.weight, WithinAbs(4.8, 1e-4));  // 4 ml by 1.2 g/ml
+    CHECK_THAT(p.cost, WithinAbs(0.40, 1e-5));   // 4 ml by 50 / 500
+    CHECK_THAT(goo_of(p, s).header.price, WithinAbs(0.40, 1e-5));
+}
+
 TEST_CASE("resin RE2: the greys of a cube's edges", "[resin]") {
     const Settings s = base();
     const ResinPrint p = slice_resin(cube(), s);
@@ -637,34 +648,47 @@ TEST_CASE("resin CR1: the exposure tower's bands", "[resin]") {
 }
 
 TEST_CASE("resin: the exposure tower's part and the measuring block", "[resin]") {
+    // calibration_models.md, "Resina".
     const ResinTower tower;
-    TriangleMesh m = resin_tower_mesh(tower);
-    m.translate(71.7f, 44.8f, 0.0f);
+    auto sliced = [](const ResinTower& t) {
+        TriangleMesh m = resin_tower_mesh(t);
+        m.translate(71.7f, 44.8f, 0.0f);
+        return m;
+    };
+    const TriangleMesh m = sliced(tower);
     const BoundingBox box = m.bounding_box();
     CHECK_THAT(box.max.z, WithinAbs(20.0, 1e-5)); // a base and nine bands
-    CHECK_THAT(box.max.x - box.min.x, WithinAbs(24.0, 1e-4));
-    CHECK_THAT(box.max.y - box.min.y, WithinAbs(10.0, 1e-4)); // 8 mm and the fins
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(30.0, 1e-4));
+    CHECK_THAT(box.max.y - box.min.y, WithinAbs(5.5, 1e-4)); // 4 mm and the fins
     Settings s = base();
     const std::vector<Polygons> sections = resin_sections(weld_exact(m), s);
     REQUIRE(sections.size() == 400);
-    auto pieces = [&](std::size_t layer) {
+    auto pieces = [](const Polygons& section) {
         Clipper2Lib::PolyTree64 tree;
         Clipper2Lib::Clipper64 c;
-        c.AddSubject(sections[layer]);
+        c.AddSubject(section);
         c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
         return tree.Count();
     };
-    CHECK(pieces(41) == 1);  // z 2.075: under the holes, before the fins
-    CHECK(pieces(59) == 6);  // z 2.975: the five holes cut across it
-    CHECK(pieces(10) == 1);  // the base has no holes
-    // Fins of 0.15 to 0.5 mm at the back, from 0.25 mm over the band's bottom.
-    const Clipper2Lib::Rect64 fins = Clipper2Lib::GetBounds(sections[59]);
-    CHECK_THAT(to_mm(fins.bottom) - 44.8, WithinAbs(6.0, 1e-3));
-    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[41]).bottom) - 44.8, WithinAbs(4.0, 1e-3));
-    // The groove in the front between bands: from 0.15 under the border to 0.15 over it.
-    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[40]).top) - 44.8, WithinAbs(-3.5, 1e-3));
-    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[44]).top) - 44.8, WithinAbs(-4.0, 1e-3));
-    CHECK_THROWS_AS(resin_tower_mesh(ResinTower{1.5, 3.5, 0.25, 1.0}), ResinError);
+    CHECK(pieces(sections[41]) == 1); // Z 2.075: under the holes
+    CHECK(pieces(sections[59]) == 6); // Z 2.975: the five holes cut across it
+    CHECK(pieces(sections[10]) == 1); // the base has none
+    // The holes are round: at Z 2.975, 0.025 mm off their middle, each
+    // nearly its whole diameter wide.
+    CHECK_THAT(area_mm2(sections[59]), WithinAbs(4.0 * (30.0 - 0.4 - 0.6 - 0.8 - 1.0 - 1.4) + 1.25 * 1.5, 0.2));
+    auto front = [&](std::size_t l) { return to_mm(Clipper2Lib::GetBounds(sections[l]).top) - 44.8; };
+    auto back = [&](std::size_t l) { return to_mm(Clipper2Lib::GetBounds(sections[l]).bottom) - 44.8; };
+    // The slot at the foot of each band, 0.3 mm high and 0.8 mm deep.
+    CHECK_THAT(front(41), WithinAbs(-1.2, 1e-3));
+    CHECK_THAT(front(47), WithinAbs(-2.0, 1e-3));
+    // The fins, 1.5 mm out at the back, from 0.2 mm over the band's foot.
+    CHECK_THAT(back(41), WithinAbs(2.0, 1e-3));
+    CHECK_THAT(back(44), WithinAbs(3.5, 1e-3));
+    // CM3: bands of 1 mm hold only the 0.4 mm holes.
+    const std::vector<Polygons> thin = resin_sections(weld_exact(sliced(ResinTower{1.5, 3.5, 0.25, 1.0})), s);
+    CHECK(pieces(thin[30]) == 2); // Z 1.525
+    // CM5: no tower with a step of 0.
+    CHECK_THROWS_WITH(resin_tower_mesh(ResinTower{1.5, 3.5, 0.0, 2.0}), ContainsSubstring("the step"));
 
     const BoundingBox block = resin_measure_block().bounding_box();
     CHECK(block.max.x - block.min.x == 30.0f);

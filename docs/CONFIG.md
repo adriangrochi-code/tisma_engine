@@ -526,6 +526,9 @@ material.
 | `light_pwm`, `bottom_light_pwm` | entero | 255 | 0 a 255 | Potencia de la luz de las capas normales y de las de fondo |
 | `antialiasing` | entero | 8 | 1 a 16 | Nivel de suavizado que se anota en el archivo; las imágenes siempre llevan el suavizado exacto |
 | `density` | número | 1 | más de 0 a 10 | Densidad de la resina en g/ml, para el peso |
+| `bottle_cost` | número | 0 | 0 o más | Costo del frasco de resina (ficha `gcode_extras.md`, regla 2): la impresión cuesta sus ml × `bottle_cost` / `bottle_volume`, y va en la cabecera del archivo |
+| `bottle_volume` | número | 1000 | más de 0 | Volumen del frasco, en ml |
+| `bottle_weight` | número | 1 | más de 0 a 1000 | Peso del frasco, en kg; la interfaz da con él la densidad (peso sobre volumen) |
 | `gamma` | número | 1 | 0 a 5 | Curva de los grises del borde: cada gris `g` pasa a `255 · (g / 255)^gamma`, redondeado y nunca a 0. 1 deja el suavizado como sale, más alto oscurece el borde; 0 lo quita: un píxel queda blanco si la sección cubre la mitad o más, si no negro |
 | `z_correction_layers` | entero | 0 | 0 a 100 | De cada sección se ilumina solo lo que tiene debajo las secciones de estas capas: lo que cuelga queda sin exponer en sus primeras capas, porque la luz de las de arriba lo cura igual |
 | `absolute_correction` | número | 0 | −1 a 1 | Agranda (+) o achica (−) cada sección en XY, en mm |

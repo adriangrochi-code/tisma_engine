@@ -23,7 +23,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   la pieza queda elevada sobre pilares con puntas finas en las caras que miran hacia abajo, sobre una base pegada a
   la plataforma (o con la base alrededor de la pieza apoyada); puede vaciarse con paredes de un espesor mínimo y el
   hueco redondeado, con barras interiores que se sostienen solas; el motor acepta agujeros de drenaje. Los soportes
-  y la base vienen activados, como en Tisma Slicer.
+  y la base vienen activados, como en Tisma Slicer. El peso y el costo de la resina salen del frasco
+  (`resin.bottle_*`).
 - **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
   en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
   cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba

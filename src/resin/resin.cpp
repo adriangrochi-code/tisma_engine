@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <numbers>
 #include <numeric>
 #include <string>
 
@@ -153,6 +154,68 @@ void add_box(TriangleMesh& m, double x0, double y0, double z0, double x1, double
     quad(1, 2, 6, 5);
     quad(2, 3, 7, 6);
     quad(3, 0, 4, 7);
+}
+
+// A slab from x0 to x1, y0 to y1 and z0 to z1 with round holes through it
+// along Y, all centred at height cz: holes[i] = {centre x, radius}, sorted
+// by x, apart and inside the slab. Its faces in X and Z are cut where the
+// holes are, so that every edge the slicing planes cross is shared.
+void add_holed_slab(TriangleMesh& m, double x0, double x1, double y0, double y1, double z0, double z1, double cz,
+                    const std::vector<std::array<double, 2>>& holes) {
+    if (holes.empty()) {
+        add_box(m, x0, y0, z0, x1, y1, z1);
+        return;
+    }
+    constexpr int kHalf = 12; // pieces of each half circle
+    auto at = [](double x, double y, double z) { return Vec3f{float(x), float(y), float(z)}; };
+    // Both ends (y0 and y1) of a face of the profile in XZ, wound outwards.
+    auto face = [&](double ax, double az, double bx, double bz, double cx, double cz2, double dx, double dz) {
+        m.add_triangle(at(ax, y0, az), at(bx, y0, bz), at(cx, y0, cz2));
+        m.add_triangle(at(ax, y0, az), at(cx, y0, cz2), at(dx, y0, dz));
+        m.add_triangle(at(ax, y1, az), at(cx, y1, cz2), at(bx, y1, bz));
+        m.add_triangle(at(ax, y1, az), at(dx, y1, dz), at(cx, y1, cz2));
+    };
+    // A face along Y between two points of the profile.
+    auto side = [&](double ax, double az, double bx, double bz) {
+        m.add_triangle(at(ax, y0, az), at(bx, y0, bz), at(bx, y1, bz));
+        m.add_triangle(at(ax, y0, az), at(bx, y1, bz), at(ax, y1, az));
+    };
+    std::vector<double> top{x0}; // the x where the top and bottom faces are cut
+    double x = x0;
+    for (const auto& [hx, r] : holes) {
+        // Plain between holes, cut at cz like the holes' sides.
+        if (hx - r > x) {
+            face(x, z0, hx - r, z0, hx - r, cz, x, cz);
+            face(x, cz, hx - r, cz, hx - r, z1, x, z1);
+        }
+        for (int k = 0; k < kHalf; ++k) {
+            const double a0 = std::numbers::pi * (1.0 - double(k) / kHalf), a1 = std::numbers::pi * (1.0 - double(k + 1) / kHalf);
+            const double xa = hx + r * std::cos(a0), xb = hx + r * std::cos(a1);
+            const double ua = cz + r * std::sin(a0), ub = cz + r * std::sin(a1);
+            const double la = cz - r * std::sin(a0), lb = cz - r * std::sin(a1);
+            face(xa, ua, xb, ub, xb, z1, xa, z1);
+            face(xa, z0, xb, z0, xb, lb, xa, la);
+            // The hole's wall, wound towards its axis.
+            side(xb, ub, xa, ua);
+            side(xa, la, xb, lb);
+            top.push_back(xb);
+        }
+        x = hx + r;
+    }
+    if (x1 > x) {
+        face(x, z0, x1, z0, x1, cz, x, cz);
+        face(x, cz, x1, cz, x1, z1, x, z1);
+        top.push_back(x1);
+    }
+    // Top and bottom, cut at the same x; the ends in X, cut at cz.
+    for (std::size_t i = 0; i + 1 < top.size(); ++i) {
+        side(top[i + 1], z1, top[i], z1);
+        side(top[i], z0, top[i + 1], z0);
+    }
+    side(x0, z1, x0, cz);
+    side(x0, cz, x0, z0);
+    side(x1, z0, x1, cz);
+    side(x1, cz, x1, z1);
 }
 
 // The holes of a section, each a piece of the plane the part closes around
@@ -542,6 +605,7 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     for (std::size_t l = 0; l < count; ++l)
         print.volume += area_mm2(grown[l]) * (layers[l].top - layers[l].bottom);
     print.weight = print.volume / 1000.0 * s.resin_density;
+    print.cost = print.volume / 1000.0 * s.resin_bottle_cost / s.resin_bottle_volume;
     print.bottom_layers = std::max(1, s.resin_bottom_layers);
     const PixelGrid grid = display_grid(s);
     print.layers.resize(count);
@@ -726,42 +790,38 @@ double tower_exposure(const ResinTower& t, double base, double z) {
 }
 
 TriangleMesh resin_tower_mesh(const ResinTower& t) {
-    if (!(t.band >= 2.0 && t.band <= 20.0))
-        throw ResinError("the exposure tower's bands must be 2 to 20 mm tall");
-    constexpr double kHalfWidth = 12.0, kHalfDepth = 4.0;
-    constexpr double kFront = 0.5;   // the front strip, where the grooves are
-    constexpr double kGroove = 0.15; // half the groove's height
-    constexpr double kHoles[5] = {0.4, 0.6, 0.8, 1.0, 1.4}, kHoleX[5] = {-8.0, -4.0, 0.0, 4.0, 8.0};
-    constexpr double kFins[4] = {0.15, 0.25, 0.35, 0.5}, kFinX[4] = {-7.5, -2.5, 2.5, 7.5};
+    if (!(t.step != 0.0 && t.band > 0.0))
+        throw ResinError("the step and the band's height must be above 0");
+    // calibration_models.md, "Resina": 30 mm wide and 4 mm deep, X and Y from
+    // its front left corner, centred on the origin at the end.
+    constexpr double kWidth = 30.0, kDepth = 4.0;
+    constexpr double kSlotHeight = 0.3, kSlotDepth = 0.8;
+    constexpr double kHoles[5] = {0.4, 0.6, 0.8, 1.0, 1.4}, kHoleX[5] = {3.0, 7.0, 11.0, 15.0, 19.0};
+    constexpr double kFins[4] = {0.15, 0.25, 0.35, 0.5}, kFinX[4] = {22.0, 24.0, 26.0, 28.0};
+    constexpr double kFinOut = 1.5, kFinGap = 0.2;
     const std::size_t bands = tower_exposures(t).size() + 1;
     TriangleMesh m;
     for (std::size_t k = 0; k < bands; ++k) {
         const double z0 = double(k) * t.band, z1 = z0 + t.band, mid = 0.5 * (z0 + z1);
-        // The front strip leaves a groove at each border between bands.
-        const double f0 = k > 0 ? z0 + kGroove : z0, f1 = k + 1 < bands ? z1 - kGroove : z1;
-        // Columns across X, those of the holes open from mid - d/2 to mid + d/2.
-        double x = -kHalfWidth;
-        auto column = [&](double x0, double x1, double hole) {
-            const double ranges[2][2] = {{z0, hole > 0.0 ? mid - 0.5 * hole : z1}, {mid + 0.5 * hole, z1}};
-            for (int r = 0; r < (hole > 0.0 ? 2 : 1); ++r) {
-                add_box(m, x0, -kHalfDepth + kFront, ranges[r][0], x1, kHalfDepth, ranges[r][1]);
-                const double a = std::max(ranges[r][0], f0), b = std::min(ranges[r][1], f1);
-                if (b > a)
-                    add_box(m, x0, -kHalfDepth, a, x1, -kHalfDepth + kFront, b);
-            }
-        };
-        for (int h = 0; h < 5 && k > 0; ++h) {
-            const double x0 = kHoleX[h] - 0.5 * kHoles[h], x1 = kHoleX[h] + 0.5 * kHoles[h];
-            column(x, x0, 0.0);
-            column(x0, x1, kHoles[h]);
-            x = x1;
+        if (k == 0) { // the base
+            add_box(m, 0.0, 0.0, z0, kWidth, kDepth, z1);
+            continue;
         }
-        column(x, kHalfWidth, 0.0);
-        // The fins at the back.
-        for (int f = 0; f < 4 && k > 0; ++f)
-            add_box(m, kFinX[f] - 0.5 * kFins[f], kHalfDepth, z0 + 0.25, kFinX[f] + 0.5 * kFins[f], kHalfDepth + 2.0,
-                    z1 - 0.25);
+        // The holes that leave 0.3 mm of wall above and below.
+        std::vector<std::array<double, 2>> holes;
+        for (int h = 0; h < 5; ++h)
+            if (kHoles[h] <= t.band - 0.6 + 1e-9)
+                holes.push_back({kHoleX[h], 0.5 * kHoles[h]});
+        // Behind the slot, the whole band; in front, over the slot.
+        add_holed_slab(m, 0.0, kWidth, kSlotDepth, kDepth, z0, z1, mid, holes);
+        if (t.band > kSlotHeight)
+            add_holed_slab(m, 0.0, kWidth, 0.0, kSlotDepth, z0 + kSlotHeight, z1, mid, holes);
+        if (t.band > 2.0 * kFinGap)
+            for (int f = 0; f < 4; ++f)
+                add_box(m, kFinX[f] - 0.5 * kFins[f], kDepth, z0 + kFinGap, kFinX[f] + 0.5 * kFins[f], kDepth + kFinOut,
+                        z1 - kFinGap);
     }
+    m.translate(float(-kWidth / 2), float(-kDepth / 2), 0.0f);
     return m;
 }
 

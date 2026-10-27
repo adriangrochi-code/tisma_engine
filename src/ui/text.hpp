@@ -1045,6 +1045,9 @@
     X(ResinGamma, "Gamma del borde", "Edge gamma") \
     X(ResinAntialiasing, "Suavizado en el archivo", "Anti-aliasing in the file") \
     X(ResinDensity, "Densidad", "Density") \
+    X(ResinBottleCost, "Costo del frasco", "Bottle cost") \
+    X(ResinBottleVolume, "Volumen del frasco", "Bottle volume") \
+    X(ResinBottleWeight, "Peso del frasco", "Bottle weight") \
     X(SumResinExposure, "%s s · fondo %s s", "%s s · bottom %s s") \
     X(SumPixels, "%d × %d px", "%d × %d px") \
     X(SumLift, "%s mm a %s mm/s", "%s mm at %s mm/s") \

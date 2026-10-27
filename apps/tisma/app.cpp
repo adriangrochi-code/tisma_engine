@@ -3518,6 +3518,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::ResinAntialiasing, "resin.antialiasing", s.resin_antialiasing, 1, 16);
     } else if (id == "resin_material") {
         mm(T::ResinDensity, "resin.density", s.resin_density, 0.01, 10.0, "%.2f g/ml", 0.01f);
+        mm(T::ResinBottleCost, "resin.bottle_cost", s.resin_bottle_cost, 0.0, 1e6, "%.2f", 0.1f);
+        mm(T::ResinBottleVolume, "resin.bottle_volume", s.resin_bottle_volume, 1.0, 1e6, "%.0f ml", 1.0f);
+        // The bottle's weight over its volume is the density (gcode_extras.md, rule 2).
+        if (shown("resin.bottle_weight") &&
+            row(T::ResinBottleWeight, s.resin_bottle_weight, 0.001, 1000.0, "%.3f kg", 0.001f)) {
+            s.resin_density = s.resin_bottle_weight * 1000.0 / s.resin_bottle_volume;
+            changed = true;
+        }
     } else if (id == "stability") {
         mm(T::NozzleForce, "review.nozzle_force", s.review_nozzle_force, 0.0, 1000.0, "%.3f N", 0.001f);
         mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);

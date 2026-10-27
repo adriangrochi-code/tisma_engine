@@ -377,6 +377,9 @@ struct Settings {
     int resin_light_pwm = 255, resin_bottom_light_pwm = 255;
     int resin_antialiasing = 8;
     double resin_density = 1.0; // g/ml
+    // The resin's bottle (gcode_extras.md, rule 2): its cost, ml and kg; the
+    // print costs its ml times the cost over the bottle's ml.
+    double resin_bottle_cost = 0.0, resin_bottle_volume = 1000.0, resin_bottle_weight = 1.0;
     double resin_gamma = 1.0;
     int resin_z_correction_layers = 0;
     double resin_absolute_correction = 0.0;

@@ -6073,8 +6073,9 @@ comandos).
   (`cupping`) con las alturas, el área y cómo arreglarlo. Las superposiciones se calculan para todas las capas a la
   vez; la pasada en orden solo suma áreas.
 - Calibraciones de resina (reglas 16 a 19): la torre de exposición (`ResinTower`, `tower_exposure`,
-  `resin_tower_mesh`: base, una franja por exposición, agujeros que cruzan cada franja, aletas atrás y ranuras al
-  frente) y el bloque de medidas con su corrección de escala. Todavía sin menú en la interfaz.
+  `resin_tower_mesh`, con la forma de `calibration_models.md`: base, una franja por exposición con su ranura al pie,
+  agujeros redondos que la atraviesan y aletas atrás; CM3 y CM5) y el bloque de medidas con su corrección de escala.
+  Todavía sin menú en la interfaz.
 - Soportes y base (`resin_supports.md`, reglas 1 a 3): puntos en los nodos de una grilla de 4 mm (a densidad 100 %)
   sobre las caras que miran hacia abajo a menos de 45° de la horizontal, más uno en cada isla que empieza en el aire;
   bajo cada punto, una punta que entra en la pieza, un pilar recto y un ensanche al pie, o un aterrizaje sobre la
