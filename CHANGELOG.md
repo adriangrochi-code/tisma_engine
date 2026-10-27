@@ -18,6 +18,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   una torre, el bloque o el parche elegido, segundos, un ángulo, capas) calcula el valor nuevo del ajuste, con inicio,
   paso y franja tomados de la última prueba generada, y ofrece aplicarlo después de corregirlo si hace falta. «Cómo se hace» abre la guía desde la página de calibraciones y desde la
   sección Calibración de la impresora.
+- **Input shaping desde su guía:** con la impresora conectada, la guía manda la frecuencia elegida con el comando de
+  su firmware (Klipper, Marlin 2 o RepRapFirmware). El tutorial de material nuevo abre las guías en orden: la primera
+  que falta de temperatura, flujo máximo, avance de presión, flujo y retracción.
 - **«¿Cómo lo arreglo?» en los avisos del laminado**: un clic en los avisos los lista con un enlace al problema de la
   ayuda que les corresponde.
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y

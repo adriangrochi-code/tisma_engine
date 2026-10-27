@@ -764,6 +764,9 @@
     X(GuideFirmware, "Este resultado no va en el perfil: se guarda en la impresora.",                                 \
       "This result does not go in the profile: it is saved in the printer.")                                          \
     X(GuideTips, "Consejos", "Tips")                                                                                  \
+    X(GuideFrequency, "Frecuencia (Hz)", "Frequency (Hz)")                                                          \
+    X(GuideSend, "Mandar a la impresora", "Send to the printer")                                                      \
+    X(GuideSent, "Mandado a la impresora: %s", "Sent to the printer: %s")                                             \
     X(GuideHow, "Cómo se hace", "How it is done")                                                                     \
     X(GuideCalibrate, "Calibrar", "Calibrate")                                                                        \
     X(ReviewFix, "¿Cómo lo arreglo?", "How do I fix it?")                                                            \

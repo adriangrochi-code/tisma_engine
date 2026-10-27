@@ -6440,4 +6440,11 @@ preferencias se siguen leyendo mientras el perfil no tenga. Prueba nueva en `[pr
 
 **Probado:** 668 de 668 en el árbol de trabajo (`ctest`), `[settings]` con la prueba nueva del grupo `material`.
 
-**Sigue:** AS18 (mandar el comando del firmware) y la regla 24.
+**Después (octavo paso):** la guía de input shaping toma la frecuencia, muestra el comando del firmware de la
+impresora (`SET_INPUT_SHAPER` en Klipper, `M593 F` en Marlin 2 y RepRapFirmware) y, con la impresora conectada, lo
+manda y fecha la guía (AS18). El paso de calibración del tutorial `new_material` abre la primera guía que falta en el
+orden temperatura, flujo máximo, avance de presión, flujo, retracción (regla 24). `[assistant]`: 211 comprobaciones en
+16 casos. No probado con una impresora real: el envío usa la misma cola de comandos que los controles de la página
+Impresora.
+
+**Sigue:** `model_tools.md` (partes, modificadores y ajustes por objeto), que también pide `calibration_models.md`.

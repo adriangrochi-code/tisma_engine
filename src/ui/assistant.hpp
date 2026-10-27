@@ -158,4 +158,15 @@ struct GuideOutcome {
 // height. None for a guide without a formula.
 std::optional<GuideOutcome> guide_result(std::string_view guide_id, const GuideInput& input, double layer_height);
 
+// The command a guide whose result goes in the printer sends to it (rule 23,
+// AS18; calibrations.md, rule 3): input shaping's frequency in Hz, as
+// Klipper's SET_INPUT_SHAPER or Marlin's and RepRapFirmware's M593. None for
+// the other guides and the dialects without such a command.
+std::optional<std::string> firmware_command(std::string_view guide_id, GcodeFlavor flavor, double value);
+
+// Rule 24: the guide the new-material tutorial's calibration step opens, the
+// first in this order not done yet (temperature, max flow, pressure advance,
+// flow, retraction); empty when all are.
+std::string_view next_material_guide(const std::set<std::string>& done);
+
 } // namespace tisma::ui

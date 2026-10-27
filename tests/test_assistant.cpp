@@ -417,3 +417,16 @@ TEST_CASE("assistant: the review's warnings lead to their problems (rule 9)", "[
     CHECK(review_problem("stability_air") == "support_surface");
     CHECK(review_problem("thin_detail").empty());
 }
+
+TEST_CASE("assistant: the firmware's command and the new material's order (AS18, rule 24)", "[ui][assistant]") {
+    CHECK(firmware_command("input_shaping", GcodeFlavor::Klipper, 42.5) ==
+          "SET_INPUT_SHAPER SHAPER_FREQ_X=42.5 SHAPER_FREQ_Y=42.5");
+    CHECK(firmware_command("input_shaping", GcodeFlavor::Marlin, 40.0) == "M593 F40.0");
+    CHECK(firmware_command("input_shaping", GcodeFlavor::RepRapFirmware, 40.0) == "M593 F40.0");
+    CHECK_FALSE(firmware_command("input_shaping", GcodeFlavor::Repetier, 40.0));
+    CHECK_FALSE(firmware_command("input_shaping", GcodeFlavor::Klipper, 0.0));
+    CHECK_FALSE(firmware_command("max_flow", GcodeFlavor::Klipper, 10.0));
+    CHECK(next_material_guide({}) == "temperature_tower");
+    CHECK(next_material_guide({"temperature_tower", "max_flow"}) == "pressure_advance");
+    CHECK(next_material_guide({"temperature_tower", "max_flow", "pressure_advance", "flow", "retraction"}).empty());
+}

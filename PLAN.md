@@ -699,9 +699,10 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   tabla de la regla 23 para todas las guías (franja, valor leído, capas), inicio, paso y franja tomados de la última
   prueba generada, el valor propuesto editable y la relación guía-prueba de la regla 20 (AS20 a AS22; ficha en
   `spec/next` 7c5cfca). Séptimo paso (2026-10-27): las fechas de las calibraciones en los perfiles
-  (`machine.calibrations` y `extrusion.calibrations`, por id de guía y por prueba; AS21). Falta: mandar el comando del
-  firmware con la impresora conectada (AS18), el orden de las guías en el tutorial `new_material` (regla 24), los
-  avisos de la revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
+  (`machine.calibrations` y `extrusion.calibrations`, por id de guía y por prueba; AS21). Octavo paso
+  (2026-10-27): el comando de input shaping de cada firmware, mandado con la impresora conectada (AS18), y el paso de
+  calibración del tutorial `new_material` en el orden de las guías (regla 24). Falta: los avisos de la
+  revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
   hecho en el lector pero sin datos en inglés) y las anclas de Ingeniería por paso (hoy todas iluminan la pestaña
   Análisis)
 - [ ] `calibration_models.md` (P1, encontrado el 2026-10-27): las piezas de las pruebas como dice la ficha (cilindro

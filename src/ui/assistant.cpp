@@ -451,4 +451,30 @@ std::optional<GuideOutcome> guide_result(std::string_view id, const GuideInput& 
     return GuideOutcome{in.measured, in.measured};
 }
 
+std::optional<std::string> firmware_command(std::string_view id, GcodeFlavor flavor, double value) {
+    if (id != "input_shaping" || !(value > 0.0))
+        return std::nullopt;
+    char text[96];
+    switch (flavor) {
+    case GcodeFlavor::Klipper:
+        std::snprintf(text, sizeof text, "SET_INPUT_SHAPER SHAPER_FREQ_X=%.1f SHAPER_FREQ_Y=%.1f", value, value);
+        return std::string(text);
+    case GcodeFlavor::Marlin:
+    case GcodeFlavor::RepRapFirmware:
+        std::snprintf(text, sizeof text, "M593 F%.1f", value);
+        return std::string(text);
+    default:
+        return std::nullopt;
+    }
+}
+
+std::string_view next_material_guide(const std::set<std::string>& done) {
+    static constexpr std::string_view order[] = {"temperature_tower", "max_flow", "pressure_advance", "flow",
+                                                 "retraction"};
+    for (const std::string_view id : order)
+        if (!done.contains(std::string(id)))
+            return id;
+    return {};
+}
+
 } // namespace tisma::ui

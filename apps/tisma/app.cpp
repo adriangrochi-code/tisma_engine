@@ -4631,6 +4631,24 @@ void App::help_guide(const KnowledgeCalibration& g) {
         ImGui::TextUnformatted(g.result_text.c_str());
     if (g.result_where == "printer_firmware") {
         ImGui::TextColored(rgb(kWarningColour), "%s", tr(T::GuideFirmware));
+        // AS18: with the printer connected, its firmware's command.
+        if (firmware_command(g.id, settings_.flavor, 1.0)) {
+            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
+            ImGui::InputDouble(tr(T::GuideFrequency), &guide_input_.measured, 0.0, 0.0, "%g");
+            if (const std::optional<std::string> command =
+                    firmware_command(g.id, settings_.flavor, guide_input_.measured)) {
+                ImGui::TextDisabled("%s", command->c_str());
+                const bool connected = printer_ && printer_->status().state != device::PrinterState::Disconnected &&
+                                       printer_->status().state != device::PrinterState::Error;
+                if (connected && ImGui::Button(tr(T::GuideSend))) {
+                    if (printer_->send(*command)) {
+                        record_calibration(g.id);
+                        settings_changed();
+                        notify(format(tr(T::GuideSent), command->c_str()));
+                    }
+                }
+            }
+        }
     } else if (const std::optional<GuideFormula> f = guide_formula(g.id)) {
         // The setting comes from rule 23's table, in the engine's names.
         const std::string key(f->key);
@@ -4978,6 +4996,11 @@ void App::guide_overlay() {
                     help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
                     help_steps_done_.assign(knowledge_->procedures[i].steps.size(), false);
                 }
+        } else if (tutorial.id == "new_material" && !next_material_guide(guides_done()).empty()) {
+            // Rule 24: the calibrations in the guides' order, the first not done.
+            open_guide(next_material_guide(guides_done()));
+        } else if (find_guide(*knowledge_, step.open_id)) {
+            open_guide(step.open_id);
         } else {
             set_tab(Tab::Calibration);
         }
