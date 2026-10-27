@@ -199,3 +199,29 @@ TEST_CASE("tree support: a branch's paths, one wall, two when wide, lines inside
             laid += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
     CHECK(laid > 0.7 * 3.14159265358979 * 9.0 / 0.4); // lines a bead apart
 }
+
+TEST_CASE("tree support: tips no closer than two beads, however the settings ask (a big overhang stays quick)", "[support][tree]") {
+    // A 10 x 40 wall under a 40 x 40 slab: 30 x 40 mm overhang.
+    std::vector<Polygons> regions;
+    for (int l = 0; l < 30; ++l)
+        regions.push_back(l < 25 ? square(0, 0, 10, 40) : square(0, 0, 40, 40));
+    const std::vector<double> heights(regions.size(), 0.2);
+    const SupportParams sp = support_params();
+    TreeParams tp = tree_params(sp);
+    tp.tip_diameter = 0.2;
+    tp.tip_spacing = tree_tip_spacing(0.2, 100.0, 0.1); // far below a bead
+    tp.bead = 0.4;
+    const std::vector<Polygons> over = supported_overhangs(regions, heights, sp);
+    const auto nodes = tree_nodes(regions, heights, over, tp);
+    const std::vector<TreeNode>& tips = nodes[20]; // under the interface and the gap
+    REQUIRE_FALSE(tips.empty());
+    CHECK(tips.size() <= std::size_t((30.0 / 0.8 + 2.0) * (40.0 / 0.8 + 2.0)));
+    // None nearer each other than 0.8 of the spacing, two beads.
+    std::size_t close = 0;
+    for (std::size_t i = 0; i < tips.size(); ++i)
+        for (std::size_t j = i + 1; j < tips.size(); ++j)
+            close += std::hypot(tips[i].x - tips[j].x, tips[i].y - tips[j].y) < 0.8 * 0.8 - 1e-9;
+    CHECK(close == 0);
+    CHECK(nodes[0].size() < tips.size()); // they still join on the way down
+}
+

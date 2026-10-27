@@ -357,6 +357,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             tp.widen_angle = settings.tree_branch_diameter_angle;
             tp.tip_spacing = tree_tip_spacing(settings.tree_tip_diameter, settings.tree_top_rate, settings.tree_branch_distance);
             tp.xy_gap = sp.xy_gap;
+            tp.bead = settings.wall_width;
             tp.z_gap_layers = sp.z_gap_layers;
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);

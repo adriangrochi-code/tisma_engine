@@ -23,6 +23,7 @@ struct TreeParams {
     double widen_angle = 5.0;      // degrees the radius grows by on the way down
     double tip_spacing = 3.0;      // mm between tips under an overhang
     double xy_gap = 0.6;           // mm between a branch and the part
+    double bead = 0.4;             // mm, the line width: tips are never closer than two
     int z_gap_layers = 1;          // empty layers between the support and the part above it
     int interface_layers = 3;      // dense layers right under what overhangs, over the tips
 };

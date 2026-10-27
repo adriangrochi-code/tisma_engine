@@ -10,6 +10,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Corregido
+
+- **Soportes en árbol con ajustes extremos:** puntas muy finas, muy densas y muy juntas bajo un voladizo grande
+  agotaban la memoria y el proceso moría. Ahora las puntas nunca quedan más juntas que dos cordones, y el laminado
+  termina: el caso extremo de una losa de 100 × 100 mm, en 5 s.
+- **G-code con muchos lazos** (los de los soportes en árbol): escribirlo es de 10 a 20 veces más rápido. En una losa de
+  100 × 100 mm con árboles, 0,8 s en vez de 17 s, con el mismo G-code.
+- **Un 3MF dañado que dice tener una parte enorme** se rechaza con un mensaje claro, en vez de un error interno al
+  quedarse sin memoria.
+
 ### Cambiado
 
 - **Soporte en grilla como pide la ficha `supports_skirt.md`** (segunda prueba de caja negra, QA10 a QA12): la zona

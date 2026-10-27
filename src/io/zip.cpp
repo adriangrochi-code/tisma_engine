@@ -222,6 +222,11 @@ std::uint64_t u64(std::string_view d, std::uint64_t at) {
     return std::uint64_t(u32(d, at)) | (std::uint64_t(u32(d, at + 4)) << 32);
 }
 
+// DEFLATE gives at most 258 bytes for a code of 1 bit and a distance of 1
+// (RFC 1951, 3.2.5), so a stream never inflates to more than about 1032
+// times its size; an archive that says more is damaged.
+constexpr std::uint64_t kMaxRatio = 1032;
+
 constexpr std::uint32_t kLocalHeader = 0x04034b50, kCentralHeader = 0x02014b50, kEnd = 0x06054b50,
                         kEnd64Locator = 0x07064b50, kEnd64 = 0x06064b50;
 
@@ -238,7 +243,7 @@ std::string normalized(std::string_view name) {
 
 std::string inflate(std::string_view deflated, std::size_t limit) {
     std::string out;
-    out.reserve(limit);
+    out.reserve(std::min<std::uint64_t>(limit, kMaxRatio * std::uint64_t(deflated.size()) + 64));
     BitReader in(deflated);
     Huffman literals, distances;
     for (bool last = false; !last;) {
@@ -382,6 +387,8 @@ std::string ZipArchive::read(const Entry& e) const {
             throw ZipError(e.name + ": a stored ZIP entry whose sizes differ");
         out = std::string(stored);
     } else if (e.method == 8) {
+        if (e.size > kMaxRatio * e.compressed + 64)
+            throw ZipError(e.name + ": the ZIP entry says it inflates to more than deflate can hold");
         out = inflate(stored, std::size_t(e.size));
         if (out.size() != e.size)
             throw ZipError(e.name + ": the ZIP entry inflates to another size than it says");

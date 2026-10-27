@@ -143,6 +143,13 @@ TEST_CASE("formats: damaged 3MF packages are refused, never crash", "[formats]")
         }
     }
     CHECK(refused > 0);
+    // An entry that says it inflates to 4 GB: refused before anything is allocated.
+    std::string huge = good;
+    for (std::size_t at = huge.find("PK\x01\x02"); at != std::string::npos; at = huge.find("PK\x01\x02", at + 4))
+        if (huge.compare(at + 46, 16, "3D/3dmodel.model") == 0)
+            for (int k = 0; k < 4; ++k)
+                huge[at + 24 + std::size_t(k)] = char(k == 0 ? 0xF0 : 0xFF);
+    CHECK_THROWS_WITH(parse_3mf(huge), ContainsSubstring("more than deflate can hold"));
 }
 
 TEST_CASE("formats: STL, OBJ or 3MF by the content and the extension", "[formats]") {

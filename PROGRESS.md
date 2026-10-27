@@ -4849,3 +4849,39 @@ ficha, 0,425 con un perímetro de 0,45: la separación es la mitad del ancho).
 perímetros como `;TYPE:Overhang perimeter`: necesita alturas y tipos por tramo en el escritor. Y el ancho del soporte
 (`supports_more.md`, regla 18: el diámetro de la boquilla, no el de las paredes).
 
+## 2026-10-27 — mantenimiento (00:40)
+
+**Revisado:** `origin/dev` y `origin/main` sin cambios nuevos; fuzzer con semillas nuevas (1201, 1202 y 1301: 2400
+corridas, 0 fallas); casos borde de lo agregado hoy (3MF dañados, árboles con ajustes extremos, orden de recorridos).
+
+**Encontrado y arreglado:**
+- **Árboles con ajustes extremos** (puntas de 0,2 mm, `tree_top_rate` 100 %, `tree_branch_distance` 0,3) bajo una
+  losa de 100 × 100 mm sobre una pared: el laminado agotó la memoria (unas 180 000 puntas) y el sistema lo mató; el
+  contenedor de trabajo se reinició. Las puntas ahora nunca quedan más juntas que su ancho ni que dos cordones, y las
+  búsquedas de vecinas (cobertura de puntas, la vecina más cercana, las ramas que se tocan) van en una grilla de
+  celdas: antes eran cuadráticas en la cantidad de ramas. SM13 da el mismo G-code byte a byte; en la esfera y el
+  cráneo los árboles cambian un poco (una rama que crece al juntarse vuelve a buscar), con el G-code verificado.
+- **Escribir G-code con muchos lazos** (los de las ramas): `order_paths`, con costura `nearest` (la de los rellenos),
+  buscaba en cada paso el punto más cercano de todos los lazos que quedaban. Ahora mira las cajas de los lazos, de la
+  más cercana con un montículo, y corta cuando una caja queda más lejos que el mejor inicio; los tramos abiertos van
+  en la grilla aunque haya lazos. Mismo G-code byte a byte (Benchy y esfera con relleno concéntrico y soportes; los
+  modelos del banco con y sin soporte).
+- **Un 3MF que dice inflar a 4 GB** pedía toda esa memoria y terminaba en «error: internal: std::bad_alloc»; ahora se
+  rechaza antes, porque DEFLATE no infla más de unas 1032 veces.
+
+**Medido** (4 núcleos):
+
+| | Antes | Ahora |
+|---|---|---|
+| Losa de 100 × 100 mm con árboles (por defecto): laminar / escribir | 3,8 s / 17,1 s | 4,1 s / 0,83 s |
+| La misma, ajustes extremos | se queda sin memoria | 2,6 s / 2,9 s |
+| Benchy, escribir | 90 ms | 79 ms |
+| Esfera de 1 millón de triángulos, laminar | 1,16 s | 1,08 s |
+| Análisis del cubo | 12,9 s | 12,6 s |
+
+**Pruebas nuevas:** el orden con costura `nearest` entre 150 lazos y 150 tramos contra mirar cada punto; árboles con
+ajustes extremos (cantidad acotada de puntas, ninguna a menos de dos cordones); el 3MF de 4 GB.
+
+**Sigue:** QA13; las ramas de los árboles que engordan y se juntan antes, con las mediciones nuevas del equipo de fichas
+(a la altura de las puntas, pares que se tocan; cada rama pasa de 0,9 a 1,2 mm en una capa).
+

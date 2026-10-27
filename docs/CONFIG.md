@@ -229,7 +229,7 @@ puentes cortos sin soporte vienen después.
 | `tree_branch_diameter` | número | 2 | más de 0, hasta 100 | Diámetro de las ramas más finas, en mm |
 | `tree_branch_diameter_angle` | número | 5 | 0 a 85 | Cuánto engordan las ramas al bajar, en grados (0: el mismo grosor) |
 | `tree_double_wall_diameter` | número | 3 | 0 a 100 | Una rama más gruesa que un círculo de este diámetro, en mm, lleva dos paredes; 0: nunca |
-| `tree_branch_distance` | número | 1 | más de 0, hasta 100 | Cuánto se separan las puntas: 2 las separa el doble |
+| `tree_branch_distance` | número | 1 | más de 0, hasta 100 | Cuánto se separan las puntas: 2 las separa el doble. Nunca quedan más juntas que su ancho ni que dos cordones |
 | `tree_tip_diameter` | número | 0.8 | más de 0, hasta 100 | Diámetro de las puntas, en mm |
 | `tree_top_rate` | número | 15 | más de 0, hasta 100 | Qué tan juntas van las puntas bajo la pieza, en % |
 

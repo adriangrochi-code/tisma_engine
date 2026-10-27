@@ -4,6 +4,7 @@
 #include "gcode/order.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -105,7 +106,8 @@ constexpr std::size_t kFiledPaths = 64;
 // looking at every one took 20 of the 23 s to write it.
 class EndGrid {
 public:
-    EndGrid(const std::vector<Toolpath>& paths, const std::vector<std::size_t>& seams) {
+    // With open_only, the loops are left out (their seams follow the cursor).
+    EndGrid(const std::vector<Toolpath>& paths, const std::vector<std::size_t>& seams, bool open_only = false) {
         double xmin = std::numeric_limits<double>::max(), ymin = xmin;
         double xmax = std::numeric_limits<double>::lowest(), ymax = xmax;
         for (std::size_t i = 0; i < paths.size(); ++i) {
@@ -113,7 +115,8 @@ public:
             if (t.points.empty())
                 continue;
             if (t.closed) {
-                ends_.push_back({t.points[seams[i]].p, i, false});
+                if (!open_only)
+                    ends_.push_back({t.points[seams[i]].p, i, false});
             } else {
                 ends_.push_back({t.points.front().p, i, false});
                 ends_.push_back({t.points.back().p, i, true});
@@ -544,8 +547,31 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
     const bool seams_move = mode == SeamMode::Nearest &&
                             std::any_of(paths.begin(), paths.end(), [](const Toolpath& t) { return t.closed; });
     std::optional<EndGrid> grid;
-    if (!seams_move && paths.size() > kFiledPaths)
-        grid.emplace(paths, seams);
+    const std::size_t open = std::size_t(std::count_if(paths.begin(), paths.end(), [](const Toolpath& t) { return !t.closed; }));
+    if ((seams_move ? open : paths.size()) > kFiledPaths)
+        grid.emplace(paths, seams, seams_move);
+    // With seams that follow the cursor, a loop's nearest point is no nearer
+    // than its box: the loops are looked at nearest box first, and those
+    // whose box lies farther than the best start so far cannot win nor tie.
+    // The same pick as looking at every one, without finding the nearest
+    // point of each loop at every step.
+    std::vector<std::array<double, 4>> boxes;
+    std::vector<std::pair<double, std::size_t>> by_box;
+    if (seams_move) {
+        boxes.resize(paths.size());
+        for (std::size_t i = 0; i < paths.size(); ++i) {
+            auto& b = boxes[i];
+            b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                 std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+            if (paths[i].closed)
+                for (const ToolpathPoint& q : (painted[i] ? painted[i]->dense : paths[i]).points)
+                    b = {std::min(b[0], q.p.x), std::min(b[1], q.p.y), std::max(b[2], q.p.x), std::max(b[3], q.p.y)};
+        }
+    }
+    const auto box_distance = [&](std::size_t i) {
+        const auto& b = boxes[i];
+        return std::hypot(std::max({b[0] - cursor.x, 0.0, cursor.x - b[2]}), std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]}));
+    };
     for (std::size_t k = 0; k < paths.size(); ++k) {
         std::size_t best = paths.size();
         bool reverse = false;
@@ -554,18 +580,44 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
             if (d < nearest || (d == nearest && (i < best || (i == best && reverse && !back))))
                 nearest = d, best = i, reverse = back;
         };
-        if (grid) {
+        if (grid && !seams_move) {
             grid->nearest(cursor, done, consider, nearest);
-        } else {
+        } else if (seams_move) {
+            // The open paths' ends (from the grid when there are many), then the loops.
+            if (grid)
+                grid->nearest(cursor, done, consider, nearest);
+            by_box.clear();
             for (std::size_t i = 0; i < paths.size(); ++i) {
                 if (done[i] || paths[i].points.empty())
                     continue;
                 const Toolpath& t = paths[i];
                 if (t.closed) {
-                    if (mode == SeamMode::Nearest)
-                        seams[i] = seam_of(i);
+                    by_box.push_back({box_distance(i), i});
+                } else if (!grid) {
+                    consider(i, false, distance(cursor, t.points.front().p));
+                    consider(i, true, distance(cursor, t.points.back().p));
+                }
+            }
+            // A heap: only the few nearest boxes come out.
+            const auto farther = [](const std::pair<double, std::size_t>& a, const std::pair<double, std::size_t>& b) {
+                return a > b;
+            };
+            std::make_heap(by_box.begin(), by_box.end(), farther);
+            while (!by_box.empty() && by_box.front().first <= nearest) {
+                const std::size_t i = by_box.front().second;
+                std::pop_heap(by_box.begin(), by_box.end(), farther);
+                by_box.pop_back();
+                seams[i] = seam_of(i);
+                consider(i, false, distance(cursor, (painted[i] ? painted[i]->dense : paths[i]).points[seams[i]].p));
+            }
+        } else {
+            for (std::size_t i = 0; i < paths.size(); ++i) {
+                if (done[i] || paths[i].points.empty())
+                    continue;
+                const Toolpath& t = paths[i];
+                if (t.closed)
                     consider(i, false, distance(cursor, (painted[i] ? painted[i]->dense : t).points[seams[i]].p));
-                } else {
+                else {
                     consider(i, false, distance(cursor, t.points.front().p));
                     consider(i, true, distance(cursor, t.points.back().p));
                 }

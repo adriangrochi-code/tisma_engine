@@ -18,6 +18,55 @@ namespace {
 
 constexpr double kDegrees = std::numbers::pi / 180.0;
 
+// Indices of points in square cells, for the points near a place: the
+// branches of a layer can be tens of thousands.
+class CellGrid {
+public:
+    explicit CellGrid(double cell) : cell_(std::max(cell, 1e-3)) {}
+
+    void add(double x, double y, std::size_t i) { cells_[key(at(x), at(y))].push_back(i); }
+
+    // f(i) for the points in the cells within `radius` of (x, y).
+    template <class F>
+    void near(double x, double y, double radius, F&& f) const {
+        const std::int64_t cx = at(x), cy = at(y), r = std::int64_t(std::ceil(radius / cell_));
+        for (std::int64_t gx = cx - r; gx <= cx + r; ++gx)
+            for (std::int64_t gy = cy - r; gy <= cy + r; ++gy)
+                visit(gx, gy, f);
+    }
+
+    // f(i) for the points in the cells at Chebyshev distance k from (x, y)'s
+    // cell; every point of a farther ring is at least k cells away.
+    template <class F>
+    void ring(double x, double y, std::int64_t k, F&& f) const {
+        const std::int64_t cx = at(x), cy = at(y);
+        if (k == 0) {
+            visit(cx, cy, f);
+            return;
+        }
+        for (std::int64_t g = cx - k; g <= cx + k; ++g)
+            visit(g, cy - k, f), visit(g, cy + k, f);
+        for (std::int64_t g = cy - k + 1; g <= cy + k - 1; ++g)
+            visit(cx - k, g, f), visit(cx + k, g, f);
+    }
+
+    double cell() const { return cell_; }
+
+private:
+    std::int64_t at(double v) const { return std::int64_t(std::floor(v / cell_)); }
+    static std::int64_t key(std::int64_t gx, std::int64_t gy) { return (gx * 2654435761LL) ^ gy; }
+    template <class F>
+    void visit(std::int64_t gx, std::int64_t gy, F& f) const {
+        const auto it = cells_.find(key(gx, gy));
+        if (it != cells_.end())
+            for (const std::size_t i : it->second)
+                f(i);
+    }
+
+    double cell_;
+    std::unordered_map<std::int64_t, std::vector<std::size_t>> cells_;
+};
+
 // The point of a region's boundary nearest to (x, y), and its distance.
 struct Nearest {
     double x = 0.0, y = 0.0, d = std::numeric_limits<double>::infinity();
@@ -122,16 +171,21 @@ void add_tips(const Polygons& overhang, const Polygons& forbidden, double spacin
     // outline where nothing reaches.
     std::stable_partition(candidates.begin(), candidates.end(),
                           [&](const auto& c) { return nearest_boundary(overhang, c.first, c.second).d > tip_r; });
+    const double near = spacing * 0.8;
+    CellGrid grid(near);
+    for (std::size_t i = 0; i < branches.size(); ++i)
+        if (branches[i].alive)
+            grid.add(branches[i].node.x, branches[i].node.y, i);
     for (const auto& [x, y] : candidates) {
         bool covered = false;
-        for (const Branch& b : branches)
-            if (b.alive && std::hypot(b.node.x - x, b.node.y - y) < spacing * 0.8) {
-                covered = true;
-                break;
-            }
+        grid.near(x, y, near, [&](std::size_t i) {
+            covered = covered || std::hypot(branches[i].node.x - x, branches[i].node.y - y) < near;
+        });
         double cx = x, cy = y;
-        if (!covered && keep_clear(forbidden, cx, cy, tip_r, reach))
+        if (!covered && keep_clear(forbidden, cx, cy, tip_r, reach)) {
+            grid.add(cx, cy, branches.size());
             branches.push_back({{cx, cy, tip_r}, 0.0, {}, true});
+        }
     }
 }
 
@@ -153,6 +207,9 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
     const double dodge = std::tan(std::clamp(std::max(params.angle, params.angle_preferred), 0.0, 85.0) * kDegrees);
     const std::size_t gap = std::size_t(std::max(params.z_gap_layers, 0));
     const std::size_t interface = std::size_t(std::max(params.interface_layers, 0));
+    // Tips never closer than their own width, nor than two beads: closer, a
+    // tip prints nothing of its own (and the count grows past any use).
+    const double spacing = std::max({params.tip_spacing, 2.0 * tip_r, 2.0 * params.bead});
     // How high each layer is over the bed: a branch joins another only if
     // they can meet before reaching it.
     std::vector<double> base(n, 0.0);
@@ -166,7 +223,7 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
         // may move as far as its own width to stand clear of it.
         if (const std::size_t a = l + 1 + gap + interface; a < n && a < overhangs.size() && !overhangs[a].empty()) {
             const Polygons forbidden = regions[l].empty() ? Polygons{} : offset(regions[l], params.xy_gap);
-            add_tips(overhangs[a], forbidden, params.tip_spacing, tip_r, 2.0 * tip_r, branches);
+            add_tips(overhangs[a], forbidden, spacing, tip_r, 2.0 * tip_r, branches);
         }
         for (Branch& b : branches) {
             if (!b.alive)
@@ -186,32 +243,23 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
         for (std::size_t i = 0; i < branches.size(); ++i)
             if (branches[i].alive)
                 alive.push_back(i);
-        // A grid of cells of the reach, for the nearest neighbours.
-        std::unordered_map<std::int64_t, std::vector<std::size_t>> cells;
-        const auto cell_of = [&](double x, double y) {
-            return (std::int64_t(std::floor(x / reach_range)) << 32) ^ (std::int64_t(std::floor(y / reach_range)) & 0xffffffff);
-        };
+        // The nearest neighbour, ring by ring of cells out to the reach.
+        CellGrid cells(std::max(spacing, 2.0 * branch_r));
         for (const std::size_t i : alive)
-            cells[cell_of(branches[i].node.x, branches[i].node.y)].push_back(i);
+            cells.add(branches[i].node.x, branches[i].node.y, i);
         std::vector<std::pair<double, double>> moves(branches.size(), {0.0, 0.0});
         for (const std::size_t i : alive) {
             const TreeNode& a = branches[i].node;
             double best = std::numeric_limits<double>::infinity();
             std::size_t partner = branches.size();
-            const std::int64_t cx = std::int64_t(std::floor(a.x / reach_range)), cy = std::int64_t(std::floor(a.y / reach_range));
-            for (std::int64_t gx = cx - 1; gx <= cx + 1; ++gx)
-                for (std::int64_t gy = cy - 1; gy <= cy + 1; ++gy) {
-                    const auto it = cells.find((gx << 32) ^ (gy & 0xffffffff));
-                    if (it == cells.end())
-                        continue;
-                    for (const std::size_t j : it->second) {
-                        if (j == i)
-                            continue;
-                        const double d = std::hypot(branches[j].node.x - a.x, branches[j].node.y - a.y);
-                        if (d < best || (d == best && j < partner))
-                            best = d, partner = j;
-                    }
-                }
+            for (std::int64_t k = 0; double(k - 1) * cells.cell() <= std::min(best, reach_range); ++k)
+                cells.ring(a.x, a.y, k, [&](std::size_t j) {
+                    if (j == i)
+                        return;
+                    const double d = std::hypot(branches[j].node.x - a.x, branches[j].node.y - a.y);
+                    if (d < best || (d == best && j < partner))
+                        best = d, partner = j;
+                });
             // They meet halfway: each covers half the distance, before the bed.
             if (partner == branches.size() || best > reach_range || best * 0.5 > base[l] * lean + 1e-9)
                 continue;
@@ -223,27 +271,49 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
             branches[i].node.x += moves[i].first;
             branches[i].node.y += moves[i].second;
         }
-        // Join the branches that now overlap: their area kept, at their centre.
+        // Join the branches that now overlap: their area kept, at their
+        // centre. The widest first, each with the narrower ones it reaches;
+        // as it grows and moves, it looks again.
         std::sort(alive.begin(), alive.end(), [&](std::size_t p, std::size_t q) {
             return branches[p].node.r > branches[q].node.r || (branches[p].node.r == branches[q].node.r && p < q);
         });
+        std::vector<std::size_t> rank(branches.size(), 0);
+        double widest = 0.0;
+        for (std::size_t u = 0; u < alive.size(); ++u) {
+            rank[alive[u]] = u;
+            widest = std::max(widest, branches[alive[u]].node.r);
+        }
+        CellGrid overlap(std::max(widest, 0.1));
+        for (const std::size_t i : alive)
+            overlap.add(branches[i].node.x, branches[i].node.y, i);
+        std::vector<std::size_t> found;
         for (std::size_t u = 0; u < alive.size(); ++u) {
             Branch& a = branches[alive[u]];
             if (!a.alive)
                 continue;
-            for (std::size_t v = u + 1; v < alive.size(); ++v) {
-                Branch& b = branches[alive[v]];
-                if (!b.alive)
-                    continue;
-                const double d = std::hypot(a.node.x - b.node.x, a.node.y - b.node.y);
-                if (d > std::max(a.node.r, b.node.r))
-                    continue;
-                const double wa = a.node.r * a.node.r, wb = b.node.r * b.node.r;
-                a.node.x = (a.node.x * wa + b.node.x * wb) / (wa + wb);
-                a.node.y = (a.node.y * wa + b.node.y * wb) / (wa + wb);
-                a.node.r = std::sqrt(wa + wb); // as thick as both together, as trees grow
-                a.grown = std::max(a.grown, b.grown);
-                b.alive = false;
+            for (bool joined = true; joined;) {
+                joined = false;
+                found.clear();
+                overlap.near(a.node.x, a.node.y, std::max(a.node.r, widest), [&](std::size_t j) {
+                    if (branches[j].alive && rank[j] > u)
+                        found.push_back(j);
+                });
+                std::sort(found.begin(), found.end(), [&](std::size_t p, std::size_t q) { return rank[p] < rank[q]; });
+                for (const std::size_t j : found) {
+                    Branch& b = branches[j];
+                    if (!b.alive)
+                        continue;
+                    const double d = std::hypot(a.node.x - b.node.x, a.node.y - b.node.y);
+                    if (d > std::max(a.node.r, b.node.r))
+                        continue;
+                    const double wa = a.node.r * a.node.r, wb = b.node.r * b.node.r;
+                    a.node.x = (a.node.x * wa + b.node.x * wb) / (wa + wb);
+                    a.node.y = (a.node.y * wa + b.node.y * wb) / (wa + wb);
+                    a.node.r = std::sqrt(wa + wb); // as thick as both together, as trees grow
+                    a.grown = std::max(a.grown, b.grown);
+                    b.alive = false;
+                    joined = true;
+                }
             }
         }
         // Widen: a tip quickly to a branch, then by the widening angle.

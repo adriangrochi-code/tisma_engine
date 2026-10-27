@@ -193,6 +193,80 @@ TEST_CASE("ordering many paths through the grid picks what looking at every path
     CHECK(differ == 0);
 }
 
+TEST_CASE("nearest seams among many loops and lines: the pick of looking at every point", "[order]") {
+    // Loops of 3 to 8 points and short lines on a 1 mm grid (many ties), more
+    // of each than the grid's threshold: the loops' boxes prune, the lines'
+    // ends are filed.
+    std::mt19937 random(23);
+    std::uniform_int_distribution<int> coordinate(0, 30), size(1, 3), corners(3, 8);
+    std::vector<Toolpath> paths;
+    for (int i = 0; i < 300; ++i) {
+        Toolpath t;
+        if (i % 2 == 0) {
+            t.closed = true;
+            const double cx = coordinate(random), cy = coordinate(random), r = size(random);
+            const int n = corners(random);
+            for (int k = 0; k < n; ++k)
+                t.points.push_back({{std::round(cx + r * std::cos(6.283185307179586 * k / n)),
+                                     std::round(cy + r * std::sin(6.283185307179586 * k / n))},
+                                    0.4});
+        } else {
+            const double x = coordinate(random), y = coordinate(random);
+            t.points = {{{x, y}, 0.4}, {{x + size(random), y}, 0.4}};
+        }
+        paths.push_back(std::move(t));
+    }
+    // Every path looked at each time: a loop at its nearest point (the first
+    // of equals), a line at its nearer end; between equals the first path,
+    // its front before its back.
+    std::vector<Toolpath> want;
+    {
+        std::vector<bool> done(paths.size(), false);
+        Point2d cursor{-3.0, 7.0};
+        for (std::size_t k = 0; k < paths.size(); ++k) {
+            std::size_t best = paths.size(), seam = 0;
+            bool back = false;
+            double nearest = 1e300;
+            for (std::size_t i = 0; i < paths.size(); ++i) {
+                if (done[i])
+                    continue;
+                const auto& pts = paths[i].points;
+                const auto d = [&](std::size_t j) { return std::hypot(cursor.x - pts[j].p.x, cursor.y - pts[j].p.y); };
+                if (paths[i].closed) {
+                    std::size_t j = 0;
+                    for (std::size_t q = 1; q < pts.size(); ++q)
+                        if (d(q) < d(j))
+                            j = q;
+                    if (d(j) < nearest)
+                        nearest = d(j), best = i, back = false, seam = j;
+                } else {
+                    if (d(0) < nearest)
+                        nearest = d(0), best = i, back = false;
+                    if (d(1) < nearest)
+                        nearest = d(1), best = i, back = true;
+                }
+            }
+            done[best] = true;
+            Toolpath t = paths[best];
+            if (t.closed)
+                std::rotate(t.points.begin(), t.points.begin() + std::ptrdiff_t(seam), t.points.end());
+            else if (back)
+                std::reverse(t.points.begin(), t.points.end());
+            cursor = t.closed ? t.points.front().p : t.points.back().p;
+            want.push_back(std::move(t));
+        }
+    }
+    Point2d cursor{-3.0, 7.0};
+    SeamMemory memory;
+    const std::vector<Toolpath> got = order_paths(paths, cursor, SeamMode::Nearest, 1, memory);
+    REQUIRE(got.size() == want.size());
+    int differ = 0;
+    for (std::size_t k = 0; k < got.size(); ++k)
+        for (std::size_t q = 0; q < got[k].points.size(); ++q)
+            differ += got[k].points[q].p.x != want[k].points[q].p.x || got[k].points[q].p.y != want[k].points[q].p.y;
+    CHECK(differ == 0);
+}
+
 namespace {
 
 // The aligned seam's candidates by the plain walk: from every point, one point
