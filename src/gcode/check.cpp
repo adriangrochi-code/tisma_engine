@@ -2,6 +2,7 @@
 // PROVENANCE.md.
 
 #include "gcode/check.hpp"
+#include "gcode/dialect.hpp"
 
 #include "infill/nonplanar.hpp"
 
@@ -145,7 +146,7 @@ public:
             problem_at(line_, "the closing summary is missing: the file is incomplete");
         if (out_.stats.layers == 0)
             problem_at(line_, "no layers");
-        if (out_.stats.extrusions == 0)
+        if (out_.stats.extrusions == 0 && limits_.e_axis != 0)
             problem_at(line_, "nothing is extruded");
         return std::move(out_);
     }
@@ -238,13 +239,14 @@ private:
         else if (kind == 'G' && n == 28)
             known_[0] = known_[1] = known_[2] = false; // homed: where exactly, the printer knows
         else if (kind == 'M' && n == 106 && !custom_) {
-            const std::optional<double>& s = param['S' - 'A'];
+            const std::optional<double>& s = param[limits_.fan_parameter - 'A'];
             if (!s || *s < 0.0 || *s > 255.0)
                 problem("fan speed out of 0 to 255");
         }
     }
 
-    static char axis(int a) { return "XYZE"[a]; }
+    // X, Y, Z and the extruder's axis as the dialect names it.
+    char axis(int a) const { return a < 3 ? "XYZ"[a] : limits_.e_axis != 0 ? limits_.e_axis : 'E'; }
 
     void move(int g, const std::optional<double> (&param)[26]) {
         double to[4];
@@ -469,7 +471,10 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
             current.flow = *c.flow / 100.0;
         limits.changes.push_back(current);
     }
-    limits.relative_extrusion = s.relative_extrusion;
+    limits.relative_extrusion = relative_e(s);
+    const Dialect dialect = dialect_of(s.flavor);
+    limits.e_axis = dialect.e_axis;
+    limits.fan_parameter = dialect.fan == Dialect::Fan::M106P ? 'P' : 'S';
     return limits;
 }
 

@@ -21,6 +21,10 @@ struct GcodeLimits {
     double retract_length = 0.0;  // mm of filament
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
+    // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3
+    // and Machinekit; 0: none, no_extrusion) and the letter of M106's value.
+    char e_axis = 'E';
+    char fan_parameter = 'S';
     // Z anti-aliasing (docs/ZAA.md): how far an extrusion may leave its layer's
     // Z, down and up, as shares of the layer height; its bead is as thick as
     // what is left down to the layer's bottom.

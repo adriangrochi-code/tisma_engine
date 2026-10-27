@@ -750,8 +750,8 @@ Con el PR #23 (2026-10-26):
     a 17);
   - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
     cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4), la E volumétrica (regla 11, X11), la contracción
-    (regla 4, X3) y los comentarios detallados (regla 12, X12). Faltan los sabores viejos (X5), el modo silencioso
-    (X6), las miniaturas (X7), el G-code binario (X8) y los arcos `G2`/`G3` (X10)
+    (regla 4, X3), los comentarios detallados (regla 12, X12) y los dialectos antiguos (regla 6, X5). Faltan el modo
+    silencioso (X6), las miniaturas (X7), el G-code binario (X8) y los arcos `G2`/`G3` (X10)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

@@ -67,8 +67,8 @@ struct Words {
 
 class Reader {
 public:
-    explicit Reader(double filament_diameter)
-        : filament_area_(std::numbers::pi * 0.25 * filament_diameter * filament_diameter) {}
+    Reader(double filament_diameter, char extruder_axis)
+        : filament_area_(std::numbers::pi * 0.25 * filament_diameter * filament_diameter), e_axis_(extruder_axis) {}
 
     void line(std::string_view raw) {
         ++out_.lines;
@@ -185,9 +185,9 @@ private:
             };
             const double x = axis('X', x_), y = axis('Y', y_), z = axis('Z', z_);
             double de = 0.0;
-            if (at('E')) {
-                de = absolute_e_ ? *at('E') - e_ : *at('E');
-                e_ = absolute_e_ ? *at('E') : e_ + *at('E');
+            if (const std::optional<double>& e = at(e_axis_)) {
+                de = absolute_e_ ? *e - e_ : *e;
+                e_ = absolute_e_ ? *e : e_ + *e;
             }
             out_.filament += de;
             move(x, y, z, de);
@@ -202,8 +202,8 @@ private:
                 y_ = *at('Y');
             if (at('Z'))
                 z_ = *at('Z');
-            if (at('E'))
-                e_ = *at('E');
+            if (at(e_axis_))
+                e_ = *at(e_axis_);
         } else if (code == 28) {
             const auto named = [&](char letter) { return w.present[letter - 'A']; };
             const bool all = !named('X') && !named('Y') && !named('Z');
@@ -271,6 +271,7 @@ private:
 
     GcodePreview out_;
     double filament_area_;
+    char e_axis_; // the extruder's axis: E, or A on Mach3 and Machinekit
     double x_ = 0.0, y_ = 0.0, z_ = 0.0, e_ = 0.0;
     double feed_ = 0.0;
     double width_ = 0.4, height_ = 0.0;
@@ -318,8 +319,8 @@ double parse_duration(std::string_view text) {
     return seconds;
 }
 
-GcodePreview read_gcode_preview(std::string_view text, double filament_diameter) {
-    Reader reader(filament_diameter);
+GcodePreview read_gcode_preview(std::string_view text, double filament_diameter, char extruder_axis) {
+    Reader reader(filament_diameter, extruder_axis >= 'A' && extruder_axis <= 'Z' ? extruder_axis : 'E');
     std::size_t start = 0;
     while (start < text.size()) {
         std::size_t end = text.find('\n', start);

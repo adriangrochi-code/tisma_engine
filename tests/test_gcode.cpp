@@ -1,5 +1,6 @@
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
+#include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
 #include "report/warnings.hpp"
 #include "io/stl.hpp"
@@ -1459,4 +1460,120 @@ TEST_CASE("extras: verbose comments say what each line does (gcode_extras.md, ru
     };
     CHECK(bare(verbose.str()) == bare(plain.str()));
     CHECK(check_gcode(verbose.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("extras: the old firmwares' dialects (gcode_extras.md, rule 6, X5)", "[gcode][extras]") {
+    IndexedMesh m;
+    add_box(m, -10, -10, 10, 10, 10);
+    Settings s = test_printer();
+    s.relative_extrusion = false;
+    s.retract_length = 0.8;
+    s.retract_lift = 0.4;
+    s.fan_min = s.fan_max = 99.0;
+    s.acceleration = 1000.0;
+    HeightChange hot;
+    hot.z = 2.0;
+    hot.temperature = 215.0;
+    s.changes = {hot};
+    const SlicedModel model = slice_model(m, s);
+    REQUIRE(model.layers.size() == 50);
+    const auto gcode = [&](GcodeFlavor flavor, bool relative = false) {
+        Settings f = s;
+        f.flavor = flavor;
+        f.relative_extrusion = relative;
+        std::ostringstream out;
+        write_gcode(out, model, f);
+        INFO(flavor_name(flavor));
+        const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, f));
+        CHECK(check.ok());
+        if (!check.ok())
+            UNSCOPED_INFO(check.problems.front().line << ": " << check.problems.front().message);
+        return out.str();
+    };
+    const auto has = [](const std::string& g, const std::string& text) { return g.find(text) != std::string::npos; };
+    // Each move's axes, past the user's start G-code.
+    const auto letters = [](const std::string& g) {
+        std::set<char> out;
+        for (const std::string& line : lines_of(g))
+            if (line.rfind("G1 ", 0) == 0)
+                for (std::size_t i = 3; i < line.size() && line[i] != ';'; ++i)
+                    if (line[i - 1] == ' ' && std::isupper(static_cast<unsigned char>(line[i])))
+                        out.insert(line[i]);
+        return out;
+    };
+    // Repetier and Smoothie write as RepRap.
+    const std::string reprap = gcode(GcodeFlavor::RepRap);
+    const auto but_flavor = [](std::string g) {
+        const std::size_t at = g.find("; machine.flavor = ");
+        return g.erase(at, g.find('\n', at) - at);
+    };
+    CHECK(but_flavor(gcode(GcodeFlavor::Repetier)) == but_flavor(reprap));
+    CHECK(but_flavor(gcode(GcodeFlavor::Smoothie)) == but_flavor(reprap));
+    CHECK(has(reprap, "\nM82\n"));
+    CHECK(has(reprap, "\nG92 E0.00000\n"));
+    CHECK(has(reprap, "\nM106 S252\n"));
+    CHECK(has(reprap, "\nM104 S215 ; change at Z"));
+    CHECK(has(reprap, "\nM204 P1000 T"));
+
+    const std::string teacup = gcode(GcodeFlavor::Teacup);
+    CHECK(has(teacup, "\nM106 S0\n"));
+    CHECK_FALSE(has(teacup, "M107"));
+    CHECK_FALSE(has(teacup, "M204"));
+
+    for (const GcodeFlavor flavor : {GcodeFlavor::MakerWare, GcodeFlavor::Sailfish}) {
+        const std::string g = gcode(flavor, true); // relative E asked: absolute, without M82
+        INFO(flavor_name(flavor));
+        CHECK(has(g, "\nM73 P10\n")); // layer 5 of 50
+        CHECK(has(g, "\nM104 S215 T0 ; change at Z"));
+        CHECK(has(g, "\nM126\n"));
+        CHECK(has(g, "\nM127\n"));
+        CHECK_FALSE(has(g, "M106"));
+        CHECK_FALSE(has(g, "M107"));
+        CHECK_FALSE(has(g, "G92"));
+        CHECK_FALSE(has(g, "M82"));
+        CHECK_FALSE(has(g, "M83"));
+        CHECK(has(g, "M101 ; extruder on") == (flavor == GcodeFlavor::MakerWare));
+        CHECK(has(g, "M103 ; extruder off") == (flavor == GcodeFlavor::MakerWare));
+        // E only grows, but for the retractions.
+        double last = 0.0, drop = 0.0;
+        for (const std::string& line : lines_of(g))
+            if (const std::size_t e = line.find(" E"); line.rfind("G1 ", 0) == 0 && e != std::string::npos) {
+                const double v = std::stod(line.substr(e + 2));
+                drop = std::max(drop, last - v);
+                last = v;
+            }
+        CHECK(last > 100.0);
+        CHECK(drop <= 0.8 + 1e-9);
+    }
+
+    const std::string mach3 = gcode(GcodeFlavor::Mach3), machinekit = gcode(GcodeFlavor::Machinekit);
+    for (const std::string* g : {&mach3, &machinekit}) {
+        CHECK(letters(*g).count('A'));
+        CHECK_FALSE(letters(*g).count('E'));
+        CHECK(has(*g, "\nM104 P215 ; change at Z"));
+        CHECK(has(*g, "\nM106 P252.45\n"));
+    }
+    CHECK_FALSE(has(mach3, "G92"));
+    CHECK(has(machinekit, "\nG92 A0.00000\n"));
+    CHECK_FALSE(has(mach3, "\nM2\n"));
+    // The preview reads the A axis as the extruder when told so.
+    CHECK(read_gcode_preview(mach3, 1.75, 'A').extrusions.size() == read_gcode_preview(reprap).extrusions.size());
+    CHECK(read_gcode_preview(mach3).extrusions.empty());
+    CHECK(has(machinekit, "\nM2\n; estimated printing time"));
+
+    const std::string none = gcode(GcodeFlavor::NoExtrusion);
+    CHECK_FALSE(letters(none).count('E'));
+    CHECK_FALSE(letters(none).count('A'));
+    CHECK(letters(none).count('X'));
+    CHECK_FALSE(has(none, "G92"));
+    for (const std::string& line : lines_of(none)) // no retraction left as a bare feed
+        CHECK_FALSE((line.rfind("G1 F", 0) == 0));
+    // The same moves in X and Y as RepRap's.
+    const auto xy = [](const std::string& g) {
+        std::size_t n = 0;
+        for (const std::string& line : lines_of(g))
+            n += line.rfind("G1 X", 0) == 0 || line.rfind("G1 Y", 0) == 0;
+        return n;
+    };
+    CHECK(xy(none) == xy(reprap));
 }

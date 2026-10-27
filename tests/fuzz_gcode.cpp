@@ -269,7 +269,10 @@ int main(int argc, char** argv) {
             s.zaa_raise = pick(2) == 0;
         }
         // The machine's capabilities and the firmware's commands (docs/CATALOG.md, "Capacidades").
-        s.flavor = std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
+        s.flavor = pick(4) == 0 ? std::array{GcodeFlavor::Repetier, GcodeFlavor::Smoothie, GcodeFlavor::Teacup,
+                                             GcodeFlavor::MakerWare, GcodeFlavor::Sailfish, GcodeFlavor::Mach3,
+                                             GcodeFlavor::Machinekit, GcodeFlavor::NoExtrusion}[std::size_t(pick(8))]
+                                : std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
         s.filament_max_flow = pick(4) == 0 ? uni(2, 30) : 0.0;
         s.pressure_advance = pick(4) == 0 ? uni(0, 0.1) : 0.0;

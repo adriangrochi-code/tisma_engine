@@ -79,8 +79,9 @@ struct GcodePreview {
 // move extrudes when E grows. Without ;LAYER_CHANGE comments a new layer starts
 // at the first extrusion at a new Z. Without ;WIDTH:, the width comes from the
 // filament pushed over the move's length and height (filament_diameter, mm).
-// Own design; see PROVENANCE.md.
-GcodePreview read_gcode_preview(std::string_view text, double filament_diameter = 1.75);
+// extruder_axis: the extruder's letter, A in the Mach3 and Machinekit dialects
+// (gcode_extras.md, rule 6). Own design; see PROVENANCE.md.
+GcodePreview read_gcode_preview(std::string_view text, double filament_diameter = 1.75, char extruder_axis = 'E');
 
 // Seconds in a duration written as "2d 1h 7m 36s" (any of the parts, in that
 // order, as format_duration writes them); -1 if it does not read so.

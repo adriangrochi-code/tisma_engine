@@ -5292,3 +5292,28 @@ verificador lo acepta. 467 pruebas pasan; fuzzer con contracción y comentarios:
 **Sigue:** los sabores viejos (X5), el modo silencioso (X6, con los límites de la máquina), los arcos (X10), el
 G-code binario (X8) y las miniaturas (X7, con la interfaz).
 
+## 2026-10-27 — Punto 2: dialectos de firmwares antiguos
+
+**Hecho** (ficha `gcode_extras.md`, regla 6, X5): `machine.flavor` acepta además `repetier`, `smoothie`, `teacup`,
+`makerware`, `sailfish`, `mach3`, `machinekit` y `no_extrusion`. Lo que cambia de cada uno está como datos en
+`src/gcode/dialect.hpp` y lo leen el emisor, el verificador y la vista previa:
+- `repetier` y `smoothie`: como `reprap` (el mismo archivo, salvo la línea del ajuste);
+- `teacup`: `M106 S0` en vez de `M107`;
+- `makerware` y `sailfish`: E absoluta sin `M82` ni `G92` (aunque se pida E relativa), `M126`/`M127`, `M104 S… T0`,
+  `M73 P…` en cada capa; `makerware` también `M101 ; extruder on` y `M103 ; extruder off`;
+- `mach3` y `machinekit`: el extrusor es `A`, `M104 P…`, `M106 P252.45`; `machinekit` con `G92 A0.00000` en cada
+  capa y `M2` al final;
+- `no_extrusion`: los mismos movimientos en X e Y, sin E y sin las retracciones (que serían solo `F`).
+Los antiguos (salvo `repetier` y `smoothie`) no llevan `M204` ni avance de presión: la ficha no los mide y esas
+máquinas no los conocen. En el panel, Impresora › Firmware.
+
+**Medido:** X5 sobre un cubo de 20 × 20 × 10 mm (50 capas): `M73 P10` en la capa 5, `M104 S215 T0` en el cambio a
+2 mm, `M106 P252.45` con el ventilador al 99 %; `no_extrusion` da tantos movimientos en X e Y como `reprap`; el
+verificador acepta los once dialectos y la vista previa de `mach3` ve las mismas extrusiones que la de `reprap`. 468
+pruebas pasan; fuzzer con los once sabores: 600 corridas (semilla 1) y 1000 (semilla 271028), 0 fallas.
+
+**No probado:** ninguna de esas máquinas de verdad (no hay); solo contra la ficha.
+
+**Sigue:** el modo silencioso (X6), que pide los límites de la máquina de `gcode_firmware.md`; los arcos (X10); el
+G-code binario (X8); las miniaturas (X7, con la interfaz).
+

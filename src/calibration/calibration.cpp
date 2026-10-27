@@ -468,11 +468,11 @@ std::string extruder_steps_text(GcodeFlavor flavor, double value) {
     case GcodeFlavor::Marlin:
         std::snprintf(text, sizeof text, "M92 E%.2f\nM500", value);
         break;
-    case GcodeFlavor::RepRap:
-        std::snprintf(text, sizeof text, "M92 E%.2f", value);
-        break;
     case GcodeFlavor::Klipper:
         std::snprintf(text, sizeof text, "rotation_distance: %.4f", value);
+        break;
+    default: // RepRap and the rest: steps per mm, as RepRap sets them
+        std::snprintf(text, sizeof text, "M92 E%.2f", value);
         break;
     }
     return text;

@@ -3180,7 +3180,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "firmware") {
         if (shown("machine.flavor"))
             changed |= row(T::Flavor, s.flavor,
-                           {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
+                           {{GcodeFlavor::Marlin, "Marlin"},
+                            {GcodeFlavor::Klipper, "Klipper"},
+                            {GcodeFlavor::RepRap, "RepRap"},
+                            {GcodeFlavor::Repetier, "Repetier"},
+                            {GcodeFlavor::Smoothie, "Smoothieware"},
+                            {GcodeFlavor::Teacup, "Teacup"},
+                            {GcodeFlavor::MakerWare, "MakerWare (MakerBot)"},
+                            {GcodeFlavor::Sailfish, "Sailfish (MakerBot)"},
+                            {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
+                            {GcodeFlavor::Machinekit, "Machinekit"},
+                            {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
     } else if (id == "variables") {
         count(T::VariablesRow, "machine.variables", s.variables.size());
     }

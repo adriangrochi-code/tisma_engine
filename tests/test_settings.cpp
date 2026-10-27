@@ -232,7 +232,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"seam": "back"}})"), ContainsSubstring("walls.seam: must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"outer_wall": "fast"}})"), ContainsSubstring("speed.outer_wall: must be a number of mm/s or a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel": 0}})"), ContainsSubstring("speed.travel: must be greater than 0"));
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "sailfish"}})"), ContainsSubstring("machine.flavor: must be one of"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "x3g"}})"), ContainsSubstring("machine.flavor: must be one of"));
+    // Every flavor by its name, and back (gcode_extras.md, rule 6).
+    for (const char* name : {"marlin", "klipper", "reprap", "repetier", "smoothie", "teacup", "makerware", "sailfish",
+                             "mach3", "machinekit", "no_extrusion"}) {
+        const Settings f = parse_settings(std::string(R"({"machine": {"flavor": ")") + name + "\"}}");
+        CHECK(std::string(flavor_name(f.flavor)) == name);
+        CHECK(parse_settings(settings_json(f)).flavor == f.flavor);
+    }
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"relative_extrusion": 1}})"), ContainsSubstring("machine.relative_extrusion: must be true or false"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"variables": {"x": {"y": 1}}}})"), ContainsSubstring("machine.variables.x: values must be"));
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);

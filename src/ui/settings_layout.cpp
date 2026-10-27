@@ -494,8 +494,33 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "max_temps")
         return format(T::SumMaxTemps, s.max_nozzle_temp > 0.0 ? number(s.max_nozzle_temp, 0).c_str() : "—",
                       s.max_bed_temp > 0.0 ? number(s.max_bed_temp, 0).c_str() : "—");
-    if (id == "firmware")
-        return s.flavor == GcodeFlavor::Marlin ? "Marlin" : s.flavor == GcodeFlavor::Klipper ? "Klipper" : "RepRap";
+    if (id == "firmware") {
+        switch (s.flavor) {
+        case GcodeFlavor::Marlin:
+            return "Marlin";
+        case GcodeFlavor::Klipper:
+            return "Klipper";
+        case GcodeFlavor::RepRap:
+            return "RepRap";
+        case GcodeFlavor::Repetier:
+            return "Repetier";
+        case GcodeFlavor::Smoothie:
+            return "Smoothieware";
+        case GcodeFlavor::Teacup:
+            return "Teacup";
+        case GcodeFlavor::MakerWare:
+            return "MakerWare";
+        case GcodeFlavor::Sailfish:
+            return "Sailfish";
+        case GcodeFlavor::Mach3:
+            return "Mach3";
+        case GcodeFlavor::Machinekit:
+            return "Machinekit";
+        case GcodeFlavor::NoExtrusion:
+            return tr(T::FlavorNoExtrusion);
+        }
+        return "RepRap";
+    }
     if (id == "start_end") {
         const auto lines = [](const std::string& text) {
             int n = text.empty() ? 0 : 1;

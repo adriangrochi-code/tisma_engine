@@ -3,6 +3,7 @@
 #include "gcode/writer.hpp"
 
 #include "gcode/cooling.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
@@ -85,6 +86,17 @@ std::size_t format_fixed(char* buffer, double v, int decimals) {
 std::string fixed(double v, int decimals) {
     char buffer[kNumberCapacity];
     return std::string(buffer, format_fixed(buffer, v, decimals));
+}
+
+// v with up to `decimals` decimals and no zeros at the end ("252.45", "255").
+std::string trimmed(double v, int decimals) {
+    std::string t = fixed(v, decimals);
+    if (t.find('.') != std::string::npos) {
+        t.erase(t.find_last_not_of('0') + 1);
+        if (t.back() == '.')
+            t.pop_back();
+    }
+    return t;
 }
 
 } // namespace
@@ -674,7 +686,7 @@ const KindNotes& notes_of(const char* type) {
 class Emitter {
 public:
     explicit Emitter(const Settings& s)
-        : relative_(s.relative_extrusion),
+        : relative_(relative_e(s)), dialect_(dialect_of(s.flavor)),
           time_(Kinematics{{s.max_feed_x, s.max_feed_y, s.max_feed_z, s.max_feed_e},
                            s.acceleration,
                            s.travel_acceleration,
@@ -736,7 +748,8 @@ public:
     void settle_fan(double layer, double bridge) {
         if (fan_marks_.empty())
             return;
-        const long values[2] = {fan_value(layer), fan_value(bridge)};
+        const double percents[2] = {layer, bridge};
+        const long values[2] = {fan_key(layer), fan_key(bridge)};
         std::string out;
         out.reserve(text_.size() + 12 * fan_marks_.size());
         std::size_t from = 0;
@@ -746,13 +759,7 @@ public:
             const long value = values[on_bridge];
             if (value == fan_)
                 continue;
-            if (value == 0) {
-                out += verbose_ ? "M107 ; disable fan\n" : "M107\n";
-            } else {
-                out += "M106 S";
-                append_integer(out, value);
-                out += verbose_ ? " ; enable fan\n" : "\n";
-            }
+            append_fan(out, percents[on_bridge], value);
             fan_ = value;
         }
         out.append(text_, from);
@@ -792,11 +799,14 @@ public:
     void resync() {
         text_ += "G90";
         line_end("use absolute coordinates");
-        text_ += relative_ ? "M83" : "M82";
-        line_end(relative_ ? "use relative distances for extrusion" : "use absolute distances for extrusion");
-        if (!relative_) {
+        if (dialect_.e_mode) {
+            text_ += relative_ ? "M83" : "M82";
+            line_end(relative_ ? "use relative distances for extrusion" : "use absolute distances for extrusion");
+        }
+        if (!relative_ && dialect_.resets_e) {
             char buffer[kNumberCapacity];
-            text_ += "G92 E";
+            text_ += "G92 ";
+            text_ += dialect_.e_axis;
             text_.append(buffer, format_fixed(buffer, e_ * e_scale_, 5));
             line_end("reset extrusion distance");
         }
@@ -841,10 +851,12 @@ public:
     void new_layer(double z, double height, double travel_feed, bool keep_z = false, const std::string& before = {},
                    const std::string& after = {}) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
-        if (!relative_) {
+        if (!relative_ && dialect_.resets_e) {
             // A retraction carries over the layer change: E restarts at minus its length.
             e_ = retracted_ ? -retracted_amount_ : 0.0;
-            text_ += "G92 E" + fixed(e_ * e_scale_, 5);
+            text_ += "G92 ";
+            text_ += dialect_.e_axis;
+            text_ += fixed(e_ * e_scale_, 5);
             line_end("reset extrusion distance");
             position_[3] = e_;
             e_text_.clear();
@@ -900,7 +912,7 @@ public:
 
     // Before an extrusion: its kind's acceleration; 0 leaves it as it is.
     void print_acceleration(double a) {
-        if (!(a > 0.0) || (a == accel_print_ && (marlin_ || a == accel_travel_)))
+        if (!dialect_.accelerations || !(a > 0.0) || (a == accel_print_ && (marlin_ || a == accel_travel_)))
             return;
         text_ += marlin_ ? "M204 P" : "M204 S";
         append_integer(text_, std::lround(a));
@@ -933,6 +945,7 @@ public:
                 const Point2d* planned_from = nullptr, bool force_retract = false, const char* next_type = nullptr) {
         const char* note = first_travel_ ? "travel to first layer point" : notes_of(next_type).travel;
         first_travel_ = false;
+        extruder_off();
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
@@ -996,6 +1009,10 @@ public:
         if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
             fan_marks_.push_back({text_.size(), bridge_});
             marked_bridge_ = bridge_;
+        }
+        if (dialect_.extruder_on_off && !extruder_on_) {
+            text_ += "M101 ; extruder on\n";
+            extruder_on_ = true;
         }
         if (retracted_) { // unretract: back to where E was (a length changed since stays the old one)
             e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
@@ -1073,6 +1090,23 @@ public:
 
     double total_e() const { return total_e_; }
 
+    // MakerWare's M103 after the extrusions (before a travel, and at the end).
+    void extruder_off() {
+        if (extruder_on_) {
+            text_ += "M103 ; extruder off\n";
+            extruder_on_ = false;
+        }
+    }
+
+    // The print's progress, at each layer on the dialects that show it (M73 P).
+    void progress(long percent) {
+        if (!dialect_.progress)
+            return;
+        text_ += "M73 P";
+        append_integer(text_, percent);
+        line_end("update progress");
+    }
+
 private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
@@ -1081,7 +1115,7 @@ private:
     // ones' (speeds_accels.md, rule 11).
     void travel_acceleration(double length) {
         const double a = length < min_travel_ ? short_travel_accel_ : travel_accel_;
-        if (!(a > 0.0) || (a == accel_travel_ && (marlin_ || a == accel_print_)))
+        if (!dialect_.accelerations || !(a > 0.0) || (a == accel_travel_ && (marlin_ || a == accel_print_)))
             return;
         text_ += marlin_ ? "M204 T" : "M204 S";
         append_integer(text_, std::lround(a));
@@ -1094,6 +1128,43 @@ private:
 
     // The feed of a move in Z, beside travels at `travel`.
     double z_feed(double travel) const { return z_feed_ > 0.0 ? z_feed_ : travel; }
+
+    // A fan in percent as the dialect tells one setting from another: the
+    // S0-255 of M106, on or off (M126, M127), or hundredths of P's 0-255.
+    long fan_key(double percent) const {
+        const long value = fan_value(percent);
+        switch (dialect_.fan) {
+        case Dialect::Fan::OnOff:
+            return value > 0 ? 1 : 0;
+        case Dialect::Fan::M106P:
+            return value == 0 ? 0 : std::max(1L, std::lround(std::clamp(percent, 0.0, 100.0) * 255.0));
+        case Dialect::Fan::M106:
+        case Dialect::Fan::M106OffS0:
+            break;
+        }
+        return value;
+    }
+
+    // The command that sets the fan to `percent`, whose fan_key is `key`.
+    void append_fan(std::string& out, double percent, long key) const {
+        if (key == 0) {
+            out += dialect_.fan == Dialect::Fan::OnOff       ? "M127"
+                   : dialect_.fan == Dialect::Fan::M106OffS0 ? "M106 S0"
+                                                             : "M107";
+            out += verbose_ ? " ; disable fan\n" : "\n";
+            return;
+        }
+        if (dialect_.fan == Dialect::Fan::OnOff) {
+            out += "M126";
+        } else if (dialect_.fan == Dialect::Fan::M106P) {
+            out += "M106 P";
+            out += trimmed(std::clamp(percent, 0.0, 100.0) * 2.55, 2);
+        } else {
+            out += "M106 S";
+            append_integer(out, key);
+        }
+        out += verbose_ ? " ; enable fan\n" : "\n";
+    }
 
     // A fan in percent as M106 writes it, S0-255.
     static long fan_value(double percent) {
@@ -1125,7 +1196,7 @@ private:
                 return;
             char buffer[kNumberCapacity];
             const std::string_view t = given.empty() ? std::string_view(buffer, format_fixed(buffer, *v, decimals)) : given;
-            if (t != last || name == 'E') {
+            if (t != last || name == dialect_.e_axis) {
                 text_ += ' ';
                 text_ += name;
                 text_ += t;
@@ -1135,7 +1206,12 @@ private:
         axis('X', x, 3, x_, x_text);
         axis('Y', y, 3, y_, y_text);
         axis('Z', z, 3, z_, {});
-        axis('E', e ? std::optional<double>(*e * e_scale_) : std::nullopt, 5, e_text_, {});
+        if (dialect_.e_axis != 0)
+            axis(dialect_.e_axis, e ? std::optional<double>(*e * e_scale_) : std::nullopt, 5, e_text_, {});
+        else if (!x && !y && !z) {
+            text_.resize(start); // no E to write: a retraction is no move at all
+            return;
+        }
         const long f = std::lround(feed * 60.0);
         if (f != f_) {
             text_ += " F";
@@ -1161,6 +1237,8 @@ private:
 
     std::string text_;
     bool relative_;
+    Dialect dialect_;
+    bool extruder_on_ = false;        // after MakerWare's M101
     bool verbose_ = false;            // gcode.verbose_comments
     const char* note_ = "extrude";    // what the current kind's extrusions are, for them
     bool first_travel_ = false;       // the next travel is the layer's first
@@ -1337,9 +1415,12 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     case GcodeFlavor::Klipper:
         return "SET_PRESSURE_ADVANCE ADVANCE=" + v;
     case GcodeFlavor::RepRap:
+    case GcodeFlavor::Repetier:
+    case GcodeFlavor::Smoothie:
         return "M572 D0 S" + v + " ; pressure advance";
+    default: // the old dialects: none (src/gcode/dialect.hpp)
+        return {};
     }
-    return {};
 }
 
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
@@ -1358,9 +1439,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         out << chamber_gcode(s.flavor, chamber) << "\n";
     if (!s.start_gcode.empty())
         out << substitute_variables(s.start_gcode, s.variables) << "\n";
-    if (s.pressure_advance > 0.0)
+    // The dialect of the firmware (gcode_extras.md, rule 6).
+    const Dialect dialect = dialect_of(s.flavor);
+    const bool relative = relative_e(s);
+    if (s.pressure_advance > 0.0 && dialect.accelerations)
         out << pressure_advance_gcode(s.flavor, s.pressure_advance) << "\n";
-    if (s.acceleration > 0.0)
+    if (s.acceleration > 0.0 && dialect.accelerations)
         out << acceleration_gcode(s.flavor, s.acceleration, s.travel_acceleration) << "\n";
     if (heat_chamber) {
         if (s.chamber_min_temperature > 0.0)
@@ -1371,11 +1455,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         const std::vector<Warning> capability = capability_warnings(s);
         warnings->insert(warnings->end(), capability.begin(), capability.end());
     }
-    out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n")
-        << (s.relative_extrusion ? "M83" : "M82")
-        << (!s.verbose_comments          ? "\n"
-            : s.relative_extrusion       ? " ; use relative distances for extrusion\n"
-                                         : " ; use absolute distances for extrusion\n");
+    out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n");
+    if (dialect.e_mode)
+        out << (relative ? "M83" : "M82")
+            << (!s.verbose_comments ? "\n"
+                : relative          ? " ; use relative distances for extrusion\n"
+                                    : " ; use absolute distances for extrusion\n");
     Point2d cursor{0.0, 0.0};
     SeamMemory seams;
 
@@ -2061,6 +2146,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             after = substitute_variables(s.gcode_after_layer, vars);
         }
         g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn, before, after);
+        g.progress(long(l * 100 / model.layers.size()));
         g.custom(a.lines, a.user);
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -2134,12 +2220,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         while (next_change < s.changes.size() && s.changes[next_change].z < written_top - 1e-6) {
             const HeightChange& c = s.changes[next_change++];
             if (c.temperature)
-                active.lines += "M104 S" + std::to_string(std::lround(*c.temperature)) + " ; change at Z " + fixed(c.z, 3) + "\n";
+                active.lines += std::string("M104 ") + dialect.temperature + std::to_string(std::lround(*c.temperature)) +
+                                (dialect.tool_on_m104 ? " T0" : "") + " ; change at Z " + fixed(c.z, 3) + "\n";
             if (c.bed_temperature)
-                active.lines += "M140 S" + std::to_string(std::lround(*c.bed_temperature)) + "\n";
-            if (c.pressure_advance)
+                active.lines +=
+                    std::string("M140 ") + dialect.temperature + std::to_string(std::lround(*c.bed_temperature)) + "\n";
+            if (c.pressure_advance && dialect.accelerations)
                 active.lines += pressure_advance_gcode(s.flavor, *c.pressure_advance) + "\n";
-            if (c.acceleration)
+            if (c.acceleration && dialect.accelerations)
                 active.lines += acceleration_gcode(s.flavor, *c.acceleration, s.travel_acceleration) + "\n";
             if (c.volumetric_flow)
                 active.volumetric_flow = *c.volumetric_flow;
@@ -2325,12 +2413,15 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 std::vector<Step>().swap(planned[l]);
             }));
 
+    g.extruder_off();
     g.type("Custom");
     g.flush(out);
     if (!s.end_gcode.empty())
         out << substitute_variables(s.end_gcode, s.variables) << "\n";
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
         out << chamber_gcode(s.flavor, 0.0) << "\n";
+    if (dialect.ends_m2)
+        out << "M2\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not counted).
     out << "; estimated printing time = " << format_duration(g.print_time()) << "\n";
     // The filament, its weight and cost (gcode_extras.md, rule 1).

@@ -20,7 +20,22 @@ public:
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
-enum class GcodeFlavor { Marlin, Klipper, RepRap };
+// The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
+// dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
+// how the others differ in src/gcode/dialect.hpp.
+enum class GcodeFlavor {
+    Marlin,
+    Klipper,
+    RepRap,
+    Repetier,
+    Smoothie,
+    Teacup,
+    MakerWare,
+    Sailfish,
+    Mach3,
+    Machinekit,
+    NoExtrusion
+};
 enum class SeamMode { Aligned, Nearest, Random, Rear };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic };
@@ -393,6 +408,9 @@ std::string settings_json(const Settings& settings);
 
 // The name of an infill pattern in the settings ("rectilinear", "grid"...).
 const char* infill_pattern_name(InfillPattern pattern);
+
+// The name of a flavor in the settings ("marlin", "no_extrusion"...).
+const char* flavor_name(GcodeFlavor flavor);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);

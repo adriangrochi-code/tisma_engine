@@ -3,6 +3,7 @@
 #include "ui/slicing.hpp"
 
 #include "fea/analysis.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/writer.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -188,7 +189,7 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
             },
             [&] {
                 const auto begin = std::chrono::steady_clock::now();
-                out.preview = read_gcode_preview(out.gcode, settings.filament_diameter);
+                out.preview = read_gcode_preview(out.gcode, settings.filament_diameter, dialect_of(settings.flavor).e_axis);
                 out.preview_seconds = seconds_since(begin);
             });
         out.ok = true;

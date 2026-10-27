@@ -72,6 +72,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
   grande para que, al contraerse, quede de la medida pedida.
+- **Firmwares antiguos** (`machine.flavor`, ficha `gcode_extras.md`): `repetier`, `smoothie`, `teacup`, `makerware`,
+  `sailfish`, `mach3`, `machinekit` y `no_extrusion` (solo movimientos), cada uno con sus comandos.
 - **Comentarios detallados** (`gcode.verbose_comments`, en Otros › Salida del G-code): cada línea que escribe el motor
   dice qué hace (`; perimeter`, `; retract`, `; travel to first layer point`…).
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en

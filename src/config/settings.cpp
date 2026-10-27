@@ -161,6 +161,25 @@ Settings parse_checked(std::string_view text);
 
 } // namespace
 
+// The flavors by name (machine.flavor).
+const std::map<std::string, GcodeFlavor>& flavors() {
+    static const std::map<std::string, GcodeFlavor> names = {
+        {"marlin", GcodeFlavor::Marlin},       {"klipper", GcodeFlavor::Klipper},
+        {"reprap", GcodeFlavor::RepRap},       {"repetier", GcodeFlavor::Repetier},
+        {"smoothie", GcodeFlavor::Smoothie},   {"teacup", GcodeFlavor::Teacup},
+        {"makerware", GcodeFlavor::MakerWare}, {"sailfish", GcodeFlavor::Sailfish},
+        {"mach3", GcodeFlavor::Mach3},         {"machinekit", GcodeFlavor::Machinekit},
+        {"no_extrusion", GcodeFlavor::NoExtrusion}};
+    return names;
+}
+
+const char* flavor_name(GcodeFlavor flavor) {
+    for (const auto& [name, value] : flavors())
+        if (value == flavor)
+            return name.c_str();
+    return "reprap";
+}
+
 const char* infill_pattern_name(InfillPattern pattern) {
     for (const auto& [name, value] : infill_patterns())
         if (value == pattern)
@@ -549,8 +568,7 @@ Settings parse_checked(std::string_view text) {
                         : n == "max_bed_temp"    ? s.max_bed_temp
                                                  : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
-                       s.flavor = choice<GcodeFlavor>(
-                           g, n, k, {{"marlin", GcodeFlavor::Marlin}, {"klipper", GcodeFlavor::Klipper}, {"reprap", GcodeFlavor::RepRap}});
+                       s.flavor = choice<GcodeFlavor>(g, n, k, flavors());
                    } else if (n == "start_gcode" || n == "end_gcode") {
                        if (!v.is_string())
                            fail(k, "must be a string");
@@ -1205,7 +1223,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
     const char* pattern = infill_pattern_name(s.infill_pattern);
-    const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
+    const char* flavor = flavor_name(s.flavor);
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
         {"layers.first_height", num(s.first_layer_height)},
@@ -1420,7 +1438,7 @@ std::string settings_json(const Settings& s) {
     using nlohmann::ordered_json;
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
     const char* pattern = infill_pattern_name(s.infill_pattern);
-    const char* flavor = s.flavor == GcodeFlavor::Marlin ? "marlin" : s.flavor == GcodeFlavor::Klipper ? "klipper" : "reprap";
+    const char* flavor = flavor_name(s.flavor);
     const char* seam = s.seam == SeamMode::Aligned ? "aligned"
                        : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random"
