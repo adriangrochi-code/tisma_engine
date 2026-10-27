@@ -1,4 +1,5 @@
 #include "support/support.hpp"
+#include "gcode/order.hpp"
 #include "support/tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -129,6 +130,28 @@ TEST_CASE("tree support: SM13, tips under the interface, branches that join down
         CHECK_FALSE(areas[l].empty());
         CHECK(area_mm2(Clipper2Lib::Intersect(areas[l], offset(regions[l], 0.59), Clipper2Lib::FillRule::NonZero)) < 1e-9);
     }
+    // The pieces going down (the spec, remeasured: 22 tips, then 13, 11, 9,
+    // 7, 4 and 1 at Z 7.0, 6.2, 5.2, 4.2, 2.2 and 0.4): a layer under the tips
+    // most stand linked in pairs, the hull of the two filled.
+    const auto pieces = [&](std::size_t l) { return split_islands(areas[l]).size(); };
+    CHECK(pieces(34) >= 9);
+    CHECK(pieces(34) <= 15);
+    CHECK(pieces(34) < tips.size() * 3 / 4);
+    CHECK(pieces(30) >= 8);
+    CHECK(pieces(30) <= 14);
+    CHECK(pieces(25) >= 6);
+    CHECK(pieces(25) <= 12);
+    CHECK(pieces(10) <= 6);
+    std::size_t linked = 0;
+    for (const TreeNode& t : nodes[34])
+        if (t.to != TreeNode::kNoNode) {
+            ++linked;
+            REQUIRE(t.to < nodes[34].size());
+            // Neighbours, a tip's gap apart at most.
+            const TreeNode& u = nodes[34][t.to];
+            CHECK(std::hypot(u.x - t.x, u.y - t.y) - t.r - u.r <= tp.tip_spacing);
+        }
+    CHECK(linked >= 6);
 }
 
 TEST_CASE("tree support: wider tips are fewer, a higher top rate more (SM13)", "[support][tree]") {

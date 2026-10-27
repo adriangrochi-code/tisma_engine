@@ -1,5 +1,6 @@
 #include "infill/nonplanar.hpp"
 
+#include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
@@ -15,6 +16,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -174,4 +176,64 @@ TEST_CASE("wavy infill: patterns whose lines move from layer to layer stay flat"
             for (const ToolpathPoint& q : t.points)
                 CHECK(q.dz == 0.0);
         }
+}
+
+TEST_CASE("interlocking waves IL1: the egg crate the infill follows in every layer", "[nonplanar]") {
+    // interlock_infill.md: a 20 x 20 x 10 mm cube centred on X 100, Y 100.
+    Settings s = wavy(InfillPattern::Rectilinear);
+    s.infill_nonplanar = false;
+    s.infill_waves = true;
+    IndexedMesh m = cube(20.0f);
+    m.vertices = {{90, 90, 0}, {110, 90, 0}, {110, 110, 0}, {90, 110, 0},
+                  {90, 90, 10}, {110, 90, 10}, {110, 110, 10}, {90, 110, 10}};
+    const std::optional<WaveParams> p = wave_params(s);
+    REQUIRE(p);
+    CHECK(p->egg_crate);
+    CHECK_THAT(p->amplitude, WithinAbs(0.2, 1e-12)); // 50 % of 0.2 mm each way
+    const SlicedModel model = slice_model(m, s);
+    // Layers 11 and 12 (Z 2.2 and 2.4): every point of the infill at Z + 0.1 · sin(2πX/10) · sin(2πY/10),
+    // but by the walls, where the waves fade out.
+    for (const std::size_t layer : {std::size_t(10), std::size_t(11)}) {
+        INFO("layer " << layer + 1);
+        std::vector<double> errors;
+        double lo = 1e9, hi = -1e9;
+        for (const Toolpath& t : model.fills[layer].sparse) {
+            CHECK(t.wavy);
+            for (const ToolpathPoint& q : t.points) {
+                const double want = 0.1 * std::sin(2.0 * std::numbers::pi * q.p.x / 10.0) *
+                                    std::sin(2.0 * std::numbers::pi * q.p.y / 10.0);
+                errors.push_back(std::abs(q.dz - want));
+                lo = std::min(lo, q.dz), hi = std::max(hi, q.dz);
+                // The same phase in every layer: it nests on the one below.
+                if (layer == 11)
+                    CHECK_THAT(q.below, WithinAbs(q.dz, 1e-9));
+            }
+        }
+        REQUIRE(errors.size() > 100);
+        std::sort(errors.begin(), errors.end());
+        CHECK(errors[errors.size() / 2] < 0.002);
+        CHECK(errors[errors.size() * 9 / 10] < 0.04);
+        CHECK(lo >= -0.1 - 1e-9);
+        CHECK(hi <= 0.1 + 1e-9);
+        CHECK(hi > 0.09);
+        CHECK(lo < -0.09);
+    }
+    // The G-code passes the check, each bead as thick as its gap.
+    std::ostringstream g;
+    write_gcode(g, model, s);
+    const GcodeCheck check = check_gcode(g.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    // One kind of wavy infill at a time, and no arcs or spiral with it (rule 4).
+    Settings both = s;
+    both.infill_nonplanar = true;
+    CHECK_THROWS_AS(check_settings(both), SettingsError);
+    Settings arcs = s;
+    arcs.gcode_arcs = true;
+    CHECK_THROWS_AS(check_settings(arcs), SettingsError);
+    // Read and written.
+    const Settings back = parse_settings(R"({"infill": {"waves": true, "wave_amplitude": 40, "wave_length": 8}})");
+    CHECK(back.infill_waves);
+    CHECK(back.infill_wave_amplitude == 40.0);
+    CHECK(parse_settings(settings_json(back)).infill_wave_length == 8.0);
 }

@@ -37,9 +37,25 @@ add_executable(tisma_tests
   test_infill.cpp
   test_gcode.cpp
   test_resolution.cpp
+  test_gcode_arcs.cpp
+  test_firmware.cpp
+  test_template.cpp
+  test_binary.cpp
+  test_retraction.cpp
+  test_walls_extra.cpp
+  test_sequential.cpp
+  test_labels.cpp
+  test_multi_extruder.cpp
+  test_color_mix.cpp
+  test_curved.cpp
+  test_resin.cpp
+  test_belt.cpp
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp
+  test_settings_view.cpp
+  test_printer_card.cpp
+  test_transform.cpp
   test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
@@ -49,6 +65,9 @@ add_executable(tisma_tests
   test_paint.cpp
   test_support.cpp
   test_tree_support.cpp
+  test_arcs.cpp
+  test_stability.cpp
+  test_speeds.cpp
   test_formats.cpp
   test_bitgrid.cpp
   test_voronoi.cpp
@@ -68,10 +87,11 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
-                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs")
+                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
+                                                 TISMA_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
@@ -208,6 +228,84 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_paint_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode)
+    # The settings panel (settings_panel.md): the same G-code in Basic and in
+    # Custom (SP9), the search going to a setting (SP6) with all the sections
+    # together (SP6b), and the dialog that chooses what Custom shows.
+    add_test(NAME ui_settings_basic
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level basic
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.png)
+    add_test(NAME ui_settings_custom_search
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level custom
+              --search seam --single-column --choose-settings
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.png)
+    add_test(NAME ui_settings_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode)
+    # The printer's card with a catalog printer of several nozzles and beds
+    # (SP22), and the printer's page on its calibrations (SP28, SP29).
+    add_test(NAME ui_printer_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+              "--profile" "printer=Raise3D E3 0.4 mm" --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_card.png)
+    add_test(NAME ui_printer_page
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --section printer/calibration
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_page.png)
+    # A cube cut at 4 mm in the interface: two pieces, sliced and exported
+    # with their G-code checked (model_tools.md, rule 13).
+    add_test(NAME ui_cut
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --cut 4
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.png)
+    # The help with the engine's own test data: a problem with its actions
+    # (assistant.md, rules 5 to 8), and the ABS card with its warnings (AS9).
+    add_test(NAME ui_help_problem
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --help-panel problems --help-item stringing
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_problem.png)
+    add_test(NAME ui_material_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --profile filament=ABS --section material/temperature
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_material_card.png)
+    # A guided tutorial of the test data on its first step (assistant.md, AS12).
+    add_test(NAME ui_tutorial
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --tutorial first_print,1
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_tutorial.png)
+    set_tests_properties(ui_help_problem ui_material_card ui_tutorial PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Measure between the cube's bottom and top (model_tools.md, rule 20).
+    add_test(NAME ui_measure
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool measure --measure 0,2
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_measure.png)
+    set_tests_properties(ui_cut ui_measure PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # More › Credits and sources, in English (credits.md, CR2 and CR4).
+    add_test(NAME ui_credits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --credits
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_credits.png)
+    # The help panel without the pack's data says it comes with the profiles
+    # (assistant.md, AS1), with an empty data folder of its own.
+    add_test(NAME ui_help_panel
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --help-panel problems
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_panel.png)
+    set_tests_properties(ui_help_panel PROPERTIES ENVIRONMENT
+                         "ASAN_OPTIONS=detect_leaks=0;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_help_config" TIMEOUT 300)
+    set_tests_properties(ui_printer_card ui_printer_page ui_credits PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)
+    set_tests_properties(ui_settings_custom_search PROPERTIES FIXTURES_SETUP ui_level_custom)
+    set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")
+    set_tests_properties(ui_settings_basic ui_settings_custom_search PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
     set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
     set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")

@@ -17,9 +17,13 @@ constexpr float kMinDistance = 1.0f, kMaxDistance = 20000.0f; // mm
 
 } // namespace
 
+float OrbitCamera::lens_distance() const {
+    return orthographic ? distance * std::tan(fov * 0.5f) / std::tan(kOrthoFov * 0.5f) : distance;
+}
+
 Vec3 OrbitCamera::eye() const {
     const Vec3 back{std::cos(pitch) * std::sin(yaw), -std::cos(pitch) * std::cos(yaw), std::sin(pitch)};
-    return target + back * distance;
+    return target + back * lens_distance();
 }
 
 Vec3 OrbitCamera::forward() const {
@@ -37,9 +41,15 @@ Mat4 OrbitCamera::view() const {
 }
 
 Mat4 OrbitCamera::projection(float aspect) const {
-    const float near = std::max(distance * 0.01f, 0.05f);
-    const float far = distance * 20.0f + 1000.0f;
-    const float t = 1.0f / std::tan(fov * 0.5f);
+    float near = std::max(distance * 0.01f, 0.05f);
+    float far = distance * 20.0f + 1000.0f;
+    if (orthographic) {
+        // The scene lies within a few distances and a bed's size of the target.
+        const float d = lens_distance(), reach = 3.0f * distance + 1000.0f;
+        near = std::max(d - reach, 0.05f);
+        far = d + reach;
+    }
+    const float t = 1.0f / std::tan(lens_fov() * 0.5f);
     Mat4 m{};
     m[0] = t / std::max(aspect, 1e-6f);
     m[5] = t;
@@ -81,6 +91,7 @@ void OrbitCamera::set_view(StandardView view) {
     case StandardView::Back: yaw = kPi, pitch = 0.0f; break;
     case StandardView::Left: yaw = -kPi * 0.5f, pitch = 0.0f; break;
     case StandardView::Right: yaw = kPi * 0.5f, pitch = 0.0f; break;
+    case StandardView::Bottom: yaw = 0.0f, pitch = kMinPitch; break;
     }
 }
 

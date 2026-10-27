@@ -10,6 +10,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <numbers>
@@ -189,4 +191,178 @@ TEST_CASE("line kinds have names and ids", "[gcode][preview]") {
     CHECK(line_kind("") == LineKind::Other);
     CHECK(std::string(line_kind_id(LineKind::TopSolidInfill)) == "top_solid_infill");
     CHECK(std::string(line_kind_id(LineKind::Travel)) == "travel");
+}
+
+TEST_CASE("the preview keeps each move's fan, temperature, tool and colour (preview.md, rule 6)", "[gcode][preview]") {
+    const GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:Perimeter\n;WIDTH:0.45\n"
+                                              "M104 S215\nM106 S127.5\nG1 X10 Y0 Z0.2 E1 F1200\n"
+                                              "M106 P1 S255\nM104 T1 S250\nT1\nG1 X20 E2\nM107\nM600\nM109 S230\n"
+                                              "G1 X30 E3\n");
+    REQUIRE(p.moves.size() == 3);
+    CHECK(p.moves[0].fan == 50);
+    CHECK(p.moves[0].temperature == 215);
+    CHECK(p.moves[0].tool == 0);
+    CHECK(p.moves[0].color == 0);
+    // Another fan, and another tool's temperature, change nothing here.
+    CHECK(p.moves[1].fan == 50);
+    CHECK(p.moves[1].temperature == 215);
+    CHECK(p.moves[1].tool == 1);
+    CHECK(p.moves[2].fan == 0);
+    CHECK(p.moves[2].temperature == 230);
+    CHECK(p.moves[2].color == 1);
+    // The filament by kind: 3 mm of perimeter.
+    CHECK_THAT(p.kind_filament[std::size_t(LineKind::InnerWall)], WithinAbs(3.0, 1e-9));
+}
+
+TEST_CASE("the preview's moves take their time with the accelerations (preview.md, rules 6 and 8)", "[gcode][preview]") {
+    GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:External perimeter\n;WIDTH:0.4\n"
+                                        "G1 X100 Y0 Z0.2 E5 F3000\n;TYPE:Internal infill\nG1 X100 Y100 E10\n"
+                                        ";LAYER_CHANGE\n;Z:0.4\n;HEIGHT:0.2\n;TYPE:External perimeter\nG1 X0 Y100 Z0.4 E15\n");
+    Kinematics k;
+    k.acceleration = 1000.0;
+    k.corner_speed = 0.0;
+    time_preview(p, k);
+    REQUIRE(p.layers.size() == 2);
+    // 100 mm at 50 mm/s from rest to rest at 1000 mm/s2: 1.95 s at speed and
+    // 0.05 s each to speed up and slow down.
+    CHECK_THAT(p.layers[1].seconds, WithinAbs(2.05, 1e-4)); // and 0.2 mm up in Z
+    CHECK_THAT(double(p.moves[p.layers[1].first].seconds), WithinAbs(2.05, 1e-4));
+    double sum = 0.0;
+    for (const PreviewMove& m : p.moves)
+        sum += m.seconds;
+    CHECK_THAT(p.moves_seconds, WithinAbs(sum, 1e-4));
+    CHECK_THAT(p.layers[0].seconds + p.layers[1].seconds, WithinAbs(p.moves_seconds, 1e-9));
+    CHECK_THAT(p.first_layer_seconds, WithinAbs(p.layers[0].seconds, 1e-12));
+    CHECK_THAT(p.kind_seconds[std::size_t(LineKind::OuterWall)] + p.kind_seconds[std::size_t(LineKind::SparseInfill)],
+               WithinAbs(p.moves_seconds, 1e-4));
+    // A move slowed by the turn takes longer than at its feed.
+    CHECK(p.moves[0].seconds > 2.0f);
+}
+
+TEST_CASE("the preview marks retractions, seams and changes (preview.md, rule 11, PV7)", "[gcode][preview]") {
+    const GcodePreview p = read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nT0\n;TYPE:External perimeter\n;WIDTH:0.45\nG1 X0 Y0 Z0.2 F600\n"
+        "G1 X10 E1\nG1 Y10 E2\nG1 X0 E3\nG1 Y0 E4\n"
+        // a wipe that retracts, the rest of the retraction, a travel, the unretraction
+        "G1 X2 Y0 E3.6\nG1 E3.2\nG1 X20 Y0\nG1 E4\n"
+        "G1 X30 E5\nG1 Y10 E6\n;TYPE:Perimeter\nG1 X20 E7\n"
+        "G10\nG1 X40\nG11\n;COLOR_CHANGE\nM600\nT1\n;PAUSE_PRINT\nM601\n;TYPE:Custom\nG4 P100\n"
+        ";TYPE:External perimeter\nG1 X50 E8\n");
+    std::array<int, kMarkKinds> count{};
+    for (const PreviewMark& m : p.marks)
+        ++count[std::size_t(m.kind)];
+    CHECK(count[std::size_t(MarkKind::Retract)] == 2);   // the wipe's, then G10
+    CHECK(count[std::size_t(MarkKind::Unretract)] == 2); // E back, then G11
+    CHECK(count[std::size_t(MarkKind::Seam)] == 3);      // each outer wall's start
+    CHECK(count[std::size_t(MarkKind::ToolChange)] == 1);
+    CHECK(count[std::size_t(MarkKind::ColorChange)] == 1);
+    CHECK(count[std::size_t(MarkKind::Pause)] == 1);
+    CHECK(count[std::size_t(MarkKind::Custom)] == 1);
+    // The first seam where the loop starts; the wipe is a travel of its own kind.
+    CHECK(p.marks.front().kind == MarkKind::Seam);
+    CHECK(p.marks.front().x == 0.0f);
+    CHECK(std::count_if(p.moves.begin(), p.moves.end(), [](const PreviewMove& m) { return m.wipe; }) == 1);
+}
+
+TEST_CASE("the preview marks as many retractions as the engine's G-code makes (PV7)", "[gcode][preview]") {
+    // Two cubes apart: a retraction on every travel between them.
+    IndexedMesh two;
+    for (const float x0 : {0.0f, 40.0f}) {
+        const std::uint32_t b = std::uint32_t(two.vertices.size());
+        for (const float z : {0.0f, 5.0f})
+            for (const auto& [x, y] : {std::pair{0.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}})
+                two.vertices.push_back({x0 + x + 80.0f, y + 100.0f, z});
+        const auto quad = [&](std::uint32_t a, std::uint32_t c, std::uint32_t d, std::uint32_t e) {
+            two.triangles.push_back({b + a, b + c, b + d});
+            two.triangles.push_back({b + a, b + d, b + e});
+        };
+        quad(0, 3, 2, 1);
+        quad(4, 5, 6, 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    }
+    Settings s = test_printer();
+    s.gpu = GpuMode::Off;
+    std::ostringstream g;
+    write_gcode(g, slice_model(two, s), s);
+    const std::string text = g.str();
+    // The retractions in the text: E going down from where it was pushed to.
+    int retractions = 0;
+    bool retracted = false;
+    double e = 0.0;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line);) {
+        line = line.substr(0, line.find(';'));
+        if (line.rfind("G92", 0) == 0) {
+            e = 0.0;
+            continue;
+        }
+        if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+            continue;
+        const std::size_t at = line.find(" E");
+        if (at == std::string::npos)
+            continue;
+        const double next = std::stod(line.substr(at + 2));
+        const double de = s.relative_extrusion ? next : next - e;
+        e = s.relative_extrusion ? e + next : next;
+        if (de < -1e-7 && !retracted)
+            ++retractions, retracted = true;
+        else if (de > 1e-7)
+            retracted = false;
+    }
+    REQUIRE(retractions > 0);
+    const GcodePreview p = read_gcode_preview(text, s.filament_diameter);
+    const auto marked = std::count_if(p.marks.begin(), p.marks.end(), [](const PreviewMark& m) { return m.kind == MarkKind::Retract; });
+    CHECK(marked == retractions);
+}
+
+TEST_CASE("a change added at a layer starts that layer (preview.md, PV8 and PV9)", "[gcode][preview]") {
+    // The cube of 10 mm, 50 layers; a colour change at layer 25 and a pause
+    // with its message at layer 30, each halfway below its layer's top, as
+    // the layer slider's «+» puts them.
+    IndexedMesh cube;
+    for (const float z : {0.0f, 10.0f})
+        for (const auto& [x, y] : {std::pair{0.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}})
+            cube.vertices.push_back({x + 95.0f, y + 95.0f, z});
+    const auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+        cube.triangles.push_back({a, b, c});
+        cube.triangles.push_back({a, c, d});
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    for (std::uint32_t i = 0; i < 4; ++i)
+        quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    Settings s = test_printer();
+    s.gpu = GpuMode::Off;
+    HeightChange colour;
+    colour.z = 0.5 * (4.8 + 5.0);
+    colour.color_change = true;
+    HeightChange pause;
+    pause.z = 0.5 * (5.8 + 6.0);
+    pause.pause = true;
+    pause.gcode = "M117 Insertar tuerca";
+    s.changes = {colour, pause};
+    std::ostringstream g;
+    write_gcode(g, slice_model(cube, s), s);
+    const GcodePreview p = read_gcode_preview(g.str(), s.filament_diameter);
+    std::uint32_t colour_layer = 0, pause_layer = 0;
+    for (const PreviewMark& m : p.marks) {
+        if (m.kind == MarkKind::ColorChange)
+            colour_layer = m.layer;
+        if (m.kind == MarkKind::Pause)
+            pause_layer = m.layer;
+    }
+    CHECK(colour_layer == 24); // layer 25, from 1
+    CHECK(pause_layer == 29);
+    CHECK(g.str().find("M117 Insertar tuerca") != std::string::npos);
+}
+
+TEST_CASE("a G-code without the kinds' comments has no types, and its heights and speeds (PV10)", "[gcode][preview]") {
+    const GcodePreview bare = read_gcode_preview("G1 Z0.2 F3000\nG1 X10 Y0 E0.5 F1200\nG1 X10 Y10 E1\n"
+                                                 "G1 Z0.4\nG1 X0 Y10 E1.5\n");
+    CHECK_FALSE(bare.typed);
+    REQUIRE(bare.layers.size() == 2);
+    CHECK(bare.moves[bare.extrusions.front()].height > 0.0f);
+    CHECK(bare.moves[bare.extrusions.front()].feed == 20.0f);
+    CHECK(read_gcode_preview(";TYPE:Perimeter\nG1 X10 E1\n").typed);
 }

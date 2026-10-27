@@ -19,12 +19,16 @@
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
 #include "fea/analysis.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/export.hpp"
+#include "resin/goo.hpp"
 #include "gcode/print_time.hpp"
+#include "gcode/writer.hpp"
 #include "io/model.hpp"
 #include "io/stl.hpp"
 #include "project/project.hpp"
 #include "ui/camera.hpp"
+#include "ui/credits.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/help.hpp"
@@ -34,10 +38,17 @@
 #include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
 #include "ui/settings_layout.hpp"
+#include "ui/settings_view.hpp"
+#include "ui/printer_card.hpp"
+#include "ui/measure.hpp"
+#include "ui/knowledge.hpp"
+#include "ui/guide.hpp"
+#include "slice/transform.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_internal.h> // ImGui::BringWindowToDisplayFront, for the guided tutorials
 #ifdef TISMA_VULKAN_WINDOW
 #include <imgui_impl_vulkan.h>
 #endif
@@ -53,13 +64,16 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace tisma::ui {
@@ -72,6 +86,7 @@ constexpr float kPanel = 420.0f;
 constexpr float kFontSize = 15.0f;
 constexpr float kTitleSize = 21.0f;
 constexpr double kToastSeconds = 6.0;
+constexpr std::uint32_t kWarningColour = 0xE5A13A; // a warning in the help (an amber of its own)
 
 constexpr const char* kIcons[] = {
     "tisma_plate",      "tisma_print",     "tisma_filament", "tisma_printer",     "tisma_more",      "tisma_folder",
@@ -79,13 +94,13 @@ constexpr const char* kIcons[] = {
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
-    "tool_lay_flat",    "tool_arrange",     "tool_paint",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
 const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf"};
 
 bool is_model(const std::filesystem::path& path) {
@@ -255,10 +270,68 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
-enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+// The preview's views (preview.md, rule 1), in its order: what colours the
+// lines, the shader's way to colour them, and the number the instances carry.
+enum class PreviewView {
+    Kind,
+    Height,
+    Width,
+    Speed,
+    ActualSpeed,
+    Fan,
+    Temperature,
+    Flow,
+    ActualFlow,
+    LayerTime,
+    LayerTimeLog,
+    Tool,
+    ColorPrint
+};
+inline constexpr int kPreviewViews = 13;
+struct ViewInfo {
+    T name;
+    ColorMode shader;
+    PreviewValue value;
+};
+constexpr ViewInfo kViewInfo[kPreviewViews] = {
+    {T::ByKind, ColorMode::Kind, PreviewValue::Feed},
+    {T::ByHeight, ColorMode::Height, PreviewValue::Feed},
+    {T::ByWidth, ColorMode::Width, PreviewValue::Feed},
+    {T::BySpeed, ColorMode::Speed, PreviewValue::Feed},
+    {T::ByActualSpeed, ColorMode::Speed, PreviewValue::ActualFeed},
+    {T::ByFan, ColorMode::Speed, PreviewValue::Fan},
+    {T::ByTemperature, ColorMode::Speed, PreviewValue::Temperature},
+    {T::ByFlow, ColorMode::Speed, PreviewValue::Flow},
+    {T::ByActualFlow, ColorMode::Speed, PreviewValue::ActualFlow},
+    {T::ByLayerTime, ColorMode::Speed, PreviewValue::LayerTime},
+    {T::ByLayerTimeLog, ColorMode::Speed, PreviewValue::LayerTimeLog},
+    {T::ByTool, ColorMode::Speed, PreviewValue::Tool},
+    {T::ByColorPrint, ColorMode::Speed, PreviewValue::ColorPrint},
+};
+
+// The colours of the preview's marks (rule 11), in MarkKind order, and of
+// the wipes.
+constexpr std::uint32_t kMarkColours[kMarkKinds] = {0xFF5A36, 0x3FBF7F, 0xF0F0F0, 0xFFD23F, 0xE04FD0, 0x9B6BFF, 0x4FA3FF};
+constexpr std::uint32_t kWipeColour = 0x7FE0C0;
+
+// What the layer slider's «+» adds at a layer (preview.md, rule 12).
+enum class ChangeKind { Color, Pause, Gcode };
+
+enum class Purpose {
+    Open,
+    AddModel,
+    SaveGcode,
+    LoadSettings,
+    SaveSettings,
+    SaveProject,
+    SaveExtruderTest,
+    LoadCase,
+    ExportView,
+    ImportView
+};
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
-enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint };
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Cut, Measure, Paint, Material };
 
 class App {
 public:
@@ -287,7 +360,16 @@ private:
     void plate_changed();
     void arrange_plate();
     void plate_tools();
+    // The chosen object mirrored, or cut in two (model_tools.md, rules 13 and 16).
+    void mirror_selected(int axis);
+    void cut_selected();
+    void split_selected();
+    void cut_plane_overlay();
+    void measure_overlay();
     void paint_card(ImVec2 at);
+    void mixing_dialog();
+    std::string filament_color(int extruder) const;
+    void objects_material_changed();
     void brush_stroke(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
@@ -312,6 +394,10 @@ private:
     void start_slice();
     void poll_jobs();
     void show_preview();
+    void upload_preview();
+    void preview_overlay(const GcodePreview& preview);
+    void add_change_at(int layer, ChangeKind kind, std::string text = {});
+    void part_labels();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
@@ -356,11 +442,54 @@ private:
                 const char* tip, float height);
     bool icon_button(const char* id, const char* icon_name, const char* tip, float size);
     // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
-    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary);
+    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset);
     bool card_rows(std::string_view id, bool& bed);
     bool setting_shown(std::string_view key, std::string_view card) const;
     bool setting_applies(std::string_view key) const;
     bool card_shown(const SubsectionLayout& sub) const;
+    // Whether the level (or the Custom view) shows a setting, before what
+    // else shows it.
+    bool view_shows(std::string_view key) const;
+    // The settings of the chosen profiles, as saved: what a change is
+    // measured from and a card's Reset goes back to (rule 8).
+    Settings saved_settings() const;
+    void choose_level(ViewLevel level);
+    // The search (rule 5): the field in the top bar, and going to a setting.
+    void search_box(float width, float height);
+    void go_to_setting(const std::string& key);
+    // Choosing what Custom shows (rule 16).
+    void choose_settings_dialog();
+    // «Based on» under a card, and the Credits and sources page (credits.md).
+    void card_credits(std::string_view card, float left, float right);
+    void credits_dialog();
+    // The help panel over the settings panel (assistant.md).
+    void help_panel();
+    void load_help_data();
+    void help_body();
+    void help_problem(const KnowledgeProblem& problem);
+    void help_procedure(const KnowledgeProcedure& procedure);
+    void help_action(const KnowledgeAction& action);
+    void help_apply_dialog();
+    void anchor(const char* name); // the last item, as a part tutorials can point at
+    void anchor_rect(const char* name, ImVec2 min, ImVec2 max);
+    void fire(std::string_view event);
+    void offer_tutorials(std::string_view when);
+    void end_guide(bool finished);
+    void guide_overlay();
+    // The chosen filament's material in the help's data, its card and its
+    // warnings (assistant.md, rules 13 and 14).
+    const KnowledgeMaterial* current_material() const;
+    void material_card();
+    // A section in the column of sections, and a section's cards.
+    bool section_button(std::string_view id, const char* title, const char* icon_name, bool selected, bool marked,
+                        float column);
+    void section_cards(const SectionLayout& section, bool& changed, bool& bed);
+    // The printer's card on top of the panel, its nozzle change, and its page.
+    void printer_card();
+    void choose_nozzle(double diameter, const std::string& profile);
+    void printer_page();
+    void record_calibration(CalibrationKind kind);
+    void notify_undo(std::string text, std::function<void()> undo);
 
     AppOptions options_;
     GLFWwindow* window_ = nullptr;
@@ -381,6 +510,33 @@ private:
     std::map<std::string, float> card_heights_;
     std::set<std::string> show_all_cards_;
     std::set<std::string> changed_keys_;
+    // Custom (rules 15 to 19): the settings it shows; «See all together»
+    // (rule 4); the search's text, the setting it went to (lit for 2 s, and
+    // shown whatever the level until the section changes), and the dialog
+    // that chooses what Custom shows, with its draft and its filter.
+    CustomView custom_view_;
+    bool single_column_ = false;
+    std::string search_query_;
+    bool search_focus_ = false;
+    bool search_list_hovered_ = false;
+    std::string highlight_key_;
+    double highlight_until_ = 0.0;
+    bool scroll_to_highlight_ = false;
+    std::set<std::string> revealed_keys_;
+    bool choose_open_ = false;
+    CustomView choose_draft_;
+    std::string choose_query_;
+    // The printer's card and its page (rules 21 to 40): the page open and its
+    // section, the printer list's search, the size asked for «Other…», the
+    // bed chosen on printers with several, and each printer's calibrations
+    // applied (rule 38) and notes, kept in the preferences.
+    bool printer_page_ = false;
+    std::string printer_section_ = "machine";
+    std::string printer_query_;
+    double other_nozzle_ = 0.4;
+    std::string bed_type_;
+    std::map<std::string, std::map<std::string, CalibrationRecord>> calibration_records_;
+    std::map<std::string, std::string> printer_notes_;
     ImTextureID logo_ = 0;
     // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
     // panels and the 3D view drawn by it. The view goes first at shutdown.
@@ -407,6 +563,23 @@ private:
     std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
     const std::vector<TriangleIndex>& plate_indexes();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
+    // The Cut tool (model_tools.md, rules 13 and 18): the plane's height over
+    // the bed, and whether the part below is turned over onto its cut face.
+    double cut_height_ = 5.0;
+    bool cut_flip_lower_ = false;
+    // The Measure tool (rule 20): what was picked on which object, and the
+    // distance it should be.
+    std::vector<MeasureFeature> measure_picks_;
+    int measure_object_ = -1;
+    double measure_wanted_ = 0.0;
+    // The project's mixed colours and each filament's colour
+    // (color_mixing.md); the dialog that edits them, what they were when it
+    // opened and the blend being edited.
+    std::vector<ColorMix> mixes_;
+    std::vector<std::string> filament_colors_;
+    bool mixing_open_ = false;
+    std::vector<ColorMix> mixes_before_;
+    int mix_edit_ = -1;
     // The Paint tool (docs/PAINTING.md): what it paints, with which mark and
     // how wide; the model a stroke started on; where the brush is now.
     PaintChannel paint_channel_ = PaintChannel::Support;
@@ -443,8 +616,25 @@ private:
     int top_layer_ = 0; // 0-based
     int bottom_layer_ = 0;
     bool only_layer_ = false;
-    bool show_travels_ = false;
-    ColorMode color_mode_ = ColorMode::Kind;
+    // The layer slider: which handle is dragged; a pause's message or a
+    // G-code being written for a layer, and the change whose menu is open.
+    bool dragging_bottom_ = false;
+    // The move slider (preview.md, rule 4): the top layer's moves drawn, for
+    // that layer (it starts whole on another one).
+    int move_cut_ = -1, move_cut_layer_ = -1;
+    bool change_dialog_ = false;
+    int change_layer_ = 0, change_edit_ = -1;
+    ChangeKind change_kind_ = ChangeKind::Color;
+    std::string change_text_;
+    bool show_travels_ = true;
+    // The preview's icon row (preview.md, rule 11): wipes, the marks by kind,
+    // the centre of gravity and the nozzle (travels: show_travels_).
+    bool show_wipes_ = false, show_gravity_ = false, show_nozzle_ = true;
+    bool show_legend_ = true;  // L hides the preview's legend
+    bool show_labels_ = false; // E shows the parts' names
+    std::array<bool, kMarkKinds> show_marks_{false, false, true, false, false, false, false}; // seams on
+    ColorMode color_mode_ = ColorMode::Kind; // the shader's, from the view
+    PreviewView preview_view_ = PreviewView::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
     float feed_range_[2] = {0, 0}, width_range_[2] = {0, 0}, height_range_[2] = {0, 0};
     PreviewBuffers preview_buffers_;
@@ -488,12 +678,41 @@ private:
         std::string text;
         bool error = false;
         double until = 0.0;
+        std::function<void()> undo; // with it, the toast has an «Undo» button
     };
     std::vector<Toast> toasts_;
     bool error_open_ = false;
     std::string error_title_, error_message_;
     std::vector<std::string> error_details_;
     bool about_open_ = false;
+    // Credits and sources (credits.md, rule 4): open, and the library whose
+    // license notice shows (-1: none).
+    bool credits_open_ = false;
+    int credits_notice_ = -1;
+    // The help panel (assistant.md, rules 1 to 4): open, its tab and its search.
+    bool help_open_ = false;
+    int help_tab_ = 0;
+    bool help_select_ = false; // choose help_tab_ in the tab bar once
+    // The help's data (knowledge/), read when the panel opens; what it shows
+    // (a list, or one problem or procedure) and the problems it came through,
+    // for Back; a setting change waiting for its confirmation (rule 7).
+    std::optional<Knowledge> knowledge_;
+    enum class HelpPage { List, Problem, Procedure };
+    HelpPage help_page_ = HelpPage::List;
+    std::size_t help_item_ = 0;
+    std::vector<std::size_t> help_back_;
+    std::vector<bool> help_steps_done_;
+    std::optional<SettingChange> help_change_;
+    bool help_change_open_ = false;
+    // The guided tutorials (assistant.md, rules 15 to 18): the parts of the
+    // interface named this frame (anchors), what is remembered of each
+    // tutorial, the one going on and those offered now.
+    std::map<std::string, std::array<float, 4>> anchors_;
+    GuideMemory guide_memory_;
+    std::optional<Guide> guide_;
+    std::vector<std::size_t> guide_offers_;
+    bool guide_opened_panel_ = false;
+    std::string help_query_;
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
     int tour_step_ = -1;
@@ -512,6 +731,7 @@ private:
     DimensionTest dimension_test_;
     Measurements measured_{30.0, 20.0, 15.0, 10.0};
     double elephant_bottom_ = 20.0, elephant_body_ = 20.0; // the elephant's foot block, measured
+    double resin_measured_[3] = {30.0, 30.0, 10.0};       // the resin measuring block, measured
     struct TowerRange {
         double start = 0.0, end = 0.0, step = 1.0, segment = 5.0;
     };
@@ -627,8 +847,23 @@ const std::map<std::string, SettingDoc>& setting_docs() {
     return docs;
 }
 
-// The setting each row of the panel edits, for its info button.
-const char* row_key(T label) {
+// Where the functions come from and the libraries' notices, from the copy of
+// resources/credits.json the program carries (credits.md, rule 5); none when
+// that copy does not read, which the tests rule out.
+const Credits& credits() {
+    static const Credits all = [] {
+        try {
+            return parse_credits(embedded("credits.json"));
+        } catch (const CreditsError&) {
+            return Credits{};
+        }
+    }();
+    return all;
+}
+
+// The setting each row of the panel edits, for its info button and the
+// search.
+const std::map<T, const char*>& row_keys() {
     static const std::map<T, const char*> keys = {
         {T::LayerHeight, "layers.height"}, {T::FirstLayerHeight, "layers.first_height"},
         {T::LayerHeights, "layers.heights"},
@@ -653,6 +888,19 @@ const char* row_key(T label) {
         {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
+        {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
+        {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
+        {T::BridgeFlowRatio, "extrusion.bridge_flow_ratio"}, {T::AccelDefault, "acceleration.default"},
+        {T::AccelWalls, "acceleration.walls"}, {T::AccelOuterWall, "acceleration.outer_wall"},
+        {T::AccelInfill, "acceleration.infill"}, {T::AccelSolid, "acceleration.solid_infill"},
+        {T::AccelTop, "acceleration.top_solid_infill"}, {T::AccelBridges, "acceleration.bridges"},
+        {T::AccelFirstLayer, "acceleration.first_layer"}, {T::AccelTravel, "acceleration.travel"},
+        {T::AccelShortTravel, "acceleration.short_travel"}, {T::DynamicOverhangs, "speed.dynamic_overhangs"},
+        {T::Overhang0, "speed.overhang_0"}, {T::Overhang1, "speed.overhang_1"}, {T::Overhang2, "speed.overhang_2"},
+        {T::Overhang3, "speed.overhang_3"}, {T::FlowSlopeUp, "speed.flow_slope_up"},
+        {T::FlowSlopeDown, "speed.flow_slope_down"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
         {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
@@ -665,7 +913,22 @@ const char* row_key(T label) {
         {T::ScarfMode, "walls.scarf"}, {T::ScarfLength, "walls.scarf_length"},
         {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
-        {T::ScarfInner, "walls.scarf_inner"}, {T::ScaleXRow, "compensation.scale_x"},
+        {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
+        {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
+        {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
+        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
+        {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
+        {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
+        {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
+        {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
+        {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
+        {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
+        {T::RaftExpansion, "adhesion.raft_expansion"}, {T::RaftFirstDensity, "adhesion.raft_first_layer_density"},
+        {T::RaftFirstExpansion, "adhesion.raft_first_layer_expansion"}, {T::SpeedOverRaft, "speed.first_layer_over_raft"},
+        {T::AccelOverRaft, "acceleration.first_layer_over_raft"},
+        {T::IroningEnabled, "ironing.enabled"}, {T::IroningSurfacesRow, "ironing.surfaces"},
+        {T::IroningFlow, "ironing.flow"}, {T::IroningSpacing, "ironing.spacing"}, {T::IroningSpeed, "ironing.speed"}, {T::ScaleXRow, "compensation.scale_x"},
         {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
         {T::HoleCorrection, "compensation.hole_offset"}, {T::XyOffset, "slicing.xy_offset"},
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
@@ -678,29 +941,148 @@ const char* row_key(T label) {
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
         {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
         {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
+        {T::SupportWidth, "support.width"}, {T::ArcsEnabled, "arcs.enabled"}, {T::ArcsOverlap, "arcs.overlap"}, {T::ArcsSpeed, "arcs.speed"},
+        {T::ArcsMaxDistance, "arcs.max_distance"},
+        {T::NozzleForce, "review.nozzle_force"}, {T::BedAdhesion, "review.bed_adhesion"},
+        {T::MaxDeflection, "review.max_deflection"},
         {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
         {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
+        {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
+        {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
+        {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
+        {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
+        {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
+        {T::BeforeWipe, "retraction.before_wipe"}, {T::FirmwareRetraction, "retraction.firmware"},
+        {T::LiftAbove, "retraction.lift_above"}, {T::LiftBelow, "retraction.lift_below"},
+        {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
+        {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
+        {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
+        {T::FilamentRetractionRow, "extrusion.retraction"},
+        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
+        {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
+        {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
         {T::MaxChamberTemp, "machine.max_chamber_temp"}, {T::HardenedNozzle, "machine.hardened_nozzle"},
         {T::MachineMaxFlow, "machine.max_flow"}, {T::MaxFeedX, "machine.max_feed_x"},
         {T::MaxFeedY, "machine.max_feed_y"}, {T::MaxFeedZ, "machine.max_feed_z"},
         {T::MaxFeedE, "machine.max_feed_e"}, {T::CornerSpeed, "machine.corner_speed"},
         {T::AccelerationRow, "machine.acceleration"}, {T::TravelAcceleration, "machine.travel_acceleration"},
+        {T::RetractAcceleration, "machine.retract_acceleration"}, {T::MaxAccelX, "machine.max_accel_x"},
+        {T::MaxAccelY, "machine.max_accel_y"}, {T::MaxAccelZ, "machine.max_accel_z"},
+        {T::MaxAccelE, "machine.max_accel_e"}, {T::JerkX, "machine.jerk_x"}, {T::JerkY, "machine.jerk_y"},
+        {T::JerkZ, "machine.jerk_z"}, {T::JerkE, "machine.jerk_e"}, {T::JunctionDeviation, "machine.junction_deviation"},
+        {T::MinExtrudeFeed, "machine.min_extrude_feed"}, {T::MinTravelFeed, "machine.min_travel_feed"},
+        {T::LimitsUsageRow, "machine.limits_usage"}, {T::GcodeProgress, "gcode.progress"},
+        {T::SilentModeRow, "machine.silent_mode"}, {T::SilentLimitsRow, "machine.silent"},
         {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
-        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}};
-    const auto it = keys.find(label);
-    return it == keys.end() ? nullptr : it->second;
+        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}, {T::SequentialRow, "sequential.enabled"},
+        {T::ClearanceRadius, "sequential.clearance_radius"}, {T::ClearanceHeight, "sequential.clearance_height"},
+        {T::BetweenObjectsGcode, "gcode.between_objects"}, {T::ObjectLabelsRow, "gcode.object_labels"},
+        {T::ExtrudersRow, "machine.extruders"}, {T::ExtruderOffsetRow, "machine.extruder_offset"},
+        {T::ToolchangeLength, "retraction.toolchange_length"},
+        {T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra"}, {T::ToolchangeGcode, "gcode.toolchange"},
+        {T::WallsExtruder, "extruders.walls"}, {T::InfillExtruder, "extruders.infill"},
+        {T::SolidInfillExtruder, "extruders.solid_infill"}, {T::SupportExtruder, "extruders.support"},
+        {T::SupportInterfaceExtruder, "extruders.support_interface"},
+        {T::BedTemperatureFrom, "extruders.bed_temperature_from"}, {T::OozePrevention, "extruders.ooze_prevention"},
+        {T::StandbyDelta, "extruders.standby_delta"}, {T::InterfaceShells, "surfaces.interface_shells"},
+        {T::WipeTowerRow, "wipe_tower.enabled"}, {T::WipeTowerWidth, "wipe_tower.width"},
+        {T::WipeTowerBrim, "wipe_tower.brim_width"}, {T::WipeTowerX, "wipe_tower.x"}, {T::WipeTowerY, "wipe_tower.y"},
+        {T::WipeTowerRotation, "wipe_tower.rotation"}, {T::WipeTowerBridging, "wipe_tower.bridging"},
+        {T::WipeTowerExtruder, "extruders.wipe_tower"}, {T::PurgeVolumesRow, "wipe_tower.purge_volumes"},
+        {T::WipeTowerSpacing, "wipe_tower.extra_spacing"}, {T::WipeTowerFlow, "wipe_tower.extra_flow"},
+        {T::WipeTowerCone, "wipe_tower.cone_angle"}, {T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers"},
+        {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"},
+        {T::MinPurgeOnTower, "extrusion.min_purge_on_tower"}, {T::CoolingTubeLength, "mmu.cooling_tube_length"},
+        {T::CoolingTubePosition, "mmu.cooling_tube_position"}, {T::ParkingPosition, "mmu.parking_position"},
+        {T::ExtraLoadingMove, "mmu.extra_loading_move"}, {T::HighCurrentOnSwap, "mmu.high_current_on_swap"},
+        {T::LoadingSpeed, "extrusion.loading_speed"}, {T::LoadingSpeedStart, "extrusion.loading_speed_start"},
+        {T::UnloadingSpeed, "extrusion.unloading_speed"}, {T::UnloadingSpeedStart, "extrusion.unloading_speed_start"},
+        {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
+        {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
+        {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
+        {T::UnloadTime, "extrusion.unload_time"}, {T::InterlockBeams, "interlocking.beams"},
+        {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
+        {T::InterlockOrientation, "interlocking.orientation"}, {T::InterlockDepth, "interlocking.depth"},
+        {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
+        {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"},
+        {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"},
+        {T::CurvedModeRow, "curved.mode"}, {T::CurvedPatternRow, "curved.pattern"}, {T::CurvedFitHead, "curved.fit_head"},
+        {T::CurvedAmplitude, "curved.amplitude"}, {T::CurvedWavelength, "curved.wavelength"},
+        {T::CurvedAngle, "curved.angle"}, {T::CurvedTwist, "curved.twist"}, {T::CurvedConeAngle, "curved.cone_angle"},
+        {T::CurvedFlatBelow, "curved.flat_below"}, {T::CurvedRampHeight, "curved.ramp_height"},
+        {T::CurvedFlatTop, "curved.flat_top"}, {T::CurvedSegment, "curved.segment_length"},
+        {T::CurvedMaxSlope, "curved.max_slope"}, {T::CurvedFlowPolicy, "curved.flow_policy"},
+        {T::CurvedUniformFlow, "curved.uniform_flow"}, {T::CurvedOverhangThreshold, "curved.overhang_threshold"},
+        {T::HeadFreeAngleX, "head.free_angle_x"},
+        {T::HeadFreeAngleY, "head.free_angle_y"}, {T::HeadClearanceHeight, "head.clearance_height"},
+        {T::HeadClearanceRadius, "head.clearance_radius"}, {T::HeadProfile, "head.profile"},
+        {T::BeltEnabled, "belt.enabled"}, {T::BeltAngle, "belt.angle"}, {T::BeltIsZ, "belt.belt_is_z"},
+        {T::InterlockWaves, "infill.waves"}, {T::WaveAmplitude, "infill.wave_amplitude"},
+        {T::WaveLength, "infill.wave_length"}, {T::Technology, "machine.technology"},
+        {T::DisplayPixelsX, "machine.display_pixels_x"}, {T::DisplayPixelsY, "machine.display_pixels_y"},
+        {T::DisplayWidth, "machine.display_width"}, {T::DisplayHeight, "machine.display_height"},
+        {T::DisplayMirrorX, "machine.display_mirror_x"}, {T::DisplayMirrorY, "machine.display_mirror_y"},
+        {T::ResinLayerHeight, "resin.layer_height"}, {T::ResinExposure, "resin.exposure"},
+        {T::ResinBottomExposure, "resin.bottom_exposure"}, {T::ResinBottomLayers, "resin.bottom_layers"},
+        {T::ResinElephantFoot, "resin.elephant_foot"}, {T::ResinScaleX, "resin.scale_x"},
+        {T::ResinScaleY, "resin.scale_y"}, {T::ResinScaleZ, "resin.scale_z"},
+        {T::ResinAbsoluteCorrection, "resin.absolute_correction"}, {T::ResinZCorrection, "resin.z_correction_layers"},
+        {T::ResinGamma, "resin.gamma"}, {T::ResinAntialiasing, "resin.antialiasing"},
+        {T::ResinLiftDistance, "resin.lift_distance"}, {T::ResinLiftSpeed, "resin.lift_speed"},
+        {T::ResinBottomLiftDistance, "resin.bottom_lift_distance"}, {T::ResinBottomLiftSpeed, "resin.bottom_lift_speed"},
+        {T::ResinRetractSpeed, "resin.retract_speed"}, {T::ResinWaitAfterCure, "resin.wait_after_cure"},
+        {T::ResinWaitAfterLift, "resin.wait_after_lift"}, {T::ResinWaitBeforeExposure, "resin.wait_before_exposure"},
+        {T::ResinLightPwm, "resin.light_pwm"}, {T::ResinBottomLightPwm, "resin.bottom_light_pwm"},
+        {T::ResinDensity, "resin.density"}, {T::ResinBottleCost, "resin.bottle_cost"},
+        {T::ResinBottleVolume, "resin.bottle_volume"}, {T::ResinBottleWeight, "resin.bottle_weight"},
+        {T::ResinPrinterName, "resin.printer_name"}, {T::ResinProfileName, "resin.profile_name"},
+        {T::ResinSupports, "resin.supports"}, {T::ResinSupportDensity, "resin.support_density"},
+        {T::ResinElevation, "resin.support_elevation"}, {T::ResinPillarDiameter, "resin.support_pillar_diameter"},
+        {T::ResinTipDiameter, "resin.support_tip_diameter"}, {T::ResinTipPenetration, "resin.support_tip_penetration"},
+        {T::ResinCriticalAngle, "resin.support_critical_angle"}, {T::ResinPad, "resin.pad"},
+        {T::ResinPadAroundObject, "resin.pad_around_object"}, {T::ResinPadMargin, "resin.pad_margin"},
+        {T::ResinPadThickness, "resin.pad_thickness"}, {T::ResinPadWallSlope, "resin.pad_wall_slope"},
+        {T::ResinHollow, "resin.hollow"}, {T::ResinHollowWall, "resin.hollow_wall"},
+        {T::ResinHollowClosing, "resin.hollow_closing"}, {T::ResinHollowInfill, "resin.hollow_infill"},
+        {T::ResinHollowInfillCell, "resin.hollow_infill_cell"}};
+    return keys;
+}
+
+const char* row_key(T label) {
+    const auto it = row_keys().find(label);
+    return it == row_keys().end() ? nullptr : it->second;
+}
+
+// A setting's row name, for the search and the list of settings to show; the
+// key itself when no row names it.
+std::string key_label(std::string_view key) {
+    static const std::map<std::string, T, std::less<>> labels = [] {
+        std::map<std::string, T, std::less<>> m;
+        for (const auto& [label, k] : row_keys())
+            m.emplace(k, label);
+        m.emplace("machine.variables.temperature", T::NozzleTemp);
+        m.emplace("machine.variables.bed_temperature", T::BedTemp);
+        return m;
+    }();
+    const auto it = labels.find(key);
+    return it == labels.end() ? std::string(key) : std::string(tr(it->second));
 }
 
 // The setting whose info card is kept open (--info, for screenshots).
 std::string g_open_info;
+
+// The help's data, for the glossary's definitions beside the settings
+// (assistant.md, rule 12); none until it is read.
+const Knowledge* g_knowledge = nullptr;
 
 // The (i) beside a setting's name: a click opens what the setting does, its
 // key, default and range (docs/UI.md, «Ayuda»).
@@ -725,8 +1107,20 @@ void info_button(T label, const char* key) {
     dl->AddCircle(c, size * 0.45f, colour, 16, 1.2f);
     dl->AddLine(ImVec2(c.x, c.y - size * 0.05f), ImVec2(c.x, c.y + size * 0.25f), colour, 1.6f);
     dl->AddCircleFilled(ImVec2(c.x, c.y - size * 0.22f), size * 0.07f, colour);
-    if (hovered)
-        ImGui::SetTooltip("%s", tr(T::Info));
+    const KnowledgeTerm* term = g_knowledge ? term_for_setting(*g_knowledge, key) : nullptr;
+    if (hovered) {
+        if (term) {
+            // The glossary's definition, on the pointer (rule 12).
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
+            ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", term->term.c_str());
+            ImGui::TextUnformatted(term->definition.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        } else {
+            ImGui::SetTooltip("%s", tr(T::Info));
+        }
+    }
     if (ImGui::BeginPopup("##info_card")) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
         ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
@@ -744,6 +1138,10 @@ void info_button(T label, const char* key) {
             ImGui::TextDisabled("%s: %s", tr(T::InfoRange), doc->second.range.c_str());
         if (language() == Language::English)
             ImGui::TextDisabled("%s", tr(T::InfoSpanish));
+        if (term) {
+            ImGui::SeparatorText(tr(T::HelpGlossary));
+            ImGui::TextUnformatted((term->term + ": " + term->definition).c_str());
+        }
         ImGui::PopTextWrapPos();
         ImGui::EndPopup();
     }
@@ -754,24 +1152,658 @@ void info_button(T label, const char* key) {
 // A gray tag after the next row's label: the level of a changed setting that
 // the panel's level would hide (settings_panel.md, rule 12).
 const char* g_row_tag = nullptr;
+// The next row's setting, as the panel asked whether to show it.
+const char* g_row_key = nullptr;
+// The setting the search went to (rule 5): its row lit in this colour, and
+// brought into sight once.
+std::string g_highlight_key;
+ImU32 g_highlight_colour = 0;
+bool g_scroll_highlight = false;
+// In Custom, an eye on the hovered row hides its setting (rule 16): the key
+// to hide, for the panel.
+bool g_custom_rows = false;
+std::string g_hide_key;
+
+// The eye struck through, in a square of `size` at `at`.
+void eye_struck(ImDrawList* dl, ImVec2 at, float size, ImU32 colour) {
+    const ImVec2 c(at.x + size * 0.5f, at.y + size * 0.5f);
+    dl->AddEllipse(c, ImVec2(size * 0.45f, size * 0.26f), colour, 0.0f, 20, 1.3f);
+    dl->AddCircleFilled(c, size * 0.12f, colour);
+    dl->AddLine(ImVec2(at.x + size * 0.12f, at.y + size * 0.88f), ImVec2(at.x + size * 0.88f, at.y + size * 0.12f), colour,
+                1.5f);
+}
+
+// The printer card's drawings (settings_panel.md, rules 34 to 36): the
+// engine's own, one ink on a soft background, in a square of `size` at `at`.
+void draw_back(ImDrawList* dl, ImVec2 at, float size, ImU32 back) {
+    dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), back, size * 0.18f);
+}
+
+void draw_printer(ImDrawList* dl, ImVec2 at, float size, PrinterKind kind, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    const float w = std::max(1.0f, size * 0.045f);
+    switch (kind) {
+    case PrinterKind::Resin:
+        // The lid over the vat, the plate hanging from its arm.
+        dl->AddRect(p(0.25f, 0.14f), p(0.75f, 0.62f), ink, size * 0.06f, w);
+        dl->AddLine(p(0.5f, 0.2f), p(0.5f, 0.42f), ink, w);
+        dl->AddRectFilled(p(0.38f, 0.42f), p(0.62f, 0.47f), ink);
+        dl->AddRectFilled(p(0.2f, 0.62f), p(0.8f, 0.84f), ink, size * 0.03f);
+        break;
+    case PrinterKind::Pellets:
+    case PrinterKind::Open:
+        // Two uprights, the gantry with its head, the bed.
+        dl->AddLine(p(0.2f, 0.16f), p(0.2f, 0.82f), ink, w);
+        dl->AddLine(p(0.8f, 0.16f), p(0.8f, 0.82f), ink, w);
+        dl->AddLine(p(0.2f, 0.36f), p(0.8f, 0.36f), ink, w);
+        dl->AddRectFilled(p(0.42f, 0.3f), p(0.58f, 0.46f), ink, size * 0.02f);
+        dl->AddTriangleFilled(p(0.46f, 0.46f), p(0.54f, 0.46f), p(0.5f, 0.52f), ink);
+        if (kind == PrinterKind::Pellets) // the hopper on the head
+            dl->AddQuadFilled(p(0.4f, 0.12f), p(0.6f, 0.12f), p(0.55f, 0.3f), p(0.45f, 0.3f), ink);
+        dl->AddRectFilled(p(0.14f, 0.7f), p(0.86f, 0.76f), ink, size * 0.02f);
+        break;
+    case PrinterKind::Enclosed:
+        // A box with its door, the head inside.
+        dl->AddRect(p(0.16f, 0.14f), p(0.84f, 0.86f), ink, size * 0.06f, w);
+        dl->AddRect(p(0.24f, 0.26f), p(0.76f, 0.76f), ink, size * 0.04f, w * 0.7f);
+        dl->AddRectFilled(p(0.43f, 0.34f), p(0.57f, 0.46f), ink, size * 0.02f);
+        dl->AddRectFilled(p(0.3f, 0.64f), p(0.7f, 0.69f), ink);
+        break;
+    case PrinterKind::Delta:
+        // Three towers, the arms down to the effector, a round bed.
+        for (const float x : {0.2f, 0.5f, 0.8f})
+            dl->AddLine(p(x, 0.12f), p(x, 0.78f), ink, w);
+        dl->AddLine(p(0.2f, 0.3f), p(0.47f, 0.52f), ink, w * 0.8f);
+        dl->AddLine(p(0.8f, 0.3f), p(0.53f, 0.52f), ink, w * 0.8f);
+        dl->AddCircleFilled(p(0.5f, 0.54f), size * 0.05f, ink);
+        dl->AddEllipseFilled(p(0.5f, 0.78f), ImVec2(size * 0.32f, size * 0.07f), ink);
+        break;
+    case PrinterKind::Belt:
+        // The belt on its two rollers, the gantry leaning over it.
+        dl->AddRect(p(0.1f, 0.66f), p(0.9f, 0.8f), ink, size * 0.07f, w);
+        dl->AddCircleFilled(p(0.17f, 0.73f), size * 0.035f, ink);
+        dl->AddCircleFilled(p(0.83f, 0.73f), size * 0.035f, ink);
+        dl->AddLine(p(0.3f, 0.66f), p(0.62f, 0.18f), ink, w);
+        dl->AddRectFilled(p(0.42f, 0.36f), p(0.56f, 0.48f), ink, size * 0.02f);
+        break;
+    }
+}
+
+void draw_bed(ImDrawList* dl, ImVec2 at, float size, BedFamily family, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    const float w = std::max(1.0f, size * 0.045f);
+    // The plate seen from a little above.
+    dl->AddQuad(p(0.22f, 0.3f), p(0.86f, 0.3f), p(0.78f, 0.74f), p(0.14f, 0.74f), ink, w);
+    switch (family) {
+    case BedFamily::Textured:
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 3; ++j)
+                dl->AddCircleFilled(p(0.3f + 0.13f * float(i) - 0.03f * float(j), 0.4f + 0.12f * float(j)),
+                                    size * 0.022f, ink);
+        break;
+    case BedFamily::Smooth:
+        dl->AddLine(p(0.32f, 0.62f), p(0.5f, 0.4f), ink, w * 0.6f);
+        break;
+    case BedFamily::Glass:
+        dl->AddLine(p(0.3f, 0.66f), p(0.48f, 0.36f), ink, w);
+        dl->AddLine(p(0.42f, 0.66f), p(0.6f, 0.36f), ink, w * 0.6f);
+        break;
+    case BedFamily::Cool:
+        for (int i = 0; i < 3; ++i) {
+            const float a = float(i) * 3.14159265f / 3.0f;
+            const float dx = 0.13f * std::cos(a), dy = 0.13f * std::sin(a);
+            dl->AddLine(p(0.5f - dx, 0.52f - dy), p(0.5f + dx, 0.52f + dy), ink, w);
+        }
+        break;
+    case BedFamily::Engineering:
+        dl->AddTriangleFilled(p(0.5f, 0.36f), p(0.6f, 0.64f), p(0.4f, 0.64f), ink);
+        dl->AddCircleFilled(p(0.5f, 0.6f), size * 0.08f, ink);
+        break;
+    case BedFamily::Other:
+        break;
+    }
+}
+
+void draw_nozzle(ImDrawList* dl, ImVec2 at, float size, const NozzleLook& look, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    // The body (longer for high flow), the hex, and the cone whose tip grows
+    // with the diameter.
+    const float bottom = look.high_flow ? 0.66f : 0.56f;
+    dl->AddRectFilled(p(0.32f, 0.14f), p(0.68f, 0.3f), ink, size * 0.02f);
+    dl->AddRectFilled(p(0.4f, 0.3f), p(0.6f, bottom), ink);
+    const float tip = 0.03f + 0.09f * float(look.size);
+    dl->AddQuadFilled(p(0.36f, bottom), p(0.64f, bottom), p(0.5f + tip, 0.84f), p(0.5f - tip, 0.84f), ink);
+    if (look.hardened) // stripes across the body, in the background's colour
+        for (int i = 0; i < 4; ++i) {
+            const float y = 0.33f + 0.07f * float(i);
+            dl->AddLine(p(0.4f, y + 0.05f), p(0.6f, y), back, std::max(1.0f, size * 0.035f));
+        }
+}
+
+// A gear, for the printer's settings.
+void draw_gear(ImDrawList* dl, ImVec2 c, float r, ImU32 ink) {
+    for (int i = 0; i < 8; ++i) {
+        const float a = float(i) * 3.14159265f / 4.0f;
+        dl->AddLine(ImVec2(c.x + std::cos(a) * r * 0.55f, c.y + std::sin(a) * r * 0.55f),
+                    ImVec2(c.x + std::cos(a) * r, c.y + std::sin(a) * r), ink, r * 0.32f);
+    }
+    dl->AddCircleFilled(c, r * 0.7f, ink);
+}
+
+// A calibration's name, as its card in Calibrate shows it.
+const char* calibration_title(CalibrationKind kind) {
+    switch (kind) {
+    case CalibrationKind::Dimensions: return tr(T::CalDimensions);
+    case CalibrationKind::Temperature: return tr(T::CalTemperature);
+    case CalibrationKind::Retraction: return tr(T::CalRetraction);
+    case CalibrationKind::Flow: return tr(T::CalFlow);
+    case CalibrationKind::Speed: return tr(T::CalSpeed);
+    case CalibrationKind::RetractionSpeed: return tr(T::CalRetractionSpeed);
+    case CalibrationKind::PressureAdvance: return tr(T::CalPressureAdvance);
+    case CalibrationKind::FirstLayer: return tr(T::CalFirstLayer);
+    case CalibrationKind::Fit: return tr(T::CalFit);
+    case CalibrationKind::MaxFlow: return tr(T::CalMaxFlow);
+    case CalibrationKind::Acceleration: return tr(T::CalAcceleration);
+    case CalibrationKind::ElephantFoot: return tr(T::CalElephantFoot);
+    case CalibrationKind::ResinExposure: return tr(T::CalResinExposure);
+    case CalibrationKind::ResinMeasure: return tr(T::CalResinMeasure);
+    }
+    return "";
+}
+
+// A nozzle's name: "0,4 mm" and, when known, "· hardened steel".
+std::string nozzle_text(double diameter, bool hardened) {
+    char text[32];
+    std::snprintf(text, sizeof text, "%g mm", diameter);
+    std::string out = text;
+    if (language() == Language::Spanish)
+        std::replace(out.begin(), out.end(), '.', ',');
+    if (hardened)
+        out += std::string(" · ") + tr(T::HardenedSteel);
+    return out;
+}
+
+// The drawing of a printer in the catalog, by what it says of itself.
+PrinterKind catalog_kind(const PrinterModel& p) {
+    if (p.kinematics == "belt")
+        return PrinterKind::Belt;
+    if (p.circular || p.kinematics == "delta")
+        return PrinterKind::Delta;
+    return p.enclosed ? PrinterKind::Enclosed : PrinterKind::Open;
+}
+
+// The printer's card on top of the panel (settings_panel.md, rules 21 and 32
+// to 36): the printer with its drawing, the bed on printers with several, the
+// gear to its settings; below, the nozzle, changed with one click.
+void App::printer_card() {
+    const std::size_t k = std::size_t(ProfileKind::Printer);
+    const Profile* chosen = find_profile(ProfileKind::Printer, chosen_profile_[k]);
+    const Catalog& catalog = builtin_catalog();
+    const std::optional<CatalogMatch> match = chosen ? catalog_model_of(catalog, chosen->name) : std::nullopt;
+    const float em = ImGui::GetFontSize(), gap = ImGui::GetStyle().ItemSpacing.x;
+    const float pic = 3.0f * em, small = 2.0f * em, line = ImGui::GetFrameHeight();
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.accent_hover)), back = ImGui::GetColorU32(rgb(theme_.accent, 0.18f));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::PushID("##printer_card");
+
+    // The printer.
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    draw_printer(dl, at, pic, printer_kind(settings_), ink, back);
+    ImGui::Dummy(ImVec2(pic, pic));
+    ImGui::SameLine(0, gap);
+    ImGui::BeginGroup();
+    static const std::vector<std::string> no_beds;
+    const std::vector<std::string>& beds = match ? match->model->bed_surfaces : no_beds;
+    const bool several_beds = beds.size() >= 2;
+    const float rest = ImGui::GetContentRegionAvail().x - line - gap;
+    std::string preview = chosen ? chosen->name : std::string(tr(T::NoProfile));
+    if (chosen && profile_modified_[k])
+        preview += " *";
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (pic - 2.0f * line - ImGui::GetStyle().ItemSpacing.y) * 0.5f);
+    ImGui::SetNextItemWidth(several_beds ? rest * 0.6f : rest);
+    const Profile* picked = nullptr;
+    const PrinterModel* from_catalog = nullptr;
+    if (ImGui::BeginCombo("##printer", preview.c_str(), ImGuiComboFlags_HeightLargest)) {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        ImGui::InputTextWithHint("##find", tr(T::SearchPrinter), &printer_query_);
+        const std::string query = fold(printer_query_);
+        const auto wanted = [&](std::string_view name) { return query.empty() || fold(name).find(query) != std::string::npos; };
+        // A row of the list: the drawing (2 em) and the name.
+        const auto row = [&](const char* id, const std::string& name, PrinterKind kind, bool selected) {
+            const ImVec2 r = ImGui::GetCursorScreenPos();
+            const bool hit = ImGui::Selectable(id, selected, 0, ImVec2(0, small));
+            draw_printer(ImGui::GetWindowDrawList(), r, small, kind, ink, back);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                ImGui::GetColorU32(ImGuiCol_Text), name.c_str());
+            return hit;
+        };
+        // The person's printers first, then the engine's, then the catalog by brand.
+        if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), [&](const Profile& p) { return wanted(p.name); })) {
+            ImGui::SeparatorText(tr(T::MyPrinters));
+            for (const Profile& p : user_profiles_[k])
+                if (wanted(p.name) && row(("##u" + p.name).c_str(), p.name, printer_kind(p.settings), chosen == &p))
+                    picked = &p;
+        }
+        if (std::any_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(), [&](const Profile& p) { return wanted(p.name); })) {
+            ImGui::SeparatorText(tr(T::BuiltinProfiles));
+            for (const Profile& p : builtin_profiles_[k])
+                if (wanted(p.name) && row(("##b" + p.name).c_str(), p.name, printer_kind(p.settings), chosen == &p))
+                    picked = &p;
+        }
+        ImGui::SeparatorText(tr(T::FromCatalog));
+        for (std::size_t i = 0; i < catalog.printers.size();) {
+            const std::string& vendor = catalog.printers[i].vendor;
+            std::size_t j = i;
+            std::vector<const PrinterModel*> models;
+            for (; j < catalog.printers.size() && catalog.printers[j].vendor == vendor; ++j)
+                if (wanted(vendor + " " + catalog.printers[j].model))
+                    models.push_back(&catalog.printers[j]);
+            if (!models.empty()) {
+                if (!query.empty())
+                    ImGui::SetNextItemOpen(true);
+                if (ImGui::TreeNode(vendor.c_str())) {
+                    for (const PrinterModel* m : models)
+                        if (row(("##c" + vendor + m->model).c_str(), m->model, catalog_kind(*m), false))
+                            from_catalog = m;
+                    ImGui::TreePop();
+                }
+            }
+            i = j;
+        }
+        ImGui::Separator();
+        if (ImGui::Selectable(tr(T::AddPrinter)))
+            catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+        ImGui::EndCombo();
+    }
+    if (picked) {
+        choose_profile(ProfileKind::Printer, *picked);
+        bed_type_.clear();
+    }
+    if (from_catalog) {
+        // Its stock nozzle; the profile made before, if there is one.
+        const std::string name = printer_profile_name(*from_catalog, from_catalog->nozzles.front());
+        if (const Profile* p = find_profile(ProfileKind::Printer, name))
+            choose_profile(ProfileKind::Printer, *p);
+        else
+            add_catalog_profile(printer_profile(*from_catalog, from_catalog->nozzles.front()));
+        bed_type_.clear();
+    }
+    // The bed, on printers with several (rule 32): the maker's names.
+    if (several_beds) {
+        if (std::find(beds.begin(), beds.end(), bed_type_) == beds.end())
+            bed_type_ = beds.front();
+        ImGui::SameLine(0, gap);
+        const ImVec2 b = ImGui::GetCursorScreenPos();
+        draw_bed(dl, b, line, bed_family(bed_type_), ink, back);
+        ImGui::Dummy(ImVec2(line, line));
+        ImGui::SameLine(0, gap * 0.5f);
+        ImGui::SetNextItemWidth(rest * 0.4f - line - gap * 1.5f);
+        if (ImGui::BeginCombo("##bed", bed_type_.c_str())) {
+            for (const std::string& bed : beds) {
+                const ImVec2 r = ImGui::GetCursorScreenPos();
+                if (ImGui::Selectable(("##" + bed).c_str(), bed == bed_type_, 0, ImVec2(0, small)))
+                    bed_type_ = bed;
+                draw_bed(ImGui::GetWindowDrawList(), r, small, bed_family(bed), ink, back);
+                ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                    ImGui::GetColorU32(ImGuiCol_Text), bed.c_str());
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::BedType));
+    }
+    // The gear: the printer's settings (rule 37).
+    ImGui::SameLine(0, gap);
+    {
+        const ImVec2 g = ImGui::GetCursorScreenPos();
+        if (ImGui::InvisibleButton("##gear", ImVec2(line, line)))
+            printer_page_ = true;
+        const bool hovered = ImGui::IsItemHovered();
+        draw_gear(dl, ImVec2(g.x + line * 0.5f, g.y + line * 0.5f), line * 0.38f,
+                  ImGui::GetColorU32(rgb(hovered ? theme_.accent_hover : theme_.text_dim)));
+        dl->AddCircleFilled(ImVec2(g.x + line * 0.5f, g.y + line * 0.5f), line * 0.12f, ImGui::GetColorU32(rgb(theme_.panel)));
+        if (hovered)
+            ImGui::SetTooltip("%s", tr(T::PrinterSettingsTip));
+    }
+
+    // The nozzle (rules 21 to 23).
+    const std::vector<NozzleChoice> nozzles =
+        nozzle_choices(catalog, chosen ? chosen->name : std::string(), settings_.nozzle_diameter);
+    {
+        const ImVec2 n = ImGui::GetCursorScreenPos();
+        draw_nozzle(dl, n, line, nozzle_look(settings_.nozzle_diameter, settings_.hardened_nozzle), ink, back);
+        ImGui::Dummy(ImVec2(line, line));
+        ImGui::SameLine(0, gap * 0.5f);
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    bool other = false;
+    if (ImGui::BeginCombo("##nozzle", nozzle_text(settings_.nozzle_diameter, settings_.hardened_nozzle).c_str())) {
+        for (const NozzleChoice& c : nozzles) {
+            const ImVec2 r = ImGui::GetCursorScreenPos();
+            const bool now = std::abs(c.diameter - settings_.nozzle_diameter) < 1e-9;
+            if (ImGui::Selectable(("##n" + std::to_string(c.diameter)).c_str(), now, 0, ImVec2(0, small)) && !now)
+                choose_nozzle(c.diameter, c.profile);
+            draw_nozzle(ImGui::GetWindowDrawList(), r, small, nozzle_look(c.diameter, now && settings_.hardened_nozzle),
+                        ink, back);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                ImGui::GetColorU32(ImGuiCol_Text),
+                                                nozzle_text(c.diameter, now && settings_.hardened_nozzle).c_str());
+        }
+        // A printer not from the catalog: another size (rule 23).
+        if (nozzles.size() == 1 && nozzles.front().profile.empty() && ImGui::Selectable(tr(T::OtherNozzle)))
+            other = true;
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tr(T::Nozzle));
+    if (other) {
+        other_nozzle_ = settings_.nozzle_diameter;
+        ImGui::OpenPopup("##other_nozzle");
+    }
+    if (ImGui::BeginPopup("##other_nozzle")) {
+        ImGui::TextUnformatted(tr(T::OtherNozzleTitle));
+        ImGui::SetNextItemWidth(120.0f * scale_);
+        ImGui::InputDouble("mm", &other_nozzle_, 0.05, 0.1, "%.2f");
+        other_nozzle_ = std::clamp(other_nozzle_, 0.1, 3.0);
+        if (ImGui::Button(tr(T::OkButton))) {
+            choose_nozzle(other_nozzle_, {});
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::EndGroup();
+    ImGui::PopID();
+    ImGui::Spacing();
+}
+
+// One click to another nozzle (rule 22): the printer's profile for it (made
+// from the catalog when there is none yet), or, for a printer of its own,
+// the size alone, the profile marked changed (rule 23). A toast says so,
+// with Undo.
+void App::choose_nozzle(double diameter, const std::string& profile) {
+    const Settings before = settings_;
+    const std::array<std::string, 3> profiles = chosen_profile_;
+    if (!profile.empty()) {
+        if (const Profile* p = find_profile(ProfileKind::Printer, profile))
+            choose_profile(ProfileKind::Printer, *p);
+        else if (const std::optional<CatalogMatch> match = catalog_model_of(builtin_catalog(), profile))
+            add_catalog_profile(printer_profile(*match->model, diameter));
+    } else {
+        settings_.nozzle_diameter = diameter;
+        bed_changed();
+        settings_changed();
+    }
+    notify_undo(format(tr(T::NozzleChanged), nozzle_text(diameter, false).c_str()), [this, before, profiles] {
+        settings_ = before;
+        chosen_profile_ = profiles;
+        profiles_checked_.clear();
+        bed_changed();
+        settings_changed();
+    });
+}
+
+// A calibration's result applied: its day, the nozzle and the filament, for
+// the printer page (rule 38).
+void App::record_calibration(CalibrationKind kind) {
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    if (printer.empty())
+        return;
+    const std::time_t now = std::time(nullptr);
+    char date[16] = "";
+    if (const std::tm* t = std::localtime(&now))
+        std::strftime(date, sizeof date, "%Y-%m-%d", t);
+    calibration_records_[printer][calibration_kind_name(kind)] =
+        CalibrationRecord{date, settings_.nozzle_diameter, chosen_profile_[std::size_t(ProfileKind::Filament)]};
+}
+
+// The printer's own page (rules 37 to 40), the whole width: back to the
+// plate, its profile, and its sections: the machine, the nozzle, the limits,
+// the G-code, its calibrations, its connection and the person's notes.
+void App::printer_page() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - top - bottom));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##printer_page", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    bool changed = false, bed = false;
+    refresh_profiles();
+    if (ImGui::Button(tr(T::BackToPlate)) ||
+        (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsAnyItemActive() &&
+         !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)))
+        printer_page_ = false;
+    ImGui::SameLine();
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(tr(T::PrinterSettingsTitle));
+    ImGui::PopFont();
+    {
+        const float w = std::min(ImGui::GetContentRegionAvail().x, 520.0f * scale_);
+        ImGui::BeginChild("##printer_profile", ImVec2(w, ImGui::GetFrameHeightWithSpacing()));
+        profile_row(ProfileKind::Printer);
+        ImGui::EndChild();
+    }
+    ImGui::Separator();
+
+    // The sections: the printer's settings, then its calibrations, its
+    // connection and the notes.
+    const std::vector<SectionLayout>& layout = settings_layout(SettingsTab::Printer);
+    std::vector<const SectionLayout*> sections;
+    for (const SectionLayout& section : layout)
+        if (std::any_of(section.subsections.begin(), section.subsections.end(),
+                        [&](const SubsectionLayout& sub) { return card_shown(sub); }))
+            sections.push_back(&section);
+    struct Extra {
+        const char* id;
+        T title;
+        const char* icon;
+    };
+    static constexpr Extra extras[] = {{"calibration", T::SecCalibration, "tisma_calibrate"},
+                                       {"connection", T::SecConnection, "tisma_printer"},
+                                       {"notes", T::SecNotes, "section_other"}};
+    const bool known = std::any_of(sections.begin(), sections.end(), [&](const SectionLayout* s) { return s->id == printer_section_; }) ||
+                       std::any_of(std::begin(extras), std::end(extras), [&](const Extra& e) { return printer_section_ == e.id; });
+    if (!known)
+        printer_section_ = sections.empty() ? "calibration" : std::string(sections.front()->id);
+    // The column as wide as its longest name.
+    float column = 84.0f * scale_;
+    {
+        const float small = ImGui::GetFontSize() * 0.78f;
+        const auto fit = [&](const char* name) {
+            column = std::max(column, ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name).x + 18.0f * scale_);
+        };
+        for (const SectionLayout* section : sections)
+            fit(tr(section->title));
+        for (const Extra& e : extras)
+            fit(tr(e.title));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::BeginChild("##printer_sections", ImVec2(column, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+    for (const SectionLayout* section : sections) {
+        const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
+            return std::any_of(sub.settings.begin(), sub.settings.end(),
+                               [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
+        });
+        const std::string icon_name(section->icon.substr(0, section->icon.size() - 4));
+        if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == printer_section_, marked, column))
+            printer_section_ = std::string(section->id), show_all_cards_.clear(), revealed_keys_.clear();
+    }
+    for (const Extra& e : extras)
+        if (section_button(e.id, tr(e.title), e.icon, printer_section_ == e.id, false, column))
+            printer_section_ = e.id;
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::SameLine(0, 8.0f * scale_);
+
+    ImGui::BeginChild("##printer_cards", ImVec2(std::min(ImGui::GetContentRegionAvail().x, 720.0f * scale_), 0));
+    g_custom_rows = view_level_ == ViewLevel::Custom;
+    for (const SectionLayout* section : sections)
+        if (section->id == printer_section_)
+            section_cards(*section, changed, bed);
+    g_custom_rows = false;
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    if (printer_section_ == "calibration") {
+        // Each calibration this printer takes: what it fixes, its value now,
+        // whether it was made and with what (rule 38).
+        const std::vector<CalibrationKind> kinds = printer_calibrations(settings_);
+        const auto records = calibration_records_.find(printer);
+        const auto record_of = [&](CalibrationKind kind) -> const CalibrationRecord* {
+            if (records == calibration_records_.end())
+                return nullptr;
+            const auto it = records->second.find(calibration_kind_name(kind));
+            return it == records->second.end() ? nullptr : &it->second;
+        };
+        int done = 0;
+        std::optional<CalibrationKind> next;
+        for (const CalibrationKind kind : kinds) {
+            if (calibration_state(record_of(kind), settings_.nozzle_diameter) == CalibrationState::Done)
+                ++done;
+            else if (!next)
+                next = kind;
+        }
+        ImGui::Text(tr(T::CalibratedCount), done, int(kinds.size()));
+        ImGui::SameLine();
+        if (next && ImGui::SmallButton(tr(T::CalibrateInOrder))) {
+            printer_page_ = false;
+            set_tab(Tab::Calibration);
+            create_calibration(*next, false);
+        }
+        ImGui::Spacing();
+        const std::map<std::string, std::string> values = [&] {
+            std::map<std::string, std::string> m;
+            for (auto& [key, value] : describe(settings_))
+                m[key] = std::move(value);
+            return m;
+        }();
+        if (ImGui::BeginTable("##calibrations", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+            for (const CalibrationKind kind : kinds) {
+                ImGui::PushID(int(kind));
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(calibration_title(kind));
+                ImGui::TableNextColumn();
+                if (const std::string_view key = calibration_key(kind); !key.empty()) {
+                    std::string value;
+                    if (key == "machine.variables.temperature") {
+                        const auto t = settings_.variables.find("temperature");
+                        value = t != settings_.variables.end() && !t->second.empty() ? t->second.front() + " °C" : "—";
+                    } else if (const auto v = values.find(std::string(key)); v != values.end()) {
+                        value = v->second == "null" ? "—" : v->second;
+                    }
+                    ImGui::TextDisabled("%s: %s", key_label(key).c_str(), value.c_str());
+                }
+                ImGui::TableNextColumn();
+                const CalibrationRecord* record = record_of(kind);
+                switch (calibration_state(record, settings_.nozzle_diameter)) {
+                case CalibrationState::Missing:
+                    ImGui::TextDisabled("%s", tr(T::NotCalibrated));
+                    break;
+                case CalibrationState::Done:
+                    ImGui::TextColored(rgb(0x3FBF7F), tr(T::CalibratedOn), record->date.c_str());
+                    break;
+                case CalibrationState::OtherNozzle:
+                    ImGui::TextColored(rgb(0xE8B83D), tr(T::CalibratedOtherNozzle),
+                                       nozzle_text(record->nozzle, false).c_str());
+                    break;
+                }
+                if (record && filament_calibration(kind) && !record->filament.empty()) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(tr(T::CalibratedWith), record->filament.c_str());
+                }
+                ImGui::TableNextColumn();
+                if (ImGui::SmallButton(tr(T::CalibrateButton))) {
+                    printer_page_ = false;
+                    set_tab(Tab::Calibration);
+                    create_calibration(kind, false);
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+    } else if (printer_section_ == "connection") {
+        // The connection is the Printer tab's for now (rule 43 waits for the
+        // network connections).
+        const bool connected = printer_ && printer_->status().state != device::PrinterState::Disconnected &&
+                               printer_->status().state != device::PrinterState::Error;
+        ImGui::PushTextWrapPos(0.0f);
+        if (connected)
+            ImGui::Text(tr(T::ConnectionNow), device_port_ == "sim" ? tr(T::DeviceSimulated) : device_port_.c_str());
+        else
+            ImGui::TextDisabled("%s", tr(T::ConnectionNone));
+        ImGui::PopTextWrapPos();
+        if (ImGui::Button(tr(T::OpenInDevices))) {
+            printer_page_ = false;
+            set_tab(Tab::Device);
+        }
+    } else if (printer_section_ == "notes") {
+        std::string& notes = printer_notes_[printer];
+        ImGui::InputTextMultiline("##notes", &notes, ImVec2(-FLT_MIN, 18.0f * ImGui::GetTextLineHeight()));
+        if (notes.empty() && !ImGui::IsItemActive()) {
+            const ImVec2 at = ImGui::GetItemRectMin();
+            ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 8.0f * scale_, at.y + 6.0f * scale_),
+                                                ImGui::GetColorU32(ImGuiCol_TextDisabled), tr(T::NotesHint));
+        }
+    }
+    ImGui::EndChild();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    if (bed)
+        bed_changed();
+    if (changed)
+        settings_changed();
+}
+
 
 // Rows of the settings tables: a label (with a tooltip and, for a setting of
 // the engine, its info button) and a control.
 void label_cell(T label, const char* tip = nullptr) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+    const std::string key = g_row_key ? g_row_key : row_key(label) ? row_key(label) : "";
+    g_row_key = nullptr;
+    if (!key.empty() && key == g_highlight_key) {
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, g_highlight_colour);
+        if (g_scroll_highlight) {
+            ImGui::SetScrollHereY(0.35f);
+            g_scroll_highlight = false;
+        }
+    }
+    const ImVec2 cell = ImGui::GetCursorScreenPos();
+    const float column = ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", tip);
-    if (const char* key = row_key(label))
-        info_button(label, key);
+    if (const char* info = row_key(label))
+        info_button(label, info);
     if (g_row_tag) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", g_row_tag);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", tr(T::HiddenChanged));
         g_row_tag = nullptr;
+    }
+    const float tall = ImGui::GetFrameHeight();
+    if (g_custom_rows && !key.empty() && ImGui::IsWindowHovered() &&
+        ImGui::IsMouseHoveringRect(cell, ImVec2(cell.x + column, cell.y + tall))) {
+        const float size = tall * 0.72f;
+        const ImVec2 at(cell.x + column - size, cell.y + (tall - size) * 0.5f);
+        ImGui::SetCursorScreenPos(at);
+        ImGui::PushID(key.c_str());
+        if (ImGui::InvisibleButton("##hide", ImVec2(size, size)))
+            g_hide_key = key;
+        const bool hovered = ImGui::IsItemHovered();
+        eye_struck(ImGui::GetWindowDrawList(), at, size, ImGui::GetColorU32(hovered ? ImGuiCol_CheckMark : ImGuiCol_TextDisabled));
+        if (hovered)
+            ImGui::SetTooltip("%s", tr(T::HideSetting));
+        ImGui::PopID();
     }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1046,12 +2078,55 @@ bool App::init(std::string& error) {
         tour_step_ = options_.tour;
     g_open_info = options_.info;
     if (!options_.level.empty())
-        view_level_ = options_.level == "basic" ? ViewLevel::Basic : options_.level == "advanced" ? ViewLevel::Advanced
-                                                                                                 : ViewLevel::Normal;
+        choose_level(view_level_from(options_.level));
+    if (options_.single_column)
+        single_column_ = true;
+    if (options_.ortho)
+        camera_.orthographic = true;
+    if (options_.labels)
+        show_labels_ = true;
     if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
         const std::string tab = options_.section.substr(0, slash);
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
+        // The printer's settings are on its page (settings_panel.md, rule 37).
+        if (panel_tab_ == SettingsTab::Printer)
+            printer_page_ = true, printer_section_ = options_.section.substr(slash + 1), panel_tab_ = SettingsTab::Print;
+    }
+    if (!options_.search.empty()) {
+        const std::vector<SettingHit> hits = search_settings(
+            options_.search, [](std::string_view key) { return SettingText{key_label(key), {}}; });
+        if (!hits.empty())
+            go_to_setting(hits.front().key);
+    }
+    load_help_data();
+    // --help-item: a problem or a procedure open from the start.
+    for (std::size_t i = 0; i < knowledge_->problems.size(); ++i)
+        if (knowledge_->problems[i].id == options_.help_open)
+            help_tab_ = 0, help_select_ = true, help_page_ = HelpPage::Problem, help_item_ = i;
+    for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
+        if (knowledge_->procedures[i].id == options_.help_open)
+            help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+    if (!options_.tutorial.empty())
+        for (std::size_t i = 0; i < knowledge_->tutorials.size(); ++i)
+            if (knowledge_->tutorials[i].id == options_.tutorial) {
+                guide_ = start_guide(*knowledge_, i, guide_memory_);
+                guide_->step = std::clamp(options_.tutorial_step, 0, int(knowledge_->tutorials[i].steps.size()) - 1);
+            }
+    if (options_.credits)
+        credits_open_ = true;
+    if (!options_.help.empty()) {
+        help_open_ = true;
+        static constexpr const char* tabs[] = {"problems", "procedures", "glossary", "tutorials", "calibrations"};
+        for (int i = 0; i < 5; ++i)
+            if (options_.help == tabs[i])
+                help_tab_ = i;
+        help_select_ = true;
+    }
+    if (options_.choose_settings) {
+        choose_level(ViewLevel::Custom);
+        choose_draft_ = custom_view_;
+        choose_open_ = true;
     }
     if (options_.light)
         theme_ = light_theme();
@@ -1065,8 +2140,10 @@ bool App::init(std::string& error) {
         fxaa_ = options_.fxaa != 0;
     if (options_.moire >= 0)
         moire_ = options_.moire != 0;
-    if (options_.color >= 0)
-        color_mode_ = static_cast<ColorMode>(options_.color);
+    if (options_.color >= 0 && options_.color < kPreviewViews) {
+        preview_view_ = static_cast<PreviewView>(options_.color);
+        color_mode_ = kViewInfo[options_.color].shader;
+    }
     device_ports_ = device::list_serial_ports();
     if (!options_.device.empty()) {
         device_port_ = options_.device;
@@ -1100,7 +2177,28 @@ bool App::init(std::string& error) {
     if (!options_.tool.empty())
         tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
               : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
-                                                                                         : PlateTool::LayFlat;
+              : options_.tool == "material" || options_.tool == "mixing" ? PlateTool::Material
+              : options_.tool == "cut"                                    ? PlateTool::Cut
+              : options_.tool == "measure"                                ? PlateTool::Measure
+                                                                          : PlateTool::LayFlat;
+    if (options_.measure[0] >= 0 && !objects_.empty()) {
+        selected_ = measure_object_ = 0;
+        const TriangleMesh placed = placed_mesh(objects_.front());
+        for (const int t : options_.measure)
+            if (t >= 0 && std::size_t(t) < placed.triangle_count())
+                measure_picks_.push_back(surface_feature(placed, std::size_t(t)));
+    }
+    if (options_.cut > 0.0 && !objects_.empty()) {
+        selected_ = 0;
+        cut_height_ = options_.cut;
+        cut_selected();
+    }
+    // The mixed colours' dialog open, with the project's first blend (for screenshots).
+    if (options_.tool == "mixing") {
+        mixing_open_ = true;
+        mixes_before_ = mixes_;
+        mix_edit_ = mixes_.empty() ? -1 : 0;
+    }
     // Brush strokes asked on the command line, for screenshots and tests.
     for (const AppOptions::Stroke& b : options_.strokes) {
         const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
@@ -1122,6 +2220,13 @@ bool App::init(std::string& error) {
         const std::size_t eq = choice.find('=');
         const auto kind = profile_kind_from_name(choice.substr(0, eq));
         const Profile* p = kind && eq != std::string::npos ? find_profile(*kind, choice.substr(eq + 1)) : nullptr;
+        // A printer of the catalog by its profile's name, for this run.
+        if (!p && kind == ProfileKind::Printer)
+            if (const std::optional<CatalogMatch> m = catalog_model_of(builtin_catalog(), choice.substr(eq + 1))) {
+                std::vector<Profile>& mine = user_profiles_[std::size_t(ProfileKind::Printer)];
+                mine.push_back(printer_profile(*m->model, m->nozzle));
+                p = &mine.back();
+            }
         if (!p) {
             error = "--profile " + choice + ": no such profile";
             return false;
@@ -1207,6 +2312,19 @@ void App::load_preferences() {
             for (const auto& t : j.at("tips_seen"))
                 if (t.is_string())
                     tips_seen_.insert(t.get<std::string>());
+        // Where each guided tutorial was left (assistant.md, rule 18).
+        if (const auto g = j.find("tutorials"); g != j.end() && g->is_object()) {
+            if (const auto st = g->find("step"); st != g->end() && st->is_object())
+                for (const auto& [id, n] : st->items())
+                    if (n.is_number_integer())
+                        guide_memory_.step[id] = n.get<int>();
+            for (const char* list : {"dismissed", "done"})
+                if (const auto l = g->find(list); l != g->end() && l->is_array())
+                    for (const auto& id : *l)
+                        if (id.is_string())
+                            (std::string(list) == "done" ? guide_memory_.done : guide_memory_.dismissed)
+                                .insert(id.get<std::string>());
+        }
         if (j.value("language", "es") == "en")
             set_language(Language::English);
         if (j.value("theme", "dark") == "light")
@@ -1231,8 +2349,23 @@ void App::load_preferences() {
         // The settings panel: level, section by tab and the cards open or folded.
         if (j.contains("ui") && j.at("ui").is_object()) {
             const nlohmann::json& ui = j.at("ui");
-            const std::string level = ui.value("level", std::string("normal"));
-            view_level_ = level == "basic" ? ViewLevel::Basic : level == "advanced" ? ViewLevel::Advanced : ViewLevel::Normal;
+            view_level_ = view_level_from(ui.value("level", std::string("normal")));
+            // The Custom view: its keys, the level it started from, and the
+            // keys there were then (settings_panel.md, rules 15 to 18).
+            custom_view_.base = view_level_from(ui.value("custom_base", std::string("normal")));
+            if (custom_view_.base == ViewLevel::Custom)
+                custom_view_.base = ViewLevel::Normal;
+            for (auto& [list, keys] : {std::pair<const char*, std::set<std::string>*>{"custom_visible", &custom_view_.visible},
+                                       {"custom_known", &custom_view_.known}})
+                if (ui.contains(list) && ui.at(list).is_array())
+                    for (const auto& key : ui.at(list))
+                        if (key.is_string())
+                            keys->insert(key.get<std::string>());
+            if (view_level_ == ViewLevel::Custom && custom_view_.known.empty())
+                custom_view_ = custom_view_from(custom_view_.base);
+            single_column_ = ui.value("single_column", false);
+            bed_type_ = ui.value("bed_type", std::string());
+            camera_.orthographic = ui.value("orthographic", false);
             if (ui.contains("section") && ui.at("section").is_array())
                 for (std::size_t t = 0; t < std::min<std::size_t>(3, ui.at("section").size()); ++t)
                     if (ui.at("section")[t].is_string())
@@ -1241,6 +2374,20 @@ void App::load_preferences() {
                 for (const auto& [card, open] : ui.at("cards").items())
                     if (open.is_boolean())
                         card_open_[card] = open.get<bool>();
+        }
+        // Each printer's calibrations applied and notes (settings_panel.md, rule 38).
+        if (j.contains("printers") && j.at("printers").is_object()) {
+            for (const auto& [printer, data] : j.at("printers").items()) {
+                if (!data.is_object())
+                    continue;
+                if (data.contains("notes") && data.at("notes").is_string())
+                    printer_notes_[printer] = data.at("notes").get<std::string>();
+                if (data.contains("calibrations") && data.at("calibrations").is_object())
+                    for (const auto& [kind, r] : data.at("calibrations").items())
+                        if (r.is_object() && calibration_kind_from_name(kind))
+                            calibration_records_[printer][kind] = CalibrationRecord{
+                                r.value("date", std::string()), r.value("nozzle", 0.0), r.value("filament", std::string())};
+            }
         }
         if (j.contains("profiles") && j.at("profiles").is_object())
             for (const auto& [kind, name] : j.at("profiles").items())
@@ -1270,7 +2417,22 @@ void App::save_preferences() {
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["tips_seen"] = tips_seen_;
-        j["ui"]["level"] = view_level_ == ViewLevel::Basic ? "basic" : view_level_ == ViewLevel::Advanced ? "advanced" : "normal";
+        j["tutorials"]["step"] = guide_memory_.step;
+        j["tutorials"]["dismissed"] = guide_memory_.dismissed;
+        j["tutorials"]["done"] = guide_memory_.done;
+        j["ui"]["level"] = std::string(view_level_name(view_level_));
+        j["ui"]["custom_base"] = std::string(view_level_name(custom_view_.base));
+        j["ui"]["custom_visible"] = custom_view_.visible;
+        j["ui"]["custom_known"] = custom_view_.known;
+        j["ui"]["single_column"] = single_column_;
+        j["ui"]["bed_type"] = bed_type_;
+        j["ui"]["orthographic"] = camera_.orthographic;
+        for (const auto& [printer, notes] : printer_notes_)
+            if (!notes.empty())
+                j["printers"][printer]["notes"] = notes;
+        for (const auto& [printer, records] : calibration_records_)
+            for (const auto& [kind, r] : records)
+                j["printers"][printer]["calibrations"][kind] = {{"date", r.date}, {"nozzle", r.nozzle}, {"filament", r.filament}};
         j["ui"]["section"] = panel_section_;
         j["ui"]["cards"] = card_open_;
         // Without the changes of a calibration tower left on the bed.
@@ -1288,7 +2450,12 @@ void App::save_preferences() {
 }
 
 void App::notify(std::string text, bool error) {
-    toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds});
+    toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
+}
+
+// A toast with «Undo», kept twice as long.
+void App::notify_undo(std::string text, std::function<void()> undo) {
+    toasts_.push_back({std::move(text), false, ImGui::GetTime() + 2.0 * kToastSeconds, std::move(undo)});
 }
 
 void App::fail(T title, std::string message, std::vector<std::string> details) {
@@ -1305,7 +2472,7 @@ void App::open_path(const std::filesystem::path& path) {
         load_model(path);
     else if (ext == ".tisma")
         open_project(path);
-    else if (ext == ".gcode" || ext == ".gco" || ext == ".g")
+    else if (ext == ".gcode" || ext == ".gco" || ext == ".g" || ext == ".bgcode")
         load_gcode(path);
     else if (ext == ".json")
         load_settings_file(path);
@@ -1337,6 +2504,7 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     ++revision_.model;
     objects_.clear();
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    fire("model_added");
     selected_ = 0;
     tool_ = PlateTool::Select;
     model_path_ = name;
@@ -1442,6 +2610,7 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         return;
     }
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    fire("model_added");
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
     frame_all();
@@ -1462,7 +2631,10 @@ void App::arrange_plate() {
         x0 = i == 0 ? p[0] : std::min(x0, p[0]), x1 = i == 0 ? p[0] : std::max(x1, p[0]);
         y0 = i == 0 ? p[1] : std::min(y0, p[1]), y1 = i == 0 ? p[1] : std::max(y1, p[1]);
     }
-    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, 6.0);
+    // Printed one by one, the head's cylinder between them (sequential.md, rule 2).
+    const double spacing = settings_.sequential ? std::max(settings_.placement_spacing, settings_.clearance_radius)
+                                                : settings_.placement_spacing;
+    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, spacing);
     for (std::size_t i = 0; i < objects_.size(); ++i)
         objects_[i].place.x = at[i][0], objects_[i].place.y = at[i][1];
     plate_changed();
@@ -1482,7 +2654,7 @@ Vec3 App::mouse_ray() const {
     const ImVec2 m = ImGui::GetIO().MousePos;
     const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
     const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
-    const float half = std::tan(0.5f * camera_.fov), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
+    const float half = std::tan(0.5f * camera_.lens_fov()), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
     return normalize(camera_.forward() + camera_.right() * (nx * half * aspect) + camera_.up() * (ny * half));
 }
 
@@ -1498,7 +2670,17 @@ void App::load_gcode(const std::filesystem::path& path) {
     r.ok = true;
     r.settings = settings_;
     r.gcode = std::move(text).str();
+    // A binary G-code (gcode_extras.md): its G-code block, read back.
+    if (r.gcode.starts_with("GCDE")) {
+        try {
+            r.gcode = read_binary_gcode(r.gcode).gcode;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, utf8(path) + ": " + e.what());
+            return;
+        }
+    }
     r.preview = read_gcode_preview(r.gcode, settings_.filament_diameter);
+    time_preview(r.preview, machine_kinematics(settings_), settings_.filament_diameter);
     if (r.preview.extrusions.empty()) {
         fail(T::CannotOpen, utf8(path) + ": no extrusions found");
         return;
@@ -1558,6 +2740,11 @@ void App::open_project(const std::filesystem::path& path) {
     fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
+    // The project's mixed colours; those using filaments this printer does
+    // not have are dropped (color_mixing.md, rule 5).
+    mixes_ = std::move(p.mixes);
+    std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
+    filament_colors_ = std::move(p.filament_colors);
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
@@ -1566,6 +2753,9 @@ void App::open_project(const std::filesystem::path& path) {
         for (ProjectModel& m : p.models) {
             PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
                           std::move(m.painting)};
+            o.extruder = m.extruder;
+            o.wipe_into_infill = m.wipe_into_infill;
+            o.wipe_into_object = m.wipe_into_object;
             const BoundingBox box = o.mesh.bounding_box();
             o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
             o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
@@ -1619,7 +2809,10 @@ void App::save_project_to(const std::filesystem::path& path) {
     p.profiles = chosen_profile_;
     // Each model as placed on the bed, its turn and scale applied.
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
-        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting});
+        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
+                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+    p.mixes = mixes_;
+    p.filament_colors = filament_colors_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     try {
@@ -1710,10 +2903,7 @@ void App::refresh_profiles() {
     // changes», and what a level never hides.
     changed_keys_.clear();
     try {
-        Settings saved = settings_;
-        for (const ProfileKind kind : kProfileKinds)
-            if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
-                saved = with_profile(saved, kind, p->settings);
+        const Settings saved = saved_settings();
         std::map<std::string, std::string> before;
         for (auto& [key, value] : describe(saved))
             before[key] = std::move(value);
@@ -1734,6 +2924,16 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
     profiles_checked_.clear();
+    if (kind == ProfileKind::Printer)
+        fire("printer_selected");
+    if (kind == ProfileKind::Filament) {
+        fire("filament_selected");
+        // A material chosen for the first time offers its tutorials (rule 15).
+        if (const KnowledgeMaterial* m = current_material(); m && !guide_memory_.done.contains("material:" + m->name)) {
+            guide_memory_.done.insert("material:" + m->name);
+            offer_tutorials("new_filament");
+        }
+    }
     if (kind == ProfileKind::Printer) {
         bed_changed();
         if (speed_fallback_.contains(profile.name))
@@ -2086,8 +3286,33 @@ void App::add_catalog_profile(const Profile& catalog) {
 void App::export_gcode_to(const std::filesystem::path& path) {
     // The result can go while the dialog is open: say so instead of writing
     // nothing, or an old result, without a word.
-    if (!result_ || !result_->ok || !result_->model || viewer_ || stale_) {
+    if (!result_ || !result_->ok || (!result_->model && !result_->resin) || viewer_ || stale_) {
         fail(T::ExportFailed, tr(T::Stale));
+        return;
+    }
+    // A resin printer's GOO file (resin.md), written whole or not at all.
+    if (result_->resin) {
+        const std::filesystem::path part = path.string() + ".part";
+        bool written = false;
+        {
+            std::ofstream out(part, std::ios::binary);
+            if (out) {
+                write_goo(out, *result_->resin, result_->settings, goo_time_now());
+                out.close();
+                written = bool(out);
+            }
+        }
+        std::error_code ec;
+        if (written)
+            std::filesystem::rename(part, path, ec);
+        if (!written || ec) {
+            std::filesystem::remove(part, ec);
+            fail(T::ExportFailed, "cannot write " + utf8(path));
+            return;
+        }
+        last_folder_ = path.parent_path();
+        notify(format(tr(T::Exported), utf8(path.filename()).c_str()) + " · " +
+               format(tr(T::ResinLayersN), int(result_->resin->layers.size())));
         return;
     }
     std::vector<Warning> warnings;
@@ -2106,8 +3331,10 @@ void App::export_gcode_to(const std::filesystem::path& path) {
 
 void App::begin_export() {
     purpose_ = Purpose::SaveGcode;
-    const std::string name = model_path_.empty() ? "tisma.gcode" : utf8(model_path_.stem()) + ".gcode";
-    browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {".gcode"}, last_folder_, name);
+    // A resin printer's file is a GOO (resin.md).
+    const std::string ext = result_ && result_->resin ? ".goo" : ".gcode";
+    const std::string name = (model_path_.empty() ? std::string("tisma") : utf8(model_path_.stem())) + ext;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveGcode), {ext}, last_folder_, name);
 }
 
 void App::start_slice() {
@@ -2120,19 +3347,35 @@ void App::start_slice() {
         fail(T::CannotSlice, e.what());
         return;
     }
-    // Vase mode prints one object (vase_mode.md, rule 2).
-    if (settings_.vase && objects_.size() > 1) {
+    // Vase mode prints one object (vase_mode.md, rule 2), or several one
+    // after another (sequential.md, rule 5).
+    if (settings_.vase && objects_.size() > 1 && !settings_.sequential) {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
+    // The resin tests print on the platform, without supports, pad or
+    // hollowing (calibration_models.md, "Resina").
+    if (calibration_ && is_resin_calibration(calibration_kind_))
+        settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
     Painting painting = plate_painting(objects_);
+    // Each model's triangles in the plate's mesh, as plate_mesh joins them.
+    std::vector<MeshObject> objects;
+    for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
+                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+        first += placed_meshes_[i].triangle_count();
+    }
+    // The objects go to the slicer when there are several, or when each may
+    // print with its own extruder or a mixed colour.
+    const bool by_object = objects.size() > 1 || settings.extruders > 1;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
-                      painting = std::move(painting)]() {
-        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting);
+                      painting = std::move(painting), objects = std::move(objects), mixes = mixes_, by_object]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting,
+                           by_object ? &objects : nullptr, mixes.empty() ? nullptr : &mixes);
     });
 }
 
@@ -2156,6 +3399,7 @@ void App::poll_jobs() {
         result_ = std::move(*r);
         viewer_ = false;
         stale_ = made == Fit::OutOfDate;
+        fire("sliced");
         show_preview();
         const bool calibrating = tab_ == Tab::Calibration;
         if (options_.layer > 0)
@@ -2192,8 +3436,15 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
+    upload_preview();
+    top_layer_ = int(result_->preview.layers.size()) - 1;
+    bottom_layer_ = 0;
+}
+
+// The preview's buffers with the view's numbers, to the GPU.
+void App::upload_preview() {
     const auto start = std::chrono::steady_clock::now();
-    preview_buffers_ = preview_buffers(result_->preview);
+    preview_buffers_ = preview_buffers(result_->preview, 0xFF4FA3FF, kViewInfo[int(preview_view_)].value);
     preview_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     const PreviewBuffers& buffers = preview_buffers_;
     ++scene_version_;
@@ -2202,8 +3453,6 @@ void App::show_preview() {
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     vk_view_.set_preview(buffers);
-    top_layer_ = int(result_->preview.layers.size()) - 1;
-    bottom_layer_ = 0;
 }
 
 void App::settings_changed() {
@@ -2330,6 +3579,12 @@ void App::top_bar() {
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
         if (button(tr(t.label), t.icon, tr(t.label), false, tab_ == t.tab, enabled, nullptr, button_h))
             set_tab(t.tab);
+        if (t.tab == Tab::Preview)
+            anchor("preview");
+        else if (t.tab == Tab::Calibration)
+            anchor("calibrations");
+        else if (t.tab == Tab::Analysis)
+            anchor("engineering_panel");
         ImGui::SameLine(0, 4.0f * scale_);
     }
 
@@ -2341,6 +3596,25 @@ void App::top_bar() {
                2.0f + ImGui::CalcTextSize(label).x;
     };
     const float right = width_of(tr(T::Open)) + width_of(tr(T::Slice)) + width_of(tr(T::Export)) + more_w + gap * 3.0f;
+    // The search for a setting and the help (assistant.md, rule 1), between
+    // the tabs and the actions, when there is room; F1 and More open the help
+    // anyway.
+    {
+        const float from = ImGui::GetCursorPosX() + 10.0f * scale_;
+        float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
+        if (room >= button_h) {
+            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - right - 12.0f * scale_ - gap - button_h, top));
+            if (icon_button("##help", "help", tr(T::HelpTip), button_h))
+                help_open_ = !help_open_;
+            room -= button_h + gap;
+        }
+        const float w = std::min(300.0f * scale_, room);
+        if (w > 120.0f * scale_) {
+            ImGui::SetCursorPos(ImVec2(from, top));
+            search_box(w, button_h);
+            ImGui::SameLine();
+        }
+    }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
     if (button("##open", "tisma_folder", tr(T::Open), false, false, true, tr(T::OpenTip), button_h)) {
@@ -2353,12 +3627,14 @@ void App::top_bar() {
     if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
                mesh_.has_value() && !slicing, tr(T::SliceTip), button_h))
         start_slice();
+    anchor("slice_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
-    if (button("##export", "tisma_save", tr(T::Export), false, false, can_export,
+    if (button("##export", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false, false, can_export,
                can_export ? tr(T::ExportTip) : tr(T::ExportNeedsSlice), button_h))
         begin_export();
+    anchor("send_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     if (icon_button("##more", "tisma_more", tr(T::More), button_h))
@@ -2387,6 +3663,18 @@ void App::top_bar() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem(tr(T::GcodePreviewMenu))) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"}, last_folder_);
+        }
+        if (ImGui::MenuItem(tr(T::ExportView))) {
+            purpose_ = Purpose::ExportView;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
+        }
+        if (ImGui::MenuItem(tr(T::ImportView))) {
+            purpose_ = Purpose::ImportView;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
+        }
         if (ImGui::MenuItem(tr(T::Tutorial)))
             tour_step_ = 0;
         if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
@@ -2395,6 +3683,10 @@ void App::top_bar() {
             tips_seen_.clear();
             tips_ = true;
         }
+        if (ImGui::MenuItem(tr(T::Help), "F1"))
+            help_open_ = true;
+        if (ImGui::MenuItem(tr(T::Credits)))
+            credits_open_ = true;
         if (ImGui::MenuItem(tr(T::About)))
             about_open_ = true;
         ImGui::Separator();
@@ -2409,10 +3701,24 @@ void App::top_bar() {
     ImGui::PopStyleColor();
 }
 
+// Whether a setting is of the printer's kind: a resin printer's settings, or
+// the rest (interface.md, «Con una impresora de resina»; settings_panel.md,
+// rule 1).
+bool of_technology(const Settings& s, std::string_view key) {
+    if (key == "machine.technology" || key == "machine.max_height")
+        return true;
+    const bool resin = key.starts_with("resin.") || key.starts_with("machine.display_");
+    return resin == (s.machine_technology == MachineTechnology::Msla);
+}
+
 // Whether a setting does anything with the others as they are: the ones
 // that hang on a switch hide while it is off (settings_panel.md, rule 6).
 bool App::setting_applies(std::string_view key) const {
     const Settings& s = settings_;
+    if (key == "machine.technology" || key == "machine.max_height")
+        return true;
+    if (!of_technology(s, key))
+        return false;
     if (key.starts_with("support.tree_"))
         return s.support && s.support_style == SupportStyle::Organic;
     if (key.starts_with("support.") && key != "support.enabled")
@@ -2421,6 +3727,10 @@ bool App::setting_applies(std::string_view key) const {
         return s.zaa;
     if (key == "infill.nonplanar_amplitude" || key == "infill.nonplanar_wavelength")
         return s.infill_nonplanar;
+    if (key == "infill.wave_amplitude" || key == "infill.wave_length")
+        return s.infill_waves;
+    if (key == "belt.angle" || key == "belt.belt_is_z")
+        return s.belt_enabled;
     if (key == "infill.dense_density")
         return s.infill_dense_under_top;
     if (key == "infill.combine_layers")
@@ -2442,10 +3752,262 @@ bool App::setting_applies(std::string_view key) const {
 bool App::setting_shown(std::string_view key, std::string_view card) const {
     if (!setting_applies(key))
         return false;
+    const std::string k(key);
+    return view_shows(key) || show_all_cards_.contains(std::string(card)) || changed_keys_.contains(k) ||
+           revealed_keys_.contains(k);
+}
+
+bool App::view_shows(std::string_view key) const {
+    if (view_level_ == ViewLevel::Custom)
+        return custom_shows(custom_view_, key);
     const std::optional<SettingPlace> place = setting_place(key);
-    const SettingLevel level = place ? place->level : SettingLevel::Advanced;
-    return level_shows(view_level_, level) || show_all_cards_.contains(std::string(card)) ||
-           changed_keys_.contains(std::string(key));
+    return level_shows(view_level_, place ? place->level : SettingLevel::Advanced);
+}
+
+Settings App::saved_settings() const {
+    Settings saved = settings_;
+    for (const ProfileKind kind : kProfileKinds)
+        if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
+            saved = with_profile(saved, kind, p->settings);
+    return saved;
+}
+
+// A level for the panel; Custom the first time shows what the level before
+// it showed (rule 15).
+void App::choose_level(ViewLevel level) {
+    if (level == ViewLevel::Custom && custom_view_.known.empty())
+        custom_view_ = custom_view_from(view_level_);
+    view_level_ = level;
+    show_all_cards_.clear();
+}
+
+// The search goes to a setting (rule 5): its tab, section and card open, the
+// row brought into sight and lit for 2 s; shown, with its level's tag, if
+// the level hides it.
+void App::go_to_setting(const std::string& key) {
+    const std::optional<SettingPlace> place = setting_place(key);
+    if (!place)
+        return;
+    if (tab_ != Tab::Prepare && tab_ != Tab::Preview)
+        set_tab(Tab::Prepare);
+    // A printer's setting is on its page (rule 37).
+    printer_page_ = place->tab == SettingsTab::Printer;
+    if (printer_page_)
+        printer_section_ = std::string(place->section->id);
+    else
+        panel_tab_ = place->tab;
+    panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
+    card_open_[std::string(place->subsection->id)] = true;
+    show_all_cards_.clear();
+    revealed_keys_.clear();
+    if (!view_shows(key))
+        revealed_keys_.insert(key);
+    highlight_key_ = key;
+    // A screenshot keeps it lit until it is taken.
+    highlight_until_ = options_.screenshot.empty() ? ImGui::GetTime() + 2.0 : 1e30;
+    scroll_to_highlight_ = true;
+}
+
+// The search field of the top bar (interface.md, «Búsqueda de ajustes»): the
+// settings that match as one types, by name, card, key or what they do;
+// Enter or a click goes to one.
+void App::search_box(float width, float height) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, height * 0.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(height * 0.9f, std::max(0.0f, (height - ImGui::GetFontSize()) * 0.5f)));
+    ImGui::SetNextItemWidth(width);
+    if (search_focus_) {
+        ImGui::SetKeyboardFocusHere();
+        search_focus_ = false;
+    }
+    const bool enter = ImGui::InputTextWithHint("##search", tr(T::SearchSettings), &search_query_,
+                                                ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool active = ImGui::IsItemActive() || ImGui::IsItemFocused();
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    ImGui::PopStyleVar(2);
+    // The magnifier.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float r = height * 0.18f;
+    const ImVec2 c(lo.x + height * 0.45f, (lo.y + hi.y) * 0.5f - r * 0.25f);
+    const ImU32 dim = ImGui::GetColorU32(rgb(theme_.text_dim));
+    dl->AddCircle(c, r, dim, 16, 1.5f);
+    dl->AddLine(ImVec2(c.x + r * 0.7f, c.y + r * 0.7f), ImVec2(c.x + r * 1.6f, c.y + r * 1.6f), dim, 1.8f);
+    if (search_query_.empty())
+        return;
+    const Settings& s = settings_;
+    const auto& docs = setting_docs();
+    const std::vector<SettingHit> hits = search_settings(
+        search_query_,
+        [&](std::string_view key) {
+            const auto doc = docs.find(std::string(key));
+            return SettingText{key_label(key), doc != docs.end() ? doc->second.meaning : std::string()};
+        },
+        [&](std::string_view key) { return of_technology(s, key); }, 10);
+    if (enter && !hits.empty()) {
+        go_to_setting(hits.front().key);
+        search_query_.clear();
+        ImGui::SetWindowFocus(nullptr);
+        return;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        search_query_.clear();
+        return;
+    }
+    if (!active && !search_list_hovered_)
+        return;
+    // The matches under the field.
+    ImGui::SetNextWindowPos(ImVec2(lo.x, hi.y + 4.0f * scale_));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::max(width, 320.0f * scale_), 0), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::Begin("##search_results", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    search_list_hovered_ = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    if (hits.empty())
+        ImGui::TextDisabled("%s", tr(T::SearchNoMatch));
+    for (const SettingHit& hit : hits) {
+        const std::string label = key_label(hit.key) + "##" + hit.key;
+        if (ImGui::Selectable(label.c_str())) {
+            go_to_setting(hit.key);
+            search_query_.clear();
+            search_list_hovered_ = false;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s › %s", tr(hit.place.section->title), tr(hit.place.subsection->title));
+    }
+    ImGui::End();
+}
+
+// What Custom shows, chosen in a tree of tab, section, card and setting
+// (rule 16), each with its box; a section's or a card's box sets all of it
+// and shows a dash when only some are on. «Start from» a level, all or none;
+// a filter; Cancel or Accept.
+void App::choose_settings_dialog() {
+    if (choose_open_) {
+        ImGui::OpenPopup("###choose_settings");
+        choose_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f * scale_, vp->Size.y * 0.8f), ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::ChooseSettingsTitle)) + "###choose_settings";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_NoSavedSettings))
+        return;
+    CustomView& draft = choose_draft_;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(tr(T::StartFrom));
+    for (const auto& [level, name] : {std::pair{ViewLevel::Basic, T::LevelBasic},
+                                      {ViewLevel::Normal, T::LevelNormal},
+                                      {ViewLevel::Advanced, T::LevelAdvanced}}) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(name)))
+            draft = custom_view_from(level);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::AllSettings))) {
+        draft = custom_view_from(ViewLevel::Advanced);
+        draft.base = custom_view_.base;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::NoSettings))) {
+        draft.visible.clear();
+        draft.known.insert(panel_keys().begin(), panel_keys().end());
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##filter", tr(T::FilterSettings), &choose_query_);
+    const std::string filter = fold(choose_query_);
+    const auto matches = [&](std::string_view key) {
+        return of_technology(settings_, key) &&
+               (filter.empty() || fold(key_label(key)).find(filter) != std::string::npos ||
+                fold(key).find(filter) != std::string::npos);
+    };
+    // A box for many settings: on when all are, a dash when some are.
+    const auto group_box = [&](const char* id, const std::vector<SettingEntry>& entries) {
+        int on = 0, all = 0;
+        for (const SettingEntry& e : entries)
+            if (matches(e.key))
+                ++all, on += custom_shows(draft, e.key) ? 1 : 0;
+        bool value = all > 0 && on == all;
+        if (ImGui::Checkbox(id, &value))
+            custom_set(draft, entries, value);
+        if (on > 0 && on < all) {
+            const ImVec2 a = ImGui::GetItemRectMin();
+            const float box = ImGui::GetFrameHeight();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x + box * 0.25f, a.y + box * 0.45f),
+                                                      ImVec2(a.x + box * 0.75f, a.y + box * 0.55f),
+                                                      ImGui::GetColorU32(ImGuiCol_CheckMark));
+        }
+        ImGui::SameLine();
+    };
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##tree", ImVec2(0, -bottom), ImGuiChildFlags_Borders);
+    for (const auto& [tab, tab_name] : {std::pair{SettingsTab::Print, T::Print},
+                                        {SettingsTab::Material, T::Material},
+                                        {SettingsTab::Printer, T::Printer}}) {
+        ImGui::PushID(int(tab));
+        if (!filter.empty())
+            ImGui::SetNextItemOpen(true);
+        if (ImGui::TreeNodeEx(tr(tab_name), ImGuiTreeNodeFlags_DefaultOpen)) {
+            for (const SectionLayout& section : settings_layout(tab)) {
+                std::vector<SettingEntry> in_section;
+                for (const SubsectionLayout& sub : section.subsections)
+                    for (const SettingEntry& e : sub.settings)
+                        if (matches(e.key))
+                            in_section.push_back(e);
+                if (in_section.empty())
+                    continue;
+                ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
+                group_box("##section", in_section);
+                if (!filter.empty())
+                    ImGui::SetNextItemOpen(true);
+                if (ImGui::TreeNode(tr(section.title))) {
+                    for (const SubsectionLayout& sub : section.subsections) {
+                        std::vector<SettingEntry> in_card;
+                        for (const SettingEntry& e : sub.settings)
+                            if (matches(e.key))
+                                in_card.push_back(e);
+                        if (in_card.empty())
+                            continue;
+                        ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
+                        group_box("##card", in_card);
+                        if (!filter.empty())
+                            ImGui::SetNextItemOpen(true);
+                        if (ImGui::TreeNode(tr(sub.title))) {
+                            for (const SettingEntry& e : in_card) {
+                                bool value = custom_shows(draft, e.key);
+                                const std::string label = key_label(e.key) + "##" + std::string(e.key);
+                                if (ImGui::Checkbox(label.c_str(), &value))
+                                    custom_set(draft, {e}, value);
+                                ImGui::SameLine();
+                                ImGui::TextDisabled("%s", tr(e.level == SettingLevel::Basic    ? T::LevelBasic
+                                                             : e.level == SettingLevel::Normal ? T::LevelNormal
+                                                                                               : T::LevelAdvanced));
+                            }
+                            ImGui::TreePop();
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    const float w = 120.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2.0f * w - ImGui::GetStyle().ItemSpacing.x -
+                         ImGui::GetStyle().WindowPadding.x);
+    if (ImGui::Button(tr(T::Cancel), ImVec2(w, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Accept), ImVec2(w, 0))) {
+        custom_view_ = draft;
+        view_level_ = ViewLevel::Custom;
+        show_all_cards_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 bool App::card_shown(const SubsectionLayout& sub) const {
@@ -2453,10 +4015,10 @@ bool App::card_shown(const SubsectionLayout& sub) const {
                        [&](const SettingEntry& e) { return setting_shown(e.key, sub.id); });
 }
 
-// A card of the panel: its title, «N changes» in violet, and, folded, the
-// line that sums it up; a click on the title folds or opens it. Its
-// background is as tall as the card was in the last frame.
-bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary) {
+// A card of the panel: its title, «N changes» in violet, its menu (Reset,
+// rule 8) and, folded, the line that sums it up; a click on the title folds
+// or opens it. Its background is as tall as the card was in the last frame.
+bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset) {
     const std::string id(sub.id);
     const auto known = card_open_.find(id);
     bool open = known != card_open_.end() ? known->second : first;
@@ -2471,11 +4033,22 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
                       7.0f * scale_);
     ImGui::PushID(id.c_str());
     ImGui::SetCursorScreenPos(ImVec2(start.x, start.y));
+    ImGui::SetNextItemAllowOverlap();
     if (ImGui::InvisibleButton("##head", ImVec2(width, header + 2.0f * pad * 0.85f))) {
         open = !open;
         card_open_[id] = open;
     }
     const bool hovered = ImGui::IsItemHovered();
+    // Where the card's function comes from, over its title (credits.md, rule 3).
+    if (hovered && ImGui::GetMousePos().y < start.y + pad + line) {
+        const std::vector<const FeatureCredit*> from = credits_for_card(credits(), sub.id);
+        if (!from.empty()) {
+            std::string text;
+            for (const FeatureCredit* c : from)
+                text += (text.empty() ? "" : "\n") + based_on(*c);
+            ImGui::SetTooltip("%s", text.c_str());
+        }
+    }
     // The arrow, the title and the changes.
     const ImU32 strong = ImGui::GetColorU32(rgb(theme_.text)), dim = ImGui::GetColorU32(rgb(theme_.text_dim));
     const ImU32 violet = ImGui::GetColorU32(rgb(theme_.accent_hover));
@@ -2489,10 +4062,27 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
                               hovered ? violet : dim);
     const float text_x = start.x + pad + 2.0f * a + 8.0f * scale_;
     dl->AddText(ImVec2(text_x, start.y + pad), hovered ? violet : strong, tr(sub.title));
+    // The menu: three dots at the right of the title.
+    const float dots = line * 1.1f;
+    const ImVec2 menu_at(start.x + width - pad - dots, start.y + pad);
+    ImGui::SetCursorScreenPos(menu_at);
+    if (ImGui::InvisibleButton("##menu", ImVec2(dots, line)))
+        ImGui::OpenPopup("##card_menu");
+    const bool menu_hovered = ImGui::IsItemHovered();
+    for (int i = 0; i < 3; ++i)
+        dl->AddCircleFilled(ImVec2(menu_at.x + dots * (0.2f + 0.3f * float(i)), menu_at.y + line * 0.5f), 1.7f * scale_,
+                            menu_hovered ? violet : dim);
+    if (ImGui::BeginPopup("##card_menu")) {
+        if (ImGui::MenuItem(tr(T::ResetCard), nullptr, false, changes > 0))
+            reset = true;
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", tr(T::ResetCardTip));
+        ImGui::EndPopup();
+    }
     if (changes > 0) {
         const std::string count = changes == 1 ? std::string(tr(T::OneChangeCount)) : format(tr(T::ChangesCount), changes);
         const float w = ImGui::CalcTextSize(count.c_str()).x;
-        dl->AddText(ImVec2(start.x + width - pad - w, start.y + pad), violet, count.c_str());
+        dl->AddText(ImVec2(menu_at.x - 6.0f * scale_ - w, start.y + pad), violet, count.c_str());
     }
     if (!open) {
         // The summary, cut to the card's width.
@@ -2513,6 +4103,858 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
     return open;
 }
 
+// «Basado en Support Fins, de gittrahan» at a card's foot, small and grey,
+// the source's name a link to it (credits.md, rule 3).
+void App::card_credits(std::string_view card, float left, float right) {
+    const std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    if (from.empty())
+        return;
+    ImGui::Spacing();
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    // The next piece on this line when it fits before the card's edge, else
+    // on the next one.
+    const auto next = [&](const char* text, float gap) {
+        ImGui::SameLine(0.0f, gap);
+        if (ImGui::GetCursorScreenPos().x + ImGui::CalcTextSize(text).x > right) {
+            ImGui::NewLine();
+            ImGui::SetCursorScreenPos(ImVec2(left, ImGui::GetCursorScreenPos().y));
+        }
+    };
+    for (const FeatureCredit* c : from) {
+        ImGui::PushID(c);
+        ImGui::SetCursorScreenPos(ImVec2(left, ImGui::GetCursorScreenPos().y));
+        ImGui::TextDisabled("%s", tr(T::BasedOn));
+        const std::string& name = card_source(*c);
+        next(name.c_str(), ImGui::CalcTextSize(" ").x);
+        ImGui::TextLinkOpenURL(name.c_str(), c->url.c_str());
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s\n%s", c->source.c_str(), c->url.c_str());
+        if (!c->author.empty()) {
+            const std::string by = std::string(tr(T::BasedOnBy)) + c->author;
+            next(by.c_str(), 0.0f);
+            ImGui::TextDisabled("%s", by.c_str());
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopStyleColor();
+    ImGui::PopFont();
+}
+
+// Where the assistant's data lives once the profile pack brings it
+// (profile_pack.md, rules 8 and 21): the interface's data folder, apart from
+// the person's profiles.
+std::filesystem::path knowledge_dir() {
+    const std::filesystem::path prefs = preferences_path();
+    return prefs.empty() ? prefs : prefs.parent_path() / "pack" / "knowledge";
+}
+
+// The help's data, read once (the pack's knowledge/, or --knowledge).
+void App::load_help_data() {
+    const std::filesystem::path folder = options_.knowledge.empty() ? knowledge_dir() : from_utf8(options_.knowledge);
+    knowledge_ = folder.empty() ? Knowledge{} : load_knowledge(folder, language() == Language::English ? "en" : "es");
+    g_knowledge = &*knowledge_;
+}
+
+// The help panel (assistant.md, rules 1 to 4), over the settings panel: its
+// tabs, a search over all of them, and at its foot where its texts come
+// from. Without the pack's data it says it comes with the profiles (AS1).
+void App::help_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::Begin("##help_panel", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+    if (!knowledge_)
+        load_help_data();
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::Help));
+    ImGui::PopFont();
+    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetFrameHeight() - ImGui::GetStyle().WindowPadding.x);
+    if (ImGui::Button("×", ImVec2(ImGui::GetFrameHeight(), 0)) ||
+        (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+        help_open_ = false;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    char query[256] = {};
+    help_query_.copy(query, sizeof query - 1);
+    if (ImGui::InputTextWithHint("##help_search", tr(T::HelpSearch), query, sizeof query))
+        help_query_ = query;
+    static constexpr T tabs[] = {T::HelpProblems, T::HelpProcedures, T::HelpGlossary, T::HelpTutorials,
+                                 T::HelpCalibrations};
+    if (ImGui::BeginTabBar("##help_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        for (int i = 0; i < int(std::size(tabs)); ++i) {
+            const ImGuiTabItemFlags flags = help_select_ && help_tab_ == i ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(tr(tabs[i]), nullptr, flags)) {
+                // Until the tab asked for shows, the one shown is not chosen.
+                if ((!help_select_ || help_tab_ == i) && help_tab_ != i)
+                    help_page_ = HelpPage::List, help_back_.clear();
+                if (!help_select_ || help_tab_ == i)
+                    help_tab_ = i, help_select_ = false;
+                ImGui::EndTabItem();
+            }
+            if (i == 0)
+                anchor("help_problems");
+            else if (i == 1)
+                anchor("help_procedures");
+        }
+        ImGui::EndTabBar();
+    }
+    const float foot = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##help_body", ImVec2(0, -foot));
+    ImGui::PushTextWrapPos(0.0f);
+    help_body();
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+    help_apply_dialog();
+    // Rule 4: where the help's texts come from.
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    for (const FeatureCredit& c : credits().features)
+        if (c.spec == "assistant.md" && c.author == "Rafa Barajas") {
+            ImGui::TextDisabled("%s", tr(T::HelpBasedOn));
+            ImGui::SameLine(0.0f, ImGui::CalcTextSize(" ").x);
+            ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::TextLinkOpenURL(c.author.c_str(), c.url.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", c.url.c_str());
+            break;
+        }
+    ImGui::PopFont();
+    ImGui::End();
+}
+
+// The help's pages (assistant.md, rules 2 and 5 to 12): the search's hits,
+// a tab's list, or one problem or procedure.
+void App::help_body() {
+    const Knowledge& k = *knowledge_;
+    const auto open_problem = [&](std::size_t i) {
+        help_tab_ = 0, help_select_ = true, help_page_ = HelpPage::Problem, help_item_ = i;
+    };
+    const auto open_procedure = [&](std::size_t i) {
+        help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+        help_steps_done_.assign(k.procedures[i].steps.size(), false);
+    };
+    ImGui::Spacing();
+    if (help_page_ == HelpPage::Problem && help_item_ < k.problems.size()) {
+        help_problem(k.problems[help_item_]);
+        return;
+    }
+    if (help_page_ == HelpPage::Procedure && help_item_ < k.procedures.size()) {
+        help_procedure(k.procedures[help_item_]);
+        return;
+    }
+    // The search, over every tab (rule 2).
+    if (!help_query_.empty()) {
+        const std::vector<KnowledgeHit> hits = search_knowledge(k, help_query_);
+        if (hits.empty())
+            ImGui::TextDisabled("%s", tr(T::HelpNothingFound));
+        for (const KnowledgeHit& h : hits) {
+            ImGui::PushID(int(h.index) * 8 + int(h.kind));
+            using Kind = KnowledgeHit::Kind;
+            switch (h.kind) {
+            case Kind::Problem:
+                if (ImGui::Selectable(k.problems[h.index].name.c_str()))
+                    open_problem(h.index), help_back_.clear();
+                break;
+            case Kind::Procedure:
+                if (ImGui::Selectable(k.procedures[h.index].name.c_str()))
+                    open_procedure(h.index);
+                break;
+            case Kind::Term:
+                ImGui::TextUnformatted(k.terms[h.index].term.c_str());
+                ImGui::TextDisabled("%s", k.terms[h.index].definition.c_str());
+                break;
+            case Kind::Material:
+                ImGui::TextUnformatted(k.materials[h.index].name.c_str());
+                break;
+            case Kind::Tutorial:
+                ImGui::TextUnformatted(k.tutorials[h.index].name.c_str());
+                break;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("· %s", tr(h.kind == Kind::Problem     ? T::HelpProblems
+                                           : h.kind == Kind::Procedure ? T::HelpProcedures
+                                           : h.kind == Kind::Term      ? T::HelpGlossary
+                                           : h.kind == Kind::Tutorial  ? T::HelpTutorials
+                                                                       : T::HelpMaterial));
+            ImGui::PopID();
+        }
+        return;
+    }
+    if (help_tab_ == 3) {
+        // The interface's own tour is here whether or not the data came.
+        ImGui::TextUnformatted(tr(T::HelpTour));
+        ImGui::TextDisabled("%s", tr(T::HelpTourAbout));
+        if (ImGui::Button(tr(T::HelpStart))) {
+            tour_step_ = 0;
+            help_open_ = false;
+        }
+        ImGui::Separator();
+        for (std::size_t i = 0; i < k.tutorials.size(); ++i) {
+            const KnowledgeTutorial& t = k.tutorials[i];
+            ImGui::PushID(int(i));
+            ImGui::TextUnformatted(t.name.c_str());
+            ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(t.steps.size()), t.minutes).c_str());
+            // Where it was left, if it was (rule 18).
+            const auto left = guide_memory_.step.find(t.id);
+            if (ImGui::Button(tr(left != guide_memory_.step.end() ? T::GuideContinue : T::HelpStart))) {
+                end_guide(false);
+                guide_ = start_guide(k, i, guide_memory_);
+                help_open_ = false;
+            }
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    }
+    if (k.empty()) {
+        ImGui::TextDisabled("%s", tr(T::HelpNoData));
+        for (const std::string& e : k.errors)
+            ImGui::TextColored(rgb(theme_.paint_block), "%s", e.c_str());
+        return;
+    }
+    if (help_tab_ == 0) {
+        for (std::size_t i = 0; i < k.problems.size(); ++i) {
+            ImGui::PushID(int(i));
+            if (ImGui::Selectable(k.problems[i].name.c_str()))
+                open_problem(i), help_back_.clear();
+            ImGui::TextDisabled("%s", k.problems[i].symptoms.c_str());
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 1) {
+        for (std::size_t i = 0; i < k.procedures.size(); ++i) {
+            ImGui::PushID(int(i));
+            if (ImGui::Selectable(k.procedures[i].name.c_str()))
+                open_procedure(i);
+            ImGui::TextDisabled("%s", k.procedures[i].for_cases.c_str());
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 2) {
+        for (const KnowledgeTerm& t : k.terms) {
+            ImGui::TextUnformatted(t.term.c_str());
+            ImGui::TextDisabled("%s", t.definition.c_str());
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 4) {
+        ImGui::TextDisabled("%s", tr(T::HelpGuidesSoon));
+    }
+}
+
+// One problem (rules 6 to 8): its symptom, and its causes with the most
+// common first and the last resorts at the end, each with its question and
+// what to do.
+void App::help_problem(const KnowledgeProblem& p) {
+    if (ImGui::SmallButton(tr(T::HelpBack))) {
+        if (!help_back_.empty()) {
+            help_item_ = help_back_.back();
+            help_back_.pop_back();
+        } else {
+            help_page_ = HelpPage::List;
+        }
+        return;
+    }
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(p.name.c_str());
+    ImGui::PopFont();
+    ImGui::TextDisabled("%s", p.symptoms.c_str());
+    for (const KnowledgeCause* c : causes_in_order(p.causes)) {
+        ImGui::PushID(c);
+        ImGui::SeparatorText(c->name.c_str());
+        if (c->last_resort)
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::HelpLastResort));
+        ImGui::TextUnformatted(c->explain.c_str());
+        if (!c->check.empty())
+            ImGui::TextDisabled("%s", c->check.c_str());
+        for (std::size_t i = 0; i < c->actions.size(); ++i) {
+            ImGui::PushID(int(i));
+            help_action(c->actions[i]);
+            ImGui::PopID();
+        }
+        ImGui::PopID();
+    }
+}
+
+// What a cause's action offers (rules 7 and 8).
+void App::help_action(const KnowledgeAction& a) {
+    const Knowledge& k = *knowledge_;
+    if (a.type == "setting") {
+        const std::optional<SettingAction> action = setting_action(a);
+        std::optional<SettingChange> change;
+        try {
+            if (action) {
+                const auto& docs = setting_docs();
+                const auto doc = docs.find(a.key);
+                change = plan_setting(settings_, *action, doc == docs.end() ? SettingRange{} : parse_range(doc->second.range));
+            }
+        } catch (const std::exception&) {
+            change.reset();
+        }
+        if (!change)
+            return; // a key the engine does not have: no button (rule 7)
+        ImGui::Bullet();
+        ImGui::TextUnformatted((key_label(a.key) + ": " + change->before + " » " + change->after).c_str());
+        if (!a.why.empty())
+            ImGui::TextDisabled("%s", a.why.c_str());
+        if (ImGui::SmallButton(tr(T::HelpApply))) {
+            help_change_ = change;
+            help_change_open_ = true;
+        }
+    } else if (a.type == "procedure") {
+        for (std::size_t i = 0; i < k.procedures.size(); ++i)
+            if (k.procedures[i].id == a.id && ImGui::SmallButton((std::string(tr(T::HelpOpen)) + " " + k.procedures[i].name).c_str())) {
+                help_page_ = HelpPage::Procedure, help_item_ = i, help_tab_ = 1, help_select_ = true;
+                help_steps_done_.assign(k.procedures[i].steps.size(), false);
+            }
+    } else if (a.type == "problem") {
+        for (std::size_t i = 0; i < k.problems.size(); ++i)
+            if (k.problems[i].id == a.id && ImGui::SmallButton((std::string(tr(T::HelpSee)) + " " + k.problems[i].name).c_str())) {
+                help_back_.push_back(help_item_);
+                help_item_ = i;
+            }
+    } else if (a.type == "calibration") {
+        if (ImGui::SmallButton(tr(T::HelpOpenCalibration)))
+            tab_ = Tab::Calibration;
+    } else if (!a.text.empty()) {
+        ImGui::Bullet();
+        ImGui::TextUnformatted(a.text.c_str());
+    }
+}
+
+// One procedure (rule 10): its warnings first, its steps to tick, then how to
+// avoid it and its notes.
+void App::help_procedure(const KnowledgeProcedure& p) {
+    if (ImGui::SmallButton(tr(T::HelpBack))) {
+        help_page_ = HelpPage::List;
+        return;
+    }
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(p.name.c_str());
+    ImGui::PopFont();
+    if (!p.applies_to.empty())
+        ImGui::TextDisabled("%s", p.applies_to.c_str());
+    for (const std::string& w : p.warnings)
+        ImGui::TextColored(rgb(kWarningColour), "%s", w.c_str());
+    help_steps_done_.resize(p.steps.size(), false);
+    for (std::size_t i = 0; i < p.steps.size(); ++i) {
+        ImGui::PushID(int(i));
+        bool done = help_steps_done_[i];
+        if (ImGui::Checkbox(p.steps[i].title.c_str(), &done))
+            help_steps_done_[i] = done;
+        ImGui::Indent();
+        ImGui::TextDisabled("%s", p.steps[i].text.c_str());
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    if (!p.prevention.empty()) {
+        ImGui::SeparatorText(tr(T::HelpPrevention));
+        for (const std::string& t : p.prevention)
+            ImGui::BulletText("%s", t.c_str());
+    }
+    if (!p.notes.empty()) {
+        ImGui::SeparatorText(tr(T::HelpNotes));
+        for (const std::string& t : p.notes)
+            ImGui::BulletText("%s", t.c_str());
+    }
+}
+
+const KnowledgeMaterial* App::current_material() const {
+    if (!knowledge_ || knowledge_->materials.empty())
+        return nullptr;
+    std::vector<MaterialInfo> infos;
+    for (const KnowledgeMaterial& m : knowledge_->materials)
+        infos.push_back(material_info(m));
+    const MaterialInfo* found =
+        find_material(infos, {}, chosen_profile_[std::size_t(ProfileKind::Filament)]);
+    return found ? &knowledge_->materials[std::size_t(found - infos.data())] : nullptr;
+}
+
+// The material's card under the filament's profile (rules 13 and 14): its
+// temperatures, bed, chamber, fan, surfaces, retraction and drying, and what
+// this printer lacks for it.
+void App::material_card() {
+    const KnowledgeMaterial* m = current_material();
+    if (!m)
+        return;
+    const auto range = [](const KnowledgeRange& r, const char* unit) {
+        if (!r.known)
+            return std::string("—");
+        char text[64];
+        if (r.min == r.max)
+            std::snprintf(text, sizeof text, "%g %s", r.min, unit);
+        else
+            std::snprintf(text, sizeof text, "%g%s%g %s", r.min, tr(T::RangeTo), r.max, unit);
+        return std::string(text);
+    };
+    const std::vector<MaterialWarning> warnings = material_warnings(material_info(*m), settings_);
+    const std::string title = format(tr(T::MaterialCard), m->name.c_str()) + "###material_card";
+    if (!warnings.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, rgb(kWarningColour));
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once); // open while it has something to say
+    }
+    const bool open = ImGui::CollapsingHeader(title.c_str());
+    if (!warnings.empty())
+        ImGui::PopStyleColor();
+    if (!open)
+        return;
+    ImGui::PushTextWrapPos(0.0f);
+    for (const MaterialWarning w : warnings)
+        ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(w, material_info(*m)).c_str());
+    ImGui::TextDisabled("%s · %s", m->family.c_str(), m->category.c_str());
+    ImGui::Text("%s: %s", tr(T::NozzleTemp), range(m->nozzle_temp, "°C").c_str());
+    ImGui::Text("%s: %s", tr(T::BedTemp), range(m->bed_temp, "°C").c_str());
+    if (m->base && m->base->chamber_temp)
+        ImGui::Text("%s: %g °C", tr(T::MaterialChamber), *m->base->chamber_temp);
+    if (m->fan.known)
+        ImGui::Text("%s: %s", tr(T::MaterialFan), range(m->fan, "%").c_str());
+    if (!m->enclosure.empty())
+        ImGui::Text("%s: %s", tr(T::MaterialEnclosure), m->enclosure.c_str());
+    ImGui::Text("%s: %s", tr(T::MaterialNozzle), m->nozzle_material.c_str());
+    if (!m->surfaces.empty()) {
+        std::string list;
+        for (const std::string& s : m->surfaces)
+            list += (list.empty() ? "" : ", ") + s;
+        ImGui::Text("%s: %s", tr(T::BedSurfaces), list.c_str());
+    }
+    // Direct or Bowden: the engine does not know the printer's extruder yet,
+    // so both are shown.
+    if (m->base && (m->base->retraction_direct || m->base->retraction_bowden)) {
+        std::string r;
+        if (m->base->retraction_direct)
+            r += format(tr(T::MaterialDirect), *m->base->retraction_direct);
+        if (m->base->retraction_bowden)
+            r += (r.empty() ? "" : ", ") + format(tr(T::MaterialBowden), *m->base->retraction_bowden);
+        ImGui::Text("%s: %s", tr(T::MaterialRetraction), r.c_str());
+    }
+    if (m->drying) {
+        std::string d = range(m->drying->temp, "°C");
+        if (m->drying->hours_before_printing)
+            d += ", " + std::to_string(*m->drying->hours_before_printing) + " h";
+        ImGui::Text("%s: %s", tr(T::MaterialDrying), d.c_str());
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+}
+
+void App::anchor(const char* name) { anchor_rect(name, ImGui::GetItemRectMin(), ImGui::GetItemRectMax()); }
+
+void App::anchor_rect(const char* name, ImVec2 min, ImVec2 max) { anchors_[name] = {min.x, min.y, max.x, max.y}; }
+
+// Something the tutorials wait for happened (rule 16, «Eventos»).
+void App::fire(std::string_view event) {
+    if (!guide_ || !knowledge_)
+        return;
+    if (guide_event(*knowledge_, *guide_, event))
+        end_guide(true);
+}
+
+void App::offer_tutorials(std::string_view when) {
+    if (!knowledge_)
+        return;
+    for (const std::size_t i : tutorials_to_offer(*knowledge_, when, guide_memory_))
+        if (std::find(guide_offers_.begin(), guide_offers_.end(), i) == guide_offers_.end())
+            guide_offers_.push_back(i);
+}
+
+void App::end_guide(bool finished) {
+    if (guide_ && knowledge_)
+        remember(guide_memory_, *knowledge_, *guide_, finished);
+    guide_.reset();
+}
+
+// The tutorial going on, or one offered (rules 15 to 17): the part its step
+// names stays lit and the rest goes dark, with a bubble beside it; a part
+// that is not on screen opens its panel, and without one the bubble sits in
+// the middle. The dark layer takes no clicks, so the step can be done.
+void App::guide_overlay() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float width = 360.0f * scale_;
+    if (!guide_ && !guide_offers_.empty() && knowledge_) {
+        // «¿Te muestro cómo?»: accept, later or never.
+        const std::size_t t = guide_offers_.front();
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 16.0f * scale_, vp->Pos.y + vp->Size.y - 60.0f * scale_),
+                                ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+        ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+        ImGui::Begin("##guide_offer", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::GuideOffer));
+        ImGui::TextUnformatted(knowledge_->tutorials[t].name.c_str());
+        ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(knowledge_->tutorials[t].steps.size()),
+                                         knowledge_->tutorials[t].minutes)
+                                      .c_str());
+        if (ImGui::Button(tr(T::GuideAccept))) {
+            guide_ = start_guide(*knowledge_, t, guide_memory_);
+            guide_offers_.erase(guide_offers_.begin());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideLater)))
+            guide_offers_.erase(guide_offers_.begin());
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideNever))) {
+            guide_memory_.dismissed.insert(knowledge_->tutorials[t].id);
+            guide_offers_.erase(guide_offers_.begin());
+        }
+        ImGui::End();
+        return;
+    }
+    if (!guide_ || !knowledge_ || guide_->tutorial >= knowledge_->tutorials.size())
+        return;
+    const KnowledgeTutorial& tutorial = knowledge_->tutorials[guide_->tutorial];
+    if (guide_->step >= int(tutorial.steps.size())) {
+        end_guide(true);
+        return;
+    }
+    const KnowledgeTutorial::Step& step = tutorial.steps[std::size_t(guide_->step)];
+    // A part not on screen opens its panel (rule 17).
+    auto found = anchors_.find(step.anchor);
+    if (found == anchors_.end() && !guide_opened_panel_) {
+        guide_opened_panel_ = true;
+        if (step.anchor == "filament_selector")
+            panel_tab_ = SettingsTab::Material;
+        else if (step.anchor == "help_problems" || step.anchor == "help_procedures")
+            help_open_ = true;
+        else if (step.anchor.starts_with("engineering_"))
+            set_tab(Tab::Analysis);
+        else if (step.anchor == "calibrations")
+            set_tab(Tab::Calibration);
+    } else if (found != anchors_.end()) {
+        guide_opened_panel_ = false;
+    }
+    // The dark layer around the part.
+    ImGui::SetNextWindowPos(vp->Pos);
+    ImGui::SetNextWindowSize(vp->Size);
+    ImGui::Begin("##guide_dim", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 dark = IM_COL32(0, 0, 0, 140);
+    const ImVec2 lo = vp->Pos, hi(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y);
+    ImVec2 a, b;
+    if (found != anchors_.end()) {
+        const float pad = 4.0f * scale_;
+        a = ImVec2(found->second[0] - pad, found->second[1] - pad), b = ImVec2(found->second[2] + pad, found->second[3] + pad);
+        dl->AddRectFilled(lo, ImVec2(hi.x, a.y), dark);
+        dl->AddRectFilled(ImVec2(lo.x, b.y), hi, dark);
+        dl->AddRectFilled(ImVec2(lo.x, a.y), ImVec2(a.x, b.y), dark);
+        dl->AddRectFilled(ImVec2(b.x, a.y), ImVec2(hi.x, b.y), dark);
+        dl->AddRect(a, b, ImGui::GetColorU32(rgb(theme_.accent_hover)), 6.0f * scale_, 2.5f * scale_);
+    } else {
+        dl->AddRectFilled(lo, hi, dark);
+    }
+    ImGui::End();
+    // The bubble: beside the part where it fits, else in the middle.
+    ImVec2 at(vp->Pos.x + 0.5f * vp->Size.x, vp->Pos.y + 0.5f * vp->Size.y), pivot(0.5f, 0.5f);
+    if (found != anchors_.end()) {
+        if (b.x + 12.0f * scale_ + width < hi.x)
+            at = ImVec2(b.x + 12.0f * scale_, std::max(a.y, lo.y + 60.0f * scale_)), pivot = ImVec2(0.0f, 0.0f);
+        else if (a.x - 12.0f * scale_ - width > lo.x)
+            at = ImVec2(a.x - 12.0f * scale_, std::max(a.y, lo.y + 60.0f * scale_)), pivot = ImVec2(1.0f, 0.0f);
+        else if (b.y + 200.0f * scale_ < hi.y)
+            at = ImVec2(std::min(a.x, hi.x - width - 8.0f * scale_), b.y + 12.0f * scale_), pivot = ImVec2(0.0f, 0.0f);
+    }
+    ImGui::SetNextWindowPos(at, ImGuiCond_Always, pivot);
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.accent));
+    ImGui::Begin("##guide", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+    ImGui::TextDisabled("%s · %d / %d", tutorial.name.c_str(), guide_->step + 1, int(tutorial.steps.size()));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", step.title.c_str());
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(step.text.c_str());
+    if (!step.wait_for.empty())
+        ImGui::TextDisabled("%s", tr(T::GuideWaits));
+    ImGui::PopTextWrapPos();
+    // A step that opens something (rule 16).
+    if (!step.open_type.empty() && ImGui::Button(tr(T::HelpOpen))) {
+        if (step.open_type == "procedure") {
+            for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
+                if (knowledge_->procedures[i].id == step.open_id) {
+                    help_open_ = true;
+                    help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+                    help_steps_done_.assign(knowledge_->procedures[i].steps.size(), false);
+                }
+        } else {
+            set_tab(Tab::Calibration);
+        }
+    }
+    ImGui::Spacing();
+    const bool last = guide_->step + 1 == int(tutorial.steps.size());
+    if (guide_->step > 0) {
+        if (ImGui::Button(tr(T::Back)))
+            guide_back(*guide_);
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(last ? T::Finish : T::Next)) && guide_next(*knowledge_, *guide_)) {
+        end_guide(true);
+    } else {
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GuideExit)))
+            end_guide(false);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// Applying a setting from the help (rule 7): the setting, its value now and
+// after, the limit when it was cut, and Undo afterwards.
+void App::help_apply_dialog() {
+    if (help_change_open_) {
+        ImGui::OpenPopup("###help_apply");
+        help_change_open_ = false;
+    }
+    const std::string title = std::string(tr(T::HelpApply)) + "###help_apply";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    if (help_change_) {
+        const SettingChange& c = *help_change_;
+        ImGui::TextUnformatted(key_label(c.key).c_str());
+        ImGui::Text("%s » %s", c.before.c_str(), c.after.c_str());
+        if (c.clamped)
+            ImGui::TextColored(rgb(kWarningColour), "%s", format(tr(T::HelpLimitUsed), c.after.c_str()).c_str());
+        if (ImGui::Button(tr(T::HelpApply), ImVec2(120.0f * scale_, 0))) {
+            try {
+                const Settings before = settings_;
+                settings_ = apply_setting(settings_, c);
+                settings_changed();
+                notify_undo(key_label(c.key) + ": " + c.before + " » " + c.after, [this, before] {
+                    settings_ = before;
+                    settings_changed();
+                });
+            } catch (const std::exception& e) {
+                notify(e.what(), true);
+            }
+            help_change_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        help_change_.reset();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// More › Credits and sources (credits.md, rule 4): the functions taken from
+// other sources, and the third-party components with their licenses and the
+// notices those licenses ask to hand out with the program.
+void App::credits_dialog() {
+    if (credits_open_) {
+        ImGui::OpenPopup("###credits");
+        credits_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(980.0f * scale_, vp->Size.x * 0.92f), vp->Size.y * 0.85f),
+                             ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::Credits)) + "###credits";
+    if (!ImGui::BeginPopupModal(title.c_str()))
+        return;
+    const Credits& all = credits();
+    ImGui::TextWrapped("%s", tr(T::CreditsIntro));
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##credits_body", ImVec2(0, -bottom));
+    constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
+                                      ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_PadOuterX;
+    ImGui::SeparatorText(tr(T::CreditsFeatures));
+    if (ImGui::BeginTable("##features", 4, flags)) {
+        ImGui::TableSetupColumn(tr(T::CreditsFunction), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsSource), ImGuiTableColumnFlags_WidthStretch, 1.6f);
+        ImGui::TableSetupColumn(tr(T::CreditsAuthor), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableSetupColumn(tr(T::CreditsLicense), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableHeadersRow();
+        for (const FeatureCredit& c : all.features) {
+            ImGui::PushID(&c);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.feature.now().c_str());
+            ImGui::TableNextColumn();
+            // A link that wraps: a paper's title is long.
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextLink));
+            ImGui::TextWrapped("%s", c.source.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("%s", c.url.c_str());
+            }
+            if (ImGui::IsItemClicked() && ImGui::GetPlatformIO().Platform_OpenInShellFn)
+                ImGui::GetPlatformIO().Platform_OpenInShellFn(ImGui::GetCurrentContext(), c.url.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.author.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", c.license.now().c_str());
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    ImGui::SeparatorText(tr(T::CreditsLibraries));
+    if (ImGui::BeginTable("##libraries", 4, flags)) {
+        ImGui::TableSetupColumn(tr(T::CreditsComponent), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsVersion), ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(tr(T::CreditsLibraryLicense), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableSetupColumn(tr(T::CreditsNotice), ImGuiTableColumnFlags_WidthStretch, 0.9f);
+        ImGui::TableHeadersRow();
+        for (std::size_t i = 0; i < all.libraries.size(); ++i) {
+            const LibraryCredit& lib = all.libraries[i];
+            ImGui::PushID(int(i));
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextLinkOpenURL(lib.name.c_str(), lib.url.c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", lib.url.c_str());
+            ImGui::TableNextColumn();
+            // A commit is long: its first twelve digits say which.
+            ImGui::TextUnformatted(lib.version.size() > 24 ? (lib.version.substr(0, 12) + "…").c_str()
+                                                             : lib.version.c_str());
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", lib.license.c_str());
+            ImGui::TableNextColumn();
+            const bool shown = credits_notice_ == int(i);
+            if (ImGui::Selectable(tr(T::CreditsShowNotice), shown))
+                credits_notice_ = shown ? -1 : int(i);
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (credits_notice_ >= 0 && credits_notice_ < int(all.libraries.size())) {
+        const LibraryCredit& lib = all.libraries[std::size_t(credits_notice_)];
+        ImGui::SeparatorText((lib.name + " — " + tr(T::CreditsNotice)).c_str());
+        for (const std::string& notice : lib.notices) {
+            ImGui::PushID(notice.c_str());
+            ImGui::BeginChild("##notice", ImVec2(0, 220.0f * scale_), ImGuiChildFlags_Borders);
+            ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+            const std::string_view text = embedded(notice);
+            ImGui::TextUnformatted(text.data(), text.data() + text.size());
+            ImGui::PopFont();
+            ImGui::EndChild();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// A section in a column of sections (settings_panel.md, rule 1): its icon
+// and name, the chosen one in violet, and a dot where something differs from
+// the profile. True when clicked; the caller's tooltip asks IsItemHovered.
+bool App::section_button(std::string_view id, const char* name, const char* icon_name, bool selected, bool marked,
+                         float column) {
+    ImGui::PushID(id.data(), id.data() + id.size());
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
+    const float tall = icon_size + small + 16.0f * scale_;
+    const bool clicked = ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected;
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (selected || hovered)
+        dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
+                          ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
+                          7.0f * scale_);
+    const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
+    const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
+    dl->AddImage(icon(icon_name), ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
+                 ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
+    const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
+    dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
+    if (marked)
+        dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
+                            ImGui::GetColorU32(rgb(theme_.accent_hover)));
+    ImGui::PopID();
+    return clicked;
+}
+
+// A section's cards: each with its rows when open, its Reset (rule 8), and
+// at its foot what the level hides (rule 11) or, in Custom, the settings to
+// add back (rule 16).
+void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) {
+    bool first = true;
+    for (const SubsectionLayout& sub : section.subsections) {
+        if (!card_shown(sub))
+            continue;
+        const int changes = int(std::count_if(sub.settings.begin(), sub.settings.end(), [&](const SettingEntry& e) {
+            return changed_keys_.contains(std::string(e.key));
+        }));
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const float card_width = ImGui::GetContentRegionAvail().x;
+        bool reset = false;
+        const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
+        if (reset) {
+            // Back to the saved profile, this card's settings only (rule 8).
+            std::vector<std::string> keys;
+            for (const SettingEntry& e : sub.settings)
+                keys.emplace_back(e.key);
+            try {
+                settings_ = with_keys(settings_, saved_settings(), keys);
+                changed = true;
+                bed |= sub.id == "bed_volume";
+            } catch (const std::exception& e) {
+                fail(T::CannotOpen, e.what());
+            }
+        }
+        if (open) {
+            ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
+            changed |= card_rows(sub.id, bed);
+            if (view_level_ == ViewLevel::Custom) {
+                // Settings of this card Custom leaves out, to add back (rule 16).
+                std::vector<std::string_view> hidden;
+                for (const SettingEntry& e : sub.settings)
+                    if (setting_applies(e.key) && !setting_shown(e.key, sub.id))
+                        hidden.push_back(e.key);
+                if (!hidden.empty()) {
+                    ImGui::Spacing();
+                    if (ImGui::SmallButton(tr(T::AddSetting)))
+                        ImGui::OpenPopup("##add_setting");
+                    if (ImGui::BeginPopup("##add_setting")) {
+                        for (const std::string_view key : hidden)
+                            if (ImGui::Selectable((key_label(key) + "##" + std::string(key)).c_str())) {
+                                custom_view_.visible.insert(std::string(key));
+                                custom_view_.known.insert(std::string(key));
+                            }
+                        ImGui::EndPopup();
+                    }
+                }
+            } else {
+                // Basic tells what it hides (rule 11).
+                int hidden = 0;
+                for (const SettingEntry& e : sub.settings)
+                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
+                if (hidden > 0) {
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
+                                                                                        : T::MoreSettingsAdvanced),
+                                                     hidden)
+                                                  .c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::ShowAll)))
+                        show_all_cards_.insert(std::string(sub.id));
+                }
+            }
+            const float pad = 9.0f * scale_;
+            card_credits(sub.id, start.x + pad, start.x + card_width - pad);
+            ImGui::PopID();
+        }
+        const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
+        card_heights_[std::string(sub.id)] = end - start.y;
+        ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
+        ImGui::Dummy(ImVec2(0, 0));
+        first = false;
+    }
+}
+
 // The settings panel (docs/spec/features/settings_panel.md): the Print,
 // Material and Printer tabs, each with its profile, its sections in a column
 // of icons and the chosen section's cards; a level (Basic, Normal, Advanced)
@@ -2526,25 +4968,43 @@ void App::settings_panel() {
     ImGui::Begin("##settings", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
+    anchor_rect("quick_settings", ImGui::GetWindowPos(),
+                ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowSize().x, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y));
     refresh_profiles();
     bool changed = false, bed = false;
 
-    // A setting asked with --info opens its tab, section and card.
+    // A setting asked with --info opens its tab (or the printer's page),
+    // section and card.
     if (!g_open_info.empty())
         if (const std::optional<SettingPlace> place = setting_place(g_open_info)) {
-            panel_tab_ = place->tab;
+            if (place->tab == SettingsTab::Printer)
+                printer_page_ = true, printer_section_ = std::string(place->section->id);
+            else
+                panel_tab_ = place->tab;
             panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
             card_open_[std::string(place->subsection->id)] = true;
             view_level_ = ViewLevel::Advanced;
         }
+    // On top, the printer's card (rule 32); the printer's settings have a
+    // page of their own, and the panel the Print and Material tabs.
+    ImGui::BeginGroup();
+    printer_card();
+    ImGui::EndGroup();
+    anchor("printer_selector");
+    if (panel_tab_ == SettingsTab::Printer)
+        panel_tab_ = SettingsTab::Print;
 
     // The tabs, and the level on their right.
     {
         const float gap = ImGui::GetStyle().ItemSpacing.x;
-        const float level_width = 118.0f * scale_;
-        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
-        const std::array<std::pair<SettingsTab, T>, 3> tabs = {
-            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Printer}}};
+        // The level's chip, as wide as its longest name.
+        float level_width = 0.0f;
+        for (const T name : {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom})
+            level_width = std::max(level_width, ImGui::CalcTextSize((std::string("    ") + tr(name)).c_str()).x);
+        level_width += ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().FramePadding.x;
+        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 2.0f * gap) / 2.0f;
+        const std::array<std::pair<SettingsTab, T>, 2> tabs = {
+            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}}};
         for (const auto& [tab, title] : tabs) {
             const bool chosen = panel_tab_ == tab;
             ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame, 0.0f));
@@ -2556,10 +5016,11 @@ void App::settings_panel() {
             ImGui::SameLine(0, gap);
         }
         // The level: a dot of its colour and its name.
-        constexpr std::array<std::tuple<ViewLevel, T, T, std::uint32_t>, 3> levels = {
+        constexpr std::array<std::tuple<ViewLevel, T, T, std::uint32_t>, 4> levels = {
             {{ViewLevel::Basic, T::LevelBasic, T::LevelBasicTip, 0x3FBF7Fu},
              {ViewLevel::Normal, T::LevelNormal, T::LevelNormalTip, 0xE8B83Du},
-             {ViewLevel::Advanced, T::LevelAdvanced, T::LevelAdvancedTip, 0xE5484Du}}};
+             {ViewLevel::Advanced, T::LevelAdvanced, T::LevelAdvancedTip, 0xE5484Du},
+             {ViewLevel::Custom, T::LevelCustom, T::LevelCustomTip, 0x9B6BFFu}}};
         std::uint32_t dot = 0xE8B83D;
         const char* name = tr(T::LevelNormal);
         for (const auto& [level, title, tip, colour] : levels)
@@ -2568,17 +5029,23 @@ void App::settings_panel() {
         ImGui::SetNextItemWidth(level_width);
         const std::string preview = std::string("    ") + name;
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        if (ImGui::BeginCombo("##level", preview.c_str())) {
+        if (ImGui::BeginCombo("##level", preview.c_str(), ImGuiComboFlags_HeightLarge)) {
             for (const auto& [level, title, tip, colour] : levels) {
                 const ImVec2 row = ImGui::GetCursorScreenPos();
                 const std::string item = std::string("    ") + tr(title) + "##" + std::to_string(int(level));
                 if (ImGui::Selectable(item.c_str(), level == view_level_))
-                    view_level_ = level, show_all_cards_.clear();
+                    choose_level(level);
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("%s", tr(tip));
                 ImGui::GetWindowDrawList()->AddCircleFilled(
                     ImVec2(row.x + 6.0f * scale_, row.y + ImGui::GetTextLineHeight() * 0.5f), 4.0f * scale_,
                     ImGui::GetColorU32(rgb(colour)));
+            }
+            ImGui::Separator();
+            if (ImGui::Selectable(tr(T::ChooseSettings))) {
+                choose_level(ViewLevel::Custom);
+                choose_draft_ = custom_view_;
+                choose_open_ = true;
             }
             ImGui::EndCombo();
         }
@@ -2588,20 +5055,42 @@ void App::settings_panel() {
             ImVec2(at.x + ImGui::GetStyle().FramePadding.x + 4.0f * scale_, at.y + ImGui::GetFrameHeight() * 0.5f),
             4.0f * scale_, ImGui::GetColorU32(rgb(dot)));
     }
-    // Ctrl+Alt+1, 2 and 3 choose the level (rule 14).
+    // Ctrl+Alt+1 to 4 choose the level (rule 14).
     if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyAlt) {
         if (ImGui::IsKeyPressed(ImGuiKey_1))
-            view_level_ = ViewLevel::Basic, show_all_cards_.clear();
+            choose_level(ViewLevel::Basic);
         if (ImGui::IsKeyPressed(ImGuiKey_2))
-            view_level_ = ViewLevel::Normal, show_all_cards_.clear();
+            choose_level(ViewLevel::Normal);
         if (ImGui::IsKeyPressed(ImGuiKey_3))
-            view_level_ = ViewLevel::Advanced, show_all_cards_.clear();
+            choose_level(ViewLevel::Advanced);
+        if (ImGui::IsKeyPressed(ImGuiKey_4))
+            choose_level(ViewLevel::Custom);
     }
-    const ProfileKind kind = panel_tab_ == SettingsTab::Print      ? ProfileKind::Print
-                             : panel_tab_ == SettingsTab::Material ? ProfileKind::Filament
-                                                                   : ProfileKind::Printer;
-    profile_row(kind);
+    profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
+    if (panel_tab_ == SettingsTab::Material)
+        anchor("filament_selector");
+    if (panel_tab_ == SettingsTab::Material)
+        material_card();
+    // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
+    if (ImGui::SmallButton(tr(single_column_ ? T::SeeBySection : T::SeeAllTogether)))
+        single_column_ = !single_column_;
+    if (view_level_ == ViewLevel::Custom) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::ChooseSettings))) {
+            choose_draft_ = custom_view_;
+            choose_open_ = true;
+        }
+    }
     ImGui::Spacing();
+
+    // The setting the search went to stays lit for 2 s.
+    if (!highlight_key_.empty() && ImGui::GetTime() > highlight_until_)
+        highlight_key_.clear();
+    g_highlight_key = highlight_key_;
+    g_highlight_colour = ImGui::GetColorU32(rgb(theme_.accent, 0.35f));
+    g_scroll_highlight = scroll_to_highlight_;
+    scroll_to_highlight_ = false;
+    g_custom_rows = view_level_ == ViewLevel::Custom;
 
     const std::vector<SectionLayout>& layout = settings_layout(panel_tab_);
     std::string& chosen = panel_section_[std::size_t(panel_tab_)];
@@ -2617,95 +5106,52 @@ void App::settings_panel() {
 
     const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     const float column = 70.0f * scale_;
-    // The column of sections: an icon and its name, the chosen one in violet;
-    // a dot where something differs from the profile.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
-    for (const SectionLayout* section : sections) {
-        const bool selected = section->id == chosen;
-        ImGui::PushID(section->id.data(), section->id.data() + section->id.size());
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
-        const float tall = icon_size + small + 16.0f * scale_;
-        if (ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected) {
-            chosen = std::string(section->id);
-            show_all_cards_.clear();
+    // The column of sections (all together, none).
+    if (!single_column_) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+        for (const SectionLayout* section : sections) {
+            const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
+                return std::any_of(sub.settings.begin(), sub.settings.end(),
+                                   [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
+            });
+            const std::string icon_name(section->icon.substr(0, section->icon.size() - 4));
+            if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == chosen, marked, column)) {
+                chosen = std::string(section->id);
+                show_all_cards_.clear();
+                revealed_keys_.clear();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(tr(section->title));
+                for (const SubsectionLayout& sub : section->subsections)
+                    if (card_shown(sub))
+                        ImGui::BulletText("%s", tr(sub.title));
+                ImGui::EndTooltip();
+            }
         }
-        const bool hovered = ImGui::IsItemHovered();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        if (selected || hovered)
-            dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
-                              ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
-                              7.0f * scale_);
-        const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
-        const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
-        dl->AddImage(icon(std::string(section->icon.substr(0, section->icon.size() - 4)).c_str()),
-                     ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
-                     ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
-        const char* name = tr(section->title);
-        const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
-        dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
-        const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
-            return std::any_of(sub.settings.begin(), sub.settings.end(),
-                               [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
-        });
-        if (marked)
-            dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
-                                ImGui::GetColorU32(rgb(theme_.accent_hover)));
-        if (hovered) {
-            ImGui::BeginTooltip();
-            ImGui::TextUnformatted(name);
-            for (const SubsectionLayout& sub : section->subsections)
-                if (card_shown(sub))
-                    ImGui::BulletText("%s", tr(sub.title));
-            ImGui::EndTooltip();
-        }
-        ImGui::PopID();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::SameLine(0, 4.0f * scale_);
     }
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::SameLine(0, 4.0f * scale_);
 
-    // The chosen section's cards.
+    // The chosen section's cards, or every section's one below the other.
     ImGui::BeginChild("##cards", ImVec2(0, -footer));
     for (const SectionLayout* section : sections) {
-        if (section->id != chosen)
+        if (!single_column_ && section->id != chosen)
             continue;
-        bool first = true;
-        for (const SubsectionLayout& sub : section->subsections) {
-            if (!card_shown(sub))
-                continue;
-            const int changes = int(std::count_if(sub.settings.begin(), sub.settings.end(), [&](const SettingEntry& e) {
-                return changed_keys_.contains(std::string(e.key));
-            }));
-            const ImVec2 start = ImGui::GetCursorScreenPos();
-            if (settings_card(sub, first, changes, subsection_summary(sub.id, settings_))) {
-                ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
-                changed |= card_rows(sub.id, bed);
-                // Basic tells what it hides (rule 11).
-                int hidden = 0;
-                for (const SettingEntry& e : sub.settings)
-                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
-                if (hidden > 0) {
-                    ImGui::Spacing();
-                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
-                                                                                        : T::MoreSettingsAdvanced),
-                                                     hidden)
-                                                  .c_str());
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(tr(T::ShowAll)))
-                        show_all_cards_.insert(std::string(sub.id));
-                }
-                ImGui::PopID();
-            }
-            const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
-            card_heights_[std::string(sub.id)] = end - start.y;
-            ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
-            ImGui::Dummy(ImVec2(0, 0));
-            first = false;
+        if (single_column_) {
+            ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
+            ImGui::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
+            ImGui::PopFont();
+            ImGui::Spacing();
         }
+        section_cards(*section, changed, bed);
+        if (single_column_)
+            ImGui::Spacing();
     }
     ImGui::EndChild();
+    g_custom_rows = false;
 
     // Settings files.
     ImGui::Separator();
@@ -2744,8 +5190,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (!setting_shown(key, id))
             return false;
         const std::optional<SettingPlace> place = setting_place(key);
-        if (place && !level_shows(view_level_, place->level) && !show_all_cards_.contains(std::string(id)))
-            g_row_tag = tr(place->level == SettingLevel::Normal ? T::LevelNormal : T::LevelAdvanced);
+        if (place && !view_shows(key) && !show_all_cards_.contains(std::string(id)))
+            g_row_tag = tr(place->level == SettingLevel::Basic    ? T::LevelBasic
+                           : place->level == SettingLevel::Normal ? T::LevelNormal
+                                                                  : T::LevelAdvanced);
+        g_row_key = key;
         return true;
     };
     if (!ImGui::BeginTable("##rows", 2, ImGuiTableFlags_SizingStretchProp,
@@ -2766,6 +5215,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
     const auto flag = [&](T label, const char* key, bool& v, const char* tip = nullptr) {
         if (shown(key))
             changed |= row(label, v, tip);
+    };
+    // A speed in mm/s or a share of another (as the file gives it); 0: the other's.
+    const auto share_row = [&](T label, const char* key, Speed& v) {
+        if (shown(key))
+            changed |= row(label, v.value, 0.0, 1000.0, v.value <= 0.0 ? "—" : v.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
     };
     const auto count = [&](T label, const char* key, std::size_t n) {
         if (!shown(key))
@@ -2814,6 +5268,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::ScaleYRow, "compensation.scale_y", s.scale_y, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::ScaleZRow, "compensation.scale_z", s.scale_z, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::HoleCorrection, "compensation.hole_offset", s.hole_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+    } else if (id == "ironing") {
+        flag(T::IroningEnabled, "ironing.enabled", s.ironing);
+        if (shown("ironing.surfaces"))
+            changed |= row(T::IroningSurfacesRow, s.ironing_surfaces,
+                           {{IroningSurfaces::Top, tr(T::IroningTop)},
+                            {IroningSurfaces::Topmost, tr(T::IroningTopmost)},
+                            {IroningSurfaces::Solid, tr(T::IroningSolid)}});
+        mm(T::IroningFlow, "ironing.flow", s.ironing_flow, 1.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::IroningSpacing, "ironing.spacing", s.ironing_spacing, 0.01, 2.0, "%.2f mm", 0.005f);
+        mm(T::IroningSpeed, "ironing.speed", s.ironing_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
     } else if (id == "slopes") {
         flag(T::Zaa, "zaa.enabled", s.zaa, tr(T::ZaaTip));
         mm(T::ZaaMinThickness, "zaa.min_thickness", s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f,
@@ -2823,6 +5287,29 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // Print: Strength.
     else if (id == "walls") {
         whole(T::Walls, "walls.count", s.wall_count, 0, 50);
+        flag(T::DetectOverhangs, "walls.detect_overhangs", s.detect_overhangs);
+        if (shown("walls.min_line_width"))
+            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
+                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
+        if (shown("walls.min_detail"))
+            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
+                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
+        if (shown("walls.generator"))
+            changed |= row(T::WallGeneratorRow, s.wall_generator,
+                           {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
+        flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
+        flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
+    } else if (id == "walls_more") {
+        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        if (shown("walls.top_one_wall"))
+            changed |= row(T::TopOneWallRow, s.top_one_wall,
+                           {{TopOneWall::None, tr(T::TopOneWallNone)},
+                            {TopOneWall::Top, tr(T::TopOneWallTop)},
+                            {TopOneWall::Topmost, tr(T::TopOneWallTopmost)}});
+        flag(T::FirstLayerOneWall, "walls.first_layer_one_wall", s.first_layer_one_wall);
+        flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
+        flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
+        flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);
@@ -2830,6 +5317,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         if (shown("surfaces.top_pattern"))
             changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         if (shown("infill.pattern"))
@@ -2881,10 +5369,20 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
         mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
            0.05f);
+        // The interlocking waves (interlock_infill.md): one kind at a time.
+        if (shown("infill.waves") && row(T::InterlockWaves, s.infill_waves, tr(T::InterlockWavesTip))) {
+            if (s.infill_waves)
+                s.infill_nonplanar = false;
+            changed = true;
+        }
+        mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
+        mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
     }
     // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
     else if (id == "first_layer") {
         mm(T::SpeedFirstLayer, "speed.first_layer", s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        share_row(T::SpeedFirstLayerInfill, "speed.first_layer_infill", s.first_layer_infill_speed);
+        share_row(T::SpeedOverRaft, "speed.first_layer_over_raft", s.first_layer_over_raft);
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
@@ -2892,13 +5390,53 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        // 0: the solid infill's.
+        mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        share_row(T::SpeedOverBridges, "speed.over_bridges", s.over_bridges_speed);
+        mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : "—",
+           0.5f);
     } else if (id == "infill_support") {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
+           0.5f);
+        flag(T::AvoidCrossingWalls, "travel.avoid_crossing_walls", s.avoid_crossing_walls);
+        if (shown("travel.max_detour"))
+            changed |= row(T::MaxDetour, s.max_detour.value, 0.0, 10000.0,
+                           s.max_detour.value <= 0.0 ? "—" : s.max_detour.percent ? "%.0f %%" : "%.1f mm", 0.1f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
+           s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
+        mm(T::FlowSlopeDown, "speed.flow_slope_down", s.flow_slope_down, 0.0, 1000.0,
+           s.flow_slope_down > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
+    } else if (id == "overhang_speeds") {
+        flag(T::DynamicOverhangs, "speed.dynamic_overhangs", s.dynamic_overhangs);
+        const T labels[4] = {T::Overhang0, T::Overhang1, T::Overhang2, T::Overhang3};
+        const char* keys[4] = {"speed.overhang_0", "speed.overhang_1", "speed.overhang_2", "speed.overhang_3"};
+        for (std::size_t k = 0; k < 4; ++k)
+            share_row(labels[k], keys[k], s.overhang_speeds[k]);
+    } else if (id == "accel_kinds" || id == "accel_travel") {
+        // 0: the one it falls back to, or none (speeds_accels.md, rule 10).
+        const auto accel = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 100000.0, v > 0.0 ? "%.0f mm/s²" : "—", 10.0f);
+        };
+        if (id == "accel_kinds") {
+            accel(T::AccelDefault, "acceleration.default", s.accel_default);
+            accel(T::AccelWalls, "acceleration.walls", s.accel_walls);
+            accel(T::AccelOuterWall, "acceleration.outer_wall", s.accel_outer_wall);
+            accel(T::AccelInfill, "acceleration.infill", s.accel_infill);
+            accel(T::AccelSolid, "acceleration.solid_infill", s.accel_solid_infill);
+            accel(T::AccelTop, "acceleration.top_solid_infill", s.accel_top_solid_infill);
+            accel(T::AccelBridges, "acceleration.bridges", s.accel_bridges);
+        } else {
+            accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
+            accel(T::AccelOverRaft, "acceleration.first_layer_over_raft", s.accel_first_layer_over_raft);
+            accel(T::AccelTravel, "acceleration.travel", s.accel_travel);
+            accel(T::AccelShortTravel, "acceleration.short_travel", s.accel_short_travel);
+        }
     }
     // Print: Supports and Adhesion.
     else if (id == "support") {
@@ -2927,19 +5465,181 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
+        flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
+        if (shown("support.width"))
+            changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,
+                           s.support_width.percent ? "%.0f %%" : "%.2f mm", s.support_width.percent ? 0.5f : 0.01f);
+    } else if (id == "arcs") {
+        flag(T::ArcsEnabled, "arcs.enabled", s.arcs);
+        mm(T::ArcsOverlap, "arcs.overlap", s.arcs_overlap, 0.0, 90.0, "%.0f %%", 0.5f);
+        mm(T::ArcsSpeed, "arcs.speed", s.arcs_speed, 0.0, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::ArcsMaxDistance, "arcs.max_distance", s.arcs_max_distance, 0.0, 1000.0, "%.1f mm", 0.1f);
     } else if (id == "skirt") {
         whole(T::SkirtLoops, "adhesion.skirt_loops", s.skirt_loops, 0, 20);
         mm(T::SkirtDistance, "adhesion.skirt_distance", s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
         whole(T::SkirtLayers, "adhesion.skirt_layers", s.skirt_layers, 1, 100);
+        mm(T::SkirtMinFilament, "adhesion.skirt_min_filament", s.skirt_min_filament, 0.0, 100000.0,
+           s.skirt_min_filament > 0.0 ? "%.0f mm" : "—", 1.0f);
+        if (shown("adhesion.draft_shield"))
+            changed |= row(T::DraftShieldRow, s.draft_shield,
+                           {{DraftShield::Disabled, tr(T::ShieldDisabled)},
+                            {DraftShield::Limited, tr(T::ShieldLimited)},
+                            {DraftShield::Enabled, tr(T::ShieldEnabled)}});
     } else if (id == "brim") {
         mm(T::BrimWidth, "adhesion.brim_width", s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
+        if (shown("adhesion.brim_type"))
+            changed |= row(T::BrimTypeRow, s.brim_type,
+                           {{BrimType::Outer, tr(T::BrimOuter)},
+                            {BrimType::Inner, tr(T::BrimInner)},
+                            {BrimType::OuterAndInner, tr(T::BrimBoth)},
+                            {BrimType::None, tr(T::BrimNone)}});
+        mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 10.0, "%.2f mm", 0.01f);
+    } else if (id == "raft") {
+        whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
+        mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        mm(T::RaftExpansion, "adhesion.raft_expansion", s.raft_expansion, 0.0, 100.0, "%.1f mm", 0.05f);
+        mm(T::RaftFirstDensity, "adhesion.raft_first_layer_density", s.raft_first_layer_density, 5.0, 100.0, "%.0f %%",
+           0.5f);
+        mm(T::RaftFirstExpansion, "adhesion.raft_first_layer_expansion", s.raft_first_layer_expansion, 0.0, 100.0,
+           "%.1f mm", 0.05f);
     }
     // Print: Others.
     else if (id == "special_modes") {
         flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
+        flag(T::SequentialRow, "sequential.enabled", s.sequential, tr(T::SequentialTip));
+    } else if (id == "multi_material") {
+        // Which extruder prints what (multi_extruder.md, rules 2, 4, 7 and 16); 0: the object's.
+        whole(T::WallsExtruder, "extruders.walls", s.extruder_walls, 0, kMaxExtruders);
+        whole(T::InfillExtruder, "extruders.infill", s.extruder_infill, 0, kMaxExtruders);
+        whole(T::SolidInfillExtruder, "extruders.solid_infill", s.extruder_solid_infill, 0, kMaxExtruders);
+        whole(T::SupportExtruder, "extruders.support", s.extruder_support, 0, kMaxExtruders);
+        whole(T::SupportInterfaceExtruder, "extruders.support_interface", s.extruder_support_interface, 0, kMaxExtruders);
+        whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
+        flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
+        mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "multi_nozzle") {
+        // Different nozzles and mixed colours (multimaterial.md, rules 3, 9
+        // and 11): with one nozzle for every filament, turning the mixing on
+        // first says what it costs.
+        flag(T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill", s.fine_walls_coarse_infill);
+        if (shown("multi.color_mixing")) {
+            bool mixing = color_mixing_offered(s);
+            if (row(T::ColorMixingRow, mixing)) {
+                // A change template that cannot render would fail the
+                // export at the first blend: said now (color_mixing.md, rule 13).
+                if (mixing)
+                    if (const std::string error = toolchange_template_error(s); !error.empty())
+                        fail(T::MixingTemplateError, error);
+                if (mixing && s.single_extruder_mmu)
+                    ImGui::OpenPopup("##mixing_cost");
+                else {
+                    s.color_mixing = mixing;
+                    changed = true;
+                }
+            }
+            if (ImGui::BeginPopup("##mixing_cost")) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
+                ImGui::TextUnformatted(tr(T::ColorMixingCost));
+                ImGui::PopTextWrapPos();
+                if (ImGui::Button(tr(T::Cancel)))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SameLine();
+                if (ImGui::Button(tr(T::TurnOn))) {
+                    s.color_mixing = true;
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+        }
+    } else if (id == "curved") {
+        // Curved layers (nonplanar.md).
+        if (shown("curved.mode"))
+            changed |= row(T::CurvedModeRow, s.curved_mode,
+                           {{CurvedMode::Disabled, tr(T::SumOff)},
+                            {CurvedMode::Wave, tr(T::CurvedWave)},
+                            {CurvedMode::Conical, tr(T::CurvedCone)},
+                            {CurvedMode::Overhangs, tr(T::CurvedOverhangs)},
+                            {CurvedMode::Stress, tr(T::CurvedStress)},
+                            {CurvedMode::Surface, tr(T::CurvedSurface)},
+                            {CurvedMode::Automatic, tr(T::CurvedAutomatic)}});
+        if (shown("curved.pattern"))
+            changed |= row(T::CurvedPatternRow, s.curved_pattern,
+                           {{CurvedPattern::Egg, tr(T::CurvedEgg)},
+                            {CurvedPattern::Ridges, tr(T::CurvedRidges)},
+                            {CurvedPattern::Twisted, tr(T::CurvedTwisted)}});
+        flag(T::CurvedFitHead, "curved.fit_head", s.curved_fit_head);
+        mm(T::CurvedAmplitude, "curved.amplitude", s.curved_amplitude, 0.0, 50.0, "%.2f mm", 0.01f);
+        mm(T::CurvedWavelength, "curved.wavelength", s.curved_wavelength, 1.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::CurvedAngle, "curved.angle", s.curved_angle, -360.0, 360.0, "%.0f°", 0.5f);
+        mm(T::CurvedTwist, "curved.twist", s.curved_twist, -360.0, 360.0, "%.1f°/mm", 0.1f);
+        mm(T::CurvedConeAngle, "curved.cone_angle", s.curved_cone_angle, -60.0, 60.0, "%.1f°", 0.1f);
+    } else if (id == "curved_more") {
+        mm(T::CurvedFlatBelow, "curved.flat_below", s.curved_flat_below, 0.0, 1000.0, "%.2f mm", 0.01f);
+        mm(T::CurvedRampHeight, "curved.ramp_height", s.curved_ramp_height, 0.1, 1000.0, "%.1f mm", 0.1f);
+        flag(T::CurvedFlatTop, "curved.flat_top", s.curved_flat_top);
+        mm(T::CurvedSegment, "curved.segment_length", s.curved_segment_length, 0.05, 50.0, "%.2f mm", 0.01f);
+        mm(T::CurvedMaxSlope, "curved.max_slope", s.curved_max_slope, 1.0, 80.0, "%.0f°", 0.5f);
+        if (shown("curved.flow_policy"))
+            changed |= row(T::CurvedFlowPolicy, s.curved_flow,
+                           {{CurvedFlow::Preserve, tr(T::CurvedFlowKeep)},
+                            {CurvedFlow::Uniform, tr(T::CurvedFlowUniform)},
+                            {CurvedFlow::Off, tr(T::CurvedFlowOff)}});
+        mm(T::CurvedUniformFlow, "curved.uniform_flow", s.curved_uniform_flow, 0.0, 1000.0,
+           s.curved_uniform_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+        mm(T::CurvedOverhangThreshold, "curved.overhang_threshold", s.curved_overhang_threshold, 10.0, 80.0, "%.0f°", 0.5f);
+    } else if (id == "interlocking") {
+        // Beams between materials (multi_extruder.md, rules 17 and 18).
+        flag(T::InterlockBeams, "interlocking.beams", s.interlock_beams);
+        mm(T::InterlockWidth, "interlocking.beam_width", s.interlock_width, 0.1, 100.0, "%.2f mm", 0.01f);
+        whole(T::InterlockLayers, "interlocking.beam_layers", s.interlock_layers, 1, 100);
+        mm(T::InterlockOrientation, "interlocking.orientation", s.interlock_orientation, -360.0, 360.0, "%.1f°", 0.5f);
+        whole(T::InterlockDepth, "interlocking.depth", s.interlock_depth, 0, 100);
+        whole(T::InterlockAvoidance, "interlocking.boundary_avoidance", s.interlock_avoidance, 0, 100);
+        mm(T::PaintMaxRegionWidth, "painting.max_region_width", s.paint_max_region_width, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::PaintInterlockingDepth, "painting.interlocking_depth", s.paint_interlocking_depth, 0.0, 1000.0, "%.1f mm",
+           0.1f);
+    } else if (id == "mmu") {
+        // A single-extruder MMU's change (multi_extruder.md, rule 15).
+        mm(T::CoolingTubeLength, "mmu.cooling_tube_length", s.mmu_cooling_tube_length, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::CoolingTubePosition, "mmu.cooling_tube_position", s.mmu_cooling_tube_position, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::ParkingPosition, "mmu.parking_position", s.mmu_parking_position, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::ExtraLoadingMove, "mmu.extra_loading_move", s.mmu_extra_loading_move, -1000.0, 1000.0, "%.1f mm", 0.1f);
+        flag(T::HighCurrentOnSwap, "mmu.high_current_on_swap", s.mmu_high_current_on_swap);
+    } else if (id == "mmu_load") {
+        mm(T::LoadingSpeed, "extrusion.loading_speed", s.loading_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::LoadingSpeedStart, "extrusion.loading_speed_start", s.loading_speed_start, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::UnloadingSpeed, "extrusion.unloading_speed", s.unloading_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        mm(T::UnloadingSpeedStart, "extrusion.unloading_speed_start", s.unloading_speed_start, 0.1, 1000.0, "%.1f mm/s",
+           0.1f);
+        whole(T::CoolingMoves, "extrusion.cooling_moves", s.cooling_moves, 0, 100);
+        mm(T::CoolingInitialSpeed, "extrusion.cooling_initial_speed", s.cooling_initial_speed, 0.1, 1000.0, "%.1f mm/s",
+           0.1f);
+        mm(T::CoolingFinalSpeed, "extrusion.cooling_final_speed", s.cooling_final_speed, 0.1, 1000.0, "%.1f mm/s", 0.1f);
+        count(T::RammingRow, "extrusion.ramming", s.ramming.size());
+    } else if (id == "mmu_times") {
+        mm(T::ToolchangeDelay, "extrusion.toolchange_delay", s.toolchange_delay, 0.0, 1000.0, "%.1f s", 0.1f);
+        mm(T::LoadTime, "extrusion.load_time", s.load_time, 0.0, 1000.0, "%.1f s", 0.1f);
+        mm(T::UnloadTime, "extrusion.unload_time", s.unload_time, 0.0, 1000.0, "%.1f s", 0.1f);
+    } else if (id == "wipe_tower") {
+        // The wipe tower (multi_extruder.md, rules 9 to 14).
+        flag(T::WipeTowerRow, "wipe_tower.enabled", s.wipe_tower);
+        mm(T::WipeTowerWidth, "wipe_tower.width", s.wipe_tower_width, 1.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerBrim, "wipe_tower.brim_width", s.wipe_tower_brim, 0.0, 100.0, "%.1f mm", 0.05f);
+        mm(T::WipeTowerX, "wipe_tower.x", s.wipe_tower_x, -10000.0, 10000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerY, "wipe_tower.y", s.wipe_tower_y, -10000.0, 10000.0, "%.1f mm", 0.1f);
+        mm(T::WipeTowerRotation, "wipe_tower.rotation", s.wipe_tower_rotation, -360.0, 360.0, "%.0f°", 0.5f);
+        mm(T::WipeTowerBridging, "wipe_tower.bridging", s.wipe_tower_bridging, 1.0, 100.0, "%.1f mm", 0.05f);
+        whole(T::WipeTowerExtruder, "extruders.wipe_tower", s.extruder_wipe_tower, 0, kMaxExtruders);
+    } else if (id == "wipe_tower_more") {
+        count(T::PurgeVolumesRow, "wipe_tower.purge_volumes", s.purge_volumes.size());
+        mm(T::WipeTowerSpacing, "wipe_tower.extra_spacing", s.wipe_tower_extra_spacing, 50.0, 500.0, "%.0f %%", 0.5f);
+        mm(T::WipeTowerFlow, "wipe_tower.extra_flow", s.wipe_tower_extra_flow, 50.0, 500.0, "%.0f %%", 0.5f);
+        mm(T::WipeTowerCone, "wipe_tower.cone_angle", s.wipe_tower_cone_angle, 0.0, 90.0, "%.0f°", 0.5f);
+        flag(T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers", s.wipe_tower_no_sparse_layers);
     } else if (id == "fuzzy") {
         if (shown("fuzzy.mode"))
             changed |= row(T::FuzzySkin, s.fuzzy_mode,
@@ -2952,6 +5652,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::GcodeResolution, "gcode.resolution", s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f,
            tr(T::GcodeResolutionTip));
         count(T::HeightChanges, "changes", s.changes.size());
+        flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
+        flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
+        flag(T::GcodeArcs, "gcode.arcs", s.gcode_arcs);
+        flag(T::GcodeBinary, "gcode.binary", s.gcode_binary);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
             changed |= row(T::FillModeRow, s.fill_mode,
@@ -2970,6 +5674,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
     } else if (id == "chamber") {
         mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 120.0, "%.0f °C", 0.5f);
+        mm(T::ChamberMinTemp, "extrusion.chamber_min_temperature", s.chamber_min_temperature, 0.0, 120.0,
+           s.chamber_min_temperature > 0.0 ? "%.0f °C" : "—", 0.5f);
+    } else if (id == "price") {
+        mm(T::FilamentDensity, "extrusion.density", s.filament_density, 0.0, 30.0,
+           s.filament_density > 0.0 ? "%.2f g/cm³" : "—", 0.005f);
+        mm(T::FilamentCost, "extrusion.cost", s.filament_cost, 0.0, 1e6, "%.2f", 0.1f);
+        mm(T::SpoolWeight, "extrusion.spool_weight", s.spool_weight, 0.0, 1e6, "%.0f g", 1.0f);
+    } else if (id == "shrinkage") {
+        mm(T::ShrinkageXY, "extrusion.shrinkage_xy", s.shrinkage_xy, 0.0, 20.0, "%.2f %%", 0.01f);
+        mm(T::ShrinkageZ, "extrusion.shrinkage_z", s.shrinkage_z, 0.0, 20.0, "%.2f %%", 0.01f);
     } else if (id == "fan") {
         mm(T::FanMin, "cooling.fan_min", s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
         mm(T::FanMax, "cooling.fan_max", s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
@@ -2983,23 +5697,61 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
     } else if (id == "flow") {
         mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
+        mm(T::BridgeFlowRatio, "extrusion.bridge_flow_ratio", s.bridge_flow_ratio, 0.1, 2.0, "%.2f", 0.01f);
+        // The share of the purge this filament asks for (multi_extruder.md, rule 12).
+        if (s.purge_multiplier.size() == 1)
+            mm(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.front(), 0.0, 1000.0, "%.0f %%", 0.5f);
+        else
+            count(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.size());
+        if (s.min_purge_on_tower.size() == 1)
+            mm(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.front(), 0.0, 10000.0, "%.0f mm³", 0.5f);
+        else
+            count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {
         mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 200.0,
            s.filament_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+        mm(T::InfillMaxSpeed, "extrusion.infill_max_speed", s.infill_max_speed, 0.0, 1000.0,
+           s.infill_max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed", s.infill_max_crossing_speed, 0.0, 1000.0,
+           s.infill_max_crossing_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
     } else if (id == "retraction") {
         mm(T::Retraction, "retraction.length", s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
+        mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
+           s.unretract_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
+        flag(T::WipeRow, "retraction.wipe", s.wipe);
+        mm(T::BeforeWipe, "retraction.before_wipe", s.before_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
+        mm(T::LiftAbove, "retraction.lift_above", s.lift_above, 0.0, 10000.0, s.lift_above > 0.0 ? "%.2f mm" : "—", 0.05f);
+        mm(T::LiftBelow, "retraction.lift_below", s.lift_below, 0.0, 10000.0, s.lift_below > 0.0 ? "%.2f mm" : "—", 0.05f);
+        flag(T::RampingLift, "travel.ramping_lift", s.ramping_lift);
+        mm(T::TravelSlope, "travel.slope", s.travel_slope, 0.0, 89.0, "%.1f°", 0.1f);
+        mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : "—", 0.01f);
+        flag(T::LiftBeforeObstacle, "travel.lift_before_obstacle", s.lift_before_obstacle);
+    } else if (id == "material_retraction") {
+        count(T::FilamentRetractionRow, "extrusion.retraction", s.filament_retraction.size());
     } else if (id == "needs") {
         flag(T::Abrasive, "extrusion.abrasive", s.abrasive);
         flag(T::NeedsEnclosure, "extrusion.needs_enclosure", s.needs_enclosure);
     }
     // Printer.
     else if (id == "bed_volume") {
+        // Filament or resin: the panel shows that kind's settings, and a
+        // resin printer's plate is its display (resin.md).
+        if (shown("machine.technology") &&
+            row(T::Technology, s.machine_technology,
+                {{MachineTechnology::Fdm, tr(T::TechnologyFdm)}, {MachineTechnology::Msla, tr(T::TechnologyMsla)}})) {
+            if (s.machine_technology == MachineTechnology::Msla)
+                s.bed = {{0.0, 0.0}, {s.display_width, 0.0}, {s.display_width, s.display_height}, {0.0, s.display_height}};
+            bed = changed = true;
+        }
         if (shown("machine.bed")) {
             double width = 0, depth = 0;
             if (rectangle_bed(s, width, depth)) {
@@ -3015,11 +5767,140 @@ bool App::card_rows(std::string_view id, bool& bed) {
             }
         }
         mm(T::MaxHeight, "machine.max_height", s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
+        mm(T::ZOffset, "machine.z_offset", s.z_offset, -10.0, 10.0, "%.2f mm", 0.005f);
+        mm(T::ClearanceRadius, "sequential.clearance_radius", s.clearance_radius, 0.0, 1000.0, "%.0f mm", 0.5f);
+        mm(T::ClearanceHeight, "sequential.clearance_height", s.clearance_height, 0.0, 1000.0, "%.0f mm", 0.5f);
     } else if (id == "enclosure") {
         flag(T::Enclosed, "machine.enclosed", s.enclosed);
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);
+    } else if (id == "head") {
+        // The print head around the nozzle (nonplanar.md, rule 6).
+        mm(T::HeadFreeAngleX, "head.free_angle_x", s.head_free_angle_x, 0.0, 89.0, s.head_free_angle_x > 0.0 ? "%.0f°" : "—", 0.5f);
+        mm(T::HeadFreeAngleY, "head.free_angle_y", s.head_free_angle_y, 0.0, 89.0, s.head_free_angle_y > 0.0 ? "%.0f°" : "—", 0.5f);
+        mm(T::HeadClearanceHeight, "head.clearance_height", s.head_clearance_height, 0.1, 1000.0, "%.1f mm", 0.1f);
+        mm(T::HeadClearanceRadius, "head.clearance_radius", s.head_clearance_radius, 0.1, 1000.0, "%.1f mm", 0.1f);
+        count(T::HeadProfile, "head.profile", s.head_profile.size());
+    } else if (id == "belt") {
+        // A belt printer (belt_printer.md).
+        flag(T::BeltEnabled, "belt.enabled", s.belt_enabled, tr(T::BeltEnabledTip));
+        mm(T::BeltAngle, "belt.angle", s.belt_angle, 10.0, 80.0, "%.0f°", 0.5f);
+        flag(T::BeltIsZ, "belt.belt_is_z", s.belt_is_z);
+    } else if (id == "resin_display") {
+        // A resin printer's display (resin.md).
+        whole(T::DisplayPixelsX, "machine.display_pixels_x", s.display_pixels_x, 1, 32767);
+        whole(T::DisplayPixelsY, "machine.display_pixels_y", s.display_pixels_y, 1, 32767);
+        const double width = s.display_width, height = s.display_height;
+        mm(T::DisplayWidth, "machine.display_width", s.display_width, 1.0, 1000.0, "%.2f mm", 0.01f);
+        mm(T::DisplayHeight, "machine.display_height", s.display_height, 1.0, 1000.0, "%.2f mm", 0.01f);
+        if (s.display_width != width || s.display_height != height) {
+            s.bed = {{0.0, 0.0}, {s.display_width, 0.0}, {s.display_width, s.display_height}, {0.0, s.display_height}};
+            bed = true;
+        }
+        flag(T::DisplayMirrorX, "machine.display_mirror_x", s.display_mirror_x);
+        flag(T::DisplayMirrorY, "machine.display_mirror_y", s.display_mirror_y);
+    } else if (id == "resin_layers") {
+        mm(T::ResinLayerHeight, "resin.layer_height", s.resin_layer_height, 0.005, 0.5, "%.3f mm", 0.001f);
+    } else if (id == "resin_supports") {
+        // Resin supports, pad and hollowing (resin_supports.md).
+        flag(T::ResinSupports, "resin.supports", s.resin_supports);
+        mm(T::ResinElevation, "resin.support_elevation", s.resin_support_elevation, 0.0, 50.0, "%.1f mm", 0.1f);
+        mm(T::ResinSupportDensity, "resin.support_density", s.resin_support_density, 10.0, 400.0, "%.0f %%", 1.0f);
+        mm(T::ResinTipDiameter, "resin.support_tip_diameter", s.resin_support_tip_diameter, 0.1, 2.0, "%.2f mm", 0.01f);
+        mm(T::ResinTipPenetration, "resin.support_tip_penetration", s.resin_support_tip_penetration, 0.0, 2.0, "%.2f mm",
+           0.01f);
+        mm(T::ResinPillarDiameter, "resin.support_pillar_diameter", s.resin_support_pillar_diameter, 0.2, 5.0, "%.2f mm",
+           0.01f);
+        mm(T::ResinCriticalAngle, "resin.support_critical_angle", s.resin_support_critical_angle, 10.0, 80.0, "%.0f°",
+           0.5f);
+    } else if (id == "resin_pad") {
+        flag(T::ResinPad, "resin.pad", s.resin_pad);
+        flag(T::ResinPadAroundObject, "resin.pad_around_object", s.resin_pad_around_object);
+        mm(T::ResinPadThickness, "resin.pad_thickness", s.resin_pad_thickness, 0.1, 10.0, "%.1f mm", 0.1f);
+        mm(T::ResinPadMargin, "resin.pad_margin", s.resin_pad_margin, 0.0, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinPadWallSlope, "resin.pad_wall_slope", s.resin_pad_wall_slope, 10.0, 90.0, "%.0f°", 0.5f);
+    } else if (id == "resin_hollow") {
+        flag(T::ResinHollow, "resin.hollow", s.resin_hollow);
+        mm(T::ResinHollowWall, "resin.hollow_wall", s.resin_hollow_wall, 0.5, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinHollowClosing, "resin.hollow_closing", s.resin_hollow_closing, 0.0, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinHollowInfill, "resin.hollow_infill", s.resin_hollow_infill, 0.0, 60.0, "%.0f %%", 0.5f);
+        mm(T::ResinHollowInfillCell, "resin.hollow_infill_cell", s.resin_hollow_infill_cell, 2.0, 50.0, "%.1f mm", 0.1f);
+    } else if (id == "resin_exposure") {
+        mm(T::ResinExposure, "resin.exposure", s.resin_exposure, 0.1, 600.0, "%.2f s", 0.01f);
+        mm(T::ResinBottomExposure, "resin.bottom_exposure", s.resin_bottom_exposure, 0.1, 600.0, "%.1f s", 0.1f);
+        whole(T::ResinBottomLayers, "resin.bottom_layers", s.resin_bottom_layers, 0, 1000);
+        whole(T::ResinLightPwm, "resin.light_pwm", s.resin_light_pwm, 0, 255);
+        whole(T::ResinBottomLightPwm, "resin.bottom_light_pwm", s.resin_bottom_light_pwm, 0, 255);
+    } else if (id == "resin_moves") {
+        mm(T::ResinLiftDistance, "resin.lift_distance", s.resin_lift_distance, 0.0, 100.0, "%.1f mm", 0.1f);
+        mm(T::ResinLiftSpeed, "resin.lift_speed", s.resin_lift_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinBottomLiftDistance, "resin.bottom_lift_distance", s.resin_bottom_lift_distance, 0.0, 100.0, "%.1f mm",
+           0.1f);
+        mm(T::ResinBottomLiftSpeed, "resin.bottom_lift_speed", s.resin_bottom_lift_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinRetractSpeed, "resin.retract_speed", s.resin_retract_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinWaitBeforeExposure, "resin.wait_before_exposure", s.resin_wait_before_exposure, 0.0, 600.0, "%.1f s",
+           0.1f);
+        mm(T::ResinWaitAfterCure, "resin.wait_after_cure", s.resin_wait_after_cure, 0.0, 600.0, "%.1f s", 0.1f);
+        mm(T::ResinWaitAfterLift, "resin.wait_after_lift", s.resin_wait_after_lift, 0.0, 600.0, "%.1f s", 0.1f);
+    } else if (id == "resin_corrections") {
+        mm(T::ResinElephantFoot, "resin.elephant_foot", s.resin_elephant_foot, 0.0, 2.0, "%.2f mm", 0.01f);
+        mm(T::ResinScaleX, "resin.scale_x", s.resin_scale_x, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinScaleY, "resin.scale_y", s.resin_scale_y, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinScaleZ, "resin.scale_z", s.resin_scale_z, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinAbsoluteCorrection, "resin.absolute_correction", s.resin_absolute_correction, -1.0, 1.0, "%+.3f mm",
+           0.001f);
+        whole(T::ResinZCorrection, "resin.z_correction_layers", s.resin_z_correction_layers, 0, 100);
+        mm(T::ResinGamma, "resin.gamma", s.resin_gamma, 0.0, 5.0, "%.2f", 0.01f);
+        whole(T::ResinAntialiasing, "resin.antialiasing", s.resin_antialiasing, 1, 16);
+    } else if (id == "resin_material") {
+        mm(T::ResinDensity, "resin.density", s.resin_density, 0.01, 10.0, "%.2f g/ml", 0.01f);
+        mm(T::ResinBottleCost, "resin.bottle_cost", s.resin_bottle_cost, 0.0, 1e6, "%.2f", 0.1f);
+        mm(T::ResinBottleVolume, "resin.bottle_volume", s.resin_bottle_volume, 1.0, 1e6, "%.0f ml", 1.0f);
+        // The bottle's weight over its volume is the density (gcode_extras.md, rule 2).
+        if (shown("resin.bottle_weight") &&
+            row(T::ResinBottleWeight, s.resin_bottle_weight, 0.001, 1000.0, "%.3f kg", 0.001f)) {
+            s.resin_density = s.resin_bottle_weight * 1000.0 / s.resin_bottle_volume;
+            changed = true;
+        }
+    } else if (id == "stability") {
+        mm(T::NozzleForce, "review.nozzle_force", s.review_nozzle_force, 0.0, 1000.0, "%.3f N", 0.001f);
+        mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);
+        mm(T::MaxDeflection, "review.max_deflection", s.review_max_deflection, 0.001, 10.0, "%.3f mm", 0.001f);
     } else if (id == "nozzle_size") {
-        mm(T::Nozzle, "machine.nozzle_diameter", s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
+        // One nozzle per extruder (multimaterial.md, rule 1): each under the
+        // general one, which sets them all and says "different nozzles"
+        // while they differ.
+        if (shown("machine.nozzle_diameter")) {
+            bool differ = false;
+            for (int e = 2; e <= s.extruders; ++e)
+                differ = differ || nozzle_of(s, e) != nozzle_of(s, 1);
+            if (row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, differ ? tr(T::DifferentNozzles) : "%.2f mm", 0.005f)) {
+                s.nozzle_diameters.clear();
+                changed = true;
+            }
+            for (int e = 1; e <= s.extruders && s.extruders > 1 && !s.single_extruder_mmu; ++e) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(format(tr(T::ExtruderNozzle), e).c_str());
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                double v = nozzle_of(s, e);
+                const double low = 0.1, high = 2.0;
+                ImGui::PushID("extruder_nozzle");
+                ImGui::PushID(e);
+                if (ImGui::DragScalar("##v", ImGuiDataType_Double, &v, 0.005f, &low, &high, "%.2f mm",
+                                      ImGuiSliderFlags_AlwaysClamp)) {
+                    std::vector<double> nozzles;
+                    for (int k = 1; k <= s.extruders; ++k)
+                        nozzles.push_back(k == e ? v : nozzle_of(s, k));
+                    s.nozzle_diameters = std::move(nozzles);
+                    s.nozzle_diameter = s.nozzle_diameters.front();
+                    changed = true;
+                }
+                ImGui::PopID();
+                ImGui::PopID();
+            }
+        }
         flag(T::HardenedNozzle, "machine.hardened_nozzle", s.hardened_nozzle);
         mm(T::MinLayerHeight, "machine.min_layer_height", s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f,
            tr(T::LayerLimitTip));
@@ -3030,6 +5911,20 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 200.0,
            s.machine_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
         flag(T::RelativeE, "machine.relative_extrusion", s.relative_extrusion);
+    } else if (id == "extruders") {
+        // Several extruders (multi_extruder.md): a list by extruder edits
+        // here while it holds one value for all.
+        whole(T::ExtrudersRow, "machine.extruders", s.extruders, 1, kMaxExtruders);
+        count(T::ExtruderOffsetRow, "machine.extruder_offset", s.extruder_offset.size());
+        flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
+        for (const auto& [label, key, list, top] :
+             {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
+            if (list->size() == 1)
+                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+            else
+                count(label, key, list->size());
+        }
     } else if (id == "speeds") {
         mm(T::MaxFeedX, "machine.max_feed_x", s.max_feed_x, 0.0, 2000.0, "%.0f mm/s", 0.5f);
         mm(T::MaxFeedY, "machine.max_feed_y", s.max_feed_y, 0.0, 2000.0, "%.0f mm/s", 0.5f);
@@ -3040,17 +5935,112 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
            10.0f);
+        const auto accel = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 100000.0, v > 0.0 ? "%.0f mm/s²" : "—", 10.0f);
+        };
+        accel(T::RetractAcceleration, "machine.retract_acceleration", s.retract_acceleration);
+        accel(T::MaxAccelX, "machine.max_accel_x", s.max_accel_x);
+        accel(T::MaxAccelY, "machine.max_accel_y", s.max_accel_y);
+        accel(T::MaxAccelZ, "machine.max_accel_z", s.max_accel_z);
+        accel(T::MaxAccelE, "machine.max_accel_e", s.max_accel_e);
+    } else if (id == "jerk") {
+        const auto feed = [&](T label, const char* key, double& v) {
+            mm(label, key, v, 0.0, 1000.0, v > 0.0 ? "%.2f mm/s" : "—", 0.05f);
+        };
+        feed(T::JerkX, "machine.jerk_x", s.jerk_x);
+        feed(T::JerkY, "machine.jerk_y", s.jerk_y);
+        feed(T::JerkZ, "machine.jerk_z", s.jerk_z);
+        feed(T::JerkE, "machine.jerk_e", s.jerk_e);
+        mm(T::JunctionDeviation, "machine.junction_deviation", s.junction_deviation, 0.0, 1.0,
+           s.junction_deviation > 0.0 ? "%.3f mm" : "—", 0.001f);
+        feed(T::MinExtrudeFeed, "machine.min_extrude_feed", s.min_extrude_feed);
+        feed(T::MinTravelFeed, "machine.min_travel_feed", s.min_travel_feed);
+    } else if (id == "silent") {
+        flag(T::SilentModeRow, "machine.silent_mode", s.silent_mode);
+        count(T::SilentLimitsRow, "machine.silent", s.silent_limits.size());
     } else if (id == "max_temps") {
         mm(T::MaxNozzleTemp, "machine.max_nozzle_temp", s.max_nozzle_temp, 0.0, 600.0, "%.0f °C", 0.5f);
         mm(T::MaxBedTemp, "machine.max_bed_temp", s.max_bed_temp, 0.0, 200.0, "%.0f °C", 0.5f);
     } else if (id == "firmware") {
         if (shown("machine.flavor"))
             changed |= row(T::Flavor, s.flavor,
-                           {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
+                           {{GcodeFlavor::Marlin, "Marlin 2"},
+                            {GcodeFlavor::MarlinLegacy, "Marlin 1"},
+                            {GcodeFlavor::Klipper, "Klipper"},
+                            {GcodeFlavor::RepRapFirmware, "RepRapFirmware (Duet)"},
+                            {GcodeFlavor::RepRap, "RepRap"},
+                            {GcodeFlavor::Repetier, "Repetier"},
+                            {GcodeFlavor::Smoothie, "Smoothieware"},
+                            {GcodeFlavor::Teacup, "Teacup"},
+                            {GcodeFlavor::MakerWare, "MakerWare (MakerBot)"},
+                            {GcodeFlavor::Sailfish, "Sailfish (MakerBot)"},
+                            {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
+                            {GcodeFlavor::Machinekit, "Machinekit"},
+                            {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
+        if (shown("machine.limits_usage"))
+            changed |= row(T::LimitsUsageRow, s.limits_usage,
+                           {{LimitsUsage::TimeOnly, tr(T::LimitsTimeOnly)},
+                            {LimitsUsage::Emit, tr(T::LimitsEmit)},
+                            {LimitsUsage::Ignore, tr(T::LimitsIgnore)}});
+        flag(T::GcodeProgress, "gcode.progress", s.gcode_progress);
+        if (shown("gcode.object_labels"))
+            changed |= row(T::ObjectLabelsRow, s.object_labels,
+                           {{ObjectLabels::None, tr(T::LabelsNone)},
+                            {ObjectLabels::OctoPrint, tr(T::LabelsOctoPrint)},
+                            {ObjectLabels::Firmware, tr(T::LabelsFirmware)}});
     } else if (id == "variables") {
         count(T::VariablesRow, "machine.variables", s.variables.size());
+    } else if (id == "gcode_templates") {
+        flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
+    } else if (id == "output_file") {
+        count(T::PostProcessRow, "output.post_process", s.post_process.size());
     }
     ImGui::EndTable();
+    // The file's name, full width (gcode_templates.md, rule 15).
+    if (id == "output_file" && shown("output.filename_format")) {
+        ImGui::TextUnformatted(tr(T::FilenameFormat));
+        ImGui::SetNextItemWidth(-9.0f * scale_);
+        changed |= ImGui::InputText("##filename_format", &s.filename_format);
+    }
+    // The names the GOO file's header carries (resin.md, rule 10), full
+    // width, at most 31 bytes.
+    for (const auto& [card, key, label, text] :
+         {std::tuple{"resin_display", "resin.printer_name", T::ResinPrinterName, &s.resin_printer_name},
+          std::tuple{"resin_material", "resin.profile_name", T::ResinProfileName, &s.resin_profile_name}})
+        if (id == card && shown(key)) {
+            ImGui::TextUnformatted(tr(label));
+            ImGui::SetNextItemWidth(-9.0f * scale_);
+            ImGui::PushID(key);
+            changed |= ImGui::InputText("##name", text);
+            ImGui::PopID();
+            if (text->size() > 31)
+                text->resize(31);
+        }
+    // The templates below the table, full width (gcode_templates.md).
+    if (id == "gcode_templates") {
+        const std::pair<T, std::pair<const char*, std::string*>> texts[] = {
+            {T::FilamentStartGcode, {"extrusion.start_gcode", &s.filament_start_gcode}},
+            {T::FilamentEndGcode, {"extrusion.end_gcode", &s.filament_end_gcode}},
+            {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
+            {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
+            {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},
+            {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}},
+            {T::BetweenObjectsGcode, {"gcode.between_objects", &s.gcode_between_objects}}};
+        for (const auto& [label, key_text] : texts)
+            if (shown(key_text.first)) {
+                ImGui::TextUnformatted(tr(label));
+                ImGui::PushID(key_text.first);
+                changed |= ImGui::InputTextMultiline("##text", key_text.second,
+                                                     ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
+                ImGui::PopID();
+            }
+    }
+    // The tool change's G-code below the table, full width (multi_extruder.md, rule 5).
+    if (id == "extruders" && shown("gcode.toolchange")) {
+        ImGui::TextUnformatted(tr(T::ToolchangeGcode));
+        changed |= ImGui::InputTextMultiline("##toolchange", &s.gcode_toolchange,
+                                             ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
+    }
     // The start and end G-code below the table, full width.
     if (id == "start_end") {
         if (shown("machine.start_gcode")) {
@@ -3099,7 +6089,12 @@ void App::status_bar() {
         const double total = result_->slice_seconds + result_->gcode_seconds + result_->check_seconds;
         ImGui::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
         ImGui::SameLine(0, 16.0f * scale_);
-        if (result_->check.ok())
+        if (result_->resin)
+            ImGui::TextColored(rgb(0x3FBF7F), "%s",
+                               format(tr(T::ResinSliced), int(result_->resin->layers.size()), result_->resin->volume / 1000.0,
+                                      result_->resin->weight)
+                                   .c_str());
+        else if (result_->check.ok())
             ImGui::TextColored(rgb(0x3FBF7F), "%s",
                                format(tr(T::GcodeOk), number_text(result_->check.stats.lines).c_str()).c_str());
         else
@@ -3121,6 +6116,20 @@ void App::status_bar() {
         }
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
+    }
+    // The chosen material's warnings (assistant.md, rule 14).
+    if (const KnowledgeMaterial* m = current_material()) {
+        const MaterialInfo info = material_info(*m);
+        const std::vector<MaterialWarning> warnings = material_warnings(info, settings_);
+        if (!warnings.empty()) {
+            ImGui::SameLine(0, 16.0f * scale_);
+            ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(warnings.front(), info).c_str());
+            if (warnings.size() > 1 && ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+                for (const MaterialWarning w : warnings)
+                    ImGui::BulletText("%s", material_warning_text(w, info).c_str());
+                ImGui::EndTooltip();
+            }
+        }
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
@@ -3197,7 +6206,7 @@ void App::viewport() {
         painted_ = false;
     }
     if (brush_depth_ && view_size_.y > 0.0f) {
-        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.fov)) * 0.5f * view_size_.y;
+        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
     if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -3206,7 +6215,18 @@ void App::viewport() {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
             selected_ = int(hit->object);
-            if (tool_ == PlateTool::LayFlat) {
+            if (tool_ == PlateTool::Measure) {
+                // A face's plane, or with Shift its nearest vertex; another
+                // object starts again (rule 20: within one object).
+                const TriangleMesh& placed = placed_meshes_[hit->object];
+                const float t = float(hit->distance);
+                const Point3 at{e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+                if (int(hit->object) != measure_object_ || measure_picks_.size() >= 2)
+                    measure_picks_.clear();
+                measure_object_ = int(hit->object);
+                measure_picks_.push_back(io.KeyShift ? point_feature(placed, hit->triangle, at)
+                                                     : surface_feature(placed, hit->triangle));
+            } else if (tool_ == PlateTool::LayFlat) {
                 PlateObject& o = objects_[hit->object];
                 o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));
                 plate_changed();
@@ -3394,7 +6414,9 @@ void App::plate_tools() {
     } tools[] = {{"##move", "tool_move", T::ToolMoveTip, PlateTool::Move},
                  {"##rotate", "tool_rotate", T::ToolRotateTip, PlateTool::Rotate},
                  {"##scale", "tool_scale", T::ToolScaleTip, PlateTool::Scale},
-                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat}};
+                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat},
+                 {"##cut", "tool_cut", T::ToolCutTip, PlateTool::Cut},
+                 {"##measure", "tool_measure", T::ToolMeasureTip, PlateTool::Measure}};
     for (const auto& t : tools)
         if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
             tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
@@ -3406,7 +6428,11 @@ void App::plate_tools() {
     ImGui::Separator();
     if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
+    if (button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true, tr(T::ToolMaterialTip),
+               size))
+        tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    anchor_rect("plate_tools", strip_min, ImVec2(strip_min.x + strip_size.x, strip_min.y + strip_size.y));
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
@@ -3422,6 +6448,10 @@ void App::plate_tools() {
             tool_ = PlateTool::Scale;
         if (ImGui::IsKeyPressed(ImGuiKey_F, false))
             tool_ = PlateTool::LayFlat;
+        if (ImGui::IsKeyPressed(ImGuiKey_C, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Cut;
+        if (ImGui::IsKeyPressed(ImGuiKey_U, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Measure;
         if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
             tool_ = PlateTool::Paint;
         if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl) {
@@ -3461,6 +6491,8 @@ void App::plate_tools() {
     ImGui::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
     const float field = 110.0f * scale_;
     bool changed = false;
+    int mirror_axis = -1; // done after the card, as they change the plate's objects
+    bool cut = false, split = false;
     const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
@@ -3534,16 +6566,503 @@ void App::plate_tools() {
             o.place.scale = {1.0, 1.0, 1.0};
             changed = true;
         }
+        // Mirror on an axis of the bed (rule 16).
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::Mirror));
+        for (int k = 0; k < 3; ++k) {
+            ImGui::SameLine();
+            if (ImGui::Button(axes[k], ImVec2(36.0f * scale_, 0)))
+                mirror_axis = k;
+        }
     } else if (tool_ == PlateTool::LayFlat) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
         ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
         ImGui::PopTextWrapPos();
+    } else if (tool_ == PlateTool::Measure) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolMeasureHint));
+        if (measure_object_ != selected_)
+            measure_picks_.clear();
+        // What each pick is, with a round surface's diameter or a cone's angle.
+        for (std::size_t i = 0; i < measure_picks_.size(); ++i) {
+            const MeasureFeature& f = measure_picks_[i];
+            using Kind = MeasureFeature::Kind;
+            if (f.kind == Kind::Circle)
+                ImGui::BulletText("%s", format(tr(f.hole ? T::MeasureHole : T::MeasureCylinder), f.diameter).c_str());
+            else if (f.kind == Kind::Cone)
+                ImGui::BulletText("%s", format(tr(T::MeasureCone), f.angle, std::max(f.diameter, f.diameter_end),
+                                               std::min(f.diameter, f.diameter_end))
+                                            .c_str());
+            else
+                ImGui::BulletText("%s", tr(f.kind == Kind::Plane ? T::MeasurePlane : T::MeasurePoint));
+        }
+        // One hole or cylinder: writing the diameter it should have scales the model to it.
+        if (measure_picks_.size() == 1 && measure_picks_[0].kind == MeasureFeature::Kind::Circle &&
+            measure_picks_[0].diameter > 0.0) {
+            const double now = measure_picks_[0].diameter;
+            if (measure_wanted_ <= 0.0)
+                measure_wanted_ = now;
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(tr(T::MeasureShouldBe));
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(field);
+            const double lo = 0.001, hi = 100000.0;
+            ImGui::DragScalar("##wanted_d", ImGuiDataType_Double, &measure_wanted_, 0.05f, &lo, &hi, "Ø %.3f mm",
+                              ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::MeasureScale))) {
+                const double factor = measure_wanted_ / now;
+                for (double& s : o.place.scale)
+                    s = std::max(s * factor, 1e-3);
+                measure_picks_.clear();
+                measure_wanted_ = 0.0;
+                changed = true;
+            }
+        }
+        if (measure_picks_.size() == 2) {
+            const Measurement m = measure(measure_picks_[0], measure_picks_[1]);
+            if (m.distance) {
+                ImGui::Text("%s: %.3f mm", tr(T::MeasureDistance), *m.distance);
+                // Writing what it should measure scales the model evenly.
+                if (measure_wanted_ <= 0.0)
+                    measure_wanted_ = *m.distance;
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(T::MeasureShouldBe));
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(field);
+                const double lo = 0.001, hi = 100000.0;
+                ImGui::DragScalar("##wanted", ImGuiDataType_Double, &measure_wanted_, 0.1f, &lo, &hi, "%.3f mm",
+                                  ImGuiSliderFlags_AlwaysClamp);
+                ImGui::SameLine();
+                if (ImGui::Button(tr(T::MeasureScale)) && *m.distance > 0.0) {
+                    const double factor = measure_wanted_ / *m.distance;
+                    for (double& s : o.place.scale)
+                        s = std::max(s * factor, 1e-3);
+                    measure_picks_.clear();
+                    measure_wanted_ = 0.0;
+                    changed = true;
+                }
+            } else if (m.angle) {
+                ImGui::Text("%s: %.2f°", tr(T::MeasureAngle), *m.angle);
+            }
+        } else if (measure_picks_.size() != 1) {
+            measure_wanted_ = 0.0;
+        }
+        ImGui::PopTextWrapPos();
+    } else if (tool_ == PlateTool::Cut) {
+        // A horizontal plane at a height over the bed (rule 13): two closed
+        // objects, side by side.
+        const double tall = placed_size(o)[2];
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolCutHint));
+        ImGui::PopTextWrapPos();
+        cut_height_ = std::clamp(cut_height_, 0.0, tall);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::CutHeight));
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(field);
+        const double lo = 0.0;
+        ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, "%.2f mm",
+                          ImGuiSliderFlags_AlwaysClamp);
+        ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
+        ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
+        if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
+            cut = true;
+        ImGui::EndDisabled();
+        // Its loose pieces, each a model (rule 14).
+        ImGui::Separator();
+        if (ImGui::Button(tr(T::SplitButton)))
+            split = true;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::SplitTip));
+    } else if (tool_ == PlateTool::Material) {
+        // The object's extruder, one of the machine's or a mixed colour's
+        // (multi_extruder.md, rule 1; color_mixing.md), and where a filament
+        // change may purge (rule 13).
+        bool material = false;
+        const auto name_of = [&](int e) {
+            return e <= settings_.extruders ? format(tr(T::ExtruderItem), e) : format(tr(T::VirtualExtruder), e);
+        };
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(T::ObjectExtruder));
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(170.0f * scale_);
+        if (ImGui::BeginCombo("##extruder", name_of(o.extruder).c_str())) {
+            std::vector<int> choices;
+            for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+                choices.push_back(e);
+            for (const ColorMix& m : mixes_)
+                if (mix_usable(m, settings_.extruders))
+                    choices.push_back(m.id);
+            for (const int e : choices)
+                if (ImGui::Selectable(name_of(e).c_str(), e == o.extruder) && e != o.extruder) {
+                    o.extruder = e;
+                    material = true;
+                }
+            ImGui::EndCombo();
+        }
+        material |= ImGui::Checkbox(tr(T::WipeIntoInfill), &o.wipe_into_infill);
+        material |= ImGui::Checkbox(tr(T::WipeIntoObject), &o.wipe_into_object);
+        // A project that brings blends keeps the button to change them (rule 9).
+        if (settings_.extruders >= 2 && (color_mixing_offered(settings_) || !mixes_.empty()) &&
+            ImGui::Button(tr(T::ColorMixingDialog))) {
+            mixing_open_ = true;
+            mixes_before_ = mixes_;
+            mix_edit_ = -1;
+        }
+        if (material)
+            objects_material_changed();
     }
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+    if (tool_ == PlateTool::Cut)
+        cut_plane_overlay();
+    if (tool_ == PlateTool::Measure)
+        measure_overlay();
     if (changed)
         plate_changed();
+    if (mirror_axis >= 0)
+        mirror_selected(mirror_axis);
+    if (cut)
+        cut_selected();
+    if (split)
+        split_selected();
+}
+
+void App::split_selected() {
+    const std::size_t index = std::size_t(selected_);
+    const PlateObject& o = objects_[index];
+    std::vector<TriangleMesh> pieces = split_mesh(placed_mesh(o));
+    if (pieces.size() < 2) {
+        notify(tr(T::SplitOnePiece));
+        return;
+    }
+    std::vector<PlateObject> parts;
+    for (std::size_t k = 0; k < pieces.size(); ++k) {
+        PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
+        p.extruder = o.extruder;
+        p.wipe_into_infill = o.wipe_into_infill, p.wipe_into_object = o.wipe_into_object;
+        parts.push_back(std::move(p));
+    }
+    objects_.erase(objects_.begin() + std::ptrdiff_t(index));
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), std::make_move_iterator(parts.begin()),
+                    std::make_move_iterator(parts.end()));
+    tool_ = PlateTool::Select;
+    arrange_plate();
+}
+
+void App::mirror_selected(int axis) {
+    PlateObject& o = objects_[std::size_t(selected_)];
+    if (o.place.rotation == kNoRotation) {
+        // On the model's own axis, which is the bed's: its scale stays.
+        mirror_mesh(o.mesh, axis);
+    } else {
+        // Turned, the model takes its turn and size into its mesh first.
+        TriangleMesh m = placed_mesh(o);
+        mirror_mesh(m, axis);
+        o.mesh = std::move(m);
+        o.place.rotation = kNoRotation;
+        o.place.scale = {1.0, 1.0, 1.0};
+    }
+    plate_changed();
+}
+
+void App::cut_selected() {
+    const std::size_t index = std::size_t(selected_);
+    const PlateObject& o = objects_[index];
+    CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
+    if (halves.below.empty() || halves.above.empty())
+        return;
+    if (cut_flip_lower_)
+        rotate_mesh(halves.below, 180.0, 0.0, 0.0); // its cut face down on the bed
+    // The halves keep the object's extruder; its painting was by triangle and
+    // stays with the whole.
+    PlateObject below{o.name + " (1)", std::move(halves.below), {}, {}};
+    PlateObject above{o.name + " (2)", std::move(halves.above), {}, {}};
+    for (PlateObject* half : {&below, &above}) {
+        half->extruder = o.extruder;
+        half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
+    }
+    objects_.erase(objects_.begin() + std::ptrdiff_t(index));
+    objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
+    tool_ = PlateTool::Select;
+    arrange_plate();
+}
+
+// The Cut tool's plane over the chosen object, drawn over the 3D view.
+void App::cut_plane_overlay() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f) || selected_ < 0 ||
+        std::size_t(selected_) >= placed_meshes_.size())
+        return;
+    const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+    if (box.empty)
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](float x, float y, float z, ImVec2& out) {
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    const float mx = 0.15f * (box.max.x - box.min.x) + 2.0f, my = 0.15f * (box.max.y - box.min.y) + 2.0f;
+    const float z = box.min.z + float(cut_height_);
+    ImVec2 c[4];
+    if (!project(box.min.x - mx, box.min.y - my, z, c[0]) || !project(box.max.x + mx, box.min.y - my, z, c[1]) ||
+        !project(box.max.x + mx, box.max.y + my, z, c[2]) || !project(box.min.x - mx, box.max.y + my, z, c[3]))
+        return;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
+    dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    dl->PopClipRect();
+}
+
+// The Measure tool's picks over the 3D view: a dot at a vertex or at the
+// face's centre, and a line between the two.
+void App::measure_overlay() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f) || measure_picks_.empty())
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const Point3& p, ImVec2& out) {
+        const float x = float(p[0]), y = float(p[1]), z = float(p[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const ImU32 colour = ImGui::GetColorU32(rgb(theme_.accent_hover));
+    ImVec2 at[2];
+    std::size_t shown = 0;
+    for (const MeasureFeature& f : measure_picks_)
+        if (project(f.point, at[shown])) {
+            dl->AddCircleFilled(at[shown], 5.0f * scale_, colour);
+            ++shown;
+        }
+    if (shown == 2)
+        dl->AddLine(at[0], at[1], colour, 2.0f * scale_);
+    dl->PopClipRect();
+}
+
+// A change of what the objects print with: sliced again, the plate as it was.
+void App::objects_material_changed() {
+    ++revision_.model;
+    if (result_ && !viewer_)
+        stale_ = true;
+}
+
+// Filament `extruder`'s colour (from 1): the project's, else one of eight.
+std::string App::filament_color(int extruder) const {
+    static const char* const kColors[] = {"#FCE94F", "#204A87", "#CC0000", "#4E9A06",
+                                          "#F57900", "#75507B", "#C17D11", "#555753"};
+    if (extruder >= 1 && std::size_t(extruder) <= filament_colors_.size() && !filament_colors_[std::size_t(extruder - 1)].empty())
+        return filament_colors_[std::size_t(extruder - 1)];
+    return kColors[std::size_t(std::max(extruder - 1, 0)) % 8];
+}
+
+// The project's mixed colours (color_mixing.md, rules 1 to 3): the list on
+// the left, each with its colour and shares; on the right the filaments and
+// their two-colour blends, a click adds one at 1 : 1; below, the blend being
+// edited, with a slider between two filaments and its layers.
+void App::mixing_dialog() {
+    if (!mixing_open_)
+        return;
+    const auto color_of = [](const std::string& hex) {
+        unsigned v = 0x808080;
+        if (hex.size() == 7 && hex[0] == '#')
+            std::sscanf(hex.c_str() + 1, "%6x", &v);
+        return ImVec4(float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f, 1.0f);
+    };
+    const int filaments = std::max(settings_.extruders, 1);
+    const auto recolor = [&](ColorMix& m) {
+        std::vector<std::string> colors;
+        std::vector<double> shares;
+        for (const ColorMix::Component& c : m.components)
+            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
+        m.color = mix_color(colors, shares);
+    };
+    const auto add = [&](int a, int b) {
+        ColorMix m;
+        m.id = filaments + 1;
+        for (const ColorMix& other : mixes_)
+            m.id = std::max(m.id, other.id + 1);
+        m.components = {{a, 0.5}, {b, 0.5}};
+        recolor(m);
+        mixes_.push_back(std::move(m));
+        mix_edit_ = int(mixes_.size()) - 1;
+    };
+    ImGui::SetNextWindowSize(ImVec2(720.0f * scale_, 480.0f * scale_), ImGuiCond_Appearing);
+    bool open = true;
+    if (!ImGui::Begin(tr(T::ColorMixingDialog), &open, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::End();
+        mixing_open_ = open;
+        return;
+    }
+    // The list.
+    ImGui::BeginChild("##mixes", ImVec2(260.0f * scale_, -ImGui::GetFrameHeightWithSpacing() * 1.5f), ImGuiChildFlags_Borders);
+    for (std::size_t k = 0; k < mixes_.size(); ++k) {
+        ColorMix& m = mixes_[k];
+        ImGui::PushID(int(k));
+        ImGui::ColorButton("##color", color_of(m.color), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 18.0f * scale_));
+        ImGui::SameLine();
+        std::string shares;
+        for (const ColorMix::Component& c : m.components)
+            shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
+                      std::to_string(int(std::lround(c.share * 100.0))) + " %";
+        if (ImGui::Selectable((format(tr(T::VirtualExtruder), m.id) + "\n" + shares).c_str(), mix_edit_ == int(k), 0,
+                              ImVec2(170.0f * scale_, 0)))
+            mix_edit_ = int(k);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X")) {
+            mixes_.erase(mixes_.begin() + std::ptrdiff_t(k));
+            mix_edit_ = -1;
+            ImGui::PopID();
+            break;
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::Button(tr(T::AddBlend)) && filaments >= 2)
+        add(1, 2);
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##blends", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 1.5f));
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(T::MixingIntro));
+    ImGui::PopTextWrapPos();
+    // The filaments, each with its colour.
+    filament_colors_.resize(std::size_t(filaments));
+    for (int e = 1; e <= filaments; ++e) {
+        ImGui::PushID(e);
+        ImVec4 c = color_of(filament_color(e));
+        float rgb3[3] = {c.x, c.y, c.z};
+        if (ImGui::ColorEdit3("##filament", rgb3, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
+            char hex[8];
+            std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
+                          unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
+            filament_colors_[std::size_t(e - 1)] = hex;
+            for (ColorMix& m : mixes_)
+                recolor(m);
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted(std::to_string(e).c_str());
+        if (e < filaments)
+            ImGui::SameLine();
+        ImGui::PopID();
+    }
+    ImGui::SeparatorText(tr(T::TwoColorBlends));
+    for (int a = 1; a <= filaments; ++a)
+        for (int b = a + 1; b <= filaments; ++b) {
+            ImGui::PushID(a * 64 + b);
+            const std::string c = mix_color({filament_color(a), filament_color(b)}, {0.5, 0.5});
+            if (ImGui::ColorButton("##pair", color_of(c), 0, ImVec2(36.0f * scale_, 36.0f * scale_)))
+                add(a, b);
+            ImGui::SetItemTooltip("%d+%d", a, b);
+            ImGui::SameLine();
+            ImGui::TextUnformatted((std::to_string(a) + "+" + std::to_string(b)).c_str());
+            ImGui::SameLine();
+            ImGui::PopID();
+        }
+    ImGui::NewLine();
+    // The blend being edited.
+    if (mix_edit_ >= 0 && mix_edit_ < int(mixes_.size())) {
+        ColorMix& m = mixes_[std::size_t(mix_edit_)];
+        ImGui::SeparatorText(format(tr(T::VirtualExtruder), m.id).c_str());
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", tr(T::MixingEditorHint));
+        ImGui::PopTextWrapPos();
+        bool edited = false;
+        const auto pick = [&](const char* id, int& extruder) {
+            ImGui::SetNextItemWidth(110.0f * scale_);
+            if (ImGui::BeginCombo(id, format(tr(T::ExtruderItem), extruder).c_str())) {
+                for (int e = 1; e <= filaments; ++e)
+                    if (ImGui::Selectable(format(tr(T::ExtruderItem), e).c_str(), e == extruder))
+                        extruder = e, edited = true;
+                ImGui::EndCombo();
+            }
+        };
+        if (m.components.size() >= 2) {
+            pick("##a", m.components[0].extruder);
+            ImGui::SameLine();
+            int share = int(std::lround(m.components[1].share * 100.0));
+            ImGui::SetNextItemWidth(200.0f * scale_);
+            if (ImGui::SliderInt("##share", &share, 0, 100, "%d %%")) {
+                const double rest = 1.0 - share / 100.0, others = m.components[0].share + (m.components.size() > 2 ? m.components[2].share : 0.0);
+                m.components[1].share = share / 100.0;
+                for (std::size_t c : {std::size_t(0), std::size_t(2)})
+                    if (c < m.components.size())
+                        m.components[c].share = others > 0.0 ? rest * m.components[c].share / others
+                                                              : rest / double(m.components.size() - 1);
+                edited = true;
+            }
+            ImGui::SameLine();
+            pick("##b", m.components[1].extruder);
+            ImGui::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
+                        int(std::lround(m.components[1].share * 100.0)));
+        }
+        bool third = m.components.size() > 2;
+        ImGui::BeginDisabled(filaments < 3);
+        if (ImGui::Checkbox(tr(T::AddThirdExtruder), &third)) {
+            if (third) {
+                for (ColorMix::Component& c : m.components)
+                    c.share *= 2.0 / 3.0;
+                m.components.push_back({3, 1.0 / 3.0});
+            } else if (m.components.size() > 2) {
+                const double gone = m.components[2].share;
+                m.components.pop_back();
+                for (ColorMix::Component& c : m.components)
+                    c.share += gone / 2.0;
+            }
+            edited = true;
+        }
+        ImGui::EndDisabled();
+        if (third && m.components.size() > 2)
+            pick("##c", m.components[2].extruder);
+        if (edited)
+            recolor(m);
+        ImGui::TextUnformatted(tr(T::DisplayColor));
+        ImGui::SameLine();
+        ImGui::ColorButton("##shown", color_of(m.color), 0, ImVec2(48.0f * scale_, 18.0f * scale_));
+        // The layers of its cycle, as they repeat.
+        ImGui::TextUnformatted(tr(T::LayerSequencePreview));
+        std::vector<double> shares;
+        std::vector<int> used;
+        for (const ColorMix::Component& c : m.components)
+            if (c.share > 0.0)
+                shares.push_back(c.share), used.push_back(c.extruder);
+        if (!shares.empty()) {
+            const std::vector<int> order = mix_order(mix_cycle(shares));
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float w = 12.0f * scale_, h = 18.0f * scale_;
+            for (int k = 0; k < 24; ++k) {
+                const int e = used[std::size_t(order[std::size_t(k) % order.size()])];
+                dl->AddRectFilled(ImVec2(at.x + float(k) * w, at.y), ImVec2(at.x + float(k + 1) * w - 1.0f, at.y + h),
+                                  ImGui::GetColorU32(color_of(filament_color(e))));
+            }
+            ImGui::Dummy(ImVec2(24.0f * w, h));
+        }
+    }
+    ImGui::EndChild();
+    if (ImGui::Button(tr(T::Cancel))) {
+        mixes_ = mixes_before_;
+        open = false;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::OkButton))) {
+        open = false;
+        if (mixes_ != mixes_before_)
+            objects_material_changed();
+    }
+    ImGui::End();
+    mixing_open_ = open;
 }
 
 // The Paint tool's card: what to paint, the mark, the brush's size.
@@ -3726,6 +7245,9 @@ void App::help_windows() {
             ImGui::SameLine();
         if (ImGui::Button(tr(last ? T::Finish : T::Next), ImVec2(92.0f * scale_, 0)))
             tour_step_ = last ? -1 : tour_step_ + 1;
+        // The first start's tutorials, once its assistant is over (rule 15).
+        if (tour_step_ < 0 && first_run_)
+            offer_tutorials("first_start");
     } else {
         if (ImGui::Button(tr(T::GotIt))) {
             tips_seen_.insert(tip_);
@@ -3764,6 +7286,133 @@ void App::empty_hint() {
     ImGui::PopStyleVar(2);
 }
 
+// What the icon row shows over the paths (preview.md, rule 11), drawn over
+// the 3D view: the marks of the layers drawn, the wipes, the centre of
+// gravity of what is drawn and the nozzle at its last extrusion.
+void App::preview_overlay(const GcodePreview& p) {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](float x, float y, float z, ImVec2& out) {
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const std::uint32_t lo = std::uint32_t(bottom_layer_), hi = std::uint32_t(top_layer_);
+    ImVec2 a, b;
+    if (show_wipes_)
+        for (std::uint32_t l = lo; l <= hi && l < p.layers.size(); ++l)
+            for (std::size_t i = p.layers[l].first; i < p.layers[l].first + p.layers[l].count; ++i)
+                if (const PreviewMove& m = p.moves[i];
+                    m.wipe && project(m.x0, m.y0, m.z0, a) && project(m.x1, m.y1, m.z1, b))
+                    dl->AddLine(a, b, ImGui::GetColorU32(rgb(kWipeColour)), 2.0f * scale_);
+    if (std::any_of(show_marks_.begin(), show_marks_.end(), [](bool on) { return on; }))
+        for (const PreviewMark& m : p.marks)
+            if (m.layer >= lo && m.layer <= hi && show_marks_[std::size_t(m.kind)] && project(m.x, m.y, m.z, a))
+                dl->AddCircleFilled(a, 3.5f * scale_, ImGui::GetColorU32(rgb(kMarkColours[std::size_t(m.kind)])));
+    if (show_gravity_) {
+        // Each extrusion's middle, by its volume.
+        double sum = 0.0, cx = 0.0, cy = 0.0, cz = 0.0;
+        for (std::uint32_t l = lo; l <= hi && l < p.layers.size(); ++l)
+            for (std::size_t e = p.layers[l].first_extrusion; e < p.layers[l].first_extrusion + p.layers[l].extrusion_count; ++e) {
+                const PreviewMove& m = p.moves[p.extrusions[e]];
+                const double length = std::hypot(double(m.x1) - m.x0, double(m.y1) - m.y0, double(m.z1) - m.z0);
+                const double v = double(m.width) * m.height * length;
+                sum += v;
+                cx += v * 0.5 * (double(m.x0) + m.x1), cy += v * 0.5 * (double(m.y0) + m.y1);
+                cz += v * (0.5 * (double(m.z0) + m.z1) - 0.5 * m.height);
+            }
+        if (sum > 0.0 && project(float(cx / sum), float(cy / sum), float(cz / sum), a)) {
+            const float r = 7.0f * scale_;
+            const ImU32 ink = ImGui::GetColorU32(rgb(0xFFFFFF)), shade = ImGui::GetColorU32(ImVec4(0, 0, 0, 0.6f));
+            dl->AddCircleFilled(a, r, shade);
+            dl->AddCircle(a, r, ink, 20, 1.8f * scale_);
+            dl->AddLine(ImVec2(a.x - r * 1.5f, a.y), ImVec2(a.x + r * 1.5f, a.y), ink, 1.5f * scale_);
+            dl->AddLine(ImVec2(a.x, a.y - r * 1.5f), ImVec2(a.x, a.y + r * 1.5f), ink, 1.5f * scale_);
+        }
+    }
+    if (show_nozzle_ && hi < p.layers.size() && p.layers[hi].count > 0) {
+        // At the end of the last move drawn (the move slider's).
+        const std::size_t cut = move_cut_layer_ == int(hi) && move_cut_ > 0 ? std::size_t(move_cut_) : p.layers[hi].count;
+        const PreviewMove& m = p.moves[p.layers[hi].first + std::min(cut, p.layers[hi].count) - 1];
+        if (project(m.x1, m.y1, m.z1, a)) {
+            // The nozzle standing on the point, and where it is when the mouse is on it.
+            const float s = 16.0f * scale_;
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.accent_hover)), edge = ImGui::GetColorU32(ImVec4(0, 0, 0, 0.7f));
+            dl->AddRectFilled(ImVec2(a.x - s * 0.35f, a.y - s * 1.6f), ImVec2(a.x + s * 0.35f, a.y - s * 0.7f), c);
+            dl->AddTriangleFilled(ImVec2(a.x - s * 0.4f, a.y - s * 0.7f), ImVec2(a.x + s * 0.4f, a.y - s * 0.7f), a, c);
+            dl->AddTriangle(ImVec2(a.x - s * 0.4f, a.y - s * 0.7f), ImVec2(a.x + s * 0.4f, a.y - s * 0.7f), a, edge, 1.2f);
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            if (!ImGui::GetIO().WantCaptureMouse && std::abs(mouse.x - a.x) < s * 0.5f && mouse.y > a.y - s * 1.7f &&
+                mouse.y < a.y + 2.0f)
+                ImGui::SetTooltip(tr(T::NozzleAt), double(m.x1), double(m.y1), double(m.z1), double(m.feed));
+        }
+    }
+    dl->PopClipRect();
+}
+
+// A colour change, a pause (with its message) or G-code at the start of a
+// layer (preview.md, rule 12): a change by height (gcode_templates.md, rule
+// 13) halfway between that layer's top and the one below it, so it starts
+// that layer; the G-code changes when sliced again.
+void App::add_change_at(int layer, ChangeKind kind, std::string text) {
+    if (!result_ || layer < 0 || std::size_t(layer) >= result_->preview.layers.size())
+        return;
+    const auto& layers = result_->preview.layers;
+    const double top = layers[std::size_t(layer)].z;
+    const double below = layer > 0 ? layers[std::size_t(layer) - 1].z : 0.0;
+    HeightChange change;
+    change.z = 0.5 * (top + below);
+    change.color_change = kind == ChangeKind::Color;
+    change.pause = kind == ChangeKind::Pause;
+    if (kind == ChangeKind::Pause && !text.empty())
+        change.gcode = "M117 " + text; // the message the printer shows
+    else if (kind == ChangeKind::Gcode)
+        change.gcode = std::move(text);
+    settings_.changes.push_back(std::move(change));
+    std::stable_sort(settings_.changes.begin(), settings_.changes.end(),
+                     [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
+    settings_changed();
+    notify(format(tr(kind == ChangeKind::Color ? T::ColorChangeAt : kind == ChangeKind::Pause ? T::PauseAt : T::GcodeAt),
+                  layer + 1));
+}
+
+// Each part's name over it (E, preview.md, rule 10).
+void App::part_labels() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        if (placed_meshes_[i].empty())
+            continue;
+        Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+        for (const Vec3f& c : placed_meshes_[i].corners()) {
+            lo = Vec3{std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+            hi = Vec3{std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+        }
+        const Vec3 top{(lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f, hi.z};
+        const float w = vp[3] * top.x + vp[7] * top.y + vp[11] * top.z + vp[15];
+        if (!(w > 1e-6f))
+            continue;
+        const float x = (vp[0] * top.x + vp[4] * top.y + vp[8] * top.z + vp[12]) / w;
+        const float y = (vp[1] * top.x + vp[5] * top.y + vp[9] * top.z + vp[13]) / w;
+        const ImVec2 at(view_pos_.x + (x * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - y * 0.5f) * view_size_.y);
+        const ImVec2 size = ImGui::CalcTextSize(objects_[i].name.c_str());
+        const ImVec2 box(at.x - size.x * 0.5f - 6.0f * scale_, at.y - size.y - 14.0f * scale_);
+        dl->AddRectFilled(box, ImVec2(box.x + size.x + 12.0f * scale_, box.y + size.y + 6.0f * scale_),
+                          ImGui::GetColorU32(rgb(theme_.panel, 0.85f)), 5.0f * scale_);
+        dl->AddText(ImVec2(box.x + 6.0f * scale_, box.y + 3.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)),
+                    objects_[i].name.c_str());
+    }
+}
+
 void App::preview_panels() {
     if (!result_)
         return;
@@ -3786,12 +7435,15 @@ void App::preview_panels() {
             top_layer_ = layers - 1;
     }
 
-    // The layer slider, on the right.
+    // The layer slider, on the right (rules 4, 9 and 12): the top and the
+    // bottom layer drawn, each with its height and number; a «+» by the top
+    // one adds a colour change there (a right click: a pause or G-code); the
+    // changes by height are marks on it.
     const float margin = 14.0f * scale_;
     const float slider_top = 64.0f * scale_;
     const ImGuiStyle& style = ImGui::GetStyle();
-    const float slider_h = view_size_.y - slider_top - margin - 2.0f * ImGui::GetTextLineHeightWithSpacing() -
-                           2.0f * style.WindowPadding.y - style.ItemSpacing.y;
+    const float line_h = ImGui::GetTextLineHeightWithSpacing();
+    const float slider_h = std::max(view_size_.y - slider_top - margin - 4.0f * line_h - 2.0f * style.WindowPadding.y, 80.0f * scale_);
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin, view_pos_.y + slider_top), ImGuiCond_Always,
                             ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.85f);
@@ -3800,28 +7452,155 @@ void App::preview_panels() {
     ImGui::Begin("##layers", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    const std::string top_text = std::to_string(top_layer_ + 1);
-    const float slider_w = 30.0f * scale_;
-    const float text_w = ImGui::CalcTextSize("00000").x;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - ImGui::CalcTextSize(top_text.c_str()).x) * 0.5f);
-    ImGui::TextUnformatted(top_text.c_str());
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - slider_w) * 0.5f);
-    int shown = top_layer_ + 1;
-    ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, 18.0f * scale_);
-    if (ImGui::VSliderInt("##top_layer", ImVec2(slider_w, std::max(slider_h, 80.0f * scale_)), &shown, 1, layers, ""))
-        top_layer_ = shown - 1;
-    ImGui::PopStyleVar();
-    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
-        top_layer_ = std::clamp(top_layer_ + int(ImGui::GetIO().MouseWheel), 0, layers - 1);
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (text_w - ImGui::CalcTextSize("1").x) * 0.5f);
-    ImGui::TextDisabled("1");
+    const auto layer_text = [&](int l) {
+        return format("%.2f (%d)", p.layers[std::size_t(l)].z, l + 1);
+    };
+    const float text_w = ImGui::CalcTextSize(layer_text(layers - 1).c_str()).x + ImGui::GetFrameHeight();
+    {
+        const std::string top_text = layer_text(top_layer_);
+        ImGui::TextUnformatted(top_text.c_str());
+        // The «+» (rule 12).
+        ImGui::SameLine(text_w - ImGui::GetFrameHeight() + style.ItemSpacing.x);
+        if (!viewer_ && !result_->resin) {
+            if (ImGui::SmallButton("+"))
+                add_change_at(top_layer_, ChangeKind::Color);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tr(T::AddAtLayer));
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                ImGui::OpenPopup("##add_change");
+            if (ImGui::BeginPopup("##add_change")) {
+                if (ImGui::MenuItem(tr(T::AddColorChange)))
+                    add_change_at(top_layer_, ChangeKind::Color);
+                if (ImGui::MenuItem(tr(T::AddPause)))
+                    change_layer_ = top_layer_, change_kind_ = ChangeKind::Pause, change_text_.clear(), change_dialog_ = true;
+                if (ImGui::MenuItem(tr(T::AddCustomGcode)))
+                    change_layer_ = top_layer_, change_kind_ = ChangeKind::Gcode, change_text_.clear(), change_dialog_ = true;
+                ImGui::EndPopup();
+            }
+        } else {
+            ImGui::Dummy(ImVec2(ImGui::GetFrameHeight(), 1));
+        }
+    }
+    const int shown_lo = only_layer_ ? top_layer_ : bottom_layer_;
+    {
+        // The track and its two handles.
+        const float track_w = text_w;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("##layer_track", ImVec2(track_w, slider_h));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float cx = at.x + track_w * 0.5f, grab = 9.0f * scale_;
+        const float y0 = at.y + grab, y1 = at.y + slider_h - grab;
+        const auto y_of = [&](int l) { return layers > 1 ? y1 - (y1 - y0) * float(l) / float(layers - 1) : y1; };
+        const auto layer_at = [&](float y) {
+            return layers > 1 ? std::clamp(int(std::lround((y1 - y) / (y1 - y0) * float(layers - 1))), 0, layers - 1) : 0;
+        };
+        if (ImGui::IsItemActivated()) {
+            const float my = ImGui::GetIO().MousePos.y;
+            dragging_bottom_ = !only_layer_ && std::abs(my - y_of(bottom_layer_)) < std::abs(my - y_of(top_layer_));
+        }
+        if (ImGui::IsItemActive()) {
+            const int l = layer_at(ImGui::GetIO().MousePos.y);
+            if (dragging_bottom_)
+                bottom_layer_ = std::min(l, top_layer_);
+            else
+                top_layer_ = std::max(l, only_layer_ ? 0 : bottom_layer_);
+        }
+        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+            top_layer_ = std::clamp(top_layer_ + int(ImGui::GetIO().MouseWheel), bottom_layer_, layers - 1);
+        const ImU32 track = ImGui::GetColorU32(rgb(theme_.frame)), fill = ImGui::GetColorU32(rgb(theme_.accent, 0.8f));
+        dl->AddRectFilled(ImVec2(cx - 3.0f * scale_, y0), ImVec2(cx + 3.0f * scale_, y1), track, 3.0f * scale_);
+        dl->AddRectFilled(ImVec2(cx - 3.0f * scale_, y_of(top_layer_)), ImVec2(cx + 3.0f * scale_, y_of(shown_lo)), fill,
+                          3.0f * scale_);
+        // The changes by height, as marks: what each is when the mouse is on it,
+        // and a click to remove it.
+        for (std::size_t c = 0; c < settings_.changes.size(); ++c) {
+            const HeightChange& h = settings_.changes[c];
+            if (!h.color_change && !h.pause && h.gcode.empty())
+                continue;
+            int l = 0;
+            while (l + 1 < layers && p.layers[std::size_t(l)].z < h.z)
+                ++l;
+            const float y = y_of(l);
+            const std::uint32_t colour = h.color_change ? kMarkColours[std::size_t(MarkKind::ColorChange)]
+                                         : h.pause      ? kMarkColours[std::size_t(MarkKind::Pause)]
+                                                        : kMarkColours[std::size_t(MarkKind::Custom)];
+            const ImVec2 m0(cx + 6.0f * scale_, y - 3.0f * scale_), m1(cx + 14.0f * scale_, y + 3.0f * scale_);
+            dl->AddRectFilled(m0, m1, ImGui::GetColorU32(rgb(colour)), 2.0f * scale_);
+            if (ImGui::IsMouseHoveringRect(m0, m1)) {
+                ImGui::SetTooltip("%s", (h.color_change ? format(tr(T::ColorChangeAt), l + 1)
+                                         : h.pause      ? format(tr(T::PauseAt), l + 1) + (h.gcode.empty() ? "" : "\n" + h.gcode)
+                                                        : format(tr(T::GcodeAt), l + 1) + "\n" + h.gcode)
+                                            .c_str());
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    change_edit_ = int(c), ImGui::OpenPopup("##edit_change");
+            }
+        }
+        if (ImGui::BeginPopup("##edit_change")) {
+            if (change_edit_ >= 0 && std::size_t(change_edit_) < settings_.changes.size()) {
+                HeightChange& h = settings_.changes[std::size_t(change_edit_)];
+                if (h.pause || !h.gcode.empty()) {
+                    ImGui::SetNextItemWidth(260.0f * scale_);
+                    if (ImGui::InputTextMultiline("##change_text", &h.gcode, ImVec2(260.0f * scale_, 3.0f * line_h)))
+                        settings_changed();
+                }
+                if (ImGui::Button(tr(T::RemoveChange))) {
+                    settings_.changes.erase(settings_.changes.begin() + change_edit_);
+                    change_edit_ = -1;
+                    settings_changed();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::EndPopup();
+        }
+        for (const int l : {shown_lo, top_layer_}) {
+            const float y = y_of(l);
+            dl->AddCircleFilled(ImVec2(cx, y), grab, ImGui::GetColorU32(rgb(theme_.accent_hover)));
+            dl->AddCircle(ImVec2(cx, y), grab, ImGui::GetColorU32(rgb(0xFFFFFF)), 20, 1.5f * scale_);
+        }
+    }
+    ImGui::TextDisabled("%s", layer_text(shown_lo).c_str());
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
     if (only_layer_)
         bottom_layer_ = top_layer_;
-    else
-        bottom_layer_ = 0;
+    // The move slider (rule 4), at the bottom: the last move drawn in the
+    // top layer, with its number; left and right step it.
+    {
+        const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
+        if (move_cut_layer_ != top_layer_)
+            move_cut_ = int(top.count), move_cut_layer_ = top_layer_;
+        move_cut_ = std::clamp(move_cut_, 1, std::max(int(top.count), 1));
+        if (top.count > 1) {
+            const float w = std::min(420.0f * scale_, view_size_.x * 0.3f);
+            // Right of the legend, left of the layer slider.
+            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin - 150.0f * scale_,
+                                           view_pos_.y + view_size_.y - margin),
+                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+            ImGui::SetNextWindowBgAlpha(0.85f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+            ImGui::Begin("##moves", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+            ImGui::SetNextItemWidth(w);
+            ImGui::SliderInt("##move_cut", &move_cut_, 1, int(top.count), "");
+            ImGui::SameLine();
+            ImGui::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
+            if (!ImGui::GetIO().WantTextInput) {
+                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+                    move_cut_ = std::max(move_cut_ - 1, 1);
+                if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+                    move_cut_ = std::min(move_cut_ + 1, int(top.count));
+            }
+        }
+    }
+    preview_overlay(p);
+    if (!show_legend_)
+        return;
 
     // The legend and the numbers, bottom left.
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + view_size_.y - margin), ImGuiCond_Always,
@@ -3845,65 +7624,172 @@ void App::preview_panels() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(T::ColorBy));
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByKind)).x + ImGui::GetFrameHeight() * 2.0f);
-    int mode = int(color_mode_);
-    const char* modes[] = {tr(T::ByKind), tr(T::BySpeed), tr(T::ByWidth), tr(T::ByHeight)};
-    if (ImGui::Combo("##colour_mode", &mode, modes, 4))
-        color_mode_ = static_cast<ColorMode>(mode);
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize(tr(T::ByLayerTimeLog)).x + ImGui::GetFrameHeight() * 2.0f);
+    if (ImGui::BeginCombo("##colour_mode", tr(kViewInfo[int(preview_view_)].name), ImGuiComboFlags_HeightLargest)) {
+        for (int v = 0; v < kPreviewViews; ++v)
+            if (ImGui::Selectable(tr(kViewInfo[v].name), v == int(preview_view_)) && v != int(preview_view_)) {
+                preview_view_ = static_cast<PreviewView>(v);
+                color_mode_ = kViewInfo[v].shader;
+                upload_preview(); // the instances carry the view's number
+            }
+        ImGui::EndCombo();
+    }
     const float swatch = ImGui::GetTextLineHeight();
-    if (color_mode_ == ColorMode::Kind) {
-        for (std::size_t k = 1; k < kLineKinds; ++k) {
-            if (p.kind_moves[k] == 0)
-                continue;
-            bool visible = (kind_mask_ >> k) & 1u;
-            ImGui::PushID(int(k));
-            if (ImGui::Checkbox("##visible", &visible))
-                kind_mask_ = visible ? kind_mask_ | (1u << k) : kind_mask_ & ~(1u << k);
-            ImGui::SameLine();
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            const float y = at.y + (ImGui::GetFrameHeight() - swatch) * 0.5f;
-            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x, y), ImVec2(at.x + swatch, y + swatch),
-                                                      ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))), 3.0f * scale_);
-            ImGui::Dummy(ImVec2(swatch, swatch));
-            ImGui::SameLine();
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
-            ImGui::PopID();
+    if (preview_view_ == PreviewView::Kind && !p.typed) {
+        // A G-code without the kinds' comments (rule 13, PV10).
+        ImGui::TextDisabled("%s", tr(T::NoTypes));
+    } else if (preview_view_ == PreviewView::Kind) {
+        // Each kind: its colour, its time and share of the moves' time, and
+        // its filament (rule 2).
+        const double all = p.moves_seconds;
+        const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter * result_->settings.filament_diameter;
+        const double density = result_->settings.filament_density > 0.0 ? result_->settings.filament_density : 1.24;
+        if (ImGui::BeginTable("##kinds", 4, ImGuiTableFlags_SizingFixedFit)) {
+            for (std::size_t k = 1; k < kLineKinds; ++k) {
+                if (p.kind_moves[k] == 0)
+                    continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                bool visible = (kind_mask_ >> k) & 1u;
+                ImGui::PushID(int(k));
+                if (ImGui::Checkbox("##visible", &visible))
+                    kind_mask_ = visible ? kind_mask_ | (1u << k) : kind_mask_ & ~(1u << k);
+                ImGui::SameLine();
+                const ImVec2 at = ImGui::GetCursorScreenPos();
+                const float y = at.y + (ImGui::GetFrameHeight() - swatch) * 0.5f;
+                ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(at.x, y), ImVec2(at.x + swatch, y + swatch),
+                                                          ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))), 3.0f * scale_);
+                ImGui::Dummy(ImVec2(swatch, swatch));
+                ImGui::SameLine();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                if (all > 0.0)
+                    ImGui::TextDisabled("%s", format_duration(p.kind_seconds[k]).c_str());
+                ImGui::TableNextColumn();
+                if (all > 0.0) {
+                    const double share = p.kind_seconds[k] / all;
+                    const ImVec2 b = ImGui::GetCursorScreenPos();
+                    const float bar = 40.0f * scale_, by = b.y + ImGui::GetFrameHeight() * 0.5f - 2.0f * scale_;
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(b.x, by), ImVec2(b.x + bar, by + 4.0f * scale_),
+                                                              ImGui::GetColorU32(rgb(theme_.frame)));
+                    ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(b.x, by), ImVec2(b.x + bar * float(share), by + 4.0f * scale_),
+                                                              ImGui::GetColorU32(rgb(kind_colour(LineKind(k)))));
+                    ImGui::Dummy(ImVec2(bar, 1));
+                    ImGui::SameLine();
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextDisabled("%.1f %%", 100.0 * share);
+                }
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                if (p.kind_filament[k] > 0.0)
+                    ImGui::TextDisabled("%.2f m · %.2f g", p.kind_filament[k] / 1000.0,
+                                        p.kind_filament[k] * area / 1000.0 * density);
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
         }
     } else {
-        // The colour ramp with its ends.
-        const float w = 200.0f * scale_;
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const ImU32 stops[5] = {IM_COL32(43, 84, 242, 255), IM_COL32(26, 204, 217, 255), IM_COL32(77, 217, 89, 255),
-                                IM_COL32(250, 217, 51, 255), IM_COL32(235, 56, 51, 255)};
-        for (int i = 0; i < 4; ++i)
-            ImGui::GetWindowDrawList()->AddRectFilledMultiColor(
-                ImVec2(at.x + w * float(i) / 4.0f, at.y), ImVec2(at.x + w * float(i + 1) / 4.0f, at.y + swatch),
-                stops[i], stops[i + 1], stops[i + 1], stops[i]);
-        ImGui::Dummy(ImVec2(w, swatch));
-        const bool speed = color_mode_ == ColorMode::Speed;
-        const float* range = speed ? feed_range_ : color_mode_ == ColorMode::Height ? height_range_ : width_range_;
-        const char* unit = speed ? "%.0f mm/s" : "%.2f mm";
-        const std::string low = format(unit, double(range[0]));
-        const std::string high = format(unit, double(range[1]));
-        const float left = ImGui::GetCursorPosX();
-        ImGui::TextUnformatted(low.c_str());
-        ImGui::SameLine(left + w - ImGui::CalcTextSize(high.c_str()).x);
-        ImGui::TextUnformatted(high.c_str());
+        // Eleven steps from the least to the most (rule 7), or each tool or
+        // colour.
+        const PreviewView v = preview_view_;
+        const float* range = v == PreviewView::Height ? height_range_ : v == PreviewView::Width ? width_range_ : feed_range_;
+        const bool log = v == PreviewView::LayerTimeLog;
+        const bool discrete = v == PreviewView::Tool || v == PreviewView::ColorPrint;
+        std::vector<double> steps;
+        if (discrete)
+            for (int i = int(std::lround(range[0])); i <= int(std::lround(range[1])); ++i)
+                steps.push_back(i);
+        else
+            steps = legend_steps(range[0], range[1], log);
+        const auto text_of = [&](double value) -> std::string {
+            switch (v) {
+            case PreviewView::Height:
+            case PreviewView::Width: return format("%.3f mm", value);
+            case PreviewView::Speed:
+            case PreviewView::ActualSpeed: return format("%.1f mm/s", value);
+            case PreviewView::Fan: return format("%.0f %%", value);
+            case PreviewView::Temperature: return format("%.0f °C", value);
+            case PreviewView::Flow:
+            case PreviewView::ActualFlow: return format("%.2f mm³/s", value);
+            case PreviewView::LayerTime:
+            case PreviewView::LayerTimeLog: return format_duration(value);
+            case PreviewView::Tool: return format(tr(T::ToolN), int(value) + 1);
+            case PreviewView::ColorPrint: return format(tr(T::ColorN), int(value) + 1);
+            case PreviewView::Kind: break;
+            }
+            return {};
+        };
+        // The shader's ramp, from blue to red.
+        const auto ramp = [](double s) {
+            static const float stops[5][3] = {
+                {0.17f, 0.33f, 0.95f}, {0.10f, 0.80f, 0.85f}, {0.30f, 0.85f, 0.35f}, {0.98f, 0.85f, 0.20f}, {0.92f, 0.22f, 0.20f}};
+            const float u = float(std::clamp(s, 0.0, 1.0)) * 4.0f;
+            const int i = std::min(int(u), 3);
+            const float f = u - float(i);
+            return ImGui::GetColorU32(ImVec4(stops[i][0] + (stops[i + 1][0] - stops[i][0]) * f,
+                                             stops[i][1] + (stops[i + 1][1] - stops[i][1]) * f,
+                                             stops[i][2] + (stops[i + 1][2] - stops[i][2]) * f, 1.0f));
+        };
+        // Largest first, as a scale reads from top to bottom.
+        for (auto it = steps.rbegin(); it != steps.rend(); ++it) {
+            const double step = *it;
+            const double value = log ? std::log10(std::max(step, 0.01)) : step;
+            const double s = range[1] > range[0] ? (value - range[0]) / (range[1] - range[0]) : 0.0;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + swatch, at.y + swatch), ramp(s), 3.0f * scale_);
+            ImGui::Dummy(ImVec2(swatch, swatch));
+            ImGui::SameLine();
+            ImGui::TextUnformatted(text_of(step).c_str());
+        }
     }
-    bool travel = show_travels_;
-    if (ImGui::Checkbox("##travel", &travel))
-        show_travels_ = travel;
-    ImGui::SameLine();
+    // The icon row (rule 11): each shows or hides something over the paths.
     {
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const float y = at.y + ImGui::GetFrameHeight() * 0.5f;
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(at.x, y), ImVec2(at.x + swatch, y),
-                                            ImGui::GetColorU32(rgb(kind_colour(LineKind::Travel))), 2.0f * scale_);
-        ImGui::Dummy(ImVec2(swatch, swatch));
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(tr(T::KindTravel));
+        const float size = ImGui::GetFrameHeight();
+        const ImU32 off = ImGui::GetColorU32(rgb(theme_.frame)), on = ImGui::GetColorU32(rgb(theme_.accent, 0.45f));
+        int n = 0;
+        const auto icon_toggle = [&](const char* id, bool& value, T tip, const std::function<void(ImDrawList*, ImVec2, float)>& draw) {
+            if (n++ % 6 != 0)
+                ImGui::SameLine(0, 4.0f * scale_);
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            if (ImGui::InvisibleButton(id, ImVec2(size, size)))
+                value = !value;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), value ? on : off, 5.0f * scale_);
+            draw(dl, at, size);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tr(tip));
+        };
+        icon_toggle("##travels", show_travels_, T::IconTravels, [&](ImDrawList* dl, ImVec2 a, float s) {
+            dl->AddLine(ImVec2(a.x + s * 0.2f, a.y + s * 0.7f), ImVec2(a.x + s * 0.8f, a.y + s * 0.3f),
+                        ImGui::GetColorU32(rgb(kind_colour(LineKind::Travel))), 2.0f * scale_);
+        });
+        icon_toggle("##wipes", show_wipes_, T::IconWipes, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImVec2 pts[4] = {ImVec2(a.x + s * 0.2f, a.y + s * 0.6f), ImVec2(a.x + s * 0.4f, a.y + s * 0.35f),
+                                   ImVec2(a.x + s * 0.6f, a.y + s * 0.65f), ImVec2(a.x + s * 0.8f, a.y + s * 0.4f)};
+            dl->AddPolyline(pts, 4, ImGui::GetColorU32(rgb(kWipeColour)), 2.0f * scale_, ImDrawFlags_None);
+        });
+        static constexpr T mark_tips[kMarkKinds] = {T::IconRetracts, T::IconUnretracts, T::IconSeams, T::IconToolChanges,
+                                                    T::IconColorChanges, T::IconPauses, T::IconCustom};
+        for (std::size_t k = 0; k < kMarkKinds; ++k) {
+            const std::string id = "##mark" + std::to_string(k);
+            icon_toggle(id.c_str(), show_marks_[k], mark_tips[k], [&](ImDrawList* dl, ImVec2 a, float s) {
+                dl->AddCircleFilled(ImVec2(a.x + s * 0.5f, a.y + s * 0.5f), s * 0.18f, ImGui::GetColorU32(rgb(kMarkColours[k])));
+            });
+        }
+        icon_toggle("##gravity", show_gravity_, T::IconGravity, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.text));
+            dl->AddCircle(ImVec2(a.x + s * 0.5f, a.y + s * 0.5f), s * 0.22f, c, 16, 1.5f);
+            dl->AddLine(ImVec2(a.x + s * 0.2f, a.y + s * 0.5f), ImVec2(a.x + s * 0.8f, a.y + s * 0.5f), c, 1.2f);
+            dl->AddLine(ImVec2(a.x + s * 0.5f, a.y + s * 0.2f), ImVec2(a.x + s * 0.5f, a.y + s * 0.8f), c, 1.2f);
+        });
+        icon_toggle("##nozzle", show_nozzle_, T::IconNozzle, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.accent_hover));
+            dl->AddRectFilled(ImVec2(a.x + s * 0.32f, a.y + s * 0.18f), ImVec2(a.x + s * 0.68f, a.y + s * 0.42f), c);
+            dl->AddTriangleFilled(ImVec2(a.x + s * 0.3f, a.y + s * 0.42f), ImVec2(a.x + s * 0.7f, a.y + s * 0.42f),
+                                  ImVec2(a.x + s * 0.5f, a.y + s * 0.8f), c);
+        });
     }
     ImGui::Separator();
     if (ImGui::BeginTable("##numbers", 2)) {
@@ -3916,12 +7802,22 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
-        const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
-                            result_->settings.filament_diameter;
-        line(tr(T::FilamentUsed),
-             format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
-        line(tr(T::Layers), std::to_string(layers));
-        line(tr(T::Lines), number_text(p.lines));
+        if (p.first_layer_seconds > 0.0)
+            line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
+        if (result_->resin) {
+            // A resin print: the resin it takes, by its bottle (gcode_extras.md, rule 2).
+            line(tr(T::ResinUsed), format("%.1f ml  ·  %.1f g", result_->resin->volume / 1000.0, result_->resin->weight));
+            if (result_->resin->cost > 0.0)
+                line(tr(T::ResinCost), format("%.2f", result_->resin->cost));
+            line(tr(T::Layers), std::to_string(layers));
+        } else {
+            const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
+                                result_->settings.filament_diameter;
+            line(tr(T::FilamentUsed),
+                 format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
+            line(tr(T::Layers), std::to_string(layers));
+            line(tr(T::Lines), number_text(p.lines));
+        }
         ImGui::EndTable();
     }
     ImGui::End();
@@ -4049,6 +7945,8 @@ void App::calibration_panel() {
         {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
         {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
+        {CalibrationKind::ResinExposure, T::CalResinExposure, T::CalResinExposureWhat, T::CalResinExposureHint},
+        {CalibrationKind::ResinMeasure, T::CalResinMeasure, T::CalResinMeasureWhat, T::CalResinMeasureHint},
     };
     const float button_h = 30.0f * scale_;
     // A card's title and what it is for, with its button on the right.
@@ -4084,6 +7982,9 @@ void App::calibration_panel() {
         }
     };
     for (const Card& card : cards) {
+        // With a resin printer, only the resin tests (interface.md); else the others.
+        if (is_resin_calibration(card.kind) != (settings_.machine_technology == MachineTechnology::Msla))
+            continue;
         ImGui::PushID(int(card.kind));
         ImGui::Separator();
         const bool active = calibration_ && calibration_kind_ == card.kind;
@@ -4107,7 +8008,8 @@ void App::calibration_panel() {
                     ImGui::TextDisabled(tr(T::PartReady), time.c_str());
             }
             const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
-            if (button("##export_calibration", "tisma_save", tr(T::Export), false, false, can_export, tr(T::ExportTip),
+            if (button("##export_calibration", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false,
+                       false, can_export, tr(T::ExportTip),
                        button_h))
                 begin_export();
             // 2: print and look.
@@ -4148,6 +8050,7 @@ void App::calibration_panel() {
                     settings_.scale_z = next.scale_z, settings_.hole_offset = next.hole_offset;
                     // The block printed with these values would now measure as designed.
                     measured_ = {dimension_test_.x, dimension_test_.y, dimension_test_.z, dimension_test_.hole};
+                    record_calibration(CalibrationKind::Dimensions);
                     settings_changed();
                     notify(format(tr(T::CompensationApplied), next.scale_x, next.scale_y, next.scale_z,
                                   next.hole_offset));
@@ -4169,8 +8072,28 @@ void App::calibration_panel() {
                 if (button("##apply_shrink", nullptr, tr(T::ApplyShrink), true, false, true, nullptr, button_h)) {
                     settings_.first_layer_shrink = next;
                     elephant_bottom_ = elephant_body_; // printed with this shrink, the bottom would match the body
+                    record_calibration(CalibrationKind::ElephantFoot);
                     settings_changed();
                     notify(format(tr(T::ShrinkApplied), next));
+                }
+            } else if (card.kind == CalibrationKind::ResinMeasure) {
+                // 3: measure the block; the scale corrections follow (resin.md, rule 19).
+                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                number(T::MeasuredX, resin_measured_[0], 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredY, resin_measured_[1], 1.0, 1000.0, "%.3f mm", 0.005f);
+                number(T::MeasuredZ, resin_measured_[2], 1.0, 1000.0, "%.3f mm", 0.005f);
+                const std::array<double, 3> next =
+                    resin_scale_from(settings_, resin_measured_[0], resin_measured_[1], resin_measured_[2]);
+                ImGui::Text("%s: %.4f · %.4f · %.4f", tr(T::New), next[0], next[1], next[2]);
+                if (button("##apply_scale", nullptr, tr(T::ApplyCompensation), true, false, true, nullptr, button_h)) {
+                    settings_.resin_scale_x = std::clamp(next[0], 0.5, 2.0);
+                    settings_.resin_scale_y = std::clamp(next[1], 0.5, 2.0);
+                    settings_.resin_scale_z = std::clamp(next[2], 0.5, 2.0);
+                    resin_measured_[0] = resin_measured_[1] = 30.0;
+                    resin_measured_[2] = 10.0;
+                    record_calibration(CalibrationKind::ResinMeasure);
+                    settings_changed();
+                    notify(tr(T::ResinScaleApplied));
                 }
             } else if (card.kind == CalibrationKind::FirstLayer) {
                 // 3: what each look means; the height is set on the printer.
@@ -4194,6 +8117,7 @@ void App::calibration_panel() {
                     if (button("##use", nullptr, format(tr(T::UseValue), value.c_str()).c_str(), true, false, true,
                                nullptr, button_h)) {
                         apply_calibration(card.kind, *chosen_value_, settings_);
+                        record_calibration(card.kind);
                         settings_changed();
                         notify(format(tr(T::ValueApplied), value.c_str()));
                         calibration_.reset();
@@ -4231,42 +8155,45 @@ void App::calibration_panel() {
         ImGui::PopID();
     }
 
-    // The extruder's steps: no part to slice, a G-code to run and a sum.
-    ImGui::PushID("extruder");
-    ImGui::Separator();
-    if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
-        extruder_open_ = !extruder_open_;
-        extruder_scroll_ = extruder_open_;
-    }
-    if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
-        ImGui::SetScrollHereY(0.0f);
-        extruder_scroll_ = false;
-    }
-    if (extruder_open_) {
-        const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
-        if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
-            purpose_ = Purpose::SaveExtruderTest;
-            browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
-                          "tisma_extruder_steps.gcode");
+    // The extruder's steps: no part to slice, a G-code to run and a sum (FDM only).
+    if (settings_.machine_technology != MachineTechnology::Msla) {
+        ImGui::PushID("extruder");
+        ImGui::Separator();
+        if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
+            extruder_open_ = !extruder_open_;
+            extruder_scroll_ = extruder_open_;
         }
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
-        number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
-        number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
-        const double extruded = 120.0 - extruder_left_;
-        const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
-        ImGui::Text(tr(T::ExtruderResult), extruded, value);
-        std::string text = extruder_steps_text(settings_.flavor, value);
-        const float two_lines = ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
-        ImGui::InputTextMultiline("##steps_text", &text, ImVec2(-FLT_MIN, two_lines), ImGuiInputTextFlags_ReadOnly);
-        if (button("##copy", nullptr, tr(T::Copy), false, false, true, nullptr, button_h)) {
-            ImGui::SetClipboardText(text.c_str());
-            notify(tr(T::Copied));
+        if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
+            ImGui::SetScrollHereY(0.0f);
+            extruder_scroll_ = false;
         }
-        ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+        if (extruder_open_) {
+            const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
+            if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
+                purpose_ = Purpose::SaveExtruderTest;
+                browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
+                              "tisma_extruder_steps.gcode");
+            }
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
+            number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
+            number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
+            const double extruded = 120.0 - extruder_left_;
+            const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
+            ImGui::Text(tr(T::ExtruderResult), extruded, value);
+            std::string text = extruder_steps_text(settings_.flavor, value);
+            const float two_lines =
+                ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
+            ImGui::InputTextMultiline("##steps_text", &text, ImVec2(-FLT_MIN, two_lines), ImGuiInputTextFlags_ReadOnly);
+            if (button("##copy", nullptr, tr(T::Copy), false, false, true, nullptr, button_h)) {
+                ImGui::SetClipboardText(text.c_str());
+                notify(tr(T::Copied));
+            }
+            ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+        }
+        ImGui::PopID();
     }
-    ImGui::PopID();
     ImGui::Separator();
     if (ImGui::CollapsingHeader(tr(T::MoreCalibrations)))
         ImGui::TextDisabled("%s", tr(T::MoreCalibrationsList));
@@ -4303,6 +8230,7 @@ void App::create_calibration(CalibrationKind kind, bool custom) {
 }
 
 void App::toasts() {
+    std::function<void()> undo; // pressed: run after the toasts are drawn
     const double now = ImGui::GetTime();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return t.until < now; }),
                   toasts_.end());
@@ -4318,13 +8246,23 @@ void App::toasts() {
         ImGui::Begin(id.c_str(), nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                         ImGuiWindowFlags_NoNav | (it->undo ? 0 : ImGuiWindowFlags_NoInputs));
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", it->text.c_str());
+        if (it->undo) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::Undo))) {
+                undo = std::move(it->undo);
+                it->until = 0.0;
+            }
+        }
         y -= ImGui::GetWindowHeight() + 8.0f * scale_;
         ImGui::End();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
     }
+    if (undo)
+        undo();
 }
 
 void App::dialogs() {
@@ -4336,6 +8274,31 @@ void App::dialogs() {
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
+        case Purpose::ExportView: {
+            // The Custom view, or the level's as one (rule 17).
+            const CustomView view = view_level_ == ViewLevel::Custom ? custom_view_ : custom_view_from(view_level_);
+            std::ofstream out(chosen, std::ios::binary);
+            out << custom_view_json(view);
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::ViewExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ImportView: {
+            std::ifstream in(chosen, std::ios::binary);
+            std::ostringstream text;
+            text << in.rdbuf();
+            try {
+                custom_view_ = parse_custom_view(text.str());
+                choose_level(ViewLevel::Custom);
+                notify(format(tr(T::ViewImported), int(custom_view_.visible.size())));
+            } catch (const ViewError& e) {
+                fail(T::CannotOpen, e.what());
+            }
+            break;
+        }
         case Purpose::SaveProject: save_project_to(chosen); break;
         case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
@@ -4421,6 +8384,33 @@ void App::dialogs() {
     }
 
     catalog_dialog();
+    choose_settings_dialog();
+    credits_dialog();
+    // A pause's message, or the G-code for a layer (preview.md, rule 12).
+    if (change_dialog_) {
+        ImGui::OpenPopup("###layer_change");
+        change_dialog_ = false;
+    }
+    if (ImGui::BeginPopupModal(
+            (std::string(tr(change_kind_ == ChangeKind::Pause ? T::AddPause : T::AddCustomGcode)) + "###layer_change").c_str(),
+            nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(tr(T::ChangeAtLayer), change_layer_ + 1);
+        ImGui::TextDisabled("%s", tr(change_kind_ == ChangeKind::Pause ? T::PauseMessage : T::CustomGcodeText));
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        if (change_kind_ == ChangeKind::Pause)
+            ImGui::InputText("##change_text", &change_text_);
+        else
+            ImGui::InputTextMultiline("##change_text", &change_text_, ImVec2(360.0f * scale_, 6.0f * ImGui::GetTextLineHeight()));
+        if (ImGui::Button(tr(T::Accept), ImVec2(120.0f * scale_, 0))) {
+            add_change_at(change_layer_, change_kind_, change_text_);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (about_open_) {
         ImGui::OpenPopup("###about");
@@ -4448,23 +8438,37 @@ void App::dialogs() {
 }
 
 void App::layout() {
+    anchors_.clear();
     viewport();
+    anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     top_bar();
-    settings_panel();
-    status_bar();
-    view_tools();
-    if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
-        plate_tools();
-    if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
-        empty_hint();
-    if (tab_ == Tab::Preview)
-        preview_panels();
-    if (tab_ == Tab::Analysis)
-        analysis_panel();
-    if (tab_ == Tab::Calibration)
-        calibration_panel();
-    if (tab_ == Tab::Device)
-        device_panel();
+    // The printer's page covers the panel and the view (settings_panel.md,
+    // rule 37) until it goes back to the plate.
+    if (printer_page_) {
+        printer_page();
+        status_bar();
+    } else {
+        settings_panel();
+        if (help_open_)
+            help_panel();
+        status_bar();
+        view_tools();
+        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+            plate_tools();
+        mixing_dialog();
+        if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
+            empty_hint();
+        if (tab_ == Tab::Preview)
+            preview_panels();
+        if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
+            part_labels();
+        if (tab_ == Tab::Analysis)
+            analysis_panel();
+        if (tab_ == Tab::Calibration)
+            calibration_panel();
+        if (tab_ == Tab::Device)
+            device_panel();
+    }
     // Each function's tip the first time it is used.
     if (tool_ != last_tool_) {
         last_tool_ = tool_;
@@ -4480,12 +8484,17 @@ void App::layout() {
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
+        if (tab_ == Tab::Analysis && !guide_memory_.done.contains("opened:engineering")) {
+            guide_memory_.done.insert("opened:engineering");
+            offer_tutorials("first_open:engineering");
+        }
     }
     if (result_ && !had_result_ && !viewer_) {
         had_result_ = true;
         tip("slice");
     }
     help_windows();
+    guide_overlay();
     toasts();
     dialogs();
 
@@ -4493,6 +8502,45 @@ void App::layout() {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
+    }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
+        search_focus_ = true;
+    if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
+        help_open_ = !help_open_;
+    // The view's keys (preview.md, rule 10) while no text field has the keyboard.
+    const ImGuiIO& keys = ImGui::GetIO();
+    if (!keys.WantTextInput && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&
+        tab_ != Tab::Calibration && tab_ != Tab::Device) {
+        static constexpr std::pair<ImGuiKey, StandardView> fixed[] = {
+            {ImGuiKey_0, StandardView::Iso},  {ImGuiKey_1, StandardView::Top},  {ImGuiKey_2, StandardView::Bottom},
+            {ImGuiKey_3, StandardView::Front}, {ImGuiKey_4, StandardView::Back}, {ImGuiKey_5, StandardView::Left},
+            {ImGuiKey_6, StandardView::Right}};
+        for (const auto& [key, view] : fixed)
+            if (ImGui::IsKeyPressed(key, false) ||
+                ImGui::IsKeyPressed(ImGuiKey(int(ImGuiKey_Keypad0) + (int(key) - int(ImGuiKey_0))), false)) {
+                camera_.set_view(view);
+                frame_all();
+            }
+        if (ImGui::IsKeyPressed(ImGuiKey_K, false))
+            camera_.orthographic = !camera_.orthographic;
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+            // The chosen part, or everything.
+            if (tab_ == Tab::Prepare && selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() &&
+                !placed_meshes_[std::size_t(selected_)].empty()) {
+                Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+                for (const Vec3f& c : placed_meshes_[std::size_t(selected_)].corners()) {
+                    lo = Vec3{std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+                    hi = Vec3{std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+                }
+                camera_.fit(lo, hi, view_size_.x / std::max(view_size_.y, 1.0f));
+            } else {
+                frame_all();
+            }
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+            show_labels_ = !show_labels_;
+        if (ImGui::IsKeyPressed(ImGuiKey_L, false))
+            show_legend_ = !show_legend_;
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(false);
@@ -4560,6 +8608,26 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);
+    // The move slider: the top layer's extrusions among its first moves, and
+    // which of them the part hides (they are drawn apart).
+    if (preview && tab_ == Tab::Preview && result_ && move_cut_layer_ == top_layer_ && move_cut_ > 0 &&
+        std::size_t(top_layer_) < result_->preview.layers.size()) {
+        const GcodePreview& p = result_->preview;
+        const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
+        if (std::size_t(move_cut_) < top.count) {
+            std::size_t extrusions = 0;
+            for (std::size_t i = top.first; i < top.first + std::size_t(move_cut_); ++i)
+                extrusions += p.moves[i].kind != LineKind::Travel;
+            std::size_t hidden = 0;
+            if (std::size_t(top_layer_) < preview_buffers_.layer_extrusions.size())
+                for (std::size_t j = 0; j < extrusions; ++j) {
+                    const std::size_t e = preview_buffers_.layer_extrusions[std::size_t(top_layer_)] + j;
+                    hidden += e < preview_buffers_.hidden.size() && preview_buffers_.hidden[e];
+                }
+            f.top_shown = extrusions - hidden;
+            f.top_hidden = hidden;
+        }
+    }
     f.last_layer = std::size_t(top_layer_);
     if (calibration_preview) {
         f.first_layer = 0;

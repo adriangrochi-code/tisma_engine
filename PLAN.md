@@ -518,18 +518,23 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     el campo optimizado de CurviSlicer y un término de resistencia con el análisis propio (F7); en 5 ejes, S³-Slicer
     (F9). Actualizado el 2026-10-26 (`docs/NONPLANAR_2026.md`): F7 sobre las superficies de corte en grilla 2D de
     Double QuickCurve, en este orden:
-    - [ ] la base, probada con `wave` (NP1 a NP4): campo en los vértices, material según `J`, tope de Z, choques con
-      un mapa de alturas y el perfil del cabezal, verificador y vista previa
-    - [ ] `surface` con la superficie de arriba, y el Z anti-aliasing encima
-    - [ ] `overhangs` con la superficie de abajo; `automatic`; `conical`
+    - [ ] la base, probada con `wave` (NP1 a NP4): hechos (2026-10-27) la onda (huevera, crestas, torcidas) y el cono
+      fijo, la rampa, el ajuste a la cabeza con `J` entre 0,6 y 1,4, la malla refinada y deformada, el G-code curvado
+      con el material por `J` y el tope de velocidad de Z, el verificador sobre la curva y la vista previa. Faltan
+      suavizar las capas donde la cabeza chocaría (hoy es un error), el tope de aceleración de Z y el caudal `uniform`
+    - [ ] `surface` con la superficie de arriba (hecho 2026-10-27, SU1 a SU5 y CO1), y el Z anti-aliasing encima
+    - [ ] `overhangs` con la superficie de abajo y `conical` según la pieza (hechos 2026-10-27, CO1 a CO4, VO2 a
+      VO5) y `automatic` (AU1 a AU3)
     - [ ] `stress`, solo si el análisis «como impresa» muestra ganancia
   - soportes: menos, más fáciles de sacar y con mejor superficie (`docs/SUPPORT_RESEARCH.md`):
-    - [ ] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
-      `docs/ARC_OVERHANGS.md`); después, frentes por distancia (las ondas de Andersons et al. 2026), con la
-      transformada de distancia de Q11
+    - [x] S1: arcos en voladizos, según la ficha `arc_overhangs.md` (método, límites y pruebas en
+      `docs/ARC_OVERHANGS.md`): `arcs.*`, reglas 1 a 11, A1 a A5 (2026-10-27)
+    - [ ] después, frentes por distancia (las ondas de Andersons et al. 2026), con la transformada de distancia de
+      Q11; y que los arcos no tarden tanto (el Benchy con arcos lamina en 1,1 s en vez de 0,6)
     - [ ] S2: la superficie soportada: lo que falta de `supports_more.md`, interfaz no planar que sigue la cara de
       abajo (con el mecanismo del ZAA), planchado de la interfaz, primera capa sobre el soporte como puente
-    - [x] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17): `support.style` `organic` (2026-10-26)
+    - [x] S3: soportes en árbol, según `supports_more.md` (reglas 15 a 17): `support.style` `organic` (2026-10-26);
+      las puntas vecinas enlazadas de a pares y las piezas por capa cerca de SM13 remedido (2026-10-27)
     - [ ] S4: laminado cónico como campo (con F7)
     - [ ] S5: interfaz de otro material (con MM1)
   - simulación del enfriamiento para los detalles chicos que la capa entera no ve (`docs/COOLING_SIMULATION.md`):
@@ -561,8 +566,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
     - lo nuevo de 2018 a 2026 (`docs/QUALITY_2026.md`, 2026-10-26), por ganancia contra esfuerzo:
-      - [ ] Q13: planchado según `ironing.md` (Ra −60 a −83 % en cuatro estudios); hoy es solo un tipo de la vista
-        previa
+      - [x] Q13: planchado según `ironing.md` (Ra −60 a −83 % en cuatro estudios; hecho 2026-10-27)
       - [ ] Q14: sección redondeada para los cordones sin vecinos (relleno ralo, capas combinadas, paredes de un
         cordón): el rectángulo pone 11 a 27 % de más; explicaría P11 de `docs/INFILL.md`
       - [ ] Q15: sin bordes débiles entre bandas de densidad del relleno (Hutton y Bartolai 2023: +26 a +33 % de
@@ -644,9 +648,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Pruebas de laminado no planar (altura y ángulo que admite la máquina): a definir con el dueño cuando llegue F7
 - [x] Opciones de guardar (pedido del dueño): perfiles con nombre de impresora, filamento e impresión, con perfiles de
   fábrica genéricos (`docs/PROFILES.md`), y proyectos `.tisma` (`docs/PROJECT.md`)
-- [ ] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
+- [x] Arc Overhang (pedido del dueño): techos planos en el aire sin soporte, con cordones que crecen en arcos desde el
   borde apoyado. En sala limpia: desde la descripción pública de la idea, con diseño propio, sin leer código GPL.
-  Se prueba con el estante plano de la torre de temperatura
+  Hecho el 2026-10-27 (`arcs.enabled`, Soportes › Arcos en voladizos). Falta probarlo impreso (el estante plano de la
+  torre de temperatura; necesita al dueño)
 - [ ] El análisis completo desde la interfaz: apoyos, cargas, material y el mapa de seguridad sobre la pieza
 - [x] Mover, girar y escalar el modelo; varias piezas en la cama (pedido del dueño, 2026-10-25): Agregar, Quitar,
   Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar en una cara y Organizar (`docs/UI.md`)
@@ -669,7 +674,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 - [x] Modo vaso (`vase_mode.md`, pedido del dueño de una pared en espiral, 2026-10-26): una sola pared que sube en
   espiral, sobre capas de abajo planas; reglas 1 a 6 (la de varios objetos, en la interfaz: el motor lamina uno por
-  vez). Falta la impresión uno por uno (`sequential.md`)
+  vez). Varios objetos en modo vaso, uno por uno, con la impresión secuencial (2026-10-27)
 
 ## Fichas nuevas (2026-10-26)
 
@@ -679,23 +684,54 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   `knowledge.tar.xz` del paquete libre; aplicar un ajuste desde la ayuda con deshacer; ficha y avisos del material;
   tutoriales con anclas, eventos y progreso guardado. Primer paso hecho (2026-10-26): el asistente de siete pasos, los
   consejos de la primera vez y el botón (i) de cada ajuste (`docs/UI.md`, «Ayuda»); el (i) mostrará también la
-  definición del glosario (regla 12)
+  definición del glosario (regla 12). Segundo paso (2026-10-27): el panel de ayuda (F1, botón y Más) con sus pestañas,
+  el buscador, el aviso sin datos y «Basado en las guías de Rafa Barajas» (reglas 1 a 4, AS1); aplicar una acción
+  `setting` con el valor acotado al rango (regla 7, AS4 a AS8), el orden de las causas (AS3) y la búsqueda y los avisos
+  del material (reglas 13 y 14, AS9 a AS11), en `src/ui/assistant.*`. Tercer paso (2026-10-27): los archivos de
+  `knowledge/` leídos (`src/ui/knowledge.*`), la búsqueda (AS2), los problemas con Aplicar y Deshacer, los
+  procedimientos, el glosario junto a cada ajuste (regla 12, AS15) y la ficha del material con sus avisos. Cuarto
+  paso (2026-10-27): los tutoriales guiados con anclas, eventos, ofertas y progreso guardado (reglas 15 a 18, AS12 a
+  AS14). Falta: las guías de calibración (20 a 24, AS16 a AS19), los enlaces desde la revisión previa (regla 9), las
+  preferencias `assistant.*`, el idioma de los archivos por carpeta (19, hecho en el lector pero sin datos en inglés) y
+  las anclas de Ingeniería por paso (hoy todas iluminan la pestaña Análisis)
 - [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas.
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,
   los dependientes ocultos con su interruptor apagado, los cambios marcados y nunca ocultos (reglas 1 a 3, 6, 7 y 9 a
-  14). Falta: Personalizado (15 a 20), «Ver todo junto» (4), la búsqueda (5), Restablecer por tarjeta (8), la tarjeta
-  de la impresora con boquilla, cámara y conexión (21 a 44) y la configuración de la impresora aparte (hoy, una pestaña)
-- [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…)
-- [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
+  14). Segundo paso hecho (2026-10-27): «Ver todo junto» (4), la búsqueda de la barra superior (5), Restablecer por
+  tarjeta (8) y Personalizado con su diálogo, el ojo tachado, «+ Agregar ajuste» y exportar e importar la vista (15 a
+  20; SP6, SP6b, SP9 a SP14). Tercer paso hecho (2026-10-27): la tarjeta de la impresora con sus dibujos, la lista con
+  buscador por marca, las camas, la boquilla rápida con Deshacer y «Otra…» (21 a 23, 32 a 36), y la configuración de la
+  impresora en una página aparte con Calibración, Conexión y Notas (37 a 40). Falta: la cámara (27 a 31), la conexión
+  por red desde la tarjeta (41 a 44), la boquilla de la impresora conectada (26), el diálogo de cambios sin guardar al
+  cambiar de boquilla (24, con `presets.md`), los perfiles compatibles al cambiar de boquilla (22, con
+  `profile_pack.md`) y la temperatura de cama por tipo de cama (`profiles.md`, regla 4)
+- [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…). Hecho (2026-10-27):
+  las 13 vistas con la leyenda por tipo (tiempo, parte y filamento) y la escala de 11 pasos (reglas 1 a 3, 6 a 8; PV2 a
+  PV4), los dos deslizadores de capas y el de movimientos (4, 9), las teclas de la vista con la ortogonal (10), la fila
+  de íconos con las marcas, el centro de gravedad y la boquilla (11, PV7), el «+» para cambio de color, pausa o G-code
+  en una capa (12, PV8, PV9) y el visor con G-code binario y sin tipos (13, PV10). Falta: la pieza transparente sobre
+  las trayectorias (ícono Pieza), el visor en una ventana aparte sin placa ni ajustes, el extrusor del cambio de color
+  con varios extrusores, el panel táctil y «Girar libre», y medir PV1 contra Tisma Slicer con la pieza en voladizo
+- [x] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente. Hecho (2026-10-27): los créditos en
+  `resources/credits.json`, el pie «Basado en» y su globo en el título de las fichas (reglas 1 a 3, CR1 y CR4), la
+  página Más › Créditos y fuentes con los avisos de las licencias (4, CR2) y la prueba que compara el archivo con las
+  fichas y con `THIRD_PARTY.md` (5, CR3). Las aletas de soporte, la guía de calibración, los perfiles de resina y la
+  conexión con Bambu Lab ya tienen su crédito, que se verá bajo su panel cuando existan
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
-  escalar a medida, cortar, separar y copias en grilla
+  escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
+  comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
+  con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
+  En la interfaz, Espejar, Cortar con un plano horizontal, Separar en piezas y Medir caras y vértices (reglas 13, 14,
+  16, 18 y 20 en parte). Falta: el plano libre y los conectores del corte, las aristas y círculos de Medir y Separar en
+  partes (reglas 18 a 20), partes, modificadores y ajustes por objeto (reglas 1 a 10) y las copias en grilla
+  (regla 15)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)
 - [ ] `placement.md` (F1): hecho (2026-10-26) centrar la pieza en la cama o en `placement.center` (regla 2, PL1, PL2,
-  PL3, PL6). Falta: varias copias en grilla con `placement.spacing` (PL7, PL8) y `placement.drop_to_bed` «no» (PL5,
+  PL3, PL6); PL15 el 2026-10-27 (sin cama, solo un centro dado a mano la mueve). Falta: varias copias en grilla con `placement.spacing` (PL7, PL8) y `placement.drop_to_bed` «no» (PL5,
   PL9); hoy la pieza siempre se apoya en la cama
 - [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios. Las
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
@@ -709,20 +745,124 @@ Con el PR #23 (2026-10-26):
 - [ ] Prueba de caja negra del equipo de fichas (`docs/spec/qa/2026-10-26.md`). Hechos (2026-10-26): QA1 a QA4 (falda
   a 6 mm y redondeada, borde a la separación de los cordones, soporte solo «más de» el límite), QA5 (ventilador por
   tiempo de capa), QA6 (`speed.top_solid_infill` 15 mm/s) y QA7 (la última capa con la primera más gruesa). Faltan:
-  - QA8: la revisión de estabilidad (`print_review.md`, `stability.md`, claves `review.*`);
-  - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
+  - [x] QA8: la revisión de estabilidad (`stability.md`, claves `review.*`; hecho 2026-10-27). Del resto de
+    `print_review.md` faltan los detalles perdidos, los puentes largos, las capas sin tiempo (en parte, `layer_time`),
+    los viajes por el aire sin retracción y las velocidades sobre el límite;
+  - [x] QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`; hecho 2026-10-27, con
+    `walls.min_detail`);
   - segunda prueba (`docs/spec/qa/2026-10-26-segunda-prueba.md`), soporte en grilla del estante de S4. Hechos
-    (2026-10-26): QA10, QA11 y QA12. Falta QA13:
+    (2026-10-26): QA10, QA11 y QA12; QA13 el 2026-10-27, con la regla 8 de `walls_extra.md` (perímetros en voladizo,
+    `walls.detect_overhangs`); el cordón redondo de los puentes, con `speed.bridges`, el 2026-10-27 (paso 2):
     - QA10: la zona de soporte unos 1,6 mm más allá de lo que cuelga (`supports_skirt.md`, regla 2); hoy termina
       0,15 mm adentro, y en piezas orgánicas sale en pedazos sueltos. La más importante;
     - QA11: la separación XY medida desde la cara de la pieza (el eje de la línea a 0,425 mm de la cara, no a 0,8);
     - QA12: la base en líneas paralelas a `support.line_angle` en todas las capas, cada `support.spacing` más un
       cordón (2,857 mm);
-    - QA13: la primera capa sobre el soporte, con la altura de capa más la separación y los perímetros como
-      `;TYPE:Overhang perimeter` (regla 4);
+    - [x] QA13: la primera capa sobre el soporte, con la altura de capa más la separación y los perímetros como
+      `;TYPE:Overhang perimeter` (regla 4; hecho 2026-10-27);
   - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): la primera capa sólida sobre el relleno ralo es un puente
     (regla 6). Hecho (2026-10-26): solo la capa de arriba de todo es «Top solid infill» (regla 2);
   - `cooling.enabled`
+- [ ] Paso 2 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27):
+  - [x] `speeds_accels.md` (hecho 2026-10-27, salvo lo que espera a otras fichas: V1 al relleno de huecos, el tope de
+    las aceleraciones por los límites de la máquina a `gcode_firmware.md`, las de la balsa y la torre de purga a esas
+    funciones; V1 hecho con el relleno de huecos): `speed.bridges` (y el cordón redondo de los puentes y de los
+    perímetros en voladizo, `gcode_motion.md` regla 1, con `extrusion.bridge_flow_ratio`, regla 14), `speed.gap_fill`,
+    `speed.over_bridges`, `speed.first_layer_infill`, `speed.travel_z` y los topes del relleno por filamento
+    (`extrusion.infill_max_speed` y `_crossing_speed`): reglas 1 a 5 y 14, pruebas V2 a V5, V10 y M2. También
+    (2026-10-27) las velocidades dinámicas en voladizos (6 y 7, V6) y las aceleraciones por tipo (10 a 13, V8 y V9;
+    sin el tope de los límites de la máquina, que espera a `gcode_firmware.md`, ni las de la balsa y la torre de
+    purga), y el ecualizador del caudal (8 y 9, V7);
+  - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
+    2026-10-27). El relleno concéntrico del motor ya es de ancho fijo (regla 1, último punto);
+  - [ ] el resto de `walls_extra.md`: hechos (2026-10-27) las costuras internas escalonadas (regla 3, W5), los
+    perímetros extra en voladizos (regla 5, W3), un solo perímetro arriba (regla 10, W7) y en la primera capa (regla
+    11, W8); `walls.extra_if_needed` (regla 6, Tisma Slicer no agregó ninguno) y `walls.avoid_curled_overhangs` (regla
+    9, sin medir) se leen y se guardan. Falta el espesor de la cáscara vertical (regla 7, W4), con una pregunta al
+    equipo de fichas (PROGRESS, 2026-10-27);
+  - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
+  - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27), y el resto de la ficha (hecho
+    2026-10-27): largo mínimo de falda (B1), escudo contra corrientes (B3), tipos de borde y su separación (B4); B2 ya;
+  - [x] cambio de color y pausas (`gcode_templates.md`, reglas 11 y 13; hecho 2026-10-27): `gcode.color_change`,
+    `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`; y el lenguaje de
+    plantillas (reglas 1 a 10, 12 y 15 a 17; hecho 2026-10-27). Faltan ponerlos desde la vista previa (regla 13, con
+    la interfaz P1), los parámetros propios de cada perfil (regla 14, su prefijo sale de `presets.md`), el nombre del
+    modelo en la interfaz (`input_filename_base`) y los scripts de posproceso desde la interfaz;
+  - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
+    cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4), la E volumétrica (regla 11, X11), la contracción
+    (regla 4, X3), los comentarios detallados (regla 12, X12), los dialectos antiguos (regla 6, X5), los arcos
+    (regla 10, X10), el modo silencioso (regla 7, X6) y el G-code binario (regla 9, X8, sin comprimir). Faltan las
+    miniaturas (X7, con la vista 3D de la interfaz), la compresión y MeatPack del binario, y confirmar con una caja
+    negra qué cubre el CRC32 de cada bloque (se usó encabezado + parámetros + datos)
+  - [x] el firmware (`gcode_firmware.md`; hecho 2026-10-27): temperaturas al empezar (regla 1), límites de la máquina
+    con `machine.limits_usage` (regla 2; también en la estimación, `print_time.md` reglas 2 y 3, y el tope de las
+    aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y
+    de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`, y las etiquetas de objetos (regla 4,
+    `gcode.object_labels`, FW1, FW3, FW6 y FW8; hechas 2026-10-27)
+  - [x] impresión secuencial (`sequential.md`, reglas 1 a 5, SQ1 a SQ4; hecha 2026-10-27): los objetos de la placa
+    (o las copias de `slice --copies`) se laminan aparte y se imprimen uno por uno, con el paso de uno a otro de la
+    regla 3, `gcode.between_objects`, la separación del cabezal al acomodar, y los objetos que chocarían se rechazan.
+    En la interfaz, la opción en Otros › Modos especiales y el acomodo con el radio del cabezal
+  - [x] retracción y viajes completos (`retraction_travel.md`, reglas 1 a 10, R1 a R11; hecho 2026-10-27): la vuelta
+    con su velocidad y su extra, retraer en todo cambio de capa, el barrido, las alturas del salto, el salto en rampa,
+    la retracción del firmware (`G10`/`G11`), los viajes rectos o con desvío máximo, los lazos en sentido horario y
+    los valores propios del material. Faltan la rampa más empinada ante obstáculos (regla 6, la ficha no la midió) y
+    editar los valores del material en la interfaz (hoy se ven; se editan en el archivo)
+- [ ] Punto 4 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27): varios extrusores y materiales
+  (`multi_extruder.md`, `multimaterial.md`), después F7 no planar y resina:
+  - [x] 4a, el núcleo de varios extrusores (`multi_extruder.md`, reglas 1 a 8 y 16; ME1 a ME5 y ME10; hecho
+    2026-10-27): `machine.extruders` y `machine.extruder_offset`, el extrusor de cada objeto y de cada tipo de
+    extrusión (`extruders.*`), un cambio por extrusor y por capa empezando con el último, la secuencia del cambio
+    (`retraction.toolchange_length` y `toolchange_restart_extra`, `gcode.toolchange`, `T<n>`), la espera con menos
+    temperatura, la cama por extrusor y las cáscaras entre materiales (`surfaces.interface_shells`). Falta asignar el
+    extrusor de cada objeto desde la línea de comandos y la interfaz, y los colores pintados (regla 1, con
+    `model_tools.md`)
+  - [ ] 4b, la torre de purga (reglas 9 a 14, ME6 a ME8): hechos (2026-10-27) la torre con su contorno, un bloque por
+    cambio (purga con MMU, cebado con varias boquillas), relleno denso abajo y en columnas arriba, borde, giro,
+    separación y flujo de sus líneas, el multiplicador de purga, el cambio sobre la torre y los errores (E absoluta,
+    fuera de la cama, sobre la pieza), sin capas ralas (regla 11, la boquilla baja a la torre) y la purga en el
+    relleno o el objeto (regla 13, ME8). Faltan el cono (regla 14, no medido) y marcar los objetos en la interfaz
+  - [x] 4c, la MMU de un extrusor (regla 15, ME9; hecho 2026-10-27): compresión, descarga, enfriamiento, carga y
+    purga sobre la torre, con el grupo `mmu` y los ajustes del filamento. Falta la corriente del motor durante el
+    cambio (se lee)
+  - [x] 4d, las vigas de entrelazado (regla 17, ME11; hecho 2026-10-27). Las regiones pintadas (regla 18) esperan a
+    los colores pintados (`model_tools.md`): sus claves se leen
+  - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12): el motor ya imprime
+    siempre el soporte en las capas de la pieza (lo sincronizado; `support.synchronize_layers` se lee). Faltan las
+    capas propias del soporte, más gruesas (hasta `machine.max_layer_height`, o el 75 % de la boquilla), que ME12
+    mide sin sincronizar
+  - [ ] 4f, `multimaterial.md` (MM1 a MM6) y `color_mixing.md`: hechos (2026-10-27) las boquillas distintas
+    (`machine.nozzle_diameter` como lista, el 75 % de cada una, `multi.fine_walls_coarse_infill` con el relleno
+    combinado de la gruesa, los anchos por boquilla), `multi.color_mixing` con su aviso de costo en la interfaz y el
+    aviso de purga después de laminar (MM1 a MM6); y `color_mixing.md` (2026-10-27): las mezclas del proyecto, su
+    ciclo de capas, los degradés, el proyecto, el extrusor de cada objeto en la interfaz y el diálogo de mezclas
+    (FS1 a FS14). Falta leer y escribir las mezclas y el extrusor de cada objeto en el 3MF (el motor no escribe 3MF ni
+    lee los objetos de uno por separado) y en la línea de comandos
+  - [ ] F7 no planar (la base, `surface`, `overhangs`, el cono según la pieza y `automatic` hechos, 2026-10-27;
+    falta `stress`, con el análisis estructural); resina (`resin.md`, `resin_supports.md`), en tres partes:
+    - [x] R1, el núcleo (`resin.md`, reglas 1 a 12 y 20 a 22, RE1 a RE10; hecho 2026-10-27): los ajustes
+      (`machine.display_*`, grupo `resin`), las imágenes con el área exacta de cada píxel, el pie de elefante, las
+      correcciones de escala, absoluta y de Z, la gamma, el archivo GOO (escritura y lectura) y la salida `.goo` de la
+      línea de comandos, con sus tarjetas en el panel
+    - [x] R2, las ventosas (reglas 13 a 15, VE1 a VE9) y las calibraciones de resina (reglas 16 a 19, CR1; hecho
+      2026-10-27): el aviso de ventosas en el JSON de avisos; la torre de exposición y el bloque de medidas en el
+      motor, todavía sin menú en la interfaz
+    - [ ] R3, los soportes de resina (`resin_supports.md`) y la resina en la interfaz (laminar, vista previa de las
+      imágenes, exportar `.goo`): hechos (2026-10-27) los soportes (puntos, puntas, pilares, aterrizaje sobre la
+      pieza), la base (también alrededor de la pieza), el vaciado con su redondeo, las barras interiores y los
+      drenajes en el motor, con sus tarjetas en el panel (RS1 a RS4); y la resina en la interfaz
+      (`machine.technology`): el panel con solo los ajustes de resina, laminar, la vista previa con los contornos de
+      cada capa, exportar `.goo` y las dos calibraciones de resina en Calibrar. Faltan las uniones entre pilares a
+      `resin.support_critical_angle` (los pilares bajan rectos) y poner los drenajes desde la interfaz
+- [x] Punto 5 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27): lo propio de Tisma.
+  - [x] los arcos en voladizos (S1) y el relleno denso (`dense_infill.md`), hechos antes;
+  - [x] el relleno ondulado entrelazado (`interlock_infill.md`, IL1; hecho 2026-10-27): `infill.waves`, el relleno
+    poco denso sobre el cartón de huevos `a · sin(2πX/λ) · sin(2πY/λ)`, con las herramientas del relleno ondulado
+    (N1) para apagarlo cerca de paredes y relleno sólido y seguir el espesor real;
+  - [x] las impresoras de cinta (`belt_printer.md`, B1 a B3; hecho 2026-10-27): `belt.*`, la pieza girada sobre X,
+    laminada como en una cama y su G-code pasado a los ejes de la máquina; el verificador lo devuelve a los planos de
+    corte, y la vista previa de la interfaz muestra la pieza sobre la cinta. Falta que el visor dibuje el alto del
+    cordón perpendicular a la capa inclinada (hoy va vertical, y la cara lateral se ve con huecos)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
@@ -732,6 +872,15 @@ Con el PR #23 (2026-10-26):
   servidor (`model_library.md`, reglas 16 y 17). Para un bloque de mantenimiento: perfilar el laminado del Benchy y
   ver qué sobra en el G-code (comentarios `;WIDTH`/`;HEIGHT`, decimales de E, puntos casi en línea). Lo que está
   bien: dos laminados iguales dan el mismo archivo byte a byte
+- [ ] **Eje medio con varias islas** (encontrado 2026-10-27, para un bloque de mantenimiento): `layer_walls` sobre
+  tres islas juntas (una banda en «C» de 0,4 mm abierta a la derecha y dos rectángulos de 0,3 × 0,7 mm frente a la
+  abertura, uno arriba y otro abajo) da unos 140 cordones paralelos muy afuera de la región, a lo largo de la
+  bisectriz abierta entre los dos rectángulos, como si estuviera adentro. Cada isla sola, o dos de ellas, da bien.
+  Se reproduce con el Benchy local, `walls.generator` `fixed`, en la capa de Z 33,6 si el relleno de huecos se hace
+  de una vez (hoy va isla por isla, por esto); una figura sintética parecida no lo reproduce (20 000 variantes al
+  azar), así que depende de los números exactos. El dato no se sube: sale del Benchy, que es solo para medir. Las
+  paredes variables de siempre pasan por el mismo eje medio con regiones de varias islas: revisar la clasificación
+  de las aristas infinitas del diagrama (`src/geom/medial_axis.cpp`) y si conviene ir isla por isla en `layer_walls`
 
 ### Vista con Vulkan (decisión del dueño, 2026-10-26)
 

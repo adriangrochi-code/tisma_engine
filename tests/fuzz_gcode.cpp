@@ -6,11 +6,14 @@
 //
 //   tisma_fuzz_gcode [runs] [seed]   exit code 1 if any case fails
 #include "config/settings.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/check.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/writer.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/placement.hpp"
 #include "slice/printable.hpp"
 #include "test_printer.hpp"
 #include <algorithm>
@@ -132,10 +135,41 @@ int main(int argc, char** argv) {
         }
         s.brim_width = pick(3) == 0 ? uni(0, 8) : 0.0;
         s.skirt_loops = pick(4);
+        if (pick(4) == 0) { // skirt_brim_raft.md: brim types and gap, draft shield, the skirt's filament
+            s.brim_type = std::array{BrimType::None, BrimType::Outer, BrimType::Inner, BrimType::OuterAndInner}[std::size_t(pick(4))];
+            s.brim_gap = pick(2) == 0 ? uni(0, 2) : 0.0;
+            s.draft_shield = std::array{DraftShield::Disabled, DraftShield::Limited, DraftShield::Enabled}[std::size_t(pick(3))];
+            s.skirt_min_filament = pick(2) == 0 ? uni(0, 400) : 0.0;
+        }
         s.skirt_distance = uni(1, 6);
         s.retract_length = pick(4) == 0 ? 0.0 : uni(0.2, 6);
         s.retract_lift = pick(3) == 0 ? uni(0, 1) : 0.0;
         s.relative_extrusion = pick(2) == 0;
+        if (pick(3) == 0) { // retraction and travel options (retraction_travel.md)
+            s.unretract_speed = pick(2) == 0 ? uni(5, 80) : 0.0;
+            s.restart_extra = pick(2) == 0 ? uni(0, 1) : 0.0;
+            s.retract_layer_change = pick(2) == 0;
+            s.firmware_retraction = pick(4) == 0;
+            s.wipe = !s.firmware_retraction && pick(2) == 0;
+            s.before_wipe = pick(2) == 0 ? uni(0, 100) : 0.0;
+            s.lift_above = pick(3) == 0 ? uni(0, 5) : 0.0;
+            s.lift_below = pick(3) == 0 ? uni(0, 10) : 0.0;
+            s.ramping_lift = pick(2) == 0;
+            s.travel_slope = pick(4) == 0 ? 0.0 : uni(1, 60);
+            s.max_lift = pick(3) == 0 ? 0.0 : uni(0.1, 2);
+            s.avoid_crossing_walls = pick(3) != 0;
+            s.max_detour = pick(2) == 0 ? Speed{} : Speed{uni(0, 300), pick(2) == 0};
+            s.walls_clockwise = pick(2) == 0;
+            s.staggered_inner_seams = pick(2) == 0;
+            s.top_one_wall = std::array{TopOneWall::None, TopOneWall::Top, TopOneWall::Topmost}[std::size_t(pick(3))];
+            s.first_layer_one_wall = pick(3) == 0;
+            s.extra_on_overhangs = pick(3) == 0;
+            if (pick(3) == 0) // the filament's own values
+                s.filament_retraction = {{"retraction.length", pick(3) == 0 ? 0.0 : uni(0.2, 4)},
+                                         {"retraction.lift", uni(0, 0.6)},
+                                         {"retraction.min_travel", uni(0, 20)},
+                                         {"retraction.wipe", s.firmware_retraction ? 0.0 : double(pick(2))}};
+        }
         s.seam = std::array{SeamMode::Aligned, SeamMode::Nearest, SeamMode::Random, SeamMode::Rear}[std::size_t(pick(4))];
         if (pick(8) == 0 && !s.support) // vase mode, never with supports
             s.vase = true;
@@ -147,6 +181,80 @@ int main(int argc, char** argv) {
             s.scarf_entire_loop = pick(4) == 0;
             s.scarf_max_segment = uni(0.2, 3);
             s.scarf_inner = pick(3) == 0;
+        }
+        s.detect_overhangs = pick(4) != 0;
+        if (pick(4) == 0) { // templates around the layer changes, and colour changes and pauses
+            s.gcode_before_layer = pick(2) == 0 ? ";before [layer_num] [layer_z]" : "G91\nG1 Z0.5\nG90";
+            s.gcode_after_layer = pick(3) == 0   ? ""
+                                  : pick(2) == 0 ? ";after {layer_z}"
+                                                 : "{if layer_num % 2 == 0};even {layer_z * 2}{else};odd {digits(layer_z, 8, 3)}{endif}";
+            s.filament_start_gcode = pick(2) == 0 ? "{global first = layer_z};filament {first_layer_print_size[0]}" : "";
+            s.filament_end_gcode = pick(2) == 0 ? ";end {total_layer_count} {layer_num}" : "";
+            HeightChange c;
+            c.z = uni(0.5, 8);
+            (pick(2) == 0 ? c.color_change : c.pause) = true;
+            s.changes.push_back(c);
+        }
+        if (pick(5) == 0) { // the G-code's extras
+            s.z_offset = uni(-0.3, 0.3);
+            s.volumetric_e = pick(2) == 0;
+            s.shrinkage_xy = pick(2) == 0 ? uni(0, 3) : 0.0;
+            s.shrinkage_z = pick(2) == 0 ? uni(0, 3) : 0.0;
+            s.verbose_comments = pick(2) == 0;
+            s.gcode_arcs = pick(2) == 0;
+            s.gcode_binary = pick(2) == 0;
+        }
+        if (pick(5) == 0) { // a raft
+            s.raft_layers = 1 + pick(5);
+            s.raft_gap = pick(3) == 0 ? 0.0 : uni(0.05, 0.3);
+            s.raft_expansion = uni(0, 4);
+            s.raft_first_layer_density = uni(30, 100);
+            s.raft_first_layer_expansion = uni(0, 5);
+            s.first_layer_over_raft = pick(2) == 0 ? Speed{} : Speed{uni(10, 60), false};
+        }
+        if (pick(4) == 0) { // ironing
+            s.ironing = true;
+            s.ironing_surfaces = std::array{IroningSurfaces::Top, IroningSurfaces::Topmost,
+                                            IroningSurfaces::Solid}[std::size_t(pick(3))];
+            s.ironing_flow = uni(5, 40);
+            s.ironing_spacing = uni(0.05, 0.4);
+            s.ironing_speed = uni(5, 60);
+        }
+        if (pick(4) == 0) { // walls of one width
+            s.wall_generator = WallGenerator::Fixed;
+            s.wall_gap_fill = pick(4) != 0;
+        }
+        if (pick(4) == 0) { // arcs over the overhangs
+            s.arcs = true;
+            s.arcs_overlap = uni(0, 40);
+            s.arcs_speed = pick(3) == 0 ? 0.0 : uni(2, 30);
+            s.arcs_max_distance = pick(2) == 0 ? 0.0 : uni(1, 20);
+        }
+        // Speeds of their own and the bridges' flow (speeds_accels.md).
+        if (pick(3) == 0) {
+            s.bridge_speed = pick(2) == 0 ? 0.0 : uni(5, 120);
+            s.over_bridges_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
+            s.first_layer_infill_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
+            s.travel_z_speed = pick(2) == 0 ? 0.0 : uni(2, 60);
+            s.infill_max_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
+            s.infill_max_crossing_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
+            s.bridge_flow_ratio = uni(0.5, 1.5);
+        }
+        if (pick(4) == 0) { // walls by how much rests on the layer below
+            s.dynamic_overhangs = true;
+            for (Speed& v : s.overhang_speeds)
+                v = pick(2) == 0 ? Speed{uni(10, 120), true} : Speed{uni(2, 60), false};
+        }
+        if (pick(4) == 0) { // the flow equalizer
+            s.flow_slope_up = pick(2) == 0 ? 0.0 : uni(0.2, 20);
+            s.flow_slope_down = pick(2) == 0 ? 0.0 : uni(0.2, 20);
+        }
+        if (pick(3) == 0) { // accelerations by kind
+            s.accel_default = pick(3) == 0 ? 0.0 : uni(500, 5000);
+            for (double* a : {&s.accel_walls, &s.accel_outer_wall, &s.accel_infill, &s.accel_solid_infill,
+                              &s.accel_top_solid_infill, &s.accel_bridges, &s.accel_first_layer, &s.accel_travel,
+                              &s.accel_short_travel})
+                *a = pick(2) == 0 ? 0.0 : uni(300, 10000);
         }
         s.min_layer_time = uni(0, 30);
         s.filament_diameter = pick(4) == 0 ? 2.85 : 1.75;
@@ -201,7 +309,26 @@ int main(int argc, char** argv) {
             s.zaa_raise = pick(2) == 0;
         }
         // The machine's capabilities and the firmware's commands (docs/CATALOG.md, "Capacidades").
-        s.flavor = std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap}[std::size_t(pick(3))];
+        s.flavor = pick(4) == 0 ? std::array{GcodeFlavor::Repetier, GcodeFlavor::Smoothie, GcodeFlavor::Teacup,
+                                             GcodeFlavor::MakerWare, GcodeFlavor::Sailfish, GcodeFlavor::Mach3,
+                                             GcodeFlavor::Machinekit, GcodeFlavor::NoExtrusion}[std::size_t(pick(8))]
+                                : std::array{GcodeFlavor::Marlin, GcodeFlavor::Klipper, GcodeFlavor::RepRap,
+                                             GcodeFlavor::MarlinLegacy, GcodeFlavor::RepRapFirmware}[std::size_t(pick(5))];
+        if (pick(4) == 0) { // the firmware's limits, a silent mode, M73
+            s.limits_usage = std::array{LimitsUsage::TimeOnly, LimitsUsage::Emit, LimitsUsage::Ignore}[std::size_t(pick(3))];
+            if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
+                s.limits_usage = LimitsUsage::TimeOnly;
+            s.max_accel_x = s.max_accel_y = pick(2) == 0 ? uni(200, 5000) : 0.0;
+            s.retract_acceleration = pick(2) == 0 ? uni(200, 5000) : 0.0;
+            s.jerk_x = s.jerk_y = pick(2) == 0 ? uni(1, 20) : 0.0;
+            s.junction_deviation = pick(3) == 0 ? uni(0.005, 0.1) : 0.0;
+            s.min_extrude_feed = pick(3) == 0 ? uni(0, 5) : 0.0;
+            s.silent_mode = pick(2) == 0;
+            if (s.silent_mode)
+                s.silent_limits = {{"acceleration", uni(100, 1000)}, {"max_feed_x", uni(50, 200)}};
+            s.gcode_progress = pick(2) == 0;
+            s.variables["temperature"] = {std::to_string(int(uni(180, 260)))};
+        }
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
         s.filament_max_flow = pick(4) == 0 ? uni(2, 30) : 0.0;
         s.pressure_advance = pick(4) == 0 ? uni(0, 0.1) : 0.0;
@@ -230,9 +357,127 @@ int main(int argc, char** argv) {
         std::stable_sort(s.changes.begin(), s.changes.end(),
                          [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
         s.gpu = GpuMode::Off;
-        const auto& [name, mesh] = shapes[std::size_t(pick(int(shapes.size())))];
+        const auto& [name, shape] = shapes[std::size_t(pick(int(shapes.size())))];
+        // Copies, printed together or one by one (sequential.md).
+        IndexedMesh mesh = shape;
+        std::vector<MeshObject> objects;
+        if (pick(6) == 0) {
+            s.sequential = pick(2) == 0;
+            s.gcode_between_objects = pick(2) == 0 ? ";between [current_object_idx]" : "";
+            s.object_labels = std::array{ObjectLabels::None, ObjectLabels::OctoPrint, ObjectLabels::Firmware}[std::size_t(pick(3))];
+            TriangleMesh one;
+            for (const auto& t : shape.triangles)
+                one.add_triangle(shape.vertices[t[0]], shape.vertices[t[1]], shape.vertices[t[2]]);
+            mesh = weld_exact(place_copies(one, std::size_t(2 + pick(2)), s, name, &objects));
+        }
+        // Several extruders (multi_extruder.md): the copies each with one,
+        // a kind of extrusion with another, the nozzles offset.
+        std::vector<ColorMix> mixes;
+        if (pick(5) == 0) {
+            s.extruders = 2 + pick(2);
+            for (std::size_t k = 0; k < objects.size(); ++k)
+                objects[k].extruder = 1 + int(k % std::size_t(s.extruders));
+            for (int* kind : {&s.extruder_walls, &s.extruder_infill, &s.extruder_solid_infill, &s.extruder_support,
+                              &s.extruder_support_interface})
+                *kind = pick(3) == 0 ? pick(s.extruders + 1) : 0;
+            s.bed_temperature_from = pick(s.extruders + 1);
+            s.ooze_prevention = pick(3) == 0;
+            s.standby_delta = -uni(0, 40);
+            s.toolchange_length = {uni(0, 12), uni(0, 12)};
+            s.toolchange_restart_extra = {uni(0, 2)};
+            s.interface_shells = pick(2) == 0;
+            // Mixed colours (color_mixing.md): a blend, or a gradient, for some copies.
+            if (pick(3) == 0) {
+                ColorMix m;
+                m.id = s.extruders + 1;
+                m.gradient = pick(3) == 0;
+                const double a = uni(0, 1);
+                m.components = {{1, m.gradient ? 0.0 : a}, {2, m.gradient ? 1.0 : 1.0 - a}};
+                if (s.extruders > 2 && pick(2) == 0)
+                    m.components.push_back({3, m.gradient ? uni(0, 1) : uni(0, 1)});
+                if (m.gradient && pick(2) == 0)
+                    m.min_z = uni(0, 5), m.max_z = *m.min_z + uni(0.5, 10);
+                mixes.push_back(m);
+                for (MeshObject& o : objects)
+                    if (pick(2) == 0)
+                        o.extruder = m.id;
+            }
+            // Different nozzles (multimaterial.md), where the layers fit 75 % of the finest.
+            if (pick(3) == 0) {
+                const std::vector<double> nozzles = {s.nozzle_diameter, s.nozzle_diameter * uni(0.8, 1.8)};
+                const double finest = std::min(nozzles[0], nozzles[1]);
+                if (std::max(s.layer_height, s.first_layer_height) <= 0.75 * finest) {
+                    s.nozzle_diameters = nozzles;
+                    s.fine_walls_coarse_infill = pick(2) == 0;
+                    if (pick(2) == 0)
+                        s.infill_combine_auto = true;
+                }
+            }
+            if (pick(3) == 0) {
+                s.interlock_beams = true;
+                s.interlock_width = uni(0.4, 2.0);
+                s.interlock_layers = 1 + pick(3);
+                s.interlock_orientation = uni(0, 180);
+                s.interlock_depth = pick(4);
+                s.interlock_avoidance = pick(4);
+            }
+            if (pick(2) == 0)
+                s.extruder_offset = {{0.0, 0.0}, {uni(-5, 5), uni(-5, 5)}};
+            s.gcode_toolchange = std::array{"", ";TC [previous_extruder] [next_extruder] {toolchange_z}",
+                                            "T{next_extruder} ; own"}[std::size_t(pick(3))];
+            s.variables["temperature"] = {"200", "215", "230"};
+            s.variables["bed_temperature"] = {"60", "70"};
+            // The wipe tower, away from the models (centred on the origin).
+            if (pick(2) == 0) {
+                s.wipe_tower = true;
+                s.relative_extrusion = true;
+                s.single_extruder_mmu = pick(2) == 0;
+                s.wipe_tower_x = uni(80, 100), s.wipe_tower_y = uni(80, 100);
+                s.wipe_tower_rotation = pick(2) == 0 ? 0.0 : uni(-90, 90);
+                s.wipe_tower_width = uni(20, 60);
+                s.wipe_tower_brim = uni(0, 4);
+                s.wipe_tower_bridging = uni(3, 15);
+                s.wipe_tower_extra_spacing = uni(80, 200);
+                s.wipe_tower_extra_flow = uni(80, 200);
+                s.wipe_tower_no_sparse_layers = pick(3) == 0;
+                s.min_purge_on_tower = {uni(0, 60)};
+                for (MeshObject& o : objects)
+                    (pick(2) == 0 ? o.wipe_into_infill : o.wipe_into_object) = pick(2) == 0;
+                s.purge_multiplier = {uni(30, 150)};
+                if (pick(2) == 0)
+                    s.purge_volumes = {{0, uni(0, 300), uni(0, 300)}, {uni(0, 300), 0, uni(0, 300)}, {uni(0, 300), uni(0, 300), 0}};
+            }
+        }
+        // Curved layers (nonplanar.md): a wave fitted to the head, or a
+        // gentle cone, without what does not go with them.
+        if (pick(12) == 0) {
+            s.curved_mode =
+                std::array{CurvedMode::Wave, CurvedMode::Conical, CurvedMode::Surface, CurvedMode::Overhangs,
+                           CurvedMode::Automatic}[std::size_t(pick(5))];
+            s.curved_pattern = std::array{CurvedPattern::Egg, CurvedPattern::Ridges, CurvedPattern::Twisted}[std::size_t(pick(3))];
+            s.curved_angle = uni(0, 90);
+            s.curved_fit_head = s.curved_mode != CurvedMode::Conical || pick(2) == 0;
+            s.curved_overhang_threshold = uni(35, 55);
+            s.curved_cone_angle = uni(-1, 1);
+            s.curved_ramp_height = uni(8, 12);
+            s.curved_flat_top = pick(3) == 0;
+            s.curved_flat_below = uni(0.2, 2);
+            s.head_free_angle_x = pick(2) == 0 ? 0.0 : uni(10, 40);
+            s.relative_extrusion = true;
+            s.vase = s.zaa = s.infill_nonplanar = s.gcode_arcs = s.sequential = false;
+            s.scarf = ScarfMode::Nowhere;
+            s.detail_height = 0.0;
+            s.wipe_tower = false;
+            if (!relative_e(s))
+                s.flavor = GcodeFlavor::Marlin;
+        }
+        // With TISMA_FUZZ_RUN set to a run's number, that run's model and
+        // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
+        if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
+            dump(run, mesh, s, {});
         try {
-            const SlicedModel model = slice_model(mesh, s);
+            const SlicedModel model =
+                slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects, &mixes);
             if (!unprintable_reason(model, s).empty()) {
                 ++rejected;
                 continue;
@@ -240,6 +485,16 @@ int main(int argc, char** argv) {
             std::ostringstream out;
             write_gcode(out, model, s);
             const GcodeCheck c = check_gcode(out.str(), gcode_limits(model, s));
+            if (s.gcode_binary) { // the binary format reads back to the same G-code
+                try {
+                    const BinaryGcode b = read_binary_gcode(binary_gcode(out.str(), s));
+                    if (b.gcode.empty() || !out.str().starts_with(b.gcode))
+                        throw std::runtime_error("its G-code is not the text's");
+                } catch (const std::exception& e) {
+                    ++failures;
+                    std::printf("run %d (%s): binary G-code: %s\n", run, name, e.what());
+                }
+            }
             if (!c.ok()) {
                 ++failures;
                 std::printf("run %d (%s): %zu problems; first: line %zu: %s\n", run, name, c.problem_count,
@@ -252,9 +507,11 @@ int main(int argc, char** argv) {
                 for (const auto& step : s.layer_heights)
                     std::printf(" %.3f:%.3f", step[0], step[1]);
                 std::printf("\n");
-                std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d\n", int(s.vase), int(s.scarf),
-                            int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length, int(s.scarf_entire_loop),
-                            s.scarf_max_segment, int(s.scarf_inner));
+                std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d overhangs %d\n",
+                            int(s.vase), int(s.scarf), int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length,
+                            int(s.scarf_entire_loop), s.scarf_max_segment, int(s.scarf_inner), int(s.detect_overhangs));
+                std::printf("  arcs %d overlap %.1f speed %.1f max %.2f\n", int(s.arcs), s.arcs_overlap, s.arcs_speed,
+                            s.arcs_max_distance);
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);
@@ -266,6 +523,8 @@ int main(int argc, char** argv) {
                 std::printf("\n");
                 dump(run, mesh, s, out.str());
             }
+        } catch (const CurvedError&) {
+            ++rejected; // curved layers the part cannot take, said so
         } catch (const std::exception& e) {
             ++failures;
             std::printf("run %d (%s): exception %s\n", run, name, e.what());

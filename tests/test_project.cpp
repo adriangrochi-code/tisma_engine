@@ -3,6 +3,7 @@
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
 #include "io/stl.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -85,7 +86,7 @@ TEST_CASE("a project reads back as it was written", "[project]") {
     CHECK(back.calibration->segments[1].value == 205.0);
 
     // Through a file, saved over an older one.
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_project.tisma";
+    const auto path = test_temp_dir() / "tisma_test_project.tisma";
     std::ofstream(path) << "old";
     save_project(path, p);
     CHECK_FALSE(std::filesystem::exists(path.string() + ".tmp"));

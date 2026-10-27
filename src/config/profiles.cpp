@@ -135,13 +135,38 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         return ProfileKind::Printer;
     }
     // Every speed is the printer's (owner's decision, 2026-10-26).
-    if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed"))
+    if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed") ||
+        group == "mmu")
+        return ProfileKind::Printer;
+    // The lift's ramp is the printer's, like the lift; the route of the
+    // travels is the print's (retraction_travel.md).
+    if (group == "travel")
+        return key == "avoid_crossing_walls" || key == "max_detour" ? ProfileKind::Print : ProfileKind::Printer;
+    // The head's clearance is the printer's; printing object by object, the print's.
+    if (group == "sequential")
+        return key == "enabled" ? ProfileKind::Print : ProfileKind::Printer;
+    // The stability review's measurements: the printer's push and its bed's
+    // hold; the accelerations by kind, like the speeds.
+    if (group == "review" || group == "acceleration" || group == "head" || group == "belt")
         return ProfileKind::Printer;
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;
+    // Resin (resin.md): the layer height is the print's, the printer's name
+    // the printer's, the rest (exposures, lifts, waits, how the resin shrinks
+    // and the corrections) the resin's.
+    if (group == "resin") {
+        if (key == "printer_name")
+            return ProfileKind::Printer;
+        // The supports, the pad and the hollowing are the print's.
+        if (key == "layer_height" || key.starts_with("support") || key.starts_with("pad") || key.starts_with("hollow"))
+            return ProfileKind::Print;
+        return ProfileKind::Filament;
+    }
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
-        group == "vase" || group == "placement")
+        group == "vase" || group == "placement" || group == "transform" || group == "arcs" || group == "ironing" || group == "output" ||
+        group == "extruders" || group == "wipe_tower" || group == "interlocking" || group == "painting" ||
+        group == "multi" || group == "curved")
         return ProfileKind::Print;
     return std::nullopt;
 }
@@ -188,6 +213,36 @@ Settings with_profile(const Settings& settings, ProfileKind kind, const Settings
             } else if (setting_kind(group, key) == kind) {
                 value = source.at(group).at(key);
             }
+        }
+    }
+    Settings result = parse_settings(out.dump());
+    result.ignored_groups = settings.ignored_groups;
+    return result;
+}
+
+Settings with_keys(const Settings& settings, const Settings& from, const std::vector<std::string>& keys) {
+    ordered_json out = settings_object(settings);
+    const ordered_json source = settings_object(from);
+    for (const std::string& key : keys) {
+        const std::size_t dot = key.find('.');
+        if (dot == std::string::npos) {
+            if (source.contains(key))
+                out[key] = source.at(key);
+            continue;
+        }
+        const std::string group = key.substr(0, dot), name = key.substr(dot + 1);
+        if (!source.contains(group) || !out.contains(group))
+            continue;
+        if (group == "machine" && name.starts_with("variables.")) {
+            const std::string variable = name.substr(10);
+            const ordered_json& from_variables = source.at(group).at("variables");
+            ordered_json& variables = out.at(group).at("variables");
+            if (from_variables.contains(variable))
+                variables[variable] = from_variables.at(variable);
+            else
+                variables.erase(variable);
+        } else if (source.at(group).contains(name)) {
+            out.at(group)[name] = source.at(group).at(name);
         }
     }
     Settings result = parse_settings(out.dump());

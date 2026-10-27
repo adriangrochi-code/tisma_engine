@@ -4889,3 +4889,1496 @@ anterior y las pruebas de nuevo con la versión nueva.
 **Sigue:** QA13; las ramas de los árboles que engordan y se juntan antes, con las mediciones nuevas del equipo de fichas
 (a la altura de las puntas, pares que se tocan; cada rama pasa de 0,9 a 1,2 mm en una capa).
 
+
+## 2026-10-27 — QA13: la primera capa sobre el soporte y los perímetros en voladizo
+
+**Por qué:** pedido del dueño de seguir en orden lo pendiente; lo primero, QA13 de la segunda prueba de caja negra
+(`docs/spec/qa/2026-10-26-segunda-prueba.md`). La respuesta del equipo de fichas (regla 4 de `supports_skirt.md`,
+rama `spec/next` 2f55a4b, `tools/check_spec.py` limpio) se fusionó en `dev`.
+
+**Hecho:**
+- **Regla 8 de `walls_extra.md`** (`walls.detect_overhangs`, nuevo, encendido): un tramo de pared cuyo cordón queda
+  entero fuera de la capa de abajo (su eje fuera de la región de abajo agrandada medio cordón) es `Overhang
+  perimeter`, a la velocidad de los puentes (`speed.solid_infill`) y con su ventilador (`cooling.fan_bridges`). La
+  pared se corta justo donde cruza ese borde. En la interfaz, Resistencia › Paredes (Avanzado).
+- **Regla 4 de `supports_skirt.md`:** donde la primera capa de la pieza cuelga sobre el tope del soporte, sus
+  perímetros y su puente llevan la altura de la capa más la separación en Z (`;HEIGHT:0.400` y el doble de filamento
+  por mm con capas de 0,2); el puente entra 0,6 mm sobre la parte apoyada, sacado del relleno disperso. El resto de la
+  capa y la capa siguiente, normales.
+- Los soportes se calculan antes de las zonas del relleno (no dependen de ellas), para que el anclaje del puente quede
+  en las superficies antes de que el relleno las use.
+
+**Medido:**
+
+| Estante S4, Z 8,2 | Ficha (Tisma Slicer) | Antes | Ahora |
+|---|---|---|---|
+| Perímetros sobre el soporte | `Overhang perimeter`, alto 0,4, X 100,2 a 109,8 | comunes, 0,2 | `Overhang perimeter`, 0,4, X 100,2 a 109,8 |
+| Perímetros sobre la columna | comunes, 0,2 | comunes, 0,2 | comunes, 0,2 |
+| Puente | alto 0,4, X 99,41 a 109,04 | 0,2, X 100,2 a 108,6 | 0,4, X 99,4 a 108,6 |
+| Z 8,4 | normal | normal | normal |
+
+El puente termina en 108,6 y no en 109,04: sus líneas van en otra dirección que las de Tisma Slicer (el motor no
+cuenta el soporte como apoyo al elegir el ángulo). Benchy: 218 mm de perímetros en voladizo en 34 capas; el laminado
+tarda lo mismo (0,59 a 0,65 s antes y después, dentro del ruido). Cráneo escaneado (546 684 triángulos, 1503 tramos
+en voladizo): mirando cada borde de lo que cuelga para cada tramo de pared tardaba 4,8 s en vez de 2,7; con un
+índice por capa (la caja de cada polígono y los bordes en una grilla de celdas), 2,72 s contra 2,66 antes, con el
+mismo G-code byte a byte; con soporte, 3,60 contra 3,42 s. Fuzzer con la detección al azar: 1300 corridas, 0 fallas.
+
+**Pruebas nuevas:** QA13 en el estante (áreas, alturas, tipos, el anclaje y el doble de filamento por mm; sin la
+detección, los tipos comunes y la altura igual); W2 (los dos tramos sobre el aire, a la velocidad de los puentes); el
+ajuste nuevo (lectura, error y relaminado por etapas); el ventilador de los puentes también en los perímetros en
+voladizo.
+
+**No probado:** el cordón redondo de los puentes de la regla 8 (con `speed.bridges` y `gcode_motion.md`, en el paso 2
+de la cobertura); los viajes de largo cero entre tramos de una pared escriben un `G1 F` suelto (ya pasaba con las
+paredes partidas en esquinas: 812 en el Benchy), inofensivo.
+
+**Sigue:** del punto 1 de lo pendiente, las ramas de los árboles que engordan y se juntan antes (SM13 remedido),
+los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15 de ubicación, QA8, QA9 y `support.width`.
+
+## 2026-10-27 — árboles: puntas enlazadas de a pares (SM13 remedido)
+
+**Por qué:** segundo ítem de lo pendiente, en orden: las ramas se juntaban más abajo que en la ficha. El equipo de
+fichas remidió SM13 (regla y tabla en `supports_more.md`, `spec/next` 2f55a4b): una capa bajo las 22 puntas ya hay 13
+piezas, 8 de ellas pares de puntas juntas de costado (unos 3,2 × 1,25 mm).
+
+**Hecho:**
+- Las puntas vecinas a no más del hueco entre puntas (la separación de las puntas menos su ancho) se enlazan de a pares,
+  por el hueco más chico primero; el soporte llena la envolvente de los dos discos (`TreeNode::to`), y se acercan al
+  ángulo máximo (`support.tree_angle`) hasta juntarse. Solo las puntas se enlazan: más abajo, las ramas se inclinan y
+  se juntan como antes.
+- Al juntarse, el radio queda a mitad de camino entre el de la más ancha y el de las dos áreas juntas.
+- **Arreglo:** una rama absorbida por otra que después se apoyaba en la pieza dejaba su ubicación en la capa de
+  separación; ahora la que absorbe se lleva sus ubicaciones y se vacían juntas (lo mostró la prueba del estante con
+  los cambios).
+- **Arreglo de lo de QA13 (sin publicar):** en el cráneo con soporte, el G-code se rechazaba por `;WIDTH:0.000`: al
+  cortar una pared en el borde de lo que cuelga, la punta de un cordón que se afina a nada quedaba como un tramo propio
+  sin movimiento. El escritor ya no escribe un ancho sin un movimiento que lo use, y no corta a menos de una micra de
+  los extremos de un tramo. Prueba nueva con esa punta sola (falla sin el arreglo).
+
+**Medido** (estante de SM13, piezas por capa en Z 7,2 / 7,0 / 6,2 / 5,2 / 4,2 / 2,2 / 0,4):
+
+| | Piezas |
+|---|---|
+| Ficha (Tisma Slicer) | 22 / 13 / 11 / 9 / 7 / 4 / 1 |
+| Antes | 21 / 21 / 19 / 15 / 8 / 7 / 3 |
+| Ahora | 21 / 11 / 12 / 10 / 5 / 5 / 4 |
+
+Probé también el radio de las dos áreas juntas (21 / 11 / 12 / 5 / 3 / 2 / 2) y el de la más ancha (21 / 11 / 12 /
+10 / 9 / 8 / 6): el promedio de los dos queda más cerca en total. Cerca de la cama la ficha junta todo en una pieza de
+11 × 22 mm y el motor deja 4. Benchy con árboles: 1,40 s contra 1,55 s antes (menos ramas); cráneo con árboles: 7,5 s
+contra 7,0 s. Los tres soportes en el cráneo y el Benchy con soporte, verificados. Fuzzer: 800 corridas, 0 fallas.
+
+**No probado:** los tamaños de cada pieza contra la ficha (la medida de la ficha es de borde a borde menos el ancho de
+línea, y la de mi guion es otra); la base ancha de los troncos cerca de la cama.
+
+**Sigue:** los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15, QA8, QA9 y `support.width`.
+
+## 2026-10-27 — arcos en voladizos (S1)
+
+**Por qué:** tercer ítem de lo pendiente, en orden. Los arcos no estaban hechos: faltaban las reglas 7 a 11 de la
+ficha `arc_overhangs.md` (el centro, hasta dónde, agujeros y tiras, el sentido, con soportes), que el equipo de fichas
+agregó con las pruebas A2 a A5 (`spec/next` 2f55a4b, `tools/check_spec.py` limpio). También era un pedido del dueño
+(P1, «Arc Overhang»).
+
+**Hecho:**
+- `src/infill/arcs.*` (diseño propio sobre la idea publicada; `PROVENANCE.md`): las zonas que salen de la capa de abajo
+  por un solo tramo de borde (dos tramos son un puente; el borde entero, un anillo alrededor de una columna, sigue con
+  su puente), con los pedazos cuyos tramos se tocan en un extremo juntos (la L de A2); un centro por zona, 1,2 mm
+  adentro del medio del tramo apoyado; círculos cada `walls.width × (1 − arcs.overlap)` (0,36 mm), cortados por la zona
+  y una mordida de 1,2 mm en lo que la sostiene, hasta el punto más lejano; uno en un sentido y el siguiente en el
+  otro, partido en el eje (A1: los enteros en 0,684, 1,404, 2,124 y 2,844 contra 0,686, 1,407, 2,128 y 2,849 de la
+  ficha); un pedazo que no se apoya en el arco anterior ni en la capa de abajo no va.
+- En el laminado, los arcos toman el lugar del relleno de la zona y de la mordida; en el G-code van antes que las
+  paredes de su isla, como `Overhang perimeter`, a `arcs.speed` (5 mm/s; 0, la de los puentes), con cordón redondo
+  (`;HEIGHT:0.314` con ancho 0,4), el ventilador de los puentes y retracción antes de cada uno (`Toolpath::retract`).
+  Con soportes, el soporte va igual y la capa lleva arcos en vez del puente grueso de QA13 (A5).
+- Ajustes `arcs.enabled`, `arcs.overlap`, `arcs.speed`, `arcs.max_distance` (perfil de impresión; `docs/CONFIG.md`);
+  en el panel, Soportes › Arcos en voladizos.
+
+**Medido** (estante A1, Z 8,2): 598 mm de arcos (ficha 606), 0,0522 mm de filamento por mm (ficha 0,052245), F300, 67
+retracciones en la capa (ficha 62); la capa 8,4, sólida. A5: el mismo resultado con el soporte debajo. Benchy con
+arcos: G-code verificado, 1,11 s (0,62 sin arcos); cráneo: 3,5 s (2,7 sin arcos). Fuzzer con arcos al azar: 600
+corridas, 0 fallas.
+
+**Pruebas nuevas:** `test_arcs.cpp` (A1: centro, radios, vaivén y corte en el eje, hasta la esquina más lejana, largo;
+A2: un solo grupo con el centro cerca del de la ficha, (98,8; 105,0) contra (98,8; 103,8); A3: el agujero corta y
+nada cae en él; A4: la tira; un puente y un anillo sin arcos; `max_distance`); en `test_gcode.cpp`, A1 y A5 en el
+G-code; los ajustes.
+
+**No probado:** impreso (el estante plano de la torre de temperatura; necesita al dueño). Los arcos sobre las paredes
+de la zona: acá las paredes se imprimen después, como `Overhang perimeter`, y los arcos llenan solo el relleno y la
+mordida; la ficha no dice qué pasa con las paredes (en A3 el agujero lleva las suyas).
+
+**Sigue:** que los arcos tarden menos (los círculos se muestrean contra toda la zona); PL15 de ubicación, QA8, QA9 y
+`support.width`.
+
+## 2026-10-27 — PL15: el centro sin cama
+
+**Hecho:** sin `machine.bed`, la pieza sigue donde viene (regla 4 de `placement.md`, diseño), salvo que se dé
+`placement.center` a mano: entonces va ahí, como en Tisma Slicer (PL15). Prueba nueva con el cubo de 10 a 30: queda en
+10 a 30, igual con `placement.arrange` en `false`, y de 40 a 60 con el centro en (50, 50). Tisma Slicer lo pone de 90 a
+110 sin centro porque siempre tiene una cama de 200 × 200; eso no se copia (lo dice la ficha).
+
+**Sigue:** QA8 (la revisión de estabilidad), QA9 y `support.width`.
+
+## 2026-10-27 — QA8: la revisión de estabilidad
+
+**Por qué:** QA8 de la primera prueba de caja negra: una aguja de 1 × 1 × 80 mm no daba ningún aviso. La ficha
+`stability.md` (`tools/check_spec.py` limpio) es la regla 6 de `print_review.md`.
+
+**Hecho:** `src/report/stability.*` (estática y vigas de Euler-Bernoulli, de manual; `PROVENANCE.md`), solo en piezas
+sin soportes:
+- columnas: las islas de cada capa encadenadas con las de abajo que se tocan; la rigidez de una sección es el menor
+  momento principal de la suma de las islas de la cadena (teorema de Green); bajando, hasta una capa diez veces más
+  rígida (la base) o la cama;
+- partes en el aire (crítico), todas en un aviso con su cuenta y sus capas;
+- vuelco por el peso: el centro de masa de lo impreso fuera del polígono convexo del apoyo (la primera capa y el
+  borde); crítico si el momento del peso pasa lo que aguanta la cama;
+- columnas que se doblan: `review.nozzle_force · L³ / (3 · E_z · I_min)` contra `review.max_deflection`; sin medir el
+  empuje, las tres columnas más flexibles como información (las que se doblan al menos una décima de la flecha
+  máxima por newton);
+- despegue de la cama, con los dos valores medidos;
+- ajustes `review.*` (perfil de la impresora; Impresora › Máquina › Estabilidad), la gravedad en cada aviso del JSON
+  (`severity`), y la revisión en la línea de comandos y en la interfaz.
+
+**Medido:** pruebas ST1 (parte en el aire en Z 10,2, crítico y primero), ST2 (vuelco desde Z 10,4), ST3 (desde Z
+25,6), ST4 (0,385 mm/N en Z 40), ST5 (cubo sin aviso), ST7 (despegue desde Z 6,4), ST8 (base en la placa, desde Z
+27,6) y la aguja de QA8 (787 mm/N). Benchy: 0,95 → 0,99 s; cráneo: 4,3 → 4,6 s. En el Benchy sin soportes, partes en
+el aire entre Z 6,2 y 18 (los techos de las ventanas) y tres columnas como información.
+
+**No probado:** con una impresora real (la calibración de la regla 6, necesita al dueño); `E_z` es el del PLA para todo
+material hasta que el perfil del filamento traiga el suyo.
+
+**Sigue:** QA9 (paredes más finas que la boquilla, `walls.min_line_width`) y `support.width`.
+
+## 2026-10-27 — QA9: paredes más finas que la boquilla
+
+**Hecho:** `walls.min_line_width` (85 % de `machine.nozzle_diameter`) y `walls.min_detail` (25 %), mm o porcentaje
+(ficha `perimeters.md`, regla 3): en el reparto de cordones (Kuipers et al. 2020), un espesor desde el detalle mínimo
+que daba cero cordones da uno, y una pared de un solo cordón nunca es más angosta que el ancho mínimo, centrada. En el
+panel, Resistencia › Paredes (Avanzado).
+
+**Medido:** la pared de 0,2 mm de QA9 sale con cordones de 0,34 mm en el medio (antes, «nothing would be printed»); la
+de 0,05 mm, nada. Benchy: capas con detalles perdidos 9 → 3; cráneo: 31 → 8; los dos G-code verificados.
+
+**Pruebas nuevas:** la pared de 0,2 mm (ancho, centro, `;WIDTH:0.340`, el ancho en mm), la de 0,05 mm; la lectura de
+los ajustes.
+
+**Sigue:** `support.width` (`supports_more.md`, regla 18), lo último del punto 1.
+
+## 2026-10-27 — `support.width` y fin del punto 1
+
+**Hecho:** `support.width` (ficha `supports_more.md`, regla 18): el ancho de los cordones de la base, la interfaz y los
+árboles, en mm o en % de la altura de capa (150 % con capas de 0,2 da 0,3 mm); 0, el de las paredes. La separación de
+la interfaz y el paso de la base salen de ese ancho. En el panel, Soportes › Patrón (Avanzado). Prueba SM14 (0, 0,6,
+150 %, con grilla y con árboles). La primera capa del soporte con el ancho de la primera capa (también de SM14) espera
+a `layers.first_line_width`, que el motor no tiene todavía.
+
+**Punto 1 de lo pendiente, terminado:** QA13 y los perímetros en voladizo, los árboles de SM13, los arcos en
+voladizos, PL15, QA8, QA9 y `support.width`.
+
+**Sigue (punto 2, en el orden aprobado):** velocidades y aceleraciones por tipo, relleno de huecos, planchado, balsa,
+cambio de color y pausas, y los extras del G-code.
+
+## 2026-10-27 — Punto 2: velocidades propias, topes del relleno y el cordón redondo de los puentes
+
+**Hecho** (ficha `speeds_accels.md`, reglas 1 a 5 y 14; `gcode_motion.md`, regla 1; `walls_extra.md`, regla 8):
+- `speed.bridges` para los puentes y los perímetros en voladizo (y los arcos sin `arcs.speed`); sin valor, la del
+  relleno sólido, como antes;
+- el cordón de los puentes y de los tramos de pared sobre el aire es redondo, del diámetro de la boquilla por la raíz
+  de `extrusion.bridge_flow_ratio`: su sección es π/4 del diámetro al cuadrado (0,052245 mm de filamento por mm con
+  boquilla de 0,4) y las líneas del puente van a esa distancia. Los puentes sobre el soporte siguen con la altura de la
+  capa más la separación (QA13);
+- `speed.gap_fill` (el relleno de huecos, cuando lo haya), `speed.over_bridges` (mm/s o % del sólido: los tramos de
+  relleno sólido justo encima de un puente sobre el aire, cortados en el borde del puente; no encima de las capas
+  sólidas sobre el relleno), `speed.first_layer_infill` (mm/s o % del sólido, sin el tope de la primera capa),
+  `speed.travel_z` (cambios de capa, saltos y subidas del ZAA);
+- `extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`: el tope del relleno disperso según si sus
+  líneas se cruzan en la capa (`grid`, `triangles`, `stars`, los cúbicos) o no;
+- todo en el panel (Velocidad y Filamento › Flujo, nivel Avanzado salvo `speed.bridges`) y en `docs/CONFIG.md`; las
+  velocidades nuevas rehacen solo el G-code (V11).
+
+**Corregido:** las pruebas de estabilidad guardaban punteros a los avisos de una revisión temporal (ASan, en la CI de
+Linux de la sesión); ahora guardan copias.
+
+**Medido:** M2/W2: 0,052245 mm/mm en puentes y perímetros en voladizo (la ficha: 0,052735 y 0,05224); con
+`bridge_flow_ratio` 0,8, 0,8 de eso y el puente 1,10 veces más largo (la ficha: 1,098). V2 a V5 como en la ficha.
+Benchy 0,65 → 0,68 s y cráneo 2,92 → 2,91 s (mediana de 5; sin cambio); los dos G-code verificados, también con todos
+los ajustes nuevos puestos. Fuzzer con los ajustes nuevos: 400 corridas, 0 fallas.
+
+**Pruebas nuevas:** `tests/test_speeds.cpp` (M2 y V10, V2, V3, V4, V5), W2 con el cordón redondo, y la lectura de las
+claves nuevas.
+
+**Sigue:** del mismo punto, las velocidades dinámicas en voladizos (V6), el ecualizador del caudal (V7) y las
+aceleraciones por tipo (V8, V9); después, el relleno de huecos (V1, W6).
+
+## 2026-10-27 — Punto 2: aceleraciones por tipo y velocidades dinámicas en voladizos
+
+**Hecho** (ficha `speeds_accels.md`, reglas 6, 7 y 10 a 13):
+- grupo `acceleration` (perfil de la impresora): `default`, `walls`, `outer_wall`, `infill`, `solid_infill`,
+  `top_solid_infill`, `bridges`, `first_layer`, `travel` y `short_travel`, con los reemplazos de la tabla. Antes de
+  cada extrusión, la de su tipo; al terminar el tipo, se vuelve a `default`; antes de cada viaje, la de los viajes (la
+  de los cortos si es más corto que `retraction.min_travel`). Sin `default`, solo la de los viajes. `M204 S` en
+  RepRapFirmware y Klipper; en Marlin `M204 P` al imprimir y `M204 T` para los viajes, cada uno cuando cambia. El
+  tiempo estimado sigue cada cambio;
+- `speed.dynamic_overhangs` y `speed.overhang_0` a `_3` (mm/s o % del perímetro externo; 15, 15, 20 y 25): la parte
+  apoyada de cada tramo de pared sale de la arista más cercana del contorno de la capa de abajo (distancia y lado), cada
+  0,5 mm cerca de ese contorno; la velocidad se interpola entre los cinco puntos de la regla 7, nunca más rápida que la
+  de la pared; los tramos con velocidades a menos de 1 % se juntan, a su media. Los tramos en el aire, a `overhang_0`;
+- en el panel, Velocidad › Voladizos, Aceleraciones y Aceleración de los viajes (Avanzado).
+
+**Medido:** V6 con paredes de 0,45 como en la ficha: embudos de 20°, 30°, 40°, 45°, 55° y 60° con el perímetro externo
+a 26,76, 24,87, 22,54, 21,11, 17,30 y 15,0 mm/s de media (la ficha: 27,0, 24,9, 22,6, 21,1, 17,31 y 15,0); de un
+tramo a otro varía ±0,3 mm/s porque el contorno de cada capa se simplifica (`slicing.simplify_tolerance`). V8 y V9
+como en la ficha (salvo la balsa). Costo con todo encendido (mediana de 5): Benchy 0,68 → 0,82 s, cráneo 2,83 → 4,02 s
+(el cráneo cambia de apoyo en todas partes: 966 000 líneas contra 649 000); las aceleraciones solas no cuestan nada.
+Los dos G-code verificados. Fuzzer con las opciones nuevas: 700 corridas, 0 fallas.
+
+**Sigue:** el ecualizador del caudal (reglas 8 y 9, V7); después, el relleno de huecos (V1, W6).
+
+## 2026-10-27 — Punto 2: ecualizador del caudal (fin de `speeds_accels.md`)
+
+**Hecho** (ficha `speeds_accels.md`, reglas 8 y 9): `speed.flow_slope_down` y `speed.flow_slope_up` (mm³/s²). Donde
+el caudal (sección del cordón por su velocidad) baja de una extrusión a la siguiente, el final de la primera se parte
+en pedazos cada vez más lentos, con el caudal bajando a ese ritmo hasta el de la siguiente; donde sube, el comienzo de
+la segunda, salvo después de una retracción. Hasta 16 pedazos, cada uno al caudal de su mitad; si el camino es más
+corto que la rampa, la rampa se aprieta. En el panel, Velocidad › Topes (Avanzado).
+
+**Corregido:** el verificador del G-code no contaba las velocidades nuevas al calcular la más rápida permitida (el
+fuzzer lo encontró con un puente más rápido que los viajes): `fastest_extrusion` las suma. Era del commit anterior,
+ya subido; prueba nueva que falla sin el arreglo.
+
+**Medido:** V7: el perímetro interno baja de 60 a 30,x mm/s en 16 pedazos que duran 1,36 s (la ficha: 16 pedazos,
+unos 1,4 s); la subida empieza a menos de 33 mm/s y llega a 60; el relleno después de una retracción, directo a 80.
+Costo con las dos rampas (mediana de 5): Benchy 0,65 → 0,69 s, cráneo 2,77 → 2,92 s; los dos G-code verificados.
+Fuzzer: 800 corridas con semillas nuevas, 0 fallas (después del arreglo).
+
+**`speeds_accels.md` terminada**, salvo lo que espera a otras funciones (V1 al relleno de huecos; el tope de las
+aceleraciones por los límites de la máquina; las aceleraciones de la balsa y la torre de purga).
+
+**Sigue:** el relleno de huecos (`walls_extra.md`, W6 y V1).
+
+## 2026-10-27 — Punto 2: paredes de ancho fijo y relleno de huecos
+
+**Hecho** (ficha `walls_extra.md`, reglas 1 y 2; `speeds_accels.md`, V1): `walls.generator` (`variable`, como hasta
+ahora, o `fixed`) y `walls.gap_fill` (encendido). Con `fixed`, hasta `walls.count` lazos de `walls.width` a esa
+distancia, cada uno donde entra un cordón entero, todos en sentido antihorario; la región del relleno es la región
+achicada `walls.count` anchos. Lo que queda (fuera del primer lazo, entre un lazo y el siguiente, adentro del último
+cuando no hay lugar para relleno), de al menos medio cordón, se llena con cordones de ancho variable (la cadena de
+Kuipers et al. 2020), isla por isla, `;TYPE:Gap fill`, a `speed.gap_fill`; sus extremos libres siguen medio ancho
+hasta el borde del hueco, porque la sección del cordón es un rectángulo. En el panel, Resistencia › Paredes
+(Avanzado). Falta el relleno concéntrico de ancho fijo.
+
+**Encontrado:** el eje medio de ciertas regiones de varias islas da cordones muy afuera de la región (anotado en
+`PLAN.md`, «Eje medio con varias islas», para un bloque de mantenimiento). El relleno de huecos va isla por isla, y
+así no aparece; el verificador del G-code lo había rechazado en el Benchy con paredes fijas.
+
+**Medido:** W6: perímetro externo de 41,2 mm y relleno de huecos de 19,1 mm (la ficha: 41,14 y 19,14); V1 a 20 y a
+10 mm/s; sin relleno de huecos, solo el perímetro. Benchy y cráneo con paredes fijas: G-code verificado, más rápido
+que con paredes variables (medido con la CI de Linux corriendo al lado: Benchy 0,94 → 0,87 s, cráneo 4,5 → 3,6 s) y
+más corto (Benchy 133 000 líneas contra 337 000). Fuzzer con paredes fijas: 900 corridas, 0 fallas.
+
+**Sigue:** planchado (`ironing.md`).
+
+## 2026-10-27 — Punto 2: planchado
+
+**Hecho** (ficha `ironing.md`, reglas 1 a 5): grupo `ironing` (`enabled`, `surfaces` `top`/`topmost`/`solid`, `flow`
+15 %, `spacing` 0,1 mm, `speed` 15 mm/s, los de la ficha). En la misma capa y a la misma Z, después de los rellenos
+de cada isla, líneas a 45° del relleno de arriba, en zigzag, sobre lo que la capa de arriba no cubre (o lo que nada de
+más arriba cubre, o todas las superficies sólidas), también sobre los perímetros, hasta media boquilla del borde;
+`;TYPE:Ironing`. Cada línea es un cordón de `spacing × flow` de ancho (redondeado a lo que escribe `;WIDTH`) y la
+altura de la capa. En el panel, Calidad › Planchado.
+
+**Corregido:** las etiquetas de `speed.overhang_*` terminaban en «%», que la prueba de textos lee como formato y ASan
+la vio leer fuera de la cadena en la CI de Linux de la sesión (commit aparte). Esa corrida terminó con esa falla y
+subí `dev` igual por no mirar el código de salida: el arreglo va en el siguiente envío, después de una CI completa.
+
+**Medido:** IR1: solo en la capa de arriba, después de su relleno (135°), líneas a 0°, 0,1 mm, 15 mm/s, 0,001247 mm de
+filamento por mm, ejes entre X 0,2 y 19,8 (la ficha: 0,205 y 19,795), largo dentro del 2 % de 3822 mm. Escalón y
+techo: `top`, `topmost` y `solid` planchan lo que deben. Benchy y cráneo con planchado: G-code verificado (122 y 200
+tramos de planchado). Fuzzer con planchado: 800 corridas, 0 fallas (antes del redondeo del ancho, 2 fallas).
+
+**Sigue:** balsa (`skirt_brim_raft.md`).
+
+## 2026-10-27 — Punto 2: balsa
+
+**Hecho** (ficha `skirt_brim_raft.md`, reglas 3 y 9 a 14): `adhesion.raft_layers`, `raft_gap` (0,1), `raft_expansion`
+(1,5), `raft_first_layer_density` (90 %), `raft_first_layer_expansion` (3), `speed.first_layer_over_raft` y
+`acceleration.first_layer_over_raft`. La pieza se lamina como si estuviera en la cama (su primera capa con la altura
+normal, sin pata de elefante ni borde) y debajo se ponen las capas de la balsa como capas del modelo: la primera con
+la altura de la primera capa, las demás de 3/4 de la boquilla; arriba la interfaz densa a 135° y 45° alternados (como
+mucho todas menos la primera, como miden R1 y R2; con una sola capa, esa), abajo la base a `support.spacing`, a
+`support.line_angle` la de arriba y girada 90° en las alternas, la primera a su densidad. La balsa sigue la primera
+capa de la pieza agrandada (el valor exacto, sin la grilla de Tisma Slicer), su primera capa más. La pieza sube la
+balsa y la separación; su primera capa no pasa del tope sobre la balsa (o de la primera capa). La falda rodea la
+primera capa de la balsa; sin borde. En el panel, Adhesión › Balsa y las filas en Velocidad.
+
+**Corregido:** el verificador del G-code tomaba como cordón más angosto un cuarto de la pared al calcular el avance
+de un flujo forzado (torre de flujo); con planchado hay cordones mucho más finos. Lo encontró el fuzzer (commit aparte).
+
+**Medido:** R1 (base a 0° en Z 0,2 de 0,2; interfaz a 45° y 135° en 0,5 y 0,8 de 0,3; la pieza desde 1,1 con alto
+0,2; 53 capas; con separación 0 y 0,2, desde 1,0 y 1,2), R2 (5 capas: base a 90° y 0°, interfaz 135°, 45°, 135°, la
+pieza desde 1,7; 1 capa: interfaz, la pieza desde 0,5), R3 (capas de 0,1: balsa en 0,1, 0,4 y 0,7, la pieza en 0,9),
+R5 con los valores exactos (4,5 y 1,5 mm), R6 (largo por la densidad: 0,56 de 50 contra 90), R7 (15 mm/s en la
+primera capa de la pieza, 60 en la siguiente), R8 y R9 (falda a 6 mm de la base). Benchy y cráneo con 3 capas de
+balsa: G-code verificado. Fuzzer con balsa: 800 corridas, 0 fallas (después del arreglo del verificador).
+
+**Sigue:** cambio de color y pausas, y los extras del G-code (`gcode_extras.md`).
+
+## 2026-10-27 — Punto 2: cambio de color, pausas y plantillas por capa
+
+**Hecho** (ficha `gcode_templates.md`, reglas 11 y 13): `gcode.color_change` (`M600`) y `gcode.pause` (`M601`), que se
+escriben al empezar la capa de un cambio por altura con `"color_change": true` o `"pause": true` (después de las
+marcas `;COLOR_CHANGE` y `;PAUSE_PRINT`, para la vista previa); `gcode.before_layer` y `gcode.after_layer`, justo antes
+y justo después del movimiento en Z de cada capa desde la segunda, con `layer_num`, `layer_z` y `max_layer_z`. Todos
+van como G-code propio (`;TYPE:Custom`) y, si mueven algo, el viaje siguiente vuelve a escribir todos los ejes. En el
+panel, Otros › Plantillas de G-code.
+
+**Corregido:**
+- en el modo vaso, después de G-code del usuario que mueve el cabezal (un cambio de color, una plantilla), la vuelta
+  seguía sin viajar desde donde el cabezal ya no estaba; ahora viaja. Lo encontró el fuzzer;
+- la prueba del verificador que corta el G-code a la mitad podía caer justo en un salto de línea (pasó al crecer el
+  resumen final); ahora corta siempre a mitad de línea.
+
+**Medido:** T8: `;BEFORE 1 0.4` justo antes de `G1 Z0.4` y `;AFTER 1 0.4 0.4` justo después, 49 de cada uno en 50
+capas; cambio de color en la capa de Z 2,2 y pausa en la de 4,2 con cambios a 2 y 4 mm; verificados, también con una
+plantilla que mueve Z y en el modo vaso. Fuzzer con plantillas, cambios de color y pausas: 800 corridas, 0 fallas
+(después del arreglo del vaso).
+
+**Sigue:** los extras del G-code (`gcode_extras.md`): peso y costo (X1), desfase de Z (X4), E volumétrica (X11),
+cámara con espera (X2) y lo demás.
+
+## 2026-10-27 — Punto 2: extras del G-code (peso y costo, cámara, desfase de Z, E volumétrica)
+
+**Hecho** (ficha `gcode_extras.md`):
+- regla 1 (X1): al final del G-code, `; filament used [mm]`, `[cm3]` y, con `extrusion.density`, `[g]`; con
+  `extrusion.cost` (por kg), `; filament cost`; después los totales y `; total filament used for wipe tower [g] =
+  0.00` (todavía sin torre). En el panel, Filamento › Precio, con el peso del carrete vacío (`spool_weight`);
+- regla 3 (X2): con cámara, `M141` antes del G-code de inicio para que caliente junto con la boquilla; después del
+  inicio, con `extrusion.chamber_min_temperature`, la espera (`M191 S…`, o `TEMPERATURE_WAIT` en Klipper) y otra vez
+  `M141`;
+- regla 5 (X4): `machine.z_offset` se suma a todas las Z de la pieza y al `;Z:`; no toca el G-code de inicio;
+- regla 11 (X11): `gcode.volumetric_e`, toda E (extrusión, retracción, `G92`) en mm³; el verificador la lee con la
+  sección 1.
+
+**Medido:** X1 con PLA de 1,24 g/cm³ y 25 por kg: los valores cuadran con la sección del filamento al redondeo; el
+Benchy local da 4 071 mm, 9,79 cm³, 12,14 g y 0,30 (laminado en 1,0 s con la CI de Linux corriendo al lado). X2: el
+orden `M141 S50`, `M109 S200`, `M191 S40`, `M141 S50`, `M141 S0`. X4 con −0,3: la primera capa en `;Z:-0.100`.
+X11: `E-2` sale `E-4.81056`, sin `M200`. 465 pruebas pasan; fuzzer con las opciones nuevas: 400 corridas, 0 fallas.
+
+**Sigue:** el resto de `gcode_extras.md` (sabores viejos, modo silencioso, miniaturas, binario, arcos, comentarios
+detallados, contracción).
+
+## 2026-10-27 — Punto 2: contracción del filamento y comentarios detallados
+
+**Hecho** (ficha `gcode_extras.md`):
+- regla 4 (X3): `extrusion.shrinkage_xy` y `extrusion.shrinkage_z` (0 a 20 %): la pieza se lamina 100 / (100 − p)
+  veces más grande, alrededor del centro de su base, como la escala de `compensation` (se multiplican). La ficha dice
+  que en Tisma Slicer el ajuste no cambió nada desde la línea de comandos; el motor sí lo aplica, con el factor que
+  propone la ficha. En el panel, Filamento › Contracción;
+- regla 12 (X12): `gcode.verbose_comments`: cada línea que escribe el motor termina con `; ` y qué hace, con los
+  textos de la ficha (`perimeter`, `infill`, `infill (bridge)`, `skirt`, `retract`, `unretract`, `lift`, `reset
+  extrusion distance`, `simple layer change`, `travel to first layer point`, `move to first perimeter point`, `move to
+  first infill point`, `enable fan`, `disable fan`…) y unos propios para lo que la ficha no nombra (`lower`, `set
+  acceleration`, `support material`, `gap fill`, `ironing`). El G-code del usuario no cambia. Apagado no cuesta nada.
+
+**Medido:** X3: un cubo de 20 × 20 × 10 con 1 % y 2 % se lamina de 20,202 × 20,202 × 10,204 mm, 51 capas en vez de
+50. X12: en un cubo de 20 mm con relleno al 20 % y falda, 1684 `; infill`, 600 `; perimeter`, 161 `; retract`, 80
+`; skirt`, 50 `; simple layer change`; sin los comentarios, línea por línea el mismo G-code que sin el ajuste, y el
+verificador lo acepta. 467 pruebas pasan; fuzzer con contracción y comentarios: 400 corridas (semilla 1) y 1000
+(semilla 271027), 0 fallas.
+
+**Sigue:** los sabores viejos (X5), el modo silencioso (X6, con los límites de la máquina), los arcos (X10), el
+G-code binario (X8) y las miniaturas (X7, con la interfaz).
+
+## 2026-10-27 — Punto 2: dialectos de firmwares antiguos
+
+**Hecho** (ficha `gcode_extras.md`, regla 6, X5): `machine.flavor` acepta además `repetier`, `smoothie`, `teacup`,
+`makerware`, `sailfish`, `mach3`, `machinekit` y `no_extrusion`. Lo que cambia de cada uno está como datos en
+`src/gcode/dialect.hpp` y lo leen el emisor, el verificador y la vista previa:
+- `repetier` y `smoothie`: como `reprap` (el mismo archivo, salvo la línea del ajuste);
+- `teacup`: `M106 S0` en vez de `M107`;
+- `makerware` y `sailfish`: E absoluta sin `M82` ni `G92` (aunque se pida E relativa), `M126`/`M127`, `M104 S… T0`,
+  `M73 P…` en cada capa; `makerware` también `M101 ; extruder on` y `M103 ; extruder off`;
+- `mach3` y `machinekit`: el extrusor es `A`, `M104 P…`, `M106 P252.45`; `machinekit` con `G92 A0.00000` en cada
+  capa y `M2` al final;
+- `no_extrusion`: los mismos movimientos en X e Y, sin E y sin las retracciones (que serían solo `F`).
+Los antiguos (salvo `repetier` y `smoothie`) no llevan `M204` ni avance de presión: la ficha no los mide y esas
+máquinas no los conocen. En el panel, Impresora › Firmware.
+
+**Medido:** X5 sobre un cubo de 20 × 20 × 10 mm (50 capas): `M73 P10` en la capa 5, `M104 S215 T0` en el cambio a
+2 mm, `M106 P252.45` con el ventilador al 99 %; `no_extrusion` da tantos movimientos en X e Y como `reprap`; el
+verificador acepta los once dialectos y la vista previa de `mach3` ve las mismas extrusiones que la de `reprap`. 468
+pruebas pasan; fuzzer con los once sabores: 600 corridas (semilla 1) y 1000 (semilla 271028), 0 fallas.
+
+**No probado:** ninguna de esas máquinas de verdad (no hay); solo contra la ficha.
+
+**Sigue:** el modo silencioso (X6), que pide los límites de la máquina de `gcode_firmware.md`; los arcos (X10); el
+G-code binario (X8); las miniaturas (X7, con la interfaz).
+
+## 2026-10-27 — Punto 2: arcos `G2`/`G3`
+
+**Hecho** (ficha `gcode_extras.md`, regla 10, X10): `gcode.arcs`. El ajuste (`src/gcode/arcs.*`, diseño propio) busca,
+en cada trayectoria plana de un solo ancho, tramos de 3 movimientos o más cuyos puntos queden a menos de
+`gcode.resolution` del círculo por el primero, el del medio y el último (los medios de los movimientos, a menos del
+doble: la simplificación ya los dejó apartarse esa tolerancia), que giren siempre hacia el mismo lado y no pasen de
+media vuelta; cada arco crece lo más que puede. El emisor los escribe como `G2`/`G3 X Y I J E F`, con la E del largo
+del arco y el centro relativo al inicio tal como quedó escrito; el tiempo estimado sigue los movimientos que el arco
+reemplaza. El verificador lee los arcos (largo por el círculo, el final sobre el círculo del inicio a 0,01 mm, el área
+a lo largo del arco) y la vista previa los dibuja en tramos de 5° como mucho (antes, recta hasta el final).
+
+**Medido:** cilindro de 10 mm de radio y 5 de alto (X10, 128 lados, relleno al 20 %): sin arcos 6341 `G1` y 179 kB;
+con arcos 925 `G1`, 76 `G2` y 228 `G3`, 46 kB; con `resolution` 0,05, 1218 `G1` y 152 `G3` (cada vuelta de pared en
+dos medias vueltas; la simplificación más gruesa deja menos arcos en las uniones del relleno). El mismo tiempo
+estimado (4m 54s) y el mismo filamento al 0,2 %. Benchy local: 209 027 `G1` → 189 139 `G1`, 736 `G2` y 2 149 `G3`;
+7,39 → 6,95 MB; el mismo tiempo estimado; el laminado tarda lo mismo dentro del ruido (con la CI de Linux corriendo
+al lado). 470 pruebas pasan; fuzzer con arcos: 600 corridas (semilla 1) y 1500 (semilla 271029), 0 fallas.
+
+**No probado:** en una impresora (Marlin necesita `ARC_SUPPORT`, Klipper `[gcode_arcs]`).
+
+**Sigue:** de `gcode_extras.md` quedan el modo silencioso (X6), que pide los límites de la máquina de
+`gcode_firmware.md`, las miniaturas (X7, con la vista 3D) y el G-code binario (X8). Con eso cierra el punto 2; sigue
+el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
+
+## 2026-10-27 — Punto 2: firmware, límites de la máquina y modo silencioso
+
+**Hecho** (fichas `gcode_firmware.md`, `gcode_extras.md` regla 7, `print_time.md` reglas 2, 3 y 7):
+- límites nuevos en `machine`: aceleración máxima por eje (`max_accel_*`), de retracción, tirón por eje (`jerk_*`),
+  desviación de unión y avances mínimos al extruir y al viajar; `machine.limits_usage` (`time_only`, `emit`,
+  `ignore`). Con `emit` se escriben antes del G-code de inicio (Marlin 2: `M201`, `M203`, `M204 P R T`, `M205 X Y Z E`
+  o `M205 J`, `M205 S T`; Marlin 1: `M204 S T`; RepRapFirmware: `M203` y `M566` en mm/min; Klipper: error) y ninguna
+  aceleración por tipo los pasa (V9);
+- la estimación usa esos límites: la aceleración y el avance de cada movimiento acotados por los de cada eje, la
+  velocidad en las esquinas por la desviación de unión (el círculo que redondea la esquina a esa distancia) o por el
+  tirón de cada eje, los avances mínimos y la aceleración de las retracciones; con `ignore`, no;
+- `machine.silent_mode` y `machine.silent` (los límites de ese modo, por nombre): una segunda estimación; al final,
+  `; estimated printing time (normal mode)` y `(silent mode)`, y los de la primera capa (la línea de siempre sigue);
+- temperaturas al empezar (regla 1): con `variables.temperature`, `M104` antes del G-code de inicio y `M109` después
+  (RepRapFirmware: `G10 S… P0` y `M116`; cada dialecto antiguo con lo suyo), salvo que el inicio ya tenga comandos de
+  temperatura;
+- Marlin con E relativa: `G92 E0` después del salto en Z de cada capa (regla 3);
+- `gcode.progress` (regla 5): `M73 P R` por el tiempo estimado, al empezar y cada vez que cambia el porcentaje o los
+  minutos, hasta `P100 R0`; con modo silencioso, `M73 Q S` (no en RepRap genérico). El G-code se guarda en memoria
+  con marcas al empezar cada capa y cada trayectoria, y al final las marcas se cambian por los `M73`;
+- sabores `marlin_legacy` (Marlin 1) y `reprapfirmware` (Duet), propuestos en la ficha;
+- en el panel: Impresora › Límites (aceleraciones, tirones y esquinas, modo silencioso) y Firmware (uso de los
+  límites, avance).
+
+**Corregido:** el commit de los arcos `G2`/`G3` (470e2ee) había escrito sus pruebas encima de `tests/test_arcs.cpp`,
+que tenía las de los arcos en voladizos (A1 a A4). Volvieron tal cual (10dea1e) y las de `G2`/`G3` pasaron a
+`tests/test_gcode_arcs.cpp`. Lo noté al sumar el archivo de pruebas nuevo: estaba dos veces en `tests/CMakeLists.txt`.
+
+**Medido:** FW1, FW2, FW4, FW5, FW7, FW8, FW9, X6 y V9 como pruebas. Benchy local con Marlin (aceleración 1500): sin
+límites 1h 10m 17s; con los tirones de FW1 1h 14m 29s; con desviación de unión 0,013 mm 1h 14m 2s; modo silencioso
+(960 mm/s², 100 mm/s en X e Y) 1h 19m 54s; primera capa 1m 8s (normal) y 1m 12s (silencioso); 350 líneas `M73`. El
+laminado tarda lo mismo (0,93 a 0,98 s, con la CI de Linux al lado). 484 pruebas pasan; fuzzer con los límites, el
+modo silencioso, `M73` y los sabores nuevos: 600 corridas (semilla 1) y 1500 (semilla 271030), 0 fallas.
+
+**No probado:** contra una impresora (PT6 de `print_time.md` sigue pendiente).
+
+**Sigue:** las etiquetas de objetos (regla 4) con la impresión secuencial; de `print_time.md`, leer los comandos de
+movimiento y las esperas del G-code (reglas 8, 9, 13), el calentamiento (10, 14) y las esquinas como cada firmware
+(12; Klipper). De `gcode_extras.md`, las miniaturas (X7) y el G-code binario (X8).
+
+## 2026-10-27 — Punto 2: falda, escudo contra corrientes y tipos de borde
+
+**Hecho** (ficha `skirt_brim_raft.md`, reglas 1 y 4 a 8):
+- `adhesion.skirt_min_filament`: si las vueltas de falda gastan menos filamento que esto en la primera capa, se
+  agregan vueltas hacia afuera hasta pasarlo (a lo sumo 1000);
+- `adhesion.draft_shield` (`disabled`, `limited`, `enabled`): con escudo la falda se mide desde la pieza aunque haya
+  borde, la vuelta del borde que cae debajo de ella se quita, y con `enabled` se repite en todas las capas;
+- `adhesion.brim_type` (`outer`, `inner`, `outer_and_inner`, `none`): el borde de adentro sale de los agujeros de la
+  primera capa hacia adentro, rodeando las islas que haya en ellos, hasta llenar el agujero;
+- `adhesion.brim_gap`: el borde entero se aparta de la pieza, con el mismo ancho;
+- el verificador cuenta las vueltas extra de la falda en su margen; en el panel, Adhesión › Falda y Borde.
+
+**Medido:** B1 (cubo de 20 mm, una vuelta a 6 mm, 300 mm de filamento): 9153 mm de falda en la primera capa, las
+vueltas justas para pasar los 300 mm (Tisma Slicer da 10337,7 mm; su cordón es más ancho, 0,45). B3: 14 vueltas de
+borde sin escudo y 13 con él, la falda a 3,18 mm de la pieza; con `enabled` en las 50 capas, con `limited` y 5 capas
+de falda en 5. B4 (tubo de 10 y 5 mm de radio, borde de 3 mm): 8 vueltas afuera de 10,18 a 12,68 mm (Tisma Slicer:
+10,159 a 12,678), 8 en el agujero de 4,82 a 2,32 (4,801 a 2,319), con 1 mm de separación de 11,18 a 13,68 (11,168 a
+13,673). 487 pruebas pasan; fuzzer con estos ajustes: 600 corridas (semilla 1) y 1500 (semilla 271031), 0 fallas.
+
+**Sigue:** el lenguaje de plantillas (`gcode_templates.md`, reglas 1 a 10, 12 y 14 a 17); después, de `gcode_extras.md`,
+el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3.
+
+## 2026-10-27 — Punto 2: lenguaje de plantillas de G-code
+
+**Hecho** (ficha `gcode_templates.md`):
+- intérprete propio (`src/gcode/template.*`, reglas 1 a 8): `[nombre]` y `{expresión}` con números, textos, `+ - * /
+  %` (entero entre entero da entero), comparaciones, `and`/`or`/`not`, el ternario, `=~ /regex/`, listas e índices;
+  `min`, `max`, `int`, `round`, `digits`, `zdigits`, `is_nil`, `one_of`, `size`, `empty`, `interpolate_table`;
+  `{if}/{elsif}/{else}/{endif}`; `local` y `global`. Un error (variable o función desconocida, mal usada, de
+  sintaxis) hace fallar la exportación con la sección, la línea y una marca en la columna;
+- variables (regla 7): cada ajuste por su nombre (`{layers.height}`), algunos con su nombre de siempre
+  (`layer_height`…), las de `machine.variables` como listas, y `total_layer_count`, `input_filename_base`,
+  `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used`, `first_layer_print_min/max/size`, `year`,
+  `timestamp`, `layer_num`, `layer_z` y `max_layer_z`;
+- todas las plantillas pasan por el intérprete: inicio y fin de la impresora y del filamento (nuevos
+  `extrusion.start_gcode` y `end_gcode`, reglas 9 y 12), antes y después del cambio de capa, cambio de color, pausa y
+  el G-code de `changes`;
+- temperaturas automáticas (regla 10, `gcode.auto_temperatures`): sin comandos de temperatura en el inicio, `M190`
+  de la cama y `M104` antes, `M109` después;
+- `output.filename_format` (regla 15): con `slice -o carpeta`, el archivo se escribe con el nombre provisional y se
+  renombra cuando se conocen `print_time` y `total_weight`;
+- `output.post_process` (reglas 16 y 17): los scripts se corren con la ruta del G-code y las variables
+  `SLIC3R_…`, después de preguntar (o con `--yes`); con `N` no queda G-code.
+
+**Cambiado:** una variable desconocida ya no queda escrita: es un error. La prueba del catálogo que laminaba con un
+perfil de impresora solo ahora usa también uno de filamento, como en la interfaz.
+
+**Medido:** T1 a T5 (cuentas, textos, condiciones, funciones, variables propias) y T7 (errores) como pruebas del
+intérprete; T6, T8, T9, T10 y T11 sobre el cubo de 20 mm; T12 desde la línea de comandos con un script (`sh` en Linux,
+`cmd` en Windows) que agrega una línea con `SLIC3R_PP_HOST`, `SLIC3R_LAYERS_HEIGHT` y `SLIC3R_LAYER_HEIGHT`. 501
+pruebas pasan; fuzzer con plantillas con condiciones, `digits` y `global`: 600 corridas (semilla 1) y 1500 (semilla
+271032), 0 fallas.
+
+**No probado:** la pregunta del posproceso respondida a mano (las pruebas usan `--yes`).
+
+**Sigue:** de `gcode_extras.md`, el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3
+(retracción y viajes completos, paredes extra, impresión secuencial).
+
+## 2026-10-27 — Punto 2: G-code binario
+
+**Hecho** (ficha `gcode_extras.md`, regla 9, X8): `gcode.binary` escribe el formato binario público (`.bgcode`):
+encabezado `GCDE`, versión 1 y CRC32; bloques de datos del archivo (`Producer=Tisma engine …`), de la impresora
+(`printer_model`, `filament_type`, `nozzle_diameter`, `layer_height`, temperaturas, `fill_density`, soporte,
+planchado, filamento y tiempo), de la impresión (el resumen del final), del slicer (cada ajuste) y el G-code en
+bloques de 64 KiB como mucho, cortados en finales de línea; sin compresión y el G-code sin codificar. La exportación
+verifica el texto, escribe el binario, lo relee (estructura y CRC de cada bloque) y compara su G-code con el texto
+antes de darle el nombre. Con `gcode.binary`, un nombre que termina en `.gcode` pasa a `.bgcode`, y
+`read_gcode_totals` lee el tiempo y el peso de los datos de la impresión (para `slice -o carpeta`).
+
+**Fuente:** la ficha y la descripción pública del formato que cita (solo el documento en prosa). Lo que el documento
+no dice quedó como diseño propio: el CRC32 de cada bloque cubre su encabezado, sus parámetros y sus datos, y el tamaño
+del bloque cuenta solo los datos.
+
+**Pregunta para el equipo de fichas** (caja negra): abrir un `.bgcode` del motor en Tisma Slicer (visor de G-code) o
+mandarlo a una impresora Prusa, y decir si lo lee. Si no, qué cubre el CRC en un archivo de Tisma Slicer (por ejemplo,
+el CRC32 del primer bloque y sus bytes).
+
+**Medido:** X8 como prueba (los primeros bytes `47 43 44 45`, `01 00 00 00`, `01 00`; los bloques en el orden 0, 3, 4,
+2, 1; la lectura de vuelta; un byte cambiado rompe el CRC). El CRC-32 da `CBF43926` en «123456789», el valor de
+control del estándar. Benchy local: 7 387 511 bytes en binario contra 7 386 489 en texto (sin compresión pesa lo
+mismo). 504 pruebas pasan; fuzzer con ida y vuelta del binario: 600 corridas (semilla 1) y 1500 (semilla 271033), 0
+fallas.
+
+**No probado:** con un lector de otro programa ni con una impresora (no se pudo instalar uno en esta sesión).
+
+**Sigue:** las miniaturas (X7) con la vista 3D de la interfaz; la compresión del binario. Con eso, el punto 2 queda
+salvo esas dos; sigue el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
+
+## 2026-10-27 — Punto 3: retracción y viajes completos
+
+**Hecho** (ficha `retraction_travel.md`, reglas 1 a 10):
+- `retraction.unretract_speed` y `retraction.restart_extra` (regla 1): la vuelta a su velocidad y con su extra;
+- `retraction.on_layer_change` (regla 2): todo cambio de capa retrae antes de subir;
+- `retraction.wipe` y `retraction.before_wipe` (regla 3): la parte quieta primero, el resto mientras la boquilla vuelve
+  sobre el camino impreso desde el último viaje, al 80 % de `speed.travel`, a lo largo de resto × velocidad /
+  (0,95 × `retraction.speed`); si ese camino es más corto, lo que falta se retrae quieto al final;
+- `retraction.lift_above` y `retraction.lift_below` (regla 4), también para la rampa;
+- `travel.ramping_lift`, `travel.slope` y `travel.max_lift` (regla 5): la rampa sube desde donde está la boquilla
+  hasta la altura y baja en vertical al final; el primer viaje de una capa sube desde la capa de abajo (el movimiento
+  en Z del cambio de capa espera a la rampa, salvo que haya G-code después del cambio de capa);
+- `travel.lift_before_obstacle` (regla 6) se lee y se guarda; no cambia el G-code porque la ficha no lo midió;
+- `retraction.firmware` (regla 7): `G10` y `G11` sin E; con `retraction.wipe`, error de configuración;
+- `travel.avoid_crossing_walls` y `travel.max_detour` (regla 8, en mm o en %): el planificador de viajes va recto
+  cuando se le pide, o cuando el desvío pasa el máximo. En el motor viene prendido (`docs/spec/BEHAVIOR.md`);
+- `walls.clockwise` (regla 9): los lazos de pared, también la espiral del modo vaso, en sentido horario desde la misma
+  costura (la costura en bufanda decide antes de dar vuelta el lazo);
+- los valores propios del material, `extrusion.retraction` y `extrusion.travel` (regla 10): reemplazan a los de la
+  impresora en el escritor y en la verificación, aunque sean 0; `null` deja el de la impresora;
+- el verificador del G-code acepta la retracción en partes durante el barrido, la vuelta con su extra y `G10`/`G11`, y
+  la Z máxima con la rampa; el panel tiene las filas (Material › Retracción y Viajes, Velocidad › Viajes, Resistencia
+  › Paredes) y `docs/CONFIG.md` las claves y el grupo `travel`.
+
+**Medido** (caja negra de la ficha contra el motor, mismas piezas y ajustes; el cubo del motor tiene 20 mm de alto,
+100 capas):
+- R1: retracción `E-2` a F2400, vuelta `E2.5` a F1200 (igual que la ficha);
+- R2 (cilindro, costura alineada, sin relleno): 0 retracciones sin el ajuste y 49 con él (la ficha, 3 y 51, con
+  relleno); con relleno al 20 %, 99 en los dos casos: el viaje del relleno a la pared ya retraía;
+- R3: 5,474 mm de barrido a F6240 (5,47 en la ficha), 10,94 con retracción a 20 mm/s, 8,42 a F9600 con viajes a 200,
+  2,73 con 1 mm de retracción, y con `before_wipe` 50 %: `E-1` quieta y 1 mm en 2,73 mm, como la ficha;
+- R4: el salto solo en capas por encima de 2 mm o por debajo de 1 mm;
+- R5: la rampa sube a tan 10° hasta 1 mm y baja en vertical; el cambio de capa sube desde la capa de abajo;
+- R6: 299 `G10` y 299 `G11` en el cubo, ninguna E de retracción; el salto sigue con `G1 Z`;
+- R7 (tubo, capa 10): sin el ajuste, 6 viajes y 28,5 mm; con él, 27 tramos y 29,7 mm; con desvío máximo de 1 mm, igual
+  que sin el ajuste; con 200 %, igual que sin límite (la ficha: 8 viajes y 33,5 mm; 90 tramos y 39,0 mm);
+- R8: los cuatro lazos del tubo con área positiva, y negativa con `walls.clockwise`;
+- R9 a R11: los valores del material (largo 0,8, velocidades 25 y 10, extra 0,4, largo 0, vacío; salto 0,3 y 0 sobre
+  0 y 0,4 de la impresora: 698 y 100 movimientos en Z; viaje mínimo 20: 50 retracciones en lugar de 299; barrido del
+  material: las 299 retracciones barren).
+- 12 pruebas nuevas en `tests/test_retraction.cpp` y 2 del planificador en `tests/test_travel.cpp`; fuzzer con las
+  opciones nuevas: 300 corridas (semilla 11), 0 fallas.
+
+**Diseño propio** (la ficha no lo dice): la retracción del cambio de capa no fuerza el salto; un viaje que retrae por el
+cambio de capa barre a la altura nueva sobre la capa de abajo; con la retracción del firmware, `restart_extra` no se
+escribe y `retraction.length` 0 sigue sin retraer; `travel.max_lift` 0 usa `retraction.lift`.
+
+**No probado:** en una impresora real (G10/G11 necesitan la retracción del firmware activada).
+
+**Sigue:** el resto de `walls_extra.md` y la impresión secuencial (`sequential.md`, con las etiquetas de objetos).
+
+## 2026-10-27 — Punto 3: paredes extra (W5, W7, W8)
+
+**Hecho** (ficha `walls_extra.md`):
+- `walls.staggered_inner_seams` (regla 3): cada pared interna empieza `walls.width` por nivel antes, sobre su propio
+  lazo, en el sentido en que se imprime (después de `walls.clockwise`); la de afuera queda donde dice `walls.seam`;
+- `walls.top_one_wall` (regla 10): donde la capa de arriba deja la región abierta (más ancha que un cordón) queda solo
+  la pared de afuera; las internas se hacen alrededor de lo que sigue subiendo, como si fuera una región propia, y la
+  superficie de arriba gana su lugar. `top` en cada capa; `topmost` en la última capa de la pieza;
+- `walls.first_layer_one_wall` (regla 11): la primera capa con la pared de afuera sola;
+- `walls.extra_if_needed` (regla 6) y `walls.avoid_curled_overhangs` (regla 9) se leen y se guardan, sin cambiar el
+  G-code: en la ficha, Tisma Slicer no agregó perímetros, y lo segundo no se midió;
+- la tarjeta «Más opciones de paredes» en Resistencia; `walls.clockwise` ahora también se guarda en el archivo de
+  ajustes (faltaba en la escritura).
+
+**Medido** (mismas piezas y ajustes que la ficha):
+- W5 (cilindro de 10 mm, 4 paredes, costura alineada atrás): la de afuera en X 100,000 y las internas en 100,400,
+  100,799 y 101,195 (Tisma: 0,42 mm por nivel con su ancho; el motor, 0,40 con `walls.width` 0,4);
+- W7 (escalón): capa 19, paredes internas 187,2 mm sin el ajuste y 107,2 con `top` (Tisma: 186,51 y 106,42); la
+  superficie de arriba pasa de 748 a 893 mm (Tisma: 986 a 1090, con otro espaciado); capa 39 sin paredes internas con
+  `top` y `topmost`; `topmost` deja la capa 19 como sin el ajuste;
+- W8 (cubo de 20 mm, 3 paredes): capa 0 solo la de afuera, 78,4 mm (Tisma 78,34); capa 1, las tres.
+- 3 pruebas nuevas (`tests/test_walls_extra.cpp`).
+
+**Sigue:** los perímetros extra en voladizos (W3), el espesor de la cáscara vertical (W4: antes, una pregunta de
+comportamiento al equipo de fichas, porque los números de la ficha no alcanzan para saber dónde va el relleno sólido) y
+el relleno concéntrico de ancho fijo; después la impresión secuencial.
+
+## 2026-10-27 — Punto 3: perímetros extra en voladizos (W3)
+
+**Hecho** (ficha `walls_extra.md`, regla 5): `walls.extra_on_overhangs` llena cada voladizo sostenido de un solo lado
+(las mismas zonas que los arcos en voladizo, `held_zones` en `src/infill/arcs.*`), dentro de las paredes, con lazos
+desde su contorno hacia adentro, a un ancho de distancia, como `Overhang perimeter` a la velocidad de los puentes y con
+su cordón redondo, en lugar de su relleno; se imprimen después de las paredes de su isla. Con `arcs.enabled`, esas
+zonas son de los arcos. El relleno concéntrico del motor ya era de ancho fijo (regla 1, último punto).
+
+**Medido** (W3, columna de 10 × 20 × 8 mm con una losa de 20 × 20 × 2 mm que sobresale 10 mm, capa 40): sin el ajuste,
+76,0 mm de `Overhang perimeter` en 2 tramos (Tisma: 75,8 en 2); con él, 489,6 mm en 13 lazos (Tisma: 513,2 en 4
+tramos, sus lazos unidos). Prueba nueva en `tests/test_walls_extra.cpp`; 522 pruebas pasan; fuzzer con las opciones
+de paredes nuevas: 300 corridas (semilla 13), 0 fallas.
+
+**Pregunta para el equipo de fichas** (regla 7, W4, `walls.vertical_shell`): el motor ya pone sólido lo que no tapan
+todas las `surfaces.top_layers` capas de arriba (o de abajo), que en el techo de 15° parece ser lo de `partial`. Para
+saber qué cambia con `disabled` y con `enabled`, como caja negra en Tisma Slicer, con el techo de W4 en la capa 30: ¿qué
+superficie es `Top solid infill` y cuál `Solid infill` en cada modo (por ejemplo, el ancho de cada franja medido desde
+el borde alto del techo)? Y en el hongo (capa 60) y el cono (capa 20) con `enabled`: ¿dónde queda el relleno sólido
+agregado (a qué distancia de la pared y de qué ancho)?
+
+**Sigue:** la impresión secuencial (`sequential.md`, con las etiquetas de objetos de `gcode_firmware.md`, regla 4).
+
+## 2026-10-27 — Punto 3: impresión secuencial
+
+**Hecho** (ficha `sequential.md`):
+- `sequential.enabled`, `sequential.clearance_radius`, `sequential.clearance_height`, `placement.spacing` (el
+  `arrange.distance` de la ficha) y `gcode.between_objects`;
+- el laminado recibe los objetos de la placa (sus triángulos en la malla: `MeshObject`); con la impresión secuencial,
+  cada uno se lamina aparte (con su falda, borde y balsa) y sus capas siguen a las del anterior (`SlicedModel::objects`,
+  `sequential`); sin ella, se guarda el contorno de cada uno para las etiquetas de objetos que siguen;
+- el escritor imprime objeto por objeto (regla 1): cada uno con sus primeras capas (velocidad, aceleración, ventilador,
+  falda, borde, balsa, costura en bufanda), sus cambios por altura desde abajo, y el paso al siguiente de la regla 3
+  (retrae, sube a la capa más alta impresa si hace falta, viaja al centro de la caja del siguiente, temperaturas de la
+  primera capa sin esperar o las de `gcode.between_objects`, ventilador apagado, y la primera capa viaja a esa altura
+  hasta su primer punto antes de bajar). Una marca `;NEXT_OBJECT:<n>` le dice al verificador que la Z vuelve a empezar;
+- se rechaza (regla 4) un objeto que no es el último más alto que `sequential.clearance_height`, dos objetos más cerca
+  que `sequential.clearance_radius`, y varios objetos en modo vaso sin la impresión secuencial (regla 5);
+- `slice --copies N` pone N copias del modelo en la cama (placement.md, regla 2), con `placement.spacing` entre sus
+  cajas, o el radio del cabezal en la impresión secuencial (regla 2); `arrange` de la placa pasó al núcleo
+  (`arrange_boxes`) y la interfaz acomoda con ese radio;
+- la revisión de estabilidad mira cada objeto por su cuenta;
+- en la interfaz: la opción en Otros › Modos especiales, los dos espacios del cabezal en Impresora › Cama y volumen,
+  el G-code entre objetos con las plantillas, y el corte en etapas guarda los objetos.
+
+**Medido** (SQ1 a SQ4 con el cubo de 20 × 20 × 10 y la base de la ficha): 2 copias, 50 capas con las dos en cada una
+sin el ajuste y 100 capas (150 con 3) de a una con él; separación entre bordes 6 / 20 / 35 mm con los radios 5 / 20 /
+35 (6 sin el ajuste), como la ficha; al pasar al segundo: retracción, viaje a (120, 100) a Z 10, `M140 S0`, `M104 S200`,
+`;BETWEEN 1`, `M107`, y en su primera capa el viaje a Z 10 y después `G1 Z0.200`; con `M109 S[temperature]`, solo
+`M109 S205`. Las torres de 25 mm se rechazan (la ficha: Tisma Slicer no avisa). 6 pruebas nuevas
+(`tests/test_sequential.cpp`); fuzzer con copias juntas y de a una.
+
+**Diseño propio:** el orden es el de los objetos en la placa (o de las copias); el centro de un objeto es el de la caja
+de su contorno; el conjunto de copias se centra en la cama también en la impresión secuencial (Tisma Slicer deja la
+primera en el centro); la altura de viaje es la de la capa más alta impresa hasta ahí, no la del último objeto.
+
+**Corregido** (el fuzzer, con las copias y las opciones nuevas):
+- con `walls.top_one_wall`, una esfera colgaba el laminado: la diferencia entre la capa y lo abierto arriba dejaba
+  anillos sin área, el eje medio salía roto (209 350 nodos, uno a 30 m de una pieza de 16 mm) y la subida de cada nodo
+  hasta el centro era cuadrática. Ahora esa región se abre un cuarto de cordón, las paredes descartan los anillos sin
+  área, cada nodo sube una vez (lo que recorre queda guardado) y el reparto desde los nodos marcados es una búsqueda de
+  Dijkstra desde todos a la vez (antes, una búsqueda por cada uno que podía volver a recorrer los mismos caminos una
+  cantidad exponencial de veces). La región que colgaba se hace en 19 ms;
+- el verificador tomaba la última pieza diminuta de un barrido largo por una retracción nueva; ahora una retracción
+  nueva es solo la que viene después de otro movimiento;
+- en la impresión secuencial, el verificador volvía a los valores de la base en la marca del objeto nuevo, pero el
+  viaje hasta él es todavía del anterior: vuelve en la primera capa del nuevo.
+
+Fuzzer: 400 corridas (semilla 17) y 1500 con las semillas 1, 271034 y 271035, 0 fallas.
+
+**Sigue:** las etiquetas de objetos (`gcode_firmware.md`, regla 4), que ya tienen los objetos; después el punto 4.
+
+## 2026-10-27 — Punto 3: etiquetas de objetos
+
+**Hecho** (ficha `gcode_firmware.md`, regla 4): `gcode.object_labels` (`none`, `octoprint`, `firmware`). Con los
+objetos de la placa (o las copias de `slice --copies`), el G-code define cada uno al empezar (Marlin: `M486 S<n>`,
+`M486 A<nombre> (Instance <k>)`, `M486 S-1`; RepRapFirmware: `M486 S<n> A"…"`; Klipper: `EXCLUDE_OBJECT_DEFINE` con su
+centro y su envolvente) y en cada capa marca los movimientos de cada uno (`M486 S<n>` … `M486 S-1`,
+`EXCLUDE_OBJECT_START` … `EXCLUDE_OBJECT_END`, o los comentarios de OctoPrint); en RepRap genérico y los firmwares
+viejos, nada. Para eso, en cada capa las islas de un objeto van todas antes de pasar al siguiente (la más cercana
+primero, como siempre); la zona gruesa de capas locales queda fuera de los objetos. En la impresión secuencial, cada
+capa va entera con la etiqueta de su objeto. El verificador acepta esas líneas. Fila en Impresora › G-code ›
+Firmware.
+
+**Medido** (FW1, FW3, FW6 y FW8 con dos copias del cubo de 20 mm): las definiciones y las marcas como en la ficha
+(los nombres `cube20.stl (Instance 1)` y `cube20_stl_(Instance_1)`, `; printing object cube20.stl id:0 copy 0`); con
+Klipper, la segunda copia centrada en 113 (Tisma Slicer: 74, porque no centra el conjunto). 5 pruebas nuevas
+(`tests/test_labels.cpp`); fuzzer con etiquetas: 1000 corridas con las semillas 31 y 32, 0 fallas.
+
+**Sigue:** el punto 3 queda completo salvo la cáscara vertical (W4, con la pregunta al equipo de fichas). Sigue el
+punto 4 (multimaterial, F7, resina).
+
+## 2026-10-27 — Punto 4a: el núcleo de varios extrusores
+
+**Hecho** (ficha `multi_extruder.md`, reglas 1 a 8 y 16):
+- ajustes nuevos: `machine.extruders` (1 a 16) y `machine.extruder_offset`; el grupo `extruders` (`walls`, `infill`,
+  `solid_infill`, `support`, `support_interface`, `bed_temperature_from`, `ooze_prevention`, `standby_delta`);
+  `retraction.toolchange_length` y `toolchange_restart_extra` (un valor o una lista por extrusor); `gcode.toolchange`;
+  `surfaces.interface_shells`. Cada objeto de la placa (`MeshObject::extruder`) tiene su extrusor;
+- el corte: con objetos de extrusores distintos, la placa se lamina entera (contorno de cada capa, soporte, falda,
+  borde, balsa) y cada extrusor aparte sobre esas mismas capas. Cada parte tiene sus perímetros donde toca a otra; lo
+  de todas las partes sostiene sus paredes, puentes y voladizos; las superficies ven lo de las otras como propio salvo
+  con `surfaces.interface_shells`; lo que ya es de un extrusor anterior no es de este. Cada camino lleva su extrusor
+  (`Toolpath::tool`). Con un solo extrusor en la máquina, nada cambia;
+- el escritor: cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un
+  grupo por extrusor (el soporte sin extrusor propio, la falda y el borde van con el primero); el cambio retrae lo que
+  falta hasta `toolchange_length`, quieto, cierra la etiqueta del objeto abierta, escribe la espera con menos
+  temperatura, el fin del filamento, `gcode.toolchange` (`previous_extruder`, `next_extruder`, `toolchange_z`), `T<n>`
+  si el texto no lo tiene, la espera del que entra y el inicio de su filamento; al volver, el filamento de esa
+  herramienta vuelve lo que retrajo y su extra. Al empezar: cada extrusor usado calentado y esperado (o a su
+  temperatura de espera), el G-code de cambio con `previous_extruder` −1 y `T` al primero; la cama de la primera capa
+  y, desde la segunda, la del extrusor que corresponde (`M140`). El desfase de cada boquilla se resta de sus X e Y. Las
+  variables `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used` y `current_extruder`;
+- el verificador sigue cada herramienta: su retracción de cambio, lo que retrajo cada una y su extra al volver, y el
+  área de movimiento corrida por los desfases;
+- en la interfaz: Impresora › Boquilla › Extrusores (cantidad, desfases, retracción de cambio y su extra, G-code de
+  cambio), Otros › Varios materiales (el extrusor de cada tipo, la cama, la espera) y las capas sólidas entre
+  materiales en Superficies; `docs/CONFIG.md` con todas las claves.
+
+**Medido** (con las piezas de la ficha: dos mitades de 10 × 20 × 10 mm y dos bloques apilados de 20 × 20 × 5 mm):
+- ME1: `M104 S200 T0`, `M104 S220 T1`, el inicio, `M109 S200 T0`, `M109 S220 T1`, `T0`; capa 0 con T0 y T1, capa 1
+  con T1 y T0…: 51 `T` en 50 capas, como la ficha. Cada mitad con su perímetro externo de 58,4 mm;
+- ME2: `G1 E-4`, `;TC 0->1 at 0.2`, `T1`; al volver a T0, `G1 E5`. Con `T{next_extruder} ; mine` en el texto, ningún
+  `T` más; al empezar, `;TC -1` y `T0 ; mine`. La ficha muestra también `M107` después de `T1`: el motor no lo escribe
+  (el ventilador sigue el de la capa);
+- ME3: perímetros con T0, relleno, sólido y superficie con T1; la capa 5 empieza con el relleno (T1); `M190 S55` y en
+  la segunda capa `M140 S70`; todo con el extrusor 2: 55 y 50 desde el 1, 75 y 70 con 0;
+- ME4: `M104 S190 T1` al empezar, sin esperarlo; en cada cambio `M104 S170 T0 ;cooldown`, `T1`, `M109 S220 T1`;
+- ME5: la mitad del extrusor 2 de X 90,2 a 99,8 e Y 85,2 a 104,8;
+- ME10: sin el ajuste, relleno ralo en las capas 21 a 27 de los dos materiales; con él, las capas 22 a 24 sólidas
+  (la 24 superficie de arriba) y 25 a 27 sólidas, sin puente (apoyan en el bloque de abajo). Tisma Slicer imprime la
+  capa 22 como puente interno sobre el relleno; el motor no hace puentes internos sobre el relleno ralo en ningún caso
+  (pasa lo mismo con P13 de `infill_patterns.md`): queda anotado para hacerlo aparte.
+
+Velocidad (dos cubos de 40 mm lado a lado, relleno al 20 %, 200 capas, con la CI de Linux corriendo en paralelo): con
+un extrusor 5 ms de corte y 11 ms de G-code; con dos, 12 ms y 20 ms (la placa entera más cada parte; el G-code con los
+cambios). 7 pruebas nuevas (`tests/test_multi_extruder.cpp`); el fuzzer con dos y tres extrusores (copias de extrusores
+distintos, extrusor por tipo, desfases, espera, texto de cambio): 300 corridas (semilla 41), 0 fallas. Suite: 541
+pruebas pasan.
+
+**No hecho:** elegir el extrusor de cada objeto desde la línea de comandos o la interfaz (las pruebas lo dan en los
+objetos); los colores pintados (regla 1, con `model_tools.md`); el tiempo de los cambios en la estimación; la vista
+previa no colorea por extrusor.
+
+**Sigue:** 4b, la torre de purga (reglas 9 a 14, ME6 a ME8).
+
+## 2026-10-27 — Punto 4b: la torre de purga
+
+**Hecho** (ficha `multi_extruder.md`, reglas 9 a 12):
+- el orden de los extrusores de cada capa salió del escritor a `plan_tools` (`src/slice/wipe_tower.*`), para que la
+  torre, el verificador y la revisión de imprimibilidad vean los mismos cambios;
+- `plan_wipe_tower`: un rectángulo de `wipe_tower.width` con la esquina en (`x`, `y`), girado `rotation` alrededor de
+  ella, tan hondo como la capa que más purga. En cada capa hasta la del último cambio: el lazo de contorno, un bloque
+  de líneas en zigzag a lo ancho por cada cambio, impreso por la herramienta que entra (con
+  `machine.single_extruder_mmu`, las que hacen el volumen de `wipe_tower.purge_volumes` por el
+  `extrusion.purge_multiplier` del filamento que entra; con varias boquillas, 5 líneas para cebar), y el resto de
+  adentro: denso en la primera capa, en columnas a lo sumo `bridging` aparte arriba, de las que cuelgan los bloques.
+  En la primera capa, el borde (`brim_width`, en lazos de un cordón). `extra_spacing` separa las líneas y `extra_flow`
+  las ensancha;
+- el escritor: antes de cada cambio viaja a la torre y cambia ahí; el bloque y, en el primer cambio de la capa, el
+  contorno y el relleno, con la herramienta nueva; en las capas sin cambio (y en la primera) la torre va primero, con
+  la que está imprimiendo. Ningún camino de la torre queda dentro de la etiqueta de un objeto;
+- errores: la torre con E absoluta (regla 9), fuera de la cama, o sobre la pieza, su falda o su borde;
+- el verificador cuenta la torre en el área permitida, y el resumen del final dice los gramos de filamento de la
+  torre (`; total filament used for wipe tower [g]`, antes siempre 0);
+- en la interfaz: Otros › Torre de purga y Más de la torre de purga, el multiplicador en Material › Flujo y la MMU en
+  Impresora › Extrusores; `docs/CONFIG.md`.
+
+**Medido** (las piezas de la ficha; entre paréntesis, Tisma Slicer):
+- varias boquillas: la torre de X 180,2 a 239,8 e Y 140,2 a 142,6 en la capa 10 (180 a 240, 140 a 143), 419,6 mm por
+  capa (303,6), igual con volúmenes de 300;
+- MMU: hasta Y 152,6 (154,4), 1919,6 mm por capa (2038,1); con 300 mm³ hasta 166,2 (169,4), 3959,6 mm (3840,4); ancho
+  40: X hasta 219,8 (220); borde 5: la capa 0 desde X 175,0 (175,0), con 2 desde 178,2 (178,2); separación 150 %: 5 mm
+  más honda o más; flujo 150 %: 1379,4 mm (1561,7); multiplicador 50 %: hasta 146,6 (147,9), 1019,6 mm (1257,7);
+- ME7 (apilada, MMU): 2687,6 mm en la capa 0 (2388), 284,0 mm ralos en las capas 1 a 24 (387,4), 1919,6 en la 25
+  (2089,6), nada encima; el `T1` después del viaje a la torre.
+Las diferencias vienen del diseño propio de la torre (líneas del ancho de las paredes con el volumen como sección
+rectangular, 5 líneas para cebar, columnas en vez de un zigzag ralo); los comportamientos de la ficha se cumplen.
+
+**Corregido** (el fuzzer, con la torre y desfases): al cambiar sobre la torre a una boquilla con otro desfase, la
+primera línea salía en diagonal desde donde había quedado la anterior. Ahora la boquilla nueva se mueve sobre el mismo
+punto con sus coordenadas antes de extruir.
+
+2 pruebas nuevas de la torre y una de desfase con torre (`tests/test_multi_extruder.cpp`, 9 en total); fuzzer con la
+torre (MMU o boquillas, giro, ancho, borde, separación, flujo, multiplicador, volúmenes): 400 corridas (semilla 43), 0
+fallas. Suite: 543 pruebas pasan.
+
+**No hecho:** sin capas ralas (`no_sparse_layers`, regla 11: la boquilla tendría que bajar a la torre; se lee y se
+guarda), la purga en el relleno o en el objeto (regla 13, ME8), el cono (regla 14, no medido), el extrusor propio de
+la torre en las capas sin cambio (`extruders.wipe_tower`, se lee) y el tiempo de los cambios.
+
+**Después, en el mismo bloque:**
+- sin capas ralas (`wipe_tower.no_sparse_layers`, regla 11, ME7): la torre tiene solo la primera capa y las de un
+  cambio, cada una sobre la anterior. En la capa del cambio la boquilla viaja a la torre a la altura de la capa, baja
+  hasta la torre (en la pieza apilada, a Z 0,4 en la capa 25), imprime ahí con el alto de la capa y sube derecho
+  antes de volver a la pieza (ni la rampa del salto ni la del cambio de capa salen de la torre). El verificador acepta
+  la torre por debajo de la capa, nunca por encima. Medido: capas 1 a 24 sin torre, como la ficha;
+- las pruebas que escriben archivos usan una carpeta temporal propia de cada proceso (`tests/test_temp.hpp`), que se
+  borra al terminar: la etapa ASan de la CI de Linux falló una vez porque la suite del árbol de trabajo corría al mismo
+  tiempo y las dos escribían `/tmp/tisma_test_profiles_store`. Sola, la prueba pasa (3 de 3).
+
+Fuzzer con capas ralas o no: 400 corridas (semilla 44), 0 fallas. Suite: 543 pruebas pasan.
+
+- la purga en los objetos (regla 13, ME8): cada objeto puede recibir la purga en su relleno ralo
+  (`MeshObject::wipe_into_infill`) o en todo él (`wipe_into_object`). Con una MMU, después de cada cambio el
+  filamento nuevo imprime primero, de esos objetos, lo que todavía no se imprimió en la capa (hasta cubrir la purga
+  menos `extrusion.min_purge_on_tower`, que va a la torre antes), con la etiqueta de su objeto; la torre recibe solo
+  lo que falta. Lo decide `plan_tools`, así la torre ya sale con el tamaño justo. Medido en la capa 10 de los dos
+  colores con relleno al 20 %: torre de 1919,6 mm, 1860,4 con purga en el relleno (Tisma Slicer: de 2038,1 a 1978,6,
+  59,5 mm menos; acá 59,2) y 1739,6 con purga en el objeto (Tisma Slicer: sin torre en esa capa; el motor la
+  imprime con lo que falta, porque el objeto de una capa no llega a los 140 mm³). Con un mínimo de 10 000 mm³ en la
+  torre, la torre no cambia. Todavía no se marcan los objetos en la interfaz ni en la línea de comandos.
+
+Fuzzer con objetos que reciben la purga y mínimos: 300 corridas (semilla 45), 0 fallas.
+
+**Sigue:** 4c, la secuencia de la MMU (regla 15, ME9).
+
+## 2026-10-27 — Punto 4c: la MMU de un extrusor
+
+**Hecho** (ficha `multi_extruder.md`, regla 15): con `machine.single_extruder_mmu` y la torre, cada cambio:
+- comprime la punta con el filamento que sale: líneas de 0,6 mm (1,5 veces las paredes) sobre la torre, antes del
+  bloque de purga, un tramo por cada cuarto de segundo de `extrusion.ramming` a la velocidad de su caudal;
+- descarga hasta el medio del tubo de enfriamiento (`mmu.cooling_tube_position` más medio
+  `cooling_tube_length`): los primeros 15 mm a `unloading_speed_start`, lo del medio a `unloading_speed`, el último
+  cuarto más lento (lo que ya retrajo cuenta); espera `toolchange_delay` (`G4`);
+- enfría la punta con `cooling_moves` idas y vueltas de `cooling_tube_length`, el filamento de `cooling_initial_speed`
+  a `cooling_final_speed`, la boquilla a lo largo de la primera línea de purga mientras tanto;
+- retrae lo del cambio, escribe el fin del filamento, `gcode.toolchange`, `T<n>` y el inicio del nuevo, y carga
+  `parking_position` más `extra_loading_move` (un quinto lento, siete décimos rápido, el último décimo lento);
+- purga en la torre. Todo eso va como G-code propio del cambio (`;TYPE:Custom`); el verificador toma la punta del
+  filamento nuevo en la boquilla después del `T`. `load_time` y `unload_time` suman a la estimación.
+Con una MMU no se usan los desfases de boquilla (hay una sola). Un viaje que no se mueve (un camino que sigue donde
+terminó el anterior, como los tramos de la compresión) ya no retrae. En la interfaz: Impresora › MMU, Material ›
+Carga y descarga en la MMU y Tiempos del cambio; `docs/CONFIG.md`.
+
+**Medido** (ME9, dos colores con MMU y torre; entre paréntesis Tisma Slicer): la compresión a F 4900 a 5500 en la
+primera capa con cordón de 0,6 (F 3554 a 5385); la descarga `E-13` (15 menos los 2 de la retracción del viaje) a
+F6000, `E-55.5` a F5400, `E-15.67` a F2700 y `E-7.83` a F1620: 94 mm (`E-15`, `E-55.3`, `E-15.8`, `E-7.9`: 94); 4
+idas y vueltas `E5`/`E-5` a lo largo de 58,8 mm, de F1552 a F2399 (sobre 49,3 mm, de F1302 a F2013); `E-10`, `T1`;
+la carga `E18 F180`, `E63 F1680`, `E9 F180` (`E18 F180`, `E63`, `E9`: 90 mm). Con la compresión, la torre de ME6 llega
+a Y 155,0 (154,4), con 300 mm³ a 168,6 (169,4), con el multiplicador al 50 % a 149,0 (147,9); 2130,7 mm por capa
+(2038,1). La ficha muestra también `E2` antes de la retracción de cambio; el motor no lo escribe.
+
+**Corregido** (el fuzzer): con una MMU y desfases de boquilla, la primera línea después del cambio salía en diagonal;
+ahora una MMU no tiene desfases y, si los hubiera, la boquilla se mueve antes.
+
+Prueba nueva ME9 (`tests/test_multi_extruder.cpp`, 11 en total); fuzzer con MMU: 300 corridas (semilla 46), 0
+fallas.
+
+**No hecho:** la corriente del motor durante el cambio (`mmu.high_current_on_swap`, se lee); los ajustes de carga y
+descarga son uno para todos los filamentos (no por extrusor).
+
+**Sigue:** 4d, las vigas de entrelazado (regla 17, ME11).
+
+## 2026-10-27 — Punto 4d: vigas entre materiales
+
+**Hecho** (ficha `multi_extruder.md`, regla 17): con `interlocking.beams`, antes de laminar las partes de cada extrusor
+se calculan las regiones de todas; donde dos se tocan, lo que está a menos de `depth` anchos de viga del borde entre
+ellas (y a más de `boundary_avoidance` del exterior de la pieza) se corta en franjas de `beam_width` a `orientation`
+grados, giradas 90° cada `beam_layers` capas, que van por turnos a una parte y a la otra. Cada parte se lamina con su
+región así cambiada (`PartFrame::regions`): sus perímetros y su relleno siguen las vigas. Grupo `painting` (regla 18):
+se lee y se guarda; espera a que se laminen los colores pintados. En la interfaz: Otros › Entrelazado entre
+materiales; `docs/CONFIG.md`.
+
+**Medido** (ME11, dos colores con relleno al 20 %; entre paréntesis Tisma Slicer): el extrusor 1 llega hasta X 101,52
+(102,48; sin vigas 99,8); el perímetro externo de cada mitad pasa de 58,4 a 123,3 mm (de 58,3 a 119); las capas 10 y
+11 iguales y la 12 distinta, como la ficha.
+
+Prueba nueva ME11 (12 en `tests/test_multi_extruder.cpp`); fuzzer con vigas: 300 corridas (semilla 47), 0 fallas.
+
+**Sigue:** 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12).
+
+**4e, en el mismo bloque:** el motor ya imprime siempre el soporte en las capas de la pieza, que es lo que la ficha
+llama sincronizado (ME12: 50 capas, soporte en Z 0,2, 0,4, 0,6…). `support.synchronize_layers` se lee y se guarda (en
+Soporte › Interfaz). Lo que no está: el soporte con capas propias más gruesas (ME12 sin sincronizar: 70 capas, soporte
+a 0,296 mm, o 0,247 con `machine.max_layer_height` 0,25), que pide imprimir el soporte a otras Z que la pieza; queda
+anotado en `PLAN.md`.
+
+**Sigue:** 4f, `multimaterial.md` y `color_mixing.md`.
+
+## 2026-10-27 — Punto 4f, primera parte: boquillas distintas
+
+**Hecho** (ficha `multimaterial.md`, reglas 1 a 5, 9 a 11):
+- `machine.nozzle_diameter` acepta una lista, una boquilla por extrusor (un número las cambia todas). Los anchos de
+  las líneas son para la boquilla del primero y cada línea toma la de su extrusor en proporción: las paredes y lo que
+  va con su ancho (sólido, puentes, soporte) la del extrusor de las paredes; el relleno ralo la del relleno
+  (`FillParams::sparse_width`). Con boquillas distintas ninguna capa pasa el 75 % de la más fina (regla 2).
+- `multi.fine_walls_coarse_infill`: con boquillas distintas, perímetros, sólido, soporte, interfaz y torre con la más
+  fina; el relleno ralo con la más gruesa, combinado en tantas capas como entren en el 75 % de su boquilla
+  (`kind_extruders`, que reemplaza a los `extruders.*` mientras está prendido; al apagarlo vuelven, regla 4).
+- `multi.color_mixing` (sin poner: no con una MMU, sí con una boquilla por filamento); en la interfaz, prenderla con
+  una MMU avisa antes del costo («Cancelar» / «Prender»).
+- Con una MMU, después de laminar, el aviso `purge` (información) con los gramos que van a la torre y dentro de los
+  objetos (regla 10).
+- En la interfaz: la boquilla de cada extrusor debajo de la general, que dice «boquillas distintas» si no coinciden
+  (Impresora › Boquilla), y la tarjeta Otros › Boquillas distintas y colores; `docs/CONFIG.md`.
+
+**Corregido:** con varios extrusores el relleno combinado (`infill.combine_*`) se perdía: el laminado por extrusor no
+juntaba las capas gruesas de cada parte, y el escritor las imprimía fuera de los grupos de cada extrusor (sin cambio
+de herramienta). Ahora cada extrusor imprime las suyas en su grupo, todas las partes en las mismas tandas de capas, y
+el plan de herramientas las cuenta.
+
+**Medido** (MM1: cubo de 20 mm, boquillas 0,25 y 0,6, capas de 0,15, paredes de 0,3): perímetros y sólido con el
+extrusor 1 (cordón de 0,3), relleno ralo solo con el 2, de 0,72 mm de ancho (0,3 × 0,6 / 0,25) y 0,45 mm de alto (tres
+capas, el 75 % de 0,6), una capa de cada tres, con su cambio a `T1` en cada una. MM5: los gramos del aviso son los de
+la torre del pie del G-code; purgando en el relleno, parte pasa a los objetos. Tisma Slicer no se midió en estos casos.
+
+Pruebas nuevas (`tests/test_multi_extruder.cpp`, 17 en total): MM1, MM2, MM3 y la regla 2, MM5 y el relleno combinado
+de dos extrusores; fuzzer con boquillas distintas: 600 corridas (semillas 48 y 49), 0 fallas. La interfaz (MM3, MM4,
+MM6) se compiló y sus pruebas de tarjetas y ayuda pasan; no se probó a mano.
+
+**No hecho:** un `support.width` propio de cada boquilla (regla 5: el soporte sale de la fina con el ancho de sus
+paredes); el diámetro de cada extrusor no se escribe en la variable `nozzle_diameter` de las plantillas (sigue siendo
+una lista de uno).
+
+**Sigue:** 4f, segunda parte: `color_mixing.md` (las mezclas, FS1 a FS14).
+
+## 2026-10-27 — Punto 4f, segunda parte: mezcla de colores
+
+**Hecho** (ficha `color_mixing.md`):
+- `src/slice/color_mix.*`: una mezcla (`ColorMix`) es un extrusor virtual numerado después de los reales, con hasta
+  tres filamentos y su parte, o un degradé con la posición de cada uno. El ciclo de capas (regla 7) es el más corto
+  de 2 a 64 en el que cada parte queda a menos de 3 puntos de la pedida, simplificado; el orden (regla 8) da cada capa
+  al filamento más atrasado, el primero de la mezcla en un empate; el ciclo cuenta desde la primera capa donde está la
+  mezcla (regla 9). Los degradés (regla 10) van por bandas, una cada 10 capas (2 a 11), con la mezcla del medio de la
+  banda redondeada al 10 % y su propio ciclo; la banda de una capa sale de su Z de arriba, sumando las alturas de capa
+  desde la cama.
+- En el laminado (`slice_model(..., mixes)`): un objeto con el número de una mezcla se lamina como otro extrusor y
+  `apply_mixes` le pone a cada capa el filamento que le toca, capa entera (regla 6); lo demás (plan de herramientas,
+  torre, escritor) solo ve extrusores reales, y cada capa empieza con el que dejó la anterior (regla 11). Las mezclas
+  que la impresora no puede imprimir se descartan (regla 5).
+- `toolchange_template_error` dice antes de laminar si la plantilla de cambio falla (regla 13); la interfaz lo avisa
+  al prender la mezcla.
+- El proyecto guarda el extrusor de cada pieza, sus banderas de purga y las mezclas con los colores de los
+  filamentos, en el JSON de la regla 15 (`docs/PROJECT.md`); al abrirlo en una impresora con menos filamentos se
+  descartan las mezclas que no puede imprimir.
+- En la interfaz: la herramienta «Extrusor y color del objeto» de la placa (el extrusor de cada pieza, real o
+  virtual, y dónde purga) y el diálogo «Extrusores virtuales - Mezcla de colores» (la lista con su color y partes, el
+  color de cada filamento, las mezclas de dos colores, el editor con el deslizador, el tercer extrusor, el color que
+  se muestra y la secuencia de capas). El color previsto es propio: la relación de Yule y Nielsen (1951) con n = 2 en
+  cada canal; el modelo de Prusa no se usó.
+
+**Medido** (caja de 20 × 20 × 10 mm, 50 capas, MMU con torre; entre paréntesis Tisma Slicer): FS1 1, 2, 1, 2… con 49
+cambios (49); FS2 a FS8 las secuencias de la ficha; FS9, el degradé, la secuencia exacta
+`11112111111211121121212121212212221221222212222222`; FS10 49 cambios (49); FS11 4165 mm de filamento, 12,42 g en
+total y 11,16 g en la torre, 57 min con la impresora de prueba (3753 mm, 11,19 g, 10,17 g, 55 min). Desde la interfaz,
+el mismo proyecto lamina y verifica: 3,86 m.
+
+**Nota para la ficha:** la regla 7 dice «a 3 puntos o menos», pero con eso 7 : 93 daría un ciclo de 10 (10 % está
+justo a 3 puntos de 7 %); la tabla medida da 11, así que el motor usa «a menos de 3 puntos».
+
+**Corregido** (el fuzzer, con filamento de 2,85 mm): la compresión de la MMU podía ir más rápido que `speed.max`;
+ahora no pasa de ese límite (la torre de ME7 cambia de 2130,65 a 2123,98 mm por capa con la impresora de prueba).
+
+Pruebas nuevas: `tests/test_color_mix.cpp` (9 casos: la tabla de la regla 7, FS1 a FS14 y el proyecto); fuzzer con
+mezclas y degradés: 900 corridas (semillas 50 a 52), 0 fallas. Capturas del diálogo y de la herramienta bajo Xvfb.
+
+**No hecho:** el 3MF (leer y escribir `Metadata/Prusa_Slicer_full_spectrum.json` y el extrusor de cada objeto: el
+motor no escribe 3MF y lee el plato como una sola malla); la línea de comandos no asigna extrusores ni mezclas; el
+botón de degradés no está en la interfaz (la ficha dice que Tisma Slicer tampoco lo tiene, regla 4).
+
+**Sigue:** F7 no planar; después resina (`resin.md`, `resin_supports.md`).
+
+## 2026-10-27 — F7, la base: capas curvas
+
+**Hecho** (ficha `nonplanar.md`, reglas 1 a 8):
+- Ajustes `curved.*` (Impresión › Otros › Capas curvas) y `head.*` (Impresora › Máquina › Cabezal), en
+  `docs/CONFIG.md`.
+- `src/slice/curved.*`: el campo `D = g · rampa` con la huevera, las crestas, las crestas torcidas y el cono; la rampa
+  `S(t)` desde `flat_below` y, con `flat_top`, de vuelta a plano arriba; el ajuste a la cabeza (`λ = π · altura libre /
+  tan`, la amplitud con esa pendiente y como mucho media altura libre, achicada por bisección hasta que `J` quede en
+  [0,6; 1,4] y no haya choque); sin ajuste, una capa demasiado empinada, que choca o con `J` fuera de límites es un
+  error claro.
+- El laminado (`slice_model`): la malla se refina (cada arista más larga que λ/20, entre 0,25 y 1 mm, partida en
+  mitades compartidas, así sigue cerrada; las de la zona plana no) y se mueve a `z − D`; se lamina plano; los objetos
+  conservan sus triángulos.
+- El G-code (`curve_gcode`, al final de `write_gcode`): cada movimiento sobre una capa curva se parte cada
+  `segment_length`, cada punto vuelve a su Z real (`z − D = z'`, por iteración), el material de cada tramo es el plano
+  por `J` en su medio, la velocidad baja donde `J` > 1 (no sube donde es menor, para no pasar los límites) y Z no pasa
+  `machine.max_feed_z`; los tramos en línea y con casi el mismo `J` se vuelven a unir. Funciona con E y con el eje A.
+- El verificador comprueba que cada extrusión esté sobre la curva de su capa y que su material sea el plano por `J`.
+- Requisitos y límites: E relativa (NP4); no va con el modo vaso, el ZAA, el relleno ondulado, la costura en rampa,
+  los arcos G2/G3, la impresión secuencial, las alturas por zona, la torre de purga ni las caras pintadas (error).
+
+**Medido** (bloque de 40 × 40 × 12 mm en X 100, Y 100; entre paréntesis Tisma Slicer): NP1 `λ` 25,894 mm, amplitud
+0,9545 mm (0,955; 0,952 calculado), 65 capas (65; plano 60), capas 1 a 3 planas, capa 41 (Z 8,2) con error mediano
+0,00024 mm y máximo 0,0006 (0,0009 y 0,0022); NP2 crestas, error máximo menor a 0,0015 (0,0008); NP3 en la capa 11
+(Z 2,2, dentro de la rampa) la relación material / (plano · `J`) tiene mediana 0,9999 y el 80 % entre 0,9985 y 1,0014
+(1,000; 0,994 a 1,006), con `J` de 0,81 a 1,37 (0,82 a 1,36); NP4 con E absoluta, error. El G-code del bloque pesa
+3,96 MB (103 mil líneas; plano 168 kB) y la interfaz lo lamina en 3,2 s.
+
+**Corregido** (el fuzzer): la compresión de la MMU ahora no pasa la extrusión más rápida configurada
+(`fastest_extrusion`, el mismo límite que el verificador).
+
+Pruebas nuevas: `tests/test_curved.cpp` (6 casos: NP1 a NP4, el cono y las crestas torcidas, la malla refinada
+cerrada); fuzzer con capas curvas: 1200 corridas (semillas 52 a 55), 0 fallas. Captura de la vista previa con la
+huevera bajo Xvfb.
+
+**No hecho:** suavizar las capas donde la cabeza chocaría (regla 6: hoy, sin ajuste, es un error, y con ajuste la
+amplitud se achica para toda la pieza); el tope de aceleración de Z (regla 5, solo la velocidad); el caudal `uniform`
+(hace lo mismo que `preserve`); el cono según los voladizos y los demás modos (`nonplanar_modes.md`); las caras
+pintadas con capas curvas. La estimación de tiempo y el filamento del pie del G-code son los del laminado plano.
+
+**Sigue:** F7, `surface` (las caras de arriba inclinadas como una sola capa) con `nonplanar_modes.md`; después resina.
+
+## 2026-10-27 — F7: capas paralelas a las caras de arriba (`surface`)
+
+**Hecho** (ficha `nonplanar_modes.md`, reglas 14 a 18): `curved.mode` `surface`. Cada cara que mira hacia arriba
+pide su pendiente (como mucho la pendiente libre de la cabeza), con un peso por su área y por lo horizontal que es;
+los pedidos se reparten por una grilla sobre la pieza (celdas de 1 mm, hasta 64 por lado) y `h(x, y)` sale por
+mínimos cuadrados arista por arista entre los nodos, con un peso chico en todas partes para que quede suave donde nadie
+pide (gradiente conjugado). La deformación es `h · rampa(z)`, con la rampa pareja desde `curved.flat_below` hasta donde
+empiezan las caras inclinadas (regla 15), achicada por bisección hasta cumplir `J`, la pendiente y la holgura de la
+cabeza (regla 16). Una pieza sin caras inclinadas se lamina plana (CO1), y las primeras capas quedan planas (SU5).
+Corregido de paso: `J` es 1 en las capas planas aunque la rampa tenga un quiebre justo ahí.
+
+**Medido** (bloque de 40 × 40 mm con techo de 20 a 24 mm a lo largo de X; entre paréntesis Tisma Slicer): error de la
+cara de arriba, desvío estándar por celdas de 1 mm muestreando a lo largo de cada extrusión, 0,050 mm en plano (0,057)
+y 0,0052 mm con `surface` (0,010); pendiente de las capas 0,0073 en Z 2 (0,010), 0,049 en 10 (0,048), 0,075 en 15
+(0,074), 0,090 en 18 (0,090), 0,095 en 20 (0,097) y 0,098 arriba (0,099); 110 capas (110; plano 120). Bloque bajo de 5
+a 9 mm (SU4): pendiente arriba 0,062 (0,087) y error 0,056 mm contra 0,050 en plano (0,056 contra 0,057): no gana, como
+dice la regla 17, pero queda un poco peor que plano. CO1: el bloque de techo plano sale con 60 capas planas. G-code del
+techo: 2,8 MB (plano 404 kB).
+
+Pruebas nuevas en `tests/test_curved.cpp` (9 casos en total: CO1, SU1 a SU3 y SU5, SU4); fuzzer con `surface`: 600
+corridas (semillas 56 y 57), 0 fallas.
+
+**No hecho:** el Z anti-aliasing encima de `surface` (hoy no van juntos); que una pieza baja no quede peor que plana
+(SU4); `overhangs`, el cono según la pieza y `automatic`.
+
+**Sigue:** F7, `overhangs` y el cono según los voladizos (reglas 1 a 13, CO1 a VO7); después `automatic`.
+
+## 2026-10-27 — F7: el cono según la pieza y los voladizos (`conical`, `overhangs`)
+
+**Hecho** (ficha `nonplanar_modes.md`, reglas 1 a 13):
+- Los voladizos que cuentan: caras que miran hacia abajo entre `curved.overhang_threshold` (nuevo, 45°) y 80° desde la
+  vertical, arriba de `flat_below`; cada uno pide `s(u − 5°)`, o al menos `s(u − 2°)` si la cabeza no deja más, o
+  nada.
+- `conical` con `fit_head`: la pendiente por radio sale de esos pedidos (su parte radial; un hongo baja hacia afuera,
+  el borde de un cuenco dado vuelta sube), cero en el centro, pareja a lo largo de max(R/4, 5 mm) antes del primer
+  radio que pide y la última pedida más afuera; sube con la rampa `S` hasta el voladizo más bajo.
+- `overhangs`: plana dentro de la sección donde empieza el voladizo (cortada por segmentos) y bajando afuera con la
+  distancia a ella, el borde suavizado de 1 mm adentro a 0,5 mm afuera, hasta lo más lejano del voladizo; la pendiente
+  como mucho el 90 % de lo que deja la cabeza (ángulo libre y holgura).
+- Las dos van en la grilla de `surface`, y los límites (`J`, pendiente, holgura) se toman ahora en puntos de la pieza:
+  columnas de una grilla donde un rayo en Z la encuentra adentro, y sus caras; no en las esquinas de su caja. Si ya
+  achicada la deformación no saca ningún voladizo del soporte (con el ángulo del soporte del motor), la pieza va
+  plana.
+- Corregido: una pieza sin nada que curvar (CO1) ya no usa un campo vacío; se lamina plana.
+
+**Medido** (hongos de la ficha; entre paréntesis Tisma Slicer): con el cabezal de 25°, `conical` 0,291 (48°), 0,410
+(52°) y 0,4663 (55°) (0,291, 0,410, 0,4665), y 60° plano; `overhangs` 0,291, 0,41 y 0,42 (0,29, 0,41, 0,42), 60°
+plano, y una capa bajo el sombrero de 55° con pendiente 0,42 (0,417); con el cabezal por defecto, `conical` 0,2 a 48°
+(0,21) y `overhangs` 0,18 (0,18), y 52° plano en `overhangs` (plano). Soporte del hongo de 52° con el cabezal de 25°:
+83,9 m de recorrido en plano (unos 2,8 m de filamento; 3,07 m) y nada con `conical` ni con `overhangs` (nada). Hongo de
+48° con el cabezal por defecto: de 86,0 m a 8,2 m con `overhangs`.
+
+**Distinto de Tisma Slicer:** con el cabezal por defecto, `conical` deja plano el hongo de 52° (CO2 lo curva): con
+0,2 de pendiente el voladizo queda a 45,5° de la vertical, y el soporte automático del motor (medio cordón de 0,4 mm
+por capa de 0,2, 45°) todavía lo toma; el de Tisma Slicer arranca a 48,4° (cordón de 0,45).
+
+Pruebas nuevas en `tests/test_curved.cpp` (12 casos: CO1, CO2, CO4, VO2, VO4 y VO5); fuzzer con los cuatro modos:
+600 corridas (semillas 58 y 59), 0 fallas.
+
+**No hecho:** varias zonas de voladizos a distintas alturas (`overhangs` toma una sola, desde el voladizo más bajo);
+el hongo con cúpula (AU3) y `automatic`; `stress`.
+
+**Sigue:** `automatic` (la suma de `overhangs` y `surface`), y después resina.
+
+**`automatic`, en el mismo bloque** (reglas 19 y 20): la deformación de `overhangs` más la de `surface`; si la suma se
+pasa de `J`, la pendiente o la holgura, se achica solo la de las caras de arriba (la de voladizos ya cumple sola).
+Medido: el hongo de 52° sale igual que con `overhangs` (AU1), el bloque con techo igual que con `surface` (AU2), y en el
+hongo con cúpula (AU3, cabezal de 25°) el soporte pasa de 83,9 m de recorrido en plano a 83,4 con `surface` y a nada
+con `overhangs` y `automatic` (Tisma Slicer: 3065 mm de filamento en plano, 1436 con `surface`, nada con los otros dos):
+nuestro `surface` saca menos soporte bajo el sombrero. Prueba nueva AU1 a AU3 (13 casos en `tests/test_curved.cpp`).
+
+**Sigue:** `stress` necesita las capas calculadas por el análisis estructural (regla 21 a 23): queda para cuando el
+análisis las calcule. Siguiente punto: resina (`resin.md`, `resin_supports.md`).
+
+## 2026-10-27 — Resina, R1: imágenes con el área exacta y el archivo GOO
+
+**Hecho** (ficha `resin.md`, reglas 1 a 12 y 20 a 22):
+- Ajustes: `machine.display_pixels_x`/`y`, `display_width`/`height` y `display_mirror_x`/`y` (los de la Elegoo Mars 5)
+  y el grupo `resin` (altura de capa, exposiciones, capas de fondo, pie de elefante, escalas, subidas y esperas,
+  potencias, suavizado, densidad, gamma, corrección de Z, corrección absoluta y los nombres de la cabecera). En los
+  perfiles: la altura de capa en el de impresión, el nombre de la impresora en el de impresora y lo demás en el de
+  material; en el panel, sus tarjetas (Material › Resina, Impresora › Máquina › Pantalla de resina y Otros › Resina:
+  capas).
+- `src/resin/resin.*`: la pieza escalada y apoyada, cortada en capas iguales a media altura; cada sección crecida por
+  la corrección absoluta, achicada en las capas de fondo contra el pie de elefante (la `i` de `N`,
+  `pie · (1 − i / N)`) y, con corrección de Z, recortada a lo que tienen debajo las secciones de las capas anteriores.
+  La imagen sale fila por fila con el área exacta de cada píxel (cada borde suma el área con signo hasta el lado
+  derecho del píxel; la suma a lo largo de la fila es la cobertura), el gris redondeado hacia arriba y la gamma; se
+  codifica a medida que sale, sin guardar la imagen entera. La vista previa es la pieza vista desde arriba, sombreada
+  por la pendiente de las alturas.
+- `src/resin/goo.*`: el archivo GOO, escrito y leído según la especificación de Elegoo: cabecera de 195 477 bytes,
+  capas y final; el modo avanzado se activa solo si alguna capa no sigue a la cabecera.
+- Línea de comandos: `slice … -o pieza.goo` lamina para resina, con la pieza centrada en la pantalla.
+
+**Medido:**
+- RE1 y RE2 iguales a Tisma Slicer byte a byte: 200 capas, imagen de 4586 bytes con suma de control `0x03`, grises 0,
+  131, 183 y 255, columnas 1763 a 2334 y filas 994 a 1565. Igual RE3 (2955 a 3526 con espejo, 571 a 1142 sin él),
+  RE4, RE5 (8, 7, 6, 6, 5, 4, 3, 2, 1, 0 píxeles), RE6 (600 columnas, 220 capas, 4620 mm³), RE7, RE8 (bordes 73 y 37,
+  21 y 5 con gamma 2; 326 612 píxeles con gamma 0) y RE9 (164 164 píxeles en las tres primeras capas de la losa).
+- RE10 es distinto a propósito: la ficha dice que la línea de comandos de Tisma Slicer no aplica la corrección
+  absoluta; el motor la aplica (regla 22).
+- Benchy local (solo para medir) en resina: 960 capas en 1,56 s con 4 núcleos, archivo de 12,2 MB.
+
+Pruebas nuevas en `tests/test_resin.cpp` (13 casos: el RLE, RE1 a RE10, los errores y los ajustes, un archivo dañado y la línea de
+comandos).
+
+**No hecho:** las ventosas (reglas 13 a 15), las calibraciones de resina (16 a 19), los soportes de resina
+(`resin_supports.md`) y la resina en la interfaz (laminar, ver las imágenes y exportar).
+
+**Sigue:** R2, las ventosas (VE1 a VE9) y la torre de exposición con el bloque de medidas (CR1).
+
+
+## 2026-10-27 — Resina, R2 y R3a: ventosas, calibraciones, soportes, base y vaciado
+
+**Hecho:**
+- Ventosas (`resin.md`, reglas 13 a 15): `find_cups` recorre las capas desde la plataforma; un hueco de la sección
+  queda ventilado si al menos 3 mm² de él están sobre aire ventilado en la capa de abajo (el aire alrededor de la
+  pieza o un hueco ventilado); en la primera capa lo cierra la plataforma o la base, salvo que la pieza esté elevada.
+  Los huecos cerrados que se superponen de una capa a la otra son una ventosa, y desde 4 mm² van al JSON de avisos
+  (`cupping`) con las alturas, el área y cómo arreglarlo. Las superposiciones se calculan para todas las capas a la
+  vez; la pasada en orden solo suma áreas.
+- Calibraciones de resina (reglas 16 a 19): la torre de exposición (`ResinTower`, `tower_exposure`,
+  `resin_tower_mesh`, con la forma de `calibration_models.md`: base, una franja por exposición con su ranura al pie,
+  agujeros redondos que la atraviesan y aletas atrás; CM3 y CM5) y el bloque de medidas con su corrección de escala.
+  Todavía sin menú en la interfaz.
+- Soportes y base (`resin_supports.md`, reglas 1 a 3): puntos en los nodos de una grilla de 4 mm (a densidad 100 %)
+  sobre las caras que miran hacia abajo a menos de 45° de la horizontal, más uno en cada isla que empieza en el aire;
+  bajo cada punto, una punta que entra en la pieza, un pilar recto y un ensanche al pie, o un aterrizaje sobre la
+  pieza cuando ella lo tapa; la base cubre los pies con su margen, cerrada entre ellos, o rodea la pieza apoyada.
+  Sin soportes ni base alrededor, la base es un error (RS3).
+- Vaciado (reglas 4 a 6): transformada de distancia exacta (Felzenszwalb y Huttenlocher) sobre una grilla de 0,1 a
+  1 mm; el hueco es la pieza achicada por la pared y el redondeo y crecida por el redondeo, que se acota para que
+  siempre quede un hueco donde cabe (RS4). Barras interiores en cinco direcciones y agujeros de drenaje (en el motor;
+  la interfaz todavía no los pone). Un hueco cerrado avisa como ventosa.
+- Panel: tarjetas Resina: soportes, base y vaciado.
+
+**Medido:** VE1 a VE9 y CR1 como en la ficha (CR1 con modo avanzado 1, a propósito). RS1: 340 capas, el cubo desde
+Z 7,05, 25 pilares (unos 20 mm² por capa a media altura, como Tisma Slicer). RS2 (pared de 2 mm): pared de 2 mm a
+media altura; RS4: el cubo con pared de 3 mm queda hueco (Tisma Slicer lo deja macizo, no se copia). Benchy local
+(solo para medir), 4 núcleos: 0,86 a 1,03 s sin soportes (960 capas, con la búsqueda de ventosas: el texto grabado
+en la base, la bodega y la chimenea) y 1,30 s con soportes y base (1100 capas, archivo de 14,9 MB).
+
+Pruebas nuevas en `tests/test_resin.cpp` (21 casos en total).
+
+**No hecho:** las uniones entre pilares a `resin.support_critical_angle` (los pilares bajan rectos); poner los
+drenajes y lanzar las calibraciones de resina desde la interfaz; laminar resina, ver sus imágenes y exportar `.goo`
+desde la interfaz.
+
+**Sigue:** R3b, la resina en la interfaz.
+
+## 2026-10-27 — Resina, R3b: la resina en la interfaz
+
+**Hecho:**
+- `machine.technology` (`fdm` o `msla`), en Impresora › Máquina › Cama y volumen. Ninguna ficha nombra la clave; es
+  decisión propia (`PROVENANCE.md`). Con `msla`:
+  - el panel muestra solo los ajustes de resina, y la placa es la pantalla;
+  - Laminar llama a `slice_resin` y la vista previa 3D muestra los contornos de cada capa (la pieza y, aparte, los
+    soportes con la base), con el tiempo, los ml, los gramos y el costo;
+  - «Exportar GOO» escribe el archivo entero o nada;
+  - Calibrar muestra solo la torre de exposición y el bloque de medidas, sin soportes ni base: la franja elegida pasa
+    a `resin.exposure`, y las medidas del bloque dan las correcciones de escala;
+  - en la línea de comandos, `msla` pide una salida `.goo`.
+- La torre de exposición tiene la forma de `calibration_models.md` (CM3, CM5), con agujeros redondos, y sus
+  exposiciones viajan como cambios por altura (`changes`, clave nueva `exposure`).
+- Costo de la resina por el frasco (`resin.bottle_cost`, `bottle_volume`, `bottle_weight`; `gcode_extras.md`, regla
+  2): va en la cabecera del archivo y en la vista previa; en el panel, el peso del frasco fija la densidad.
+
+**Medido:** comprobado en la interfaz con capturas (cubo sobre soportes y base, torre de exposición) y exportando un
+`.goo` desde la interfaz, leído de vuelta: capa 150, 327 184 píxeles, el cubo exacto.
+
+**No hecho:** las uniones entre pilares a `resin.support_critical_angle`; poner los drenajes desde la interfaz; ver
+la imagen de una capa como imagen (la vista previa muestra contornos).
+
+**Sigue:** subir R2, R3a y R3b cuando pase la verificación de Linux; después, el punto 5 del orden (lo propio de
+Tisma) y la interfaz P1.
+
+## 2026-10-27 — Punto 5: relleno ondulado entrelazado e impresoras de cinta
+
+**Hecho:**
+- Relleno ondulado entrelazado (ficha `interlock_infill.md`): `infill.waves`, `infill.wave_amplitude` (50 % de la
+  altura de capa) e `infill.wave_length` (10 mm), en Impresión › Relleno › Relleno ondulado. El relleno poco denso va
+  sobre `a · sin(2πX/λ) · sin(2πY/λ)` con X e Y de la cama, la misma fase en todas las capas. Usa lo del relleno
+  ondulado (N1): la onda se apaga cerca de las paredes y del relleno sólido, y el material sigue el espesor real hasta
+  la capa de abajo; vale con cualquier patrón. No va con `infill.nonplanar`, `gcode.arcs`, el modo espiral, las capas
+  curvas ni la cinta (un error lo dice).
+- Impresoras de cinta (ficha `belt_printer.md`): `belt.enabled`, `belt.angle` y `belt.belt_is_z`, en Impresora ›
+  Máquina › Impresora de cinta. La pieza se gira sobre X para que los planos paralelos al pórtico queden planos
+  (`s = y · sin α + z · cos α`), se lamina como siempre y el G-code pasa al final a los ejes de la máquina: la cinta
+  a `s / sin α`, el pórtico a `z / sin α`; `;Z:` sigue llevando `s`. El verificador del G-code hace la cuenta inversa
+  y revisa las capas como en una cama; la cama solo limita X. En la cinta, soportes, balsa, borde, torre de purga,
+  impresión secuencial, modo espiral, arcos, capas curvas y ondas son un error; la falda no se imprime. La vista previa
+  de la interfaz lee el G-code y devuelve la pieza a donde está sobre la cinta, con las capas inclinadas.
+
+**Medido:**
+- IL1 (cubo de 20 × 20 × 10 mm en X 100, Y 100): capa 11, 633 puntos del relleno, error mediano 0,000 mm, el 90 %
+  por debajo de 0,016 mm, de −0,096 a +0,100; capa 12, el 90 % por debajo de 0,020 mm, de −0,098 a +0,100 (Tisma
+  Slicer: 0,001, 0,036, de −0,094 a +0,1).
+- B1 (α 45°, cinta en Z): 106 capas; capa 11, Z 3,111 e Y de 0,325 a 4,075; capa 53, Z 14,991; Y máximo 14,129;
+  los mismos números que Tisma Slicer. X de 90,217 a 109,9 (Tisma: 90,1 a 109,9). B2 (cinta en Y): lo mismo con Y y
+  Z cambiados. B3 (α 30°): 93 capas, capa 11 en Z 4,4, Y máximo 19,988, como Tisma.
+- La vista previa de la cinta, comprobada con una captura de la interfaz.
+
+**No hecho:** el visor dibuja el alto de cada cordón en vertical; con las capas inclinadas de la cinta, la cara
+lateral de la pieza se ve con huecos entre capas.
+
+**Sigue:** subir R3b y el punto 5 cuando pase la verificación de Linux; después, la interfaz P1.
+
+## 2026-10-27 — Interfaz P1: el panel de ajustes, segundo paso
+
+**Hecho** (ficha `settings_panel.md`):
+- **Buscar un ajuste** (regla 5): un campo con lupa en la barra superior (Ctrl+F). Busca en el nombre del ajuste, su
+  tarjeta, su sección, su clave y lo que hace (de `docs/CONFIG.md`), sin mayúsculas ni tildes, y ordena por dónde
+  encontró cada palabra. Enter o un clic abren la pestaña, la sección y la tarjeta, traen la fila a la vista y la
+  resaltan 2 s; un ajuste que el nivel esconde se ve con la etiqueta de su nivel.
+- **Ver todo junto** (regla 4): todas las secciones una debajo de otra, con su título.
+- **Restablecer por tarjeta** (regla 8): el menú de tres puntos de cada tarjeta vuelve sus ajustes al perfil guardado
+  (`with_keys`, en `src/config/profiles.*`).
+- **Personalizado** (reglas 15 a 20): parte del nivel de antes; «Elegir ajustes…» con el árbol, las casillas a
+  medias, el filtro, «Partir de», Todos y Ninguno; el ojo tachado en cada fila; «+ Agregar ajuste» al pie de cada
+  tarjeta; Ctrl+Alt+4; exportar e importar la vista (`tisma-ui-view`), ignorando las claves que no existen; un ajuste
+  nuevo de otra versión se ve si su nivel entra en el de partida. Se recuerda en `interface.json`.
+- Los ajustes de resina, de la cinta y de las ondas tienen ahora su botón (i) y su nombre en la búsqueda.
+
+**Medido:** pruebas `settings view: …` (SP6, SP10, SP11, SP13, SP14, regla 8) y, con la interfaz entera,
+`ui_settings_basic`, `ui_settings_custom_search` y `ui_settings_same_gcode` (SP9: el mismo G-code en Básico y en
+Personalizado). Capturas revisadas: «costura» abre Calidad › Costura con la fila resaltada, todo junto, y el diálogo.
+
+**No hecho:** la tarjeta de la impresora con su dibujo, la cama y la boquilla rápida (21 a 26, 32 a 36), la cámara
+(27 a 31), la configuración de la impresora aparte con Calibración (37 a 40) y la conexión desde la tarjeta (41 a 44).
+
+**Sigue:** la tarjeta de la impresora y su configuración aparte.
+
+## 2026-10-27 — Interfaz P1: la tarjeta de la impresora y su página
+
+**Hecho** (ficha `settings_panel.md`, reglas 21 a 23 y 32 a 40):
+- **Tarjeta de la impresora** arriba del panel: el dibujo según el tipo (resina, cinta, delta por la cama redonda,
+  cerrada o abierta), la lista de impresoras con buscador (las propias, las del programa y las 144 del catálogo por
+  marca, cada una con su dibujo), las camas con su dibujo cuando el modelo trae varias, el engranaje y la boquilla.
+- **Boquilla rápida:** un clic cambia al perfil de la impresora con esa boquilla (lo crea desde el catálogo si falta) y
+  un aviso con **Deshacer** devuelve la impresora y los ajustes de antes; una impresora propia tiene **Otra…**, que
+  cambia el diámetro y deja el perfil marcado con su asterisco.
+- **Configuración de la impresora aparte:** página a todo el ancho con «‹ Placa» y Escape. El panel queda con
+  Impresión y Material. Secciones Máquina, Boquilla y extrusor, Límites y G-code (las mismas tarjetas y niveles),
+  Calibración (cada prueba con lo que fija, su valor, su estado y el filamento; «N de M calibradas» y «Calibrar en
+  orden»), Conexión y Notas. Lo calibrado se anota al usar un resultado en Calibrar.
+- `--profile printer=…` acepta un modelo del catálogo con su boquilla («Raise3D E3 0.4 mm»), solo para esa vez.
+
+**Medido:** pruebas `printer card: …` (SP25, SP26, SP27, regla 21 y regla 38 con SP29 y SP30), y con la interfaz
+entera `ui_printer_card` (SP22, la Raise3D E3 con sus camas) y `ui_printer_page` (SP28). Capturas revisadas.
+
+**No hecho:** la cámara (27 a 31) y la conexión por red desde la tarjeta (41 a 44), que esperan
+`printer_connections.md` (F9); la boquilla que informa la impresora conectada (26); el diálogo de cambios sin guardar
+(24) y los perfiles de impresión y filamento compatibles al cambiar de boquilla (22), que esperan los perfiles de
+`presets.md` y `profile_pack.md`; la cama elegida no cambia todavía la temperatura (`profiles.md`, regla 4). Pellets
+no tiene dibujo propio hasta que exista `machine.feedstock`.
+
+**Sigue:** el resto de P1 (`preview.md`, `credits.md`, `assistant.md`), después P2.
+
+## 2026-10-27 — Interfaz P1: la vista previa (`preview.md`)
+
+**Hecho:**
+- **Las 13 vistas** (regla 1): tipo de línea, alto de capa, ancho, velocidad, velocidad alcanzada, ventilador,
+  temperatura, caudal, caudal alcanzado, tiempo de capa lineal y logarítmico, extrusor y color por capa. El lector del
+  G-code guarda en cada movimiento el ventilador, la temperatura, el extrusor y los cambios de color, y `time_preview`
+  le da su tiempo con las velocidades y aceleraciones de la impresora (el mismo cálculo del tiempo estimado, capa por
+  capa en paralelo). Las instancias llevan el número de la vista, así los dos renderizadores colorean igual.
+- **Leyenda:** por tipo, cada uno con su tiempo, su parte del tiempo y su filamento en metros y gramos; en las vistas
+  con números, 11 pasos iguales (en logaritmo para la logarítmica). Debajo, la primera capa además del total.
+- **Fila de íconos** (regla 11): viajes, barridos, retracciones, vueltas, costuras, cambios de herramienta y de color,
+  pausas, G-code propio, centro de gravedad y boquilla, dibujados sobre la vista.
+- **Deslizadores** (reglas 4, 9 y 12): el de capas con dos manijas, altura y número, el «+» con cambio de color, pausa
+  con mensaje o G-code (cambios por altura que empiezan esa capa), sus marcas, y el de movimientos dentro de la capa de
+  arriba (los renderizadores cortan esa capa).
+- **Teclas** (regla 10): 0 a 6 vistas fijas (con la de abajo), K ortogonal (un teleobjetivo, sin tocar los shaders; se
+  recuerda), Z encuadrar, E nombres de las piezas, L leyenda.
+- **Visor** (regla 13): abre `.bgcode`, «Sin tipos» sin `;TYPE:`, y Más › Vista previa de G-code….
+
+**Medido:** pruebas del lector (ventilador, temperatura, extrusor, color, marcas, tiempos de 2,05 s para 100 mm a
+50 mm/s con 1000 mm/s²), PV2 y PV3 (pasos de 23 mm/s y de 0,038 mm), PV7 (tantas retracciones marcadas como las del
+G-code del motor), PV8 y PV9 (el cambio de color empieza la capa 25 y la pausa la 30, con su mensaje), PV10, el corte
+de la capa de arriba y la cámara ortogonal. Capturas de las vistas, los íconos, los deslizadores y la vista ortogonal
+(también con ray tracing).
+
+**No hecho:** el ícono Pieza (el modelo transparente sobre las trayectorias necesita transparencia en los dos
+renderizadores); el visor en una ventana aparte; el extrusor del cambio de color con varios extrusores; el panel
+táctil y «Girar libre»; PV1 contra Tisma Slicer (falta la pieza en voladizo de sus pruebas).
+
+**Sigue:** `credits.md` y `assistant.md` (P1); después P2.
+
+## 2026-10-27 — Interfaz P1: créditos y fuentes (`credits.md`)
+
+**Hecho:**
+- **Un solo archivo de datos** (regla 5): `resources/credits.json` (formato `tisma-credits`) con las 11 fuentes de la
+  ficha y las del motor que ya estaban en `PROVENANCE.md` (Kuipers et al. 2020, ZigZagZ, Song et al. 2017, el «arc
+  overhang», Tricard et al. 2020, Felzenszwalb y Huttenlocher), cada una con las fichas del panel donde se ve; y las
+  bibliotecas que se distribuyen, con su licencia y sus avisos en `resources/licenses/` (los archivos de licencia de
+  cada una, sin cambios). El programa los lleva adentro.
+- **Bajo las fichas** (reglas 1 a 3): «Basado en FFF anti-aliasing (2017), de Song et al.» en gris y chico, el nombre
+  como enlace que abre la fuente; el mismo texto al pasar el puntero por el título. Paredes, Superficies inclinadas,
+  Relleno ondulado, Arcos en voladizos, Soportes de resina, Vaciado y las dos fichas de capas curvas.
+- **Más › Créditos y fuentes** (regla 4): la tabla de funciones (función, fuente con enlace, autor, licencia o tipo) y
+  la de componentes de terceros (versión, licencia y «Ver el aviso» con el texto de la licencia). Acerca de lo nombra.
+- **Idioma** (regla 7): «Basado en», «de», los títulos y las licencias se traducen; las fuentes y autores no.
+
+**Medido:** las pruebas `[credits]` (CR3: cada ficha con «Basado en» y cada fila de la tabla de `credits.md` tienen su
+crédito, y la prueba nombra la ficha que falta; cada biblioteca distribuida de `THIRD_PARTY.md` está con la misma
+licencia, URL y versión y sus avisos existen; CR4 en inglés: «Based on Support Fins, by gittrahan») y `ui_credits`
+(la página en inglés). Capturas de la página y del pie de Superficies inclinadas.
+
+**No hecho:** CR1 en su panel (las aletas de soporte todavía no existen; su crédito ya está en el archivo). Las otras
+fichas con **Fuentes:** (`aerodynamics.md`, `structural_analysis.md`, `orientation.md`, `infill_patterns.md`…) se
+revisan una por una cuando se hagan (regla 2). Algunos DOI no se pudieron confirmar: esos enlaces van a la página que
+ya cita `docs/spec/SOURCES.md` (HAL, arXiv, el PDF de los autores).
+
+**Sigue:** `assistant.md` (P1); después P2.
+
+## 2026-10-27 — Interfaz P1: el asistente, segundo paso (`assistant.md`)
+
+**Hecho:**
+- **Panel de ayuda** (reglas 1 a 4): F1, el botón con el signo de pregunta en la barra superior (cuando entra al lado
+  del buscador) y Más › Ayuda. Se abre sobre el panel de ajustes con el buscador, las pestañas Problemas,
+  Procedimientos, Glosario, Tutoriales y Calibraciones, y al pie «Basado en las guías de Rafa Barajas» con su enlace.
+  Sin los datos del paquete dice «La ayuda se descarga con los perfiles…» (AS1); Tutoriales ya ofrece el recorrido de
+  la interfaz.
+- **Acciones `setting`** (regla 7, `src/ui/assistant.*`): `add`, `multiply`, `set` y `set_relative` sobre el JSON de
+  ajustes, con el perfil al que pertenece la clave, el valor antes y después como lo escribe el panel, el corte al
+  rango de `docs/CONFIG.md` y la variable de temperatura sumada como número (una por extrusor). Una clave que el motor
+  no tiene no da botón.
+- **Causas y materiales:** las causas `last_resort` al final (regla 6); el material por tipo o por el nombre del perfil
+  como palabra; los avisos de cabina, boquilla endurecida, cama, hotend y secado, sin los que dependen de un dato que la
+  impresora no tiene (reglas 13 y 14).
+
+**Medido:** AS3 a AS11 en `[assistant]` (65 comprobaciones: «1 → 4» y vuelta a 1, 215 → 210, 80 → 64, 0,75 × 0,4 =
+0,3, 5000 capas acotadas a 1000, la ficha del ABS con su aviso, el secado «70 a 80 °C, 8 h»), `ui_help_panel` (AS1 con
+una carpeta de datos vacía). Capturas del panel a 1400 y 1100 px de ancho.
+
+**No hecho:** leer `knowledge/`. `docs/KNOWLEDGE.md` del repositorio de perfiles describe las acciones y las guías de
+calibración, pero no los campos de los otros cinco archivos; se pidió esa lista al equipo de fichas y el motor no lee
+los datos del paquete para adivinarla. Hasta entonces: la lista de problemas, procedimientos, glosario y guías, el
+diálogo de Aplicar con Deshacer, el (i) con la definición (regla 12), la ficha del material al elegir un filamento, los
+tutoriales con anclas y eventos (reglas 15 a 19) y los enlaces desde la revisión previa (regla 9). Bajar
+`knowledge.tar.xz` es de `profile_pack.md` (P3).
+
+**Sigue:** el resto de P1 que no espera datos; después P2.
+
+## 2026-10-27 — `model_tools.md`: escalar, girar, cortar y separar en el motor
+
+**Hecho:**
+- **Grupo `transform`** (reglas 11 a 14; `docs/CONFIG.md`): `scale` (factor o «N%»), `scale_to_fit` (el menor de los
+  tres cocientes), `rotate_x`, `rotate_y` y `rotate_z` (en ese orden, alrededor del centro de la caja), `cut_z` (desde
+  el punto más bajo de la pieza) y `split`. La línea de comandos lo aplica antes de ubicar la pieza; las piezas que
+  salen de un corte o de separar se apoyan cada una en la cama y se ordenan como las copias, con `placement.spacing`.
+  Con `--copies` da error.
+- **El corte** (`cut_mesh`): cada triángulo se reparte con los mismos puntos de cruce que usan los contornos del
+  laminado, y la cara del corte se llena con esos contornos (agujeros incluidos) por recorte de orejas: las dos
+  mitades quedan cerradas sin soldar nada.
+- **Separar** (`split_mesh`): las cáscaras unidas por vértices; una cáscara dentro de otra (un hueco) sigue con su
+  pieza.
+- **Espejar** (`mirror_mesh`, regla 16): alrededor del centro de la caja, con los triángulos dados vuelta para que
+  sigan mirando afuera.
+
+**Medido:** MT14 (100 capas y 48 000 mm³; 20 250 mm³ a 150 %), MT15 (la mitad), MT16 (con 45°, X de 82,6 a 117,4; con
+90° en X, 100 capas), MT17 (dos mitades de 3000 mm³; el cono de 256 lados da 916,3 ± 1 y 130,9 ± 0,3 mm³, las dos
+mitades cerradas), MT18 (sin separar, X de 80,2 a 119,8; separadas, de 87,2 a 112,8) y MT20, en `[transform]` (462
+comprobaciones), con un anillo con agujero cortado y una caja hueca separada.
+
+- **En la interfaz:** Espejar en X, Y o Z en la tarjeta de Escalar (regla 16), que ya escalaba por medidas con los tres
+  ejes juntos o cada uno (regla 17, MT21), y la herramienta **Cortar** (tecla C) con el plano horizontal dibujado
+  sobre la vista, su altura, «Dar vuelta la parte de abajo» y las dos mitades como piezas de la placa (reglas 13 y 18,
+  el corte horizontal), con **Separar en piezas** (regla 14) en la misma tarjeta. Prueba `ui_cut`: un cubo cortado a 4 mm se lamina y se exporta con el G-code verificado.
+
+- **Medir** (tecla U, regla 20; `src/ui/measure.*`): una cara da su plano, Shift + clic el vértice más cercano; entre
+  dos, la distancia o el ángulo, y «Debería medir» con **Escalar** escala parejo (MT25 en `[measure]`: 30 mm entre
+  las caras de la caja, 45 escrito da el factor 1,5; 90° entre caras vecinas). Prueba `ui_measure`.
+
+**No hecho:** del corte de la regla 18, el plano libre (girado), los conectores, la cola de milano y «un objeto con
+dos partes»; de Medir, las aristas y los círculos con su diámetro; Separar en partes (19), las partes y modificadores, las copias en grilla, y deshacer en
+la placa (29). La pintura de un modelo cortado no pasa a las mitades.
+
+**Sigue:** los conectores del corte y las partes de un objeto.
+
+## 2026-10-27 — Interfaz P1: el asistente, tercer paso (los datos de `knowledge/`)
+
+**Hecho:**
+- **El formato:** el equipo de fichas agregó la lista de campos a `docs/KNOWLEDGE.md` del repositorio de perfiles
+  (rama `docs/knowledge-fields`); se leyó ese documento y nada más. `src/ui/knowledge.*` lee `materials.json`,
+  `problems.json`, `procedures.json`, `glossary.json` y `tutorials.json` (formato `tisma-knowledge-*`, versión 1), con
+  los campos opcionales que faltan o valen `null`, los rangos `[mín, máx]` y la carpeta del idioma primero (regla 19).
+- **El panel de ayuda con datos:** la búsqueda en todas las pestañas (AS2), los problemas con sus causas en orden y la
+  nota de último recurso, **Aplicar** con el valor de ahora y el nuevo y **Deshacer** en el aviso, ir a otro problema
+  con **Volver**, los procedimientos con advertencias y casillas, y el glosario.
+- **Junto a los ajustes:** el (i) muestra la definición del término que nombra el ajuste (regla 12, AS15).
+- **Ficha del material** (reglas 13 y 14): en la pestaña Material, abierta si hay avisos, y el primer aviso en la
+  barra de estado (AS9: ABS en una impresora abierta).
+
+**Medido:** `[assistant]` con un paquete de prueba propio (dos materiales, tres problemas, un procedimiento, cinco
+términos, un tutorial de tres pasos; 114 comprobaciones), y `ui_help_problem` y `ui_material_card`. Capturas del
+problema de hilos, la primera capa, el secado, el glosario, el (i) de Paredes y la ficha del ABS.
+
+**No hecho:** los tutoriales guiados de los datos (anclas que resaltan, eventos que avanzan, progreso guardado; reglas
+15 a 19), las guías de calibración, los enlaces desde la revisión previa, las preferencias `assistant.*` y la
+retracción directa o Bowden según la impresora (el motor todavía no sabe qué extrusor tiene: la ficha muestra las dos).
+Bajar `knowledge.tar.xz` es de `profile_pack.md`.
+
+**Después, el mismo día (cuarto paso):** los tutoriales guiados (reglas 15 a 18, `src/ui/guide.*`): las partes de la
+interfaz con nombre (impresora, filamento, ajustes, placa, herramientas, Laminar, Exportar, Vista previa,
+Calibración, Análisis y las pestañas de la ayuda) dejan su rectángulo al dibujarse; el paso ilumina la suya y oscurece
+el resto sin tapar los clics, con la burbuja al lado. Los eventos (impresora o filamento elegido, modelo agregado,
+laminado) hacen avanzar el paso que los espera. Se ofrecen al terminar el asistente del primer arranque, con un
+material nuevo o al abrir Análisis por primera vez, y desde la pestaña Tutoriales con Empezar o Seguir; lo visto queda
+en las preferencias. Pruebas AS12 a AS14 en `[assistant]` (130 comprobaciones) y `ui_tutorial`; capturas de los tres
+pasos del tutorial de prueba.
+
+**Sigue:** las guías de calibración (reglas 20 a 24).
+
+## 2026-10-27 — Pedidos del dueño: créditos «Basado en», Medir agujeros y conos
+
+**Hecho:**
+- **Créditos:** decisión del dueño, lo tomado de un tercero aunque no se haya copiado va como «Basado en», nunca
+  «texto propio». Las guías en PDF de Rafa Barajas (la ayuda), la wiki de calibración, la guía de Ellis, la
+  documentación de Klipper, OpenBambuAPI y la idea del arco en voladizos quedan así en `resources/credits.json`.
+- **Medir** (pedido del dueño): un clic en una superficie curva junta las caras vecinas que siguen la curva (menos de
+  25° entre vecinas), toma como eje la dirección en que sus normales menos varían y ajusta un círculo a sus vértices
+  (Kåsa 1976). Reconoce un agujero (las caras miran al eje) o un cilindro con su diámetro, y un cono con su ángulo y
+  los diámetros de sus extremos. Un agujero o cilindro solo ya ofrece «Debería medir» para escalar a ese diámetro.
+
+**Medido:** `[measure]`: un saliente de 10 mm de 64 lados da Ø 10,000; la misma pared hacia adentro, agujero de
+Ø 10,000; un cono de 20 a 10 mm en 5 mm de alto, 90,00° y Ø 20 y 10.
+
+**No probado:** el tiempo del clic en mallas de millones de triángulos (cada clic suelda la malla y arma sus aristas).
+

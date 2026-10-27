@@ -15,17 +15,20 @@ namespace {
 constexpr const char* kUsage =
     "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color VIEW]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
-    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
+    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
+    "                            resin_exposure|resin_measure|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
-    "                                   [--tool move|rotate|scale|lay|paint]\n"
+    "                                   [--tool move|rotate|scale|lay|paint|material|mixing]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
-    "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
+    "                                   [--level basic|normal|advanced|custom] [--section TAB/SECTION]\n"
+    "                                   [--search TEXT] [--single-column] [--choose-settings] [--credits] [--help-panel TAB]\n"
+    "                                   [--ortho] [--labels]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
@@ -90,18 +93,52 @@ int main(int argc, char** argv) {
         } else if (arg == "--tool") {
             options.tool = value();
             if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
-                options.tool != "paint") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
+                options.tool != "paint" && options.tool != "material" && options.tool != "mixing" && options.tool != "cut" &&
+                options.tool != "measure") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, measure, paint, material or mixing\n");
                 return 2;
             }
+        } else if (arg == "--measure") {
+            // Two triangles of the first model picked as faces by the Measure tool.
+            if (std::sscanf(value(), "%d,%d", &options.measure[0], &options.measure[1]) != 2) {
+                std::fprintf(stderr, "error: --measure takes two triangle numbers, as 0,5\n");
+                return 2;
+            }
+        } else if (arg == "--cut") {
+            options.cut = std::atof(value()); // cut the first object at this height over the bed
         } else if (arg == "--info") {
             options.info = value();
         } else if (arg == "--level") {
             options.level = value();
-            if (options.level != "basic" && options.level != "normal" && options.level != "advanced") {
-                std::fprintf(stderr, "error: --level must be basic, normal or advanced\n");
+            if (options.level != "basic" && options.level != "normal" && options.level != "advanced" &&
+                options.level != "custom") {
+                std::fprintf(stderr, "error: --level must be basic, normal, advanced or custom\n");
                 return 2;
             }
+        } else if (arg == "--search") {
+            options.search = value();
+        } else if (arg == "--single-column") {
+            options.single_column = true;
+        } else if (arg == "--ortho") {
+            options.ortho = true;
+        } else if (arg == "--labels") {
+            options.labels = true;
+        } else if (arg == "--choose-settings") {
+            options.choose_settings = true;
+        } else if (arg == "--credits") {
+            options.credits = true;
+        } else if (arg == "--knowledge") {
+            options.knowledge = value();
+        } else if (arg == "--tutorial") {
+            // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
+            const std::string t = value();
+            options.tutorial = t.substr(0, t.find(','));
+            if (t.find(',') != std::string::npos)
+                options.tutorial_step = std::max(0, std::atoi(t.c_str() + t.find(',') + 1) - 1);
+        } else if (arg == "--help-item") {
+            options.help_open = value();
+        } else if (arg == "--help-panel") {
+            options.help = value(); // problems, procedures, glossary, tutorials, calibrations
         } else if (arg == "--section") {
             options.section = value(); // print/quality, material/cooling, printer/machine...
         } else if (arg == "--tips") {
@@ -208,9 +245,18 @@ int main(int argc, char** argv) {
             options.moire_check = true;
         } else if (arg == "--color") {
             const std::string_view c = value();
-            options.color = c == "kind" ? 0 : c == "speed" ? 1 : c == "width" ? 2 : c == "height" ? 3 : -2;
+            // The preview's views, in the order of preview.md (rule 1).
+            static constexpr std::string_view views[] = {"kind",        "height",     "width",          "speed",
+                                                         "actual_speed", "fan",        "temperature",    "flow",
+                                                         "actual_flow", "layer_time", "layer_time_log", "tool",
+                                                         "color_print"};
+            options.color = -2;
+            for (int k = 0; k < int(std::size(views)); ++k)
+                if (c == views[k])
+                    options.color = k;
             if (options.color == -2) {
-                std::fprintf(stderr, "error: --color must be kind, speed, width or height\n");
+                std::fprintf(stderr, "error: --color must be kind, height, width, speed, actual_speed, fan, temperature, "
+                                     "flow, actual_flow, layer_time, layer_time_log, tool or color_print\n");
                 return 2;
             }
         } else if (arg == "--device") {
@@ -222,7 +268,8 @@ int main(int argc, char** argv) {
             const std::string& c = options.calibration;
             if (c != "extruder" && !tisma::calibration_kind_from_name(c)) {
                 std::fprintf(stderr, "error: --calibration must be dimensions, first_layer, temperature, flow, retraction, "
-                                     "retraction_speed, pressure_advance, speed, fit or extruder\n");
+                                     "retraction_speed, pressure_advance, speed, fit, max_flow, acceleration, "
+                                     "elephant_foot, resin_exposure, resin_measure or extruder\n");
                 return 2;
             }
         } else if (arg == "--light") {

@@ -1,9 +1,19 @@
 #include "adhesion/adhesion.hpp"
+#include "config/settings.hpp"
+#include "gcode/writer.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <numbers>
+#include <sstream>
+#include <string>
 
 using namespace tisma;
 using Catch::Matchers::WithinAbs;
@@ -12,6 +22,24 @@ namespace {
 
 Polygon square(double x0, double y0, double x1, double y1) {
     return {{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)}, {to_units(x0), to_units(y1)}};
+}
+
+// A circle of radius r around (cx, cy), counter-clockwise (or clockwise: a hole).
+Polygon circle(double cx, double cy, double r, bool hole = false, int n = 512) {
+    Polygon p;
+    for (int i = 0; i < n; ++i) {
+        const double a = 2.0 * std::numbers::pi * i / n * (hole ? -1.0 : 1.0);
+        p.push_back({to_units(cx + r * std::cos(a)), to_units(cy + r * std::sin(a))});
+    }
+    return p;
+}
+
+// The mean distance of a loop's points from (cx, cy).
+double radius_of(const Toolpath& t, double cx = 0.0, double cy = 0.0) {
+    double sum = 0.0;
+    for (const ToolpathPoint& q : t.points)
+        sum += std::hypot(q.p.x - cx, q.p.y - cy);
+    return sum / double(t.points.size());
 }
 
 double loop_length(const Toolpath& t) {
@@ -88,4 +116,130 @@ TEST_CASE("brim: loops at the beads' spacing up to its width, merged between clo
     }
     CHECK(first == 2);
     CHECK(last == 1);
+}
+
+TEST_CASE("skirt: loops added until the skirt lays its filament (skirt_brim_raft.md, rule 1, B1)", "[adhesion]") {
+    const Polygons cube{square(0, 0, 20, 20)};
+    AdhesionShape a;
+    a.skirt_loops = 1;
+    a.skirt_distance = 6.0;
+    a.filament_area = std::numbers::pi * 1.75 * 1.75 / 4.0;
+    CHECK(skirt_loops(cube, a, 0.4, 0.2).size() == 1);
+    a.skirt_min_filament = 300.0;
+    const std::vector<Toolpath> loops = skirt_loops(cube, a, 0.4, 0.2);
+    double path = 0.0;
+    for (const Toolpath& t : loops)
+        path += loop_length(t);
+    const double per_mm = 0.4 * 0.2 / a.filament_area;
+    CHECK(path * per_mm >= 300.0);
+    CHECK((path - loop_length(loops.back())) * per_mm < 300.0); // the fewest that do
+    CHECK(loops.size() > 40);
+    CHECK(loops.size() < 70);
+    // The loops go outwards, a bead's spacing apart.
+    CHECK(loops.back().index == -int(loops.size()));
+}
+
+TEST_CASE("brim: outer, inner, both, and apart from the part (skirt_brim_raft.md, rules 5 to 8, B4)", "[adhesion]") {
+    // B4: a tube of 10 mm radius with a hole of 5, a brim 3 mm wide: 8 loops.
+    const Polygons tube{circle(0, 0, 10), circle(0, 0, 5, true)};
+    const double spacing = loop_spacing(0.4, 0.2);
+    AdhesionShape a;
+    a.brim_width = 3.0;
+    std::vector<double> outer, inner;
+    for (const BrimType type : {BrimType::Outer, BrimType::Inner, BrimType::OuterAndInner, BrimType::None}) {
+        a.brim_type = type;
+        std::vector<double> radii;
+        for (const Toolpath& t : brim_loops(tube, a, 0.4, 0.2))
+            radii.push_back(radius_of(t));
+        std::sort(radii.begin(), radii.end());
+        if (type == BrimType::Outer)
+            outer = radii;
+        else if (type == BrimType::Inner)
+            inner = radii;
+        else if (type == BrimType::OuterAndInner)
+            CHECK(radii.size() == outer.size() + inner.size());
+        else
+            CHECK(radii.empty());
+    }
+    REQUIRE(outer.size() == 8);
+    REQUIRE(inner.size() == 8);
+    CHECK_THAT(outer.front(), WithinAbs(10.0 + spacing / 2.0, 0.01)); // B4: 10.159
+    CHECK_THAT(outer.back(), WithinAbs(10.0 + 7.5 * spacing, 0.01));  // 12.678
+    CHECK_THAT(inner.back(), WithinAbs(5.0 - spacing / 2.0, 0.01));   // 4.801
+    CHECK_THAT(inner.front(), WithinAbs(5.0 - 7.5 * spacing, 0.01));  // 2.319
+    // A gap of 1 mm moves the whole brim out, as wide as before.
+    a.brim_type = BrimType::Outer;
+    a.brim_gap = 1.0;
+    std::vector<double> apart;
+    for (const Toolpath& t : brim_loops(tube, a, 0.4, 0.2))
+        apart.push_back(radius_of(t));
+    std::sort(apart.begin(), apart.end());
+    REQUIRE(apart.size() == 8);
+    CHECK_THAT(apart.front(), WithinAbs(11.0 + spacing / 2.0, 0.01)); // 11.168
+    CHECK_THAT(apart.back(), WithinAbs(11.0 + 7.5 * spacing, 0.01));  // 13.673
+    // An inner brim fills a small hole and stops.
+    const Polygons small{circle(0, 0, 10), circle(0, 0, 1, true)};
+    a.brim_type = BrimType::Inner;
+    a.brim_gap = 0.0;
+    const std::size_t n = brim_loops(small, a, 0.4, 0.2).size();
+    CHECK(n >= 1);
+    CHECK(n <= 3);
+    // An island inside the hole keeps its place: the inner loops go round it.
+    const Polygons island{circle(0, 0, 10), circle(0, 0, 6, true), circle(0, 0, 2)};
+    a.brim_width = 1.0;
+    for (const Toolpath& t : brim_loops(island, a, 0.4, 0.2))
+        for (const ToolpathPoint& q : t.points)
+            CHECK(std::hypot(q.p.x, q.p.y) > 2.0);
+}
+
+TEST_CASE("draft shield: the skirt from the part, up to the top (skirt_brim_raft.md, rule 4, B3)", "[adhesion]") {
+    const Polygons cube{square(-10, -10, 10, 10)};
+    const double spacing = loop_spacing(0.4, 0.2);
+    AdhesionShape a;
+    a.brim_width = 5.0;
+    a.skirt_loops = 1;
+    a.skirt_distance = 3.0;
+    const std::size_t brim = brim_loops(cube, a, 0.4, 0.2).size();
+    CHECK(brim == 14);
+    a.shield = true;
+    // The brim's loop where the skirt goes is left out: 13 loops (B3).
+    CHECK(brim_loops(cube, a, 0.4, 0.2).size() == brim - 1);
+    const std::vector<Toolpath> skirt = skirt_loops(cube, a, 0.4, 0.2);
+    REQUIRE(skirt.size() == 1);
+    double far = 0.0; // the skirt's distance from the part along X
+    for (const ToolpathPoint& q : skirt[0].points)
+        far = std::max(far, q.p.x);
+    CHECK_THAT(far - 10.0, WithinAbs(3.0 + spacing / 2.0, 0.01));
+    // In the G-code: enabled, on every layer; limited, on adhesion.skirt_layers.
+    IndexedMesh m;
+    for (float z : {0.0f, 10.0f})
+        for (const auto& p : {std::array<float, 2>{-10, -10}, {10, -10}, {10, 10}, {-10, 10}})
+            m.vertices.push_back({p[0], p[1], z});
+    for (const auto& f : std::vector<std::array<std::uint32_t, 4>>{{0, 3, 2, 1}, {4, 5, 6, 7}, {0, 1, 5, 4}, {1, 2, 6, 5}, {2, 3, 7, 6}, {3, 0, 4, 7}}) {
+        m.triangles.push_back({f[0], f[1], f[2]});
+        m.triangles.push_back({f[0], f[2], f[3]});
+    }
+    Settings s = test_printer();
+    s.brim_width = 5.0;
+    s.skirt_loops = 1;
+    s.skirt_distance = 3.0;
+    const auto layers_with_skirt = [&](DraftShield shield, int skirt_layers) {
+        s.draft_shield = shield;
+        s.skirt_layers = skirt_layers;
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, s), s);
+        std::size_t layers = 0;
+        bool counted = false;
+        std::istringstream in(out.str());
+        for (std::string line; std::getline(in, line);) {
+            if (line == ";LAYER_CHANGE")
+                counted = false;
+            if (line == ";TYPE:Skirt/Brim" && !counted)
+                ++layers, counted = true;
+        }
+        return layers;
+    };
+    CHECK(layers_with_skirt(DraftShield::Enabled, 1) == 50);
+    CHECK(layers_with_skirt(DraftShield::Limited, 5) == 5);
+    CHECK(layers_with_skirt(DraftShield::Disabled, 1) == 1);
 }

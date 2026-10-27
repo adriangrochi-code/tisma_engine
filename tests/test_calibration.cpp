@@ -277,9 +277,12 @@ TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibr
     CHECK(s.flow == 96.5);
     CHECK_FALSE(apply_calibration(CalibrationKind::Dimensions, 1.0, s));
 
-    // Every automatic print slices into G-code that passes its check.
+    // Every automatic print slices into G-code that passes its check (the
+    // resin ones are tried in test_resin.cpp).
     for (int i = 0; i < kCalibrationKinds; ++i) {
         const CalibrationKind k = CalibrationKind(i);
+        if (is_resin_calibration(k))
+            continue;
         Settings run = plain();
         const CalibrationPrint p = automatic_calibration(k, run);
         run.changes = p.changes;

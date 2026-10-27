@@ -135,9 +135,12 @@ TEST_CASE("catalog: printer profiles from a model", "[catalog]") {
     // Only printer settings: it reads back as a printer profile.
     CHECK(parse_profile(profile_file_json(p)).kind == ProfileKind::Printer);
 
-    // The profile prints: the cube on its bed slices to G-code that passes the check.
+    // The profile prints, with a filament (its start G-code heats to the
+    // filament's temperatures): the cube on its bed slices to G-code that
+    // passes the check.
     for (const Profile& printer : {p, delta}) {
         Settings run = with_profile(Settings{}, ProfileKind::Printer, printer.settings);
+        run = with_profile(run, ProfileKind::Filament, filament_profile(c.filaments.front()).settings);
         run.gpu = GpuMode::Off;
         IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
         BoundingBox box;

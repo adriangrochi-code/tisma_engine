@@ -10,6 +10,7 @@
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 #include "ui/text.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -52,8 +53,9 @@ std::string conversions(const char* text) {
             continue;
         while (*p && !std::isalpha(static_cast<unsigned char>(*p)))
             ++p;
-        if (*p)
-            out += *p;
+        if (!*p)
+            break; // a '%' with no conversion after it: never past the end
+        out += *p;
     }
     return out;
 }
@@ -136,6 +138,29 @@ TEST_CASE("ui: the camera frames a box and moves with the mouse", "[ui]") {
     const Vec3 before = cam.target;
     cam.pan(10, 0, 800);
     CHECK(dot(cam.target - before, cam.right()) < 0.0f);
+}
+
+TEST_CASE("ui: the orthographic view keeps sizes whatever the depth (preview.md, rule 10)", "[ui]") {
+    OrbitCamera cam;
+    cam.target = {0, 0, 0};
+    cam.distance = 300.0f;
+    cam.set_view(StandardView::Front);
+    // A 10 mm bar at the target and 100 mm nearer: its size on the screen.
+    const auto width_at = [&](float y) {
+        const Mat4 vp = cam.projection(1.0f) * cam.view();
+        return transform_point(vp, Vec3{5.0f, y, 0.0f}).x - transform_point(vp, Vec3{-5.0f, y, 0.0f}).x;
+    };
+    const float far = width_at(0.0f), near = width_at(-100.0f);
+    CHECK(near / far > 1.3f); // perspective: nearer is bigger
+    cam.orthographic = true;
+    const float far_o = width_at(0.0f), near_o = width_at(-100.0f);
+    CHECK(near_o / far_o < 1.01f);
+    // The target keeps its size on the screen, so zoom and pan feel the same.
+    CHECK_THAT(double(far_o), Catch::Matchers::WithinRel(double(far), 1e-3));
+    CHECK(length(cam.eye() - cam.target) > 10.0f * cam.distance);
+    // The bottom view looks up.
+    cam.set_view(StandardView::Bottom);
+    CHECK(cam.forward().z > 0.99f);
 }
 
 TEST_CASE("ui: a model goes to the middle of the bed, on it", "[ui]") {
@@ -262,6 +287,42 @@ int hidden_of(const PreviewBuffers& b, std::size_t l, LineKind kind) {
 }
 
 } // namespace
+
+TEST_CASE("ui: the preview's numeric views and their 11 steps (preview.md, rules 1 and 7, PV2, PV3)", "[ui]") {
+    // PV2 and PV3: 11 steps between the least and the most.
+    const std::vector<double> speed = legend_steps(0.0, 230.0, false);
+    REQUIRE(speed.size() == 11);
+    for (std::size_t i = 0; i < speed.size(); ++i)
+        CHECK_THAT(speed[i], Catch::Matchers::WithinAbs(23.0 * double(i), 1e-9));
+    const std::vector<double> width = legend_steps(0.38, 0.76, false);
+    CHECK_THAT(width[1] - width[0], Catch::Matchers::WithinAbs(0.038, 1e-12));
+    // In equal steps of the logarithm; one value alone, one step.
+    const std::vector<double> log = legend_steps(std::log10(20.0), std::log10(62.0), true);
+    CHECK_THAT(log.front(), Catch::Matchers::WithinRel(20.0, 1e-9));
+    CHECK_THAT(log.back(), Catch::Matchers::WithinRel(62.0, 1e-9));
+    CHECK_THAT(log[2] / log[1], Catch::Matchers::WithinRel(log[1] / log[0], 1e-9));
+    CHECK(legend_steps(5.0, 5.0, false) == std::vector<double>{5.0});
+    // The instances carry the view's number.
+    GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:Perimeter\n;WIDTH:0.5\n"
+                                        "M106 S255\nM104 S210\nG1 Z0.2 F600\nG1 X10 Y0 E1\nT1\nG1 X20 E2 F1200\n");
+    time_preview(p, Kinematics{});
+    const PreviewBuffers fan = preview_buffers(p, 0xFF0000FF, PreviewValue::Fan);
+    CHECK(fan.min_feed == 100.0f);
+    const PreviewBuffers flow = preview_buffers(p, 0xFF0000FF, PreviewValue::Flow);
+    CHECK_THAT(double(flow.min_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 10.0, 1e-5));
+    CHECK_THAT(double(flow.max_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 20.0, 1e-5));
+    const PreviewBuffers tool = preview_buffers(p, 0xFF0000FF, PreviewValue::Tool);
+    CHECK(tool.min_feed == 0.0f);
+    CHECK(tool.max_feed == 1.0f);
+    // The reached speed is never above the asked one (here the move starts
+    // at the corner's speed, its feed).
+    const PreviewMove& first = p.moves[p.extrusions.front()];
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) <= 10.0f + 1e-4f);
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) > 9.0f);
+    CHECK(preview_value(p, first, PreviewValue::Temperature) == 210.0f);
+    CHECK_THAT(double(preview_value(p, first, PreviewValue::LayerTime)),
+               Catch::Matchers::WithinAbs(p.layers[first.layer].seconds, 1e-5));
+}
 
 TEST_CASE("ui: the preview leaves out what the part hides when all of it shows", "[ui]") {
     // Six equal layers of a 20 mm square: inside the layers between the
@@ -491,7 +552,7 @@ TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {
 }
 
 TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_ui_files";
+    const std::filesystem::path dir = test_temp_dir() / "tisma_ui_files";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir / "Sub");
     std::filesystem::create_directories(dir / ".hidden");
@@ -585,6 +646,7 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
         {"machine.relative_extrusion", [](Settings& s) { s.relative_extrusion = !s.relative_extrusion; }},
         {"machine.flavor", [](Settings& s) { s.flavor = GcodeFlavor::Klipper; }},
         {"walls.scarf", [](Settings& s) { s.scarf = ScarfMode::Everywhere, s.scarf_only_smooth = false, s.scarf_length = 5.0; }},
+        {"walls.detect_overhangs", [](Settings& s) { s.detect_overhangs = !s.detect_overhangs; }},
     };
     for (const auto& [name, change] : changes) {
         INFO(name);
@@ -610,6 +672,30 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
     seam.set_tree(PaintChannel::Seam, 0, {kPaintEnforce});
     CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
     CHECK(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+}
+
+TEST_CASE("ui: a resin printer slices into layer images and a preview of their outlines", "[ui][resin]") {
+    Settings settings = default_settings();
+    settings.machine_technology = MachineTechnology::Msla;
+    settings.bed = {{0.0, 0.0}, {settings.display_width, 0.0}, {settings.display_width, settings.display_height},
+                    {0.0, settings.display_height}};
+    const TriangleMesh cube = read_cube();
+    const TriangleMesh placed = translated(cube, centre_on_bed(cube.bounding_box(), settings.bed));
+    Slicer slicer;
+    const SliceResult r = slicer.run(placed, settings);
+    REQUIRE(r.ok);
+    REQUIRE(r.resin);
+    CHECK_FALSE(r.model);
+    CHECK(r.gcode.empty());
+    // On supports over the pad by default: 2 + 5 mm under the part.
+    CHECK_THAT(r.resin->layers.back().z, WithinAbs(7.0 + cube.bounding_box().max.z - cube.bounding_box().min.z, 1e-3));
+    CHECK(r.preview.layers.size() == r.resin->layers.size());
+    CHECK(r.preview.kind_moves[std::size_t(LineKind::Support)] > 0);
+    CHECK(r.preview.estimated_seconds == r.resin->seconds);
+    // What does not fit on the display is refused with the engine's reason.
+    const SliceResult off = slicer.run(translated(cube, {-500, 0, 0}), settings);
+    CHECK_FALSE(off.ok);
+    CHECK_THAT(off.error, ContainsSubstring("display"));
 }
 
 TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
@@ -753,4 +839,22 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
     const SliceResult unheld = slicer.run(bar, s, &loose);
     REQUIRE(unheld.ok);
     CHECK_THAT(held_over_free(unheld), Catch::Matchers::WithinAbs(1.0, 0.15));
+}
+
+TEST_CASE("ui: the move slider draws the top layer up to a move (preview.md, rule 4)", "[ui]") {
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 10, 25};
+    order.layer_hidden = {25, 27, 30};
+    // Layers 0 and 1, the top one cut after 4 shown and 1 hidden extrusions.
+    const auto cut = preview_ranges(order, 0, 1, 0xFFFFFFFFu, 4, 1);
+    CHECK(cut[0].first == 0);
+    CHECK(cut[0].count == 14);
+    CHECK(cut[1].first == 25);
+    CHECK(cut[1].count == 3); // the hidden ones too: not all of the part is drawn
+    // Whole: the hidden ones stay out.
+    const auto whole = preview_ranges(order, 0, 1, 0xFFFFFFFFu);
+    CHECK(whole[0].count == 25);
+    CHECK(whole[1].count == 0);
+    // A cut past the layer's end draws it all.
+    CHECK(preview_ranges(order, 0, 1, 0xFFFFFFFFu, 100, 100)[0].count == 25);
 }

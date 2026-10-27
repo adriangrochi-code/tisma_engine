@@ -131,6 +131,37 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
+    CHECK(Settings().detect_overhangs);
+    const Settings thin = parse_settings(R"({"walls": {"min_line_width": 0.3, "min_detail": "20%"}})");
+    CHECK(thin.wall_min_line_width == Speed{0.3, false});
+    CHECK(parse_settings(R"({"walls": {"generator": "fixed"}})").wall_generator == WallGenerator::Fixed);
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"generator": "arachne"}})"), ContainsSubstring("walls.generator: must be one of"));
+    CHECK_FALSE(parse_settings(R"({"walls": {"gap_fill": false}})").wall_gap_fill);
+    CHECK(thin.wall_min_detail == Speed{20.0, true});
+    CHECK(Settings().wall_min_line_width == Speed{85.0, true});
+    CHECK(parse_settings(R"({"support": {"width": "150%"}})").support_width == Speed{150.0, true});
+    CHECK(parse_settings(R"({"support": {"width": 0.6}})").support_width == Speed{0.6, false});
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"over_bridges": "fast"}})"), ContainsSubstring("speed.over_bridges: must be"));
+    CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel_z": 0}})"), ContainsSubstring("speed.travel_z: must be greater than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"bridge_flow_ratio": 3}})"),
+                      ContainsSubstring("extrusion.bridge_flow_ratio: must be from 0.1 to 2"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"infill_max_speed": -1}})"),
+                      ContainsSubstring("extrusion.infill_max_speed: must be from 0 to 1000"));
+    CHECK(parse_settings(R"({"speed": {"first_layer_infill": null}})").first_layer_infill_speed == Speed{});
+    CHECK_THROWS_WITH(parse_settings(R"({"acceleration": {"walls": -1}})"),
+                      ContainsSubstring("acceleration.walls: must be from 0 to 100000"));
+    CHECK_THROWS_WITH(parse_settings(R"({"acceleration": {"wall": 1}})"), ContainsSubstring("acceleration.wall: unknown"));
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"width": "0%"}})"), ContainsSubstring("percentage of the layer"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"min_detail": "x"}})"), ContainsSubstring("percentage of the nozzle"));
+    const Settings arcs = parse_settings(R"({"arcs": {"enabled": true, "overlap": 20, "speed": 0, "max_distance": 8}})");
+    CHECK(arcs.arcs);
+    CHECK(arcs.arcs_overlap == 20.0);
+    CHECK(arcs.arcs_speed == 0.0);
+    CHECK(arcs.arcs_max_distance == 8.0);
+    CHECK_FALSE(Settings().arcs);
+    CHECK_THROWS_WITH(parse_settings(R"({"arcs": {"overlap": 95}})"), ContainsSubstring("arcs.overlap: must be from 0 to 90"));
+    CHECK_FALSE(parse_settings(R"({"walls": {"detect_overhangs": false}})").detect_overhangs);
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"detect_overhangs": 1}})"), ContainsSubstring("must be true or false"));
     CHECK(parse_settings(R"({"speed": {"outer_wall": 35}})").outer_wall_speed.of(60.0) == 35.0);
     const Settings r = parse_settings(R"({"retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
                                           "walls": {"seam": "rear"}})");
@@ -201,7 +232,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"seam": "back"}})"), ContainsSubstring("walls.seam: must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"outer_wall": "fast"}})"), ContainsSubstring("speed.outer_wall: must be a number of mm/s or a percentage"));
     CHECK_THROWS_WITH(parse_settings(R"({"speed": {"travel": 0}})"), ContainsSubstring("speed.travel: must be greater than 0"));
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "sailfish"}})"), ContainsSubstring("machine.flavor: must be one of"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"flavor": "x3g"}})"), ContainsSubstring("machine.flavor: must be one of"));
+    // Every flavor by its name, and back (gcode_extras.md, rule 6).
+    for (const char* name : {"marlin", "klipper", "reprap", "repetier", "smoothie", "teacup", "makerware", "sailfish",
+                             "mach3", "machinekit", "no_extrusion"}) {
+        const Settings f = parse_settings(std::string(R"({"machine": {"flavor": ")") + name + "\"}}");
+        CHECK(std::string(flavor_name(f.flavor)) == name);
+        CHECK(parse_settings(settings_json(f)).flavor == f.flavor);
+    }
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"relative_extrusion": 1}})"), ContainsSubstring("machine.relative_extrusion: must be true or false"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"variables": {"x": {"y": 1}}}})"), ContainsSubstring("machine.variables.x: values must be"));
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
@@ -268,7 +306,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "layers": {"height": 0.15, "first_height": 0.25},
         "slicing": {"fill_mode": "fill_holes", "gap_closing_radius": 0.07, "xy_offset": -0.03, "first_layer_shrink": 0.1,
                     "simplify_tolerance": 0.02},
-        "walls": {"count": 4, "width": 0.42, "seam": "rear"},
+        "walls": {"count": 4, "width": 0.42, "seam": "rear", "generator": "fixed", "gap_fill": false},
         "surfaces": {"top_layers": 5, "bottom_layers": 4, "top_pattern": "rectilinear"},
         "infill": {"density": 15.5, "angle": 30, "pattern": "gyroid", "wall_overlap": 12},
         "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "marlin",
@@ -277,22 +315,45 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
                     "max_feed_x": 300, "max_feed_y": 290, "max_feed_z": 15, "max_feed_e": 100, "acceleration": 2000,
                     "travel_acceleration": 3000, "corner_speed": 8, "bed": [[0, 0], [220, 0], [220, 230.5], [0, 230.5]],
                     "max_height": 250, "max_flow": 24, "max_nozzle_temp": 300, "max_bed_temp": 110,
-                    "max_chamber_temp": 60, "enclosed": true, "hardened_nozzle": true},
+                    "max_chamber_temp": 60, "enclosed": true, "hardened_nozzle": true, "z_offset": -0.15},
         "speed": {"walls": 55, "outer_wall": 35, "infill": 90, "solid_infill": 70, "top_solid_infill": 45, "support": 60,
-                  "travel": 150, "first_layer": 25, "max": 120},
+                  "travel": 150, "first_layer": 25, "max": 120, "bridges": 30, "gap_fill": 15, "over_bridges": "60%",
+                  "first_layer_infill": 35, "travel_z": 8, "dynamic_overhangs": true, "overhang_0": "40%",
+                  "overhang_1": 12, "overhang_2": 18, "overhang_3": "90%", "flow_slope_up": 1.5, "flow_slope_down": 2.5},
+        "acceleration": {"default": 2000, "walls": 1000, "outer_wall": 800, "infill": 3000, "solid_infill": 2500,
+                         "top_solid_infill": 1500, "bridges": 500, "first_layer": 700, "travel": 4000,
+                         "short_travel": 600},
         "retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
-        "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5},
+        "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5, "raft_layers": 3,
+                     "skirt_min_filament": 250, "draft_shield": "limited", "brim_type": "outer_and_inner", "brim_gap": 0.5,
+                     "raft_gap": 0.15, "raft_expansion": 2, "raft_first_layer_density": 80, "raft_first_layer_expansion": 4},
         "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
         "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},
         "compute": {"gpu": "off"},
+        "ironing": {"enabled": true, "surfaces": "topmost", "flow": 20, "spacing": 0.12, "speed": 18},
         "compensation": {"scale_x": 99.6, "scale_y": 100.4, "scale_z": 99.9, "hole_offset": 0.08},
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
-                      "needs_enclosure": true},
-        "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi"}, {"z": 5, "fan": 50, "retraction_length": 1.2,
+                      "needs_enclosure": true, "infill_max_speed": 50, "infill_max_crossing_speed": 35,
+                      "bridge_flow_ratio": 0.8, "chamber_min_temperature": 35, "density": 1.24, "cost": 25,
+                      "spool_weight": 200, "shrinkage_xy": 0.6, "shrinkage_z": 1.5},
+        "gcode": {"color_change": "M600 B1", "pause": "M601 ; [x]", "before_layer": ";B {layer_num}", "after_layer": ";A",
+                  "volumetric_e": true, "verbose_comments": true,
+                  "arcs": true},
+        "changes": [{"z": 10, "temperature": 215, "gcode": "M117 hi", "color_change": true, "pause": true},
+                    {"z": 5, "fan": 50, "retraction_length": 1.2,
                      "retraction_speed": 30, "flow": 95, "speed": 80, "bed_temperature": 65, "volumetric_flow": 12,
                      "acceleration": 3000}]
     })");
     REQUIRE(s.changes.size() == 2);
+    CHECK(s.over_bridges_speed == Speed{60.0, true});
+    CHECK(s.first_layer_infill_speed == Speed{35.0, false});
+    CHECK(s.bridge_flow_ratio == 0.8);
+    CHECK(s.shrinkage_xy == 0.6);
+    CHECK(s.shrinkage_z == 1.5);
+    CHECK(s.accel_short_travel == 600.0);
+    CHECK(s.overhang_speeds[0] == Speed{40.0, true});
+    CHECK(s.overhang_speeds[3] == Speed{90.0, true});
+    CHECK(s.flow_slope_down == 2.5);
     CHECK(s.changes[0].z == 5.0); // sorted by height
     CHECK(s.changes[1].gcode == "M117 hi");
     CHECK(!s.changes[1].fan.has_value());
@@ -320,6 +381,8 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("compensation.hole_offset"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"flow": 0}})"), ContainsSubstring("extrusion.flow"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"max_flow": -1}})"), ContainsSubstring("extrusion.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"shrinkage_xy": 25}})"),
+                      ContainsSubstring("extrusion.shrinkage_xy: must be a percentage from 0 to 20"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"chamber_temperature": 300}})"),
                       ContainsSubstring("extrusion.chamber_temperature"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"abrasive": 1}})"),

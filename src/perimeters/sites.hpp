@@ -60,6 +60,14 @@ struct Toolpath {
     bool closed = false;
     int index = 0;      // bead index, counted from the outline
     bool wavy = false;  // nonplanar infill (docs/NONPLANAR_INFILL.md): each bead fills the gap down to the one below
+    // mm the bead also fills under the layer's bottom: the part's first layer
+    // over the support reaches down to the support's top (supports_skirt.md, rule 4).
+    double gap = 0.0;
+    bool retract = false; // retract before it, however short the travel (each arc, arc_overhangs.md rule 4)
+    // The extruder of the part it belongs to, from 1 (multi_extruder.md,
+    // rule 1); 0: the default one, or for what belongs to no part (support,
+    // skirt) whichever extruder is printing.
+    std::uint8_t tool = 0;
 };
 
 // Connects the sites of each bead index inside every trapezoid into extrusion

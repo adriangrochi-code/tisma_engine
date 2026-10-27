@@ -1,0 +1,14 @@
+{
+  "format": "tisma-knowledge-tutorials",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}],
+  "notes": [],
+  "tutorials": [
+    {"id": "first_print", "name": "Primera impresión", "when": "first_start", "minutes": 3,
+     "steps": [{"anchor": "printer_selector", "title": "Tu impresora", "text": "Elegí tu impresora.", "wait_for": "printer_selected"},
+               {"anchor": "plate", "title": "Un modelo", "text": "Agregá un modelo a la placa.", "wait_for": "model_added"},
+               {"anchor": "slice_button", "title": "Laminar", "text": "Laminá y revisá la vista previa.",
+                "open": {"type": "procedure", "id": "drying"}}]}
+  ]
+}

@@ -43,6 +43,11 @@ struct LayerFill {
     std::vector<Toolpath> gaps;   // variable-width beads where the solid lines leave a gap (gap_fill)
     std::vector<Toolpath> support;           // support lines (support_areas)
     std::vector<Toolpath> support_interface; // dense support right under the part
+    std::vector<Toolpath> arcs; // over overhangs held from one side, in printing order (arc_overhangs.md)
+    // Loops over overhangs held from one side, from the zone's outline in
+    // (walls.extra_on_overhangs, walls_extra.md, rule 5).
+    std::vector<Toolpath> overhang_walls;
+    std::vector<Toolpath> ironing; // over the top surfaces, after their fill (ironing.md)
 };
 
 // What lines leave uncovered in a region, filled with variable-width beads
@@ -60,8 +65,10 @@ struct FillParams {
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
+    double bridge_width = 0.0;  // the bridges' round beads, and how far apart their lines are; 0: width
     const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
     Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
+    double sparse_width = 0.0;         // the sparse infill's bead, from its own nozzle (multimaterial.md, rule 3); 0: width
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

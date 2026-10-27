@@ -893,7 +893,7 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_ranges(order, lo, hi, f.kind_mask))
+            for (const PreviewRange& r : preview_ranges(order, lo, hi, f.kind_mask, f.top_shown, f.top_hidden))
                 if (r.count > 0) {
                     vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
                     drawn += r.count;

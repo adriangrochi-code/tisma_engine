@@ -13,6 +13,10 @@ comerciales» de terceros.
 La columna «CMake» es el nombre de `FetchContent_Declare`. `tools/check_licenses.py` comprueba, en cada compilación
 de pruebas y en la CI, que cada dependencia de CMake esté en esta tabla con una licencia permitida.
 
+Cada biblioteca que se distribuye con el programa tiene además su entrada en `resources/credits.json` y su archivo de
+licencia en `resources/licenses/`, que la interfaz muestra en Más › Créditos y fuentes (ficha `credits.md`). La prueba
+«credits: every library the program carries has its license and notice» falla si falta alguna.
+
 | Biblioteca | CMake | Versión | Licencia | Leída en | URL | Uso |
 |---|---|---|---|---|---|---|
 | Catch2 | Catch2 | 3.7.1 (commit `fa43b77429ba76c462b1898d6cd2f2d7a9416b14`) | BSL-1.0 | `LICENSE.txt` del tag `v3.7.1` | https://github.com/catchorg/Catch2 | Solo pruebas. No se distribuye con el programa. |

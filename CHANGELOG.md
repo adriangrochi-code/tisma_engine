@@ -10,6 +10,238 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.10.0-alpha.1] - 2026-10-27
+
+### Agregado
+
+- **Espejar y Cortar en la placa** (ficha `model_tools.md`): Espejar en X, Y o Z en la herramienta Escalar, y la
+  herramienta Cortar (C) con un plano horizontal que deja dos piezas cerradas, Separar en piezas, y Medir (U) distancias y ángulos entre caras y vértices, el diámetro de un agujero o un cilindro
+  y el ángulo de un cono con un clic, y escalar la pieza a la medida que debería tener.
+- **Escalar, girar, cortar y separar desde la línea de comandos** (ficha `model_tools.md`; grupo `transform`): escala o
+  porcentaje, encajar en una caja, giros en X, Y y Z, un corte horizontal que deja dos piezas cerradas y separar los
+  pedazos sueltos de una malla, cada uno como un objeto ordenado en la cama.
+- **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** o Más › Ayuda abren la ayuda con sus pestañas y su
+  buscador: problemas de impresión con sus causas y arreglos que se aplican con un clic (y se deshacen), procedimientos
+  paso a paso, tutoriales guiados que iluminan cada parte de la interfaz y siguen solos cuando la persona hace el paso,
+  y el glosario, que también aparece en el (i) de cada ajuste. La pestaña Material muestra la ficha del
+  material elegido y avisa lo que la impresora no tiene para él. Los textos llegan con el paquete de perfiles.
+- **Créditos y fuentes** (ficha `credits.md`): las fichas cuya función sale de un artículo o un proyecto dicen al pie
+  «Basado en…», con un enlace a la fuente, y **Más > Créditos y fuentes** junta todas las fuentes y los componentes de
+  terceros con su licencia y el texto de su aviso.
+
+- **Resina** (ficha `resin.md`; grupo `resin` y `machine.display_*`, en Material › Resina, Impresora › Máquina ›
+  Pantalla de resina y Otros › Resina: capas): `slice` con salida `.goo` lamina para impresoras de resina con pantalla
+  y escribe el archivo GOO de Elegoo. Cada capa es una imagen en grises con el área exacta que la sección cubre de
+  cada píxel; las capas de fondo se exponen más y se achican contra el pie de elefante; hay corrección de escala,
+  corrección absoluta del contorno, corrección de Z bajo lo que cuelga y gamma de los bordes. Por defecto, una Elegoo
+  Mars 5 con resina estándar. Avisa de las ventosas (huecos que el film sella al despegar cada capa) y dice cómo
+  arreglarlas. El motor trae además la torre de exposición y el bloque de medidas de resina (todavía sin menú).
+- **Impresoras de resina en la interfaz** (Impresora › Máquina › Tipo de impresora): con «Resina (MSLA)» el panel
+  muestra solo los ajustes de resina, Laminar hace las imágenes de las capas, la vista previa muestra la pieza con
+  sus soportes y su base capa por capa, «Exportar GOO» escribe el archivo, y Calibrar ofrece la torre de exposición
+  (cuya franja elegida pasa a la exposición) y el bloque de medidas (que calcula la corrección de escala).
+- **Soportes, base y vaciado de resina** (ficha `resin_supports.md`, en Otros › Resina: soportes, base y vaciado):
+  la pieza queda elevada sobre pilares con puntas finas en las caras que miran hacia abajo, sobre una base pegada a
+  la plataforma (o con la base alrededor de la pieza apoyada); puede vaciarse con paredes de un espesor mínimo y el
+  hueco redondeado, con barras interiores que se sostienen solas; el motor acepta agujeros de drenaje. Los soportes
+  y la base vienen activados, como en Tisma Slicer. El peso y el costo de la resina salen del frasco
+  (`resin.bottle_*`).
+- **Relleno ondulado entrelazado** (ficha `interlock_infill.md`; `infill.waves`, en Impresión › Relleno › Relleno
+  ondulado): el relleno poco denso sube y baja como un cartón de huevos, igual en cada capa, para que las capas
+  encajen en vez de apoyarse en planos lisos. Funciona con cualquier patrón.
+- **Vista previa más completa** (ficha `preview.md`): 13 maneras de colorear (velocidad alcanzada, ventilador,
+  temperatura, caudal, tiempo de capa…), la leyenda por tipo con tiempo, porcentaje y filamento, una fila de íconos
+  para ver retracciones, costuras, cambios, pausas, el centro de gravedad y la boquilla, el deslizador de capas con dos
+  manijas y el «+» para poner un cambio de color, una pausa o G-code en una capa, el deslizador de movimientos, la
+  vista ortogonal (K) y las teclas 0 a 6, Z, E y L. El visor abre también G-code binario.
+- **Tarjeta de la impresora** arriba del panel: la impresora con su dibujo y una lista con buscador (también las del
+  catálogo, por marca), la cama en las impresoras que traen varias y la boquilla, que se cambia con un clic y se puede
+  deshacer. El engranaje abre la **configuración de la impresora** en una página aparte, con su sección de
+  **Calibración** (qué está calibrado, cuándo y con qué boquilla y filamento), la conexión y notas.
+- **Buscar un ajuste** (Ctrl+F, en la barra superior): por su nombre, su tarjeta, su clave o lo que hace; lleva al
+  ajuste y lo resalta.
+- **Panel de ajustes:** el nivel **Personalizado**, con «Elegir ajustes…», el ojo para quitar un ajuste de la vista,
+  «+ Agregar ajuste» y la vista exportable a otra computadora; **Ver todo junto**; y **Restablecer** en el menú de cada
+  tarjeta.
+- **Impresoras de cinta** (ficha `belt_printer.md`; grupo `belt`, en Impresora › Máquina › Impresora de cinta): para
+  impresoras con el pórtico inclinado sobre una cinta (BlackBelt, Creality CR-30, IdeaFormer IR3). Se lamina en
+  planos paralelos al pórtico y el G-code va en los ejes de la máquina, con la cinta en Z o en Y; la vista previa
+  muestra la pieza sobre la cinta con las capas inclinadas.
+- **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
+  en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
+  cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba
+  quedan paralelas a las caras de arriba inclinadas y no se ven escalones; con `overhangs` o el cono ajustado, las
+  capas bajan bajo los voladizos y sacan el soporte que necesitarían; `automatic` hace las dos cosas.
+- **Mezcla de colores** (ficha `color_mixing.md`): extrusores virtuales que alternan filamentos capa por capa para
+  dar colores nuevos, con su diálogo (lista, mezclas de dos colores, editor con deslizador y secuencia de capas) y
+  degradés por altura; cada pieza elige su extrusor, real o virtual, con la herramienta «Extrusor y color del
+  objeto», y el proyecto guarda todo.
+- **Boquillas distintas** (ficha `multimaterial.md`, en Impresora › Boquilla y Otros › Boquillas distintas y colores):
+  cada extrusor con su boquilla; los anchos de las líneas siguen a la de cada extrusor, y «paredes finas, relleno
+  grueso» imprime el relleno con la boquilla gruesa en capas combinadas. La mezcla de colores se ofrece con aviso de
+  costo en las impresoras de una sola boquilla, y después de laminar se avisa cuánto filamento va a la purga.
+- **Vigas entre materiales** (ficha `multi_extruder.md`, en Otros › Entrelazado entre materiales): donde se tocan
+  dos materiales, cada uno entra en el otro con vigas que cambian de dirección cada pocas capas.
+- **MMU de un extrusor** (ficha `multi_extruder.md`, en Impresora › MMU y Material › Carga y descarga en la MMU): cada
+  cambio comprime la punta sobre la torre, descarga el filamento hasta el tubo de enfriamiento, lo enfría con idas y
+  vueltas, cambia, carga el nuevo y purga.
+- **Torre de purga** (ficha `multi_extruder.md`, en Otros › Torre de purga): los cambios de herramienta se hacen sobre
+  una torre al costado de la pieza, con su posición, giro, ancho y borde; con una MMU de un extrusor cada cambio purga
+  el volumen que pide ese par de filamentos (`wipe_tower.purge_volumes`, por el multiplicador de cada filamento); con
+  varias boquillas, la nueva se ceba. Una torre fuera de la cama o sobre la pieza se rechaza. Puede no imprimir las
+  capas sin cambio (la boquilla baja hasta la torre), y la purga puede ir primero al relleno o a todo un objeto, con
+  un mínimo en la torre.
+- **Varios extrusores** (ficha `multi_extruder.md`): impresoras de varias boquillas con `machine.extruders`; cada
+  objeto se imprime con su extrusor y cada tipo de extrusión puede ir con otro (perímetros, relleno, relleno sólido,
+  soporte, interfaz). Cada capa empieza con el extrusor con el que terminó la anterior, un cambio por extrusor; el
+  cambio retrae su largo propio, corre el G-code de cambio y vuelve el filamento con su extra. Temperaturas por
+  extrusor al empezar, espera con menos temperatura para los que no imprimen, cama del extrusor que corresponde,
+  desfase de cada boquilla y capas sólidas entre materiales opcionales. En Impresora › Boquilla › Extrusores y Otros ›
+  Varios materiales.
+- **Etiquetas de objetos** (ficha `gcode_firmware.md`, en Impresora › G-code › Firmware): cada objeto marcado en el
+  G-code para cancelar uno solo durante la impresión, con `M486` (Marlin y RepRapFirmware), `EXCLUDE_OBJECT`
+  (Klipper) o los comentarios de OctoPrint.
+- **Impresión secuencial** (ficha `sequential.md`, en Otros › Modos especiales): con varios objetos en la placa, cada
+  uno se imprime entero antes del siguiente, con lugar para el cabezal entre ellos (Impresora › Cama y volumen) y G-code
+  propio entre objetos; los objetos que el cabezal o el eje X chocarían se rechazan. Es la forma de imprimir varios
+  objetos en modo vaso. Desde la línea de comandos, `slice --copies N` pone N copias del modelo.
+- **Más opciones de paredes** (ficha `walls_extra.md`, en Resistencia › Más opciones de paredes): costuras internas
+  escalonadas, un solo perímetro sobre las superficies de arriba (en todas o en la de más arriba), un solo perímetro
+  en la primera capa y perímetros extra que llenan los voladizos sostenidos de un solo lado.
+- **Retracción y viajes completos** (ficha `retraction_travel.md`): velocidad y extra de la vuelta del filamento,
+  retraer en todo cambio de capa, barrido mientras retrae (con una parte quieta antes), salto en Z solo por encima o
+  por debajo de una altura, salto en rampa con su pendiente y su altura, retracción del firmware con `G10`/`G11`,
+  viajes rectos que cruzan las paredes o con un desvío máximo, lazos de pared en sentido horario y valores propios del
+  material para la retracción y los viajes. En Material › Retracción y Viajes, Velocidad › Viajes y Resistencia ›
+  Paredes.
+- **Perímetros en voladizo** (ficha `walls_extra.md`, regla 8; `walls.detect_overhangs`, encendido por defecto, en
+  Resistencia › Paredes): los tramos de pared que quedan enteros en el aire se marcan `Overhang perimeter`, van a la
+  velocidad de los puentes y con su ventilador. En el Benchy, 218 mm en 34 capas.
+- **La primera capa sobre el soporte** (ficha `supports_skirt.md`, regla 4; prueba de caja negra QA13): sobre el
+  soporte, las paredes y el puente se hacen tan gruesos como la capa más la separación en Z (0,4 mm con capas de 0,2),
+  así llenan el hueco hasta el soporte en vez de caer en el aire; el puente entra 0,6 mm sobre la parte apoyada para
+  anclarse. La capa de arriba ya es normal.
+
+- **Arcos en voladizos** (pedido del dueño; ficha `arc_overhangs.md`; `arcs.enabled`, apagado por defecto, en
+  Soportes › Arcos en voladizos): un voladizo que sale por un solo lado se imprime sin soporte con arcos que crecen
+  alrededor de un centro 1,2 mm adentro de lo apoyado, cada uno pisando al anterior, en vaivén, lentos (5 mm/s), con
+  cordón redondo, ventilador al máximo y retracción entre arcos; la capa de arriba lo cubre sólida. Los agujeros cortan
+  los arcos y las tiras angostas se llenan a lo ancho. Los puentes (apoyados de dos lados) siguen siendo puentes. En el
+  estante de la ficha, 598 mm de arcos (la ficha: 606).
+
+- **Revisión de estabilidad** (fichas `stability.md` y `print_review.md`; prueba de caja negra QA8): en piezas sin
+  soportes, avisa de partes que empiezan en el aire (crítico), de lo impreso que se vuelca fuera de su apoyo, de
+  columnas finas que se doblan con el empuje de la boquilla y de la pieza que se despega de la cama. El empuje y la
+  adherencia se miden (`review.nozzle_force`, `review.bed_adhesion`, en la pestaña Impresora › Máquina ›
+  Estabilidad); sin medir, informa las tres columnas más flexibles. La aguja de 1 × 1 × 80 mm de QA8 ahora sale.
+  Cada aviso del JSON lleva su gravedad (`severity`).
+
+- **Paredes más finas que la boquilla** (ficha `perimeters.md`, regla 3; prueba de caja negra QA9;
+  `walls.min_line_width`, 85 % de la boquilla, y `walls.min_detail`, 25 %, en Resistencia › Paredes): una pared de un
+  solo cordón más fina que el ancho mínimo se imprime con un cordón de ese ancho, centrado; más fina que el detalle
+  mínimo, no. Una pared de 0,2 mm, que antes daba «nothing would be printed», sale con un cordón de 0,34 mm. En el
+  Benchy, las capas con detalles perdidos pasan de 9 a 3; en el cráneo escaneado, de 31 a 8.
+
+- **Ancho de las líneas del soporte** (`support.width`, ficha `supports_more.md`, regla 18; en Soportes › Patrón): en
+  mm o en % de la altura de capa; 0, el de las paredes, como hasta ahora. Vale para la base, la interfaz y los árboles.
+
+- **Velocidades propias** (ficha `speeds_accels.md`; en la sección Velocidad): `speed.bridges` para puentes y
+  perímetros en voladizo, `speed.over_bridges` para el relleno sólido justo encima de un puente,
+  `speed.first_layer_infill` para el relleno de la primera capa (puede pasar la velocidad de la primera capa),
+  `speed.gap_fill` y `speed.travel_z` para los movimientos en Z. Sin valor, la de siempre.
+- **Aceleraciones por tipo** (ficha `speeds_accels.md`; grupo `acceleration`, en Velocidad › Aceleraciones): una
+  para cada tipo de extrusión, la primera capa y los viajes (también los cortos), con `M204` según el firmware.
+- **Paredes más lentas en los voladizos** (`speed.dynamic_overhangs`, en Velocidad › Voladizos): cuanto menos de su
+  cordón se apoya en la capa de abajo, más lenta va la pared, entre `speed.overhang_0` y `_3`.
+- **Ecualizador del caudal** (`speed.flow_slope_up` y `speed.flow_slope_down`, en Velocidad › Topes): el caudal
+  cambia de a poco entre una extrusión y la siguiente, en rampas de hasta 16 pedazos.
+- **Paredes de ancho fijo con relleno de huecos** (ficha `walls_extra.md`; `walls.generator` `fixed` y
+  `walls.gap_fill`, en Resistencia › Paredes): lazos todos del mismo ancho, y lo que queda entre ellos se llena con
+  cordones de relleno de huecos a `speed.gap_fill`.
+- **Planchado** (ficha `ironing.md`; grupo `ironing`, en Calidad › Planchado): la boquilla vuelve a pasar sobre las
+  superficies de arriba con muy poco material en líneas muy juntas, para alisarlas; todas, solo la más alta o todas
+  las capas sólidas.
+- **Balsa** (ficha `skirt_brim_raft.md`; `adhesion.raft_layers` y sus ajustes, en Adhesión › Balsa): capas de
+  soporte debajo de toda la pieza, base e interfaz, que la levantan de la cama; la primera capa de la pieza con su
+  propio tope de velocidad y aceleración.
+- **Cambio de color y pausas por altura** (ficha `gcode_templates.md`; `color_change` y `pause` en `changes`, con
+  `gcode.color_change` y `gcode.pause`), y **G-code antes y después de cada cambio de capa** (`gcode.before_layer`,
+  `gcode.after_layer`, con `layer_num` y `layer_z`), en Otros › Plantillas de G-code.
+- **Peso y costo del filamento** al final del G-code (ficha `gcode_extras.md`; `extrusion.density`, `extrusion.cost`,
+  en Filamento › Precio): `; filament used [mm]`, `[cm3]`, `[g]`, `; filament cost` y los totales.
+- **Espera de la cámara** (`extrusion.chamber_min_temperature`): la cámara se pide antes del G-code de inicio y, después,
+  se espera a que llegue a ese mínimo (`M191`).
+- **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
+- **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
+  grande para que, al contraerse, quede de la medida pedida.
+- **G-code binario** (`gcode.binary`, `.bgcode`; ficha `gcode_extras.md`): el formato binario público, sin comprimir
+  todavía, con sus bloques de datos y CRC32; se verifica antes de darle el nombre.
+- **Lenguaje de plantillas de G-code** (ficha `gcode_templates.md`): en el inicio, el fin, los cambios de capa y de
+  color, cuentas, textos, condiciones (`{if}`), funciones, variables propias y todos los ajustes por su nombre; un error
+  (por ejemplo una variable desconocida) hace fallar la exportación diciendo la línea y la columna. Inicio y fin del
+  filamento (`extrusion.start_gcode`, `end_gcode`), temperaturas automáticas con la cama (`gcode.auto_temperatures`),
+  nombre del archivo con variables (`output.filename_format`, con `slice -o carpeta`) y scripts de posproceso
+  (`output.post_process`, con confirmación o `--yes`).
+- **Falda, escudo y bordes** (ficha `skirt_brim_raft.md`, en Adhesión): largo mínimo de filamento de la falda
+  (`adhesion.skirt_min_filament`), escudo contra corrientes (`adhesion.draft_shield`, la falda sube con la pieza),
+  borde afuera, en los agujeros o en los dos (`adhesion.brim_type`) y separado de la pieza (`adhesion.brim_gap`).
+- **Límites de la máquina y firmware** (ficha `gcode_firmware.md`): aceleraciones por eje y de retracción, tirones o
+  desviación de unión y avances mínimos (`machine.*`, en Impresora › Límites), que la estimación del tiempo usa y que,
+  con `machine.limits_usage` `emit`, se escriben al empezar (Marlin 1 y 2, RepRapFirmware); la temperatura de la
+  boquilla antes y después del G-code de inicio; `G92 E0` en cada capa con E relativa en Marlin; `M73` con el
+  porcentaje y los minutos restantes (`gcode.progress`); sabores `marlin_legacy` y `reprapfirmware`.
+- **Modo silencioso** (`machine.silent_mode`, `machine.silent`): una segunda estimación con sus límites, y la del
+  tiempo de la primera capa.
+- **Arcos `G2`/`G3`** (`gcode.arcs`, en Otros › Salida del G-code): los tramos que siguen un círculo se escriben
+  como arcos; el G-code de una pieza redonda pesa hasta cuatro veces menos. La vista previa y el verificador los leen.
+- **Firmwares antiguos** (`machine.flavor`, ficha `gcode_extras.md`): `repetier`, `smoothie`, `teacup`, `makerware`,
+  `sailfish`, `mach3`, `machinekit` y `no_extrusion` (solo movimientos), cada uno con sus comandos.
+- **Comentarios detallados** (`gcode.verbose_comments`, en Otros › Salida del G-code): cada línea que escribe el motor
+  dice qué hace (`; perimeter`, `; retract`, `; travel to first layer point`…).
+- **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
+  Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
+  otro para los demás.
+
+### Corregido
+
+- Con varios extrusores, el relleno combinado (`infill.combine_layers`) se perdía.
+- La compresión de la MMU podía ir más rápido que la extrusión más rápida configurada.
+- El laminado ya no se cuelga cuando una región de paredes trae anillos sin área (pasaba con «un solo perímetro arriba»
+  en una esfera), y el reparto de los cordones de ancho variable es lineal en vez de cuadrático o peor en esos casos.
+- Las pruebas de los arcos en voladizos (A1 a A4) volvieron: el commit de los arcos `G2`/`G3` había escrito las suyas
+  encima.
+
+- En el modo vaso, después de G-code del usuario que mueve el cabezal, la vuelta siguiente salía desde donde el cabezal ya no estaba.
+- El verificador del G-code no contaba los cordones finos del planchado al calcular el avance de un flujo forzado.
+- Las etiquetas de las velocidades en voladizos tenían un «%» que la prueba de textos leía como formato.
+- El verificador del G-code rechazaba un G-code válido cuando una velocidad nueva (puentes, relleno de huecos, sobre
+  los puentes, relleno de la primera capa) era más rápida que todas las demás.
+
+### Cambiado
+
+- Una variable desconocida en el G-code de inicio o fin ya no queda escrita tal cual: es un error y no se escribe el
+  G-code (`gcode_templates.md`, regla 8). Un perfil de impresora del catálogo necesita el de filamento, que da
+  `temperature` y `bed_temperature`.
+
+- **Puentes con cordón redondo** (fichas `gcode_motion.md`, regla 1, y `speeds_accels.md`, regla 14): los puentes y
+  los tramos de pared sobre el aire se extruyen como un cordón redondo del ancho de la boquilla (con 0,4 mm, 0,0522 mm
+  de filamento por mm), y las líneas del puente van a esa distancia; `extrusion.bridge_flow_ratio` (1 por defecto)
+  achica la sección y junta las líneas.
+- **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las
+  vecinas se enlazan de a pares, con el soporte entre las dos, y se acercan hasta juntarse; las ramas juntadas
+  engordan menos. En el estante de la ficha, las piezas por capa bajando: 21, 11, 12, 10, 5, 5 y 4 (la ficha: 22, 13,
+  11, 9, 7, 4 y 1; antes 21, 21, 19, 15, 8, 7 y 3).
+
+- Sin cama en los ajustes, `placement.center` dado a mano mueve la pieza igual (ficha `placement.md`, PL15); sin él,
+  la pieza sigue donde viene.
+
+### Corregido
+
+- Una rama de árbol que se juntaba con otra que después se apoyaba en la pieza dejaba su pedazo en la capa de
+  separación, pegado a la pieza.
+- El G-code no escribe un ancho de línea sin un movimiento que lo use (`;WIDTH:0.000` en la punta de un cordón que se
+  afina a nada, que la verificación rechazaba).
+
 ## [0.9.0-alpha.1] - 2026-10-27
 
 Cuarta versión publicada. Trae los soportes en árbol, la lectura de OBJ y 3MF con la pieza centrada en la cama, la
@@ -619,7 +851,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.1...HEAD
+[0.10.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.1
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1

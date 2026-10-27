@@ -1,0 +1,35 @@
+{
+  "format": "tisma-knowledge-problems",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}],
+  "notes": [],
+  "problems": [
+    {"id": "stringing", "name": "Hilos entre partes", "symptoms": "Quedan hebras finas entre zonas separadas de la pieza.",
+     "causes": [
+       {"id": "hot", "name": "Boquilla muy caliente", "explain": "El plástico gotea en los viajes.",
+        "check": "¿Mejora al bajar 5 grados?",
+        "actions": [{"type": "setting", "key": "machine.variables.temperature", "op": "add", "value": -5, "unit": "°C",
+                     "why": "Menos goteo."},
+                    {"type": "calibration", "id": "stringing_temperature"}]},
+       {"id": "wet", "name": "Filamento húmedo", "explain": "El agua hierve en la boquilla.", "check": "¿Se oyen chasquidos?",
+        "last_resort": true, "actions": [{"type": "procedure", "id": "drying"}]},
+       {"id": "retract", "name": "Poca retracción", "explain": "El plástico queda en la punta.", "check": "¿Hay gotas en los viajes?",
+        "actions": [{"type": "setting", "key": "retraction.length", "op": "multiply", "value": 1.2, "unit": "mm"}]}
+     ]},
+    {"id": "warping", "name": "Esquinas levantadas", "symptoms": "Las esquinas de la base se despegan de la cama.",
+     "causes": [
+       {"id": "cold_bed", "name": "Cama fría", "explain": "La base se enfría antes.", "check": "¿La cama llega a la temperatura del material?",
+        "actions": [{"type": "hardware", "text": "Revisá que la cama caliente pareja."},
+                    {"type": "problem", "id": "first_layer_adhesion"}]}
+     ]},
+    {"id": "first_layer_adhesion", "name": "La primera capa no se pega", "symptoms": "La primera capa se arrastra o se levanta.",
+     "causes": [
+       {"id": "fan", "name": "Ventilador en las primeras capas", "explain": "Enfría la base.", "check": "¿El ventilador sopla en la capa 1?",
+        "actions": [{"type": "setting", "key": "cooling.fan_off_layers", "op": "set", "value": 4},
+                    {"type": "setting", "key": "layers.first_height", "op": "set_relative", "value": 0.75, "of": "machine.nozzle_diameter"},
+                    {"type": "setting", "key": "cooling.no_such_setting", "op": "set", "value": 1},
+                    {"type": "model", "text": "Una pieza con poca base se pega peor."}]}
+     ]}
+  ]
+}

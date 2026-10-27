@@ -53,7 +53,8 @@ double best_angle(const Polygons& bridge, const Polygons& support, double width)
 } // namespace
 
 void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& regions,
-                  const std::vector<LayerWalls>& walls, bool sparse_printed, double width) {
+                  const std::vector<LayerWalls>& walls, bool sparse_printed, double width,
+                  const std::vector<Polygons>* others) {
     // First every bridge from the unchanged surfaces, then move them out of `bottom`.
     std::vector<Polygons> bridges(surfaces.size());
     std::vector<double> angles(surfaces.size(), 0.0);
@@ -65,11 +66,12 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
         // its sparse infill when that is not printed (a hollow part, whose
         // bottom layers would otherwise each weigh a whole layer's beads).
         const Polygons& region = regions[i - 1];
-        if (open(Clipper2Lib::Difference(
-                     surfaces[i].bottom,
-                     sparse_printed ? region : Clipper2Lib::Difference(region, surfaces[i - 1].sparse, FillRule::NonZero),
-                     FillRule::NonZero))
-                .empty())
+        const Polygons none;
+        const Polygons& other = others && i - 1 < others->size() ? (*others)[i - 1] : none;
+        Polygons under = sparse_printed ? region : Clipper2Lib::Difference(region, surfaces[i - 1].sparse, FillRule::NonZero);
+        if (!other.empty())
+            under = Clipper2Lib::Union(under, other, FillRule::NonZero);
+        if (open(Clipper2Lib::Difference(surfaces[i].bottom, under, FillRule::NonZero)).empty())
             return;
         // What is printed below, only near the bottom surface: the bridge
         // comes out of the surface, and its anchors (within the bottom
@@ -85,6 +87,8 @@ void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygo
             printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, *p), FillRule::NonZero);
         if (sparse_printed)
             printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, below.sparse), FillRule::NonZero);
+        if (!other.empty())
+            printed = Clipper2Lib::Union(printed, Clipper2Lib::RectClip(window, other), FillRule::NonZero);
         // To a micrometre: the beads' fine arcs cost most of what follows.
         printed = Clipper2Lib::SimplifyPaths(printed, 0.001 * kUnitsPerMm);
         Polygons raw = Clipper2Lib::Difference(surfaces[i].bottom, printed, FillRule::NonZero);

@@ -1354,7 +1354,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     const std::size_t layers = layer_extrusions_.size() - 1;
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
     // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md).
-    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask);
+    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
     for (const PreviewRange& range : ranges) {
         const std::size_t first = range.first, count = range.count;
         if (count == 0)

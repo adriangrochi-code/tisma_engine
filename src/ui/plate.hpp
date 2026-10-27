@@ -35,6 +35,11 @@ struct PlateObject {
     TriangleMesh mesh; // as its file has it
     Placement place;
     Painting painting; // by triangle of the mesh: it follows the model however it is placed
+    // Its extruder (from 1, or a mixed colour's number), and whether a
+    // filament change may purge into its sparse infill or into all of it
+    // (multi_extruder.md, rules 1 and 13).
+    int extruder = 1;
+    bool wipe_into_infill = false, wipe_into_object = false;
 };
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).

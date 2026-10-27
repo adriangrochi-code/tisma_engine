@@ -187,10 +187,12 @@ add_library(tisma_core
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
   src/perimeters/walls.cpp
+  src/perimeters/fixed.cpp
   src/perimeters/coverage.cpp
   src/surfaces/surfaces.cpp
   src/surfaces/bridges.cpp
   src/infill/adaptive.cpp
+  src/infill/arcs.cpp
   src/infill/rectilinear.cpp
   src/infill/gyroid.cpp
   src/infill/lightning.cpp
@@ -201,6 +203,10 @@ add_library(tisma_core
   src/infill/stress_density.cpp
   src/gcode/writer.cpp
   src/gcode/resolution.cpp
+  src/gcode/arcs.cpp
+  src/gcode/template.cpp
+  src/gcode/output.cpp
+  src/gcode/binary.cpp
   src/gcode/scarf.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp
@@ -209,9 +215,19 @@ add_library(tisma_core
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
+  src/report/stability.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
-  src/slice/placement.cpp
+  src/slice/transform.cpp
+    src/slice/placement.cpp
+  src/slice/wipe_tower.cpp
+  src/slice/color_mix.cpp
+  src/slice/belt.cpp
+  src/slice/curved.cpp
+  src/resin/goo.cpp
+  src/resin/hollow.cpp
+  src/resin/resin.cpp
+  src/resin/supports.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
   src/support/tree.cpp
@@ -275,12 +291,19 @@ if(TISMA_BUILD_UI)
     src/ui/slicing.cpp
     src/ui/presets.cpp
     src/ui/settings_layout.cpp
+    src/ui/settings_view.cpp
+    src/ui/printer_card.cpp
+    src/ui/credits.cpp
+    src/ui/assistant.cpp
+    src/ui/knowledge.cpp
+    src/ui/guide.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
+    src/ui/measure.cpp
     src/ui/help.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
-  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)
+  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
   add_subdirectory(apps/tisma)
 endif()
 

@@ -4,6 +4,7 @@
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
+#include "slice/color_mix.hpp"
 
 #include <array>
 #include <filesystem>
@@ -28,6 +29,11 @@ struct ProjectModel {
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
     std::array<double, 3> offset{};  // where it was on the bed, mm
     Painting painting;               // its painted faces (docs/PAINTING.md), by triangle of the mesh
+    // Its extruder (from 1, or a blend's number), and whether a filament
+    // change may purge into its sparse infill or into all of it
+    // (multi_extruder.md, rules 1 and 13).
+    int extruder = 1;
+    bool wipe_into_infill = false, wipe_into_object = false;
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -42,6 +48,10 @@ struct Project {
     std::array<std::string, 3> profiles; // the chosen profile of each ProfileKind, "" for none
     std::vector<ProjectModel> models;
     std::optional<ProjectCalibration> calibration;
+    // The project's mixed colours and the colour of each filament
+    // (color_mixing.md): they travel with the models, not with a profile.
+    std::vector<ColorMix> mixes;
+    std::vector<std::string> filament_colors;
 };
 
 // The file: "TISMAPRJ", the format version (32 bits), then chunks, each a

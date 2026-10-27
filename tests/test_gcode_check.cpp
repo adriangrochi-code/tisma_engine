@@ -7,6 +7,7 @@
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 #include "test_printer.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -130,8 +131,14 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         REQUIRE(at != std::string::npos);
         g.replace(at, what.size(), with);
     };
-    damaged([](std::string& g) { g.resize(g.size() / 2); }, "cut short");
-    damaged([](std::string& g) { g.resize(g.rfind("; estimated printing time")); }, "closing summary is missing");
+    damaged(
+        [](std::string& g) {
+            g.resize(g.size() / 2);
+            while (!g.empty() && g.back() == '\n') // in the middle of a line, wherever the half falls
+                g.pop_back();
+        },
+        "cut short");
+    damaged([](std::string& g) { g.resize(g.find("; estimated printing time")); }, "closing summary is missing");
     damaged([&](std::string& g) { g.insert(layer, "G1 X500 Y500\n"); }, "leaves the allowed area");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 Ynan\n"); }, "unreadable parameter 'Ynan'");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 F99999\n"); }, "above the fastest allowed");
@@ -249,7 +256,7 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto path = dir / "tisma_test_export.gcode";
     auto part = path, rejected = path;
     part += ".part";

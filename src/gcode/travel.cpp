@@ -69,8 +69,11 @@ std::vector<TravelPlanner::Ring> TravelPlanner::rings_of(const Polygons& polygon
     return rings;
 }
 
-TravelPlanner::TravelPlanner(const Polygons& region, double bead) : snap_(1.5 * bead) {
+TravelPlanner::TravelPlanner(const Polygons& region, double bead, TravelRouting routing)
+    : snap_(1.5 * bead), routing_(routing) {
     region_ = rings_of(region);
+    if (!routing_.inside) // every travel straight: no route to look for
+        return;
     margin_ = rings_of(offset(region, -(bead - kMargin)));
     // The travel region as a tree: every outer contour with its holes is one piece.
     Clipper2Lib::Clipper64 clipper;
@@ -253,6 +256,8 @@ TravelPlan TravelPlanner::plan(Point2d from, Point2d to) const {
     };
     if (visible(region_, from, to))
         return straight(false);
+    if (!routing_.inside)
+        return straight(true);
     const Located a = locate(from), b = locate(to);
     if (a.piece < 0 || a.piece != b.piece)
         return straight(true);
@@ -263,6 +268,13 @@ TravelPlan TravelPlanner::plan(Point2d from, Point2d to) const {
     if (b.hopped)
         plan.points.push_back(to);
     plan.length = path_length(from, plan.points);
+    // A detour longer than allowed: straight across the walls.
+    if (routing_.max_detour > 0.0) {
+        const double direct = distance(from, to);
+        const double allowed = routing_.percent ? direct * routing_.max_detour / 100.0 : routing_.max_detour;
+        if (plan.length - direct > allowed)
+            return straight(true);
+    }
     return plan;
 }
 

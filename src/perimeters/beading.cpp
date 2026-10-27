@@ -20,8 +20,11 @@ int unlimited_count(const BeadingParams& p, double d) {
         // Pairs of preferred-width beads, one from each side.
         return 2 * static_cast<int>(std::floor(d / (2.0 * w) + 0.5));
     case BeadingScheme::Distributed:
-    case BeadingScheme::InwardDistributed:
-        return static_cast<int>(std::floor(d / w + 0.5));
+    case BeadingScheme::InwardDistributed: {
+        const int n = static_cast<int>(std::floor(d / w + 0.5));
+        // Thinner than half a bead but not than the smallest detail: one bead.
+        return n == 0 && p.min_detail > 0.0 && d >= p.min_detail ? 1 : n;
+    }
     }
     return 0;
 }
@@ -116,6 +119,12 @@ Beading fill(const BeadingParams& p, int n, double d) {
         // Uniform beads come in from both outlines; the leftover gap stays in the middle.
         for (std::size_t i = b.widths.size() / 2; i < b.widths.size(); ++i)
             b.centres[i] = d - b.centres[b.widths.size() - 1 - i];
+    }
+    if (n == 1 && p.scheme != BeadingScheme::Uniform) {
+        // A wall of one bead: as wide as the wall, never narrower than
+        // min_width, on the wall's middle.
+        b.widths[0] = std::max(b.widths[0], p.min_width);
+        b.centres[0] = d / 2.0;
     }
     return b;
 }

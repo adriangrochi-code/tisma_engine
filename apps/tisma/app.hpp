@@ -25,11 +25,13 @@ struct AppOptions {
     int msaa = -1;                  // multisampling samples; -1: the preference
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
-    int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
+    int color = -1;                 // the preview's view (PreviewView, preview.md rule 1); -1: by kind
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
     std::vector<float> look;
-    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay or paint (for screenshots)
+    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay, cut, measure, paint, material, or mixing (its dialog)
+    int measure[2] = {-1, -1}; // with --tool measure: two triangles of the first model picked as faces
+    double cut = 0.0; // above 0: the first object cut at this height over the bed (model_tools.md, rule 13)
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy
@@ -40,8 +42,19 @@ struct AppOptions {
     bool tips = false; // with screenshot: show the first-use tips (docs/UI.md, «Ayuda»)
     int tour = -1;     // the assistant's step to show at start (0 to 6); -1: none, or the first run's
     std::string info;  // with screenshot: the setting ("group.key") whose info card opens
-    std::string level;   // the settings panel's level: basic, normal or advanced; empty: the remembered one
+    std::string level;   // the settings panel's level: basic, normal, advanced or custom; empty: the remembered one
     std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
+    std::string search;  // a search for a setting, gone to as Enter would (settings_panel.md, rule 5)
+    bool single_column = false;   // the panel's «See all together» (rule 4)
+    bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
+    bool labels = false;          // the parts' names over them (E)
+    bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
+    bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
+    std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
+    std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
+    std::string help_open;        // with help: a problem or procedure id opened in it
+    std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
+    int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

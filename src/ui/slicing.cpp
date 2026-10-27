@@ -3,13 +3,17 @@
 #include "ui/slicing.hpp"
 
 #include "fea/analysis.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/writer.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "report/stability.hpp"
+#include "slice/belt.hpp"
 #include "slice/printable.hpp"
 
 #include <oneapi/tbb/parallel_invoke.h>
 
+#include <algorithm>
 #include <chrono>
 #include <sstream>
 #include <utility>
@@ -92,6 +96,18 @@ Settings without_gcode_settings(Settings s) {
     s.solid_infill_speed = d.solid_infill_speed, s.top_solid_infill_speed = d.top_solid_infill_speed;
     s.support_speed = d.support_speed, s.travel_speed = d.travel_speed, s.first_layer_speed = d.first_layer_speed;
     s.max_speed = d.max_speed, s.corner_speed = d.corner_speed;
+    s.bridge_speed = d.bridge_speed, s.gap_fill_speed = d.gap_fill_speed, s.over_bridges_speed = d.over_bridges_speed;
+    s.first_layer_infill_speed = d.first_layer_infill_speed, s.travel_z_speed = d.travel_z_speed;
+    s.infill_max_speed = d.infill_max_speed, s.infill_max_crossing_speed = d.infill_max_crossing_speed;
+    s.accel_default = d.accel_default, s.accel_walls = d.accel_walls, s.accel_outer_wall = d.accel_outer_wall;
+    s.accel_infill = d.accel_infill, s.accel_solid_infill = d.accel_solid_infill;
+    s.accel_top_solid_infill = d.accel_top_solid_infill, s.accel_bridges = d.accel_bridges;
+    s.accel_first_layer = d.accel_first_layer, s.accel_travel = d.accel_travel;
+    s.accel_short_travel = d.accel_short_travel;
+    s.dynamic_overhangs = d.dynamic_overhangs, s.overhang_speeds = d.overhang_speeds;
+    s.flow_slope_up = d.flow_slope_up, s.flow_slope_down = d.flow_slope_down;
+    s.ironing_speed = d.ironing_speed;
+    s.first_layer_over_raft = d.first_layer_over_raft, s.accel_first_layer_over_raft = d.accel_first_layer_over_raft;
     s.acceleration = d.acceleration, s.travel_acceleration = d.travel_acceleration;
     s.max_feed_x = d.max_feed_x, s.max_feed_y = d.max_feed_y, s.max_feed_z = d.max_feed_z, s.max_feed_e = d.max_feed_e;
     s.retract_length = d.retract_length, s.retract_speed = d.retract_speed, s.retract_lift = d.retract_lift;
@@ -107,6 +123,7 @@ Settings without_gcode_settings(Settings s) {
     s.scarf = d.scarf, s.scarf_only_smooth = d.scarf_only_smooth, s.scarf_start_height = d.scarf_start_height;
     s.scarf_length = d.scarf_length, s.scarf_entire_loop = d.scarf_entire_loop;
     s.scarf_max_segment = d.scarf_max_segment, s.scarf_inner = d.scarf_inner;
+    s.detect_overhangs = d.detect_overhangs;
     return s;
 }
 
@@ -115,6 +132,8 @@ Settings without_gcode_settings(Settings s) {
 struct Slicer::Cut {
     TriangleMesh mesh;
     std::optional<Painting> painting;
+    std::vector<MeshObject> objects;
+    std::vector<ColorMix> mixes;
     std::string key; // settings_json(without_gcode_settings(settings))
     bool stressed = false; // cut with a load case's stress field
     std::shared_ptr<const SlicedModel> model;
@@ -126,11 +145,30 @@ Slicer::Slicer() = default;
 Slicer::~Slicer() = default;
 
 SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
-                        const Painting* painting) {
+                        const Painting* painting, const std::vector<MeshObject>* objects,
+                        const std::vector<ColorMix>* mixes) {
+    const std::vector<MeshObject> none;
+    const std::vector<MeshObject>& given = objects ? *objects : none;
+    const std::vector<ColorMix> no_mixes;
+    const std::vector<ColorMix>& blends = mixes ? *mixes : no_mixes;
     SliceResult out;
     out.settings = settings;
     try {
         auto start = std::chrono::steady_clock::now();
+        // A resin printer (resin.md): its layers' images, and no G-code.
+        if (settings.machine_technology == MachineTechnology::Msla) {
+            ResinOptions keep;
+            keep.keep_sections = true;
+            auto print = std::make_shared<ResinPrint>(slice_resin(weld_exact(mesh), settings, keep));
+            out.slice_seconds = seconds_since(start);
+            out.warnings = resin_warnings(*print, given.empty() ? std::string("the part") : given.front().name);
+            start = std::chrono::steady_clock::now();
+            out.preview = resin_preview(*print);
+            out.preview_seconds = seconds_since(start);
+            out.resin = std::move(print);
+            out.ok = true;
+            return out;
+        }
         // The same cut as last time: only the G-code again. A load case
         // cannot be compared, so stress-guided infill always cuts anew, and
         // its cut serves no other run.
@@ -139,7 +177,7 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
         const std::shared_ptr<const Cut> last = std::exchange(last_, nullptr);
         if (last && last->key == key && !stressed && !last->stressed &&
             (painting ? last->painting && *last->painting == *painting : !last->painting) &&
-            last->mesh.corners() == mesh.corners()) {
+            last->objects == given && last->mixes == blends && last->mesh.corners() == mesh.corners()) {
             out.model = last->model;
             out.warnings = last->warnings;
             out.gpu = last->gpu;
@@ -150,12 +188,12 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
                 return out;
             }
         } else {
-            out.model = cut(mesh, settings, load, painting, out);
+            out.model = cut(mesh, settings, load, painting, given.empty() ? nullptr : &given, &blends, out);
             if (!out.error.empty())
                 return out;
             last_ = std::make_shared<const Cut>(
-                Cut{mesh, painting ? std::optional<Painting>(*painting) : std::nullopt, std::move(key), stressed,
-                    out.model, out.warnings, out.gpu});
+                Cut{mesh, painting ? std::optional<Painting>(*painting) : std::nullopt, given, blends, std::move(key),
+                    stressed, out.model, out.warnings, out.gpu});
         }
         out.slice_seconds = seconds_since(start);
 
@@ -174,7 +212,18 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
             },
             [&] {
                 const auto begin = std::chrono::steady_clock::now();
-                out.preview = read_gcode_preview(out.gcode, settings.filament_diameter);
+                out.preview = read_gcode_preview(out.gcode, settings.filament_diameter, dialect_of(settings.flavor).e_axis);
+                // Each move's time, for the views by time and reached speed (preview.md).
+                time_preview(out.preview, machine_kinematics(settings), settings.filament_diameter);
+                // A belt printer's G-code is on the machine's axes: the part
+                // back where it lies on the belt (belt_printer.md).
+                if (settings.belt_enabled) {
+                    float y0 = 0.0f;
+                    if (!mesh.empty())
+                        y0 = std::min_element(mesh.corners().begin(), mesh.corners().end(),
+                                              [](const Vec3f& a, const Vec3f& b) { return a.y < b.y; })->y;
+                    belt_preview(out.preview, settings, y0);
+                }
                 out.preview_seconds = seconds_since(begin);
             });
         out.ok = true;
@@ -185,7 +234,9 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
 }
 
 std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const Settings& settings,
-                                               const AnalysisCase* load, const Painting* painting, SliceResult& out) {
+                                               const AnalysisCase* load, const Painting* painting,
+                                               const std::vector<MeshObject>* objects,
+                                               const std::vector<ColorMix>* mixes, SliceResult& out) {
     const IndexedMesh welded = weld_exact(mesh);
     if (std::string reason = unprintable_reason(welded, settings); !reason.empty()) {
         out.error = std::move(reason);
@@ -213,7 +264,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
     }
     auto model = std::make_shared<SlicedModel>();
     try {
-        *model = slice_model(welded, settings, gpu, &stress, painting);
+        *model = slice_model(welded, settings, gpu, &stress, painting, objects, mixes);
         if (gpu)
             out.gpu = gpu->device_name();
     } catch (const std::runtime_error& e) {
@@ -222,13 +273,15 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         out.warnings.push_back(
             {"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
         gpu_.reset(); // do not try a failing device again
-        *model = slice_model(welded, settings, nullptr, &stress, painting);
+        *model = slice_model(welded, settings, nullptr, &stress, painting, objects, mixes);
     }
     if (std::string reason = unprintable_reason(*model, settings); !reason.empty()) {
         out.error = std::move(reason);
         return nullptr;
     }
     std::vector<Warning> warnings = model_warnings(*model);
+    out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
+    warnings = stability_warnings(*model, settings);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
     return model;
 }

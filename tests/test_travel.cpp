@@ -112,3 +112,30 @@ TEST_CASE("a travel into an island inside a hole leaves the part", "[travel]") {
     CHECK_FALSE(planner.plan({13, 13}, {17, 17}).leaves_part);
     CHECK_FALSE(planner.plan({2, 2}, {28, 28}).leaves_part);
 }
+
+TEST_CASE("a travel goes straight across the walls when told not to avoid them (retraction_travel.md, rule 8)",
+          "[travel]") {
+    const TravelPlanner planner(u_shape(), 0.4, TravelRouting{false, 0.0, false});
+    const TravelPlan plan = planner.plan({5, 25}, {25, 25});
+    REQUIRE(plan.points.size() == 1);
+    CHECK(plan.leaves_part);
+    CHECK_THAT(plan.length, WithinAbs(20.0, 1e-9));
+    // Inside, it still goes straight without leaving.
+    CHECK_FALSE(planner.plan({2, 2}, {28, 5}).leaves_part);
+}
+
+TEST_CASE("a detour longer than travel.max_detour goes straight (retraction_travel.md, rule 8)", "[travel]") {
+    const Point2d from{5, 25}, to{25, 25};
+    const double round = TravelPlanner(u_shape(), 0.4).plan(from, to).length;
+    REQUIRE(round > 40.0); // down the arm, across and up: about 50 mm for 20 straight
+    // In mm: a detour of 30 mm passes, of 20 does not.
+    CHECK(TravelPlanner(u_shape(), 0.4, TravelRouting{true, round - 20.0 + 1.0, false}).plan(from, to).length ==
+          round);
+    const TravelPlan cut = TravelPlanner(u_shape(), 0.4, TravelRouting{true, round - 20.0 - 1.0, false}).plan(from, to);
+    CHECK(cut.leaves_part);
+    CHECK_THAT(cut.length, WithinAbs(20.0, 1e-9));
+    // In % of the straight travel.
+    const double share = (round - 20.0) / 20.0 * 100.0;
+    CHECK(TravelPlanner(u_shape(), 0.4, TravelRouting{true, share + 5.0, true}).plan(from, to).length == round);
+    CHECK(TravelPlanner(u_shape(), 0.4, TravelRouting{true, share - 5.0, true}).plan(from, to).leaves_part);
+}

@@ -246,27 +246,28 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
                             params.width);
     }
     // Bridge lines stay straight: a join along the edge would hang in the air.
-    out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
+    const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
+    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, false, true);
     if (params.density <= 0.0)
         return out;
+    const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
     case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)
-        out.sparse = rectilinear_fill(surfaces.sparse, params.width / params.density, angle, params.width, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, w / params.density, angle, w, true);
         break;
     case InfillPattern::AlignedRectilinear: // every layer at the infill angle (rule 1)
-        out.sparse =
-            rectilinear_fill(surfaces.sparse, params.width / params.density, params.angle, params.width, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, w / params.density, params.angle, w, true);
         break;
     case InfillPattern::Grid: {
-        const double spacing = 2.0 * params.width / params.density;
-        out.sparse = rectilinear_fill(surfaces.sparse, spacing, params.angle, params.width);
-        for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 90.0, params.width))
+        const double spacing = 2.0 * w / params.density;
+        out.sparse = rectilinear_fill(surfaces.sparse, spacing, params.angle, w);
+        for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 90.0, w))
             out.sparse.push_back(std::move(t));
         break;
     }
     case InfillPattern::Gyroid:
-        out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
+        out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(w, params.density), z, w);
         break;
     case InfillPattern::Triangles:
     case InfillPattern::Stars:
@@ -277,11 +278,11 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         // never meet at one point and draw six-pointed stars. Cubic: the faces
         // of cubes standing on a vertex, so each family moves across its lines
         // by z / sqrt(2) with the height (infill_patterns.md, rules 4 to 6).
-        const double spacing = 3.0 * params.width / params.density;
+        const double spacing = 3.0 * w / params.density;
         const double shift = params.pattern == InfillPattern::Cubic ? -z / std::numbers::sqrt2 : 0.0;
         for (int k = 0; k < 3; ++k) {
             const double over = params.pattern == InfillPattern::Stars && k == 1 ? 0.5 * spacing : 0.0;
-            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, params.width, false,
+            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, w, false,
                                                 false, false, 0.0, std::fmod(shift, spacing) + over))
                 out.sparse.push_back(std::move(t));
         }
@@ -289,32 +290,29 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     }
     case InfillPattern::AdaptiveCubic:
     case InfillPattern::SupportCubic:
-        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
-                                         params.width, z);
+        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * w / params.density, w, z);
         break;
     case InfillPattern::Line: // every other line turned 6.7 degrees, the other way on odd layers (rule 3, P3)
-        out.sparse = line_fill(surfaces.sparse, params.width / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7,
-                               params.width);
+        out.sparse = line_fill(surfaces.sparse, w / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7, w);
         break;
     case InfillPattern::Honeycomb: {
         // The principal direction goes through angle + 90, + 30 and - 30, a
         // layer each (rule 10, P8: 135, 75 and 15 degrees at 45 in layers 6, 7 and 5).
         const double principal = params.angle + 90.0 - 60.0 * double(layer % 3);
-        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(params.width, params.density), principal,
-                                    params.width);
+        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(w, params.density), principal, w);
         break;
     }
     case InfillPattern::Concentric:
-        out.sparse = concentric_fill(surfaces.sparse, params.width / params.density, params.width);
+        out.sparse = concentric_fill(surfaces.sparse, w / params.density, w);
         break;
     case InfillPattern::Hilbert: // the same in every layer (rule 12)
-        out.sparse = hilbert_fill(surfaces.sparse, params.width / params.density, params.angle, params.width);
+        out.sparse = hilbert_fill(surfaces.sparse, w / params.density, params.angle, w);
         break;
     case InfillPattern::Archimedean:
-        out.sparse = archimedean_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        out.sparse = archimedean_fill(surfaces.sparse, w / params.density, params.centre, w);
         break;
     case InfillPattern::Octagram:
-        out.sparse = octagram_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        out.sparse = octagram_fill(surfaces.sparse, w / params.density, params.centre, w);
         break;
     case InfillPattern::Lightning:
         break; // all the layers at once, from the top down (lightning_layers)

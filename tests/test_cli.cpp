@@ -1,10 +1,12 @@
 #include "cli/cli.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -51,7 +53,7 @@ TEST_CASE("unknown command", "[cli]") {
 }
 
 TEST_CASE("slice reads the model and writes the G-code", "[cli]") {
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_cube.gcode";
+    const auto path = test_temp_dir() / "tisma_test_cube.gcode";
     const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", path.string()});
     CHECK(r.code == kExitOk);
     CHECK_THAT(r.out, ContainsSubstring("read 12 triangles"));
@@ -65,7 +67,7 @@ TEST_CASE("slice reads the model and writes the G-code", "[cli]") {
 }
 
 TEST_CASE("slice runs the slicing with the settings", "[cli]") {
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_cube2.gcode";
+    const auto path = test_temp_dir() / "tisma_test_cube2.gcode";
     const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", path.string()});
     std::filesystem::remove(path);
     CHECK_THAT(r.out, ContainsSubstring("layers: 50")); // defaults: 0.2 mm layers on a 10 mm cube
@@ -75,13 +77,13 @@ TEST_CASE("slice runs the slicing with the settings", "[cli]") {
 
 TEST_CASE("slice reports an output it cannot write", "[cli]") {
     const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o",
-                       (std::filesystem::temp_directory_path() / "no_such_dir" / "x.gcode").string()});
+                       (test_temp_dir() / "no_such_dir" / "x.gcode").string()});
     CHECK(r.code == kExitInput);
     CHECK_THAT(r.err, ContainsSubstring("cannot write"));
 }
 
 TEST_CASE("slice reports bad settings", "[cli]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto path = dir / "tisma_test_bad_settings.json";
     {
         std::ofstream f(path);
@@ -133,13 +135,13 @@ TEST_CASE("info and slice read OBJ and 3MF models (formats.md, FM2, FM3, FM9)", 
     CHECK_THAT(parts.out, ContainsSubstring("format: 3mf\nobjects: 1\nparts: 2\ntriangles: 24"));
     const Run inch = run({"info", kData + "/formats/box_inch.3mf"});
     CHECK_THAT(inch.out, ContainsSubstring("size: 508 x 508 x 254"));
-    const std::filesystem::path out = std::filesystem::temp_directory_path() / "tisma_box_3mf.gcode";
+    const std::filesystem::path out = test_temp_dir() / "tisma_box_3mf.gcode";
     const Run sliced = run({"slice", kData + "/formats/box.3mf", "--config", kData + "/settings.json", "-o", out.string()});
     CHECK(sliced.code == kExitOk);
     CHECK_THAT(sliced.out, ContainsSubstring("read 12 triangles"));
     CHECK(std::filesystem::exists(out));
     std::filesystem::remove(out);
-    const std::filesystem::path bad = std::filesystem::temp_directory_path() / "tisma_broken.3mf";
+    const std::filesystem::path bad = test_temp_dir() / "tisma_broken.3mf";
     std::ofstream(bad, std::ios::binary) << "PK\x03\x04 not really";
     const Run broken = run({"info", bad.string()});
     std::filesystem::remove(bad);
@@ -148,8 +150,8 @@ TEST_CASE("info and slice read OBJ and 3MF models (formats.md, FM2, FM3, FM9)", 
 }
 
 TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
-    const auto gcode = std::filesystem::temp_directory_path() / "tisma_test_warn.gcode";
-    const auto json = std::filesystem::temp_directory_path() / "tisma_test_warn.json";
+    const auto gcode = test_temp_dir() / "tisma_test_warn.gcode";
+    const auto json = test_temp_dir() / "tisma_test_warn.json";
     const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o",
                        gcode.string(), "--warnings", json.string()});
     CHECK(r.code == kExitOk);
@@ -184,7 +186,7 @@ TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
 }
 
 TEST_CASE("models that cannot be printed end with a clear error and no G-code", "[cli]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto out = dir / "tisma_test_unprintable.gcode";
     auto write = [&](const std::string& name, const std::string& text) {
         const auto path = dir / name;
@@ -257,7 +259,7 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
 }
 
 TEST_CASE("analyze writes the report and the map", "[cli]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto report = dir / "tisma_test_analysis.json", map = dir / "tisma_test_analysis.vtk";
     const Run r = run({"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "--case",
                        kData + "/analysis_case.json", "-o", report.string(), "--vtk", map.string()});
@@ -276,7 +278,7 @@ TEST_CASE("analyze writes the report and the map", "[cli]") {
 }
 
 TEST_CASE("analyze errors", "[cli]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const std::string report = (dir / "tisma_test_analysis_errors.json").string();
     const std::string model = kData + "/cube_ascii.stl", config = kData + "/settings.json";
     SECTION("arguments") {
@@ -309,7 +311,7 @@ TEST_CASE("analyze errors", "[cli]") {
 }
 
 TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const std::string model = kData + "/cube_ascii.stl", config = kData + "/settings.json",
                       analysis = kData + "/analysis_case.json";
     const auto estimate = dir / "tisma_test_estimate.json";
@@ -338,11 +340,97 @@ TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli
 }
 
 TEST_CASE("an output that cannot be written leaves nothing behind", "[cli]") {
-    const auto missing = std::filesystem::temp_directory_path() / "tisma_no_such_dir" / "report.json";
+    const auto missing = test_temp_dir() / "tisma_no_such_dir" / "report.json";
     const Run r = run({"analyze", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "--case",
                        kData + "/analysis_case.json", "-o", missing.string()});
     CHECK(r.code == kExitInput);
     CHECK_THAT(r.err, ContainsSubstring("cannot write"));
     CHECK(!std::filesystem::exists(missing));
     CHECK(!std::filesystem::exists(missing.string() + ".part"));
+}
+
+TEST_CASE("slice into a folder names the file by output.filename_format (gcode_templates.md, rule 15, T11)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_names";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"output": {"filename_format":
+        "{input_filename_base}_{layer_height}mm_[fill_density]_{print_time}_{total_weight}.{default_output_extension}"}})";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", dir.string()});
+    CHECK(r.code == kExitOk);
+    std::vector<std::string> names;
+    for (const auto& entry : std::filesystem::directory_iterator(dir))
+        if (entry.path().extension() == ".gcode")
+            names.push_back(entry.path().filename().string());
+    REQUIRE(names.size() == 1);
+    INFO(names.front());
+    CHECK(names.front().starts_with("cube_ascii_0.2mm_"));
+    CHECK(names.front().find("%_") != std::string::npos);
+    CHECK(names.front().find("m_0..gcode") != std::string::npos); // the time, no weight without a density
+    CHECK(names.front().find("{print_time}") == std::string::npos);
+    CHECK_THAT(r.out, ContainsSubstring("wrote " + (dir / names.front()).string()));
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 17, T12)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_post";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+#ifdef _WIN32
+    const auto script = dir / "post.cmd";
+    std::ofstream(script) << "@echo ; post %SLIC3R_PP_HOST% %SLIC3R_LAYERS_HEIGHT% %SLIC3R_LAYER_HEIGHT%>> %1\r\n";
+#else
+    const auto script = dir / "post.sh";
+    std::ofstream(script) << "#!/bin/sh\necho \"; post $SLIC3R_PP_HOST $SLIC3R_LAYERS_HEIGHT $SLIC3R_LAYER_HEIGHT $#\" >> \"$1\"\n";
+    std::filesystem::permissions(script, std::filesystem::perms::owner_all);
+#endif
+    std::string path = script.string();
+    for (std::size_t i = 0; (i = path.find('\\', i)) != std::string::npos; i += 2)
+        path.insert(i, "\\");
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"output": {"post_process": [")" << path << R"("]}})";
+    const auto gcode = dir / "cube.gcode";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--yes"});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("A post-processing script has been detected"));
+    std::ifstream f(gcode);
+    std::string line, last;
+    while (std::getline(f, line))
+        if (!line.empty() && line != "\r")
+            last = line;
+    if (!last.empty() && last.back() == '\r')
+        last.pop_back();
+    while (!last.empty() && last.back() == ' ')
+        last.pop_back();
+#ifdef _WIN32
+    CHECK(last == "; post File 0.2 0.2");
+#else
+    CHECK(last == "; post File 0.2 0.2 1"); // one argument: the G-code's path
+#endif
+    f.close();
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice --copies prints copies of the model, one by one with sequential printing (sequential.md, SQ1)",
+          "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_copies";
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120,
+                                             "corner_speed": 10, "bed": [[0, 0], [200, 0], [200, 200], [0, 200]]},
+                                 "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80,
+                                           "top_solid_infill": 15, "support": 80, "travel": 130, "first_layer": 30},
+                                 "retraction": {"speed": 40}, "cooling": {"min_speed": 10},
+                                 "sequential": {"enabled": true}})";
+    const auto gcode = dir / "copies.gcode";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "3"});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("layers: 150")); // 50 layers of each copy, one after another
+    std::ifstream f(gcode);
+    const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK_THAT(text, ContainsSubstring(";NEXT_OBJECT:2"));
+    f.close();
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "0"})
+              .code == kExitUsage);
+    std::filesystem::remove_all(dir);
 }

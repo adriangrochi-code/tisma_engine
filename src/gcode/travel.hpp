@@ -15,6 +15,13 @@ struct TravelPlan {
     double length = 0.0;      // mm, along the points
 };
 
+// How the travels go (docs/spec/features/retraction_travel.md, rule 8).
+struct TravelRouting {
+    bool inside = true;      // travel.avoid_crossing_walls: inside the part, round the walls
+    double max_detour = 0.0; // what a route may add to the straight travel; 0: no limit
+    bool percent = false;    // max_detour is a percentage of the straight travel, not mm
+};
+
 // Plans the travels of one layer so that they stay inside the part
 // (docs/spec/BEHAVIOR.md, "Viajes y retracción"). Own design:
 // - a travel whose straight segment stays inside the layer's region goes straight;
@@ -24,12 +31,14 @@ struct TravelPlan {
 //   leaves the travel region, replaced by the boundary it crossed, the shorter
 //   way round; the route is then shortened where a straight cut stays inside;
 // - when the two ends are in different connected pieces of the travel region
-//   (or too far from it), the travel leaves the part and goes straight.
+//   (or too far from it), the travel leaves the part and goes straight;
+// - a route that adds more than routing.max_detour to the straight travel
+//   goes straight, and without routing.inside every travel does.
 class TravelPlanner {
 public:
     // region: the layer's region (outer contours counter-clockwise, holes
     // clockwise); bead: one wall bead width in mm.
-    TravelPlanner(const Polygons& region, double bead);
+    TravelPlanner(const Polygons& region, double bead, TravelRouting routing = {});
 
     TravelPlan plan(Point2d from, Point2d to) const;
 
@@ -56,6 +65,7 @@ private:
     std::vector<std::vector<std::size_t>> pieces_; // rings of travel_ per connected piece, outer first
     std::vector<Ring> margin_;  // the travel region grown by a little: shortcut checks
     double snap_;               // farthest hop onto the travel region, mm
+    TravelRouting routing_;
 };
 
 } // namespace tisma

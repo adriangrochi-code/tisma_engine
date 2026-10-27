@@ -1,4 +1,5 @@
 #include "config/profiles.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -16,7 +17,7 @@ namespace {
 
 // An empty folder of its own for each test (CTest runs them in parallel).
 std::filesystem::path fresh_folder(const std::string& name) {
-    const auto dir = std::filesystem::temp_directory_path() / ("tisma_test_profiles_" + name);
+    const auto dir = test_temp_dir() / ("tisma_test_profiles_" + name);
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
     return dir;
