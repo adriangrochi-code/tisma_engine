@@ -539,9 +539,15 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                   above = Clipper2Lib::Union(above, out.regions[a], Clipper2Lib::FillRule::NonZero);
                           const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
+                          // Its own bead width (supports_more.md, rule 18): a
+                          // percentage is of the layer height; 0, the walls'.
+                          const double h = out.layers[l].top - out.layers[l].bottom;
+                          const double width = settings.support_width.value <= 0.0 ? settings.wall_width
+                                               : settings.support_width.percent ? settings.support_width.value / 100.0 * h
+                                                                                : settings.support_width.value;
                           if (settings.support_style == SupportStyle::Organic) {
                               // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
-                              TreeFill tf = tree_fill(out.support_areas[l], above, settings.wall_width, settings.support_spacing,
+                              TreeFill tf = tree_fill(out.support_areas[l], above, width, settings.support_spacing,
                                                       settings.tree_double_wall_diameter, (l % 2 == 0) ? 0.0 : 90.0);
                               out.fills[l].support = std::move(tf.support);
                               out.fills[l].support_interface = std::move(tf.interface);
@@ -550,11 +556,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           // The base in lines along support.line_angle, support.spacing
                           // of free space apart; the interface across them, a
                           // bead's spacing apart (supports_skirt.md, rules 5 and 6).
-                          const double bead = loop_spacing(settings.wall_width, out.layers[l].top - out.layers[l].bottom);
+                          const double bead = loop_spacing(width, h);
                           out.fills[l].support = rectilinear_fill(base, settings.support_spacing + bead, settings.support_line_angle,
-                                                                  settings.wall_width, true);
+                                                                  width, true);
                           out.fills[l].support_interface =
-                              rectilinear_fill(interface, bead, settings.support_line_angle + 90.0, settings.wall_width, true);
+                              rectilinear_fill(interface, bead, settings.support_line_angle + 90.0, width, true);
                       });
     for (std::size_t l = period; l < out.layers.size(); ++l)
         if (repeats[l])

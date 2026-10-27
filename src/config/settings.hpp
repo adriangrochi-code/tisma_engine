@@ -212,6 +212,9 @@ struct Settings {
     // Between the support and the part beside it: mm, or percent of the
     // wall width (supports_skirt.md, rule 2: 50 %).
     Speed support_xy_gap{50.0, true};
+    // The support's and its interface's bead width (supports_more.md, rule
+    // 18): mm, or percent of the layer height; 0: walls.width.
+    Speed support_width{0.0, false};
     double support_spacing = 2.5;    // mm of free space between the base's lines (a bead's spacing more between centres)
     double support_line_angle = 0.0; // degrees, the base's lines; the interface's at 90 to them
     // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15

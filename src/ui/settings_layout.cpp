@@ -78,7 +78,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface, {{"support.interface_layers", N}}},
-          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}}},
+          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}, {"support.width", A}}},
           {"arcs", T::SubArcs,
            {{"arcs.enabled", N}, {"arcs.overlap", A}, {"arcs.speed", A}, {"arcs.max_distance", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",

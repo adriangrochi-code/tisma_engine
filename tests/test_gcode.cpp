@@ -904,6 +904,33 @@ TEST_CASE("walls: a bead that tapers to nothing writes no width of 0", "[gcode]"
     CHECK(out.str().find(";WIDTH:0.000") == std::string::npos);
 }
 
+TEST_CASE("support: its own line width, in mm or of the layer height (supports_more.md, rule 18; SM14)",
+          "[gcode][support]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    const IndexedMesh m = shelf();
+    const auto widths = [&](const Settings& settings) {
+        const SlicedModel model = slice_model(m, settings);
+        std::set<long> out;
+        for (const auto& kind : {&LayerFill::support, &LayerFill::support_interface})
+            for (const Toolpath& t : model.fills[20].*kind)
+                for (const ToolpathPoint& p : t.points)
+                    out.insert(std::lround(p.width * 1000.0));
+        for (const Toolpath& t : model.fills[38].support_interface)
+            for (const ToolpathPoint& p : t.points)
+                out.insert(std::lround(p.width * 1000.0));
+        return out;
+    };
+    CHECK(widths(s) == std::set<long>{std::lround(s.wall_width * 1000.0)}); // 0: the walls'
+    s.support_width = {0.6, false};
+    CHECK(widths(s) == std::set<long>{600});
+    s.support_width = {150.0, true}; // of 0.2 mm layers
+    CHECK(widths(s) == std::set<long>{300});
+    s.support_style = SupportStyle::Organic;
+    CHECK(widths(s) == std::set<long>{300});
+}
+
 TEST_CASE("walls: the stretches over the air are overhang perimeters at the bridges' speed (walls_extra.md, rule 8; "
           "W2)",
           "[gcode]") {

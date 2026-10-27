@@ -679,7 +679,7 @@ const char* row_key(T label) {
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
         {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
         {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
-        {T::ArcsEnabled, "arcs.enabled"}, {T::ArcsOverlap, "arcs.overlap"}, {T::ArcsSpeed, "arcs.speed"},
+        {T::SupportWidth, "support.width"}, {T::ArcsEnabled, "arcs.enabled"}, {T::ArcsOverlap, "arcs.overlap"}, {T::ArcsSpeed, "arcs.speed"},
         {T::ArcsMaxDistance, "arcs.max_distance"},
         {T::NozzleForce, "review.nozzle_force"}, {T::BedAdhesion, "review.bed_adhesion"},
         {T::MaxDeflection, "review.max_deflection"},
@@ -2942,6 +2942,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
+        if (shown("support.width"))
+            changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,
+                           s.support_width.percent ? "%.0f %%" : "%.2f mm", s.support_width.percent ? 0.5f : 0.01f);
     } else if (id == "arcs") {
         flag(T::ArcsEnabled, "arcs.enabled", s.arcs);
         mm(T::ArcsOverlap, "arcs.overlap", s.arcs_overlap, 0.0, 90.0, "%.0f %%", 0.5f);

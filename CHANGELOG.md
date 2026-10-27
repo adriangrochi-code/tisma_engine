@@ -40,6 +40,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   mínimo, no. Una pared de 0,2 mm, que antes daba «nothing would be printed», sale con un cordón de 0,34 mm. En el
   Benchy, las capas con detalles perdidos pasan de 9 a 3; en el cráneo escaneado, de 31 a 8.
 
+- **Ancho de las líneas del soporte** (`support.width`, ficha `supports_more.md`, regla 18; en Soportes › Patrón): en
+  mm o en % de la altura de capa; 0, el de las paredes, como hasta ahora. Vale para la base, la interfaz y los árboles.
+
 ### Cambiado
 
 - **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las

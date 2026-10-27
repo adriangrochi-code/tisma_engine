@@ -5066,3 +5066,17 @@ de 0,05 mm, nada. Benchy: capas con detalles perdidos 9 → 3; cráneo: 31 → 8
 los ajustes.
 
 **Sigue:** `support.width` (`supports_more.md`, regla 18), lo último del punto 1.
+
+## 2026-10-27 — `support.width` y fin del punto 1
+
+**Hecho:** `support.width` (ficha `supports_more.md`, regla 18): el ancho de los cordones de la base, la interfaz y los
+árboles, en mm o en % de la altura de capa (150 % con capas de 0,2 da 0,3 mm); 0, el de las paredes. La separación de
+la interfaz y el paso de la base salen de ese ancho. En el panel, Soportes › Patrón (Avanzado). Prueba SM14 (0, 0,6,
+150 %, con grilla y con árboles). La primera capa del soporte con el ancho de la primera capa (también de SM14) espera
+a `layers.first_line_width`, que el motor no tiene todavía.
+
+**Punto 1 de lo pendiente, terminado:** QA13 y los perímetros en voladizo, los árboles de SM13, los arcos en
+voladizos, PL15, QA8, QA9 y `support.width`.
+
+**Sigue (punto 2, en el orden aprobado):** velocidades y aceleraciones por tipo, relleno de huecos, planchado, balsa,
+cambio de color y pausas, y los extras del G-code.

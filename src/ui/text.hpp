@@ -656,6 +656,7 @@
     X(SubSupportInterface, "Interfaz", "Interface") \
     X(SubSupportTree, "Árbol", "Tree") \
     X(SubArcs, "Arcos en voladizos", "Arc overhangs") \
+    X(SupportWidth, "Ancho de las líneas", "Line width") \
     X(ArcsEnabled, "Voladizos con arcos", "Overhangs in arcs") \
     X(ArcsOverlap, "Cuánto pisa cada arco", "Arc overlap") \
     X(ArcsSpeed, "Velocidad de los arcos", "Arc speed") \

@@ -136,6 +136,9 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(thin.wall_min_line_width == Speed{0.3, false});
     CHECK(thin.wall_min_detail == Speed{20.0, true});
     CHECK(Settings().wall_min_line_width == Speed{85.0, true});
+    CHECK(parse_settings(R"({"support": {"width": "150%"}})").support_width == Speed{150.0, true});
+    CHECK(parse_settings(R"({"support": {"width": 0.6}})").support_width == Speed{0.6, false});
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"width": "0%"}})"), ContainsSubstring("percentage of the layer"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"min_detail": "x"}})"), ContainsSubstring("percentage of the nozzle"));
     const Settings arcs = parse_settings(R"({"arcs": {"enabled": true, "overlap": 20, "speed": 0, "max_distance": 8}})");
     CHECK(arcs.arcs);
