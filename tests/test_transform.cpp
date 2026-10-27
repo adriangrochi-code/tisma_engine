@@ -405,3 +405,78 @@ TEST_CASE("model tools: negative volumes take their volume away (MT1, MT3)", "[t
     CHECK(r.code == kExitUsage);
     CHECK(r.err.find("negative volumes") != std::string::npos);
 }
+
+namespace {
+
+// The most walls a layer has where all of a path's points lie between x0
+// and x1: its highest bead index, plus one.
+int walls_between(const SlicedModel& m, std::size_t layer, double x0, double x1) {
+    int most = 0;
+    for (const Toolpath& t : m.walls[layer].toolpaths) {
+        if (t.points.empty())
+            continue;
+        bool inside = true;
+        for (const ToolpathPoint& p : t.points)
+            inside = inside && p.p.x >= x0 && p.p.x <= x1;
+        if (inside)
+            most = std::max(most, t.index + 1);
+    }
+    return most;
+}
+
+// Boxes in one mesh, each a part (one MeshObject) of object 0, with its own
+// settings.
+SlicedModel slice_parts(const std::vector<std::pair<std::array<Vec3f, 2>, std::string>>& parts, const Settings& s) {
+    TriangleMesh mesh;
+    std::vector<MeshObject> objects;
+    for (const auto& [box, own] : parts) {
+        const std::size_t first = mesh.triangle_count();
+        add_box(mesh, box[0], box[1]);
+        MeshObject o{"box", first, mesh.triangle_count() - first, 0, 0};
+        o.settings = own;
+        objects.push_back(o);
+    }
+    return slice_model(weld_exact(mesh), s, nullptr, nullptr, nullptr, &objects);
+}
+
+} // namespace
+
+TEST_CASE("model tools: settings of an object and of a part (MT7, MT8, MT11)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    // MT7: the object's 3 walls and 40 % infill, though the profile says 0 %.
+    SlicedModel m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, R"({"walls": {"count": 3}, "infill": {"density": 40}})"}},
+                                s);
+    REQUIRE(m.layers.size() == 50);
+    for (const std::size_t l : {std::size_t(5), std::size_t(25), std::size_t(45)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 21) == 3);
+        CHECK_FALSE(m.fills[l].sparse.empty());
+    }
+    // MT8: two loose boxes in one object, the second with 4 walls of its own.
+    m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""},
+                     {{Vec3f{30, 0, 0}, Vec3f{50, 20, 10}}, R"({"walls": {"count": 4}})"}},
+                    s);
+    CHECK(walls_between(m, 25, -1, 21) == 2);
+    CHECK(walls_between(m, 25, 29, 51) == 4);
+    // MT11: two boxes sharing X 10 to 20; the later one keeps what they share.
+    m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""},
+                     {{Vec3f{10, 0, 0}, Vec3f{30, 20, 10}}, R"({"walls": {"count": 4}})"}},
+                    s);
+    CHECK(walls_between(m, 25, 9.9, 31) == 4);  // X 10 to 30, with 4
+    CHECK(walls_between(m, 25, -1, 10.1) == 2); // X 0 to 10, with 2
+    m = slice_parts({{{Vec3f{10, 0, 0}, Vec3f{30, 20, 10}}, R"({"walls": {"count": 4}})"},
+                     {{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""}},
+                    s);
+    CHECK(walls_between(m, 25, 19.9, 31) == 4); // only X 20 to 30 with 4
+    CHECK(walls_between(m, 25, -1, 20.1) == 2);
+    // Rule 9: what cannot change for one part is refused, not ignored.
+    CHECK_THROWS_AS(slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, R"({"layers": {"height": 0.1}})"},
+                                 {{Vec3f{30, 0, 0}, Vec3f{50, 20, 10}}, ""}},
+                                s),
+                    SettingsError);
+    CHECK_THROWS_AS(own_settings(s, R"({"walls": {"count": -1}})", "box"), SettingsError);
+    CHECK(own_settings(s, "", "box").wall_count == 2);
+}

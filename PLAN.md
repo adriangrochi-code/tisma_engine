@@ -742,9 +742,13 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
   En la interfaz, Espejar, Cortar con un plano horizontal, Separar en piezas y Medir caras y vértices (reglas 13, 14,
   16, 18 y 20 en parte). Volúmenes negativos (2026-10-27, regla 2, MT1 y MT3): el 3MF los trae aparte, siguen a la
-  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Falta: los negativos con
-  corte, separar o copias, el plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), partes con
-  ajustes propios, modificadores y ajustes por objeto y por rango (reglas 3 a 10), las copias en grilla (regla 15), y el
+  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Ajustes propios de un
+  objeto o una parte en el motor (2026-10-27, reglas 5, 7 y 8; MT7, MT8 y MT11): `MeshObject::settings`, paredes,
+  relleno y superficies, laminado aparte sobre las capas de la placa; donde dos partes se pisan gana la de después; lo
+  que todavía no puede cambiar por parte se rechaza (regla 9). Falta: ponerlos desde la interfaz y leerlos del 3MF, los
+  demás grupos por objeto (velocidades, temperaturas, altura de capa), los negativos con corte, separar o copias, el
+  plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), modificadores y rangos de alturas (reglas
+  3, 4, 6 y 10), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir

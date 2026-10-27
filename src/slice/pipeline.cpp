@@ -463,10 +463,12 @@ PartNozzles part_nozzles(const Settings& s, int tool) {
     return p;
 }
 
-// Whether the plate's objects print with more than one extruder.
+// Whether the plate's objects print with more than one extruder, or with
+// settings of their own that differ (model_tools.md, rules 5 and 7).
 bool several_tools(const std::vector<MeshObject>& objects, const Settings& settings) {
     return std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
-        return object_tool(o, settings) != object_tool(objects.front(), settings);
+        return object_tool(o, settings) != object_tool(objects.front(), settings) ||
+               o.settings != objects.front().settings;
     });
 }
 
@@ -559,7 +561,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (mesh.triangles.empty())
                     continue;
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
-                SlicedModel part = slice_plate(mesh, settings, gpu, stress, painting ? &paint : nullptr, nullptr,
+                const Settings own = own_settings(settings, o.settings, o.name);
+                SlicedModel part = slice_plate(mesh, own, gpu, stress, painting ? &paint : nullptr, nullptr,
                                                object_tool(o, settings), negative);
                 if (part.layers.empty())
                     continue;
@@ -583,8 +586,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (several_tools(*objects, settings)) {
             out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative);
         } else {
-            out = slice_plate(input, settings, gpu, stress, painting, nullptr, object_tool(objects->front(), settings),
-                              negative);
+            out = slice_plate(input, own_settings(settings, objects->front().settings, objects->front().name), gpu,
+                              stress, painting, nullptr, object_tool(objects->front(), settings), negative);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -759,22 +762,55 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     frame.support = &out.support_areas;
     Settings part_settings = settings;
     part_settings.support = false;
+    // The parts to slice apart: the objects of each extruder with the same
+    // settings of their own (model_tools.md, rules 5, 7 and 8). The first
+    // extruder first; with one extruder, the group whose part comes later in
+    // the list first, so that it keeps what it shares with an earlier one
+    // (MT11).
+    struct Group {
+        int tool = 1;
+        std::string settings;
+        std::size_t last = 0;
+    };
+    std::vector<Group> groups;
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        const int tool = object_tool(objects[i], settings);
+        const auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& x) {
+            return x.tool == tool && x.settings == objects[i].settings;
+        });
+        if (g == groups.end())
+            groups.push_back({tool, objects[i].settings, i});
+        else
+            g->last = i;
+    }
+    std::sort(groups.begin(), groups.end(), [](const Group& a, const Group& b) {
+        return a.tool != b.tool ? a.tool < b.tool : a.last > b.last;
+    });
     std::vector<int> tools;
-    for (const MeshObject& o : objects)
-        tools.push_back(object_tool(o, settings));
-    std::sort(tools.begin(), tools.end());
-    tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+    std::vector<Settings> group_settings;
+    for (const Group& g : groups) {
+        tools.push_back(g.tool);
+        const MeshObject& named = objects[g.last];
+        Settings own = own_settings(part_settings, g.settings, named.name);
+        group_settings.push_back(std::move(own));
+    }
+    std::vector<int> distinct = tools;
+    std::sort(distinct.begin(), distinct.end());
+    distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
     // The combined infill (docs/INFILL.md) in the same runs for every part,
     // as thick as the finest of their infill nozzles holds.
     if (settings.infill_combine_auto || settings.infill_combine_layers > 1 || settings.fine_walls_coarse_infill) {
         double most = std::numeric_limits<double>::infinity();
-        for (const int tool : tools) {
+        for (const int tool : distinct) {
             const PartNozzles nozzles = part_nozzles(settings, tool);
             if (nozzles.settings.infill_combine_auto || nozzles.settings.infill_combine_layers > 1)
                 most = std::min(most, combine_max_height(nozzles.settings, nozzles.infill_nozzle));
         }
-        if (std::isfinite(most))
+        if (std::isfinite(most)) {
             part_settings.infill_combine_max_height = {most, false};
+            for (Settings& g : group_settings)
+                g.infill_combine_max_height = {most, false};
+        }
     }
     std::vector<LayerWalls> walls(n);
     std::vector<LayerFill> fills(n);
@@ -794,7 +830,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     std::vector<Painting> part_paints(tools.size());
     for (std::size_t p = 0; p < tools.size(); ++p)
         for (const MeshObject& o : objects) {
-            if (object_tool(o, settings) != tools[p])
+            if (object_tool(o, settings) != tools[p] || o.settings != groups[p].settings)
                 continue;
             const IndexedMesh piece = object_mesh(mesh, o);
             if (painting)
@@ -806,7 +842,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         }
     // Beams between the materials (rule 17): every part's regions first.
     std::vector<std::vector<Polygons>> beamed;
-    if (settings.interlock_beams && tools.size() > 1) {
+    // Only between materials, each extruder one part.
+    if (settings.interlock_beams && distinct.size() > 1 && distinct.size() == tools.size()) {
         beamed.resize(tools.size());
         for (std::size_t p = 0; p < tools.size(); ++p)
             beamed[p] = part_meshes[p].triangles.empty() ? std::vector<Polygons>(n)
@@ -819,8 +856,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         if (part_mesh.triangles.empty())
             continue;
         frame.regions = beamed.empty() ? nullptr : &beamed[p];
-        SlicedModel part =
-            slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame, tool, negative);
+        SlicedModel part = slice_layers(part_mesh, group_settings[p], gpu, stress, painting ? &part_paints[p] : nullptr,
+                                        &frame, tool, negative);
         tag_tool(part, tool);
         zaa_points += part.zaa_points;
         // Their combined infill, in the same runs (above).

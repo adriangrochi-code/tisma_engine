@@ -6456,5 +6456,12 @@ agrega capas. Con corte, separar o copias la línea de comandos todavía lo rech
 techo sólidos) en `[transform]`. El piso de MT3 a Z 2,6 debería ser un puente sobre el relleno vacío: el motor todavía
 no hace puentes internos (pendiente de I1). 670 de 670 en el árbol de trabajo.
 
-**Sigue:** partes con ajustes propios y ajustes por objeto (reglas 5, 7 y 8; MT7, MT8, MT11), después modificadores y
-rangos (P4).
+**Después: ajustes de un objeto o una parte (reglas 5, 7 y 8).** Cada `MeshObject` puede traer sus ajustes en JSON
+(los del objeto y los de la parte ya juntos); `own_settings` los pone sobre los del perfil y rechaza lo que todavía no
+puede cambiar por parte (regla 9: hoy cambian paredes, relleno y superficies). El laminado agrupa las partes por
+extrusor y ajustes y lamina cada grupo aparte sobre las capas de la placa, como con varios extrusores: el grupo de la
+parte que viene después va primero y se queda con lo que comparte (MT11). MT7, MT8 y MT11 en `[transform]`; 671 de 671
+en el árbol de trabajo.
+
+**Sigue:** poner esos ajustes desde la interfaz (`settings_levels.md`, reglas 10 y 11), después modificadores y rangos
+de alturas (P4).

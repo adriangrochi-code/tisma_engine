@@ -376,6 +376,39 @@ bool json_depth_ok(std::string_view text, int max_depth) {
     return true;
 }
 
+Settings own_settings(const Settings& base, std::string_view own, std::string_view where) {
+    if (own.empty())
+        return base;
+    json given;
+    try {
+        given = json::parse(own.begin(), own.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string(where) + ": its settings are not valid JSON: " + e.what());
+    }
+    if (!given.is_object())
+        throw SettingsError(std::string(where) + ": its settings must be an object of groups");
+    static const std::set<std::string> regional = {"walls", "infill", "surfaces"};
+    json root = json::parse(settings_json(base));
+    for (const auto& [group, keys] : given.items()) {
+        if (!keys.is_object())
+            throw SettingsError(std::string(where) + ": " + group + " must be an object");
+        for (const auto& [key, value] : keys.items()) {
+            if (!regional.contains(group))
+                throw SettingsError(std::string(where) + ": " + group + "." + key +
+                                    " cannot change for one object or part yet (walls, infill and surfaces can)");
+            root[group][key] = value;
+        }
+    }
+    Settings out;
+    try {
+        out = parse_settings(root.dump());
+    } catch (const SettingsError& e) {
+        throw SettingsError(std::string(where) + ": " + e.what());
+    }
+    out.ignored_groups = base.ignored_groups;
+    return out;
+}
+
 std::optional<std::string> engine_setting_key(std::string_view key) {
     if (!key.starts_with("material."))
         return std::string(key);

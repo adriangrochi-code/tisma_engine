@@ -31,6 +31,11 @@ struct MeshObject {
     std::size_t object = 0, instance = 0;
     int extruder = 1;
     bool wipe_into_infill = false, wipe_into_object = false;
+    // Its own settings (model_tools.md, rules 5, 7 and 8): a JSON object of
+    // groups with the profile's keys, the object's and the part's already
+    // merged by whoever made the list; empty: the plate's. Where two parts
+    // with different settings meet, the later in the list wins (MT11).
+    std::string settings{};
     friend bool operator==(const MeshObject&, const MeshObject&) = default;
 };
 
