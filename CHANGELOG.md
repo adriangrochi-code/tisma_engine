@@ -27,6 +27,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   los arcos y las tiras angostas se llenan a lo ancho. Los puentes (apoyados de dos lados) siguen siendo puentes. En el
   estante de la ficha, 598 mm de arcos (la ficha: 606).
 
+- **Revisión de estabilidad** (fichas `stability.md` y `print_review.md`; prueba de caja negra QA8): en piezas sin
+  soportes, avisa de partes que empiezan en el aire (crítico), de lo impreso que se vuelca fuera de su apoyo, de
+  columnas finas que se doblan con el empuje de la boquilla y de la pieza que se despega de la cama. El empuje y la
+  adherencia se miden (`review.nozzle_force`, `review.bed_adhesion`, en la pestaña Impresora › Máquina ›
+  Estabilidad); sin medir, informa las tres columnas más flexibles. La aguja de 1 × 1 × 80 mm de QA8 ahora sale.
+  Cada aviso del JSON lleva su gravedad (`severity`).
+
 ### Cambiado
 
 - **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las

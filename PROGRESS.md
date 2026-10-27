@@ -5021,3 +5021,33 @@ mordida; la ficha no dice qué pasa con las paredes (en A3 el agujero lleva las 
 110 sin centro porque siempre tiene una cama de 200 × 200; eso no se copia (lo dice la ficha).
 
 **Sigue:** QA8 (la revisión de estabilidad), QA9 y `support.width`.
+
+## 2026-10-27 — QA8: la revisión de estabilidad
+
+**Por qué:** QA8 de la primera prueba de caja negra: una aguja de 1 × 1 × 80 mm no daba ningún aviso. La ficha
+`stability.md` (`tools/check_spec.py` limpio) es la regla 6 de `print_review.md`.
+
+**Hecho:** `src/report/stability.*` (estática y vigas de Euler-Bernoulli, de manual; `PROVENANCE.md`), solo en piezas
+sin soportes:
+- columnas: las islas de cada capa encadenadas con las de abajo que se tocan; la rigidez de una sección es el menor
+  momento principal de la suma de las islas de la cadena (teorema de Green); bajando, hasta una capa diez veces más
+  rígida (la base) o la cama;
+- partes en el aire (crítico), todas en un aviso con su cuenta y sus capas;
+- vuelco por el peso: el centro de masa de lo impreso fuera del polígono convexo del apoyo (la primera capa y el
+  borde); crítico si el momento del peso pasa lo que aguanta la cama;
+- columnas que se doblan: `review.nozzle_force · L³ / (3 · E_z · I_min)` contra `review.max_deflection`; sin medir el
+  empuje, las tres columnas más flexibles como información (las que se doblan al menos una décima de la flecha
+  máxima por newton);
+- despegue de la cama, con los dos valores medidos;
+- ajustes `review.*` (perfil de la impresora; Impresora › Máquina › Estabilidad), la gravedad en cada aviso del JSON
+  (`severity`), y la revisión en la línea de comandos y en la interfaz.
+
+**Medido:** pruebas ST1 (parte en el aire en Z 10,2, crítico y primero), ST2 (vuelco desde Z 10,4), ST3 (desde Z
+25,6), ST4 (0,385 mm/N en Z 40), ST5 (cubo sin aviso), ST7 (despegue desde Z 6,4), ST8 (base en la placa, desde Z
+27,6) y la aguja de QA8 (787 mm/N). Benchy: 0,95 → 0,99 s; cráneo: 4,3 → 4,6 s. En el Benchy sin soportes, partes en
+el aire entre Z 6,2 y 18 (los techos de las ventanas) y tres columnas como información.
+
+**No probado:** con una impresora real (la calibración de la regla 6, necesita al dueño); `E_z` es el del PLA para todo
+material hasta que el perfil del filamento traiga el suyo.
+
+**Sigue:** QA9 (paredes más finas que la boquilla, `walls.min_line_width`) y `support.width`.

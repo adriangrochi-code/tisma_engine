@@ -11,6 +11,7 @@
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
 #include "gcode/writer.hpp"
+#include "report/stability.hpp"
 #include "report/warnings.hpp"
 #include "geom/medial_axis.hpp"
 #include "geom/polygons.hpp"
@@ -373,6 +374,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
     std::vector<Warning> model = model_warnings(sliced);
     warnings.insert(warnings.end(), model.begin(), model.end());
+    const std::vector<Warning> stability = stability_warnings(sliced, settings);
+    warnings.insert(warnings.end(), stability.begin(), stability.end());
     const GcodeExport exported = export_gcode(parsed->output, sliced, settings, &warnings);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";

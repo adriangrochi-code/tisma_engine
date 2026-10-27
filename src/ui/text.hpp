@@ -682,6 +682,12 @@
     X(SubNeeds, "Necesidades", "Requirements") \
     X(SubBedVolume, "Cama y volumen", "Bed and volume") \
     X(SubEnclosure, "Cabina", "Enclosure") \
+    X(SubStability, "Estabilidad", "Stability") \
+    X(NozzleForce, "Empuje de la boquilla", "Nozzle push") \
+    X(BedAdhesion, "Adherencia a la cama", "Bed hold") \
+    X(MaxDeflection, "Flecha máxima", "Largest bend") \
+    X(SumNozzleForce, "Empuje medido: %s N", "Push measured: %s N") \
+    X(SumNotMeasured, "Sin medir", "Not measured") \
     X(SubNozzle, "Boquilla", "Nozzle") \
     X(SubExtruder, "Extrusor", "Extruder") \
     X(SubSpeedLimits, "Velocidades", "Speeds") \

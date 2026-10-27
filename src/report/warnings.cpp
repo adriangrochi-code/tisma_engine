@@ -39,6 +39,7 @@ std::string warnings_json(const std::vector<Warning>& warnings) {
         item["z"] = w.layer >= 0 ? nlohmann::json(w.z) : nlohmann::json(nullptr);
         item["message"] = w.message;
         item["value"] = w.value;
+        item["severity"] = w.severity;
         list.push_back(std::move(item));
     }
     return nlohmann::json{{"version", 1}, {"warnings", std::move(list)}}.dump(2) + "\n";

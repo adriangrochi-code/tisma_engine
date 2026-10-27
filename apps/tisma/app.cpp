@@ -680,6 +680,8 @@ const char* row_key(T label) {
         {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
         {T::ArcsEnabled, "arcs.enabled"}, {T::ArcsOverlap, "arcs.overlap"}, {T::ArcsSpeed, "arcs.speed"},
         {T::ArcsMaxDistance, "arcs.max_distance"},
+        {T::NozzleForce, "review.nozzle_force"}, {T::BedAdhesion, "review.bed_adhesion"},
+        {T::MaxDeflection, "review.max_deflection"},
         {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
         {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
@@ -3026,6 +3028,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "enclosure") {
         flag(T::Enclosed, "machine.enclosed", s.enclosed);
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);
+    } else if (id == "stability") {
+        mm(T::NozzleForce, "review.nozzle_force", s.review_nozzle_force, 0.0, 1000.0, "%.3f N", 0.001f);
+        mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);
+        mm(T::MaxDeflection, "review.max_deflection", s.review_max_deflection, 0.001, 10.0, "%.3f mm", 0.001f);
     } else if (id == "nozzle_size") {
         mm(T::Nozzle, "machine.nozzle_diameter", s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
         flag(T::HardenedNozzle, "machine.hardened_nozzle", s.hardened_nozzle);

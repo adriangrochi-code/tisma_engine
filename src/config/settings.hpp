@@ -100,6 +100,11 @@ struct Settings {
     double arcs_overlap = 10.0;     // percent of the width each arc lies on the one before
     double arcs_speed = 5.0;        // mm/s; 0: the bridges' (speed.solid_infill)
     double arcs_max_distance = 0.0; // mm from the arcs' centre; 0: no limit
+    // The stability review (docs/spec/features/stability.md): measured with
+    // its calibration piece; 0 is not measured yet.
+    double review_nozzle_force = 0.0;   // N, the nozzle's push on the layer it prints
+    double review_bed_adhesion = 0.0;   // N/mm2 the hold on the bed bears, for this bed and material
+    double review_max_deflection = 0.1; // mm a slender part's tip may bend
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)

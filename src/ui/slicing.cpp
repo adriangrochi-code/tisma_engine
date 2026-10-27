@@ -6,6 +6,7 @@
 #include "gcode/writer.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "report/stability.hpp"
 #include "slice/printable.hpp"
 
 #include <oneapi/tbb/parallel_invoke.h>
@@ -230,6 +231,8 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         return nullptr;
     }
     std::vector<Warning> warnings = model_warnings(*model);
+    out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
+    warnings = stability_warnings(*model, settings);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
     return model;
 }

@@ -126,7 +126,9 @@ const std::vector<SectionLayout>& printer_layout() {
     static const std::vector<SectionLayout> layout = {
         {"machine", T::SecMachine, "section_machine.svg",
          {{"bed_volume", T::SubBedVolume, {{"machine.bed", B}, {"machine.max_height", B}}},
-          {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}}}},
+          {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}},
+          {"stability", T::SubStability,
+           {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
         {"nozzle", T::SecNozzle, "section_nozzle.svg",
          {{"nozzle_size", T::SubNozzle,
            {{"machine.nozzle_diameter", B},
@@ -408,6 +410,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     }
     if (id == "enclosure")
         return s.enclosed ? tr(T::SumClosed) : tr(T::SumOpen);
+    if (id == "stability")
+        return s.review_nozzle_force > 0.0 ? format(T::SumNozzleForce, number(s.review_nozzle_force, 3).c_str())
+                                           : tr(T::SumNotMeasured);
     if (id == "nozzle_size")
         return s.hardened_nozzle ? format(T::SumHardened, number(s.nozzle_diameter).c_str())
                                  : format(T::SumMm, number(s.nozzle_diameter).c_str());

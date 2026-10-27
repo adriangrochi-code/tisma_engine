@@ -17,6 +17,7 @@ struct Warning {
     double z = 0.0;
     std::string message;
     double value = 0.0; // mm2 for thin_detail, s for layer_time, a count for open_contours
+    std::string severity = "warning"; // "critical", "warning" or "information" (print_review.md)
 };
 
 // Details too thin for any bead below this area per layer are not reported.

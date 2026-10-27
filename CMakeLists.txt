@@ -210,6 +210,7 @@ add_library(tisma_core
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
+  src/report/stability.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
   src/slice/placement.cpp

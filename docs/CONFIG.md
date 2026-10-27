@@ -102,6 +102,23 @@ sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arco
 | `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.solid_infill`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
 | `max_distance` | número | 0 | 0 a 1000 | Hasta qué distancia del centro llegan los arcos, en mm; más allá, el voladizo se imprime como siempre. 0: sin límite |
 
+### `review`
+
+La revisión de estabilidad (fichas `docs/spec/features/stability.md` y `print_review.md`, regla 6), solo en piezas sin
+soportes: avisa de partes que empiezan en el aire (crítico), de lo impreso que se vuelca por su peso, de columnas
+esbeltas que se doblan con el empuje de la boquilla y de la pieza que se despega de la cama. Los avisos van en
+`--warnings` con `severity` (`critical`, `warning` o `information`). Los dos primeros valores se miden con la pieza de
+calibración de la ficha (regla 6); mientras no estén medidos (0), las columnas solo se informan (las tres más
+flexibles, en mm por newton, si se doblan al menos una décima de `max_deflection` por newton) y el despegue no se
+revisa. El módulo a través de las capas es el del PLA (2600 MPa) hasta
+que el perfil del filamento traiga su material. En el perfil de la impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `nozzle_force` | número | 0 | 0 a 1000 | Empuje lateral de la boquilla sobre la capa que imprime, en N; 0: sin medir |
+| `bed_adhesion` | número | 0 | 0 a 1000 | Lo que aguanta la unión con la cama, en N/mm², para esa cama y ese material; 0: sin medir |
+| `max_deflection` | número | 0.1 | más de 0, hasta 10 | Flecha máxima aceptada en la punta de una parte esbelta, en mm |
+
 ### `surfaces`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

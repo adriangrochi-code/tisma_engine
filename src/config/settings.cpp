@@ -190,7 +190,7 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs")
+            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -800,6 +800,19 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0 to 1000 mm");
                    s.arcs_max_distance = v;
                });
+    read_group(root, "review", {"nozzle_force", "bed_adhesion", "max_deflection"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   const double v = number(g, n, k);
+                   if (n == "max_deflection") {
+                       if (v <= 0.0 || v > 10.0)
+                           fail(k, "must be more than 0, up to 10 mm");
+                       s.review_max_deflection = v;
+                       return;
+                   }
+                   if (v < 0.0 || v > 1000.0)
+                       fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
+                   (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
+               });
     read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
         if (v < 0.0 || v > 1.0)
@@ -1010,6 +1023,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"arcs.overlap", num(s.arcs_overlap)},
         {"arcs.speed", num(s.arcs_speed)},
         {"arcs.max_distance", num(s.arcs_max_distance)},
+        {"review.nozzle_force", num(s.review_nozzle_force)},
+        {"review.bed_adhesion", num(s.review_bed_adhesion)},
+        {"review.max_deflection", num(s.review_max_deflection)},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
@@ -1290,6 +1306,10 @@ std::string settings_json(const Settings& s) {
           {"overlap", s.arcs_overlap},
           {"speed", s.arcs_speed},
           {"max_distance", s.arcs_max_distance}}},
+        {"review",
+         {{"nozzle_force", s.review_nozzle_force},
+          {"bed_adhesion", s.review_bed_adhesion},
+          {"max_deflection", s.review_max_deflection}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"extrusion",
