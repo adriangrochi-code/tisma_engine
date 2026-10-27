@@ -405,6 +405,8 @@ struct Settings {
     bool gcode_arcs = false;
     // M73 with the share done and the minutes left (gcode_firmware.md, rule 5).
     bool gcode_progress = false;
+    // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
+    bool gcode_binary = false;
     // The temperatures the start G-code does not set itself, written round it
     // (gcode_templates.md, rule 10; gcode_firmware.md, rule 1).
     bool auto_temperatures = true;

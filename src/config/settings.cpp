@@ -1136,12 +1136,14 @@ Settings parse_checked(std::string_view text) {
         s.post_process = std::move(scripts);
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
-                               "verbose_comments", "arcs", "progress", "auto_temperatures"},
+                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures") {
+        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures" ||
+            n == "binary") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "volumetric_e"        ? s.volumetric_e
+             : n == "binary"            ? s.gcode_binary
              : n == "arcs"              ? s.gcode_arcs
              : n == "progress"          ? s.gcode_progress
              : n == "auto_temperatures" ? s.auto_temperatures
@@ -1479,6 +1481,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"output.filename_format", text(s.filename_format)},
         {"output.post_process", json(s.post_process).dump()},
         {"gcode.auto_temperatures", flag(s.auto_temperatures)},
+        {"gcode.binary", flag(s.gcode_binary)},
         {"extrusion.start_gcode", text(s.filament_start_gcode)},
         {"extrusion.end_gcode", text(s.filament_end_gcode)},
         {"machine.corner_speed", speed(s.corner_speed)},
@@ -1875,7 +1878,8 @@ std::string settings_json(const Settings& s) {
           {"verbose_comments", s.verbose_comments},
           {"arcs", s.gcode_arcs},
           {"progress", s.gcode_progress},
-          {"auto_temperatures", s.auto_temperatures}}},
+          {"auto_temperatures", s.auto_temperatures},
+          {"binary", s.gcode_binary}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

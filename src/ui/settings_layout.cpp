@@ -137,7 +137,7 @@ const std::vector<SectionLayout>& print_layout() {
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
-            {"gcode.arcs", A}}},
+            {"gcode.arcs", A}, {"gcode.binary", A}}},
           {"output_file", T::SubOutputFile, {{"output.filename_format", A}, {"output.post_process", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
            {{"gcode.auto_temperatures", A},

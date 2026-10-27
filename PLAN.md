@@ -752,8 +752,9 @@ Con el PR #23 (2026-10-26):
   - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
     cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4), la E volumétrica (regla 11, X11), la contracción
     (regla 4, X3), los comentarios detallados (regla 12, X12), los dialectos antiguos (regla 6, X5), los arcos
-    (regla 10, X10) y el modo silencioso (regla 7, X6). Faltan las miniaturas (X7, con la vista 3D de la interfaz) y
-    el G-code binario (X8)
+    (regla 10, X10), el modo silencioso (regla 7, X6) y el G-code binario (regla 9, X8, sin comprimir). Faltan las
+    miniaturas (X7, con la vista 3D de la interfaz), la compresión y MeatPack del binario, y confirmar con una caja
+    negra qué cubre el CRC32 de cada bloque (se usó encabezado + parámetros + datos)
   - [x] el firmware (`gcode_firmware.md`; hecho 2026-10-27): temperaturas al empezar (regla 1), límites de la máquina
     con `machine.limits_usage` (regla 2; también en la estimación, `print_time.md` reglas 2 y 3, y el tope de las
     aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y

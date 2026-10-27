@@ -5439,3 +5439,33 @@ pruebas pasan; fuzzer con plantillas con condiciones, `digits` y `global`: 600 c
 **Sigue:** de `gcode_extras.md`, el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3
 (retracción y viajes completos, paredes extra, impresión secuencial).
 
+## 2026-10-27 — Punto 2: G-code binario
+
+**Hecho** (ficha `gcode_extras.md`, regla 9, X8): `gcode.binary` escribe el formato binario público (`.bgcode`):
+encabezado `GCDE`, versión 1 y CRC32; bloques de datos del archivo (`Producer=Tisma engine …`), de la impresora
+(`printer_model`, `filament_type`, `nozzle_diameter`, `layer_height`, temperaturas, `fill_density`, soporte,
+planchado, filamento y tiempo), de la impresión (el resumen del final), del slicer (cada ajuste) y el G-code en
+bloques de 64 KiB como mucho, cortados en finales de línea; sin compresión y el G-code sin codificar. La exportación
+verifica el texto, escribe el binario, lo relee (estructura y CRC de cada bloque) y compara su G-code con el texto
+antes de darle el nombre. Con `gcode.binary`, un nombre que termina en `.gcode` pasa a `.bgcode`, y
+`read_gcode_totals` lee el tiempo y el peso de los datos de la impresión (para `slice -o carpeta`).
+
+**Fuente:** la ficha y la descripción pública del formato que cita (solo el documento en prosa). Lo que el documento
+no dice quedó como diseño propio: el CRC32 de cada bloque cubre su encabezado, sus parámetros y sus datos, y el tamaño
+del bloque cuenta solo los datos.
+
+**Pregunta para el equipo de fichas** (caja negra): abrir un `.bgcode` del motor en Tisma Slicer (visor de G-code) o
+mandarlo a una impresora Prusa, y decir si lo lee. Si no, qué cubre el CRC en un archivo de Tisma Slicer (por ejemplo,
+el CRC32 del primer bloque y sus bytes).
+
+**Medido:** X8 como prueba (los primeros bytes `47 43 44 45`, `01 00 00 00`, `01 00`; los bloques en el orden 0, 3, 4,
+2, 1; la lectura de vuelta; un byte cambiado rompe el CRC). El CRC-32 da `CBF43926` en «123456789», el valor de
+control del estándar. Benchy local: 7 387 511 bytes en binario contra 7 386 489 en texto (sin compresión pesa lo
+mismo). 504 pruebas pasan; fuzzer con ida y vuelta del binario: 600 corridas (semilla 1) y 1500 (semilla 271033), 0
+fallas.
+
+**No probado:** con un lector de otro programa ni con una impresora (no se pudo instalar uno en esta sesión).
+
+**Sigue:** las miniaturas (X7) con la vista 3D de la interfaz; la compresión del binario. Con eso, el punto 2 queda
+salvo esas dos; sigue el punto 3 (retracción y viajes completos, paredes extra, impresión secuencial).
+

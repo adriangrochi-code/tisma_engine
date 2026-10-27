@@ -5,6 +5,7 @@
 #include "gcode/output.hpp"
 
 #include "config/settings.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/template.hpp"
 #include "gcode/writer.hpp"
@@ -14,6 +15,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 
 namespace tisma {
@@ -57,6 +59,28 @@ std::optional<GcodeTotals> read_gcode_totals(const std::filesystem::path& gcode)
     std::ifstream in(gcode, std::ios::binary);
     if (!in)
         return std::nullopt;
+    // A binary G-code keeps its summary in the print's metadata.
+    char magic[4] = {};
+    in.read(magic, 4);
+    if (in && std::string_view(magic, 4) == "GCDE") {
+        std::string bytes((std::istreambuf_iterator<char>(in.seekg(0))), std::istreambuf_iterator<char>());
+        try {
+            std::optional<GcodeTotals> out;
+            double grams = 0.0;
+            for (const auto& [key, value] : read_binary_gcode(bytes).print) {
+                if (key == "estimated printing time")
+                    out = GcodeTotals{parse_duration(value), 0.0};
+                else if (key == "total filament used [g]")
+                    grams = std::atof(value.c_str());
+            }
+            if (out)
+                out->grams = grams;
+            return out;
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    }
+    in.clear();
     // The summary closes the file, before the settings: the last megabyte holds it.
     in.seekg(0, std::ios::end);
     const std::streamoff size = in.tellg();
@@ -82,11 +106,15 @@ std::optional<GcodeTotals> read_gcode_totals(const std::filesystem::path& gcode)
 std::string output_filename(const Settings& s, const SlicedModel& model, const std::optional<GcodeTotals>& totals) {
     TemplateContext c = template_context(s, model);
     c.variables["fill_density"] = TemplateValue::of(template_text(TemplateValue::of(s.infill_density)) + "%");
-    c.variables["default_output_extension"] = TemplateValue::of(std::string(".gcode"));
+    c.variables["default_output_extension"] = TemplateValue::of(std::string(s.gcode_binary ? ".bgcode" : ".gcode"));
     c.variables["print_time"] = TemplateValue::of(totals ? print_time_text(totals->print_seconds) : std::string("{print_time}"));
     c.variables["total_weight"] =
         totals ? TemplateValue::of(std::round(totals->grams * 100.0) / 100.0) : TemplateValue::of(std::string("{total_weight}"));
-    return render_template(s.filename_format, c, "output.filename_format");
+    std::string name = render_template(s.filename_format, c, "output.filename_format");
+    // A binary G-code is a .bgcode, whatever the format wrote.
+    if (s.gcode_binary && name.ends_with(".gcode"))
+        name.insert(name.size() - 5, "b");
+    return name;
 }
 
 std::string run_post_process(const Settings& s, const SlicedModel& model, const std::filesystem::path& gcode) {

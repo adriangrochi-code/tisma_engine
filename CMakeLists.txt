@@ -206,6 +206,7 @@ add_library(tisma_core
   src/gcode/arcs.cpp
   src/gcode/template.cpp
   src/gcode/output.cpp
+  src/gcode/binary.cpp
   src/gcode/scarf.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp

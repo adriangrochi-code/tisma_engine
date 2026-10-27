@@ -6,6 +6,7 @@
 //
 //   tisma_fuzz_gcode [runs] [seed]   exit code 1 if any case fails
 #include "config/settings.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "io/stl.hpp"
@@ -174,6 +175,7 @@ int main(int argc, char** argv) {
             s.shrinkage_z = pick(2) == 0 ? uni(0, 3) : 0.0;
             s.verbose_comments = pick(2) == 0;
             s.gcode_arcs = pick(2) == 0;
+            s.gcode_binary = pick(2) == 0;
         }
         if (pick(5) == 0) { // a raft
             s.raft_layers = 1 + pick(5);
@@ -338,6 +340,16 @@ int main(int argc, char** argv) {
             std::ostringstream out;
             write_gcode(out, model, s);
             const GcodeCheck c = check_gcode(out.str(), gcode_limits(model, s));
+            if (s.gcode_binary) { // the binary format reads back to the same G-code
+                try {
+                    const BinaryGcode b = read_binary_gcode(binary_gcode(out.str(), s));
+                    if (b.gcode.empty() || !out.str().starts_with(b.gcode))
+                        throw std::runtime_error("its G-code is not the text's");
+                } catch (const std::exception& e) {
+                    ++failures;
+                    std::printf("run %d (%s): binary G-code: %s\n", run, name, e.what());
+                }
+            }
             if (!c.ok()) {
                 ++failures;
                 std::printf("run %d (%s): %zu problems; first: line %zu: %s\n", run, name, c.problem_count,

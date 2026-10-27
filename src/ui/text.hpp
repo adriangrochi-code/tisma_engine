@@ -857,6 +857,7 @@
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
+    X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
     X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \

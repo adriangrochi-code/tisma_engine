@@ -27,6 +27,8 @@ struct GcodeExport {
 //    gcode_limits of the model and the settings);
 // 3. if it passes, it is renamed to the path; if not, to "<path>.rejected",
 //    for inspection, and nothing is left under the path.
+// With gcode.binary, the G-code that passed is written in the binary format
+// (binary_gcode) and read back before it gets its name.
 // warnings, when given, gets the writer's warnings (as write_gcode).
 GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& model, const Settings& settings,
                          std::vector<Warning>* warnings = nullptr);

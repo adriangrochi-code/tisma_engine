@@ -72,6 +72,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
   grande para que, al contraerse, quede de la medida pedida.
+- **G-code binario** (`gcode.binary`, `.bgcode`; ficha `gcode_extras.md`): el formato binario público, sin comprimir
+  todavía, con sus bloques de datos y CRC32; se verifica antes de darle el nombre.
 - **Lenguaje de plantillas de G-code** (ficha `gcode_templates.md`): en el inicio, el fin, los cambios de capa y de
   color, cuentas, textos, condiciones (`{if}`), funciones, variables propias y todos los ajustes por su nombre; un error
   (por ejemplo una variable desconocida) hace fallar la exportación diciendo la línea y la columna. Inicio y fin del
