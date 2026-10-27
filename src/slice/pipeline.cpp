@@ -175,7 +175,9 @@ std::optional<LayerWalls> one_wall_on_top(const Polygons& region, const Polygons
     if (open.empty())
         return std::nullopt;
     LayerWalls out = walls_of(region, 1, settings, beading);
-    const Polygons on = Clipper2Lib::Difference(region, open, Clipper2Lib::FillRule::NonZero);
+    // What goes on up, without the slivers the difference leaves along the
+    // open part (narrower than half a bead: no inner wall fits there).
+    const Polygons on = offset(offset(Clipper2Lib::Difference(region, open, Clipper2Lib::FillRule::NonZero), -w / 4.0), w / 4.0);
     if (on.empty() || settings.wall_count < 2)
         return out;
     LayerWalls inner = walls_of(on, settings.wall_count, settings, beading);
@@ -213,11 +215,177 @@ IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
     return out;
 }
 
+// The triangles of one object of a mesh, with the vertices they use, and their painting.
+IndexedMesh object_mesh(const IndexedMesh& mesh, const MeshObject& object) {
+    IndexedMesh out;
+    std::vector<std::uint32_t> index(mesh.vertices.size(), UINT32_MAX);
+    const std::size_t end = std::min(mesh.triangles.size(), object.first + object.count);
+    for (std::size_t t = object.first; t < end; ++t) {
+        std::array<std::uint32_t, 3> tri{};
+        for (int k = 0; k < 3; ++k) {
+            std::uint32_t& v = index[mesh.triangles[t][std::size_t(k)]];
+            if (v == UINT32_MAX) {
+                v = std::uint32_t(out.vertices.size());
+                out.vertices.push_back(mesh.vertices[mesh.triangles[t][std::size_t(k)]]);
+            }
+            tri[std::size_t(k)] = v;
+        }
+        out.triangles.push_back(tri);
+    }
+    return out;
+}
+
+Painting object_painting(const Painting& painting, const MeshObject& object) {
+    Painting out;
+    for (std::size_t c = 0; c < kPaintChannels; ++c) {
+        const auto channel = PaintChannel(c);
+        for (std::size_t t = 0; t < object.count && object.first + t < painting.size(channel); ++t)
+            if (const Painting::Tree& tree = painting.tree(channel, object.first + t); !tree.empty())
+                out.set_tree(channel, t, tree);
+    }
+    return out;
+}
+
+// The convex hull of a mesh's vertices on the bed, counter-clockwise.
+Polygon outline_of(const IndexedMesh& mesh) {
+    std::vector<Clipper2Lib::Point64> p;
+    p.reserve(mesh.vertices.size());
+    for (const Vec3f& v : mesh.vertices)
+        p.push_back({to_units(v.x), to_units(v.y)});
+    std::sort(p.begin(), p.end(), [](const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) { return a.x < b.x || (a.x == b.x && a.y < b.y); });
+    p.erase(std::unique(p.begin(), p.end()), p.end());
+    if (p.size() < 3)
+        return Polygon(p.begin(), p.end());
+    const auto turn = [](const Clipper2Lib::Point64& o, const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return double(a.x - o.x) * double(b.y - o.y) - double(a.y - o.y) * double(b.x - o.x);
+    };
+    Polygon hull(2 * p.size());
+    std::size_t k = 0;
+    for (std::size_t i = 0; i < p.size(); ++i) { // lower, then upper (Andrew's monotone chain)
+        while (k >= 2 && turn(hull[k - 2], hull[k - 1], p[i]) <= 0.0)
+            --k;
+        hull[k++] = p[i];
+    }
+    for (std::size_t i = p.size() - 1, low = k + 1; i > 0; --i) {
+        while (k >= low && turn(hull[k - 2], hull[k - 1], p[i - 1]) <= 0.0)
+            --k;
+        hull[k++] = p[i - 1];
+    }
+    hull.resize(k - 1);
+    return hull;
+}
+
+// Appends an object sliced apart after the layers of `out` (sequential.md, rule 1).
+void append_object(SlicedModel& out, SlicedModel&& part, SlicedObject object) {
+    const std::size_t offset = out.layers.size();
+    object.first_layer = offset;
+    object.raft_layers = part.raft_layers;
+    object.skirt = std::move(part.skirt);
+    object.brim = std::move(part.brim);
+    const auto add = [](auto& to, auto& from) { to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end())); };
+    add(out.layers, part.layers);
+    add(out.regions, part.regions);
+    add(out.walls, part.walls);
+    add(out.surfaces, part.surfaces);
+    add(out.fills, part.fills);
+    add(out.support_areas, part.support_areas);
+    add(out.hanging, part.hanging);
+    add(out.on_support, part.on_support);
+    add(out.support_gap, part.support_gap);
+    add(out.air_bridges, part.air_bridges);
+    add(out.seam_enforce, part.seam_enforce);
+    add(out.seam_block, part.seam_block);
+    add(out.open_by_layer, part.open_by_layer);
+    add(out.thin_area, part.thin_area);
+    add(out.thick, part.thick);
+    for (LayerGroup& g : part.groups) {
+        g.first += offset, g.last += offset;
+        out.groups.push_back(std::move(g));
+    }
+    out.open_contours += part.open_contours;
+    out.zaa_points += part.zaa_points;
+    out.objects.push_back(std::move(object));
+}
+
+SlicedModel object_part(const SlicedModel& model, std::size_t k) {
+    SlicedModel out;
+    if (k >= model.objects.size())
+        return out;
+    const SlicedObject& o = model.objects[k];
+    const std::size_t from = o.first_layer;
+    const std::size_t to = k + 1 < model.objects.size() ? model.objects[k + 1].first_layer : model.layers.size();
+    const auto take = [&](auto& dst, const auto& src) {
+        if (from < src.size())
+            dst.assign(src.begin() + std::ptrdiff_t(from), src.begin() + std::ptrdiff_t(std::min(to, src.size())));
+    };
+    take(out.layers, model.layers);
+    take(out.regions, model.regions);
+    take(out.walls, model.walls);
+    take(out.surfaces, model.surfaces);
+    take(out.fills, model.fills);
+    take(out.support_areas, model.support_areas);
+    take(out.hanging, model.hanging);
+    take(out.on_support, model.on_support);
+    take(out.support_gap, model.support_gap);
+    take(out.air_bridges, model.air_bridges);
+    take(out.seam_enforce, model.seam_enforce);
+    take(out.seam_block, model.seam_block);
+    take(out.open_by_layer, model.open_by_layer);
+    take(out.thin_area, model.thin_area);
+    take(out.thick, model.thick);
+    for (LayerGroup g : model.groups)
+        if (g.first >= from && g.last < to) {
+            g.first -= from, g.last -= from;
+            out.groups.push_back(std::move(g));
+        }
+    out.skirt = o.skirt;
+    out.brim = o.brim;
+    out.raft_layers = o.raft_layers;
+    return out;
+}
+
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
-                        const StressField* stress, const Painting* painting) {
+                        const StressField* stress, const Painting* painting, const std::vector<MeshObject>* objects) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // The plate's objects: each one sliced apart when printed one after
+    // another (sequential.md, rule 1), else the plate as one, with their
+    // outlines kept.
+    if (objects && !objects->empty()) {
+        if (settings.sequential && objects->size() > 1) {
+            out.sequential = true;
+            for (const MeshObject& o : *objects) {
+                const IndexedMesh mesh = object_mesh(input, o);
+                if (mesh.triangles.empty())
+                    continue;
+                const Painting paint = painting ? object_painting(*painting, o) : Painting{};
+                SlicedModel part = slice_model(mesh, settings, gpu, stress, painting ? &paint : nullptr);
+                if (part.layers.empty())
+                    continue;
+                SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
+                                    part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {}};
+                append_object(out, std::move(part), std::move(object));
+            }
+            if (!out.objects.empty()) { // the skirt and brim of the first, for what reads them from the model
+                out.skirt = out.objects.front().skirt;
+                out.brim = out.objects.front().brim;
+                out.raft_layers = out.objects.front().raft_layers;
+            }
+            return out;
+        }
+        out = slice_model(input, settings, gpu, stress, painting);
+        for (const MeshObject& o : *objects) {
+            const IndexedMesh mesh = object_mesh(input, o);
+            if (mesh.triangles.empty())
+                continue;
+            float lo = mesh.vertices.front().z, hi = lo;
+            for (const Vec3f& v : mesh.vertices)
+                lo = std::min(lo, v.z), hi = std::max(hi, v.z);
+            out.objects.push_back({o.name, o.object, o.instance, outline_of(mesh), double(hi) - double(lo), 0, out.raft_layers, {}, {}});
+        }
+        return out;
+    }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
     if (settings.vase && (settings.wall_count != 1 || settings.infill_density != 0.0 || settings.top_layers != 0 ||

@@ -142,7 +142,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"adhesion.raft_first_layer_density", A},
             {"adhesion.raft_first_layer_expansion", A}}}}},
         {"other", T::SecOther, "section_other.svg",
-         {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}}},
+         {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}, {"sequential.enabled", N}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
@@ -155,7 +155,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"gcode.color_change", A},
             {"gcode.pause", A},
             {"gcode.before_layer", A},
-            {"gcode.after_layer", A}}},
+            {"gcode.after_layer", A},
+            {"gcode.between_objects", A}}},
           {"slicing", T::SubSlicing,
            {{"slicing.fill_mode", A}, {"slicing.gap_closing_radius", A}, {"slicing.simplify_tolerance", A}}}}},
     };
@@ -214,7 +215,12 @@ const std::vector<SectionLayout>& material_layout() {
 const std::vector<SectionLayout>& printer_layout() {
     static const std::vector<SectionLayout> layout = {
         {"machine", T::SecMachine, "section_machine.svg",
-         {{"bed_volume", T::SubBedVolume, {{"machine.bed", B}, {"machine.max_height", B}, {"machine.z_offset", A}}},
+         {{"bed_volume", T::SubBedVolume,
+           {{"machine.bed", B},
+            {"machine.max_height", B},
+            {"machine.z_offset", A},
+            {"sequential.clearance_radius", A},
+            {"sequential.clearance_height", A}}},
           {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}},
           {"stability", T::SubStability,
            {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
@@ -486,7 +492,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "brim")
         return s.brim_width > 0.0 ? format(T::SumMm, number(s.brim_width).c_str()) : tr(T::SumNoBrim);
     if (id == "special_modes")
-        return s.vase ? tr(T::VaseMode) : tr(T::SumNormalPrint);
+        return s.vase && s.sequential ? std::string(tr(T::VaseMode)) + " · " + tr(T::SequentialRow)
+               : s.vase               ? std::string(tr(T::VaseMode))
+               : s.sequential         ? std::string(tr(T::SequentialRow))
+                                      : std::string(tr(T::SumNormalPrint));
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)

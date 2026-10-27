@@ -88,6 +88,16 @@ double min_modulus(const Polygons& region) {
 
 std::vector<Warning> stability_warnings(const SlicedModel& model, const Settings& s) {
     std::vector<Warning> out;
+    // Object by object (sequential.md): each stands on the bed on its own.
+    if (model.sequential && !model.objects.empty()) {
+        for (std::size_t k = 0; k < model.objects.size(); ++k)
+            for (Warning w : stability_warnings(object_part(model, k), s)) {
+                if (w.layer >= 0)
+                    w.layer += int(model.objects[k].first_layer);
+                out.push_back(std::move(w));
+            }
+        return out;
+    }
     const std::size_t n = std::min(model.layers.size(), model.regions.size());
     if (s.support || n == 0) // print_review.md, rule 6: only parts printed without supports
         return out;

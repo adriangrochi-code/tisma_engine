@@ -4,6 +4,8 @@
 
 #include "ui/plate.hpp"
 
+#include "slice/placement.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -181,51 +183,7 @@ std::array<double, 3> placed_size(const PlateObject& object) {
 
 std::vector<std::array<double, 2>> arrange(const std::vector<std::array<double, 2>>& sizes, std::array<double, 2> centre,
                                            double spacing) {
-    const std::size_t n = sizes.size();
-    std::vector<std::array<double, 2>> out(n, centre);
-    if (n == 0)
-        return out;
-    // Deepest first, then widest; ties keep their order.
-    std::vector<std::size_t> order(n);
-    std::iota(order.begin(), order.end(), std::size_t(0));
-    std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
-        return sizes[a][1] > sizes[b][1] || (sizes[a][1] == sizes[b][1] && sizes[a][0] > sizes[b][0]);
-    });
-    // A row holds about the square root of the count, as wide as that many average boxes.
-    const std::size_t per_row = std::size_t(std::ceil(std::sqrt(double(n))));
-    double average = 0.0, widest = 0.0;
-    for (const auto& s : sizes)
-        average += s[0] / double(n), widest = std::max(widest, s[0]);
-    const double row_width = std::max(widest, double(per_row) * average + double(per_row - 1) * spacing) + 1e-9;
-    // Rows from the back of the bed (+Y) to the front, each filled left to right.
-    struct Row {
-        std::vector<std::size_t> items;
-        double width = 0.0, depth = 0.0;
-    };
-    std::vector<Row> rows;
-    for (const std::size_t i : order) {
-        if (rows.empty() || (!rows.back().items.empty() && rows.back().width + spacing + sizes[i][0] > row_width))
-            rows.emplace_back();
-        Row& row = rows.back();
-        row.width += (row.items.empty() ? 0.0 : spacing) + sizes[i][0];
-        row.depth = std::max(row.depth, sizes[i][1]);
-        row.items.push_back(i);
-    }
-    double total_depth = 0.0, total_width = 0.0;
-    for (const Row& r : rows)
-        total_depth += r.depth, total_width = std::max(total_width, r.width);
-    total_depth += spacing * double(rows.size() - 1);
-    // The grid's box is centred, its rows starting from its left side.
-    double y = centre[1] + 0.5 * total_depth;
-    for (const Row& r : rows) {
-        double x = centre[0] - 0.5 * total_width;
-        for (const std::size_t i : r.items) {
-            out[i] = {x + 0.5 * sizes[i][0], y - 0.5 * r.depth};
-            x += sizes[i][0] + spacing;
-        }
-        y -= r.depth + spacing;
-    }
-    return out;
+    return arrange_boxes(sizes, centre, spacing);
 }
 
 Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t t) {

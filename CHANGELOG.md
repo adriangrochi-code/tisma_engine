@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Impresión secuencial** (ficha `sequential.md`, en Otros › Modos especiales): con varios objetos en la placa, cada
+  uno se imprime entero antes del siguiente, con lugar para el cabezal entre ellos (Impresora › Cama y volumen) y G-code
+  propio entre objetos; los objetos que el cabezal o el eje X chocarían se rechazan. Es la forma de imprimir varios
+  objetos en modo vaso. Desde la línea de comandos, `slice --copies N` pone N copias del modelo.
 - **Más opciones de paredes** (ficha `walls_extra.md`, en Resistencia › Más opciones de paredes): costuras internas
   escalonadas, un solo perímetro sobre las superficies de arriba (en todas o en la de más arriba), un solo perímetro
   en la primera capa y perímetros extra que llenan los voladizos sostenidos de un solo lado.
@@ -111,6 +115,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- El laminado ya no se cuelga cuando una región de paredes trae anillos sin área (pasaba con «un solo perímetro arriba»
+  en una esfera), y el reparto de los cordones de ancho variable es lineal en vez de cuadrático o peor en esos casos.
 - Las pruebas de los arcos en voladizos (A1 a A4) volvieron: el commit de los arcos `G2`/`G3` había escrito las suyas
   encima.
 

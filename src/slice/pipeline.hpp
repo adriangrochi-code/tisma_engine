@@ -11,7 +11,9 @@
 #include "slice/zaa.hpp"
 #include "infill/stress_density.hpp"
 #include "mesh/paint.hpp"
+#include "slice/placement.hpp"
 
+#include <string>
 #include <vector>
 
 namespace tisma {
@@ -19,6 +21,22 @@ namespace tisma {
 namespace gpu {
 class Context;
 }
+
+// An object of the plate as sliced (docs/spec/features/sequential.md): its
+// name, its outline on the bed (the convex hull of its triangles) and how
+// tall it is. Printed object by object, each has its own layers, from
+// first_layer up to the next object's, its own raft, skirt and brim.
+struct SlicedObject {
+    std::string name;
+    std::size_t object = 0, instance = 0; // as MeshObject
+    // How the labels and messages name it: "<name> (Instance <instance + 1>)".
+    std::string label() const { return name + " (Instance " + std::to_string(instance + 1) + ")"; }
+    Polygon outline;
+    double height = 0.0;
+    std::size_t first_layer = 0;
+    std::size_t raft_layers = 0;
+    std::vector<Toolpath> skirt, brim;
+};
 
 // The planar slicing of a model: one region per layer, with its walls.
 struct SlicedModel {
@@ -56,6 +74,10 @@ struct SlicedModel {
     // The raft's layers (skirt_brim_raft.md, rule 10): the first ones, before
     // the part's; their regions are the raft's, their fills its support.
     std::size_t raft_layers = 0;
+    // The plate's objects, when the caller gave them; with `sequential`,
+    // printed one after another, their layers one after the other's here.
+    std::vector<SlicedObject> objects;
+    bool sequential = false;
 };
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by
@@ -79,7 +101,15 @@ double bridge_bead(const Settings& settings);
 // infill goes denser where the part works hardest. With a painting (its
 // triangle t on the mesh's triangle t; docs/PAINTING.md), the support follows
 // the painted enforcers and blockers and the seams their painted areas.
+// With the plate's objects (their triangles in the mesh), each one's outline
+// is kept, and with sequential.enabled and more than one, each is sliced
+// apart and their layers follow one another (sequential.md, rule 1).
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
-                        const StressField* stress = nullptr, const Painting* painting = nullptr);
+                        const StressField* stress = nullptr, const Painting* painting = nullptr,
+                        const std::vector<MeshObject>* objects = nullptr);
+
+// Object k of a model sliced object by object, as a model of its own (its
+// layers from 0), for what looks at a stack of layers (the stability review).
+SlicedModel object_part(const SlicedModel& model, std::size_t k);
 
 } // namespace tisma

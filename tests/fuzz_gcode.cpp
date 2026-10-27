@@ -12,6 +12,7 @@
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/placement.hpp"
 #include "slice/printable.hpp"
 #include "test_printer.hpp"
 #include <algorithm>
@@ -355,9 +356,24 @@ int main(int argc, char** argv) {
         std::stable_sort(s.changes.begin(), s.changes.end(),
                          [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
         s.gpu = GpuMode::Off;
-        const auto& [name, mesh] = shapes[std::size_t(pick(int(shapes.size())))];
+        const auto& [name, shape] = shapes[std::size_t(pick(int(shapes.size())))];
+        // Copies, printed together or one by one (sequential.md).
+        IndexedMesh mesh = shape;
+        std::vector<MeshObject> objects;
+        if (pick(6) == 0) {
+            s.sequential = pick(2) == 0;
+            s.gcode_between_objects = pick(2) == 0 ? ";between [current_object_idx]" : "";
+            TriangleMesh one;
+            for (const auto& t : shape.triangles)
+                one.add_triangle(shape.vertices[t[0]], shape.vertices[t[1]], shape.vertices[t[2]]);
+            mesh = weld_exact(place_copies(one, std::size_t(2 + pick(2)), s, name, &objects));
+        }
+        // With TISMA_FUZZ_RUN set to a run's number, that run's model and
+        // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
+        if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
+            dump(run, mesh, s, {});
         try {
-            const SlicedModel model = slice_model(mesh, s);
+            const SlicedModel model = slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects);
             if (!unprintable_reason(model, s).empty()) {
                 ++rejected;
                 continue;

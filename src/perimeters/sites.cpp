@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
+#include <queue>
 #include <tuple>
 #include <utility>
 
@@ -21,14 +23,18 @@ std::vector<HalfBeading> node_beadings(const MedialGraph& g, const std::vector<d
         return interpolate_beading(params, counts[n], 2.0 * g.nodes[n].radius);
     };
     std::vector<HalfBeading> out(g.nodes.size());
-    for (std::uint32_t n = 0; n < g.nodes.size(); ++n) {
-        if (counts[n] >= 0.0) {
-            out[n] = beading_of_central(n);
-            continue;
-        }
-        // Climb to the neighbour with the largest radius until a central node or a peak.
+    // Where each node's climb ends: to the neighbour with the largest radius
+    // until a central node or a peak. Every node on the way ends where the
+    // node does, so each climbs once (a long climb from every node of a long
+    // bone was quadratic).
+    constexpr std::uint32_t kUnknown = 0xFFFFFFFFu;
+    std::vector<std::uint32_t> top(g.nodes.size(), kUnknown);
+    std::vector<std::uint32_t> path;
+    const auto climb = [&](std::uint32_t n) {
+        path.clear();
         std::uint32_t at = n;
-        for (std::size_t steps = 0; steps < g.nodes.size(); ++steps) {
+        for (std::size_t steps = 0; steps < g.nodes.size() && top[at] == kUnknown; ++steps) {
+            path.push_back(at);
             std::uint32_t best = at;
             for (std::uint32_t m : neighbours[at])
                 if (g.nodes[m].radius > g.nodes[best].radius)
@@ -39,6 +45,17 @@ std::vector<HalfBeading> node_beadings(const MedialGraph& g, const std::vector<d
             }
             at = best;
         }
+        const std::uint32_t end = top[at] != kUnknown ? top[at] : at;
+        for (const std::uint32_t k : path)
+            top[k] = end;
+        return end;
+    };
+    for (std::uint32_t n = 0; n < g.nodes.size(); ++n) {
+        if (counts[n] >= 0.0) {
+            out[n] = beading_of_central(n);
+            continue;
+        }
+        const std::uint32_t at = climb(n);
         if (counts[at] >= 0.0) {
             out[n] = beading_of_central(at);
         } else {
@@ -62,24 +79,32 @@ std::vector<HalfBeading> node_beadings(const MedialGraph& g, const std::vector<d
         else if (g.nodes[e.a].radius > g.nodes[e.b].radius)
             up[e.b].push_back({e.a, length});
     }
+    // The nearest marked node of each one within reach, by path length up the
+    // bones (between equally near ones, the first): from all of them at once,
+    // nearest first, so each node is settled once. A search from each in turn
+    // went down every path again whenever it found a shorter one: on a graph of
+    // many short bones, more paths than any slice can wait for.
     constexpr std::uint32_t kNone = 0xFFFFFFFFu;
     std::vector<double> travelled(g.nodes.size(), reach);
     std::vector<std::uint32_t> source(g.nodes.size(), kNone);
-    std::vector<std::pair<std::uint32_t, double>> stack;
-    for (std::uint32_t m = 0; m < g.nodes.size(); ++m) {
-        if (counts[m] < 0.0)
-            continue;
-        stack.assign(1, {m, 0.0});
-        while (!stack.empty()) {
-            const auto [n, d] = stack.back();
-            stack.pop_back();
-            for (const auto& [k, length] : up[n]) {
-                const double total = d + length;
-                if (counts[k] >= 0.0 || total >= travelled[k])
-                    continue; // a marked node, or already reached closer to its source
+    using Entry = std::tuple<double, std::uint32_t, std::uint32_t>; // length, source, node
+    std::priority_queue<Entry, std::vector<Entry>, std::greater<>> queue;
+    for (std::uint32_t m = 0; m < g.nodes.size(); ++m)
+        if (counts[m] >= 0.0)
+            queue.push({0.0, m, m});
+    while (!queue.empty()) {
+        const auto [d, m, n] = queue.top();
+        queue.pop();
+        if (n != m && (d != travelled[n] || source[n] != m))
+            continue; // reached closer since
+        for (const auto& [k, length] : up[n]) {
+            const double total = d + length;
+            if (counts[k] >= 0.0)
+                continue; // a marked node
+            if (total < travelled[k] || (total == travelled[k] && source[k] != kNone && m < source[k])) {
                 travelled[k] = total;
                 source[k] = m;
-                stack.push_back({k, total});
+                queue.push({total, m, k});
             }
         }
     }

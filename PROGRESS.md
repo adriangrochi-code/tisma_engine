@@ -5568,3 +5568,52 @@ el borde alto del techo)? Y en el hongo (capa 60) y el cono (capa 20) con `enabl
 agregado (a qué distancia de la pared y de qué ancho)?
 
 **Sigue:** la impresión secuencial (`sequential.md`, con las etiquetas de objetos de `gcode_firmware.md`, regla 4).
+
+## 2026-10-27 — Punto 3: impresión secuencial
+
+**Hecho** (ficha `sequential.md`):
+- `sequential.enabled`, `sequential.clearance_radius`, `sequential.clearance_height`, `placement.spacing` (el
+  `arrange.distance` de la ficha) y `gcode.between_objects`;
+- el laminado recibe los objetos de la placa (sus triángulos en la malla: `MeshObject`); con la impresión secuencial,
+  cada uno se lamina aparte (con su falda, borde y balsa) y sus capas siguen a las del anterior (`SlicedModel::objects`,
+  `sequential`); sin ella, se guarda el contorno de cada uno para las etiquetas de objetos que siguen;
+- el escritor imprime objeto por objeto (regla 1): cada uno con sus primeras capas (velocidad, aceleración, ventilador,
+  falda, borde, balsa, costura en bufanda), sus cambios por altura desde abajo, y el paso al siguiente de la regla 3
+  (retrae, sube a la capa más alta impresa si hace falta, viaja al centro de la caja del siguiente, temperaturas de la
+  primera capa sin esperar o las de `gcode.between_objects`, ventilador apagado, y la primera capa viaja a esa altura
+  hasta su primer punto antes de bajar). Una marca `;NEXT_OBJECT:<n>` le dice al verificador que la Z vuelve a empezar;
+- se rechaza (regla 4) un objeto que no es el último más alto que `sequential.clearance_height`, dos objetos más cerca
+  que `sequential.clearance_radius`, y varios objetos en modo vaso sin la impresión secuencial (regla 5);
+- `slice --copies N` pone N copias del modelo en la cama (placement.md, regla 2), con `placement.spacing` entre sus
+  cajas, o el radio del cabezal en la impresión secuencial (regla 2); `arrange` de la placa pasó al núcleo
+  (`arrange_boxes`) y la interfaz acomoda con ese radio;
+- la revisión de estabilidad mira cada objeto por su cuenta;
+- en la interfaz: la opción en Otros › Modos especiales, los dos espacios del cabezal en Impresora › Cama y volumen,
+  el G-code entre objetos con las plantillas, y el corte en etapas guarda los objetos.
+
+**Medido** (SQ1 a SQ4 con el cubo de 20 × 20 × 10 y la base de la ficha): 2 copias, 50 capas con las dos en cada una
+sin el ajuste y 100 capas (150 con 3) de a una con él; separación entre bordes 6 / 20 / 35 mm con los radios 5 / 20 /
+35 (6 sin el ajuste), como la ficha; al pasar al segundo: retracción, viaje a (120, 100) a Z 10, `M140 S0`, `M104 S200`,
+`;BETWEEN 1`, `M107`, y en su primera capa el viaje a Z 10 y después `G1 Z0.200`; con `M109 S[temperature]`, solo
+`M109 S205`. Las torres de 25 mm se rechazan (la ficha: Tisma Slicer no avisa). 6 pruebas nuevas
+(`tests/test_sequential.cpp`); fuzzer con copias juntas y de a una.
+
+**Diseño propio:** el orden es el de los objetos en la placa (o de las copias); el centro de un objeto es el de la caja
+de su contorno; el conjunto de copias se centra en la cama también en la impresión secuencial (Tisma Slicer deja la
+primera en el centro); la altura de viaje es la de la capa más alta impresa hasta ahí, no la del último objeto.
+
+**Corregido** (el fuzzer, con las copias y las opciones nuevas):
+- con `walls.top_one_wall`, una esfera colgaba el laminado: la diferencia entre la capa y lo abierto arriba dejaba
+  anillos sin área, el eje medio salía roto (209 350 nodos, uno a 30 m de una pieza de 16 mm) y la subida de cada nodo
+  hasta el centro era cuadrática. Ahora esa región se abre un cuarto de cordón, las paredes descartan los anillos sin
+  área, cada nodo sube una vez (lo que recorre queda guardado) y el reparto desde los nodos marcados es una búsqueda de
+  Dijkstra desde todos a la vez (antes, una búsqueda por cada uno que podía volver a recorrer los mismos caminos una
+  cantidad exponencial de veces). La región que colgaba se hace en 19 ms;
+- el verificador tomaba la última pieza diminuta de un barrido largo por una retracción nueva; ahora una retracción
+  nueva es solo la que viene después de otro movimiento;
+- en la impresión secuencial, el verificador volvía a los valores de la base en la marca del objeto nuevo, pero el
+  viaje hasta él es todavía del anterior: vuelve en la primera capa del nuevo.
+
+Fuzzer: 400 corridas (semilla 17) y 1500 con las semillas 1, 271034 y 271035, 0 fallas.
+
+**Sigue:** las etiquetas de objetos (`gcode_firmware.md`, regla 4), que ya tienen los objetos; después el punto 4.

@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -406,5 +407,29 @@ TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 1
     CHECK(last == "; post File 0.2 0.2 1"); // one argument: the G-code's path
 #endif
     f.close();
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice --copies prints copies of the model, one by one with sequential printing (sequential.md, SQ1)",
+          "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_copies";
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120,
+                                             "corner_speed": 10, "bed": [[0, 0], [200, 0], [200, 200], [0, 200]]},
+                                 "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80,
+                                           "top_solid_infill": 15, "support": 80, "travel": 130, "first_layer": 30},
+                                 "retraction": {"speed": 40}, "cooling": {"min_speed": 10},
+                                 "sequential": {"enabled": true}})";
+    const auto gcode = dir / "copies.gcode";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "3"});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("layers: 150")); // 50 layers of each copy, one after another
+    std::ifstream f(gcode);
+    const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    CHECK_THAT(text, ContainsSubstring(";NEXT_OBJECT:2"));
+    f.close();
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "0"})
+              .code == kExitUsage);
     std::filesystem::remove_all(dir);
 }

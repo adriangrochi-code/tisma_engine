@@ -748,7 +748,9 @@ const char* row_key(T label) {
         {T::SilentModeRow, "machine.silent_mode"}, {T::SilentLimitsRow, "machine.silent"},
         {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
-        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}};
+        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}, {T::SequentialRow, "sequential.enabled"},
+        {T::ClearanceRadius, "sequential.clearance_radius"}, {T::ClearanceHeight, "sequential.clearance_height"},
+        {T::BetweenObjectsGcode, "gcode.between_objects"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -1516,7 +1518,10 @@ void App::arrange_plate() {
         x0 = i == 0 ? p[0] : std::min(x0, p[0]), x1 = i == 0 ? p[0] : std::max(x1, p[0]);
         y0 = i == 0 ? p[1] : std::min(y0, p[1]), y1 = i == 0 ? p[1] : std::max(y1, p[1]);
     }
-    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, 6.0);
+    // Printed one by one, the head's cylinder between them (sequential.md, rule 2).
+    const double spacing = settings_.sequential ? std::max(settings_.placement_spacing, settings_.clearance_radius)
+                                                : settings_.placement_spacing;
+    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, spacing);
     for (std::size_t i = 0; i < objects_.size(); ++i)
         objects_[i].place.x = at[i][0], objects_[i].place.y = at[i][1];
     plate_changed();
@@ -2174,19 +2179,27 @@ void App::start_slice() {
         fail(T::CannotSlice, e.what());
         return;
     }
-    // Vase mode prints one object (vase_mode.md, rule 2).
-    if (settings_.vase && objects_.size() > 1) {
+    // Vase mode prints one object (vase_mode.md, rule 2), or several one
+    // after another (sequential.md, rule 5).
+    if (settings_.vase && objects_.size() > 1 && !settings_.sequential) {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
     Painting painting = plate_painting(objects_);
+    // Each model's triangles in the plate's mesh, as plate_mesh joins them.
+    std::vector<MeshObject> objects;
+    for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0});
+        first += placed_meshes_[i].triangle_count();
+    }
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
-                      painting = std::move(painting)]() {
-        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting);
+                      painting = std::move(painting), objects = std::move(objects)]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting,
+                           objects.size() > 1 ? &objects : nullptr);
     });
 }
 
@@ -3104,6 +3117,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // Print: Others.
     else if (id == "special_modes") {
         flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
+        flag(T::SequentialRow, "sequential.enabled", s.sequential, tr(T::SequentialTip));
     } else if (id == "fuzzy") {
         if (shown("fuzzy.mode"))
             changed |= row(T::FuzzySkin, s.fuzzy_mode,
@@ -3214,6 +3228,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         }
         mm(T::MaxHeight, "machine.max_height", s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
         mm(T::ZOffset, "machine.z_offset", s.z_offset, -10.0, 10.0, "%.2f mm", 0.005f);
+        mm(T::ClearanceRadius, "sequential.clearance_radius", s.clearance_radius, 0.0, 1000.0, "%.0f mm", 0.5f);
+        mm(T::ClearanceHeight, "sequential.clearance_height", s.clearance_height, 0.0, 1000.0, "%.0f mm", 0.5f);
     } else if (id == "enclosure") {
         flag(T::Enclosed, "machine.enclosed", s.enclosed);
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);
@@ -3313,7 +3329,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
             {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
             {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
             {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},
-            {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}}};
+            {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}},
+            {T::BetweenObjectsGcode, {"gcode.between_objects", &s.gcode_between_objects}}};
         for (const auto& [label, key_text] : texts)
             if (shown(key_text.first)) {
                 ImGui::TextUnformatted(tr(label));

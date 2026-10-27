@@ -987,13 +987,13 @@ public:
                 type(was);
         };
         user(before);
-        layer_z_pending_ = !keep_z && ramp_tan_ > 0.0 && lift_ > 0.0 && known_ && !resync_ && !commands(after);
-        if (!keep_z && !layer_z_pending_)
+        layer_z_pending_ = !keep_z && ramp_tan_ > 0.0 && lift_ > 0.0 && known_ && !resync_ && !commands(after) && !descend_;
+        if (!keep_z && !layer_z_pending_ && !descend_)
             move("G1", std::nullopt, std::nullopt, z, std::nullopt, z_feed(travel_feed), {}, {}, "simple layer change");
         first_travel_ = true;
         height_ = height;
         z_value_ = z;
-        if (!keep_z && !layer_z_pending_)
+        if (!keep_z && !layer_z_pending_ && !descend_)
             z_now_ = written(z);
         clearance_ = 0.0;
         // Marlin with relative E: the extruder's position restarts at each
@@ -1006,6 +1006,36 @@ public:
         user(after);
         if (commands(before) || commands(after))
             resync();
+    }
+
+    // Over to the next object (sequential.md, rule 3): retracted, up to `z`
+    // (the highest layer laid so far) if below it, straight over to
+    // `centre`, the engine's `lines` and the user's `between`, the fan off.
+    // The next layer's move in Z waits: its first travel goes over at this
+    // height, then down.
+    void next_object(std::size_t index, double z, const Point2d& centre, double feed, const std::string& lines,
+                     const std::string& between) {
+        // The mark a reader takes the next object's lower layers by.
+        text_ += ";NEXT_OBJECT:" + std::to_string(index) + "\n";
+        extruder_off();
+        travel_acceleration(std::numeric_limits<double>::infinity());
+        wiped_path_.clear();
+        retract(0.0);
+        if (const double up = written(z); up > z_now_) {
+            move("G1", std::nullopt, std::nullopt, up, std::nullopt, z_feed(feed), {}, {}, "lift");
+            other_time_ += (up - z_now_) / z_feed(feed);
+            z_now_ = up;
+        }
+        move("G1", centre.x, centre.y, std::nullopt, std::nullopt, feed, {}, {}, "travel to the next object");
+        other_time_ += std::hypot(centre.x - x_value_, centre.y - y_value_) / feed;
+        x_value_ = centre.x, y_value_ = centre.y;
+        custom(lines + between, commands(between));
+        if (fan_ != fan_key(0.0)) {
+            append_fan(text_, 0.0, fan_key(0.0));
+            fan_ = fan_key(0.0);
+        }
+        safe_z_ = z_now_;
+        descend_ = true;
     }
 
     // Whether the user's G-code left the head where the engine does not know.
@@ -1079,6 +1109,11 @@ public:
             retract(0.0);
             layer_z_pending_ = false;
             const double cruise = written(z_value_ + clearance_);
+            if (descend_) { // a new object: over at the safe height, then down
+                move("G1", std::nullopt, std::nullopt, safe_z_, std::nullopt, z_feed(feed), {}, {}, "lift");
+                move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
+                descend_ = false;
+            }
             move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {}, "move to layer height");
             z_now_ = cruise;
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
@@ -1093,6 +1128,22 @@ public:
             travel_acceleration(std::numeric_limits<double>::infinity());
             move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
             x_value_ = p.x, y_value_ = p.y, known_ = true;
+            return;
+        }
+        if (descend_) {
+            // A new object's first point, at the height the head came over
+            // at, then down (sequential.md, rule 3).
+            descend_ = layer_z_pending_ = false;
+            const double length = std::hypot(p.x - x_value_, p.y - y_value_);
+            travel_acceleration(length);
+            retract(0.0);
+            move("G1", p.x, p.y, std::nullopt, std::nullopt, feed, {}, {}, note);
+            const double cruise = written(z_value_ + clearance_);
+            move("G1", std::nullopt, std::nullopt, cruise, std::nullopt, z_feed(feed), {}, {}, "lower");
+            other_time_ += length / feed + std::abs(z_now_ - cruise) / z_feed(feed);
+            z_now_ = cruise;
+            wiped_path_.clear();
+            x_value_ = p.x, y_value_ = p.y;
             return;
         }
         const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
@@ -1621,6 +1672,8 @@ private:
     double before_wipe_ = 0.0, lift_above_ = 0.0, lift_below_ = 0.0, ramp_tan_ = 0.0;
     std::vector<Point2d> wiped_path_; // the path printed since the last travel
     bool layer_z_pending_ = false;     // the layer's move up waits for its first travel's ramp
+    bool descend_ = false;             // a new object: the first travel goes over at safe_z_, then down
+    double safe_z_ = 0.0;
     double flow_ = 1.0;
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
@@ -1944,6 +1997,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The templates (gcode_templates.md): every setting, the machine's
     // variables and the print's; globals reach the templates that follow.
     TemplateContext templates = template_context(s, model);
+    templates.variables["current_object_idx"] = TemplateValue::of(0LL); // sequential.md, rule 3
     const std::string start_gcode = render_template(s.start_gcode, templates, "machine.start_gcode");
     const auto first_value = [&](const char* name) {
         const auto it = s.variables.find(name);
@@ -2008,13 +2062,28 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     active.retract_speed = s.retract_speed;
     active.flow = s.flow / 100.0;
     std::size_t next_change = 0;
-    // The part prints resting on the bed wherever its mesh is in Z: heights
+    // Object by object (sequential.md): each layer's object, its first
+    // layer and its raft. Otherwise one object, from layer 0.
+    std::vector<std::size_t> object_of(model.layers.size(), 0);
+    if (model.sequential)
+        for (std::size_t k = 0; k < model.objects.size(); ++k)
+            for (std::size_t l = model.objects[k].first_layer;
+                 l < (k + 1 < model.objects.size() ? model.objects[k + 1].first_layer : model.layers.size()); ++l)
+                object_of[l] = k;
+    const auto object_start = [&](std::size_t l) { return model.sequential ? model.objects[object_of[l]].first_layer : 0; };
+    const auto local = [&](std::size_t l) { return l - object_start(l); }; // the layer's number in its object
+    const auto raft_of = [&](std::size_t l) {
+        return model.sequential ? model.objects[object_of[l]].raft_layers : model.raft_layers;
+    };
+    // A part prints resting on the bed wherever its mesh is in Z: heights
     // in the G-code (and of the height changes) count from its bottom.
     // machine.z_offset moves every Z of the part (gcode_extras.md, rule 5).
-    const double base = (model.layers.empty() ? 0.0 : model.layers.front().bottom) - s.z_offset;
+    const auto base_of = [&](std::size_t l) {
+        return (model.layers.empty() ? 0.0 : model.layers[object_start(l)].bottom) - s.z_offset;
+    };
     // The layer the templates are at: its number (from 0) and its Z as written.
     const auto at_layer = [&](std::size_t l) {
-        const double z = std::round((model.layers[l].top - base) * 1000.0) / 1000.0;
+        const double z = std::round((model.layers[l].top - base_of(l)) * 1000.0) / 1000.0;
         templates.variables["layer_num"] = TemplateValue::of(static_cast<long long>(l));
         templates.variables["layer_z"] = templates.variables["max_layer_z"] = TemplateValue::of(z);
     };
@@ -2188,13 +2257,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     auto plan_layer = [&](std::size_t l, const Active& a) {
         const Layer& layer = model.layers[l];
         std::vector<Step> steps;
+        if (l > 0 && l == object_start(l))
+            seams = SeamMemory{}; // a new object: no seams below it
         seams.next_layer();
         const RegionPlan& plan = plans[plan_of[l]];
-        const bool first = l == 0;
+        const bool first = local(l) == 0;
         // The part's first layer on a raft: no faster than
         // speed.first_layer_over_raft, or that share of each speed
         // (skirt_brim_raft.md, rule 12); unset, speed.first_layer.
-        const bool over_raft = model.raft_layers > 0 && l == model.raft_layers;
+        const bool over_raft = raft_of(l) > 0 && local(l) == raft_of(l);
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
             if (over_raft)
@@ -2237,13 +2308,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The solid infill right over a bridge, at speed.over_bridges
         // (speeds_accels.md, rule 2).
         std::optional<AreaIndex> over_bridge, nowhere;
-        if (s.over_bridges_speed.value > 0.0 && l > 0 && l - 1 < model.air_bridges.size() &&
+        if (s.over_bridges_speed.value > 0.0 && local(l) > 0 && l - 1 < model.air_bridges.size() &&
             !model.air_bridges[l - 1].empty())
             over_bridge.emplace(model.air_bridges[l - 1]), nowhere.emplace(none);
         // The walls by how much of their bead rests on the layer below
         // (speeds_accels.md, rules 6 and 7); a vase's wall stays one turn.
         std::optional<AreaIndex> below_outline, air;
-        if (s.dynamic_overhangs && !s.vase && l > 0 && l - 1 < model.regions.size() && !model.regions[l - 1].empty()) {
+        if (s.dynamic_overhangs && !s.vase && local(l) > 0 && l - 1 < model.regions.size() && !model.regions[l - 1].empty()) {
             below_outline.emplace(model.regions[l - 1]);
             if (hanging_area)
                 air.emplace(*hanging_area);
@@ -2370,10 +2441,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         };
         // Skirt, then brim, before the part, at the first layer's speed.
         // A draft shield goes up to the top (skirt_brim_raft.md, rule 4).
-        if (l < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled)
-            group(model.skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
-        if (l == 0)
-            group(model.brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+        // Printed object by object, each its own (sequential.md).
+        const std::vector<Toolpath>& skirt = model.sequential ? model.objects[object_of[l]].skirt : model.skirt;
+        const std::vector<Toolpath>& brim = model.sequential ? model.objects[object_of[l]].brim : model.brim;
+        if (local(l) < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled)
+            group(skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+        if (local(l) == 0)
+            group(brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         // Every island is finished before the next, the nearest one first. In an
         // island: walls from the inside out, the outer wall (bead 0) last, each
         // bead index in nearest order; then the fills, one kind after the other.
@@ -2675,6 +2749,41 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         return result;
     };
 
+    // Over to the next object (sequential.md, rule 3): up to the highest
+    // layer laid so far, over to the centre of its box, the first layer's
+    // temperatures without waiting unless gcode.between_objects sets its own,
+    // that G-code (current_object_idx: the next object's number, from 0) and
+    // the fan off.
+    double printed_top = 0.0;
+    const auto next_object = [&](std::size_t k) {
+        const SlicedObject& o = model.objects[k];
+        double lo[2] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()}, hi[2] = {-lo[0], -lo[1]};
+        for (const auto& q : o.outline) {
+            const double p[2] = {to_mm(q.x), to_mm(q.y)};
+            for (int a = 0; a < 2; ++a)
+                lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+        }
+        const Point2d centre = o.outline.empty() ? Point2d{0.0, 0.0} : Point2d{(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0};
+        templates.variables["current_object_idx"] = TemplateValue::of(static_cast<long long>(k));
+        const std::string between = render_template(s.gcode_between_objects, templates, "gcode.between_objects");
+        std::string lines;
+        if (!sets_temperature(between)) {
+            const auto value = [&](const char* first, const char* normal) -> std::optional<long> {
+                for (const char* name : {first, normal})
+                    if (const auto it = s.variables.find(name); it != s.variables.end() && !it->second.empty())
+                        return std::lround(std::atof(it->second.front().c_str()));
+                return std::nullopt;
+            };
+            if (const std::optional<long> bed = value("first_layer_bed_temperature", "bed_temperature"))
+                lines += std::string("M140 ") + dialect.temperature + std::to_string(*bed) + "\n";
+            if (const std::optional<long> nozzle = value("first_layer_temperature", "temperature"))
+                lines += dialect.g10 ? "G10 S" + std::to_string(*nozzle) + " P0\n"
+                                     : std::string("M104 ") + dialect.temperature + std::to_string(*nozzle) +
+                                           (dialect.tool_on_m104 ? " T0" : "") + "\n";
+        }
+        g.next_object(k, printed_top, centre, s.travel_speed, lines, between);
+    };
+
     // A layer's G-code from its plan, the paths already simplified.
     auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& planned) {
         std::vector<Step> ramped;
@@ -2682,6 +2791,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             ramped = equalized(planned, model.layers[l].top - model.layers[l].bottom);
         const std::vector<Step>& steps = equalize ? ramped : planned;
         const Layer& layer = model.layers[l];
+        if (l > 0 && l == object_start(l))
+            next_object(object_of[l]);
+        printed_top = std::max(printed_top, layer.top - base_of(l));
         g.open_layer_fan();
         const bool turn = l < continues.size() && continues[l];
         // The layer's templates, from the second layer (gcode_templates.md,
@@ -2692,7 +2804,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             before = render_template(s.gcode_before_layer, templates, "gcode.before_layer");
             after = render_template(s.gcode_after_layer, templates, "gcode.after_layer");
         }
-        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn, before, after);
+        g.new_layer(layer.top - base_of(l), layer.top - layer.bottom, s.travel_speed, turn, before, after);
         if (s.gcode_progress)
             g.progress_mark();
         else
@@ -2743,7 +2855,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr,
                          t.retract, step.type);
             g.type(step.type);
-            g.print_acceleration(acceleration_of(step.type, l == 0, model.raft_layers > 0 && l == model.raft_layers));
+            g.print_acceleration(acceleration_of(step.type, local(l) == 0, raft_of(l) > 0 && local(l) == raft_of(l)));
             g.nonplanar(t.wavy);
             if (s.gcode_arcs && !t.wavy && t.points.size() > kArcMinSegments) {
                 // Arcs where the path follows a circle (gcode_extras.md, rule
@@ -2780,12 +2892,17 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The height changes of every layer first: the plans take their speeds.
     std::vector<Active> actives;
     actives.reserve(model.layers.size());
+    const Active initial = active;
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
+        if (l > 0 && l == object_start(l)) { // a new object: the changes from its bottom again
+            active = initial;
+            next_change = 0;
+        }
         // Changes below this layer's top take effect now: its top as ;Z: writes
         // it, so a reader of the G-code (the check) takes them at the same layer.
         active.lines.clear();
         active.user = false;
-        const double written_top = std::strtod(fixed(model.layers[l].top - base, 3).c_str(), nullptr);
+        const double written_top = std::strtod(fixed(model.layers[l].top - base_of(l), 3).c_str(), nullptr);
         while (next_change < s.changes.size() && s.changes[next_change].z < written_top - 1e-6) {
             const HeightChange& c = s.changes[next_change++];
             if (c.temperature)
@@ -2856,13 +2973,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 char text[160];
                 std::snprintf(text, sizeof text, "the layer takes %.1f s even at 1 mm/min, less than the minimum of %.1f s",
                               reached, s.min_layer_time);
-                warnings->push_back({"layer_time", int(l), model.layers[l].top - base, text, reached});
+                warnings->push_back({"layer_time", int(l), model.layers[l].top - base_of(l), text, reached});
             }
         }
         // The fan: a height change's, else by the layer's time; a slowed layer
         // at fan_max, even among the first layers, which otherwise print
         // without fan (owner's decision, 2026-10-24). Bridges get their own.
-        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
+        const bool fan_off = local(l) < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
         const double fan = a.fan            ? *a.fan
                            : fan_off        ? 0.0
                            : slowdown.stage ? s.fan_max
@@ -2883,7 +3000,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // hole on its left (every loop runs counter-clockwise): a bead to its
     // left is out of the part.
     const auto scarfed = [&](std::size_t l, const Step& step) {
-        if (s.scarf == ScarfMode::Nowhere || l == 0)
+        if (s.scarf == ScarfMode::Nowhere || local(l) == 0)
             return false;
         const Toolpath& t = step.path;
         const bool outer = std::strcmp(step.type, "External perimeter") == 0;
@@ -2949,7 +3066,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                            planned[l] = plan_layer(l, actives[l]);
                                                            std::vector<std::vector<std::size_t>>().swap(loop_candidates[l]);
                                                            if (s.vase) {
-                                                               const bool turn = l >= spiral_from && spiral_turn(planned[l], l);
+                                                               if (l == object_start(l))
+                                                                   after_turn = false; // a new object starts its own spiral
+                                                               const bool turn = local(l) >= spiral_from && spiral_turn(planned[l], l);
                                                                continues[l] = turn && after_turn;
                                                                after_turn = turn;
                                                            }

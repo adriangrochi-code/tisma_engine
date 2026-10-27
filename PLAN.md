@@ -671,7 +671,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 - [x] Modo vaso (`vase_mode.md`, pedido del dueño de una pared en espiral, 2026-10-26): una sola pared que sube en
   espiral, sobre capas de abajo planas; reglas 1 a 6 (la de varios objetos, en la interfaz: el motor lamina uno por
-  vez). Falta la impresión uno por uno (`sequential.md`)
+  vez). Varios objetos en modo vaso, uno por uno, con la impresión secuencial (2026-10-27)
 
 ## Fichas nuevas (2026-10-26)
 
@@ -764,7 +764,11 @@ Con el PR #23 (2026-10-26):
     con `machine.limits_usage` (regla 2; también en la estimación, `print_time.md` reglas 2 y 3, y el tope de las
     aceleraciones, V9), `G92 E0` con E relativa en Marlin (regla 3), `M73` por tiempo (regla 5), el tiempo por modo y
     de la primera capa (regla 6), sabores `marlin_legacy` y `reprapfirmware`. Faltan las etiquetas de objetos (regla
-    4), que piden objetos separados en el laminado (con la impresión secuencial, punto 3)
+    4): el laminado ya conoce los objetos de la placa (impresión secuencial, 2026-10-27)
+  - [x] impresión secuencial (`sequential.md`, reglas 1 a 5, SQ1 a SQ4; hecha 2026-10-27): los objetos de la placa
+    (o las copias de `slice --copies`) se laminan aparte y se imprimen uno por uno, con el paso de uno a otro de la
+    regla 3, `gcode.between_objects`, la separación del cabezal al acomodar, y los objetos que chocarían se rechazan.
+    En la interfaz, la opción en Otros › Modos especiales y el acomodo con el radio del cabezal
   - [x] retracción y viajes completos (`retraction_travel.md`, reglas 1 a 10, R1 a R11; hecho 2026-10-27): la vuelta
     con su velocidad y su extra, retraer en todo cambio de capa, el barrido, las alturas del salto, el salto en rampa,
     la retracción del firmware (`G10`/`G11`), los viajes rectos o con desvío máximo, los lazos en sentido horario y

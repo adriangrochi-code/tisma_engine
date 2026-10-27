@@ -392,6 +392,18 @@ las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su p
 |---|---|---|---|---|
 | `arrange` | booleano | `true` | — | Con una cama (`machine.bed`), el centro de la caja de la pieza va a `center`; `false` la deja donde viene en X e Y. Sin cama no se mueve nada, salvo que se dé `center` a mano (PL15). En Z la pieza siempre se apoya en la cama |
 | `center` | `[x, y]` o `null` | `null` | mm | Dónde queda el centro de la pieza; `null` es el centro de la caja de la cama |
+| `spacing` | número | 6 | 0 a 1000 | Con `slice --copies N`, las copias van en una grilla compacta con esta separación entre sus cajas, y el conjunto centrado como una pieza sola (ficha `placement.md`, regla 2, PL7 y PL8); en la impresión secuencial, al menos `sequential.clearance_radius` (ficha `sequential.md`, regla 2). Es lo que la ficha `sequential.md` llama `arrange.distance` |
+
+### `sequential`
+
+De la ficha `docs/spec/features/sequential.md`: objeto por objeto. `enabled` va en el perfil de impresión; los dos
+espacios del cabezal, en el de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | | Con varios objetos (las copias de `slice --copies`, o los modelos de la placa en la interfaz), cada uno se lamina aparte y se imprime entero antes del siguiente, en el orden en que vienen (regla 1, SQ1). Al terminar uno: retrae, sube a la capa más alta impresa hasta ahí si hace falta, viaja al centro de la caja del siguiente, escribe las temperaturas de la primera capa sin esperar (`M140` y `M104` con `first_layer_bed_temperature` y `first_layer_temperature` de `machine.variables`, o `bed_temperature` y `temperature`) y `gcode.between_objects` (si ese texto ya pone temperaturas, solo el texto), apaga el ventilador, y la primera capa del siguiente viaja a esa altura hasta su primer punto y recién ahí baja (regla 3, SQ3). Cada objeto tiene su falda, su borde, su balsa y sus primeras capas (velocidad, ventilador, aceleración). Es la única forma de imprimir varios objetos en modo vaso (regla 5) |
+| `clearance_radius` | número | 20 | 0 a 1000 | Radio, en mm, de un cilindro centrado en la boquilla que encierra el cabezal: las copias se acomodan al menos a esta distancia, y dos objetos más cerca son un error (regla 2, SQ2) |
+| `clearance_height` | número | 20 | 0 a 1000 | Distancia en Z, en mm, de la punta de la boquilla a lo primero que puede chocar arriba (el eje X): un objeto más alto que esto que no es el último es un error (regla 4; Tisma Slicer no lo rechaza, SQ4) |
 
 ### `compute`
 
@@ -461,6 +473,7 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |
 | `before_layer` | texto | `""` | | G-code justo antes del movimiento en Z de cada cambio de capa, desde la segunda capa (regla 11, prueba T8), con las variables y además `layer_num` (desde 0), `layer_z` y `max_layer_z` (la Z escrita, sin ceros de más). Va como G-code propio (`;TYPE:Custom`); si tiene algo más que comentarios, el viaje siguiente vuelve a escribir todos los ejes |
 | `after_layer` | texto | `""` | | Lo mismo, justo después del movimiento en Z |
+| `between_objects` | texto | `""` | | En la impresión secuencial, el G-code entre un objeto y el siguiente (ficha `sequential.md`, regla 3), con las variables y `current_object_idx`, el número del objeto que sigue (desde 0). Si pone temperaturas (`M104`, `M109`, `M140`, `M190`), el motor no escribe las suyas |
 
 
 ### `output`

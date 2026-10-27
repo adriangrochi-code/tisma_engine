@@ -185,12 +185,24 @@ private:
                 problem("layer at Z=" + text(*z) + " does not go above the one before (" + text(*layer_z_) + ")");
             layer_z_ = *z;
             awaiting_z_ = false;
+            if (new_object_) {
+                retract_length_ = limits_.retract_length;
+                flow_ = limits_.flow;
+                next_change_ = 0;
+                new_object_ = false;
+            }
             // The height changes below this layer's top hold from here on.
             while (next_change_ < limits_.changes.size() && limits_.changes[next_change_].z < *z - 1e-6) {
                 retract_length_ = limits_.changes[next_change_].retract_length;
                 flow_ = limits_.changes[next_change_].flow;
                 ++next_change_;
             }
+        } else if (c.starts_with("NEXT_OBJECT:")) {
+            // Object by object (sequential.md): the next one starts on the
+            // bed again, with the height changes from its bottom at its first
+            // layer (the way over to it is still the last one's).
+            layer_z_.reset();
+            new_object_ = true;
         } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
             nonplanar_ = c == "NONPLANAR:1";
             if (nonplanar_ && !(limits_.wave > 0.0) && !(limits_.scarf > 0.0))
@@ -344,6 +356,8 @@ private:
     // path: an arc's length.
     void classify(const double to[4], const bool given[4], std::optional<double> path) {
         const double de = to[3] - position_[3];
+        if (!(de < -1e-9))
+            pulling_ = false; // a move that pulls nothing ends a retraction's pieces
         const double dx = to[0] - position_[0], dy = to[1] - position_[1];
         const bool moves = path ? *path > 1e-9 : (given[0] || given[1]) && (std::abs(dx) > 1e-9 || std::abs(dy) > 1e-9);
         const double length = path ? *path : moves && known_[0] && known_[1] ? std::hypot(dx, dy) : 0.0;
@@ -435,9 +449,10 @@ private:
             target_ = retract_length_;
             retracted_ = 0.0;
             pieces_ = 0;
-        } else if (retracted_ >= target_ - slack()) {
+        } else if (!pulling_) {
             problem("retracts again without undoing the last retraction");
         }
+        pulling_ = true;
         ++pieces_;
         retracted_ += amount;
         if (retracted_ > target_ + slack())
@@ -463,7 +478,9 @@ private:
     double retracted_ = 0.0;
     double target_ = 0.0; // the length of the retraction under way
     std::size_t pieces_ = 0; // its pieces so far (a wipe's)
+    bool pulling_ = false;   // the last move was one of them
     bool awaiting_z_ = false;
+    bool new_object_ = false; // after ;NEXT_OBJECT, until the next object's first ;Z:
     std::optional<double> layer_z_, height_, width_;
 };
 

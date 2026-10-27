@@ -242,6 +242,12 @@ struct Settings {
     // interface places objects itself and does not use these.
     bool placement_arrange = true;
     std::optional<std::array<double, 2>> placement_center;
+    double placement_spacing = 6.0; // mm between the boxes of copies (placement.md, rule 2)
+    // Object by object (docs/spec/features/sequential.md): each whole before
+    // the next, the head within clearance_radius of the nozzle and the X
+    // axis clearance_height above its tip.
+    bool sequential = false;
+    double clearance_radius = 20.0, clearance_height = 20.0;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -456,6 +462,7 @@ struct Settings {
     std::string gcode_pause = "M601";
     std::string gcode_before_layer; // right before each layer's move in Z, from the second layer
     std::string gcode_after_layer;  // right after it
+    std::string gcode_between_objects; // sequential printing: between one object and the next (sequential.md, rule 3)
 
     // changes from a height up, sorted by z
     std::vector<HeightChange> changes;

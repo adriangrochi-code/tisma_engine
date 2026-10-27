@@ -25,6 +25,7 @@
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 
+#include <cstdlib>
 #include <chrono>
 #include <exception>
 #include <filesystem>
@@ -44,6 +45,7 @@ constexpr std::string_view kUsage =
     "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | folder> [--warnings <out.json>]\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
+    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model>\n"
@@ -87,6 +89,7 @@ struct SliceArgs {
     bool progress = false;     // analyze only: progress lines on the output
     bool estimate = false;     // analyze only: the voxels, memory and time, without solving
     bool yes = false;          // slice only: run the settings' post-processing scripts without asking
+    std::size_t copies = 1;    // slice only: copies of the model on the bed
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -127,6 +130,17 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             out.estimate = true;
         } else if (a == "--yes" && !analyze) {
             out.yes = true;
+        } else if (a == "--copies" && !analyze) {
+            std::string n;
+            if (!value(n))
+                return std::nullopt;
+            char* end = nullptr;
+            const long v = std::strtol(n.c_str(), &end, 10);
+            if (n.empty() || *end != '\0' || v < 1 || v > 1000) {
+                err << "error: --copies needs a whole number from 1 to 1000\n";
+                return std::nullopt;
+            }
+            out.copies = std::size_t(v);
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -290,7 +304,16 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-    place_on_bed(stl.mesh, settings);
+    // The copies, each an object of the plate (placement.md, rule 2;
+    // sequential.md, rule 2), or the model alone.
+    std::vector<MeshObject> objects;
+    const std::string file_name = std::filesystem::path(parsed->model).filename().string();
+    if (parsed->copies > 1) {
+        stl.mesh = place_copies(stl.mesh, parsed->copies, settings, file_name, &objects);
+    } else {
+        place_on_bed(stl.mesh, settings);
+        objects.push_back({file_name, 0, stl.mesh.triangle_count(), 0, 0});
+    }
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
@@ -336,13 +359,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress);
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress);
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {

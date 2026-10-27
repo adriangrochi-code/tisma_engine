@@ -9,8 +9,15 @@
 
 namespace tisma {
 
-LayerWalls layer_walls(const Polygons& region, const BeadingParams& params) {
+LayerWalls layer_walls(const Polygons& input, const BeadingParams& params) {
     LayerWalls out;
+    // Rings of no area, as a boolean operation may leave, break the medial
+    // axis (a node 30 m from a 16 mm part): out.
+    Polygons region;
+    region.reserve(input.size());
+    for (const Polygon& ring : input)
+        if (std::abs(Clipper2Lib::Area(ring)) > 1e6) // nm2: a thousandth of a mm squared
+            region.push_back(ring);
     if (region.empty())
         return out;
     MedialGraph graph = medial_graph(region);

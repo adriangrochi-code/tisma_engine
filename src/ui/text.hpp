@@ -718,6 +718,11 @@
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
     X(VaseMode, "Modo vaso (espiral)", "Vase mode (spiral)") \
+    X(SequentialRow, "Objeto por objeto", "One object at a time") \
+    X(SequentialTip, "Cada objeto se imprime entero antes del siguiente: si uno falla, los otros siguen. Necesita lugar para el cabezal entre los objetos", "Each object is printed whole before the next: if one fails, the others go on. The head needs room between the objects") \
+    X(ClearanceRadius, "Radio libre del cabezal", "Head clearance radius") \
+    X(ClearanceHeight, "Altura libre bajo el eje X", "Clearance under the X axis") \
+    X(BetweenObjectsGcode, "G-code entre objetos", "G-code between objects") \
     X(VaseModeTip, "Una sola pared que sube en espiral, sin costura: para vasos, macetas y pantallas. Sin relleno ni techo; las capas de abajo son planas. No se puede con soportes.", "One wall rising in a spiral, without a seam: for vases, pots and lampshades. No infill nor top; the bottom layers are flat. Not with supports.") \
     X(VaseManyObjects, "En modo vaso se imprime un solo objeto por vez", "Vase mode prints one object at a time") \
     X(SumLayer, "%s mm · primera %s mm", "%s mm · first %s mm") \

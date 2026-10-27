@@ -340,6 +340,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
+            group == "sequential" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -517,8 +518,15 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
     });
-    read_group(root, "placement", {"arrange", "center"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "placement", {"arrange", "center", "spacing"}, [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
+        if (n == "spacing") {
+            const double d = number(g, n, k);
+            if (!(d >= 0.0 && d <= 1000.0))
+                fail(k, "must be from 0 to 1000 mm");
+            s.placement_spacing = d;
+            return;
+        }
         if (n == "arrange") {
             if (!v.is_boolean())
                 fail(k, "must be true or false");
@@ -532,6 +540,19 @@ Settings parse_checked(std::string_view text) {
         if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
             fail(k, "must be null (the centre of the bed) or [x, y] in mm");
         s.placement_center = std::array<double, 2>{v[0].get<double>(), v[1].get<double>()};
+    });
+    read_group(root, "sequential", {"enabled", "clearance_radius", "clearance_height"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "enabled") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.sequential = g.at(n).get<bool>();
+            return;
+        }
+        const double d = number(g, n, k);
+        if (!(d >= 0.0 && d <= 1000.0))
+            fail(k, "must be from 0 to 1000 mm");
+        (n == "clearance_radius" ? s.clearance_radius : s.clearance_height) = d;
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -1245,7 +1266,7 @@ Settings parse_checked(std::string_view text) {
         }
         s.post_process = std::move(scripts);
     });
-    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
+    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
                                "verbose_comments", "arcs", "progress", "auto_temperatures", "binary"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures" ||
@@ -1266,6 +1287,7 @@ Settings parse_checked(std::string_view text) {
             (n == "color_change" ? s.gcode_color_change
              : n == "pause"      ? s.gcode_pause
              : n == "before_layer" ? s.gcode_before_layer
+             : n == "between_objects" ? s.gcode_between_objects
                                    : s.gcode_after_layer) = g.at(n).get<std::string>();
             return;
         }
@@ -1541,6 +1563,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
                                                                : num(s.wall_min_line_width.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
+        {"sequential.enabled", flag(s.sequential)},
+        {"sequential.clearance_radius", num(s.clearance_radius)},
+        {"sequential.clearance_height", num(s.clearance_height)},
+        {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
@@ -1741,6 +1767,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.pause", text(s.gcode_pause)},
         {"gcode.before_layer", text(s.gcode_before_layer)},
         {"gcode.after_layer", text(s.gcode_after_layer)},
+        {"gcode.between_objects", text(s.gcode_between_objects)},
         {"gcode.volumetric_e", flag(s.volumetric_e)},
         {"gcode.verbose_comments", flag(s.verbose_comments)},
         {"gcode.arcs", flag(s.gcode_arcs)},
@@ -1855,7 +1882,11 @@ std::string settings_json(const Settings& s) {
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
         {"placement",
-         {{"arrange", s.placement_arrange}, {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)}}},
+         {{"arrange", s.placement_arrange},
+          {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)},
+          {"spacing", s.placement_spacing}}},
+        {"sequential",
+         {{"enabled", s.sequential}, {"clearance_radius", s.clearance_radius}, {"clearance_height", s.clearance_height}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
@@ -2062,6 +2093,7 @@ std::string settings_json(const Settings& s) {
           {"pause", s.gcode_pause},
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
+          {"between_objects", s.gcode_between_objects},
           {"volumetric_e", s.volumetric_e},
           {"verbose_comments", s.verbose_comments},
           {"arcs", s.gcode_arcs},
