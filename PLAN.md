@@ -733,14 +733,15 @@ Con el PR #23 (2026-10-26):
 - [ ] Paso 2 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27):
   - [x] `speeds_accels.md` (hecho 2026-10-27, salvo lo que espera a otras fichas: V1 al relleno de huecos, el tope de
     las aceleraciones por los límites de la máquina a `gcode_firmware.md`, las de la balsa y la torre de purga a esas
-    funciones): `speed.bridges` (y el cordón redondo de los puentes y de los
+    funciones; V1 hecho con el relleno de huecos): `speed.bridges` (y el cordón redondo de los puentes y de los
     perímetros en voladizo, `gcode_motion.md` regla 1, con `extrusion.bridge_flow_ratio`, regla 14), `speed.gap_fill`,
     `speed.over_bridges`, `speed.first_layer_infill`, `speed.travel_z` y los topes del relleno por filamento
     (`extrusion.infill_max_speed` y `_crossing_speed`): reglas 1 a 5 y 14, pruebas V2 a V5, V10 y M2. También
     (2026-10-27) las velocidades dinámicas en voladizos (6 y 7, V6) y las aceleraciones por tipo (10 a 13, V8 y V9;
     sin el tope de los límites de la máquina, que espera a `gcode_firmware.md`, ni las de la balsa y la torre de
     purga), y el ecualizador del caudal (8 y 9, V7);
-  - [ ] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1);
+  - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
+    2026-10-27). Falta el relleno concéntrico de ancho fijo (regla 1, último punto);
   - [ ] planchado (`ironing.md`);
   - [ ] balsa (`skirt_brim_raft.md`);
   - [ ] cambio de color y pausas, y los extras del G-code (`gcode_extras.md`)
@@ -753,6 +754,15 @@ Con el PR #23 (2026-10-26):
   servidor (`model_library.md`, reglas 16 y 17). Para un bloque de mantenimiento: perfilar el laminado del Benchy y
   ver qué sobra en el G-code (comentarios `;WIDTH`/`;HEIGHT`, decimales de E, puntos casi en línea). Lo que está
   bien: dos laminados iguales dan el mismo archivo byte a byte
+- [ ] **Eje medio con varias islas** (encontrado 2026-10-27, para un bloque de mantenimiento): `layer_walls` sobre
+  tres islas juntas (una banda en «C» de 0,4 mm abierta a la derecha y dos rectángulos de 0,3 × 0,7 mm frente a la
+  abertura, uno arriba y otro abajo) da unos 140 cordones paralelos muy afuera de la región, a lo largo de la
+  bisectriz abierta entre los dos rectángulos, como si estuviera adentro. Cada isla sola, o dos de ellas, da bien.
+  Se reproduce con el Benchy local, `walls.generator` `fixed`, en la capa de Z 33,6 si el relleno de huecos se hace
+  de una vez (hoy va isla por isla, por esto); una figura sintética parecida no lo reproduce (20 000 variantes al
+  azar), así que depende de los números exactos. El dato no se sube: sale del Benchy, que es solo para medir. Las
+  paredes variables de siempre pasan por el mismo eje medio con regiones de varias islas: revisar la clasificación
+  de las aristas infinitas del diagrama (`src/geom/medial_axis.cpp`) y si conviene ir isla por isla en `layer_walls`
 
 ### Vista con Vulkan (decisión del dueño, 2026-10-26)
 

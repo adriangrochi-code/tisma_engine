@@ -9,8 +9,9 @@ namespace tisma {
 
 // The walls of one layer region and what they leave for the infill.
 struct LayerWalls {
-    std::vector<Toolpath> toolpaths; // variable-width walls (Kuipers et al. 2020)
+    std::vector<Toolpath> toolpaths; // variable-width walls (Kuipers et al. 2020), or of one width
     Polygons infill;                 // the part of the region the walls do not cover
+    std::vector<Toolpath> gaps;      // gap fill between walls of one width (walls_extra.md, rule 1)
 };
 
 // Runs the whole wall chain on a region: medial axis, central marking and its

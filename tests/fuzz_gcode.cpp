@@ -149,6 +149,10 @@ int main(int argc, char** argv) {
             s.scarf_inner = pick(3) == 0;
         }
         s.detect_overhangs = pick(4) != 0;
+        if (pick(4) == 0) { // walls of one width
+            s.wall_generator = WallGenerator::Fixed;
+            s.wall_gap_fill = pick(4) != 0;
+        }
         if (pick(4) == 0) { // arcs over the overhangs
             s.arcs = true;
             s.arcs_overlap = uni(0, 40);

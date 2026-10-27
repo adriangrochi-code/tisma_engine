@@ -134,6 +134,9 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(Settings().detect_overhangs);
     const Settings thin = parse_settings(R"({"walls": {"min_line_width": 0.3, "min_detail": "20%"}})");
     CHECK(thin.wall_min_line_width == Speed{0.3, false});
+    CHECK(parse_settings(R"({"walls": {"generator": "fixed"}})").wall_generator == WallGenerator::Fixed);
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"generator": "arachne"}})"), ContainsSubstring("walls.generator: must be one of"));
+    CHECK_FALSE(parse_settings(R"({"walls": {"gap_fill": false}})").wall_gap_fill);
     CHECK(thin.wall_min_detail == Speed{20.0, true});
     CHECK(Settings().wall_min_line_width == Speed{85.0, true});
     CHECK(parse_settings(R"({"support": {"width": "150%"}})").support_width == Speed{150.0, true});
@@ -296,7 +299,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "layers": {"height": 0.15, "first_height": 0.25},
         "slicing": {"fill_mode": "fill_holes", "gap_closing_radius": 0.07, "xy_offset": -0.03, "first_layer_shrink": 0.1,
                     "simplify_tolerance": 0.02},
-        "walls": {"count": 4, "width": 0.42, "seam": "rear"},
+        "walls": {"count": 4, "width": 0.42, "seam": "rear", "generator": "fixed", "gap_fill": false},
         "surfaces": {"top_layers": 5, "bottom_layers": 4, "top_pattern": "rectilinear"},
         "infill": {"density": 15.5, "angle": 30, "pattern": "gyroid", "wall_overlap": 12},
         "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "marlin",

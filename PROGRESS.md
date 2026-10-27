@@ -5158,3 +5158,25 @@ Fuzzer: 800 corridas con semillas nuevas, 0 fallas (después del arreglo).
 aceleraciones por los límites de la máquina; las aceleraciones de la balsa y la torre de purga).
 
 **Sigue:** el relleno de huecos (`walls_extra.md`, W6 y V1).
+
+## 2026-10-27 — Punto 2: paredes de ancho fijo y relleno de huecos
+
+**Hecho** (ficha `walls_extra.md`, reglas 1 y 2; `speeds_accels.md`, V1): `walls.generator` (`variable`, como hasta
+ahora, o `fixed`) y `walls.gap_fill` (encendido). Con `fixed`, hasta `walls.count` lazos de `walls.width` a esa
+distancia, cada uno donde entra un cordón entero, todos en sentido antihorario; la región del relleno es la región
+achicada `walls.count` anchos. Lo que queda (fuera del primer lazo, entre un lazo y el siguiente, adentro del último
+cuando no hay lugar para relleno), de al menos medio cordón, se llena con cordones de ancho variable (la cadena de
+Kuipers et al. 2020), isla por isla, `;TYPE:Gap fill`, a `speed.gap_fill`; sus extremos libres siguen medio ancho
+hasta el borde del hueco, porque la sección del cordón es un rectángulo. En el panel, Resistencia › Paredes
+(Avanzado). Falta el relleno concéntrico de ancho fijo.
+
+**Encontrado:** el eje medio de ciertas regiones de varias islas da cordones muy afuera de la región (anotado en
+`PLAN.md`, «Eje medio con varias islas», para un bloque de mantenimiento). El relleno de huecos va isla por isla, y
+así no aparece; el verificador del G-code lo había rechazado en el Benchy con paredes fijas.
+
+**Medido:** W6: perímetro externo de 41,2 mm y relleno de huecos de 19,1 mm (la ficha: 41,14 y 19,14); V1 a 20 y a
+10 mm/s; sin relleno de huecos, solo el perímetro. Benchy y cráneo con paredes fijas: G-code verificado, más rápido
+que con paredes variables (medido con la CI de Linux corriendo al lado: Benchy 0,94 → 0,87 s, cráneo 4,5 → 3,6 s) y
+más corto (Benchy 133 000 líneas contra 337 000). Fuzzer con paredes fijas: 900 corridas, 0 fallas.
+
+**Sigue:** planchado (`ironing.md`).

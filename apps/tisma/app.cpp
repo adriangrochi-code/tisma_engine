@@ -679,7 +679,8 @@ const char* row_key(T label) {
         {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
-        {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"}, {T::ScaleXRow, "compensation.scale_x"},
+        {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
+        {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"}, {T::ScaleXRow, "compensation.scale_x"},
         {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
         {T::HoleCorrection, "compensation.hole_offset"}, {T::XyOffset, "slicing.xy_offset"},
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
@@ -2853,6 +2854,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (shown("walls.min_detail"))
             changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
                            s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
+        if (shown("walls.generator"))
+            changed |= row(T::WallGeneratorRow, s.wall_generator,
+                           {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
+        flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);

@@ -15,6 +15,7 @@
 #include "support/support.hpp"
 #include "support/tree.hpp"
 #include "surfaces/bridges.hpp"
+#include "perimeters/fixed.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
 
@@ -189,7 +190,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
         if (settings.wall_count > 0) {
-            out.walls[l] = layer_walls(out.regions[l], beading);
+            out.walls[l] = settings.wall_generator == WallGenerator::Fixed
+                               ? fixed_walls(out.regions[l], settings.wall_width, settings.wall_count,
+                                             settings.wall_gap_fill)
+                               : layer_walls(out.regions[l], beading);
             // What the walls leave, simplified as the contours are: each wall's
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).

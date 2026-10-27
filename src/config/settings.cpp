@@ -304,8 +304,13 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
-                "min_detail"},
+                "min_detail", "generator", "gap_fill"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "generator") {
+            s.wall_generator =
+                choice<WallGenerator>(g, n, k, {{"variable", WallGenerator::Variable}, {"fixed", WallGenerator::Fixed}});
+            return;
+        }
         if (n == "seam") {
             s.seam = choice<SeamMode>(g, n, k,
                                       {{"aligned", SeamMode::Aligned}, {"nearest", SeamMode::Nearest},
@@ -318,12 +323,14 @@ Settings parse_checked(std::string_view text) {
                                          {"everywhere", ScarfMode::Everywhere}});
             return;
         }
-        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs") {
+        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs" ||
+            n == "gap_fill") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "scarf_only_smooth"   ? s.scarf_only_smooth
              : n == "scarf_entire_loop" ? s.scarf_entire_loop
              : n == "scarf_inner"       ? s.scarf_inner
+             : n == "gap_fill"          ? s.wall_gap_fill
                                         : s.detect_overhangs) = g.at(n).get<bool>();
             return;
         }
@@ -1125,6 +1132,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.scarf_max_segment", num(s.scarf_max_segment)},
         {"walls.scarf_inner", flag(s.scarf_inner)},
         {"walls.detect_overhangs", flag(s.detect_overhangs)},
+        {"walls.generator", s.wall_generator == WallGenerator::Fixed ? "fixed" : "variable"},
+        {"walls.gap_fill", flag(s.wall_gap_fill)},
         {"walls.min_line_width", s.wall_min_line_width.percent ? num(s.wall_min_line_width.value) + "%"
                                                                : num(s.wall_min_line_width.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
@@ -1340,6 +1349,8 @@ std::string settings_json(const Settings& s) {
           {"scarf_max_segment", s.scarf_max_segment},
           {"scarf_inner", s.scarf_inner},
           {"detect_overhangs", s.detect_overhangs},
+          {"generator", s.wall_generator == WallGenerator::Fixed ? "fixed" : "variable"},
+          {"gap_fill", s.wall_gap_fill},
           {"min_line_width", s.wall_min_line_width.percent
                                  ? ordered_json(json(s.wall_min_line_width.value).dump() + "%")
                                  : ordered_json(s.wall_min_line_width.value)},

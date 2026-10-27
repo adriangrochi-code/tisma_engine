@@ -852,6 +852,10 @@
     X(SumBySupport, "Según el apoyo", "By support") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
+    X(WallGeneratorRow, "Ancho de los cordones", "Bead width") \
+    X(WallVariable, "Variable", "Variable") \
+    X(WallFixed, "Fijo", "Fixed") \
+    X(WallGapFill, "Relleno de huecos", "Gap fill") \
     X(SubAccelTravel, "Aceleración de los viajes", "Travel acceleration") \
     X(AccelDefault, "Por defecto", "Default") \
     X(AccelWalls, "Paredes internas", "Inner walls") \

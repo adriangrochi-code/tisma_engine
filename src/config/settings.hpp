@@ -26,6 +26,11 @@ enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic };
 enum class FuzzyMode { None, External, All };
 
+// How the walls are made (walls_extra.md, rule 1): beads of variable width
+// that fill the region (Kuipers et al. 2020), or loops of one width with gap
+// fill between them.
+enum class WallGenerator { Variable, Fixed };
+
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
 // "changes"): each set value takes effect from the first layer whose top is
 // above z and stays until another change sets it again.
@@ -88,6 +93,8 @@ struct Settings {
     // overhang perimeters, at the bridges' speed and fan
     // (docs/spec/features/walls_extra.md, rule 8).
     bool detect_overhangs = true;
+    WallGenerator wall_generator = WallGenerator::Variable;
+    bool wall_gap_fill = true; // with fixed walls, fill what is left between them
     // Thin walls (docs/spec/features/perimeters.md, rule 3), mm or percent of
     // machine.nozzle_diameter: a wall thinner than min_line_width is printed
     // with a bead that wide, centred; thinner than min_detail, not at all.

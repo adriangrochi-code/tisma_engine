@@ -187,6 +187,7 @@ add_library(tisma_core
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
   src/perimeters/walls.cpp
+  src/perimeters/fixed.cpp
   src/perimeters/coverage.cpp
   src/surfaces/surfaces.cpp
   src/surfaces/bridges.cpp

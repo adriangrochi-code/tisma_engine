@@ -53,6 +53,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   cordón se apoya en la capa de abajo, más lenta va la pared, entre `speed.overhang_0` y `_3`.
 - **Ecualizador del caudal** (`speed.flow_slope_up` y `speed.flow_slope_down`, en Velocidad › Topes): el caudal
   cambia de a poco entre una extrusión y la siguiente, en rampas de hasta 16 pedazos.
+- **Paredes de ancho fijo con relleno de huecos** (ficha `walls_extra.md`; `walls.generator` `fixed` y
+  `walls.gap_fill`, en Resistencia › Paredes): lazos todos del mismo ancho, y lo que queda entre ellos se llena con
+  cordones de relleno de huecos a `speed.gap_fill`.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.

@@ -1667,6 +1667,14 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                     i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
                     add(i, t);
                 }
+        // Gap fill between walls of one width (walls_extra.md, rule 1).
+        if (l < model.walls.size())
+            for (const Toolpath& t : model.walls[l].gaps)
+                if (!t.points.empty()) {
+                    Island& i = island(t);
+                    i.fills[3].push_back(t);
+                    add(i, t);
+                }
         if (l < model.fills.size()) {
             const LayerFill& f = model.fills[l];
             const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,

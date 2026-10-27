@@ -592,3 +592,47 @@ TEST_CASE("speeds: the check takes the new speeds as the fastest a G-code may as
     REQUIRE(out.str().find(" F9000") != std::string::npos);
     CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
 }
+
+TEST_CASE("walls: one width with gap fill in the middle, at speed.gap_fill (walls_extra.md, rules 1 and 2, W6; "
+          "speeds_accels.md, V1)",
+          "[gcode][speeds][walls]") {
+    // W6: a straight wall 1.5 x 20 x 5 mm, 2 walls of 0.45, no infill and no
+    // solid layers: layer 10 has an outer wall of 41.14 mm and 19.14 mm of gap fill.
+    IndexedMesh m;
+    add_box(m, 0, 0, 1.5f, 20, 5);
+    Settings s = test_printer();
+    s.wall_generator = WallGenerator::Fixed;
+    s.wall_count = 2;
+    s.wall_width = 0.45;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    s.gap_fill_speed = 20.0;
+    const auto layer10 = [&](const Settings& settings) {
+        std::map<std::string, double> length;
+        std::set<double> gap_feeds;
+        for (const Move& mv : moves_of(gcode_of(m, settings)))
+            if (extrudes(mv) && mv.z == "2.200") {
+                length[mv.type] += mv.length();
+                if (mv.type == "Gap fill")
+                    gap_feeds.insert(mv.feed / 60.0);
+            }
+        return std::pair{length, gap_feeds};
+    };
+    auto [length, feeds] = layer10(s);
+    CHECK_THAT(length["External perimeter"], WithinAbs(41.14, 0.15));
+    CHECK(length.count("Perimeter") == 0); // no room for the inner one
+    CHECK_THAT(length["Gap fill"], WithinAbs(19.14, 0.3));
+    CHECK(feeds == std::set<double>{20.0});
+    // V1: at 10 mm/s.
+    s.gap_fill_speed = 10.0;
+    CHECK(layer10(s).second == std::set<double>{10.0});
+    // W6: without gap fill, only the perimeter.
+    s.wall_gap_fill = false;
+    std::tie(length, feeds) = layer10(s);
+    CHECK(length.count("Gap fill") == 0);
+    CHECK_THAT(length["External perimeter"], WithinAbs(41.14, 0.15));
+    // The variable walls fill it with beads of their own: no gap fill.
+    s.wall_generator = WallGenerator::Variable;
+    s.wall_gap_fill = true;
+    CHECK(layer10(s).first.count("Gap fill") == 0);
+}
