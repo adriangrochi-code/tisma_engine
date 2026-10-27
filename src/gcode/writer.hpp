@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/settings.hpp"
+#include "gcode/template.hpp"
 #include "report/warnings.hpp"
 #include "slice/pipeline.hpp"
 
@@ -43,6 +44,16 @@ std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel);
 // RepRapFirmware's M201, M203 and M566 (mm/min) and M204 P T. Nothing for
 // the other flavors. Values not known (0) are left out.
 std::string machine_limits_gcode(const Settings& settings);
+
+// What the G-code templates of a print see (gcode_templates.md, rule 7):
+// every setting by its name (layers.height...), a few by their usual names
+// (layer_height, first_layer_height, nozzle_diameter, filament_diameter),
+// machine.variables as lists, and the print's own: total_layer_count,
+// num_extruders, initial_extruder, initial_tool, is_extruder_used,
+// input_filename_base, first_layer_print_min, _max and _size, year,
+// timestamp, and layer_num, layer_z and max_layer_z (the first layer's until
+// a layer change).
+TemplateContext template_context(const Settings& settings, const SlicedModel& model);
 
 // Whether G-code sets a nozzle, bed or chamber temperature (M104, M109, M140,
 // M190, M141, M191, M116, or RepRapFirmware's G10 S): the start G-code that

@@ -5403,3 +5403,39 @@ de falda en 5. B4 (tubo de 10 y 5 mm de radio, borde de 3 mm): 8 vueltas afuera 
 **Sigue:** el lenguaje de plantillas (`gcode_templates.md`, reglas 1 a 10, 12 y 14 a 17); después, de `gcode_extras.md`,
 el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3.
 
+## 2026-10-27 — Punto 2: lenguaje de plantillas de G-code
+
+**Hecho** (ficha `gcode_templates.md`):
+- intérprete propio (`src/gcode/template.*`, reglas 1 a 8): `[nombre]` y `{expresión}` con números, textos, `+ - * /
+  %` (entero entre entero da entero), comparaciones, `and`/`or`/`not`, el ternario, `=~ /regex/`, listas e índices;
+  `min`, `max`, `int`, `round`, `digits`, `zdigits`, `is_nil`, `one_of`, `size`, `empty`, `interpolate_table`;
+  `{if}/{elsif}/{else}/{endif}`; `local` y `global`. Un error (variable o función desconocida, mal usada, de
+  sintaxis) hace fallar la exportación con la sección, la línea y una marca en la columna;
+- variables (regla 7): cada ajuste por su nombre (`{layers.height}`), algunos con su nombre de siempre
+  (`layer_height`…), las de `machine.variables` como listas, y `total_layer_count`, `input_filename_base`,
+  `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used`, `first_layer_print_min/max/size`, `year`,
+  `timestamp`, `layer_num`, `layer_z` y `max_layer_z`;
+- todas las plantillas pasan por el intérprete: inicio y fin de la impresora y del filamento (nuevos
+  `extrusion.start_gcode` y `end_gcode`, reglas 9 y 12), antes y después del cambio de capa, cambio de color, pausa y
+  el G-code de `changes`;
+- temperaturas automáticas (regla 10, `gcode.auto_temperatures`): sin comandos de temperatura en el inicio, `M190`
+  de la cama y `M104` antes, `M109` después;
+- `output.filename_format` (regla 15): con `slice -o carpeta`, el archivo se escribe con el nombre provisional y se
+  renombra cuando se conocen `print_time` y `total_weight`;
+- `output.post_process` (reglas 16 y 17): los scripts se corren con la ruta del G-code y las variables
+  `SLIC3R_…`, después de preguntar (o con `--yes`); con `N` no queda G-code.
+
+**Cambiado:** una variable desconocida ya no queda escrita: es un error. La prueba del catálogo que laminaba con un
+perfil de impresora solo ahora usa también uno de filamento, como en la interfaz.
+
+**Medido:** T1 a T5 (cuentas, textos, condiciones, funciones, variables propias) y T7 (errores) como pruebas del
+intérprete; T6, T8, T9, T10 y T11 sobre el cubo de 20 mm; T12 desde la línea de comandos con un script (`sh` en Linux,
+`cmd` en Windows) que agrega una línea con `SLIC3R_PP_HOST`, `SLIC3R_LAYERS_HEIGHT` y `SLIC3R_LAYER_HEIGHT`. 501
+pruebas pasan; fuzzer con plantillas con condiciones, `digits` y `global`: 600 corridas (semilla 1) y 1500 (semilla
+271032), 0 fallas.
+
+**No probado:** la pregunta del posproceso respondida a mano (las pruebas usan `--yes`).
+
+**Sigue:** de `gcode_extras.md`, el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3
+(retracción y viajes completos, paredes extra, impresión secuencial).
+

@@ -138,8 +138,15 @@ const std::vector<SectionLayout>& print_layout() {
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
             {"gcode.arcs", A}}},
+          {"output_file", T::SubOutputFile, {{"output.filename_format", A}, {"output.post_process", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
-           {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.before_layer", A}, {"gcode.after_layer", A}}},
+           {{"gcode.auto_temperatures", A},
+            {"extrusion.start_gcode", A},
+            {"extrusion.end_gcode", A},
+            {"gcode.color_change", A},
+            {"gcode.pause", A},
+            {"gcode.before_layer", A},
+            {"gcode.after_layer", A}}},
           {"slicing", T::SubSlicing,
            {{"slicing.fill_mode", A}, {"slicing.gap_closing_radius", A}, {"slicing.simplify_tolerance", A}}}}},
     };
@@ -558,6 +565,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     }
     if (id == "variables")
         return format(T::SumVariables, int(s.variables.size()));
+    if (id == "output_file")
+        return s.filename_format;
     if (id == "jerk")
         return s.junction_deviation > 0.0 ? format(T::SumJunction, number(s.junction_deviation, 3).c_str())
                : s.jerk_x > 0.0          ? format(T::SumJerk, number(s.jerk_x, 1).c_str())

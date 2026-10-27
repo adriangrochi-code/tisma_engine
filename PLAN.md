@@ -745,9 +745,10 @@ Con el PR #23 (2026-10-26):
   - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27), y el resto de la ficha (hecho
     2026-10-27): largo mínimo de falda (B1), escudo contra corrientes (B3), tipos de borde y su separación (B4); B2 ya;
   - [x] cambio de color y pausas (`gcode_templates.md`, reglas 11 y 13; hecho 2026-10-27): `gcode.color_change`,
-    `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`. Falta ponerlos
-    desde la vista previa (regla 13, con la interfaz P1) y el resto del lenguaje de plantillas (reglas 1 a 10, 12, 14
-    a 17);
+    `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`; y el lenguaje de
+    plantillas (reglas 1 a 10, 12 y 15 a 17; hecho 2026-10-27). Faltan ponerlos desde la vista previa (regla 13, con
+    la interfaz P1), los parámetros propios de cada perfil (regla 14, su prefijo sale de `presets.md`), el nombre del
+    modelo en la interfaz (`input_filename_base`) y los scripts de posproceso desde la interfaz;
   - [ ] los extras del G-code (`gcode_extras.md`): hechos (2026-10-27) el peso y el costo al final (regla 1, X1), la
     cámara con espera (regla 3, X2), el desfase de Z (regla 5, X4), la E volumétrica (regla 11, X11), la contracción
     (regla 4, X3), los comentarios detallados (regla 12, X12), los dialectos antiguos (regla 6, X5), los arcos

@@ -304,7 +304,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "acceleration" || group == "ironing")
+            group == "acceleration" || group == "ironing" || group == "output")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -1116,16 +1116,36 @@ Settings parse_checked(std::string_view text) {
                        fail(k, n == "nozzle_force" ? "must be from 0 to 1000 N" : "must be from 0 to 1000 N/mm2");
                    (n == "nozzle_force" ? s.review_nozzle_force : s.review_bed_adhesion) = v;
                });
-    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
-                               "verbose_comments", "arcs", "progress"},
+    read_group(root, "output", {"filename_format", "post_process"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress") {
+        const json& v = g.at(n);
+        if (n == "filename_format") {
+            if (!v.is_string() || v.get<std::string>().empty())
+                fail(k, "must be a non-empty string");
+            s.filename_format = v.get<std::string>();
+            return;
+        }
+        if (!v.is_array())
+            fail(k, "must be a list of paths");
+        std::vector<std::string> scripts;
+        for (const json& item : v) {
+            if (!item.is_string() || item.get<std::string>().empty())
+                fail(k, "must be a list of paths");
+            scripts.push_back(item.get<std::string>());
+        }
+        s.post_process = std::move(scripts);
+    });
+    read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "volumetric_e",
+                               "verbose_comments", "arcs", "progress", "auto_temperatures"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "volumetric_e" ? s.volumetric_e
-             : n == "arcs"       ? s.gcode_arcs
-             : n == "progress"   ? s.gcode_progress
-                                 : s.verbose_comments) = g.at(n).get<bool>();
+            (n == "volumetric_e"        ? s.volumetric_e
+             : n == "arcs"              ? s.gcode_arcs
+             : n == "progress"          ? s.gcode_progress
+             : n == "auto_temperatures" ? s.auto_temperatures
+                                        : s.verbose_comments) = g.at(n).get<bool>();
             return;
         }
         if (n != "resolution") {
@@ -1158,8 +1178,14 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "extrusion",
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
-                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z"},
+                "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "start_gcode" || n == "end_gcode") {
+            if (!g.at(n).is_string())
+                fail(k, "must be a string");
+            (n == "start_gcode" ? s.filament_start_gcode : s.filament_end_gcode) = g.at(n).get<std::string>();
+            return;
+        }
         if (n == "abrasive" || n == "needs_enclosure") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
@@ -1450,6 +1476,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.silent_mode", flag(s.silent_mode)},
         {"machine.silent", json(s.silent_limits).dump()},
         {"gcode.progress", flag(s.gcode_progress)},
+        {"output.filename_format", text(s.filename_format)},
+        {"output.post_process", json(s.post_process).dump()},
+        {"gcode.auto_temperatures", flag(s.auto_temperatures)},
+        {"extrusion.start_gcode", text(s.filament_start_gcode)},
+        {"extrusion.end_gcode", text(s.filament_end_gcode)},
         {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
@@ -1828,9 +1859,12 @@ std::string settings_json(const Settings& s) {
           {"spool_weight", s.spool_weight},
           {"shrinkage_xy", s.shrinkage_xy},
           {"shrinkage_z", s.shrinkage_z},
+          {"start_gcode", s.filament_start_gcode},
+          {"end_gcode", s.filament_end_gcode},
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure}}},
+        {"output", {{"filename_format", s.filename_format}, {"post_process", s.post_process}}},
         {"gcode",
          {{"resolution", s.gcode_resolution},
           {"color_change", s.gcode_color_change},
@@ -1840,7 +1874,8 @@ std::string settings_json(const Settings& s) {
           {"volumetric_e", s.volumetric_e},
           {"verbose_comments", s.verbose_comments},
           {"arcs", s.gcode_arcs},
-          {"progress", s.gcode_progress}}},
+          {"progress", s.gcode_progress},
+          {"auto_temperatures", s.auto_temperatures}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

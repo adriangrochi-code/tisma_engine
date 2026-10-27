@@ -161,8 +161,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `filament_diameter` | número | 1.75 | > 0 | Diámetro del filamento, en mm: la E de cada tramo es su volumen sobre esta sección |
 | `relative_extrusion` | booleano | false | | `true`: E relativa (`M83`), cada movimiento lleva su E (en Marlin, con `G92 E0` después del salto en Z de cada capa, para que el firmware no pierda precisión; ficha `gcode_firmware.md`, regla 3); `false`: absoluta (`M82`), con `G92 E0` en cada capa |
 | `flavor` | texto | `"reprap"` | `marlin`, `marlin_legacy`, `klipper`, `reprap`, `reprapfirmware`, `repetier`, `smoothie`, `teacup`, `makerware`, `sailfish`, `mach3`, `machinekit`, `no_extrusion` | Dialecto de G-code. `marlin` es Marlin 2 y `marlin_legacy` Marlin 1 (su `M204 S` es la aceleración al imprimir); `reprapfirmware` es el de Duet (temperatura con `G10 S… P0`, espera con `M116`), y `reprap` el RepRap genérico. Con `variables.temperature` y un G-code de inicio sin comandos de temperatura, el motor fija la de la boquilla antes del inicio (`M104 S…`) y la espera después (`M109 S…`), cada dialecto con los suyos (ficha `gcode_firmware.md`, regla 1). Los antiguos (ficha `gcode_extras.md`, regla 6; `src/gcode/dialect.hpp`): `repetier` y `smoothie` escriben como `reprap`; `teacup` apaga el ventilador con `M106 S0`; `makerware` y `sailfish` ponen la E siempre absoluta, sin `M82` ni `G92`, el ventilador con `M126` y `M127`, `M104 S… T0` y `M73 P…` (avance) en cada capa, y `makerware` además `M101` antes de extruir y `M103` después; `mach3` y `machinekit` llaman `A` al extrusor y escriben temperaturas y ventilador con `P` (`M104 P215`, `M106 P252.45`), `machinekit` vuelve `A` a 0 en cada capa y termina con `M2`; `no_extrusion`, los mismos movimientos sin E. Con los antiguos, salvo `repetier` y `smoothie`, no se escriben aceleraciones (`M204`) ni avance de presión. La vista previa del panel lee la `A` de `mach3` y `machinekit`; con `no_extrusion` solo ve viajes |
-| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin |
-| `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
+| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin, en el lenguaje de plantillas (ficha `gcode_templates.md`; ver «Plantillas de G-code» abajo). El orden al empezar: las temperaturas automáticas (`gcode.auto_temperatures`), este inicio, la espera de la boquilla y el inicio del filamento (`extrusion.start_gcode`); al terminar, el fin del filamento y después este |
+| `variables` | objeto | `{}` | nombre: valor o lista | Variables de las plantillas de G-code (ver «Plantillas de G-code»), una lista por extrusor: `[nombre]`, `{nombre}`, `{nombre[0]}`. Las da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON. Un nombre desconocido es un error: no se escribe el G-code. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
 | `max_feed_x`, `max_feed_y` | número | — (del perfil de la impresora) | > 0, o `null` | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo. Sin valor (`null`): no se sabe y no se aplica |
 | `max_feed_z` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para Z |
 | `max_feed_e` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para el extrusor |
@@ -408,6 +408,7 @@ de la pieza de prueba.
 | `cost` | número | 0 | ≥ 0 | Costo del filamento por kg, para `; filament cost` |
 | `spool_weight` | número | 0 | ≥ 0 | Peso del carrete vacío, en g (para que la interfaz compare con el carrete pesado) |
 | `shrinkage_xy`, `shrinkage_z` | número | 0 | 0 a 20 | Cuánto se contrae el filamento al enfriarse, en %, a lo ancho de las capas y en Z: la pieza se lamina 100 / (100 − p) veces más grande, alrededor del centro de su base como `compensation`, para que al contraerse quede de la medida pedida (ficha `gcode_extras.md`, regla 4; con 1 %, un cubo de 99 mm se lamina de 100). Se suma a la escala de `compensation` |
+| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin del filamento (ficha `gcode_templates.md`, reglas 9 y 12): el inicio va después del de la impresora y de la espera de la boquilla, el fin antes del de la impresora. Mismo lenguaje de plantillas |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
 
@@ -422,6 +423,7 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 |---|---|---|---|---|
 | `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
 | `progress` | booleano | `false` | | `M73 P<porcentaje> R<minutos restantes>` al empezar y cada vez que cambia el porcentaje entero o los minutos, por el tiempo estimado (ficha `gcode_firmware.md`, regla 5), hasta `M73 P100 R0` al final; con `machine.silent_mode`, también `M73 Q S` con el tiempo del modo silencioso (salvo con `reprap` y los dialectos antiguos). Las marcas van al empezar cada capa y cada trayectoria |
+| `auto_temperatures` | booleano | `true` | | Si el G-code de inicio de la impresora (ya resuelto) no tiene comandos de temperatura (`M104`, `M109`, `M140`, `M190`, `M141`, `M191`, `M116`, `G10 S`), el motor escribe antes la de la cama con espera (`M190 S…`, con `variables.bed_temperature`) y la de la boquilla (`M104 S…`), y después del inicio espera la boquilla (`M109 S…`), cada dialecto con los suyos (ficha `gcode_templates.md`, regla 10). `false`: nunca |
 | `arcs` | booleano | `false` | | Los tramos de una trayectoria plana de un solo ancho que siguen un círculo se escriben como un arco: `G2` (horario) o `G3` (antihorario), con el centro `I J` relativo a donde empieza y la E de su largo (ficha `gcode_extras.md`, regla 10). Un arco junta 3 movimientos o más, cubre a lo sumo media vuelta, pasa a menos de `resolution` de cada punto y a menos del doble del medio de cada movimiento (`src/gcode/arcs.hpp`). Con `resolution` 0, a menos de 0,001 mm. La impresora tiene que aceptar arcos (en Marlin, `ARC_SUPPORT`; en Klipper, la sección `[gcode_arcs]`). En el cilindro de 10 mm de radio de X10 el G-code baja de 179 a 46 kB; en el Benchy, 2 885 arcos y de 7,39 a 6,95 MB |
 | `verbose_comments` | booleano | `false` | | Cada línea que escribe el motor lleva al final `; ` y qué hace (ficha `gcode_extras.md`, regla 12): `perimeter`, `infill`, `infill (bridge)`, `skirt`, `support material`, `gap fill`, `ironing` en las extrusiones; `retract`, `unretract`, `lift`, `lower`, `move to layer height` (después del G-code del usuario), `reset extrusion distance`, `simple layer change`, `travel to first layer point`, `move to first perimeter point` (o `infill`, `skirt`…), `travel`, `enable fan`, `disable fan`, `set acceleration`, `use absolute coordinates`, `use absolute distances for extrusion` (o `relative`). El G-code del usuario no cambia |
 | `volumetric_e` | booleano | `false` | | Toda E (extrusión y retracción) en mm³ de plástico en vez de mm de filamento: la E de siempre por la sección del filamento (ficha `gcode_extras.md`, regla 11). El motor no escribe `M200`: va en el G-code de inicio |
@@ -429,6 +431,40 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |
 | `before_layer` | texto | `""` | | G-code justo antes del movimiento en Z de cada cambio de capa, desde la segunda capa (regla 11, prueba T8), con las variables y además `layer_num` (desde 0), `layer_z` y `max_layer_z` (la Z escrita, sin ceros de más). Va como G-code propio (`;TYPE:Custom`); si tiene algo más que comentarios, el viaje siguiente vuelve a escribir todos los ejes |
 | `after_layer` | texto | `""` | | Lo mismo, justo después del movimiento en Z |
+
+
+### `output`
+
+De la ficha `docs/spec/features/gcode_templates.md` (reglas 15 a 17). Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `filename_format` | texto | `"[input_filename_base].gcode"` | no vacío | Nombre del archivo cuando `slice -o` es una carpeta, en el lenguaje de plantillas, con las variables de la impresión, `fill_density` (`"15%"`) y `default_output_extension` (`".gcode"`, con el punto). `print_time` (`11m`, `1h7m`) y `total_weight` (g, con `extrusion.density`) se conocen al terminar: el archivo se escribe primero con ellas sin reemplazar (`{print_time}`) y después se renombra (prueba T11) |
+| `post_process` | lista de rutas | `[]` | | Scripts que se corren sobre el G-code terminado (reglas 16 y 17), cada uno con la ruta del G-code como único argumento; pueden cambiar el archivo. En su entorno: `SLIC3R_PP_OUTPUT_NAME` (la ruta), `SLIC3R_PP_HOST` (`File`) y cada variable de las plantillas como `SLIC3R_<NOMBRE>` en mayúsculas, con `_` en vez de los puntos (`SLIC3R_LAYERS_HEIGHT`, `SLIC3R_LAYER_HEIGHT`, `SLIC3R_TEMPERATURE`). Antes de correrlos, la línea de comandos pregunta «Continue (Y/N)?» (o `--yes`); con `N` no queda G-code. Un script que no termina en 0 hace fallar el comando. La interfaz todavía no los corre |
+
+### Plantillas de G-code
+
+De la ficha `docs/spec/features/gcode_templates.md` (reglas 1 a 8; `src/gcode/template.hpp`). Todos los textos de
+G-code (`machine.start_gcode` y `end_gcode`, `extrusion.start_gcode` y `end_gcode`, `gcode.before_layer`, `after_layer`,
+`color_change`, `pause` y el `gcode` de `changes`) se resuelven al escribir:
+
+- `[nombre]` se cambia por el valor de la variable; `{expresión}` por el de la expresión: números, `"textos"`, `true`,
+  `false`; `+ - * / %` (un entero dividido por un entero da un entero; `+` une textos); comparaciones, `and`, `or`,
+  `not`; `(condición ? sí : no)`; `texto =~ /expresión regular/`; `nombre[i]` de una lista (un valor solo es una
+  lista de uno, y una lista de uno vale como su valor en cuentas y comparaciones); `(1, 2, 3)` hace una lista;
+- funciones: `min`, `max`, `int` (sin redondear), `round` (las mitades hacia arriba), `digits(valor, ancho[,
+  decimales])` y `zdigits` (rellena con espacios o ceros), `is_nil`, `one_of(valor, opciones…)`, `size` y `empty` (de
+  listas), `interpolate_table(x, (x0, y0), (x1, y1)…)`;
+- `{if …}…{elsif …}…{else}…{endif}`; `{local nombre = …}` (en esa plantilla) y `{global nombre = …}` (también en las
+  que siguen);
+- variables: cada ajuste por su nombre (`{layers.height}`), algunos por su nombre de siempre (`layer_height`,
+  `first_layer_height`, `nozzle_diameter`, `filament_diameter`), las de `machine.variables` y las de la impresión:
+  `total_layer_count`, `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used`,
+  `input_filename_base` (el nombre del modelo en la línea de comandos), `first_layer_print_min`, `_max` y `_size`,
+  `year`, `timestamp`, y `layer_num`, `layer_z` y `max_layer_z` (la primera capa hasta el primer cambio; en el fin, la
+  última);
+- un error (variable o función desconocida, mal usada, de sintaxis) hace fallar la exportación con la sección, la
+  línea y una marca en la columna.
 
 ### `changes` (lista)
 

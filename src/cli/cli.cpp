@@ -10,6 +10,8 @@
 #include "fea/analysis.hpp"
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
+#include "gcode/output.hpp"
+#include "gcode/template.hpp"
 #include "gcode/writer.hpp"
 #include "report/stability.hpp"
 #include "report/warnings.hpp"
@@ -26,6 +28,7 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <iostream>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -38,8 +41,9 @@ namespace {
 
 constexpr std::string_view kUsage =
     "usage:\n"
-    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | folder> [--warnings <out.json>]\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
+    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model>\n"
@@ -82,6 +86,7 @@ struct SliceArgs {
     std::string mesh;          // analyze only; empty: not written
     bool progress = false;     // analyze only: progress lines on the output
     bool estimate = false;     // analyze only: the voxels, memory and time, without solving
+    bool yes = false;          // slice only: run the settings' post-processing scripts without asking
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -120,6 +125,8 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             out.progress = true;
         } else if (a == "--estimate" && analyze) {
             out.estimate = true;
+        } else if (a == "--yes" && !analyze) {
+            out.yes = true;
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -268,6 +275,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    // The templates' input_filename_base (gcode_templates.md, rule 7).
+    settings.input_name = std::filesystem::path(parsed->model).stem().string();
     // The speeds come from the printer's profile; those the file does not give
     // are a stock Ender-3's (docs/CONFIG.md, "Velocidades de respaldo").
     std::string fallback;
@@ -376,18 +385,61 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     warnings.insert(warnings.end(), model.begin(), model.end());
     const std::vector<Warning> stability = stability_warnings(sliced, settings);
     warnings.insert(warnings.end(), stability.begin(), stability.end());
-    const GcodeExport exported = export_gcode(parsed->output, sliced, settings, &warnings);
+    // Into a folder: the name from output.filename_format, first without the
+    // print's time and weight, then with them (gcode_templates.md, rule 15).
+    std::filesystem::path target = parsed->output;
+    const bool folder = std::filesystem::is_directory(target);
+    try {
+        if (folder)
+            target /= output_filename(settings, sliced, std::nullopt);
+    } catch (const TemplateError& e) {
+        err << "error: " << e.what() << "\n";
+        return kExitInput;
+    }
+    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)
             err << "  line " << p.line << ": " << p.message << "\n";
         return exported.check.problem_count > 0 ? kExitGcode : kExitInput;
     }
+    if (folder) {
+        const std::filesystem::path final_name = target.parent_path() / output_filename(settings, sliced, read_gcode_totals(target));
+        std::error_code ec;
+        if (final_name != target)
+            std::filesystem::rename(target, final_name, ec);
+        if (ec) {
+            err << "error: cannot rename " << target.string() << " to " << final_name.string() << "\n";
+            return kExitInput;
+        }
+        target = final_name;
+    }
+    // Post-processing scripts, once confirmed: they run anything (rules 16 and 17).
+    if (!settings.post_process.empty()) {
+        out << "A post-processing script has been detected in the settings:";
+        for (const std::string& script : settings.post_process)
+            out << " " << script;
+        out << "\nContinue (Y/N)? ";
+        std::string answer = parsed->yes ? "Y" : "";
+        if (!parsed->yes)
+            std::getline(std::cin, answer);
+        out << answer << "\n";
+        if (answer != "Y" && answer != "y") {
+            std::error_code ignored;
+            std::filesystem::remove(target, ignored);
+            err << "error: the post-processing was not confirmed: no G-code is kept\n";
+            return kExitInput;
+        }
+        if (const std::string errors = run_post_process(settings, sliced, target); !errors.empty()) {
+            err << "error: post-processing: " << errors;
+            return kExitInput;
+        }
+    }
     out << "write_ms: " << exported.write_seconds * 1000.0 << "\n";
     out << "check_ms: " << exported.check_seconds * 1000.0 << "\n";
     out << "gcode_check: ok (" << exported.check.stats.lines << " lines, " << exported.check.stats.layers
         << " layers, " << exported.check.stats.filament << " mm of filament)\n";
-    out << "wrote " << parsed->output << "\n";
+    out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {
         if (!write_file(parsed->warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {

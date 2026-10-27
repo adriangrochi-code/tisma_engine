@@ -8,6 +8,7 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
+#include "gcode/template.hpp"
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
@@ -27,6 +28,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <unordered_map>
 #include <set>
 #include <numbers>
@@ -1608,6 +1610,66 @@ std::string machine_limits_gcode(const Settings& s) {
     return out;
 }
 
+TemplateContext template_context(const Settings& s, const SlicedModel& model) {
+    TemplateContext c;
+    // Every setting by its name (layers.height, machine.flavor...).
+    for (const auto& [key, value] : describe(s))
+        c.variables[key] = TemplateValue::parse(value);
+    const auto list = [](std::vector<TemplateValue> items) { return TemplateValue::of(std::move(items)); };
+    // The usual names of the most used ones, the per-extruder ones as lists.
+    c.variables["layer_height"] = TemplateValue::of(s.layer_height);
+    c.variables["first_layer_height"] = TemplateValue::of(s.first_layer_height);
+    c.variables["nozzle_diameter"] = list({TemplateValue::of(s.nozzle_diameter)});
+    c.variables["filament_diameter"] = list({TemplateValue::of(s.filament_diameter)});
+    // machine.variables: one value per extruder.
+    for (const auto& [name, values] : s.variables) {
+        std::vector<TemplateValue> items;
+        for (const std::string& v : values)
+            items.push_back(TemplateValue::parse(v));
+        c.variables[name] = list(std::move(items));
+    }
+    // The print's own (gcode_templates.md, rule 7).
+    c.variables["total_layer_count"] = TemplateValue::of(static_cast<long long>(model.layers.size()));
+    c.variables["num_extruders"] = TemplateValue::of(1LL);
+    c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
+    c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
+    c.variables["input_filename_base"] = TemplateValue::of(s.input_name);
+    double lo[2] = {0.0, 0.0}, hi[2] = {0.0, 0.0};
+    bool any = false;
+    if (!model.regions.empty())
+        for (const Polygon& polygon : model.regions.front())
+            for (const auto& p : polygon) {
+                const double xy[2] = {to_mm(p.x), to_mm(p.y)};
+                for (int a = 0; a < 2; ++a) {
+                    lo[a] = any ? std::min(lo[a], xy[a]) : xy[a];
+                    hi[a] = any ? std::max(hi[a], xy[a]) : xy[a];
+                }
+                any = true;
+            }
+    const auto pair = [&](double x, double y) {
+        return list({TemplateValue::of(std::round(x * 1000.0) / 1000.0), TemplateValue::of(std::round(y * 1000.0) / 1000.0)});
+    };
+    c.variables["first_layer_print_min"] = pair(lo[0], lo[1]);
+    c.variables["first_layer_print_max"] = pair(hi[0], hi[1]);
+    c.variables["first_layer_print_size"] = pair(hi[0] - lo[0], hi[1] - lo[1]);
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &now);
+#else
+    localtime_r(&now, &local);
+#endif
+    char stamp[32];
+    std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
+    c.variables["year"] = TemplateValue::of(static_cast<long long>(local.tm_year + 1900));
+    c.variables["timestamp"] = TemplateValue::of(std::string(stamp));
+    // The layer the templates are at: the first, until a layer change.
+    const double first_z = model.layers.empty() ? 0.0 : model.layers.front().top - model.layers.front().bottom;
+    c.variables["layer_num"] = TemplateValue::of(0LL);
+    c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
+    return c;
+}
+
 bool sets_temperature(std::string_view gcode) {
     std::size_t at = 0;
     while (at < gcode.size()) {
@@ -1674,11 +1736,21 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << chamber_gcode(s.flavor, chamber) << "\n";
     // The nozzle's temperature, set before the start G-code and waited for
     // after it, unless the start sets temperatures itself (gcode_firmware.md, rule 1).
-    const std::string start_gcode = substitute_variables(s.start_gcode, s.variables);
-    double nozzle = 0.0;
-    if (const auto it = s.variables.find("temperature"); it != s.variables.end() && !it->second.empty())
-        nozzle = std::atof(it->second.front().c_str());
-    const bool heat_nozzle = nozzle > 0.0 && !sets_temperature(start_gcode);
+    // The templates (gcode_templates.md): every setting, the machine's
+    // variables and the print's; globals reach the templates that follow.
+    TemplateContext templates = template_context(s, model);
+    const std::string start_gcode = render_template(s.start_gcode, templates, "machine.start_gcode");
+    const auto first_value = [&](const char* name) {
+        const auto it = s.variables.find(name);
+        return it == s.variables.end() || it->second.empty() ? 0.0 : std::atof(it->second.front().c_str());
+    };
+    const double nozzle = first_value("temperature"), bed = first_value("bed_temperature");
+    // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
+    const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
+    const bool heat_nozzle = heat && nozzle > 0.0;
+    if (heat && bed > 0.0)
+        out << (dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") << dialect.temperature << std::lround(bed)
+            << "\n";
     const std::string celsius = std::to_string(std::lround(nozzle));
     if (heat_nozzle)
         out << (dialect.g10 ? "G10 S" + celsius + " P0"
@@ -1689,6 +1761,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     if (heat_nozzle && dialect.wait != Dialect::Wait::None)
         out << (dialect.wait == Dialect::Wait::M116 ? std::string("M116") : std::string("M109 ") + dialect.temperature + celsius)
             << "\n";
+    // The filament's own start, after the printer's (rule 9).
+    if (const std::string text = render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"); !text.empty())
+        out << text << "\n";
     // How far an arc may stray from the path (gcode.resolution; with every
     // point kept, a thousandth).
     const double arc_tolerance = s.gcode_resolution > 0.0 ? s.gcode_resolution : 0.001;
@@ -1732,6 +1807,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // in the G-code (and of the height changes) count from its bottom.
     // machine.z_offset moves every Z of the part (gcode_extras.md, rule 5).
     const double base = (model.layers.empty() ? 0.0 : model.layers.front().bottom) - s.z_offset;
+    // The layer the templates are at: its number (from 0) and its Z as written.
+    const auto at_layer = [&](std::size_t l) {
+        const double z = std::round((model.layers[l].top - base) * 1000.0) / 1000.0;
+        templates.variables["layer_num"] = TemplateValue::of(static_cast<long long>(l));
+        templates.variables["layer_z"] = templates.variables["max_layer_z"] = TemplateValue::of(z);
+    };
 
     // No extrusion faster than speed.max, when it is set.
     const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
@@ -2387,15 +2468,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The layer's templates, from the second layer (gcode_templates.md,
         // rule 11, T8), with the layer's number and Z.
         std::string before, after;
-        if (l > 0 && (!s.gcode_before_layer.empty() || !s.gcode_after_layer.empty())) {
-            auto vars = s.variables;
-            char z_text[32];
-            const double z_written = std::round((layer.top - base) * 1000.0) / 1000.0;
-            const auto r = std::to_chars(z_text, z_text + sizeof z_text, z_written);
-            vars["layer_num"] = {std::to_string(l)};
-            vars["layer_z"] = vars["max_layer_z"] = {std::string(z_text, r.ptr)};
-            before = substitute_variables(s.gcode_before_layer, vars);
-            after = substitute_variables(s.gcode_after_layer, vars);
+        at_layer(l);
+        if (l > 0) {
+            before = render_template(s.gcode_before_layer, templates, "gcode.before_layer");
+            after = render_template(s.gcode_after_layer, templates, "gcode.after_layer");
         }
         g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn, before, after);
         if (s.gcode_progress)
@@ -2505,18 +2581,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 active.lines += acceleration_gcode(s.flavor, *c.acceleration, s.travel_acceleration) + "\n";
             if (c.volumetric_flow)
                 active.volumetric_flow = *c.volumetric_flow;
+            at_layer(l);
             if (!c.gcode.empty()) {
-                active.lines += substitute_variables(c.gcode, s.variables) + "\n";
+                active.lines += render_template(c.gcode, templates, "changes") + "\n";
                 active.user = true;
             }
             // A colour change or a pause (gcode_templates.md, rule 13): the
             // template, after a mark the preview reads.
             if (c.color_change) {
-                active.lines += ";COLOR_CHANGE\n" + substitute_variables(s.gcode_color_change, s.variables) + "\n";
+                active.lines += ";COLOR_CHANGE\n" + render_template(s.gcode_color_change, templates, "gcode.color_change") + "\n";
                 active.user = true;
             }
             if (c.pause) {
-                active.lines += ";PAUSE_PRINT\n" + substitute_variables(s.gcode_pause, s.variables) + "\n";
+                active.lines += ";PAUSE_PRINT\n" + render_template(s.gcode_pause, templates, "gcode.pause") + "\n";
                 active.user = true;
             }
             if (c.retract_length)
@@ -2697,8 +2774,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     g.type("Custom");
     g.flush(out);
-    if (!s.end_gcode.empty())
-        out << substitute_variables(s.end_gcode, s.variables) << "\n";
+    // The filament's end, then the printer's (rule 12), at the last layer.
+    if (!model.layers.empty())
+        at_layer(model.layers.size() - 1);
+    if (const std::string text = render_template(s.filament_end_gcode, templates, "extrusion.end_gcode"); !text.empty())
+        out << text << "\n";
+    if (const std::string text = render_template(s.end_gcode, templates, "machine.end_gcode"); !text.empty())
+        out << text << "\n";
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     if (dialect.ends_m2)

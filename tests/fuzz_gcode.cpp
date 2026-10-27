@@ -157,7 +157,11 @@ int main(int argc, char** argv) {
         s.detect_overhangs = pick(4) != 0;
         if (pick(4) == 0) { // templates around the layer changes, and colour changes and pauses
             s.gcode_before_layer = pick(2) == 0 ? ";before [layer_num] [layer_z]" : "G91\nG1 Z0.5\nG90";
-            s.gcode_after_layer = pick(2) == 0 ? "" : ";after {layer_z}";
+            s.gcode_after_layer = pick(3) == 0   ? ""
+                                  : pick(2) == 0 ? ";after {layer_z}"
+                                                 : "{if layer_num % 2 == 0};even {layer_z * 2}{else};odd {digits(layer_z, 8, 3)}{endif}";
+            s.filament_start_gcode = pick(2) == 0 ? "{global first = layer_z};filament {first_layer_print_size[0]}" : "";
+            s.filament_end_gcode = pick(2) == 0 ? ";end {total_layer_count} {layer_num}" : "";
             HeightChange c;
             c.z = uni(0.5, 8);
             (pick(2) == 0 ? c.color_change : c.pause) = true;

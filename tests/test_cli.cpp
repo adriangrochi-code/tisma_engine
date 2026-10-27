@@ -346,3 +346,65 @@ TEST_CASE("an output that cannot be written leaves nothing behind", "[cli]") {
     CHECK(!std::filesystem::exists(missing));
     CHECK(!std::filesystem::exists(missing.string() + ".part"));
 }
+
+TEST_CASE("slice into a folder names the file by output.filename_format (gcode_templates.md, rule 15, T11)", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_names";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"output": {"filename_format":
+        "{input_filename_base}_{layer_height}mm_[fill_density]_{print_time}_{total_weight}.{default_output_extension}"}})";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", dir.string()});
+    CHECK(r.code == kExitOk);
+    std::vector<std::string> names;
+    for (const auto& entry : std::filesystem::directory_iterator(dir))
+        if (entry.path().extension() == ".gcode")
+            names.push_back(entry.path().filename().string());
+    REQUIRE(names.size() == 1);
+    INFO(names.front());
+    CHECK(names.front().starts_with("cube_ascii_0.2mm_"));
+    CHECK(names.front().find("%_") != std::string::npos);
+    CHECK(names.front().find("m_0..gcode") != std::string::npos); // the time, no weight without a density
+    CHECK(names.front().find("{print_time}") == std::string::npos);
+    CHECK_THAT(r.out, ContainsSubstring("wrote " + (dir / names.front()).string()));
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 17, T12)", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_post";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+#ifdef _WIN32
+    const auto script = dir / "post.cmd";
+    std::ofstream(script) << "@echo ; post %SLIC3R_PP_HOST% %SLIC3R_LAYERS_HEIGHT% %SLIC3R_LAYER_HEIGHT%>> %1\r\n";
+#else
+    const auto script = dir / "post.sh";
+    std::ofstream(script) << "#!/bin/sh\necho \"; post $SLIC3R_PP_HOST $SLIC3R_LAYERS_HEIGHT $SLIC3R_LAYER_HEIGHT $#\" >> \"$1\"\n";
+    std::filesystem::permissions(script, std::filesystem::perms::owner_all);
+#endif
+    std::string path = script.string();
+    for (std::size_t i = 0; (i = path.find('\\', i)) != std::string::npos; i += 2)
+        path.insert(i, "\\");
+    const auto config = dir / "settings.json";
+    std::ofstream(config) << R"({"output": {"post_process": [")" << path << R"("]}})";
+    const auto gcode = dir / "cube.gcode";
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--yes"});
+    CHECK(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring("A post-processing script has been detected"));
+    std::ifstream f(gcode);
+    std::string line, last;
+    while (std::getline(f, line))
+        if (!line.empty() && line != "\r")
+            last = line;
+    if (!last.empty() && last.back() == '\r')
+        last.pop_back();
+    while (!last.empty() && last.back() == ' ')
+        last.pop_back();
+#ifdef _WIN32
+    CHECK(last == "; post File 0.2 0.2");
+#else
+    CHECK(last == "; post File 0.2 0.2 1"); // one argument: the G-code's path
+#endif
+    f.close();
+    std::filesystem::remove_all(dir);
+}

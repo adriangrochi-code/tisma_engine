@@ -713,7 +713,9 @@ const char* row_key(T label) {
         {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
         {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
-        {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::DraftShieldRow, "adhesion.draft_shield"},
+        {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
+        {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
+        {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
         {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
@@ -3248,11 +3250,23 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::GcodeProgress, "gcode.progress", s.gcode_progress);
     } else if (id == "variables") {
         count(T::VariablesRow, "machine.variables", s.variables.size());
+    } else if (id == "gcode_templates") {
+        flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
+    } else if (id == "output_file") {
+        count(T::PostProcessRow, "output.post_process", s.post_process.size());
     }
     ImGui::EndTable();
+    // The file's name, full width (gcode_templates.md, rule 15).
+    if (id == "output_file" && shown("output.filename_format")) {
+        ImGui::TextUnformatted(tr(T::FilenameFormat));
+        ImGui::SetNextItemWidth(-9.0f * scale_);
+        changed |= ImGui::InputText("##filename_format", &s.filename_format);
+    }
     // The templates below the table, full width (gcode_templates.md).
     if (id == "gcode_templates") {
         const std::pair<T, std::pair<const char*, std::string*>> texts[] = {
+            {T::FilamentStartGcode, {"extrusion.start_gcode", &s.filament_start_gcode}},
+            {T::FilamentEndGcode, {"extrusion.end_gcode", &s.filament_end_gcode}},
             {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
             {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
             {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},

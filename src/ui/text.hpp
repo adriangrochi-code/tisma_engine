@@ -860,6 +860,12 @@
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
     X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \
+    X(AutoTemperatures, "Temperaturas automáticas", "Automatic temperatures") \
+    X(SubOutputFile, "Archivo de salida", "Output file") \
+    X(FilenameFormat, "Nombre del archivo", "File name") \
+    X(PostProcessRow, "Scripts de posproceso", "Post-processing scripts") \
+    X(FilamentStartGcode, "G-code de inicio del filamento", "Filament start G-code") \
+    X(FilamentEndGcode, "G-code de fin del filamento", "Filament end G-code") \
     X(DraftShieldRow, "Escudo contra corrientes", "Draft shield") \
     X(ShieldDisabled, "No", "No") \
     X(ShieldLimited, "En las capas de la falda", "On the skirt's layers") \

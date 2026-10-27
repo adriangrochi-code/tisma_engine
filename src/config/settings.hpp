@@ -195,6 +195,9 @@ struct Settings {
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
     std::string start_gcode, end_gcode;
+    // Not a setting: the input file's name without its folder and extension,
+    // for the templates' input_filename_base (gcode_templates.md, rule 7).
+    std::string input_name;
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
@@ -386,6 +389,9 @@ struct Settings {
     double shrinkage_xy = 0.0, shrinkage_z = 0.0;
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
+    // The filament's own start and end G-code (gcode_templates.md, rules 9
+    // and 12): after the printer's start, before the printer's end.
+    std::string filament_start_gcode, filament_end_gcode;
 
     // gcode
     // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
@@ -399,6 +405,14 @@ struct Settings {
     bool gcode_arcs = false;
     // M73 with the share done and the minutes left (gcode_firmware.md, rule 5).
     bool gcode_progress = false;
+    // The temperatures the start G-code does not set itself, written round it
+    // (gcode_templates.md, rule 10; gcode_firmware.md, rule 1).
+    bool auto_temperatures = true;
+
+    // output (gcode_templates.md, rules 15 to 17): the file's name in the
+    // template language, and scripts run on the finished G-code.
+    std::string filename_format = "[input_filename_base].gcode";
+    std::vector<std::string> post_process;
     // Templates (gcode_templates.md, rules 11 and 13), with the variables of
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";

@@ -72,6 +72,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
   grande para que, al contraerse, quede de la medida pedida.
+- **Lenguaje de plantillas de G-code** (ficha `gcode_templates.md`): en el inicio, el fin, los cambios de capa y de
+  color, cuentas, textos, condiciones (`{if}`), funciones, variables propias y todos los ajustes por su nombre; un error
+  (por ejemplo una variable desconocida) hace fallar la exportación diciendo la línea y la columna. Inicio y fin del
+  filamento (`extrusion.start_gcode`, `end_gcode`), temperaturas automáticas con la cama (`gcode.auto_temperatures`),
+  nombre del archivo con variables (`output.filename_format`, con `slice -o carpeta`) y scripts de posproceso
+  (`output.post_process`, con confirmación o `--yes`).
 - **Falda, escudo y bordes** (ficha `skirt_brim_raft.md`, en Adhesión): largo mínimo de filamento de la falda
   (`adhesion.skirt_min_filament`), escudo contra corrientes (`adhesion.draft_shield`, la falda sube con la pieza),
   borde afuera, en los agujeros o en los dos (`adhesion.brim_type`) y separado de la pieza (`adhesion.brim_gap`).
@@ -104,6 +110,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   los puentes, relleno de la primera capa) era más rápida que todas las demás.
 
 ### Cambiado
+
+- Una variable desconocida en el G-code de inicio o fin ya no queda escrita tal cual: es un error y no se escribe el
+  G-code (`gcode_templates.md`, regla 8). Un perfil de impresora del catálogo necesita el de filamento, que da
+  `temperature` y `bed_temperature`.
 
 - **Puentes con cordón redondo** (fichas `gcode_motion.md`, regla 1, y `speeds_accels.md`, regla 14): los puentes y
   los tramos de pared sobre el aire se extruyen como un cordón redondo del ancho de la boquilla (con 0,4 mm, 0,0522 mm
