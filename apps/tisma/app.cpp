@@ -2186,7 +2186,7 @@ bool App::init(std::string& error) {
         const TriangleMesh placed = placed_mesh(objects_.front());
         for (const int t : options_.measure)
             if (t >= 0 && std::size_t(t) < placed.triangle_count())
-                measure_picks_.push_back(plane_feature(placed, std::size_t(t)));
+                measure_picks_.push_back(surface_feature(placed, std::size_t(t)));
     }
     if (options_.cut > 0.0 && !objects_.empty()) {
         selected_ = 0;
@@ -6225,7 +6225,7 @@ void App::viewport() {
                     measure_picks_.clear();
                 measure_object_ = int(hit->object);
                 measure_picks_.push_back(io.KeyShift ? point_feature(placed, hit->triangle, at)
-                                                     : plane_feature(placed, hit->triangle));
+                                                     : surface_feature(placed, hit->triangle));
             } else if (tool_ == PlateTool::LayFlat) {
                 PlateObject& o = objects_[hit->object];
                 o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));
@@ -6583,9 +6583,42 @@ void App::plate_tools() {
         ImGui::TextDisabled("%s", tr(T::ToolMeasureHint));
         if (measure_object_ != selected_)
             measure_picks_.clear();
-        for (std::size_t i = 0; i < measure_picks_.size(); ++i)
-            ImGui::BulletText("%s", tr(measure_picks_[i].kind == MeasureFeature::Kind::Plane ? T::MeasurePlane
-                                                                                             : T::MeasurePoint));
+        // What each pick is, with a round surface's diameter or a cone's angle.
+        for (std::size_t i = 0; i < measure_picks_.size(); ++i) {
+            const MeasureFeature& f = measure_picks_[i];
+            using Kind = MeasureFeature::Kind;
+            if (f.kind == Kind::Circle)
+                ImGui::BulletText("%s", format(tr(f.hole ? T::MeasureHole : T::MeasureCylinder), f.diameter).c_str());
+            else if (f.kind == Kind::Cone)
+                ImGui::BulletText("%s", format(tr(T::MeasureCone), f.angle, std::max(f.diameter, f.diameter_end),
+                                               std::min(f.diameter, f.diameter_end))
+                                            .c_str());
+            else
+                ImGui::BulletText("%s", tr(f.kind == Kind::Plane ? T::MeasurePlane : T::MeasurePoint));
+        }
+        // One hole or cylinder: writing the diameter it should have scales the model to it.
+        if (measure_picks_.size() == 1 && measure_picks_[0].kind == MeasureFeature::Kind::Circle &&
+            measure_picks_[0].diameter > 0.0) {
+            const double now = measure_picks_[0].diameter;
+            if (measure_wanted_ <= 0.0)
+                measure_wanted_ = now;
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(tr(T::MeasureShouldBe));
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(field);
+            const double lo = 0.001, hi = 100000.0;
+            ImGui::DragScalar("##wanted_d", ImGuiDataType_Double, &measure_wanted_, 0.05f, &lo, &hi, "Ø %.3f mm",
+                              ImGuiSliderFlags_AlwaysClamp);
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::MeasureScale))) {
+                const double factor = measure_wanted_ / now;
+                for (double& s : o.place.scale)
+                    s = std::max(s * factor, 1e-3);
+                measure_picks_.clear();
+                measure_wanted_ = 0.0;
+                changed = true;
+            }
+        }
         if (measure_picks_.size() == 2) {
             const Measurement m = measure(measure_picks_[0], measure_picks_[1]);
             if (m.distance) {
@@ -6612,7 +6645,7 @@ void App::plate_tools() {
             } else if (m.angle) {
                 ImGui::Text("%s: %.2f°", tr(T::MeasureAngle), *m.angle);
             }
-        } else {
+        } else if (measure_picks_.size() != 1) {
             measure_wanted_ = 0.0;
         }
         ImGui::PopTextWrapPos();

@@ -26,7 +26,7 @@
       "spec": "assistant.md",
       "source": "OrcaSlicer calibration wiki",
       "author": "OrcaSlicer",
-      "license": {"es": "Documentación; texto propio", "en": "Documentation; own text"},
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
       "url": "https://github.com/SoftFever/OrcaSlicer/wiki/calibration_guide",
       "cards": []
     },
@@ -35,7 +35,7 @@
       "spec": "assistant.md",
       "source": "Ellis' Print Tuning Guide",
       "author": "Andrew Ellis",
-      "license": {"es": "Guía; texto propio", "en": "Guide; own text"},
+      "license": {"es": "Basado en la guía", "en": "Based on the guide"},
       "url": "https://ellis3dp.com/Print-Tuning-Guide/",
       "cards": []
     },
@@ -44,7 +44,7 @@
       "spec": "assistant.md",
       "source": "Klipper",
       "author": "Klipper",
-      "license": {"es": "Documentación; texto propio", "en": "Documentation; own text"},
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
       "url": "https://www.klipper3d.org/",
       "cards": []
     },
@@ -99,7 +99,7 @@
       "spec": "printer_connections.md",
       "source": "OpenBambuAPI",
       "author": "Doridian",
-      "license": {"es": "Documentación", "en": "Documentation"},
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
       "url": "https://github.com/Doridian/OpenBambuAPI",
       "cards": []
     },
@@ -127,7 +127,7 @@
       "spec": "arc_overhangs.md",
       "source": "Arc overhang",
       "author": "Steven McCulloch",
-      "license": {"es": "Idea; código propio", "en": "Idea; own code"},
+      "license": {"es": "Basado en la idea publicada", "en": "Based on the published idea"},
       "url": "https://github.com/stmcculloch/arc-overhang",
       "cards": ["arcs"]
     },

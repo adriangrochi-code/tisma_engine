@@ -6365,3 +6365,20 @@ en las preferencias. Pruebas AS12 a AS14 en `[assistant]` (130 comprobaciones) y
 pasos del tutorial de prueba.
 
 **Sigue:** las guías de calibración (reglas 20 a 24).
+
+## 2026-10-27 — Pedidos del dueño: créditos «Basado en», Medir agujeros y conos
+
+**Hecho:**
+- **Créditos:** decisión del dueño, lo tomado de un tercero aunque no se haya copiado va como «Basado en», nunca
+  «texto propio». Las guías en PDF de Rafa Barajas (la ayuda), la wiki de calibración, la guía de Ellis, la
+  documentación de Klipper, OpenBambuAPI y la idea del arco en voladizos quedan así en `resources/credits.json`.
+- **Medir** (pedido del dueño): un clic en una superficie curva junta las caras vecinas que siguen la curva (menos de
+  25° entre vecinas), toma como eje la dirección en que sus normales menos varían y ajusta un círculo a sus vértices
+  (Kåsa 1976). Reconoce un agujero (las caras miran al eje) o un cilindro con su diámetro, y un cono con su ángulo y
+  los diámetros de sus extremos. Un agujero o cilindro solo ya ofrece «Debería medir» para escalar a ese diámetro.
+
+**Medido:** `[measure]`: un saliente de 10 mm de 64 lados da Ø 10,000; la misma pared hacia adentro, agujero de
+Ø 10,000; un cono de 20 a 10 mm en 5 mm de alto, 90,00° y Ø 20 y 10.
+
+**No probado:** el tiempo del clic en mallas de millones de triángulos (cada clic suelda la malla y arma sus aristas).
+

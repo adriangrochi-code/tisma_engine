@@ -258,3 +258,58 @@ TEST_CASE("measure: planes, points, angles and the scale that makes a distance (
     CHECK(std::abs(*measure(a, b).distance - std::sqrt(900.0 + 400.0 + 100.0)) < 1e-9);
     CHECK(std::abs(*measure(b, top).distance - 10.0) < 1e-9);
 }
+
+namespace {
+
+// A cylinder (a cone when the top is smaller) of n sides between z = 0 and
+// h, closed; turned inward it is a hole's wall.
+void add_round(TriangleMesh& m, double r0, double r1, double h, int n, bool inward) {
+    constexpr double kTau = 6.283185307179586;
+    const auto at = [&](int i, double r, double z) {
+        const double a = kTau * double(i % n) / n;
+        return Vec3f{float(r * std::cos(a)), float(r * std::sin(a)), float(z)};
+    };
+    for (int i = 0; i < n; ++i) {
+        Vec3f p[4] = {at(i, r0, 0), at(i + 1, r0, 0), at(i + 1, r1, h), at(i, r1, h)};
+        if (inward)
+            std::swap(p[1], p[3]);
+        m.add_triangle(p[0], p[1], p[2]);
+        m.add_triangle(p[0], p[2], p[3]);
+    }
+}
+
+} // namespace
+
+TEST_CASE("measure: a hole's diameter, a cylinder's and a cone's angle", "[ui][measure]") {
+    // A boss of 10 mm and its side: a circle of 10.
+    TriangleMesh boss;
+    add_round(boss, 5, 5, 8, 64, false);
+    const MeasureFeature c = surface_feature(boss, 10);
+    REQUIRE(c.kind == MeasureFeature::Kind::Circle);
+    CHECK(std::abs(c.diameter - 10.0) < 1e-3);
+    CHECK_FALSE(c.hole);
+    CHECK(std::abs(std::abs(c.normal[2]) - 1.0) < 1e-6);
+    CHECK(std::abs(c.point[2] - 4.0) < 1e-4);
+    // The same wall facing in: a hole of 10.
+    TriangleMesh hole;
+    add_round(hole, 5, 5, 8, 64, true);
+    const MeasureFeature h = surface_feature(hole, 3);
+    REQUIRE(h.kind == MeasureFeature::Kind::Circle);
+    CHECK(h.hole);
+    CHECK(std::abs(h.diameter - 10.0) < 1e-3);
+    // A cone from 20 to 10 mm over 5 mm: 90° in all, its two diameters.
+    TriangleMesh cone;
+    add_round(cone, 10, 5, 5, 96, false);
+    const MeasureFeature k = surface_feature(cone, 7);
+    REQUIRE(k.kind == MeasureFeature::Kind::Cone);
+    CHECK(std::abs(k.angle - 90.0) < 0.05);
+    CHECK(std::abs(std::min(k.diameter, k.diameter_end) - 10.0) < 1e-2);
+    CHECK(std::abs(std::max(k.diameter, k.diameter_end) - 20.0) < 1e-2);
+    // A box's face is still its plane; between two circles, their centres.
+    TriangleMesh two;
+    add_round(two, 5, 5, 8, 64, false);
+    CHECK(surface_feature(two, 0).kind == MeasureFeature::Kind::Circle);
+    MeasureFeature other = c;
+    other.point[0] += 30.0;
+    CHECK(std::abs(*measure(c, other).distance - 30.0) < 1e-9);
+}

@@ -73,7 +73,7 @@ izquierda de la vista 3D, una columna con:
 | **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
 | **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original**, y **Espejar** en X, Y o Z alrededor del centro de su caja (un modelo girado toma su giro y su tamaño en la malla antes) |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
-| **Medir** (U) | Un clic en una cara toma su plano; Shift + clic, el vértice más cercano. Entre dos elementos del mismo modelo, la distancia (puntos, punto y cara, caras paralelas) o el ángulo entre caras; con una distancia, **Debería medir** y **Escalar** agrandan o achican el modelo parejo en los tres ejes (ficha `model_tools.md`, regla 20). `--measure T1,T2` elige dos triángulos del primer modelo como caras |
+| **Medir** (U) | Un clic en una cara toma su plano; en una superficie curva reconoce un agujero o un cilindro (su diámetro, con «Debería medir» para escalar a ese diámetro) o un cono (su ángulo y los diámetros de sus dos extremos); Shift + clic, el vértice más cercano. Entre dos elementos del mismo modelo, la distancia (puntos, punto y cara, caras paralelas) o el ángulo entre caras; con una distancia, **Debería medir** y **Escalar** agrandan o achican el modelo parejo en los tres ejes (ficha `model_tools.md`, regla 20). `--measure T1,T2` elige dos triángulos del primer modelo como caras |
 | **Cortar** (C) | Un plano horizontal a la altura que se escribe, dibujado sobre la vista; **Cortar** deja dos piezas cerradas, una al lado de la otra, con el extrusor del modelo (la pintura no pasa a las mitades). «Dar vuelta la parte de abajo» la apoya sobre la cara del corte (ficha `model_tools.md`, reglas 13 y 18). `--cut Z` corta el primer modelo al abrirse. **Separar en piezas** deja cada pedazo suelto del modelo como una pieza, con los huecos que tiene adentro (regla 14) |
 | **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
 | **Pintar** (P) | Soportes, costura (Forzar o Bloquear) o piel difusa, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Colores aparece apagado hasta que el motor tenga varios extrusores |
@@ -294,6 +294,10 @@ pie, en gris y chico, «Basado en FFF anti-aliasing (2017), de Song et al.»; el
 y el mismo texto aparece al pasar el puntero por el título de la ficha. **Más > Créditos y fuentes** junta todas las
 funciones (función, fuente, autor, licencia o tipo) y los componentes de terceros que lleva el programa, con su versión,
 su licencia y el texto del aviso que esa licencia pide repartir.
+
+Decisión del dueño (2026-10-27): todo lo que se tomó de un tercero (un texto, una guía, una documentación, una idea),
+aunque no se haya copiado, va como «Basado en …», nunca como «texto propio»: no son textos nuestros, nos basamos en
+ellos para hacer el nuestro.
 
 Los datos están en `resources/credits.json` y los avisos en `resources/licenses/`; el programa los lleva adentro. Una
 función nueva que sale de otra fuente suma su entrada allí (con `cards`, las fichas donde se ve) y su línea

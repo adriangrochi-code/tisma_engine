@@ -291,9 +291,12 @@
     X(ToolCutHint, "El plano corta la pieza a esta altura sobre la cama. Las dos mitades quedan cerradas, cada una como una pieza.", \
       "The plane cuts the part at this height over the bed. Both halves come out closed, each one a part.")           \
     X(ToolMeasureTip, "Medir (U): distancias y ángulos de un modelo", "Measure (U): distances and angles of a model")  \
-    X(ToolMeasureHint, "Clic en dos caras del mismo modelo (o Shift + clic: el vértice más cercano). Entre caras paralelas o puntos, la distancia; entre caras que no lo son, el ángulo.", \
-      "Click two faces of the same model (or Shift + click: the nearest vertex). Between parallel faces or points, the distance; between faces that are not, the angle.") \
+    X(ToolMeasureHint, "Clic en una cara del modelo (o Shift + clic: el vértice más cercano). Un agujero, un cilindro o un cono muestra enseguida su diámetro o su ángulo; entre dos elementos del mismo modelo, la distancia o, entre caras, el ángulo.", \
+      "Click a face of a model (or Shift + click: the nearest vertex). A hole, a cylinder or a cone shows its diameter or angle at once; between two picks of the same model, the distance or, between faces, the angle.") \
     X(MeasurePlane, "Una cara", "A face")                                                                             \
+    X(MeasureHole, "Agujero: Ø %.3f mm", "Hole: Ø %.3f mm")                                                           \
+    X(MeasureCylinder, "Cilindro: Ø %.3f mm", "Cylinder: Ø %.3f mm")                                                  \
+    X(MeasureCone, "Cono: %.2f° · Ø %.3f a %.3f mm", "Cone: %.2f° · Ø %.3f to %.3f mm")                                                                             \
     X(MeasurePoint, "Un vértice", "A vertex")                                                                         \
     X(MeasureDistance, "Distancia", "Distance")                                                                       \
     X(MeasureAngle, "Ángulo", "Angle")                                                                                \
