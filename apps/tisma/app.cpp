@@ -41,6 +41,7 @@
 #include "ui/settings_view.hpp"
 #include "ui/printer_card.hpp"
 #include "ui/measure.hpp"
+#include "ui/knowledge.hpp"
 #include "slice/transform.hpp"
 #include "ui/slicing.hpp"
 
@@ -83,6 +84,7 @@ constexpr float kPanel = 420.0f;
 constexpr float kFontSize = 15.0f;
 constexpr float kTitleSize = 21.0f;
 constexpr double kToastSeconds = 6.0;
+constexpr std::uint32_t kWarningColour = 0xE5A13A; // a warning in the help (an amber of its own)
 
 constexpr const char* kIcons[] = {
     "tisma_plate",      "tisma_print",     "tisma_filament", "tisma_printer",     "tisma_more",      "tisma_folder",
@@ -460,6 +462,16 @@ private:
     void credits_dialog();
     // The help panel over the settings panel (assistant.md).
     void help_panel();
+    void load_help_data();
+    void help_body();
+    void help_problem(const KnowledgeProblem& problem);
+    void help_procedure(const KnowledgeProcedure& procedure);
+    void help_action(const KnowledgeAction& action);
+    void help_apply_dialog();
+    // The chosen filament's material in the help's data, its card and its
+    // warnings (assistant.md, rules 13 and 14).
+    const KnowledgeMaterial* current_material() const;
+    void material_card();
     // A section in the column of sections, and a section's cards.
     bool section_button(std::string_view id, const char* title, const char* icon_name, bool selected, bool marked,
                         float column);
@@ -673,6 +685,17 @@ private:
     bool help_open_ = false;
     int help_tab_ = 0;
     bool help_select_ = false; // choose help_tab_ in the tab bar once
+    // The help's data (knowledge/), read when the panel opens; what it shows
+    // (a list, or one problem or procedure) and the problems it came through,
+    // for Back; a setting change waiting for its confirmation (rule 7).
+    std::optional<Knowledge> knowledge_;
+    enum class HelpPage { List, Problem, Procedure };
+    HelpPage help_page_ = HelpPage::List;
+    std::size_t help_item_ = 0;
+    std::vector<std::size_t> help_back_;
+    std::vector<bool> help_steps_done_;
+    std::optional<SettingChange> help_change_;
+    bool help_change_open_ = false;
     std::string help_query_;
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
@@ -1041,6 +1064,10 @@ std::string key_label(std::string_view key) {
 // The setting whose info card is kept open (--info, for screenshots).
 std::string g_open_info;
 
+// The help's data, for the glossary's definitions beside the settings
+// (assistant.md, rule 12); none until it is read.
+const Knowledge* g_knowledge = nullptr;
+
 // The (i) beside a setting's name: a click opens what the setting does, its
 // key, default and range (docs/UI.md, «Ayuda»).
 void info_button(T label, const char* key) {
@@ -1064,8 +1091,20 @@ void info_button(T label, const char* key) {
     dl->AddCircle(c, size * 0.45f, colour, 16, 1.2f);
     dl->AddLine(ImVec2(c.x, c.y - size * 0.05f), ImVec2(c.x, c.y + size * 0.25f), colour, 1.6f);
     dl->AddCircleFilled(ImVec2(c.x, c.y - size * 0.22f), size * 0.07f, colour);
-    if (hovered)
-        ImGui::SetTooltip("%s", tr(T::Info));
+    const KnowledgeTerm* term = g_knowledge ? term_for_setting(*g_knowledge, key) : nullptr;
+    if (hovered) {
+        if (term) {
+            // The glossary's definition, on the pointer (rule 12).
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
+            ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", term->term.c_str());
+            ImGui::TextUnformatted(term->definition.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        } else {
+            ImGui::SetTooltip("%s", tr(T::Info));
+        }
+    }
     if (ImGui::BeginPopup("##info_card")) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
         ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
@@ -1083,6 +1122,10 @@ void info_button(T label, const char* key) {
             ImGui::TextDisabled("%s: %s", tr(T::InfoRange), doc->second.range.c_str());
         if (language() == Language::English)
             ImGui::TextDisabled("%s", tr(T::InfoSpanish));
+        if (term) {
+            ImGui::SeparatorText(tr(T::HelpGlossary));
+            ImGui::TextUnformatted((term->term + ": " + term->definition).c_str());
+        }
         ImGui::PopTextWrapPos();
         ImGui::EndPopup();
     }
@@ -2040,6 +2083,14 @@ bool App::init(std::string& error) {
         if (!hits.empty())
             go_to_setting(hits.front().key);
     }
+    load_help_data();
+    // --help-item: a problem or a procedure open from the start.
+    for (std::size_t i = 0; i < knowledge_->problems.size(); ++i)
+        if (knowledge_->problems[i].id == options_.help_open)
+            help_tab_ = 0, help_select_ = true, help_page_ = HelpPage::Problem, help_item_ = i;
+    for (std::size_t i = 0; i < knowledge_->procedures.size(); ++i)
+        if (knowledge_->procedures[i].id == options_.help_open)
+            help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
     if (options_.credits)
         credits_open_ = true;
     if (!options_.help.empty()) {
@@ -4039,6 +4090,13 @@ std::filesystem::path knowledge_dir() {
     return prefs.empty() ? prefs : prefs.parent_path() / "pack" / "knowledge";
 }
 
+// The help's data, read once (the pack's knowledge/, or --knowledge).
+void App::load_help_data() {
+    const std::filesystem::path folder = options_.knowledge.empty() ? knowledge_dir() : from_utf8(options_.knowledge);
+    knowledge_ = folder.empty() ? Knowledge{} : load_knowledge(folder, language() == Language::English ? "en" : "es");
+    g_knowledge = &*knowledge_;
+}
+
 // The help panel (assistant.md, rules 1 to 4), over the settings panel: its
 // tabs, a search over all of them, and at its foot where its texts come
 // from. Without the pack's data it says it comes with the profiles (AS1).
@@ -4050,6 +4108,8 @@ void App::help_panel() {
     ImGui::Begin("##help", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+    if (!knowledge_)
+        load_help_data();
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
     ImGui::TextUnformatted(tr(T::Help));
     ImGui::PopFont();
@@ -4069,6 +4129,8 @@ void App::help_panel() {
             const ImGuiTabItemFlags flags = help_select_ && help_tab_ == i ? ImGuiTabItemFlags_SetSelected : 0;
             if (ImGui::BeginTabItem(tr(tabs[i]), nullptr, flags)) {
                 // Until the tab asked for shows, the one shown is not chosen.
+                if ((!help_select_ || help_tab_ == i) && help_tab_ != i)
+                    help_page_ = HelpPage::List, help_back_.clear();
                 if (!help_select_ || help_tab_ == i)
                     help_tab_ = i, help_select_ = false;
                 ImGui::EndTabItem();
@@ -4079,24 +4141,10 @@ void App::help_panel() {
     const float foot = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     ImGui::BeginChild("##help_body", ImVec2(0, -foot));
     ImGui::PushTextWrapPos(0.0f);
-    const std::filesystem::path data = knowledge_dir();
-    std::error_code error;
-    const bool have = !data.empty() && std::filesystem::is_directory(data, error);
-    if (help_tab_ == 3) {
-        // The interface's own tour is here whether or not the data came.
-        ImGui::Spacing();
-        ImGui::TextUnformatted(tr(T::HelpTour));
-        ImGui::TextDisabled("%s", tr(T::HelpTourAbout));
-        if (ImGui::Button(tr(T::HelpStart))) {
-            tour_step_ = 0;
-            help_open_ = false;
-        }
-        ImGui::Separator();
-    }
-    ImGui::Spacing();
-    ImGui::TextDisabled("%s", tr(have ? T::HelpNotRead : T::HelpNoData));
+    help_body();
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
+    help_apply_dialog();
     // Rule 4: where the help's texts come from.
     ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
     for (const FeatureCredit& c : credits().features)
@@ -4112,6 +4160,350 @@ void App::help_panel() {
         }
     ImGui::PopFont();
     ImGui::End();
+}
+
+// The help's pages (assistant.md, rules 2 and 5 to 12): the search's hits,
+// a tab's list, or one problem or procedure.
+void App::help_body() {
+    const Knowledge& k = *knowledge_;
+    const auto open_problem = [&](std::size_t i) {
+        help_tab_ = 0, help_select_ = true, help_page_ = HelpPage::Problem, help_item_ = i;
+    };
+    const auto open_procedure = [&](std::size_t i) {
+        help_tab_ = 1, help_select_ = true, help_page_ = HelpPage::Procedure, help_item_ = i;
+        help_steps_done_.assign(k.procedures[i].steps.size(), false);
+    };
+    ImGui::Spacing();
+    if (help_page_ == HelpPage::Problem && help_item_ < k.problems.size()) {
+        help_problem(k.problems[help_item_]);
+        return;
+    }
+    if (help_page_ == HelpPage::Procedure && help_item_ < k.procedures.size()) {
+        help_procedure(k.procedures[help_item_]);
+        return;
+    }
+    // The search, over every tab (rule 2).
+    if (!help_query_.empty()) {
+        const std::vector<KnowledgeHit> hits = search_knowledge(k, help_query_);
+        if (hits.empty())
+            ImGui::TextDisabled("%s", tr(T::HelpNothingFound));
+        for (const KnowledgeHit& h : hits) {
+            ImGui::PushID(int(h.index) * 8 + int(h.kind));
+            using Kind = KnowledgeHit::Kind;
+            switch (h.kind) {
+            case Kind::Problem:
+                if (ImGui::Selectable(k.problems[h.index].name.c_str()))
+                    open_problem(h.index), help_back_.clear();
+                break;
+            case Kind::Procedure:
+                if (ImGui::Selectable(k.procedures[h.index].name.c_str()))
+                    open_procedure(h.index);
+                break;
+            case Kind::Term:
+                ImGui::TextUnformatted(k.terms[h.index].term.c_str());
+                ImGui::TextDisabled("%s", k.terms[h.index].definition.c_str());
+                break;
+            case Kind::Material:
+                ImGui::TextUnformatted(k.materials[h.index].name.c_str());
+                break;
+            case Kind::Tutorial:
+                ImGui::TextUnformatted(k.tutorials[h.index].name.c_str());
+                break;
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("· %s", tr(h.kind == Kind::Problem     ? T::HelpProblems
+                                           : h.kind == Kind::Procedure ? T::HelpProcedures
+                                           : h.kind == Kind::Term      ? T::HelpGlossary
+                                           : h.kind == Kind::Tutorial  ? T::HelpTutorials
+                                                                       : T::HelpMaterial));
+            ImGui::PopID();
+        }
+        return;
+    }
+    if (help_tab_ == 3) {
+        // The interface's own tour is here whether or not the data came.
+        ImGui::TextUnformatted(tr(T::HelpTour));
+        ImGui::TextDisabled("%s", tr(T::HelpTourAbout));
+        if (ImGui::Button(tr(T::HelpStart))) {
+            tour_step_ = 0;
+            help_open_ = false;
+        }
+        ImGui::Separator();
+        for (const KnowledgeTutorial& t : k.tutorials) {
+            ImGui::TextUnformatted(t.name.c_str());
+            ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(t.steps.size()), t.minutes).c_str());
+        }
+        if (!k.tutorials.empty())
+            ImGui::TextDisabled("%s", tr(T::HelpTutorialsSoon));
+    }
+    if (k.empty()) {
+        ImGui::TextDisabled("%s", tr(T::HelpNoData));
+        for (const std::string& e : k.errors)
+            ImGui::TextColored(rgb(theme_.paint_block), "%s", e.c_str());
+        return;
+    }
+    if (help_tab_ == 0) {
+        for (std::size_t i = 0; i < k.problems.size(); ++i) {
+            ImGui::PushID(int(i));
+            if (ImGui::Selectable(k.problems[i].name.c_str()))
+                open_problem(i), help_back_.clear();
+            ImGui::TextDisabled("%s", k.problems[i].symptoms.c_str());
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 1) {
+        for (std::size_t i = 0; i < k.procedures.size(); ++i) {
+            ImGui::PushID(int(i));
+            if (ImGui::Selectable(k.procedures[i].name.c_str()))
+                open_procedure(i);
+            ImGui::TextDisabled("%s", k.procedures[i].for_cases.c_str());
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 2) {
+        for (const KnowledgeTerm& t : k.terms) {
+            ImGui::TextUnformatted(t.term.c_str());
+            ImGui::TextDisabled("%s", t.definition.c_str());
+            ImGui::Spacing();
+        }
+    } else if (help_tab_ == 4) {
+        ImGui::TextDisabled("%s", tr(T::HelpGuidesSoon));
+    }
+}
+
+// One problem (rules 6 to 8): its symptom, and its causes with the most
+// common first and the last resorts at the end, each with its question and
+// what to do.
+void App::help_problem(const KnowledgeProblem& p) {
+    if (ImGui::SmallButton(tr(T::HelpBack))) {
+        if (!help_back_.empty()) {
+            help_item_ = help_back_.back();
+            help_back_.pop_back();
+        } else {
+            help_page_ = HelpPage::List;
+        }
+        return;
+    }
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(p.name.c_str());
+    ImGui::PopFont();
+    ImGui::TextDisabled("%s", p.symptoms.c_str());
+    for (const KnowledgeCause* c : causes_in_order(p.causes)) {
+        ImGui::PushID(c);
+        ImGui::SeparatorText(c->name.c_str());
+        if (c->last_resort)
+            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::HelpLastResort));
+        ImGui::TextUnformatted(c->explain.c_str());
+        if (!c->check.empty())
+            ImGui::TextDisabled("%s", c->check.c_str());
+        for (std::size_t i = 0; i < c->actions.size(); ++i) {
+            ImGui::PushID(int(i));
+            help_action(c->actions[i]);
+            ImGui::PopID();
+        }
+        ImGui::PopID();
+    }
+}
+
+// What a cause's action offers (rules 7 and 8).
+void App::help_action(const KnowledgeAction& a) {
+    const Knowledge& k = *knowledge_;
+    if (a.type == "setting") {
+        const std::optional<SettingAction> action = setting_action(a);
+        std::optional<SettingChange> change;
+        try {
+            if (action) {
+                const auto& docs = setting_docs();
+                const auto doc = docs.find(a.key);
+                change = plan_setting(settings_, *action, doc == docs.end() ? SettingRange{} : parse_range(doc->second.range));
+            }
+        } catch (const std::exception&) {
+            change.reset();
+        }
+        if (!change)
+            return; // a key the engine does not have: no button (rule 7)
+        ImGui::Bullet();
+        ImGui::TextUnformatted((key_label(a.key) + ": " + change->before + " » " + change->after).c_str());
+        if (!a.why.empty())
+            ImGui::TextDisabled("%s", a.why.c_str());
+        if (ImGui::SmallButton(tr(T::HelpApply))) {
+            help_change_ = change;
+            help_change_open_ = true;
+        }
+    } else if (a.type == "procedure") {
+        for (std::size_t i = 0; i < k.procedures.size(); ++i)
+            if (k.procedures[i].id == a.id && ImGui::SmallButton((std::string(tr(T::HelpOpen)) + " " + k.procedures[i].name).c_str())) {
+                help_page_ = HelpPage::Procedure, help_item_ = i, help_tab_ = 1, help_select_ = true;
+                help_steps_done_.assign(k.procedures[i].steps.size(), false);
+            }
+    } else if (a.type == "problem") {
+        for (std::size_t i = 0; i < k.problems.size(); ++i)
+            if (k.problems[i].id == a.id && ImGui::SmallButton((std::string(tr(T::HelpSee)) + " " + k.problems[i].name).c_str())) {
+                help_back_.push_back(help_item_);
+                help_item_ = i;
+            }
+    } else if (a.type == "calibration") {
+        if (ImGui::SmallButton(tr(T::HelpOpenCalibration)))
+            tab_ = Tab::Calibration;
+    } else if (!a.text.empty()) {
+        ImGui::Bullet();
+        ImGui::TextUnformatted(a.text.c_str());
+    }
+}
+
+// One procedure (rule 10): its warnings first, its steps to tick, then how to
+// avoid it and its notes.
+void App::help_procedure(const KnowledgeProcedure& p) {
+    if (ImGui::SmallButton(tr(T::HelpBack))) {
+        help_page_ = HelpPage::List;
+        return;
+    }
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(p.name.c_str());
+    ImGui::PopFont();
+    if (!p.applies_to.empty())
+        ImGui::TextDisabled("%s", p.applies_to.c_str());
+    for (const std::string& w : p.warnings)
+        ImGui::TextColored(rgb(kWarningColour), "%s", w.c_str());
+    help_steps_done_.resize(p.steps.size(), false);
+    for (std::size_t i = 0; i < p.steps.size(); ++i) {
+        ImGui::PushID(int(i));
+        bool done = help_steps_done_[i];
+        if (ImGui::Checkbox(p.steps[i].title.c_str(), &done))
+            help_steps_done_[i] = done;
+        ImGui::Indent();
+        ImGui::TextDisabled("%s", p.steps[i].text.c_str());
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    if (!p.prevention.empty()) {
+        ImGui::SeparatorText(tr(T::HelpPrevention));
+        for (const std::string& t : p.prevention)
+            ImGui::BulletText("%s", t.c_str());
+    }
+    if (!p.notes.empty()) {
+        ImGui::SeparatorText(tr(T::HelpNotes));
+        for (const std::string& t : p.notes)
+            ImGui::BulletText("%s", t.c_str());
+    }
+}
+
+const KnowledgeMaterial* App::current_material() const {
+    if (!knowledge_ || knowledge_->materials.empty())
+        return nullptr;
+    std::vector<MaterialInfo> infos;
+    for (const KnowledgeMaterial& m : knowledge_->materials)
+        infos.push_back(material_info(m));
+    const MaterialInfo* found =
+        find_material(infos, {}, chosen_profile_[std::size_t(ProfileKind::Filament)]);
+    return found ? &knowledge_->materials[std::size_t(found - infos.data())] : nullptr;
+}
+
+// The material's card under the filament's profile (rules 13 and 14): its
+// temperatures, bed, chamber, fan, surfaces, retraction and drying, and what
+// this printer lacks for it.
+void App::material_card() {
+    const KnowledgeMaterial* m = current_material();
+    if (!m)
+        return;
+    const auto range = [](const KnowledgeRange& r, const char* unit) {
+        if (!r.known)
+            return std::string("—");
+        char text[64];
+        if (r.min == r.max)
+            std::snprintf(text, sizeof text, "%g %s", r.min, unit);
+        else
+            std::snprintf(text, sizeof text, "%g%s%g %s", r.min, tr(T::RangeTo), r.max, unit);
+        return std::string(text);
+    };
+    const std::vector<MaterialWarning> warnings = material_warnings(material_info(*m), settings_);
+    const std::string title = format(tr(T::MaterialCard), m->name.c_str()) + "###material_card";
+    if (!warnings.empty()) {
+        ImGui::PushStyleColor(ImGuiCol_Text, rgb(kWarningColour));
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once); // open while it has something to say
+    }
+    const bool open = ImGui::CollapsingHeader(title.c_str());
+    if (!warnings.empty())
+        ImGui::PopStyleColor();
+    if (!open)
+        return;
+    ImGui::PushTextWrapPos(0.0f);
+    for (const MaterialWarning w : warnings)
+        ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(w, material_info(*m)).c_str());
+    ImGui::TextDisabled("%s · %s", m->family.c_str(), m->category.c_str());
+    ImGui::Text("%s: %s", tr(T::NozzleTemp), range(m->nozzle_temp, "°C").c_str());
+    ImGui::Text("%s: %s", tr(T::BedTemp), range(m->bed_temp, "°C").c_str());
+    if (m->base && m->base->chamber_temp)
+        ImGui::Text("%s: %g °C", tr(T::MaterialChamber), *m->base->chamber_temp);
+    if (m->fan.known)
+        ImGui::Text("%s: %s", tr(T::MaterialFan), range(m->fan, "%").c_str());
+    if (!m->enclosure.empty())
+        ImGui::Text("%s: %s", tr(T::MaterialEnclosure), m->enclosure.c_str());
+    ImGui::Text("%s: %s", tr(T::MaterialNozzle), m->nozzle_material.c_str());
+    if (!m->surfaces.empty()) {
+        std::string list;
+        for (const std::string& s : m->surfaces)
+            list += (list.empty() ? "" : ", ") + s;
+        ImGui::Text("%s: %s", tr(T::BedSurfaces), list.c_str());
+    }
+    // Direct or Bowden: the engine does not know the printer's extruder yet,
+    // so both are shown.
+    if (m->base && (m->base->retraction_direct || m->base->retraction_bowden)) {
+        std::string r;
+        if (m->base->retraction_direct)
+            r += format(tr(T::MaterialDirect), *m->base->retraction_direct);
+        if (m->base->retraction_bowden)
+            r += (r.empty() ? "" : ", ") + format(tr(T::MaterialBowden), *m->base->retraction_bowden);
+        ImGui::Text("%s: %s", tr(T::MaterialRetraction), r.c_str());
+    }
+    if (m->drying) {
+        std::string d = range(m->drying->temp, "°C");
+        if (m->drying->hours_before_printing)
+            d += ", " + std::to_string(*m->drying->hours_before_printing) + " h";
+        ImGui::Text("%s: %s", tr(T::MaterialDrying), d.c_str());
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+}
+
+// Applying a setting from the help (rule 7): the setting, its value now and
+// after, the limit when it was cut, and Undo afterwards.
+void App::help_apply_dialog() {
+    if (help_change_open_) {
+        ImGui::OpenPopup("###help_apply");
+        help_change_open_ = false;
+    }
+    const std::string title = std::string(tr(T::HelpApply)) + "###help_apply";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    if (help_change_) {
+        const SettingChange& c = *help_change_;
+        ImGui::TextUnformatted(key_label(c.key).c_str());
+        ImGui::Text("%s » %s", c.before.c_str(), c.after.c_str());
+        if (c.clamped)
+            ImGui::TextColored(rgb(kWarningColour), "%s", format(tr(T::HelpLimitUsed), c.after.c_str()).c_str());
+        if (ImGui::Button(tr(T::HelpApply), ImVec2(120.0f * scale_, 0))) {
+            try {
+                const Settings before = settings_;
+                settings_ = apply_setting(settings_, c);
+                settings_changed();
+                notify_undo(key_label(c.key) + ": " + c.before + " » " + c.after, [this, before] {
+                    settings_ = before;
+                    settings_changed();
+                });
+            } catch (const std::exception& e) {
+                notify(e.what(), true);
+            }
+            help_change_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        help_change_.reset();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 // More › Credits and sources (credits.md, rule 4): the functions taken from
@@ -4430,6 +4822,8 @@ void App::settings_panel() {
             choose_level(ViewLevel::Custom);
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
+    if (panel_tab_ == SettingsTab::Material)
+        material_card();
     // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
     if (ImGui::SmallButton(tr(single_column_ ? T::SeeBySection : T::SeeAllTogether)))
         single_column_ = !single_column_;
@@ -5475,6 +5869,20 @@ void App::status_bar() {
         }
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
+    }
+    // The chosen material's warnings (assistant.md, rule 14).
+    if (const KnowledgeMaterial* m = current_material()) {
+        const MaterialInfo info = material_info(*m);
+        const std::vector<MaterialWarning> warnings = material_warnings(info, settings_);
+        if (!warnings.empty()) {
+            ImGui::SameLine(0, 16.0f * scale_);
+            ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(warnings.front(), info).c_str());
+            if (warnings.size() > 1 && ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
+                for (const MaterialWarning w : warnings)
+                    ImGui::BulletText("%s", material_warning_text(w, info).c_str());
+                ImGui::EndTooltip();
+            }
+        }
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;

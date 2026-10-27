@@ -310,7 +310,19 @@ información al lado de cada ajuste.
   Glosario, Tutoriales y Calibraciones; al pie, «Basado en las guías de Rafa Barajas». Sus datos llegan con el paquete
   de perfiles (`knowledge/`, en la carpeta `pack/` junto a las preferencias); sin ellos, el panel lo dice. Tutoriales
   ofrece además el recorrido de la interfaz. `--help-panel problems|procedures|glossary|tutorials|calibrations` lo
-  abre en esa pestaña.
+  abre en esa pestaña, `--knowledge CARPETA` lee los datos de otra carpeta y `--help-item ID` abre un problema o un
+  procedimiento.
+  - **Problemas:** la lista con su síntoma; uno muestra sus causas (las de último recurso al final, con su nota), la
+    pregunta para confirmarla y sus acciones: **Aplicar** un ajuste (el valor de ahora y el nuevo, acotado al rango de
+    `docs/CONFIG.md`; el cambio queda sin guardar en el perfil y el aviso ofrece **Deshacer**), abrir un procedimiento,
+    otro problema (con **Volver**) o la calibración, o un consejo. Una clave que el motor no tiene no da botón.
+  - **Procedimientos:** las advertencias arriba, los pasos con su casilla, cómo evitarlo y las notas.
+  - **Glosario:** los términos en orden alfabético. El botón (i) de un ajuste que nombra un término muestra su
+    definición al pasar el puntero y en la tarjeta.
+  - **Ficha del material:** en la pestaña Material, el material del filamento elegido (por su nombre: «Generic ABS»
+    es ABS) con temperaturas, cabina, ventilador, superficies, retracción y secado; lo que la impresora no tiene para
+    ese material (cabina, boquilla endurecida, cama u hotend que no llegan, secado) se avisa ahí y en la barra de
+    estado.
 
 - **Asistente:** se abre solo la primera vez (sin preferencias guardadas), y desde **Más > Tutorial**. Siete pasos
   abajo de la vista: abrir un modelo, elegir impresora, filamento y perfil, los ajustes, las herramientas de la placa,

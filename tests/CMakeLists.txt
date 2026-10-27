@@ -261,6 +261,19 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --cut 4
               --export ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.png)
+    # The help with the engine's own test data: a problem with its actions
+    # (assistant.md, rules 5 to 8), and the ABS card with its warnings (AS9).
+    add_test(NAME ui_help_problem
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --help-panel problems --help-item stringing
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_problem.png)
+    add_test(NAME ui_material_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --profile filament=ABS --section material/temperature
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_material_card.png)
+    set_tests_properties(ui_help_problem ui_material_card PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # Measure between the cube's bottom and top (model_tools.md, rule 20).
     add_test(NAME ui_measure
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

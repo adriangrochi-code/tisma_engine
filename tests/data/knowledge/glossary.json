@@ -1,0 +1,14 @@
+{
+  "format": "tisma-knowledge-glossary",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}],
+  "notes": [],
+  "terms": [
+    {"term": "Retracción", "definition": "Tirar del filamento hacia atrás antes de un viaje.", "settings": ["retraction.length"]},
+    {"term": "Perímetro", "definition": "Cada vuelta de pared de una capa.", "settings": ["walls.count"]},
+    {"term": "Hilos", "definition": "Hebras que quedan entre partes en los viajes.", "settings": ["retraction.length"]},
+    {"term": "Pared", "definition": "Las vueltas que forman el borde de la pieza.", "settings": ["walls.count"]},
+    {"term": "Altura de capa", "definition": "Cuánto sube la boquilla entre capas.", "settings": null}
+  ]
+}

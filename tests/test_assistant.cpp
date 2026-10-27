@@ -1,4 +1,5 @@
 #include "ui/assistant.hpp"
+#include "ui/knowledge.hpp"
 
 #include "config/settings.hpp"
 #include "ui/text.hpp"
@@ -6,6 +7,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -165,4 +169,109 @@ TEST_CASE("assistant: a material's card and warnings (AS9 to AS11)", "[ui][assis
     CHECK(material_warning_text(w.front(), materials[3]) == "Conviene secarlo antes de imprimir: 70 a 80 °C, 8 h");
     const LanguageScope en(Language::English);
     CHECK(material_warning_text(w.front(), materials[3]) == "Better dry it before printing: 70 to 80 °C, 8 h");
+}
+
+namespace {
+
+const std::filesystem::path kKnowledge = std::filesystem::path(TISMA_TEST_DATA_DIR) / "knowledge";
+
+} // namespace
+
+TEST_CASE("assistant: the knowledge files read (docs/KNOWLEDGE.md)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    CHECK(k.errors.empty());
+    CHECK(k.language == "es");
+    REQUIRE(k.materials.size() == 2);
+    REQUIRE(k.problems.size() == 3);
+    REQUIRE(k.procedures.size() == 1);
+    REQUIRE(k.terms.size() == 5);
+    REQUIRE(k.tutorials.size() == 1);
+    CHECK_FALSE(k.sources.empty());
+    // The glossary in alphabetical order, accents aside.
+    CHECK(k.terms.front().term == "Altura de capa");
+    CHECK(k.terms.back().term == "Retracción");
+    // A material's details.
+    const KnowledgeMaterial& abs = k.materials[1];
+    CHECK(abs.base);
+    CHECK(abs.base->chamber_temp == 45.0);
+    CHECK_FALSE(abs.base->retraction_bowden);
+    CHECK(abs.drying->hours_before_printing == 4);
+    CHECK_FALSE(k.materials[0].drying);
+    // The tutorial's steps.
+    const KnowledgeTutorial& t = k.tutorials.front();
+    REQUIRE(t.steps.size() == 3);
+    CHECK(t.steps[0].wait_for == "printer_selected");
+    CHECK(t.steps[2].open_type == "procedure");
+    // A missing folder: nothing, no errors (AS1).
+    const Knowledge none = load_knowledge(kKnowledge / "no_such_folder", "es");
+    CHECK(none.empty());
+    CHECK(none.errors.empty());
+    // What is not such a file.
+    Knowledge bad;
+    CHECK_THROWS_AS(parse_knowledge_file("{}", bad), KnowledgeError);
+    CHECK_THROWS_AS(parse_knowledge_file(R"({"format": "tisma-knowledge-terms", "version": 2})", bad), KnowledgeError);
+    CHECK_THROWS_AS(parse_knowledge_file(R"({"format": "tisma-knowledge-glossary", "version": 1, "terms": [{"term": "x"}]})", bad),
+                    KnowledgeError);
+}
+
+TEST_CASE("assistant: the search finds the problem and the term (AS2)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    const std::vector<KnowledgeHit> hits = search_knowledge(k, "HILOS");
+    bool problem = false, term = false;
+    for (const KnowledgeHit& h : hits) {
+        problem |= h.kind == KnowledgeHit::Kind::Problem && k.problems[h.index].id == "stringing";
+        term |= h.kind == KnowledgeHit::Kind::Term && k.terms[h.index].term == "Hilos";
+    }
+    CHECK(problem);
+    CHECK(term);
+    CHECK(search_knowledge(k, "retraccion").size() >= 1); // accents aside
+    CHECK(search_knowledge(k, "   ").empty());
+}
+
+TEST_CASE("assistant: the knowledge's causes, actions and materials at work (AS3 to AS9, AS15)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    // AS3: the last_resort cause last.
+    const std::vector<const KnowledgeCause*> causes = causes_in_order(k.problems[0].causes);
+    REQUIRE(causes.size() == 3);
+    CHECK(causes.back()->id == "wet");
+    // AS4, AS5, AS7 from the file's actions.
+    Settings s;
+    s.fan_off_layers = 1;
+    s.variables["temperature"] = {"215"};
+    s.nozzle_diameter = 0.4;
+    const auto& fan = k.problems[2].causes[0].actions;
+    const std::optional<SettingAction> four = setting_action(fan[0]);
+    REQUIRE(four);
+    const std::optional<SettingChange> c = plan_setting(s, *four);
+    REQUIRE(c);
+    CHECK(c->before == "1");
+    CHECK(apply_setting(s, *c).fan_off_layers == 4);
+    const std::optional<SettingChange> first = plan_setting(s, *setting_action(fan[1]));
+    REQUIRE(first);
+    CHECK(std::abs(apply_setting(s, *first).first_layer_height - 0.3) < 1e-9);
+    // A key the engine does not have: no button.
+    CHECK_FALSE(plan_setting(s, *setting_action(fan[2])));
+    CHECK_FALSE(setting_action(fan[3]));
+    const std::optional<SettingChange> cooler = plan_setting(s, *setting_action(k.problems[0].causes[0].actions[0]));
+    REQUIRE(cooler);
+    CHECK(cooler->after == "210");
+    // AS9: the ABS card on an open printer.
+    const MaterialInfo abs = material_info(k.materials[1]);
+    CHECK(abs.enclosure_needed);
+    CHECK(abs.dry_before_printing);
+    CHECK(abs.dry_hours == 4);
+    Settings open;
+    const std::vector<MaterialWarning> w = material_warnings(abs, open);
+    CHECK(std::find(w.begin(), w.end(), MaterialWarning::NeedsEnclosure) != w.end());
+    CHECK(std::find(w.begin(), w.end(), MaterialWarning::DryFirst) != w.end());
+    std::vector<MaterialInfo> all;
+    for (const KnowledgeMaterial& m : k.materials)
+        all.push_back(material_info(m));
+    CHECK(find_material(all, "", "Generic ABS @0.4")->name == "ABS");
+    // AS15: the term for a setting, the first in alphabetical order.
+    const KnowledgeTerm* walls = term_for_setting(k, "walls.count");
+    REQUIRE(walls);
+    CHECK(walls->term == "Pared");
+    CHECK(term_for_setting(k, "retraction.length")->term == "Hilos");
+    CHECK_FALSE(term_for_setting(k, "infill.density"));
 }

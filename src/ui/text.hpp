@@ -713,6 +713,29 @@
     X(HelpTour, "Recorrido de la interfaz", "A tour of the interface")                                               \
     X(HelpTourAbout, "Siete pasos, de abrir un modelo a imprimir.", "Seven steps, from opening a model to printing.") \
     X(HelpStart, "Empezar", "Start")                                                                                  \
+    X(HelpNothingFound, "No se encontró nada", "Nothing found")                                                       \
+    X(MaterialCard, "Ficha del material: %s", "Material card: %s")                                                    \
+    X(MaterialChamber, "Cabina", "Chamber")                                                                           \
+    X(MaterialFan, "Ventilador", "Fan")                                                                               \
+    X(MaterialEnclosure, "Impresora cerrada", "Enclosed printer")                                                     \
+    X(MaterialNozzle, "Boquilla", "Nozzle")                                                                           \
+    X(MaterialRetraction, "Retracción", "Retraction")                                                                 \
+    X(MaterialDirect, "directa %.1f mm", "direct %.1f mm")                                                            \
+    X(MaterialBowden, "Bowden %.1f mm", "Bowden %.1f mm")                                                             \
+    X(MaterialDrying, "Secado", "Drying")                                                       \
+    X(HelpMaterial, "Material", "Material")                                                                           \
+    X(HelpBack, "‹ Volver", "‹ Back")                                                                                 \
+    X(HelpLastResort, "Probar solo después de las anteriores", "Try only after the ones above")                       \
+    X(HelpApply, "Aplicar", "Apply")                                                                                  \
+    X(HelpOpen, "Abrir", "Open")                                                                                      \
+    X(HelpSee, "Ver", "See")                                                                                          \
+    X(HelpOpenCalibration, "Abrir la calibración", "Open the calibration")                                            \
+    X(HelpPrevention, "Para que no vuelva a pasar", "So it does not happen again")                                    \
+    X(HelpNotes, "Notas", "Notes")                                                                                    \
+    X(HelpLimitUsed, "Se usó el límite: %s", "The limit was used: %s")                                                \
+    X(HelpTutorialSteps, "%d pasos, unos %d min", "%d steps, about %d min")                                           \
+    X(HelpTutorialsSoon, "Los tutoriales guiados de la ayuda llegan en el próximo paso.", "The help's guided tutorials come in the next step.") \
+    X(HelpGuidesSoon, "Las guías de calibración llegan con la página de calibraciones.", "The calibration guides come with the calibrations page.")                                                                                  \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \

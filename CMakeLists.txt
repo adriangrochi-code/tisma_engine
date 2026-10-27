@@ -295,6 +295,7 @@ if(TISMA_BUILD_UI)
     src/ui/printer_card.cpp
     src/ui/credits.cpp
     src/ui/assistant.cpp
+    src/ui/knowledge.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
     src/ui/measure.cpp

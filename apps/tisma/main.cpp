@@ -127,6 +127,10 @@ int main(int argc, char** argv) {
             options.choose_settings = true;
         } else if (arg == "--credits") {
             options.credits = true;
+        } else if (arg == "--knowledge") {
+            options.knowledge = value();
+        } else if (arg == "--help-item") {
+            options.help_open = value();
         } else if (arg == "--help-panel") {
             options.help = value(); // problems, procedures, glossary, tutorials, calibrations
         } else if (arg == "--section") {

@@ -6332,3 +6332,28 @@ la placa (29). La pintura de un modelo cortado no pasa a las mitades.
 
 **Sigue:** los conectores del corte y las partes de un objeto.
 
+## 2026-10-27 — Interfaz P1: el asistente, tercer paso (los datos de `knowledge/`)
+
+**Hecho:**
+- **El formato:** el equipo de fichas agregó la lista de campos a `docs/KNOWLEDGE.md` del repositorio de perfiles
+  (rama `docs/knowledge-fields`); se leyó ese documento y nada más. `src/ui/knowledge.*` lee `materials.json`,
+  `problems.json`, `procedures.json`, `glossary.json` y `tutorials.json` (formato `tisma-knowledge-*`, versión 1), con
+  los campos opcionales que faltan o valen `null`, los rangos `[mín, máx]` y la carpeta del idioma primero (regla 19).
+- **El panel de ayuda con datos:** la búsqueda en todas las pestañas (AS2), los problemas con sus causas en orden y la
+  nota de último recurso, **Aplicar** con el valor de ahora y el nuevo y **Deshacer** en el aviso, ir a otro problema
+  con **Volver**, los procedimientos con advertencias y casillas, y el glosario.
+- **Junto a los ajustes:** el (i) muestra la definición del término que nombra el ajuste (regla 12, AS15).
+- **Ficha del material** (reglas 13 y 14): en la pestaña Material, abierta si hay avisos, y el primer aviso en la
+  barra de estado (AS9: ABS en una impresora abierta).
+
+**Medido:** `[assistant]` con un paquete de prueba propio (dos materiales, tres problemas, un procedimiento, cinco
+términos, un tutorial de tres pasos; 114 comprobaciones), y `ui_help_problem` y `ui_material_card`. Capturas del
+problema de hilos, la primera capa, el secado, el glosario, el (i) de Paredes y la ficha del ABS.
+
+**No hecho:** los tutoriales guiados de los datos (anclas que resaltan, eventos que avanzan, progreso guardado; reglas
+15 a 19), las guías de calibración, los enlaces desde la revisión previa, las preferencias `assistant.*` y la
+retracción directa o Bowden según la impresora (el motor todavía no sabe qué extrusor tiene: la ficha muestra las dos).
+Bajar `knowledge.tar.xz` es de `profile_pack.md`.
+
+**Sigue:** los tutoriales guiados (reglas 15 a 19).
+
