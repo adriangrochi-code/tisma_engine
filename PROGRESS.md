@@ -6100,3 +6100,30 @@ drenajes y lanzar las calibraciones de resina desde la interfaz; laminar resina,
 desde la interfaz.
 
 **Sigue:** R3b, la resina en la interfaz.
+
+## 2026-10-27 — Resina, R3b: la resina en la interfaz
+
+**Hecho:**
+- `machine.technology` (`fdm` o `msla`), en Impresora › Máquina › Cama y volumen. Ninguna ficha nombra la clave; es
+  decisión propia (`PROVENANCE.md`). Con `msla`:
+  - el panel muestra solo los ajustes de resina, y la placa es la pantalla;
+  - Laminar llama a `slice_resin` y la vista previa 3D muestra los contornos de cada capa (la pieza y, aparte, los
+    soportes con la base), con el tiempo, los ml, los gramos y el costo;
+  - «Exportar GOO» escribe el archivo entero o nada;
+  - Calibrar muestra solo la torre de exposición y el bloque de medidas, sin soportes ni base: la franja elegida pasa
+    a `resin.exposure`, y las medidas del bloque dan las correcciones de escala;
+  - en la línea de comandos, `msla` pide una salida `.goo`.
+- La torre de exposición tiene la forma de `calibration_models.md` (CM3, CM5), con agujeros redondos, y sus
+  exposiciones viajan como cambios por altura (`changes`, clave nueva `exposure`).
+- Costo de la resina por el frasco (`resin.bottle_cost`, `bottle_volume`, `bottle_weight`; `gcode_extras.md`, regla
+  2): va en la cabecera del archivo y en la vista previa; en el panel, el peso del frasco fija la densidad.
+
+**Medido:** comprobado en la interfaz con capturas (cubo sobre soportes y base, torre de exposición) y exportando un
+`.goo` desde la interfaz, leído de vuelta: capa 150, 327 184 píxeles, el cubo exacto.
+
+**No hecho:** las uniones entre pilares a `resin.support_critical_angle`; poner los drenajes desde la interfaz; ver
+la imagen de una capa como imagen (la vista previa muestra contornos).
+
+**Sigue:** subir R2, R3a y R3b cuando pase la verificación de Linux; después, el punto 5 del orden (lo propio de
+Tisma) y la interfaz P1.
+

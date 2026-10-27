@@ -128,8 +128,9 @@ se escribe nada y vale lo que tenga la impresora.
 
 ### De resina
 
-De la ficha `docs/spec/features/resin.md` (reglas 16 a 19). Están en el motor (`src/resin/resin.*`); la interfaz
-todavía no las ofrece.
+De la ficha `docs/spec/features/resin.md` (reglas 16 a 19), en el motor (`src/resin/resin.*`, y como
+`CalibrationKind::ResinExposure` y `ResinMeasure`). Con una impresora de resina (`machine.technology` `msla`), la
+pestaña Calibrar muestra solo estas dos; se imprimen sobre la plataforma, sin soportes, base ni vaciado.
 
 - **Torre de exposición** (`ResinTower`, `resin_tower_mesh`, `tower_exposure`; forma de la ficha
   `calibration_models.md`): 30 mm de ancho y 4 de fondo, una base y una franja por exposición, de 1,5 a 3,5 s cada
@@ -140,10 +141,11 @@ todavía no las ofrece.
   se doblan con exposición de menos. Se imprime sobre la plataforma. La franja `i` empieza en `Z = i · alto`; la 0 es
   la base, con `resin.exposure`, y la `i ≥ 1` prueba `inicio + (i − 1) · paso`, sin pasar del final; las capas de fondo
   mantienen su exposición. Solo en formatos que guardan la exposición de cada capa (GOO): el archivo lleva el modo
-  avanzado. La exposición de la franja que salió mejor pasa a `resin.exposure`.
+  avanzado. Las exposiciones van como cambios por altura (`changes`, clave `exposure`). La exposición de la franja que
+  salió mejor pasa a `resin.exposure`.
 - **Bloque de medidas** (`resin_measure_block`, `resin_scale_from`): un bloque de 30 × 30 × 10 mm. Con X, Y y Z
   medidos, cada corrección nueva es la actual por la medida deseada sobre la impresa (`resin.scale_x`, `scale_y`,
-  `scale_z`).
+  `scale_z`); la tarjeta la calcula y la aplica.
 
 ### Siguientes (estándar)
 

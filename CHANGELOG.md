@@ -19,6 +19,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   corrección absoluta del contorno, corrección de Z bajo lo que cuelga y gamma de los bordes. Por defecto, una Elegoo
   Mars 5 con resina estándar. Avisa de las ventosas (huecos que el film sella al despegar cada capa) y dice cómo
   arreglarlas. El motor trae además la torre de exposición y el bloque de medidas de resina (todavía sin menú).
+- **Impresoras de resina en la interfaz** (Impresora › Máquina › Tipo de impresora): con «Resina (MSLA)» el panel
+  muestra solo los ajustes de resina, Laminar hace las imágenes de las capas, la vista previa muestra la pieza con
+  sus soportes y su base capa por capa, «Exportar GOO» escribe el archivo, y Calibrar ofrece la torre de exposición
+  (cuya franja elegida pasa a la exposición) y el bloque de medidas (que calcula la corrección de escala).
 - **Soportes, base y vaciado de resina** (ficha `resin_supports.md`, en Otros › Resina: soportes, base y vaciado):
   la pieza queda elevada sobre pilares con puntas finas en las caras que miran hacia abajo, sobre una base pegada a
   la plataforma (o con la base alrededor de la pieza apoyada); puede vaciarse con paredes de un espesor mínimo y el

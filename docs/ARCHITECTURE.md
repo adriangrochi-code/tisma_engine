@@ -157,6 +157,9 @@ volúmenes que un proyecto marca como modificadores, fuera).
   dónde la pieza lo tapa), el radio de cada pilar a cada altura y el contorno de la base.
 - **`hollow.*`:** el vaciado con la transformada de distancia exacta sobre una grilla de celdas, las barras
   interiores y los agujeros de drenaje. `slice_resin` junta la pieza vaciada, los soportes y la base en cada capa.
+- En la interfaz, `Slicer::run` (`src/ui/slicing.*`) lamina con `slice_resin` cuando `machine.technology` es `msla`
+  y deja el resultado en `SliceResult::resin`; `resin_preview` convierte los contornos de cada capa en movimientos
+  para la misma vista previa 3D del G-code.
 
 ### `geom/`: geometría
 

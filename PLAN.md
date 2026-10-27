@@ -819,9 +819,10 @@ Con el PR #23 (2026-10-26):
     - [ ] R3, los soportes de resina (`resin_supports.md`) y la resina en la interfaz (laminar, vista previa de las
       imágenes, exportar `.goo`): hechos (2026-10-27) los soportes (puntos, puntas, pilares, aterrizaje sobre la
       pieza), la base (también alrededor de la pieza), el vaciado con su redondeo, las barras interiores y los
-      drenajes en el motor, con sus tarjetas en el panel (RS1 a RS4). Faltan las uniones entre pilares a
-      `resin.support_critical_angle` (los pilares bajan rectos), poner los drenajes desde la interfaz y la resina en
-      la interfaz
+      drenajes en el motor, con sus tarjetas en el panel (RS1 a RS4); y la resina en la interfaz
+      (`machine.technology`): el panel con solo los ajustes de resina, laminar, la vista previa con los contornos de
+      cada capa, exportar `.goo` y las dos calibraciones de resina en Calibrar. Faltan las uniones entre pilares a
+      `resin.support_critical_angle` (los pilares bajan rectos) y poner los drenajes desde la interfaz
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
