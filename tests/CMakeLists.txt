@@ -259,6 +259,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --credits
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_credits.png)
+    # The help panel without the pack's data says it comes with the profiles
+    # (assistant.md, AS1), with an empty data folder of its own.
+    add_test(NAME ui_help_panel
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --help-panel problems
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_panel.png)
+    set_tests_properties(ui_help_panel PROPERTIES ENVIRONMENT
+                         "ASAN_OPTIONS=detect_leaks=0;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_help_config" TIMEOUT 300)
     set_tests_properties(ui_printer_card ui_printer_page ui_credits PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)

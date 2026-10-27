@@ -6266,3 +6266,33 @@ revisan una por una cuando se hagan (regla 2). Algunos DOI no se pudieron confir
 ya cita `docs/spec/SOURCES.md` (HAL, arXiv, el PDF de los autores).
 
 **Sigue:** `assistant.md` (P1); después P2.
+
+## 2026-10-27 — Interfaz P1: el asistente, segundo paso (`assistant.md`)
+
+**Hecho:**
+- **Panel de ayuda** (reglas 1 a 4): F1, el botón con el signo de pregunta en la barra superior (cuando entra al lado
+  del buscador) y Más › Ayuda. Se abre sobre el panel de ajustes con el buscador, las pestañas Problemas,
+  Procedimientos, Glosario, Tutoriales y Calibraciones, y al pie «Basado en las guías de Rafa Barajas» con su enlace.
+  Sin los datos del paquete dice «La ayuda se descarga con los perfiles…» (AS1); Tutoriales ya ofrece el recorrido de
+  la interfaz.
+- **Acciones `setting`** (regla 7, `src/ui/assistant.*`): `add`, `multiply`, `set` y `set_relative` sobre el JSON de
+  ajustes, con el perfil al que pertenece la clave, el valor antes y después como lo escribe el panel, el corte al
+  rango de `docs/CONFIG.md` y la variable de temperatura sumada como número (una por extrusor). Una clave que el motor
+  no tiene no da botón.
+- **Causas y materiales:** las causas `last_resort` al final (regla 6); el material por tipo o por el nombre del perfil
+  como palabra; los avisos de cabina, boquilla endurecida, cama, hotend y secado, sin los que dependen de un dato que la
+  impresora no tiene (reglas 13 y 14).
+
+**Medido:** AS3 a AS11 en `[assistant]` (65 comprobaciones: «1 → 4» y vuelta a 1, 215 → 210, 80 → 64, 0,75 × 0,4 =
+0,3, 5000 capas acotadas a 1000, la ficha del ABS con su aviso, el secado «70 a 80 °C, 8 h»), `ui_help_panel` (AS1 con
+una carpeta de datos vacía). Capturas del panel a 1400 y 1100 px de ancho.
+
+**No hecho:** leer `knowledge/`. `docs/KNOWLEDGE.md` del repositorio de perfiles describe las acciones y las guías de
+calibración, pero no los campos de los otros cinco archivos; se pidió esa lista al equipo de fichas y el motor no lee
+los datos del paquete para adivinarla. Hasta entonces: la lista de problemas, procedimientos, glosario y guías, el
+diálogo de Aplicar con Deshacer, el (i) con la definición (regla 12), la ficha del material al elegir un filamento, los
+tutoriales con anclas y eventos (reglas 15 a 19) y los enlaces desde la revisión previa (regla 9). Bajar
+`knowledge.tar.xz` es de `profile_pack.md` (P3).
+
+**Sigue:** el resto de P1 que no espera datos; después P2.
+

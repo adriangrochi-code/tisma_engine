@@ -27,7 +27,7 @@ constexpr const char* kUsage =
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--level basic|normal|advanced|custom] [--section TAB/SECTION]\n"
-    "                                   [--search TEXT] [--single-column] [--choose-settings] [--credits]\n"
+    "                                   [--search TEXT] [--single-column] [--choose-settings] [--credits] [--help-panel TAB]\n"
     "                                   [--ortho] [--labels]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
@@ -118,6 +118,8 @@ int main(int argc, char** argv) {
             options.choose_settings = true;
         } else if (arg == "--credits") {
             options.credits = true;
+        } else if (arg == "--help-panel") {
+            options.help = value(); // problems, procedures, glossary, tutorials, calibrations
         } else if (arg == "--section") {
             options.section = value(); // print/quality, material/cooling, printer/machine...
         } else if (arg == "--tips") {

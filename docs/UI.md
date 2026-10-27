@@ -303,6 +303,13 @@ de licencia. Las pruebas `[credits]` fallan si falta alguna de esas partes.
 Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
 información al lado de cada ajuste.
 
+- **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** de la barra superior (si entra junto al buscador) o
+  **Más > Ayuda**. Se abre sobre el panel de ajustes con un buscador y las pestañas Problemas, Procedimientos,
+  Glosario, Tutoriales y Calibraciones; al pie, «Basado en las guías de Rafa Barajas». Sus datos llegan con el paquete
+  de perfiles (`knowledge/`, en la carpeta `pack/` junto a las preferencias); sin ellos, el panel lo dice. Tutoriales
+  ofrece además el recorrido de la interfaz. `--help-panel problems|procedures|glossary|tutorials|calibrations` lo
+  abre en esa pestaña.
+
 - **Asistente:** se abre solo la primera vez (sin preferencias guardadas), y desde **Más > Tutorial**. Siete pasos
   abajo de la vista: abrir un modelo, elegir impresora, filamento y perfil, los ajustes, las herramientas de la placa,
   laminar y revisar, imprimir. **Atrás**, **Siguiente** y **Saltar**.

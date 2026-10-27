@@ -91,7 +91,7 @@ constexpr const char* kIcons[] = {
     "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
@@ -450,6 +450,8 @@ private:
     // «Based on» under a card, and the Credits and sources page (credits.md).
     void card_credits(std::string_view card, float left, float right);
     void credits_dialog();
+    // The help panel over the settings panel (assistant.md).
+    void help_panel();
     // A section in the column of sections, and a section's cards.
     bool section_button(std::string_view id, const char* title, const char* icon_name, bool selected, bool marked,
                         float column);
@@ -650,6 +652,11 @@ private:
     // license notice shows (-1: none).
     bool credits_open_ = false;
     int credits_notice_ = -1;
+    // The help panel (assistant.md, rules 1 to 4): open, its tab and its search.
+    bool help_open_ = false;
+    int help_tab_ = 0;
+    bool help_select_ = false; // choose help_tab_ in the tab bar once
+    std::string help_query_;
     // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
     // the first-use tip on screen, the tips already seen and whether they show.
     int tour_step_ = -1;
@@ -2018,6 +2025,14 @@ bool App::init(std::string& error) {
     }
     if (options_.credits)
         credits_open_ = true;
+    if (!options_.help.empty()) {
+        help_open_ = true;
+        static constexpr const char* tabs[] = {"problems", "procedures", "glossary", "tutorials", "calibrations"};
+        for (int i = 0; i < 5; ++i)
+            if (options_.help == tabs[i])
+                help_tab_ = i;
+        help_select_ = true;
+    }
     if (options_.choose_settings) {
         choose_level(ViewLevel::Custom);
         choose_draft_ = custom_view_;
@@ -3442,10 +3457,18 @@ void App::top_bar() {
                2.0f + ImGui::CalcTextSize(label).x;
     };
     const float right = width_of(tr(T::Open)) + width_of(tr(T::Slice)) + width_of(tr(T::Export)) + more_w + gap * 3.0f;
-    // The search for a setting, between the tabs and the actions.
+    // The search for a setting and the help (assistant.md, rule 1), between
+    // the tabs and the actions, when there is room; F1 and More open the help
+    // anyway.
     {
         const float from = ImGui::GetCursorPosX() + 10.0f * scale_;
-        const float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
+        float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
+        if (room >= button_h) {
+            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - right - 12.0f * scale_ - gap - button_h, top));
+            if (icon_button("##help", "help", tr(T::HelpTip), button_h))
+                help_open_ = !help_open_;
+            room -= button_h + gap;
+        }
         const float w = std::min(300.0f * scale_, room);
         if (w > 120.0f * scale_) {
             ImGui::SetCursorPos(ImVec2(from, top));
@@ -3519,6 +3542,8 @@ void App::top_bar() {
             tips_seen_.clear();
             tips_ = true;
         }
+        if (ImGui::MenuItem(tr(T::Help), "F1"))
+            help_open_ = true;
         if (ImGui::MenuItem(tr(T::Credits)))
             credits_open_ = true;
         if (ImGui::MenuItem(tr(T::About)))
@@ -3973,6 +3998,89 @@ void App::card_credits(std::string_view card, float left, float right) {
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();
+}
+
+// Where the assistant's data lives once the profile pack brings it
+// (profile_pack.md, rules 8 and 21): the interface's data folder, apart from
+// the person's profiles.
+std::filesystem::path knowledge_dir() {
+    const std::filesystem::path prefs = preferences_path();
+    return prefs.empty() ? prefs : prefs.parent_path() / "pack" / "knowledge";
+}
+
+// The help panel (assistant.md, rules 1 to 4), over the settings panel: its
+// tabs, a search over all of them, and at its foot where its texts come
+// from. Without the pack's data it says it comes with the profiles (AS1).
+void App::help_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::Begin("##help", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::Help));
+    ImGui::PopFont();
+    ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::GetFrameHeight() - ImGui::GetStyle().WindowPadding.x);
+    if (ImGui::Button("×", ImVec2(ImGui::GetFrameHeight(), 0)) ||
+        (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+        help_open_ = false;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    char query[256] = {};
+    help_query_.copy(query, sizeof query - 1);
+    if (ImGui::InputTextWithHint("##help_search", tr(T::HelpSearch), query, sizeof query))
+        help_query_ = query;
+    static constexpr T tabs[] = {T::HelpProblems, T::HelpProcedures, T::HelpGlossary, T::HelpTutorials,
+                                 T::HelpCalibrations};
+    if (ImGui::BeginTabBar("##help_tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        for (int i = 0; i < int(std::size(tabs)); ++i) {
+            const ImGuiTabItemFlags flags = help_select_ && help_tab_ == i ? ImGuiTabItemFlags_SetSelected : 0;
+            if (ImGui::BeginTabItem(tr(tabs[i]), nullptr, flags)) {
+                // Until the tab asked for shows, the one shown is not chosen.
+                if (!help_select_ || help_tab_ == i)
+                    help_tab_ = i, help_select_ = false;
+                ImGui::EndTabItem();
+            }
+        }
+        ImGui::EndTabBar();
+    }
+    const float foot = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##help_body", ImVec2(0, -foot));
+    ImGui::PushTextWrapPos(0.0f);
+    const std::filesystem::path data = knowledge_dir();
+    std::error_code error;
+    const bool have = !data.empty() && std::filesystem::is_directory(data, error);
+    if (help_tab_ == 3) {
+        // The interface's own tour is here whether or not the data came.
+        ImGui::Spacing();
+        ImGui::TextUnformatted(tr(T::HelpTour));
+        ImGui::TextDisabled("%s", tr(T::HelpTourAbout));
+        if (ImGui::Button(tr(T::HelpStart))) {
+            tour_step_ = 0;
+            help_open_ = false;
+        }
+        ImGui::Separator();
+    }
+    ImGui::Spacing();
+    ImGui::TextDisabled("%s", tr(have ? T::HelpNotRead : T::HelpNoData));
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+    // Rule 4: where the help's texts come from.
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    for (const FeatureCredit& c : credits().features)
+        if (c.spec == "assistant.md" && c.author == "Rafa Barajas") {
+            ImGui::TextDisabled("%s", tr(T::HelpBasedOn));
+            ImGui::SameLine(0.0f, ImGui::CalcTextSize(" ").x);
+            ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::TextLinkOpenURL(c.author.c_str(), c.url.c_str());
+            ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", c.url.c_str());
+            break;
+        }
+    ImGui::PopFont();
+    ImGui::End();
 }
 
 // More › Credits and sources (credits.md, rule 4): the functions taken from
@@ -7393,6 +7501,8 @@ void App::layout() {
         status_bar();
     } else {
         settings_panel();
+        if (help_open_)
+            help_panel();
         status_bar();
         view_tools();
         if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
@@ -7442,6 +7552,8 @@ void App::layout() {
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
         search_focus_ = true;
+    if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
+        help_open_ = !help_open_;
     // The view's keys (preview.md, rule 10) while no text field has the keyboard.
     const ImGuiIO& keys = ImGui::GetIO();
     if (!keys.WantTextInput && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&

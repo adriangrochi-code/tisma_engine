@@ -676,6 +676,23 @@
       "Your hot end does not reach this material's temperature")                                                      \
     X(WarnDry, "Conviene secarlo antes de imprimir", "Better dry it before printing")                                 \
     X(RangeTo, " a ", " to ")                                                                                         \
+    X(Help, "Ayuda", "Help")                                                                                          \
+    X(HelpTip, "Ayuda: problemas de impresión, procedimientos, glosario y tutoriales, sin conexión (F1)",              \
+      "Help: print problems, procedures, glossary and tutorials, offline (F1)")                                        \
+    X(HelpProblems, "Problemas", "Problems")                                                                          \
+    X(HelpProcedures, "Procedimientos", "Procedures")                                                                 \
+    X(HelpGlossary, "Glosario", "Glossary")                                                                           \
+    X(HelpTutorials, "Tutoriales", "Tutorials")                                                                       \
+    X(HelpCalibrations, "Calibraciones", "Calibrations")                                                              \
+    X(HelpSearch, "Buscar en la ayuda", "Search the help")                                                            \
+    X(HelpNoData, "La ayuda se descarga con los perfiles; se va a bajar cuando haya conexión.",                       \
+      "The help is downloaded with the profiles; it will be when there is a connection.")                             \
+    X(HelpNotRead, "Los datos de la ayuda están en esta computadora, pero esta versión todavía no los lee.",          \
+      "The help's data is on this computer, but this version does not read it yet.")                                  \
+    X(HelpBasedOn, "Basado en las guías de", "Based on the guides by")                                                \
+    X(HelpTour, "Recorrido de la interfaz", "A tour of the interface")                                               \
+    X(HelpTourAbout, "Siete pasos, de abrir un modelo a imprimir.", "Seven steps, from opening a model to printing.") \
+    X(HelpStart, "Empezar", "Start")                                                                                  \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \

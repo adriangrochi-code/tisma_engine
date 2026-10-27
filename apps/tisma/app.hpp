@@ -48,6 +48,7 @@ struct AppOptions {
     bool labels = false;          // the parts' names over them (E)
     bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
     bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
+    std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

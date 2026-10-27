@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Panel de ayuda** (ficha `assistant.md`, primer paso): F1, el botón **?** o Más › Ayuda abren la ayuda con sus
+  pestañas y su buscador. Sus textos llegan con el paquete de perfiles; mientras tanto ofrece el recorrido de la
+  interfaz.
 - **Créditos y fuentes** (ficha `credits.md`): las fichas cuya función sale de un artículo o un proyecto dicen al pie
   «Basado en…», con un enlace a la fuente, y **Más > Créditos y fuentes** junta todas las fuentes y los componentes de
   terceros con su licencia y el texto de su aviso.
