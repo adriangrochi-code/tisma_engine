@@ -5381,3 +5381,25 @@ modo silencioso, `M73` y los sabores nuevos: 600 corridas (semilla 1) y 1500 (se
 movimiento y las esperas del G-code (reglas 8, 9, 13), el calentamiento (10, 14) y las esquinas como cada firmware
 (12; Klipper). De `gcode_extras.md`, las miniaturas (X7) y el G-code binario (X8).
 
+## 2026-10-27 — Punto 2: falda, escudo contra corrientes y tipos de borde
+
+**Hecho** (ficha `skirt_brim_raft.md`, reglas 1 y 4 a 8):
+- `adhesion.skirt_min_filament`: si las vueltas de falda gastan menos filamento que esto en la primera capa, se
+  agregan vueltas hacia afuera hasta pasarlo (a lo sumo 1000);
+- `adhesion.draft_shield` (`disabled`, `limited`, `enabled`): con escudo la falda se mide desde la pieza aunque haya
+  borde, la vuelta del borde que cae debajo de ella se quita, y con `enabled` se repite en todas las capas;
+- `adhesion.brim_type` (`outer`, `inner`, `outer_and_inner`, `none`): el borde de adentro sale de los agujeros de la
+  primera capa hacia adentro, rodeando las islas que haya en ellos, hasta llenar el agujero;
+- `adhesion.brim_gap`: el borde entero se aparta de la pieza, con el mismo ancho;
+- el verificador cuenta las vueltas extra de la falda en su margen; en el panel, Adhesión › Falda y Borde.
+
+**Medido:** B1 (cubo de 20 mm, una vuelta a 6 mm, 300 mm de filamento): 9153 mm de falda en la primera capa, las
+vueltas justas para pasar los 300 mm (Tisma Slicer da 10337,7 mm; su cordón es más ancho, 0,45). B3: 14 vueltas de
+borde sin escudo y 13 con él, la falda a 3,18 mm de la pieza; con `enabled` en las 50 capas, con `limited` y 5 capas
+de falda en 5. B4 (tubo de 10 y 5 mm de radio, borde de 3 mm): 8 vueltas afuera de 10,18 a 12,68 mm (Tisma Slicer:
+10,159 a 12,678), 8 en el agujero de 4,82 a 2,32 (4,801 a 2,319), con 1 mm de separación de 11,18 a 13,68 (11,168 a
+13,673). 487 pruebas pasan; fuzzer con estos ajustes: 600 corridas (semilla 1) y 1500 (semilla 271031), 0 fallas.
+
+**Sigue:** el lenguaje de plantillas (`gcode_templates.md`, reglas 1 a 10, 12 y 14 a 17); después, de `gcode_extras.md`,
+el G-code binario (X8) y las miniaturas (X7, con la interfaz); luego el punto 3.
+

@@ -39,6 +39,9 @@ enum class GcodeFlavor {
     NoExtrusion
 };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+// Where the brim goes (skirt_brim_raft.md, rules 5 to 7) and the draft shield (rule 4).
+enum class BrimType { None, Outer, Inner, OuterAndInner };
+enum class DraftShield { Disabled, Limited, Enabled };
 // What the machine's limits are for (gcode_firmware.md, rule 2): written at
 // the start and used for the time, used for the time only, or neither.
 enum class LimitsUsage { TimeOnly, Emit, Ignore };
@@ -297,6 +300,13 @@ struct Settings {
     double skirt_distance = 6.0; // mm from the part (or its brim; supports_skirt.md)
     int skirt_layers = 1;
     double brim_width = 0.0; // mm; 0: no brim
+    // skirt_brim_raft.md: the skirt adds loops until it lays this much
+    // filament (rule 1); a draft shield (rule 4); where the brim goes and how
+    // far from the part (rules 5 to 8).
+    double skirt_min_filament = 0.0; // mm of filament; 0: none
+    DraftShield draft_shield = DraftShield::Disabled;
+    BrimType brim_type = BrimType::Outer;
+    double brim_gap = 0.0; // mm
     // The raft (skirt_brim_raft.md, rules 9 to 14): raft_layers of support
     // under the whole part, which goes up by them and raft_gap; 0: none.
     int raft_layers = 0;
@@ -440,6 +450,10 @@ const char* flavor_name(GcodeFlavor flavor);
 
 // The name of a limits usage in the settings ("time_only", "emit", "ignore").
 const char* limits_usage_name(LimitsUsage usage);
+
+// The names of a draft shield and a brim type in the settings.
+const char* draft_shield_name(DraftShield shield);
+const char* brim_type_name(BrimType type);
 
 // The machine's limits by name, as machine.silent names them: max_feed_x to
 // _e, max_accel_x to _e, acceleration, travel_acceleration,

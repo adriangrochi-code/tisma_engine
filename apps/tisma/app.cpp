@@ -713,6 +713,8 @@ const char* row_key(T label) {
         {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
         {T::TreeTopRate, "support.tree_top_rate"},
         {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
+        {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::DraftShieldRow, "adhesion.draft_shield"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
@@ -3045,8 +3047,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::SkirtLoops, "adhesion.skirt_loops", s.skirt_loops, 0, 20);
         mm(T::SkirtDistance, "adhesion.skirt_distance", s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
         whole(T::SkirtLayers, "adhesion.skirt_layers", s.skirt_layers, 1, 100);
+        mm(T::SkirtMinFilament, "adhesion.skirt_min_filament", s.skirt_min_filament, 0.0, 100000.0,
+           s.skirt_min_filament > 0.0 ? "%.0f mm" : "—", 1.0f);
+        if (shown("adhesion.draft_shield"))
+            changed |= row(T::DraftShieldRow, s.draft_shield,
+                           {{DraftShield::Disabled, tr(T::ShieldDisabled)},
+                            {DraftShield::Limited, tr(T::ShieldLimited)},
+                            {DraftShield::Enabled, tr(T::ShieldEnabled)}});
     } else if (id == "brim") {
         mm(T::BrimWidth, "adhesion.brim_width", s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
+        if (shown("adhesion.brim_type"))
+            changed |= row(T::BrimTypeRow, s.brim_type,
+                           {{BrimType::Outer, tr(T::BrimOuter)},
+                            {BrimType::Inner, tr(T::BrimInner)},
+                            {BrimType::OuterAndInner, tr(T::BrimBoth)},
+                            {BrimType::None, tr(T::BrimNone)}});
+        mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 10.0, "%.2f mm", 0.01f);
     } else if (id == "raft") {
         whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
         mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);

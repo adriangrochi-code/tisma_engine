@@ -742,8 +742,8 @@ Con el PR #23 (2026-10-26):
   - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
     2026-10-27). Falta el relleno concéntrico de ancho fijo (regla 1, último punto);
   - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
-  - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27). Del resto de la ficha faltan el
-    largo mínimo de falda (B1), el escudo contra corrientes (B3), los tipos de borde y su separación (B4); B2 ya;
+  - [x] balsa (`skirt_brim_raft.md`, reglas 3 y 9 a 14, R1 a R9; hecho 2026-10-27), y el resto de la ficha (hecho
+    2026-10-27): largo mínimo de falda (B1), escudo contra corrientes (B3), tipos de borde y su separación (B4); B2 ya;
   - [x] cambio de color y pausas (`gcode_templates.md`, reglas 11 y 13; hecho 2026-10-27): `gcode.color_change`,
     `gcode.pause`, `gcode.before_layer`, `gcode.after_layer` y `color_change`/`pause` en `changes`. Falta ponerlos
     desde la vista previa (regla 13, con la interfaz P1) y el resto del lenguaje de plantillas (reglas 1 a 10, 12, 14

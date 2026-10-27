@@ -2,6 +2,7 @@
 // PROVENANCE.md.
 
 #include "gcode/check.hpp"
+#include "adhesion/adhesion.hpp"
 #include "gcode/dialect.hpp"
 
 #include "infill/nonplanar.hpp"
@@ -425,8 +426,16 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& s) {
     // and the travels that go round the outside.
     // The brim and skirt are mitred offsets (offset(), miter limit 2): at a
     // sharp corner they reach out up to twice their distance.
-    const double skirt = s.skirt_loops > 0 ? s.skirt_distance + s.skirt_loops * s.wall_width : 0.0;
-    const double margin = 2.0 * (s.brim_width + skirt) + 2.0 * s.wall_width + 1.0;
+    double skirt = s.skirt_loops > 0 ? s.skirt_distance + s.skirt_loops * s.wall_width : 0.0;
+    if (s.skirt_loops > 0 && s.skirt_min_filament > 0.0) {
+        // The loops added for the skirt's filament (skirt_brim_raft.md, rule
+        // 1): each at least as long as a circle of the skirt's distance.
+        const double area = std::numbers::pi * s.filament_diameter * s.filament_diameter / 4.0;
+        const double path = s.skirt_min_filament * area / std::max(s.wall_width * s.first_layer_height, 1e-9);
+        const double shortest = 2.0 * std::numbers::pi * std::max(s.skirt_distance, 0.5 * s.wall_width);
+        skirt += std::min(double(kMaxSkirtLoops), std::ceil(path / shortest)) * s.wall_width;
+    }
+    const double margin = 2.0 * (s.brim_width + s.brim_gap + skirt) + 2.0 * s.wall_width + 1.0;
     limits.min_x = lo[0] - margin, limits.max_x = hi[0] + margin;
     limits.min_y = lo[1] - margin, limits.max_y = hi[1] + margin;
     if (!s.bed.empty()) { // and never off the bed

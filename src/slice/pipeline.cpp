@@ -134,8 +134,9 @@ void add_raft(SlicedModel& out, const Settings& settings) {
     out.raft_layers = n;
     // No brim on a raft (rule 9); the skirt round its first layer (rule 3).
     out.brim.clear();
-    out.skirt = skirt_loops(first_area, 0.0, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
-                            settings.skirt_distance, settings.wall_width, settings.first_layer_height);
+    AdhesionShape shape = adhesion_shape(settings);
+    shape.brim_width = 0.0;
+    out.skirt = skirt_loops(first_area, shape, settings.wall_width, settings.first_layer_height);
 }
 
 // The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
@@ -594,9 +595,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
     if (!out.regions.empty()) {
         const double first = out.layers.front().top - out.layers.front().bottom;
-        out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width, first);
-        out.skirt = skirt_loops(out.regions.front(), settings.brim_width, settings.skirt_layers > 0 ? settings.skirt_loops : 0,
-                                settings.skirt_distance, settings.wall_width, first);
+        const AdhesionShape shape = adhesion_shape(settings);
+        out.brim = brim_loops(out.regions.front(), shape, settings.wall_width, first);
+        out.skirt = skirt_loops(out.regions.front(), shape, settings.wall_width, first);
     }
     out.fills.resize(out.layers.size());
     // A layer with nothing but its surfaces to fill, the same as the layer a

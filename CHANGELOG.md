@@ -72,6 +72,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Desfase de Z** (`machine.z_offset`) y **E volumétrica** (`gcode.volumetric_e`, E en mm³).
 - **Contracción del filamento** (`extrusion.shrinkage_xy` y `_z`, en Filamento › Contracción): la pieza se lamina más
   grande para que, al contraerse, quede de la medida pedida.
+- **Falda, escudo y bordes** (ficha `skirt_brim_raft.md`, en Adhesión): largo mínimo de filamento de la falda
+  (`adhesion.skirt_min_filament`), escudo contra corrientes (`adhesion.draft_shield`, la falda sube con la pieza),
+  borde afuera, en los agujeros o en los dos (`adhesion.brim_type`) y separado de la pieza (`adhesion.brim_gap`).
 - **Límites de la máquina y firmware** (ficha `gcode_firmware.md`): aceleraciones por eje y de retracción, tirones o
   desviación de unión y avances mínimos (`machine.*`, en Impresora › Límites), que la estimación del tiempo usa y que,
   con `machine.limits_usage` `emit`, se escriben al empezar (Marlin 1 y 2, RepRapFirmware); la temperatura de la

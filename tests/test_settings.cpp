@@ -325,6 +325,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
                          "short_travel": 600},
         "retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
         "adhesion": {"skirt_loops": 2, "skirt_distance": 4, "skirt_layers": 2, "brim_width": 5, "raft_layers": 3,
+                     "skirt_min_filament": 250, "draft_shield": "limited", "brim_type": "outer_and_inner", "brim_gap": 0.5,
                      "raft_gap": 0.15, "raft_expansion": 2, "raft_first_layer_density": 80, "raft_first_layer_expansion": 4},
         "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
         "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},

@@ -2080,7 +2080,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             deferring = false;
         };
         // Skirt, then brim, before the part, at the first layer's speed.
-        if (l < std::size_t(std::max(s.skirt_layers, 0)))
+        // A draft shield goes up to the top (skirt_brim_raft.md, rule 4).
+        if (l < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled)
             group(model.skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         if (l == 0)
             group(model.brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);

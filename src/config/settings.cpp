@@ -215,6 +215,24 @@ Settings silent_settings(const Settings& settings) {
     return out;
 }
 
+const char* draft_shield_name(DraftShield shield) {
+    return shield == DraftShield::Enabled ? "enabled" : shield == DraftShield::Limited ? "limited" : "disabled";
+}
+
+const char* brim_type_name(BrimType type) {
+    switch (type) {
+    case BrimType::None:
+        return "none";
+    case BrimType::Inner:
+        return "inner";
+    case BrimType::OuterAndInner:
+        return "outer_and_inner";
+    case BrimType::Outer:
+        break;
+    }
+    return "outer";
+}
+
 const char* limits_usage_name(LimitsUsage usage) {
     return usage == LimitsUsage::Emit ? "emit" : usage == LimitsUsage::Ignore ? "ignore" : "time_only";
 }
@@ -818,8 +836,31 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "adhesion",
                {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width", "raft_layers", "raft_gap", "raft_expansion",
-                "raft_first_layer_density", "raft_first_layer_expansion"},
+                "raft_first_layer_density", "raft_first_layer_expansion", "skirt_min_filament", "draft_shield", "brim_type",
+                "brim_gap"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "draft_shield") {
+                       s.draft_shield = choice<DraftShield>(g, n, k,
+                                                            {{"disabled", DraftShield::Disabled},
+                                                             {"limited", DraftShield::Limited},
+                                                             {"enabled", DraftShield::Enabled}});
+                       return;
+                   }
+                   if (n == "brim_type") {
+                       s.brim_type = choice<BrimType>(g, n, k,
+                                                      {{"none", BrimType::None},
+                                                       {"outer", BrimType::Outer},
+                                                       {"inner", BrimType::Inner},
+                                                       {"outer_and_inner", BrimType::OuterAndInner}});
+                       return;
+                   }
+                   if (n == "skirt_min_filament" || n == "brim_gap") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= (n == "brim_gap" ? 100.0 : 100000.0)))
+                           fail(k, n == "brim_gap" ? "must be from 0 to 100 mm" : "must be from 0 to 100000 mm");
+                       (n == "brim_gap" ? s.brim_gap : s.skirt_min_filament) = d;
+                       return;
+                   }
                    if (n == "skirt_loops" || n == "skirt_layers") {
                        const json& v = g.at(n);
                        if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
@@ -1455,6 +1496,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.skirt_distance", num(s.skirt_distance)},
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
         {"adhesion.brim_width", num(s.brim_width)},
+        {"adhesion.skirt_min_filament", num(s.skirt_min_filament)},
+        {"adhesion.draft_shield", json(draft_shield_name(s.draft_shield)).dump()},
+        {"adhesion.brim_type", json(brim_type_name(s.brim_type)).dump()},
+        {"adhesion.brim_gap", num(s.brim_gap)},
         {"adhesion.raft_layers", std::to_string(s.raft_layers)},
         {"adhesion.raft_gap", num(s.raft_gap)},
         {"adhesion.raft_expansion", num(s.raft_expansion)},
@@ -1705,6 +1750,10 @@ std::string settings_json(const Settings& s) {
           {"skirt_distance", s.skirt_distance},
           {"skirt_layers", s.skirt_layers},
           {"brim_width", s.brim_width},
+          {"skirt_min_filament", s.skirt_min_filament},
+          {"draft_shield", draft_shield_name(s.draft_shield)},
+          {"brim_type", brim_type_name(s.brim_type)},
+          {"brim_gap", s.brim_gap},
           {"raft_layers", s.raft_layers},
           {"raft_gap", s.raft_gap},
           {"raft_expansion", s.raft_expansion},

@@ -859,6 +859,17 @@
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
+    X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \
+    X(DraftShieldRow, "Escudo contra corrientes", "Draft shield") \
+    X(ShieldDisabled, "No", "No") \
+    X(ShieldLimited, "En las capas de la falda", "On the skirt's layers") \
+    X(ShieldEnabled, "Hasta arriba", "Up to the top") \
+    X(BrimTypeRow, "Dónde va el borde", "Where the brim goes") \
+    X(BrimOuter, "Afuera", "Outside") \
+    X(BrimInner, "En los agujeros", "In the holes") \
+    X(BrimBoth, "Afuera y en los agujeros", "Outside and in the holes") \
+    X(BrimNone, "Ninguno", "None") \
+    X(BrimGap, "Separación del borde", "Brim gap") \
     X(SubSilent, "Modo silencioso", "Silent mode") \
     X(RetractAcceleration, "Aceleración al retraer", "Retraction acceleration") \
     X(MaxAccelX, "Aceleración máxima en X", "Maximum acceleration in X") \

@@ -132,6 +132,12 @@ int main(int argc, char** argv) {
         }
         s.brim_width = pick(3) == 0 ? uni(0, 8) : 0.0;
         s.skirt_loops = pick(4);
+        if (pick(4) == 0) { // skirt_brim_raft.md: brim types and gap, draft shield, the skirt's filament
+            s.brim_type = std::array{BrimType::None, BrimType::Outer, BrimType::Inner, BrimType::OuterAndInner}[std::size_t(pick(4))];
+            s.brim_gap = pick(2) == 0 ? uni(0, 2) : 0.0;
+            s.draft_shield = std::array{DraftShield::Disabled, DraftShield::Limited, DraftShield::Enabled}[std::size_t(pick(3))];
+            s.skirt_min_filament = pick(2) == 0 ? uni(0, 400) : 0.0;
+        }
         s.skirt_distance = uni(1, 6);
         s.retract_length = pick(4) == 0 ? 0.0 : uni(0.2, 6);
         s.retract_lift = pick(3) == 0 ? uni(0, 1) : 0.0;
