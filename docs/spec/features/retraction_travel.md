@@ -55,7 +55,9 @@
    más empinada. No se midió.
 7. **Retracción del firmware:** con `retraction.firmware`, cada retracción es un `G10` y cada vuelta un `G11`, sin
    movimientos de E; el largo y la velocidad los pone el firmware. El salto en Z sigue en el G-code. No se puede usar
-   con `retraction.wipe`: Tisma Slicer rechaza la combinación (prueba R6).
+   con `retraction.wipe`: Tisma Slicer rechaza la combinación (prueba R6). Con firmware, `retraction.restart_extra`
+   no se escribe (después de `G11` no hay E de más) y un largo de retracción 0 igual escribe `G10` y `G11`: el
+   largo es del firmware. `retraction.on_layer_change` sí agrega sus `G10`/`G11` (prueba R12).
 8. **Viajes por dentro:** con `travel.avoid_crossing_walls`, un viaje dentro de una isla sigue un camino por dentro de
    la pieza que no cruza los perímetros externos (por ejemplo, rodea un agujero en vez de cruzarlo). Si ese camino es
    más largo que el recto más `travel.max_detour`, el viaje va recto (prueba R7).
@@ -89,3 +91,4 @@ agujero de 5.
 | R9 | Cilindro, E relativa, `retraction.on_layer_change` | Material: largo 0,8; velocidad 25 y vuelta a 10; extra 0,4; largo 0 | 0,8: 26 retracciones de `E-.8` y vueltas `E.8`. Velocidad: `E-2` a F1500 y vuelta a F600. Extra: vuelta `E2.4`. Largo 0: ninguna retracción. Largo vacío: `E-2`, el de la impresora |
 | R10 | Cubo | Impresora: salto 0 / 0,4. Material: salto vacío / 0,3 / 0 | Impresora 0, material vacío: 51 movimientos en Z (solo cambios de capa). Material 0,3: 350, saltos a Z+0,3. Impresora 0,4 y material vacío: 350, saltos a Z+0,4. Impresora 0,4 y material 0: 51, sin saltos |
 | R11 | Cubo | Material: viaje mínimo 20; barrido sí | Viaje mínimo 20: 2 retracciones en lugar de 151. Barrido: 150 barridos con la retracción durante el barrido |
+| R12 | Cubo, relleno al 20 %, sin falda | `retraction.firmware` con `retraction.restart_extra` 0,5 / con `retraction.on_layer_change` / con largo 0 | 95 `G10` y 94 `G11` sin E de más después de `G11` / 97 y 96 / 95 y 94, igual que con largo 2 (medido el 27-10-2026) |
