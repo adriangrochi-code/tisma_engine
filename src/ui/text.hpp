@@ -974,7 +974,8 @@
     X(FirstLayerOneWall, "Un solo perímetro en la primera capa", "One wall on the first layer") \
     X(ExtraIfNeeded, "Perímetros extra si hacen falta", "Extra walls if needed") \
     X(AvoidCurledOverhangs, "Esquivar voladizos levantados", "Avoid curled overhangs") \
-    X(SumWallsMore, "%d de 5 activas", "%d of 5 on") \
+    X(ExtraOnOverhangs, "Perímetros extra en voladizos", "Extra perimeters on overhangs") \
+    X(SumWallsMore, "%d de 6 activas", "%d of 6 on") \
     X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
     X(SumPrinterValues, "Los de la impresora", "The printer's") \
     X(SumMaterialValues, "%d del material", "%d of the material's") \

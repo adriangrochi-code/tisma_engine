@@ -2382,6 +2382,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Toolpath> arcs;                 // over overhangs, in their order
+            std::vector<Toolpath> overhang_walls;       // loops over overhangs, from the outline in
             std::vector<Toolpath> ironing;              // over the top surfaces, after the fills
             std::vector<Point2d> ends;                  // where its paths start or end
         };
@@ -2445,6 +2446,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 if (!t.points.empty()) {
                     Island& i = island(t);
                     i.arcs.push_back(t);
+                    add(i, t);
+                }
+            for (const Toolpath& t : f.overhang_walls)
+                if (!t.points.empty()) {
+                    Island& i = island(t);
+                    i.overhang_walls.push_back(t);
                     add(i, t);
                 }
             for (const Toolpath& t : f.ironing)
@@ -2522,6 +2529,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
             for (const auto& [index, paths] : i.walls)
                 walls(index, paths);
+            // The loops over an overhang, from its outline in, after the walls
+            // they hang from (walls_extra.md, rule 5).
+            for (Toolpath t : i.overhang_walls)
+                lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
             for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
             // Ironing, in the same layer after the island's fills (ironing.md, rule 1).

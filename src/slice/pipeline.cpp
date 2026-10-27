@@ -452,6 +452,46 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 *part = Clipper2Lib::Difference(*part, arc_areas[l], Clipper2Lib::FillRule::NonZero);
         });
     }
+    // Extra perimeters on overhangs (walls_extra.md, rule 5): a zone held from
+    // one side only, where no arcs go, is filled with loops from its outline
+    // in, inside the walls, as overhang perimeters on round beads; they take
+    // the place of its fill.
+    std::vector<std::vector<Toolpath>> overhang_walls(out.layers.size());
+    if (settings.extra_on_overhangs && !settings.arcs) {
+        const double w = settings.wall_width;
+        tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
+            if (out.regions[l].empty() || out.regions[l - 1].empty())
+                return;
+            const double round = std::max(0.0, std::numbers::pi / 4.0 * w - (out.layers[l].top - out.layers[l].bottom));
+            Polygons taken;
+            for (const HeldZone& z : held_zones(out.regions[l], out.regions[l - 1], w)) {
+                const Polygons area = Clipper2Lib::Intersect(z.zone, out.walls[l].infill, Clipper2Lib::FillRule::NonZero);
+                if (area.empty())
+                    continue;
+                for (double d = w / 2.0;; d += w) {
+                    const Polygons rings = offset(area, -d);
+                    if (rings.empty())
+                        break;
+                    for (const Polygon& ring : rings) {
+                        if (ring.size() < 3)
+                            continue;
+                        Toolpath t;
+                        t.closed = true;
+                        t.gap = round;
+                        for (const auto& q : ring)
+                            t.points.push_back({{to_mm(q.x), to_mm(q.y)}, w});
+                        overhang_walls[l].push_back(std::move(t));
+                    }
+                }
+                taken.insert(taken.end(), area.begin(), area.end());
+            }
+            if (taken.empty())
+                return;
+            LayerSurfaces& surface = out.surfaces[l];
+            for (Polygons* part : {&surface.top, &surface.top_under, &surface.bottom, &surface.sparse, &surface.bridge})
+                *part = Clipper2Lib::Difference(*part, taken, Clipper2Lib::FillRule::NonZero);
+        });
+    }
     out.support_areas.resize(out.layers.size());
     if (settings.support) {
         std::vector<double> thickness;
@@ -661,7 +701,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
                dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty() &&
-               arc_paths[l].empty();
+               arc_paths[l].empty() && overhang_walls[l].empty();
     };
     std::vector<char> repeats(out.layers.size(), 0);
     if (period > 0)
@@ -681,6 +721,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
                                               kBridgeAnchor + settings.wall_width);
                           out.fills[l].arcs = std::move(arc_paths[l]);
+                          out.fills[l].overhang_walls = std::move(overhang_walls[l]);
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {

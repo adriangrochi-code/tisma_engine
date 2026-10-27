@@ -74,27 +74,17 @@ Polygon disc(const Point2d& c, double r) {
 
 } // namespace
 
-std::vector<ArcZone> overhang_arcs(const Polygons& region, const Polygons& below, const ArcParams& params) {
-    std::vector<ArcZone> out;
+std::vector<HeldZone> held_zones(const Polygons& region, const Polygons& below, double w) {
+    std::vector<HeldZone> held;
     if (region.empty() || below.empty())
-        return out;
-    const double w = params.width;
+        return held;
     Polygons hanging = Clipper2Lib::Difference(region, below, Clipper2Lib::FillRule::NonZero);
     hanging = offset(offset(hanging, -w / 2.0), w / 2.0); // no slivers
     if (hanging.empty())
-        return out;
+        return held;
     const Polygons near = offset(below, 0.01);
-    const Polygons inside = offset(region, -w / 2.0); // the beads within the outline
-    const double spacing = w * (1.0 - std::clamp(params.overlap, 0.0, 90.0) / 100.0);
-    constexpr double kStep = 0.1;          // mm between the samples of a circle
-    constexpr std::size_t kBins = 1440;    // angles, for what holds each arc
     // The pieces held from one side; pieces whose held edges meet end to end
     // (an L round a corner of what holds them) are one zone, held along both.
-    struct Held {
-        Polygons zone;
-        std::vector<Point2d> edge;
-    };
-    std::vector<Held> held;
     for (Polygons& zone : split_islands(hanging)) {
         std::vector<Run> runs = held_runs(zone, near);
         if (runs.size() != 1 || runs.front().closed)
@@ -121,7 +111,20 @@ std::vector<ArcZone> overhang_arcs(const Polygons& region, const Polygons& below
                 joined = true;
             }
     }
-    for (const Held& h : held) {
+    return held;
+}
+
+std::vector<ArcZone> overhang_arcs(const Polygons& region, const Polygons& below, const ArcParams& params) {
+    std::vector<ArcZone> out;
+    const double w = params.width;
+    const std::vector<HeldZone> held = held_zones(region, below, w);
+    if (held.empty())
+        return out;
+    const Polygons inside = offset(region, -w / 2.0); // the beads within the outline
+    const double spacing = w * (1.0 - std::clamp(params.overlap, 0.0, 90.0) / 100.0);
+    constexpr double kStep = 0.1;          // mm between the samples of a circle
+    constexpr std::size_t kBins = 1440;    // angles, for what holds each arc
+    for (const HeldZone& h : held) {
         const Polygons& zone = h.zone;
         // The middle of the held edge, and from it into what holds the zone.
         const std::vector<Point2d>& edge = h.edge;

@@ -427,7 +427,7 @@ Settings parse_checked(std::string_view text) {
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
                 "min_detail", "generator", "gap_fill", "clockwise", "staggered_inner_seams", "top_one_wall",
-                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs"},
+                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -440,10 +440,11 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "staggered_inner_seams" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
-            n == "avoid_curled_overhangs") {
+            n == "avoid_curled_overhangs" || n == "extra_on_overhangs") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
-            (n == "staggered_inner_seams"  ? s.staggered_inner_seams
+            (n == "extra_on_overhangs"     ? s.extra_on_overhangs
+             : n == "staggered_inner_seams" ? s.staggered_inner_seams
              : n == "first_layer_one_wall" ? s.first_layer_one_wall
              : n == "extra_if_needed"      ? s.extra_if_needed
                                            : s.avoid_curled_overhangs) = g.at(n).get<bool>();
@@ -1676,6 +1677,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
         {"walls.extra_if_needed", flag(s.extra_if_needed)},
         {"walls.avoid_curled_overhangs", flag(s.avoid_curled_overhangs)},
+        {"walls.extra_on_overhangs", flag(s.extra_on_overhangs)},
         {"extrusion.retraction", json(s.filament_retraction).dump()},
         {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
         {"adhesion.skirt_distance", num(s.skirt_distance)},
@@ -1845,6 +1847,7 @@ std::string settings_json(const Settings& s) {
           {"first_layer_one_wall", s.first_layer_one_wall},
           {"extra_if_needed", s.extra_if_needed},
           {"avoid_curled_overhangs", s.avoid_curled_overhangs},
+          {"extra_on_overhangs", s.extra_on_overhangs},
           {"min_line_width", s.wall_min_line_width.percent
                                  ? ordered_json(json(s.wall_min_line_width.value).dump() + "%")
                                  : ordered_json(s.wall_min_line_width.value)},

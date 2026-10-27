@@ -732,7 +732,7 @@ const char* row_key(T label) {
         {T::FilamentRetractionRow, "extrusion.retraction"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
-        {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"},
+        {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
         {T::MaxChamberTemp, "machine.max_chamber_temp"}, {T::HardenedNozzle, "machine.hardened_nozzle"},
         {T::MachineMaxFlow, "machine.max_flow"}, {T::MaxFeedX, "machine.max_feed_x"},
@@ -2913,6 +2913,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {TopOneWall::Topmost, tr(T::TopOneWallTopmost)}});
         flag(T::FirstLayerOneWall, "walls.first_layer_one_wall", s.first_layer_one_wall);
         flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
+        flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
         flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);

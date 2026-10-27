@@ -56,6 +56,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.top_one_wall", A},
             {"walls.first_layer_one_wall", A},
             {"walls.extra_if_needed", A},
+            {"walls.extra_on_overhangs", A},
             {"walls.avoid_curled_overhangs", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
@@ -420,7 +421,7 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "walls_more")
         return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
-                                           int(s.avoid_curled_overhangs));
+                                           int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs));
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
     if (id == "infill")

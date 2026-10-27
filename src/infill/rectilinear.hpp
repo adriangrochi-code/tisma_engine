@@ -44,6 +44,9 @@ struct LayerFill {
     std::vector<Toolpath> support;           // support lines (support_areas)
     std::vector<Toolpath> support_interface; // dense support right under the part
     std::vector<Toolpath> arcs; // over overhangs held from one side, in printing order (arc_overhangs.md)
+    // Loops over overhangs held from one side, from the zone's outline in
+    // (walls.extra_on_overhangs, walls_extra.md, rule 5).
+    std::vector<Toolpath> overhang_walls;
     std::vector<Toolpath> ironing; // over the top surfaces, after their fill (ironing.md)
 };
 

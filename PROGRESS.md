@@ -5546,3 +5546,25 @@ escribe y `retraction.length` 0 sigue sin retraer; `travel.max_lift` 0 usa `retr
 **Sigue:** los perímetros extra en voladizos (W3), el espesor de la cáscara vertical (W4: antes, una pregunta de
 comportamiento al equipo de fichas, porque los números de la ficha no alcanzan para saber dónde va el relleno sólido) y
 el relleno concéntrico de ancho fijo; después la impresión secuencial.
+
+## 2026-10-27 — Punto 3: perímetros extra en voladizos (W3)
+
+**Hecho** (ficha `walls_extra.md`, regla 5): `walls.extra_on_overhangs` llena cada voladizo sostenido de un solo lado
+(las mismas zonas que los arcos en voladizo, `held_zones` en `src/infill/arcs.*`), dentro de las paredes, con lazos
+desde su contorno hacia adentro, a un ancho de distancia, como `Overhang perimeter` a la velocidad de los puentes y con
+su cordón redondo, en lugar de su relleno; se imprimen después de las paredes de su isla. Con `arcs.enabled`, esas
+zonas son de los arcos. El relleno concéntrico del motor ya era de ancho fijo (regla 1, último punto).
+
+**Medido** (W3, columna de 10 × 20 × 8 mm con una losa de 20 × 20 × 2 mm que sobresale 10 mm, capa 40): sin el ajuste,
+76,0 mm de `Overhang perimeter` en 2 tramos (Tisma: 75,8 en 2); con él, 489,6 mm en 13 lazos (Tisma: 513,2 en 4
+tramos, sus lazos unidos). Prueba nueva en `tests/test_walls_extra.cpp`; 522 pruebas pasan; fuzzer con las opciones
+de paredes nuevas: 300 corridas (semilla 13), 0 fallas.
+
+**Pregunta para el equipo de fichas** (regla 7, W4, `walls.vertical_shell`): el motor ya pone sólido lo que no tapan
+todas las `surfaces.top_layers` capas de arriba (o de abajo), que en el techo de 15° parece ser lo de `partial`. Para
+saber qué cambia con `disabled` y con `enabled`, como caja negra en Tisma Slicer, con el techo de W4 en la capa 30: ¿qué
+superficie es `Top solid infill` y cuál `Solid infill` en cada modo (por ejemplo, el ancho de cada franja medido desde
+el borde alto del techo)? Y en el hongo (capa 60) y el cono (capa 20) con `enabled`: ¿dónde queda el relleno sólido
+agregado (a qué distancia de la pared y de qué ancho)?
+
+**Sigue:** la impresión secuencial (`sequential.md`, con las etiquetas de objetos de `gcode_firmware.md`, regla 4).

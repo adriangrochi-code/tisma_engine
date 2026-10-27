@@ -137,6 +137,7 @@ struct Settings {
     TopOneWall top_one_wall = TopOneWall::None;
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;
+    bool extra_on_overhangs = false; // loops fill an overhang held from one side (rule 5)
     bool avoid_curled_overhangs = false;
     // Thin walls (docs/spec/features/perimeters.md, rule 3), mm or percent of
     // machine.nozzle_diameter: a wall thinner than min_line_width is printed

@@ -241,3 +241,22 @@ TEST_CASE("walls: one wall over the top surfaces (walls_extra.md, rule 10, W7)",
     // A layer whose top is covered keeps its walls.
     CHECK_THAT(length_of(top, 10, "Perimeter"), WithinAbs(length_of(none, 10, "Perimeter"), 1e-6));
 }
+
+TEST_CASE("walls: an overhang held from one side filled with perimeters (walls_extra.md, rule 5, W3)", "[walls]") {
+    Settings s = base();
+    // A column of 10 x 20 x 8 mm with a slab of 20 x 20 x 2 mm on it that
+    // sticks out 10 mm in +X.
+    const IndexedMesh shelf = boxes({{90, 90, 0, 100, 110, 8}, {90, 90, 8, 110, 110, 10}});
+    const double plain = length_of(runs_of(gcode_of(shelf, s)), 40, "Overhang perimeter");
+    s.extra_on_overhangs = true;
+    const std::vector<Run> runs = runs_of(gcode_of(shelf, s));
+    const double filled = length_of(runs, 40, "Overhang perimeter");
+    // The spec: 75.8 mm of overhang perimeters, and 513.2 mm with the zone filled.
+    CHECK_THAT(plain, WithinRel(75.8, 0.1));
+    CHECK_THAT(filled, WithinRel(513.2, 0.12));
+    // Its fill is gone: no bridge under the zone.
+    CHECK(length_of(runs, 40, "Bridge infill") < 1.0);
+    CHECK(length_of(runs, 40, "Solid infill") < 1.0);
+    // The layer above is as without it.
+    CHECK(length_of(runs, 41, "Overhang perimeter") == 0.0);
+}
