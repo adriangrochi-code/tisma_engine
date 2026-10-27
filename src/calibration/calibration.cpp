@@ -336,8 +336,11 @@ void tube_tower(CalibrationPrint& out, const std::vector<double>& values, double
         add_tube(out.mesh, kHalf, kWall, z0, top);
         if (!last)
             add_tube(out.mesh, kHalf - kGrooveDepth, kWall - kGrooveDepth, top, z0 + segment);
-        add_label(out.mesh, value_text(values[i]), -16.5, z0 + 0.6, -kHalf, true, std::min(3.0, segment - kGroove - 1.0),
-                  0.6, 0.5);
+        // Bands under 3 mm (the max-flow tower's 2 mm) are read by their
+        // height, not by a number too small to print.
+        if (segment >= 3.0)
+            add_label(out.mesh, value_text(values[i]), -16.5, z0 + 0.6, -kHalf, true,
+                      std::min(3.0, segment - kGroove - 1.0), 0.6, 0.5);
     }
 }
 
@@ -358,7 +361,7 @@ CalibrationPrint max_flow_tower(double start, double end, double step, double se
     CalibrationPrint out;
     out.kind = "max_flow";
     out.unit = "mm³/s";
-    segment = std::max(segment, 3.0);
+    segment = std::max(segment, 2.0);
     const std::vector<double> values = tower_values(start, end, step);
     tube_tower(out, values, segment);
     tower_changes(out, values, segment, [](HeightChange& c, double v) { c.volumetric_flow = v; });
@@ -648,12 +651,13 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         return out;
     }
     case CalibrationKind::MaxFlow: {
-        // Around the known limit, half to one and a half times; else the
-        // range of common hot ends.
+        // calibration_models.md: 5 to 25 mm³/s by 1 in 2 mm bands; around a
+        // known limit, half to one and a half times it by a tenth of it
+        // rounded to 0.5 (at least 0.5), in 2 mm bands (CM6, CM7).
         if (s.machine_max_flow <= 0.0)
-            return max_flow_tower(4.0, 30.0, 2.0);
+            return max_flow_tower(5.0, 25.0, 1.0, 2.0);
         const double step = std::max(0.5, std::round(s.machine_max_flow / 10.0 * 2.0) / 2.0);
-        return max_flow_tower(std::max(0.5, std::round(s.machine_max_flow / 2.0)), std::round(s.machine_max_flow * 1.5), step);
+        return max_flow_tower(std::max(0.5, 0.5 * s.machine_max_flow), 1.5 * s.machine_max_flow, step, 2.0);
     }
     case CalibrationKind::Acceleration: {
         // From 500 up to twice the acceleration in use (at least 5000), in about ten steps.

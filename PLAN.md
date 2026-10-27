@@ -704,6 +704,12 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   avisos de la revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
   hecho en el lector pero sin datos en inglés) y las anclas de Ingeniería por paso (hoy todas iluminan la pestaña
   Análisis)
+- [ ] `calibration_models.md` (P1, encontrado el 2026-10-27): las piezas de las pruebas como dice la ficha (cilindro
+  de 50 mm para el caudal máximo, cajas huecas, torre de bloques de temperatura, retracción con dos pilares, números de
+  siete segmentos de la regla 6) y sus ajustes como ajustes del objeto (regla 3, pide ajustes por objeto de
+  `model_tools.md`). Hecho: los rangos del caudal máximo (CM6, CM7) con franjas de 2 mm. Falta el resto de las piezas
+  y rangos (las del motor son tubos cuadrados con otros rangos por defecto), y las pruebas que el motor no tiene:
+  esquinas, vibraciones y VFA
 - [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas.
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,

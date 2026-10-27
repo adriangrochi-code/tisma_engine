@@ -4,6 +4,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -81,7 +82,7 @@ TEST_CASE("settings are read by group", "[settings]") {
         "machine": {"nozzle_diameter": 0.6, "filament_diameter": 2.85, "relative_extrusion": true, "flavor": "klipper",
                     "start_gcode": "M104 S[temp]", "end_gcode": "M84", "variables": {"temp": 215, "names": ["a", "b"]}},
         "speed": {"walls": 50, "outer_wall": "40%", "travel": 150, "max": 100},
-        "material": {"anything": 1}
+        "material": {"density": 1.24}
     })");
     CHECK(s.layer_height == 0.3);
     CHECK(s.first_layer_height == 0.35);
@@ -112,7 +113,40 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.travel_speed == 150.0);
     CHECK(s.max_speed == 100.0);
     CHECK(s.infill_speed == 0.0); // not set: the printer's profile gives it
-    CHECK(s.ignored_groups == std::vector<std::string>{"material"});
+    CHECK(s.ignored_groups.empty());
+    CHECK(s.filament_density == 1.24); // material.density is extrusion.density
+}
+
+TEST_CASE("settings: the specs' material group goes to the engine's keys", "[settings]") {
+    const Settings s = parse_settings(R"({
+        "material": {"nozzle_temp": 215, "first_nozzle_temp": 220, "bed_temp": 60, "first_bed_temp": 65,
+                     "flow_factor": 0.95, "type": "PLA", "cost": 20, "variables": {"pa": "0.04"}}
+    })");
+    CHECK(s.variables.at("temperature") == std::vector<std::string>{"215"});
+    CHECK(s.variables.at("first_layer_temperature") == std::vector<std::string>{"220"});
+    CHECK(s.variables.at("bed_temperature") == std::vector<std::string>{"60"});
+    CHECK(s.variables.at("first_layer_bed_temperature") == std::vector<std::string>{"65"});
+    CHECK(s.variables.at("pa") == std::vector<std::string>{"0.04"});
+    CHECK(s.flow == Catch::Approx(95.0));
+    CHECK(s.filament_type == "PLA");
+    CHECK(s.filament_cost == 20.0);
+    // Written back under the engine's names, and read again the same.
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.variables == s.variables);
+    CHECK(back.filament_type == "PLA");
+    // An unknown key, the group not an object, or a key given twice: errors.
+    CHECK_THROWS_WITH(parse_settings(R"({"material": {"zz_not_a_key": 1}})"),
+                      Catch::Matchers::ContainsSubstring("material.zz_not_a_key"));
+    CHECK_THROWS_AS(parse_settings(R"({"material": 3})"), SettingsError);
+    CHECK_THROWS_WITH(parse_settings(R"({"material": {"nozzle_temp": 215}, "machine": {"variables": {"temperature": 210}}})"),
+                      Catch::Matchers::ContainsSubstring("also given"));
+    CHECK_THROWS_AS(parse_settings(R"({"material": {"cost": 1}, "extrusion": {"cost": 2}})"), SettingsError);
+    // The keys as the assistant names them.
+    CHECK(engine_setting_key("material.nozzle_temp") == "machine.variables.temperature");
+    CHECK(engine_setting_key("material.density") == "extrusion.density");
+    CHECK(engine_setting_key("walls.count") == "walls.count");
+    CHECK_FALSE(engine_setting_key("material.flow_factor"));
+    CHECK_FALSE(engine_setting_key("material.zz_not_a_key"));
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {

@@ -401,6 +401,11 @@ TEST_CASE("assistant: a guide before the others and its result (AS16, AS17)", "[
     REQUIRE(t);
     CHECK(t->profile == ProfileKind::Filament);
     CHECK(apply_setting(s, *t).variables.at("temperature") == std::vector<std::string>{"215"});
+    // The specs' name for it, as the knowledge data writes it (material.nozzle_temp).
+    const std::optional<SettingChange> m = plan_setting(s, {"material.nozzle_temp", SettingOp::Set, "215", {}});
+    REQUIRE(m);
+    CHECK(m->key == "machine.variables.temperature");
+    CHECK_FALSE(plan_setting(s, {"material.zz_not_a_key", SettingOp::Set, "1", {}}));
     // The firmware's and the measuring block's have no formula here.
     CHECK_FALSE(guide_result("input_shaping", {}, 0.2));
     CHECK_FALSE(guide_result("dimensional", {}, 0.2));

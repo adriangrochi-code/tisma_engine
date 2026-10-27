@@ -695,6 +695,7 @@ de la pieza de prueba.
 | `retraction`, `travel` | objeto | `{}` | | Los valores propios del filamento para la retracción y los viajes (ficha `retraction_travel.md`, regla 10, pruebas R9 a R11): `{"retraction": {"length": 0.8, "lift": 0}, "travel": {"slope": 5}}`. Se pueden dar `length`, `speed`, `unretract_speed`, `restart_extra`, `lift`, `lift_above`, `lift_below`, `min_travel`, `on_layer_change`, `wipe` y `before_wipe` de `retraction`, y `ramping_lift`, `slope` y `max_lift` de `travel`. Un valor puesto reemplaza al de la impresora para todo lo que imprime este filamento, aunque sea 0 (un salto de 0 anula el de la impresora); `null` o sin la clave, vale el de la impresora. Una `speed` de 0 deja la de la impresora |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
+| `type` | texto | `""` | | El material del filamento (`PLA`, `PETG`…), para la ficha del asistente (`assistant.md`, regla 13). Vacío: se busca por el nombre del perfil. No cambia el G-code |
 | `calibrations` | objeto | `{}` | | Las calibraciones del filamento hechas, por id de guía o nombre de prueba: `{"flow": {"date": "2026-10-27", "nozzle": 0.4, "printer": "…"}}`. Las escribe la interfaz al aplicar un resultado (`assistant.md`, regla 22; `settings_panel.md`, regla 38); una fecha cuenta solo en su impresora. No cambia el G-code |
 
 Los avisos de capacidades (`nozzle_temperature`, `bed_temperature`, `chamber`, `enclosure`, `abrasive`) van con los
@@ -788,10 +789,26 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).
 
+### `material` (los nombres de las fichas)
+
+Las fichas (`docs/spec/SETTINGS_V1.md` y `docs/spec/features/`) nombran los ajustes del filamento en un grupo
+`material`. El motor los guarda en otros grupos, así que `material` se lee como otro nombre de esos ajustes y no se
+escribe: al leer, cada clave pasa a su lugar.
+
+| Clave | Va a |
+|---|---|
+| `nozzle_temp`, `first_nozzle_temp` | `machine.variables.temperature` y `first_layer_temperature` |
+| `bed_temp`, `first_bed_temp` | `machine.variables.bed_temperature` y `first_layer_bed_temperature` |
+| `flow_factor` | `extrusion.flow` × 100 (un factor 0,95 es un flujo de 95 %) |
+| `variables` | `machine.variables`, cada nombre |
+| `type`, `density`, `cost`, `spool_weight`, `shrinkage_xy`, `shrinkage_z`, `chamber_temperature`, `chamber_min_temperature`, `start_gcode`, `end_gcode`, `infill_max_speed`, `infill_max_crossing_speed`, `min_purge_on_tower`, `purge_multiplier`, `ramming`, `loading_speed`, `loading_speed_start`, `unloading_speed`, `unloading_speed_start`, `cooling_moves`, `cooling_initial_speed`, `cooling_final_speed`, `toolchange_delay`, `load_time`, `unload_time` | `extrusion`, con el mismo nombre |
+
+Una clave que no está en la tabla es un error, y también una que viene a la vez por su nombre del motor
+(`material.cost` y `extrusion.cost`). El asistente acepta estos nombres en sus acciones (`material.nozzle_temp`).
+
 ## Grupos previstos (todavía no implementados)
 
-`material`. Se define acá
-cuando se implementan, a partir de las fichas de `docs/spec/features/`.
+Ninguno. Un grupo nuevo se define acá cuando se implementa, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo
 

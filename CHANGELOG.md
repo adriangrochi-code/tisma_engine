@@ -23,8 +23,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
+- **El grupo `material` de las fichas:** `material.nozzle_temp`, `material.bed_temp`, `material.flow_factor`,
+  `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
+
 ### Cambiado
 
+- **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con
+  un caudal máximo conocido, de la mitad a una vez y media, también en franjas de 2 mm.
+- **Una clave desconocida en `material` es un error**, como en los demás grupos (antes el grupo entero se ignoraba
+  con un aviso).
 - **Las fechas de las calibraciones van en los perfiles:** las de la impresora en el perfil de la impresora
   (`machine.calibrations`) y las del filamento en el del filamento (`extrusion.calibrations`, con la impresora en que
   se hicieron), en lugar de las preferencias de la interfaz. Las que ya estaban en las preferencias se siguen

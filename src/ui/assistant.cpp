@@ -202,8 +202,20 @@ bool known_setting(const Settings& settings, std::string_view key) {
     return find_value(root, key) != nullptr;
 }
 
-std::optional<SettingChange> plan_setting(const Settings& settings, const SettingAction& action,
+std::optional<SettingChange> plan_setting(const Settings& settings, const SettingAction& asked,
                                           const SettingRange& range) {
+    // The specs' material.* keys are the engine's under other names.
+    SettingAction action = asked;
+    const std::optional<std::string> key = engine_setting_key(asked.key);
+    if (!key)
+        return std::nullopt;
+    action.key = *key;
+    if (!asked.of.empty()) {
+        const std::optional<std::string> of = engine_setting_key(asked.of);
+        if (!of)
+            throw AssistantError(asked.key + ": no setting " + asked.of + " to take the value from");
+        action.of = *of;
+    }
     ordered_json root = ordered_json::parse(settings_json(settings));
     const ordered_json* now = find_value(root, action.key);
     const std::size_t dot = action.key.find('.');

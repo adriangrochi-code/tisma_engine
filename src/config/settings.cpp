@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -22,7 +23,9 @@ namespace {
 
 using nlohmann::json;
 
-const std::vector<std::string> kPlannedGroups = {"material"};
+// Groups a spec names that the engine does not read yet: accepted, and named
+// in Settings::ignored_groups. None today.
+const std::vector<std::string> kPlannedGroups = {};
 
 // The speeds a G-code needs, in the order of docs/CONFIG.md, and what a stock
 // Creality Ender-3 prints at, for a printer whose profile has none (owner's
@@ -373,6 +376,30 @@ bool json_depth_ok(std::string_view text, int max_depth) {
     return true;
 }
 
+std::optional<std::string> engine_setting_key(std::string_view key) {
+    if (!key.starts_with("material."))
+        return std::string(key);
+    const std::string name(key.substr(9));
+    static const std::map<std::string, std::string> temperatures = {
+        {"nozzle_temp", "temperature"},
+        {"first_nozzle_temp", "first_layer_temperature"},
+        {"bed_temp", "bed_temperature"},
+        {"first_bed_temp", "first_layer_bed_temperature"},
+    };
+    if (const auto t = temperatures.find(name); t != temperatures.end())
+        return "machine.variables." + t->second;
+    if (name.starts_with("variables."))
+        return "machine." + name;
+    // flow_factor is a factor, extrusion.flow a %: not the same value.
+    if (name == "flow_factor")
+        return std::nullopt;
+    // The rest are extrusion's under the same name.
+    static const json extrusion = json::parse(settings_json(Settings{})).at("extrusion");
+    if (!extrusion.contains(name))
+        return std::nullopt;
+    return "extrusion." + name;
+}
+
 Settings parse_settings(std::string_view text) {
     if (!json_depth_ok(text))
         throw SettingsError("settings: nested more than 64 levels deep");
@@ -387,6 +414,76 @@ Settings parse_settings(std::string_view text) {
 
 namespace {
 
+// The specs' `material` group (docs/spec/SETTINGS_V1.md and the features'
+// specs) names the filament's settings the engine keeps elsewhere: each key
+// goes to its place (the temperatures to machine.variables, flow_factor to
+// extrusion.flow in %, the rest to extrusion) and the group is dropped. A key
+// given in both places, or one the engine does not know, is an error.
+void material_aliases(json& root) {
+    const auto it = root.find("material");
+    if (it == root.end())
+        return;
+    if (!it->is_object())
+        fail("material", "must be an object");
+    const json material = *it;
+    root.erase(it);
+    const auto place = [&](const std::string& group, const std::string& key, const std::string& from, json value) {
+        json& g = root[group];
+        if (g.is_null())
+            g = json::object();
+        if (!g.is_object())
+            fail(group, "must be an object");
+        if (g.contains(key))
+            fail("material." + from, "is also given as " + group + "." + key);
+        g[key] = std::move(value);
+    };
+    const auto variable = [&](const std::string& name, const std::string& from, const json& value) {
+        json& m = root["machine"];
+        if (m.is_null())
+            m = json::object();
+        if (!m.is_object())
+            fail("machine", "must be an object");
+        json& v = m["variables"];
+        if (v.is_null())
+            v = json::object();
+        if (!v.is_object())
+            fail("machine.variables", "must be an object of name: value or [values]");
+        if (v.contains(name))
+            fail("material." + from, "is also given as machine.variables." + name);
+        v[name] = value;
+    };
+    static const std::map<std::string, std::string> temperatures = {
+        {"nozzle_temp", "temperature"},
+        {"first_nozzle_temp", "first_layer_temperature"},
+        {"bed_temp", "bed_temperature"},
+        {"first_bed_temp", "first_layer_bed_temperature"},
+    };
+    static const std::set<std::string> extrusion = {
+        "min_purge_on_tower", "infill_max_speed", "infill_max_crossing_speed", "loading_speed", "loading_speed_start",
+        "unloading_speed", "unloading_speed_start", "start_gcode", "end_gcode", "ramming", "purge_multiplier", "density",
+        "cost", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "chamber_temperature",
+        "chamber_min_temperature", "load_time", "unload_time", "toolchange_delay", "spool_weight", "shrinkage_xy",
+        "shrinkage_z", "type"};
+    for (const auto& [key, value] : material.items()) {
+        if (const auto t = temperatures.find(key); t != temperatures.end()) {
+            variable(t->second, key, value);
+        } else if (key == "variables") {
+            if (!value.is_object())
+                fail("material.variables", "must be an object of name: value or [values]");
+            for (const auto& [name, v] : value.items())
+                variable(name, "variables." + name, v);
+        } else if (key == "flow_factor") {
+            if (!value.is_number())
+                fail("material.flow_factor", "must be a number");
+            place("extrusion", "flow", key, value.get<double>() * 100.0);
+        } else if (extrusion.contains(key)) {
+            place("extrusion", key, key, value);
+        } else {
+            fail("material." + key, "unknown key (see docs/CONFIG.md, \"material\")");
+        }
+    }
+}
+
 Settings parse_checked(std::string_view text) {
     json root;
     try {
@@ -396,6 +493,7 @@ Settings parse_checked(std::string_view text) {
     }
     if (!root.is_object())
         throw SettingsError("settings: the top level must be an object");
+    material_aliases(root);
 
     Settings s;
     for (const auto& [group, value] : root.items()) {
@@ -1953,8 +2051,14 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "type") {
+            if (!g.at(n).is_string())
+                fail(k, "must be a string");
+            s.filament_type = g.at(n).get<std::string>();
+            return;
+        }
         if (n == "calibrations") {
             read_calibrations(g.at(n), k, s.filament_calibrations);
             return;
@@ -3098,6 +3202,7 @@ std::string settings_json(const Settings& s) {
           {"chamber_temperature", s.chamber_temperature},
           {"abrasive", s.abrasive},
           {"needs_enclosure", s.needs_enclosure},
+          {"type", s.filament_type},
           {"calibrations", calibrations(s.filament_calibrations)}}},
         {"output", {{"filename_format", s.filename_format}, {"post_process", s.post_process}}},
         {"gcode",

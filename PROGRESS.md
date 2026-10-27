@@ -6427,4 +6427,17 @@ fecha de filamento cuenta solo en su impresora. Se guardan por id de guía y por
 Calibración de la impresora sigue leyendo por prueba), y Deshacer también saca la fecha. Las fechas viejas de las
 preferencias se siguen leyendo mientras el perfil no tenga. Prueba nueva en `[printer_card]` (AS21).
 
+**Después (pedidos del equipo de especificaciones):**
+- El grupo `material` de las fichas ya no se ignora: cada clave pasa al ajuste del motor que nombra (las temperaturas a
+  `machine.variables`, `flow_factor` a `extrusion.flow` en %, el resto a `extrusion`, con `extrusion.type` nuevo), y
+  una clave desconocida o repetida es un error. El asistente acepta esos nombres (`material.nozzle_temp`, como lo
+  escriben los datos de las guías de temperatura).
+- La torre de caudal máximo sigue `calibration_models.md`: de 5 a 25 de a 1 sin caudal conocido (CM7) y de 0,5 a 1,5
+  veces el conocido (CM6, aprobado por el dueño), las dos con franjas de 2 mm. Las franjas de menos de 3 mm no llevan
+  número: se leen por la altura.
+- Encontrado: el resto de `calibration_models.md` (las piezas y sus ajustes como ajustes del objeto) no está hecho;
+  quedó como ítem en `PLAN.md`.
+
+**Probado:** 668 de 668 en el árbol de trabajo (`ctest`), `[settings]` con la prueba nueva del grupo `material`.
+
 **Sigue:** AS18 (mandar el comando del firmware) y la regla 24.
