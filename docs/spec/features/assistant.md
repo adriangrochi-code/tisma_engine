@@ -90,7 +90,12 @@ Preferencias de la interfaz:
 
 13. **Ficha:** al elegir un filamento, con `assistant.material_tips`, se busca su material:
     - primero por `material.type` del perfil del paquete;
-    - si no hay, por el nombre del perfil (`PLA`, `PETG`…), sin importar mayúsculas;
+    - si no hay, por el nombre del perfil (`PLA`, `PETG`…), sin importar mayúsculas: el nombre de un material
+      cuenta si aparece entero en el nombre del perfil, separado por espacios, guiones o el borde. Si coinciden
+      varios, gana el más largo: «Generic PLA+» da `PLA+` si el paquete lo tiene, y `PLA` si no; «PLA-CF» da
+      `PLA-CF` antes que `PLA`. En un nombre con paréntesis, como «PA (nylon)», también cuenta lo de afuera
+      (`PA`). Lo que no coincide con un nombre, como «PLA Silk» contra «PLA seda», cae en el más largo que sí
+      coincide (`PLA`);
     - si no se encuentra, no se muestra nada.
 
     La ficha muestra temperaturas, cama, cabina, ventilador, boquilla, superficies de cama, retracción (directa o
