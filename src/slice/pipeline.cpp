@@ -419,7 +419,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (object_tool(o, settings) != 1)
                     tag_tool(part, object_tool(o, settings));
                 SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
-                                    part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {}};
+                                    part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {},
+                                    o.wipe_into_infill, o.wipe_into_object};
                 append_object(out, std::move(part), std::move(object));
             }
             if (!out.objects.empty()) { // the skirt and brim of the first, for what reads them from the model
@@ -445,7 +446,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             float lo = mesh.vertices.front().z, hi = lo;
             for (const Vec3f& v : mesh.vertices)
                 lo = std::min(lo, v.z), hi = std::max(hi, v.z);
-            out.objects.push_back({o.name, o.object, o.instance, outline_of(mesh), double(hi) - double(lo), 0, out.raft_layers, {}, {}});
+            out.objects.push_back({o.name, o.object, o.instance, outline_of(mesh), double(hi) - double(lo), 0, out.raft_layers, {}, {},
+                                   o.wipe_into_infill, o.wipe_into_object});
         }
         return out;
     }

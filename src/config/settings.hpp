@@ -477,6 +477,9 @@ struct Settings {
     // The share of the purge each filament asks for (multi_extruder.md, rule
     // 12), %, by extruder; a shorter list repeats its last value.
     std::vector<double> purge_multiplier{100.0};
+    // What a change purges on the wipe tower at least before it purges into
+    // objects (rule 13), mm3, by extruder.
+    std::vector<double> min_purge_on_tower{0.0};
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;

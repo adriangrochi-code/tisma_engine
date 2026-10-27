@@ -43,13 +43,107 @@ std::array<bool, kMaxExtruders + 1> layer_tools(const SlicedModel& model, std::s
     return used;
 }
 
+namespace {
+
+// A path's volume as the G-code lays it (width x height x length), mm3.
+double volume_of(const Toolpath& t, double height) {
+    double v = 0.0;
+    for (std::size_t k = 1; k < t.points.size(); ++k)
+        v += 0.5 * (t.points[k - 1].width + t.points[k].width) *
+             std::hypot(t.points[k].p.x - t.points[k - 1].p.x, t.points[k].p.y - t.points[k - 1].p.y);
+    if (t.closed && t.points.size() > 2)
+        v += 0.5 * (t.points.back().width + t.points.front().width) *
+             std::hypot(t.points.front().p.x - t.points.back().p.x, t.points.front().p.y - t.points.back().p.y);
+    return v * height;
+}
+
+// What the changes of each layer purge into objects (rule 13), and what is
+// left for the tower.
+void plan_sinks(ToolPlan& plan, const SlicedModel& model, const Settings& s) {
+    const std::size_t n = model.layers.size();
+    plan.sinks.assign(n, {});
+    plan.tower_purge.assign(n, {});
+    bool any = false;
+    for (const SlicedObject& o : model.objects)
+        any = any || o.wipe_into_infill || o.wipe_into_object;
+    tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) {
+        const std::vector<int>& order = plan.order[l];
+        plan.sinks[l].assign(order.size(), {});
+        plan.tower_purge[l].assign(order.size(), 0.0);
+        for (std::size_t g = 0; g < order.size(); ++g)
+            if (plan.change_from[l][g] > 0)
+                plan.tower_purge[l][g] = purge_volume(s, plan.change_from[l][g], order[g]);
+        if (!any || !s.single_extruder_mmu || model.sequential)
+            return;
+        // The paths of the layer that objects let purge into, with their
+        // group: sparse infill with wipe_into_infill, all with wipe_into_object.
+        struct Candidate {
+            ToolPlan::Sink sink;
+            std::size_t group = 0;
+            double volume = 0.0;
+        };
+        std::vector<Candidate> candidates;
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        const auto consider = [&](const std::vector<Toolpath>& paths, int kind, int chosen, bool part) {
+            for (const Toolpath& t : paths) {
+                if (t.points.size() < 2)
+                    continue;
+                const Clipper2Lib::Point64 q{to_units(t.points.front().p.x), to_units(t.points.front().p.y)};
+                for (std::size_t o = 0; o < model.objects.size(); ++o) {
+                    const SlicedObject& object = model.objects[o];
+                    if (!(object.wipe_into_object || (object.wipe_into_infill && kind == 4)) ||
+                        Clipper2Lib::PointInPolygon(q, object.outline) == Clipper2Lib::PointInPolygonResult::IsOutside)
+                        continue;
+                    const int e = path_tool(t, chosen, part, s);
+                    const auto at = std::find(order.begin(), order.end(), e);
+                    candidates.push_back({{&t, kind, int(o)}, e == 0 || at == order.end() ? 0 : std::size_t(at - order.begin()),
+                                          volume_of(t, h)});
+                    break;
+                }
+            }
+        };
+        if (l < model.fills.size()) {
+            const LayerFill& f = model.fills[l];
+            consider(f.sparse, 4, s.extruder_infill, true);
+            consider(f.solid, 0, s.extruder_solid_infill, true), consider(f.top, 1, s.extruder_solid_infill, true);
+            consider(f.bridge, 2, s.extruder_solid_infill, true), consider(f.gaps, 3, s.extruder_solid_infill, true);
+            consider(f.arcs, ToolPlan::kArc, s.extruder_walls, true);
+            consider(f.overhang_walls, ToolPlan::kOverhangWall, s.extruder_walls, true);
+            consider(f.ironing, ToolPlan::kIroning, s.extruder_solid_infill, true);
+        }
+        if (l < model.walls.size()) {
+            consider(model.walls[l].gaps, ToolPlan::kWallGap, s.extruder_walls, true);
+            consider(model.walls[l].toolpaths, ToolPlan::kWall, s.extruder_walls, true);
+        }
+        std::vector<char> taken(candidates.size(), 0);
+        for (std::size_t g = 0; g < order.size(); ++g) {
+            if (plan.change_from[l][g] == 0)
+                continue;
+            const double floor = per_extruder(s.min_purge_on_tower, std::size_t(order[g] - 1));
+            double& tower = plan.tower_purge[l][g];
+            for (std::size_t c = 0; c < candidates.size() && tower > floor; ++c) {
+                if (taken[c] || candidates[c].group < g) // printed before the change
+                    continue;
+                taken[c] = 1;
+                plan.sinks[l][g].push_back(candidates[c].sink);
+                tower = std::max(floor, tower - candidates[c].volume);
+            }
+        }
+    });
+}
+
+} // namespace
+
 ToolPlan plan_tools(const SlicedModel& model, const Settings& s) {
     ToolPlan plan;
     const std::size_t n = model.layers.size();
     plan.order.assign(n, std::vector<int>{0});
     plan.change_from.assign(n, std::vector<int>{0});
-    if (s.extruders <= 1)
+    if (s.extruders <= 1) {
+        plan.sinks.assign(n, {{}});
+        plan.tower_purge.assign(n, {0.0});
         return plan;
+    }
     std::vector<std::array<bool, kMaxExtruders + 1>> used(n);
     tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) { used[l] = layer_tools(model, l, s); });
     for (std::size_t l = 0; l < n && plan.initial == 0; ++l)
@@ -81,6 +175,7 @@ ToolPlan plan_tools(const SlicedModel& model, const Settings& s) {
             current = order[g];
         }
     }
+    plan_sinks(plan, model, s);
     return plan;
 }
 
@@ -171,8 +266,9 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
             const int from = tools.change_from[l][g];
             if (from == 0)
                 continue;
-            const double volume = purge_volume(s, from, tools.order[l][g]);
-            const int n = s.single_extruder_mmu ? std::max(1, int(std::ceil(volume / (f.w * h * line) - 1e-9))) : kPrimeLines;
+            // What the objects did not take of the purge (rule 13).
+            const double volume = tools.tower_purge[l][g];
+            const int n = s.single_extruder_mmu ? std::max(0, int(std::ceil(volume / (f.w * h * line) - 1e-9))) : kPrimeLines;
             counts[l].push_back(n);
             used += n * f.spacing;
         }

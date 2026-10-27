@@ -936,6 +936,7 @@
     X(WipeTowerNoSparse, "Sin torre en las capas sin cambio", "No tower on layers without a change") \
     X(PurgeVolumesRow, "Volúmenes de purga", "Purge volumes") \
     X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
+    X(MinPurgeOnTower, "Purga mínima en la torre", "Minimum purge on the tower") \
     X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \

@@ -22,12 +22,14 @@ void place_on_bed(TriangleMesh& mesh, const Settings& settings);
 // docs/spec/features/sequential.md). Copies of one model share its name and
 // `object`, each its own `instance` (from 0), as the object labels name them
 // (gcode_firmware.md, rule 4). Each prints with its extruder, from 1
-// (docs/spec/features/multi_extruder.md, rule 1).
+// (docs/spec/features/multi_extruder.md, rule 1), and a change of filament
+// may purge into its sparse infill, or into all of it (rule 13).
 struct MeshObject {
     std::string name;
     std::size_t first = 0, count = 0;
     std::size_t object = 0, instance = 0;
     int extruder = 1;
+    bool wipe_into_infill = false, wipe_into_object = false;
     friend bool operator==(const MeshObject&, const MeshObject&) = default;
 };
 

@@ -37,6 +37,20 @@ struct ToolPlan {
     // Per layer, for each group of `order`: the extruder printing before it
     // when that is another (a change), else 0.
     std::vector<std::vector<int>> change_from;
+    // With a single-extruder MMU (rule 13), per layer and group: what the
+    // change prints first with the next filament to purge, out of the paths
+    // not printed yet of the objects that take it (their sparse infill with
+    // wipe_into_infill, all of them with wipe_into_object), after at least
+    // extrusion.min_purge_on_tower on the wipe tower; and what is left of
+    // its purge for the tower, mm3.
+    struct Sink {
+        const Toolpath* path = nullptr;
+        int kind = 0;   // 0 to 4: the fills (solid, top, bridge, gap fill, sparse); kWall... below
+        int object = 0; // in SlicedModel::objects
+    };
+    static constexpr int kWall = 10, kWallGap = 11, kArc = 12, kOverhangWall = 13, kIroning = 14;
+    std::vector<std::vector<std::vector<Sink>>> sinks;
+    std::vector<std::vector<double>> tower_purge;
 };
 ToolPlan plan_tools(const SlicedModel& model, const Settings& settings);
 

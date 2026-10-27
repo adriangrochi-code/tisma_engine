@@ -15,7 +15,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Torre de purga** (ficha `multi_extruder.md`, en Otros › Torre de purga): los cambios de herramienta se hacen sobre
   una torre al costado de la pieza, con su posición, giro, ancho y borde; con una MMU de un extrusor cada cambio purga
   el volumen que pide ese par de filamentos (`wipe_tower.purge_volumes`, por el multiplicador de cada filamento); con
-  varias boquillas, la nueva se ceba. Una torre fuera de la cama o sobre la pieza se rechaza.
+  varias boquillas, la nueva se ceba. Una torre fuera de la cama o sobre la pieza se rechaza. Puede no imprimir las
+  capas sin cambio (la boquilla baja hasta la torre), y la purga puede ir primero al relleno o a todo un objeto, con
+  un mínimo en la torre.
 - **Varios extrusores** (ficha `multi_extruder.md`): impresoras de varias boquillas con `machine.extruders`; cada
   objeto se imprime con su extrusor y cada tipo de extrusión puede ir con otro (perímetros, relleno, relleno sólido,
   soporte, interfaz). Cada capa empieza con el extrusor con el que terminó la anterior, un cambio por extrusor; el

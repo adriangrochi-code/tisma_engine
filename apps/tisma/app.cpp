@@ -766,7 +766,8 @@ const char* row_key(T label) {
         {T::WipeTowerExtruder, "extruders.wipe_tower"}, {T::PurgeVolumesRow, "wipe_tower.purge_volumes"},
         {T::WipeTowerSpacing, "wipe_tower.extra_spacing"}, {T::WipeTowerFlow, "wipe_tower.extra_flow"},
         {T::WipeTowerCone, "wipe_tower.cone_angle"}, {T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers"},
-        {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"}};
+        {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"},
+        {T::MinPurgeOnTower, "extrusion.min_purge_on_tower"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3224,6 +3225,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
             mm(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.front(), 0.0, 1000.0, "%.0f %%", 0.5f);
         else
             count(T::PurgeMultiplier, "extrusion.purge_multiplier", s.purge_multiplier.size());
+        if (s.min_purge_on_tower.size() == 1)
+            mm(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.front(), 0.0, 10000.0, "%.0f mm³", 0.5f);
+        else
+            count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {

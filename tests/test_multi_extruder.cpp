@@ -528,3 +528,37 @@ TEST_CASE("wipe tower: the change over the tower, sparse up to the last change (
     const SlicedModel model = slice_model(weld_exact(p.mesh), over, nullptr, nullptr, nullptr, &p.objects);
     CHECK_THAT(unprintable_reason(model, over), ContainsSubstring("wipe tower lies on the part"));
 }
+
+TEST_CASE("wipe tower: the purge goes into the objects' infill or the whole objects first (ME8)", "[extruders][tower]") {
+    Settings s = tower_base(true);
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    const auto tower_at = [&](const Plate& p, const Settings& settings) {
+        const TowerTrace t = tower_of(trace(gcode_of(p, settings)));
+        return t.length.count(10) ? t.length.at(10) : 0.0;
+    };
+    const double plain = tower_at(two_colours(), s);
+    Plate infill = two_colours();
+    for (MeshObject& o : infill.objects)
+        o.wipe_into_infill = true;
+    const double into_infill = tower_at(infill, s);
+    Plate whole = two_colours();
+    for (MeshObject& o : whole.objects)
+        o.wipe_into_object = true;
+    const double into_object = tower_at(whole, s);
+    CHECK(into_infill < plain - 20.0);
+    CHECK(into_object < into_infill - 20.0);
+    // Right after the change, the next filament prints the infill it purges into.
+    const std::string text = gcode_of(infill, s);
+    std::size_t change = text.find("\nT1\n", text.find(";LAYER_CHANGE\n;Z:2.200"));
+    REQUIRE(change != std::string::npos);
+    const std::size_t next_type = text.find(";TYPE:", text.find(";TYPE:Wipe tower", change) + 1);
+    std::size_t after_tower = next_type;
+    while (after_tower != std::string::npos && text.compare(after_tower, 16, ";TYPE:Wipe tower") == 0)
+        after_tower = text.find(";TYPE:", after_tower + 1);
+    REQUIRE(after_tower != std::string::npos);
+    CHECK(text.compare(after_tower, 21, ";TYPE:Internal infill") == 0);
+    // At least extrusion.min_purge_on_tower on the tower first.
+    s.min_purge_on_tower = {10000.0};
+    CHECK_THAT(tower_at(infill, s), WithinAbs(plain, 0.5));
+}

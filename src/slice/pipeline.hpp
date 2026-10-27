@@ -36,6 +36,7 @@ struct SlicedObject {
     std::size_t first_layer = 0;
     std::size_t raft_layers = 0;
     std::vector<Toolpath> skirt, brim;
+    bool wipe_into_infill = false, wipe_into_object = false; // as MeshObject (multi_extruder.md, rule 13)
 };
 
 // The planar slicing of a model: one region per layer, with its walls.

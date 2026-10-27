@@ -5749,4 +5749,16 @@ la torre en las capas sin cambio (`extruders.wipe_tower`, se lee) y el tiempo de
 
 Fuzzer con capas ralas o no: 400 corridas (semilla 44), 0 fallas. Suite: 543 pruebas pasan.
 
-**Sigue:** la purga en el relleno y en el objeto (regla 13, ME8); después 4c, la secuencia de la MMU (ME9).
+- la purga en los objetos (regla 13, ME8): cada objeto puede recibir la purga en su relleno ralo
+  (`MeshObject::wipe_into_infill`) o en todo él (`wipe_into_object`). Con una MMU, después de cada cambio el
+  filamento nuevo imprime primero, de esos objetos, lo que todavía no se imprimió en la capa (hasta cubrir la purga
+  menos `extrusion.min_purge_on_tower`, que va a la torre antes), con la etiqueta de su objeto; la torre recibe solo
+  lo que falta. Lo decide `plan_tools`, así la torre ya sale con el tamaño justo. Medido en la capa 10 de los dos
+  colores con relleno al 20 %: torre de 1919,6 mm, 1860,4 con purga en el relleno (Tisma Slicer: de 2038,1 a 1978,6,
+  59,5 mm menos; acá 59,2) y 1739,6 con purga en el objeto (Tisma Slicer: sin torre en esa capa; el motor la
+  imprime con lo que falta, porque el objeto de una capa no llega a los 140 mm³). Con un mínimo de 10 000 mm³ en la
+  torre, la torre no cambia. Todavía no se marcan los objetos en la interfaz ni en la línea de comandos.
+
+Fuzzer con objetos que reciben la purga y mínimos: 300 corridas (semilla 45), 0 fallas.
+
+**Sigue:** 4c, la secuencia de la MMU (regla 15, ME9).

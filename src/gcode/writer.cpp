@@ -31,12 +31,14 @@
 #include <cstring>
 #include <ctime>
 #include <unordered_map>
+#include <unordered_set>
 #include <set>
 #include <numbers>
 #include <optional>
 #include <sstream>
 #include <string_view>
 #include <thread>
+#include <unordered_set>
 
 namespace tisma {
 namespace {
@@ -2783,6 +2785,40 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             lay_tower(tower_layer->shell, order.front());
             shell_laid = true;
         }
+        // What the changes purge into objects (rule 13): printed right after
+        // the change by the next filament, not in its own place.
+        const std::vector<std::vector<ToolPlan::Sink>>& sinks = tool_plan.sinks[l];
+        std::unordered_set<const Toolpath*> purged;
+        for (const std::vector<ToolPlan::Sink>& group_sinks : sinks)
+            for (const ToolPlan::Sink& sink : group_sinks)
+                purged.insert(sink.path);
+        const auto lay_sinks = [&](const std::vector<ToolPlan::Sink>& list, int tool) {
+            laying_tool = tool;
+            for (const ToolPlan::Sink& sink : list) {
+                const std::size_t first_step = steps.size();
+                const Toolpath& t = *sink.path;
+                if (sink.kind == ToolPlan::kWall)
+                    lay(t, t.index == 0 ? "External perimeter" : "Perimeter",
+                        speed(t.index == 0 ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed));
+                else if (sink.kind == ToolPlan::kWallGap)
+                    lay(t, fill_type[3], fill_feed(3));
+                else if (sink.kind == ToolPlan::kArc)
+                    lay(t, "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
+                else if (sink.kind == ToolPlan::kOverhangWall)
+                    lay(t, "Overhang perimeter", speed(bridge_feed));
+                else if (sink.kind == ToolPlan::kIroning)
+                    lay(t, "Ironing", speed(s.ironing_speed));
+                else
+                    lay(t, fill_type[std::size_t(sink.kind)], fill_feed(std::size_t(sink.kind)));
+                // In its object's label.
+                if (labels != Labels::None && sink.object != label_now)
+                    for (std::size_t k = first_step; k < steps.size(); ++k)
+                        if (steps[k].type) {
+                            steps[k].label = label_now = sink.object;
+                            break;
+                        }
+            }
+        };
         for (std::size_t group_index = 0; group_index < order.size(); ++group_index) {
             const int tool = order[group_index];
             const bool first_group = group_index == 0;
@@ -2793,8 +2829,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     shell_laid = true;
                 }
             }
+            if (group_index < sinks.size())
+                lay_sinks(sinks[group_index], tool);
             laying_tool = tool;
             const auto mine = [&](const Toolpath& t, int chosen, bool part) {
+                if (purged.count(&t))
+                    return false; // printed at a change (rule 13)
                 const int e = path_tool(t, chosen, part, s);
                 return e == tool || (first_group && e == 0);
             };

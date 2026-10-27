@@ -1491,19 +1491,23 @@ Settings parse_checked(std::string_view text) {
                {"flow", "pressure_advance", "max_flow", "chamber_temperature", "abrasive", "needs_enclosure",
                 "infill_max_speed", "infill_max_crossing_speed", "bridge_flow_ratio", "chamber_min_temperature", "density",
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
-                "purge_multiplier"},
+                "purge_multiplier", "min_purge_on_tower"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "purge_multiplier") { // multi_extruder.md, rule 12: one value, or one per extruder
+        // multi_extruder.md, rules 12 and 13: one value, or one per extruder.
+        if (n == "purge_multiplier" || n == "min_purge_on_tower") {
             const json& v = g.at(n);
+            const double top = n == "purge_multiplier" ? 1000.0 : 10000.0;
+            const std::string what = n == "purge_multiplier" ? "must be from 0 to 1000 %, or a list of them by extruder"
+                                                             : "must be from 0 to 10000 mm3, or a list of them by extruder";
             std::vector<double> list;
             for (const json& x : v.is_array() ? v : json::array({v})) {
-                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= 1000.0))
-                    fail(k, "must be from 0 to 1000 %, or a list of them by extruder");
+                if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= top))
+                    fail(k, what);
                 list.push_back(x.get<double>());
             }
             if (list.empty() || list.size() > std::size_t(kMaxExtruders))
-                fail(k, "must be from 0 to 1000 %, or a list of them by extruder");
-            s.purge_multiplier = std::move(list);
+                fail(k, what);
+            (n == "purge_multiplier" ? s.purge_multiplier : s.min_purge_on_tower) = std::move(list);
             return;
         }
         if (n == "retraction" || n == "travel") { // the filament's own values (retraction_travel.md, rule 10)
@@ -1786,6 +1790,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"wipe_tower.no_sparse_layers", flag(s.wipe_tower_no_sparse_layers)},
         {"wipe_tower.purge_volumes", json(s.purge_volumes).dump()},
         {"extrusion.purge_multiplier", json(s.purge_multiplier).dump()},
+        {"extrusion.min_purge_on_tower", json(s.min_purge_on_tower).dump()},
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -2333,6 +2338,7 @@ std::string settings_json(const Settings& s) {
           {"start_gcode", s.filament_start_gcode},
           {"end_gcode", s.filament_end_gcode},
           {"purge_multiplier", s.purge_multiplier},
+          {"min_purge_on_tower", s.min_purge_on_tower},
           {"retraction", filament_values("retraction.")},
           {"travel", filament_values("travel.")},
           {"chamber_temperature", s.chamber_temperature},
