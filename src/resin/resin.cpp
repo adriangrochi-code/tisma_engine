@@ -1,5 +1,7 @@
 #include "resin/resin.hpp"
 
+#include "calibration/calibration.hpp"
+
 #include "slice/layers.hpp"
 #include "slice/level_set.hpp"
 
@@ -10,6 +12,8 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <map>
+#include <numeric>
 #include <string>
 
 namespace tisma {
@@ -129,6 +133,52 @@ std::vector<std::uint16_t> preview(const std::vector<Polygons>& sections, const 
             const double b = 0.30 + 0.70 * lambert;
             out[std::size_t(y) * n + std::size_t(x)] = rgb565(0.66 * b, 0.73 * b, 0.80 * b);
         }
+    return out;
+}
+
+// A box from (x0, y0, z0) to (x1, y1, z1), wound outwards.
+void add_box(TriangleMesh& m, double x0, double y0, double z0, double x1, double y1, double z1) {
+    const Vec3f v[8] = {{float(x0), float(y0), float(z0)}, {float(x1), float(y0), float(z0)},
+                        {float(x1), float(y1), float(z0)}, {float(x0), float(y1), float(z0)},
+                        {float(x0), float(y0), float(z1)}, {float(x1), float(y0), float(z1)},
+                        {float(x1), float(y1), float(z1)}, {float(x0), float(y1), float(z1)}};
+    const auto quad = [&](int a, int b, int c, int d) {
+        m.add_triangle(v[a], v[b], v[c]);
+        m.add_triangle(v[a], v[c], v[d]);
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    quad(0, 1, 5, 4);
+    quad(1, 2, 6, 5);
+    quad(2, 3, 7, 6);
+    quad(3, 0, 4, 7);
+}
+
+// The holes of a section, each a piece of the plane the part closes around
+// (with the islands standing in it taken out).
+std::vector<Polygons> holes_of(const Polygons& section) {
+    Polygons outers;
+    for (const Polygon& p : section)
+        if (Clipper2Lib::Area(p) > 0.0)
+            outers.push_back(p);
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddSubject(outers);
+    clipper.AddClip(section);
+    Clipper2Lib::PolyTree64 tree;
+    clipper.Execute(Clipper2Lib::ClipType::Difference, Clipper2Lib::FillRule::NonZero, tree);
+    std::vector<Polygons> out;
+    std::vector<const Clipper2Lib::PolyPath64*> pieces;
+    for (const auto& piece : tree)
+        pieces.push_back(piece.get());
+    for (std::size_t k = 0; k < pieces.size(); ++k) {
+        Polygons hole{pieces[k]->Polygon()};
+        for (const auto& island : *pieces[k]) {
+            hole.push_back(island->Polygon());
+            for (const auto& inner : *island)
+                pieces.push_back(inner.get());
+        }
+        out.push_back(std::move(hole));
+    }
     return out;
 }
 
@@ -457,7 +507,7 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
 
         out.z = layers[l].top;
         out.bottom = bottom;
-        out.exposure = bottom ? s.resin_bottom_exposure : exposure ? exposure(out.z) : s.resin_exposure;
+        out.exposure = bottom ? s.resin_bottom_exposure : exposure ? exposure(layers[l].slice_z()) : s.resin_exposure;
         out.lift_distance = bottom ? s.resin_bottom_lift_distance : s.resin_lift_distance;
         out.lift_speed = bottom ? s.resin_bottom_lift_speed : s.resin_lift_speed;
         out.retract_distance = out.lift_distance;
@@ -470,9 +520,185 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     for (const ResinLayer& l : print.layers)
         print.seconds += l.exposure + l.wait_after_cure + l.lift_distance / l.lift_speed + l.wait_after_lift +
                          l.retract_distance / l.retract_speed + l.wait_before_exposure;
+    // The part stands on the platform (resin supports are not made yet).
+    print.cups = find_cups(sections, s.resin_layer_height, false);
     print.small_preview = preview(sections, layers, 116, box);
     print.big_preview = preview(sections, layers, 290, box);
     return print;
+}
+
+std::vector<ResinCup> find_cups(const std::vector<Polygons>& sections, double layer_height, bool raised) {
+    const std::size_t count = sections.size();
+    // Each layer's holes, and for each, how much of it lies over the layer
+    // below's section and over each of the layer below's holes. The section
+    // and its holes do not overlap, so what is left is over the air around
+    // the part. Every layer at once.
+    struct Hole {
+        Polygons shape;
+        double area = 0.0, under = 0.0;
+        std::vector<std::pair<std::size_t, double>> over; // the holes below it overlaps, and by how much
+    };
+    std::vector<std::vector<Hole>> holes(count);
+    tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
+        for (Polygons& shape : holes_of(sections[l])) {
+            Hole h;
+            h.area = area_mm2(shape);
+            h.shape = std::move(shape);
+            holes[l].push_back(std::move(h));
+        }
+    });
+    auto overlap = [](const Polygons& a, const Polygons& b) {
+        const Clipper2Lib::Rect64 ra = Clipper2Lib::GetBounds(a), rb = Clipper2Lib::GetBounds(b);
+        if (ra.right <= rb.left || rb.right <= ra.left || ra.bottom <= rb.top || rb.bottom <= ra.top)
+            return 0.0;
+        return area_mm2(Clipper2Lib::Intersect(Clipper2Lib::RectClip(ra, b), a, Clipper2Lib::FillRule::NonZero));
+    };
+    tbb::parallel_for(std::size_t(1), std::max<std::size_t>(count, 1), [&](std::size_t l) {
+        for (Hole& h : holes[l]) {
+            h.under = overlap(h.shape, sections[l - 1]);
+            for (std::size_t g = 0; g < holes[l - 1].size(); ++g)
+                if (const double a = overlap(h.shape, holes[l - 1][g].shape); a > 1e-9)
+                    h.over.push_back({g, a});
+        }
+    });
+    // Layer by layer from the platform: a hole whose way down (over air, or
+    // over a hole that is vented) is under kCupExit is closed. Closed holes
+    // that overlap from one layer to the next are one cup.
+    struct Closed {
+        std::size_t layer;
+        double area;
+    };
+    std::vector<Closed> closed;
+    std::vector<std::size_t> parent;
+    auto root = [&](std::size_t i) {
+        while (parent[i] != i)
+            i = parent[i] = parent[parent[i]];
+        return i;
+    };
+    constexpr std::size_t kVented = std::size_t(-1);
+    std::vector<std::size_t> below; // the cup piece of each hole of the layer below, or kVented
+    for (std::size_t l = 0; l < count; ++l) {
+        std::vector<std::size_t> here(holes[l].size(), kVented);
+        for (std::size_t k = 0; k < holes[l].size(); ++k) {
+            const Hole& h = holes[l][k];
+            double open = l == 0 ? (raised ? h.area : 0.0) : h.area - h.under;
+            for (const auto& [g, a] : h.over)
+                if (below[g] != kVented)
+                    open -= a;
+            if (open >= kCupExit - 1e-9)
+                continue;
+            const std::size_t id = closed.size();
+            parent.push_back(id);
+            for (const auto& [g, a] : h.over)
+                if (below[g] != kVented)
+                    parent[root(below[g])] = id;
+            closed.push_back({l, h.area});
+            here[k] = id;
+        }
+        below = std::move(here);
+    }
+    // Each cup: its layers and its largest section (the sum of its holes on a layer).
+    std::map<std::size_t, ResinCup> cups;
+    std::map<std::pair<std::size_t, std::size_t>, double> per_layer;
+    for (std::size_t i = 0; i < closed.size(); ++i) {
+        const std::size_t r = root(i);
+        auto [it, fresh] = cups.try_emplace(r);
+        ResinCup& c = it->second;
+        const int layer = int(closed[i].layer);
+        c.first = fresh ? layer : std::min(c.first, layer);
+        c.last = fresh ? layer : std::max(c.last, layer);
+        c.area = std::max(c.area, per_layer[{r, closed[i].layer}] += closed[i].area);
+    }
+    std::vector<ResinCup> out;
+    for (auto& [r, c] : cups) {
+        if (c.area < kCupReport - 1e-9)
+            continue;
+        c.z0 = c.first * layer_height;
+        c.z1 = (c.last + 1) * layer_height;
+        out.push_back(c);
+    }
+    std::sort(out.begin(), out.end(), [](const ResinCup& a, const ResinCup& b) {
+        return a.first != b.first ? a.first < b.first : a.area > b.area;
+    });
+    return out;
+}
+
+std::vector<Warning> cup_warnings(const ResinPrint& print, const std::string& part) {
+    std::vector<Warning> out;
+    for (const ResinCup& c : print.cups) {
+        char text[512];
+        std::snprintf(text, sizeof text,
+                      "%s: a cup from z %.2f to %.2f mm (layers %d to %d), up to %.0f mm2: the film seals it as each "
+                      "layer peels off, and the suction can tear or bend the print. Add a drain hole of 3 to 5 mm in "
+                      "its floor, or turn the part so that the hollow opens towards the platform",
+                      part.c_str(), c.z0, c.z1, c.first, c.last, c.area);
+        out.push_back({"cupping", c.first, c.z0, text, c.area, "warning"});
+    }
+    return out;
+}
+
+std::vector<double> tower_exposures(const ResinTower& t) {
+    return tower_values(t.start, t.end, t.step);
+}
+
+double tower_exposure(const ResinTower& t, double base, double z) {
+    const std::vector<double> values = tower_exposures(t);
+    const double band = t.band > 0.0 ? std::floor(z / t.band + 1e-9) : 0.0;
+    if (band < 1.0 || values.empty())
+        return base;
+    return values[std::min(std::size_t(band) - 1, values.size() - 1)];
+}
+
+TriangleMesh resin_tower_mesh(const ResinTower& t) {
+    if (!(t.band >= 2.0 && t.band <= 20.0))
+        throw ResinError("the exposure tower's bands must be 2 to 20 mm tall");
+    constexpr double kHalfWidth = 12.0, kHalfDepth = 4.0;
+    constexpr double kFront = 0.5;   // the front strip, where the grooves are
+    constexpr double kGroove = 0.15; // half the groove's height
+    constexpr double kHoles[5] = {0.4, 0.6, 0.8, 1.0, 1.4}, kHoleX[5] = {-8.0, -4.0, 0.0, 4.0, 8.0};
+    constexpr double kFins[4] = {0.15, 0.25, 0.35, 0.5}, kFinX[4] = {-7.5, -2.5, 2.5, 7.5};
+    const std::size_t bands = tower_exposures(t).size() + 1;
+    TriangleMesh m;
+    for (std::size_t k = 0; k < bands; ++k) {
+        const double z0 = double(k) * t.band, z1 = z0 + t.band, mid = 0.5 * (z0 + z1);
+        // The front strip leaves a groove at each border between bands.
+        const double f0 = k > 0 ? z0 + kGroove : z0, f1 = k + 1 < bands ? z1 - kGroove : z1;
+        // Columns across X, those of the holes open from mid - d/2 to mid + d/2.
+        double x = -kHalfWidth;
+        auto column = [&](double x0, double x1, double hole) {
+            const double ranges[2][2] = {{z0, hole > 0.0 ? mid - 0.5 * hole : z1}, {mid + 0.5 * hole, z1}};
+            for (int r = 0; r < (hole > 0.0 ? 2 : 1); ++r) {
+                add_box(m, x0, -kHalfDepth + kFront, ranges[r][0], x1, kHalfDepth, ranges[r][1]);
+                const double a = std::max(ranges[r][0], f0), b = std::min(ranges[r][1], f1);
+                if (b > a)
+                    add_box(m, x0, -kHalfDepth, a, x1, -kHalfDepth + kFront, b);
+            }
+        };
+        for (int h = 0; h < 5 && k > 0; ++h) {
+            const double x0 = kHoleX[h] - 0.5 * kHoles[h], x1 = kHoleX[h] + 0.5 * kHoles[h];
+            column(x, x0, 0.0);
+            column(x0, x1, kHoles[h]);
+            x = x1;
+        }
+        column(x, kHalfWidth, 0.0);
+        // The fins at the back.
+        for (int f = 0; f < 4 && k > 0; ++f)
+            add_box(m, kFinX[f] - 0.5 * kFins[f], kHalfDepth, z0 + 0.25, kFinX[f] + 0.5 * kFins[f], kHalfDepth + 2.0,
+                    z1 - 0.25);
+    }
+    return m;
+}
+
+TriangleMesh resin_measure_block() {
+    TriangleMesh m;
+    add_box(m, -15.0, -15.0, 0.0, 15.0, 15.0, 10.0);
+    return m;
+}
+
+std::array<double, 3> resin_scale_from(const Settings& s, double x, double y, double z) {
+    if (!(x > 0.0 && y > 0.0 && z > 0.0))
+        throw ResinError("the measured sizes must be above 0");
+    return {s.resin_scale_x * 30.0 / x, s.resin_scale_y * 30.0 / y, s.resin_scale_z * 10.0 / z};
 }
 
 } // namespace tisma

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <set>
 #include <sstream>
 #include <string>
@@ -447,40 +448,6 @@ TEST_CASE("resin: what does not fit, and the settings read and written", "[resin
                     SettingsError);
 }
 
-TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_resin_cli";
-    std::filesystem::create_directories(dir);
-    {
-        std::ofstream stl(dir / "cube.stl");
-        stl << "solid c\n";
-        TriangleMesh m;
-        add_box(m, -10, -10, 0, 10, 10, 10);
-        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
-            stl << "facet normal 0 0 0\nouter loop\n";
-            for (int k = 0; k < 3; ++k) {
-                const Vec3f& v = m.corner(t, k);
-                stl << "vertex " << v.x << " " << v.y << " " << v.z << "\n";
-            }
-            stl << "endloop\nendfacet\n";
-        }
-        stl << "endsolid c\n";
-        std::ofstream(dir / "resin.json") << R"({"resin": {"bottom_layers": 10}})";
-    }
-    const std::string model = (dir / "cube.stl").string(), config = (dir / "resin.json").string(),
-                      goo = (dir / "cube.goo").string();
-    std::ostringstream out, err;
-    const std::vector<std::string_view> args = {"slice", model, "--config", config, "-o", goo};
-    REQUIRE(run_cli(args, out, err) == 0);
-    CHECK_THAT(out.str(), ContainsSubstring("layers: 200"));
-    std::ifstream in(goo, std::ios::binary);
-    const GooFile f = read_goo(in);
-    CHECK(f.layers.size() == 200);
-    // Centred on the display, as RE1 and RE2.
-    CHECK(f.layers[100].image.size() == 4586);
-    CHECK(f.layers[100].image.back() == 0x03);
-    std::filesystem::remove_all(dir);
-}
-
 TEST_CASE("resin: a damaged GOO file is refused, never read past its end", "[resin]") {
     // A small display, so that the file is small.
     Settings s = base();
@@ -520,4 +487,246 @@ TEST_CASE("resin: a damaged GOO file is refused, never read past its end", "[res
         }
     }
     CHECK(refused > 200);
+}
+
+namespace {
+
+Polygon rect(double x0, double y0, double x1, double y1) {
+    return {{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+            {to_units(x0), to_units(y1)}};
+}
+
+Polygons minus(const Polygon& outer, const Polygons& holes) {
+    return Clipper2Lib::Difference(Polygons{outer}, holes, Clipper2Lib::FillRule::NonZero);
+}
+
+// The spec's cup (VE1): `floor` layers of a 20 x 20 mm floor, with a square
+// hole of `drain` mm through it if above 0, then `walls` layers of 2 mm
+// walls round a 16 x 16 mm hollow; upside down, the walls come first.
+std::vector<Polygons> cup_sections(int floor, int walls, double drain = 0.0, bool upside_down = false) {
+    std::vector<Polygons> out;
+    const Polygon outer = rect(0, 0, 20, 20);
+    const Polygons hollow = {rect(2, 2, 18, 18)};
+    const Polygons drain_hole = drain > 0.0 ? Polygons{rect(10 - drain / 2, 10 - drain / 2, 10 + drain / 2, 10 + drain / 2)}
+                                            : Polygons{};
+    for (int i = 0; i < floor; ++i)
+        out.push_back(minus(outer, drain_hole));
+    for (int i = 0; i < walls; ++i)
+        out.push_back(minus(outer, hollow));
+    if (upside_down)
+        std::reverse(out.begin(), out.end());
+    return out;
+}
+
+// A cup turned on a lathe: radius 10, 10 mm tall, a floor 2 mm thick and
+// walls 2 mm thick; or the solid cylinder of the same size.
+IndexedMesh lathe_cup(bool hollow, double cx, double cy) {
+    constexpr int n = 64;
+    TriangleMesh m;
+    auto at = [&](double r, int i, double z) {
+        const double a = 2.0 * 3.14159265358979323846 * (i % n) / n;
+        return Vec3f{float(cx + r * std::cos(a)), float(cy + r * std::sin(a)), float(z)};
+    };
+    const Vec3f bottom{float(cx), float(cy), 0.0f}, top{float(cx), float(cy), 10.0f}, floor{float(cx), float(cy), 2.0f};
+    for (int i = 0; i < n; ++i) {
+        m.add_triangle(bottom, at(10, i + 1, 0), at(10, i, 0));
+        m.add_triangle(at(10, i, 0), at(10, i + 1, 0), at(10, i + 1, 10));
+        m.add_triangle(at(10, i, 0), at(10, i + 1, 10), at(10, i, 10));
+        if (!hollow) {
+            m.add_triangle(top, at(10, i, 10), at(10, i + 1, 10));
+            continue;
+        }
+        m.add_triangle(at(10, i, 10), at(10, i + 1, 10), at(8, i + 1, 10));
+        m.add_triangle(at(10, i, 10), at(8, i + 1, 10), at(8, i, 10));
+        m.add_triangle(at(8, i, 10), at(8, i + 1, 10), at(8, i + 1, 2));
+        m.add_triangle(at(8, i, 10), at(8, i + 1, 2), at(8, i, 2));
+        m.add_triangle(floor, at(8, i, 2), at(8, i + 1, 2));
+    }
+    return weld_exact(m);
+}
+
+} // namespace
+
+TEST_CASE("resin VE1 to VE8: cups, layer by layer from the platform", "[resin]") {
+    // VE1, on the platform: one cup from the hollow's first layer to the top.
+    std::vector<ResinCup> cups = find_cups(cup_sections(5, 20), 0.05, false);
+    REQUIRE(cups.size() == 1);
+    CHECK(cups[0].first == 5);
+    CHECK(cups[0].last == 24);
+    CHECK_THAT(cups[0].area, WithinAbs(256.0, 1e-6));
+    CHECK_THAT(cups[0].z0, WithinAbs(0.25, 1e-9));
+    CHECK_THAT(cups[0].z1, WithinAbs(1.25, 1e-9));
+    // VE2, raised on supports: its own floor closes it.
+    CHECK(find_cups(cup_sections(5, 20), 0.05, true).size() == 1);
+    // VE3, a 4 x 4 mm drain hole, raised: none. VE4, the same on the platform: one.
+    CHECK(find_cups(cup_sections(5, 20, 4.0), 0.05, true).empty());
+    CHECK(find_cups(cup_sections(5, 20, 4.0), 0.05, false).size() == 1);
+    // VE5, a 1 x 1 mm drain hole is too small an exit.
+    CHECK(find_cups(cup_sections(5, 20, 1.0), 0.05, true).size() == 1);
+    // VE6, a tube: none raised, one on the platform.
+    CHECK(find_cups(cup_sections(0, 20), 0.05, true).empty());
+    CHECK(find_cups(cup_sections(0, 20), 0.05, false).size() == 1);
+    // VE7, the cup upside down (open towards the platform), raised: none.
+    CHECK(find_cups(cup_sections(5, 20, 0.0, true), 0.05, true).empty());
+    // VE8, a 1 x 1 mm hole through a 10-layer floor on the platform: under 4 mm2, not reported.
+    CHECK(find_cups(cup_sections(10, 0, 1.0), 0.05, false).empty());
+    // A hollow that opens sideways to the air below it (a step in) is vented.
+    std::vector<Polygons> step = cup_sections(5, 0);
+    for (int i = 0; i < 10; ++i)
+        step.push_back(minus(rect(0, 0, 20, 20), {rect(2, 2, 18, 18)}));
+    step[4] = Polygons{rect(0, 0, 20, 10)}; // the floor's last layer covers only half
+    CHECK(find_cups(step, 0.05, false).empty());
+}
+
+TEST_CASE("resin VE9: a cup turned on a lathe warns, the solid cylinder does not", "[resin]") {
+    Settings s = base();
+    s.resin_layer_height = 0.1;
+    const std::vector<Polygons> cup = resin_sections(lathe_cup(true, 70, 45), s);
+    REQUIRE(cup.size() == 100);
+    // On the platform, and on supports with a pad (the pad closes it too).
+    const std::vector<ResinCup> cups = find_cups(cup, 0.1, false);
+    REQUIRE(cups.size() == 1);
+    CHECK(cups[0].first == 20);
+    CHECK(cups[0].last == 99);
+    CHECK_THAT(cups[0].area, WithinAbs(3.14159 * 64, 0.5));
+    CHECK(find_cups(resin_sections(lathe_cup(false, 70, 45), s), 0.1, false).empty());
+    // The print carries it, and its warning says how to fix it.
+    const ResinPrint p = slice_resin(lathe_cup(true, 70, 45), s);
+    REQUIRE(p.cups.size() == 1);
+    const std::vector<Warning> w = cup_warnings(p, "cup.stl");
+    REQUIRE(w.size() == 1);
+    CHECK(w[0].kind == "cupping");
+    CHECK(w[0].layer == 20);
+    CHECK_THAT(w[0].z, WithinAbs(2.0, 1e-9));
+    CHECK_THAT(w[0].message, ContainsSubstring("cup.stl"));
+    CHECK_THAT(w[0].message, ContainsSubstring("drain hole of 3 to 5 mm"));
+    CHECK_THAT(w[0].message, ContainsSubstring("z 2.00 to 10.00 mm"));
+    CHECK(slice_resin(lathe_cup(false, 70, 45), s).cups.empty());
+}
+
+TEST_CASE("resin CR1: the exposure tower's bands", "[resin]") {
+    Settings s = base();
+    s.resin_bottom_layers = 5;
+    const ResinTower tower; // 1.5 to 3.5 s by 0.25, bands of 2 mm
+    CHECK(tower_exposures(tower).size() == 9);
+    const ResinPrint p =
+        slice_resin(cube(), s, [&](double z) { return tower_exposure(tower, s.resin_exposure, z); });
+    REQUIRE(p.layers.size() == 200);
+    for (std::size_t l = 0; l < 5; ++l)
+        CHECK(p.layers[l].exposure == 30.0);
+    for (std::size_t l = 5; l < 40; ++l)
+        CHECK(p.layers[l].exposure == 2.5); // the base, to Z 2.0
+    const std::pair<std::size_t, double> bands[] = {{40, 1.5}, {80, 1.75}, {120, 2.0}, {160, 2.25}};
+    for (const auto& [from, exposure] : bands) {
+        INFO("from layer " << from);
+        CHECK_THAT(p.layers[from].z, WithinAbs(0.05 * double(from + 1), 1e-9));
+        CHECK(p.layers[from].exposure == exposure);
+        CHECK(p.layers[from + 39].exposure == exposure);
+    }
+    // Past the end, the last exposure; the header keeps resin.exposure.
+    CHECK(tower_exposure(tower, 2.5, 25.0) == 3.5);
+    const GooFile f = goo_of(p, s);
+    CHECK(f.header.exposure == 2.5f);
+    CHECK(f.layers[40].exposure == 1.5f);
+    // The engine turns the advanced mode on, so that the printer takes each
+    // layer's exposure (rule 12; Tisma Slicer writes 0).
+    CHECK(f.header.advanced);
+}
+
+TEST_CASE("resin: the exposure tower's part and the measuring block", "[resin]") {
+    const ResinTower tower;
+    TriangleMesh m = resin_tower_mesh(tower);
+    m.translate(71.7f, 44.8f, 0.0f);
+    const BoundingBox box = m.bounding_box();
+    CHECK_THAT(box.max.z, WithinAbs(20.0, 1e-5)); // a base and nine bands
+    CHECK_THAT(box.max.x - box.min.x, WithinAbs(24.0, 1e-4));
+    CHECK_THAT(box.max.y - box.min.y, WithinAbs(10.0, 1e-4)); // 8 mm and the fins
+    Settings s = base();
+    const std::vector<Polygons> sections = resin_sections(weld_exact(m), s);
+    REQUIRE(sections.size() == 400);
+    auto pieces = [&](std::size_t layer) {
+        Clipper2Lib::PolyTree64 tree;
+        Clipper2Lib::Clipper64 c;
+        c.AddSubject(sections[layer]);
+        c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+        return tree.Count();
+    };
+    CHECK(pieces(41) == 1);  // z 2.075: under the holes, before the fins
+    CHECK(pieces(59) == 6);  // z 2.975: the five holes cut across it
+    CHECK(pieces(10) == 1);  // the base has no holes
+    // Fins of 0.15 to 0.5 mm at the back, from 0.25 mm over the band's bottom.
+    const Clipper2Lib::Rect64 fins = Clipper2Lib::GetBounds(sections[59]);
+    CHECK_THAT(to_mm(fins.bottom) - 44.8, WithinAbs(6.0, 1e-3));
+    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[41]).bottom) - 44.8, WithinAbs(4.0, 1e-3));
+    // The groove in the front between bands: from 0.15 under the border to 0.15 over it.
+    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[40]).top) - 44.8, WithinAbs(-3.5, 1e-3));
+    CHECK_THAT(to_mm(Clipper2Lib::GetBounds(sections[44]).top) - 44.8, WithinAbs(-4.0, 1e-3));
+    CHECK_THROWS_AS(resin_tower_mesh(ResinTower{1.5, 3.5, 0.25, 1.0}), ResinError);
+
+    const BoundingBox block = resin_measure_block().bounding_box();
+    CHECK(block.max.x - block.min.x == 30.0f);
+    CHECK(block.max.y - block.min.y == 30.0f);
+    CHECK(block.max.z - block.min.z == 10.0f);
+    s.resin_scale_x = 1.02;
+    const std::array<double, 3> scale = resin_scale_from(s, 29.7, 30.3, 9.9);
+    CHECK_THAT(scale[0], WithinAbs(1.02 * 30.0 / 29.7, 1e-12));
+    CHECK_THAT(scale[1], WithinAbs(30.0 / 30.3, 1e-12));
+    CHECK_THAT(scale[2], WithinAbs(10.0 / 9.9, 1e-12));
+    CHECK_THROWS_AS(resin_scale_from(s, 0.0, 30.0, 10.0), ResinError);
+}
+
+TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_resin_cli";
+    std::filesystem::create_directories(dir);
+    {
+        std::ofstream stl(dir / "cube.stl");
+        stl << "solid c\n";
+        TriangleMesh m;
+        add_box(m, -10, -10, 0, 10, 10, 10);
+        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
+            stl << "facet normal 0 0 0\nouter loop\n";
+            for (int k = 0; k < 3; ++k) {
+                const Vec3f& v = m.corner(t, k);
+                stl << "vertex " << v.x << " " << v.y << " " << v.z << "\n";
+            }
+            stl << "endloop\nendfacet\n";
+        }
+        stl << "endsolid c\n";
+        std::ofstream(dir / "resin.json") << R"({"resin": {"bottom_layers": 10}})";
+    }
+    const std::string model = (dir / "cube.stl").string(), config = (dir / "resin.json").string(),
+                      goo = (dir / "cube.goo").string();
+    std::ostringstream out, err;
+    const std::vector<std::string_view> args = {"slice", model, "--config", config, "-o", goo};
+    REQUIRE(run_cli(args, out, err) == 0);
+    CHECK_THAT(out.str(), ContainsSubstring("layers: 200"));
+    std::ifstream in(goo, std::ios::binary);
+    const GooFile f = read_goo(in);
+    CHECK(f.layers.size() == 200);
+    // Centred on the display, as RE1 and RE2.
+    CHECK(f.layers[100].image.size() == 4586);
+    CHECK(f.layers[100].image.back() == 0x03);
+    // A cup on the platform goes into the warnings.
+    {
+        std::ofstream stl(dir / "cup.stl");
+        stl << "solid c\n";
+        const IndexedMesh cup = lathe_cup(true, 0, 0);
+        for (const auto& t : cup.triangles) {
+            stl << "facet normal 0 0 0\nouter loop\n";
+            for (const std::uint32_t v : t)
+                stl << "vertex " << cup.vertices[v].x << " " << cup.vertices[v].y << " " << cup.vertices[v].z << "\n";
+            stl << "endloop\nendfacet\n";
+        }
+        stl << "endsolid c\n";
+    }
+    const std::string cup = (dir / "cup.stl").string(), warnings = (dir / "cup.json").string();
+    std::ostringstream out2, err2;
+    const std::vector<std::string_view> cup_args = {"slice", cup, "--config", config, "-o", goo, "--warnings", warnings};
+    REQUIRE(run_cli(cup_args, out2, err2) == 0);
+    CHECK_THAT(out2.str(), ContainsSubstring("warnings: 1"));
+    std::ifstream report(warnings);
+    const std::string json{std::istreambuf_iterator<char>(report), std::istreambuf_iterator<char>()};
+    CHECK_THAT(json, ContainsSubstring("\"cupping\""));
+    CHECK_THAT(json, ContainsSubstring("cup.stl: a cup from z"));
+    std::filesystem::remove_all(dir);
 }

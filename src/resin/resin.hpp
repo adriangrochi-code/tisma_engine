@@ -3,12 +3,15 @@
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "report/warnings.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 // Resin printing on an MSLA printer (docs/spec/features/resin.md): every
@@ -85,8 +88,31 @@ struct ResinLayer {
     std::size_t lit = 0;             // pixels with light
 };
 
+// A cup (rules 13 and 14): a hollow closed towards the platform and open
+// towards the film, which the film seals as each layer peels off. Its
+// layers, the heights from its floor to where it closes or the part ends,
+// and its largest section.
+struct ResinCup {
+    int first = 0, last = 0;
+    double z0 = 0.0, z1 = 0.0; // mm
+    double area = 0.0;         // mm2
+};
+
+// Cups of these sections, one per layer `layer_height` thick from the
+// platform (rule 14): layer by layer, a hole of a section is vented when at
+// least kCupExit of it lies over air that is vented (the air around the
+// part, or a vented hole) on the layer below; the first layer's holes are
+// closed by the platform or the pad, unless the part is `raised` on
+// supports. The holes that are not vented, joined where they overlap from
+// layer to layer, are the cups; those whose largest section is under
+// kCupReport are left out.
+inline constexpr double kCupExit = 3.0;   // mm2, about 2 mm across
+inline constexpr double kCupReport = 4.0; // mm2
+std::vector<ResinCup> find_cups(const std::vector<Polygons>& sections, double layer_height, bool raised);
+
 struct ResinPrint {
     std::vector<ResinLayer> layers;
+    std::vector<ResinCup> cups;
     int bottom_layers = 1;        // the layers exposed as bottom ones, at least 1 (rule 7)
     double volume = 0.0;          // mm3 of the part (scaled)
     double weight = 0.0;          // g
@@ -105,11 +131,41 @@ std::vector<Polygons> resin_sections(const IndexedMesh& mesh, const Settings& se
 // The part's print (rules 1 to 8 and 20 to 22): the sections grown by
 // resin.absolute_correction, the bottom layers shrunk against the
 // elephant's foot, what hangs left dark for resin.z_correction_layers
-// layers; coded images, exposures and moves. exposure(z) gives the exposure
-// of the normal layer whose top is at z (the exposure tower), else
-// resin.exposure. Throws ResinError when the part does not fit on the
-// display or under machine.max_height (150 mm when 0).
+// layers; coded images, exposures and moves; and the cups, with the part
+// on the platform. exposure(z) gives the exposure of the normal layer whose
+// middle is at z (the exposure tower), else resin.exposure. Throws
+// ResinError when the part does not fit on the display or under
+// machine.max_height (150 mm when 0).
 ResinPrint slice_resin(const IndexedMesh& mesh, const Settings& settings,
                        const std::function<double(double z)>& exposure = {});
+
+// The warning of each cup (rule 15), for the warnings' JSON: the part, the
+// heights and the largest section, and how to fix it.
+std::vector<Warning> cup_warnings(const ResinPrint& print, const std::string& part);
+
+// The exposure tower (rules 16 and 17): a base and a band per exposure, from
+// start to end by step, each `band` mm tall.
+struct ResinTower {
+    double start = 1.5, end = 3.5, step = 0.25, band = 2.0;
+};
+// The exposures the tower tries, from start to end (at most 40).
+std::vector<double> tower_exposures(const ResinTower& tower);
+// The exposure of the normal layer whose middle is at z (rule 17): band i
+// starts at i · band; band 0, the base, keeps `base`; band i from 1 tries
+// start + (i - 1) · step, never past the end.
+double tower_exposure(const ResinTower& tower, double base, double z);
+// The tower's part, standing on z = 0 and centred on the origin: a 24 by 8 mm
+// block, a band per exposure over a base band. Each band has five holes
+// across it along Y (0.4, 0.6, 0.8, 1.0 and 1.4 mm square), which close with
+// too much light; four fins at the back (0.15, 0.25, 0.35 and 0.5 mm
+// thick, 2 mm out), which go missing or bend with too little; and a groove
+// in the front between bands.
+TriangleMesh resin_tower_mesh(const ResinTower& tower);
+
+// The measuring block (rule 19): 30 by 30 by 10 mm, centred on the origin.
+TriangleMesh resin_measure_block();
+// The scale corrections from what the block measures once printed (rule
+// 19): each the current one times the wanted size over the printed one.
+std::array<double, 3> resin_scale_from(const Settings& settings, double x, double y, double z);
 
 } // namespace tisma
