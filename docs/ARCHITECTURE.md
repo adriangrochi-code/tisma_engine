@@ -57,6 +57,8 @@ fill_layer ── en paralelo por capa ─────────────�
   │                                                     soportes e interfaz
   ▼
 SlicedModel
+  │ plan_tools, plan_wipe_tower       slice/wipe_tower  con varios extrusores: el orden de los extrusores en cada
+  │                                                     capa y la torre de purga donde cambian
   │ unprintable_reason                slice/printable   ¿se puede imprimir? (si no: mensaje claro, código 4)
   │ export_gcode                      gcode/export      escribe en .part, vuelve a leer, verifica, renombra
   │   write_gcode                     gcode/writer      orden (gcode/order), viajes (gcode/travel), enfriamiento
@@ -124,7 +126,12 @@ volúmenes que un proyecto marca como modificadores, fuera).
   (`same_sections`, los lados de un prisma), el corte deja el nivel vacío y `pipeline.cpp` copia la región y las
   paredes de la capa de abajo. Las superficies, el relleno y los planes de viaje del G-code se reusan igual cuando
   sus entradas son iguales a las de otra capa.
-- `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir.
+- `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir. Con objetos
+  de varios extrusores (`docs/spec/features/multi_extruder.md`), `slice_tools` lamina la placa entera (el contorno de
+  cada capa, el soporte, la falda y el borde) y después los objetos de cada extrusor sobre esas capas, con un
+  `PartFrame` que les dice qué hay en las otras partes; cada camino lleva su extrusor (`Toolpath::tool`).
+- `wipe_tower.cpp` decide el orden de los extrusores de cada capa (`plan_tools`, que usan el escritor, el
+  verificador y `printable.cpp`) y arma la torre de purga: un bloque de líneas por cambio, el contorno y el relleno.
 
 ### `geom/`: geometría
 
