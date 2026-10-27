@@ -8,7 +8,8 @@
 namespace tisma {
 
 void place_on_bed(TriangleMesh& mesh, const Settings& s) {
-    if (!s.placement_arrange || s.bed.empty() || mesh.empty())
+    // Without a bed, only a centre given by hand moves it (placement.md, PL15).
+    if (!s.placement_arrange || (s.bed.empty() && !s.placement_center) || mesh.empty())
         return;
     std::array<double, 2> target{};
     if (s.placement_center) {

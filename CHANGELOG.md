@@ -34,6 +34,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   engordan menos. En el estante de la ficha, las piezas por capa bajando: 21, 11, 12, 10, 5, 5 y 4 (la ficha: 22, 13,
   11, 9, 7, 4 y 1; antes 21, 21, 19, 15, 8, 7 y 3).
 
+- Sin cama en los ajustes, `placement.center` dado a mano mueve la pieza igual (ficha `placement.md`, PL15); sin él,
+  la pieza sigue donde viene.
+
 ### Corregido
 
 - Una rama de árbol que se juntaba con otra que después se apoyaba en la pieza dejaba su pedazo en la capa de

@@ -200,3 +200,19 @@ TEST_CASE("placement: the model's box centred on the bed, or on placement.center
     place_on_bed(m.mesh, s);
     CHECK_THAT(m.mesh.bounding_box().min.x, WithinAbs(40.0, 1e-4));
 }
+
+TEST_CASE("placement: without a bed it stays, unless a centre is given (PL15)", "[formats]") {
+    ModelFile m = read_model(kFormats / "box.obj"); // 20 mm, from 0 to 20
+    m.mesh.translate(10.0f, 10.0f, 0.0f);            // 10 to 30, as in the test
+    Settings s;                                      // no machine.bed
+    place_on_bed(m.mesh, s);
+    CHECK_THAT(m.mesh.bounding_box().min.x, WithinAbs(10.0, 1e-4)); // Tisma Slicer: 90, on its default bed
+    s.placement_center = std::array<double, 2>{50.0, 50.0};
+    s.placement_arrange = false;
+    place_on_bed(m.mesh, s);
+    CHECK_THAT(m.mesh.bounding_box().min.x, WithinAbs(10.0, 1e-4)); // placement.arrange "no"
+    s.placement_arrange = true;
+    place_on_bed(m.mesh, s);
+    CHECK_THAT(m.mesh.bounding_box().min.x, WithinAbs(40.0, 1e-4));
+    CHECK_THAT(m.mesh.bounding_box().max.y, WithinAbs(60.0, 1e-4));
+}

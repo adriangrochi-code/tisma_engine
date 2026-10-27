@@ -5012,3 +5012,12 @@ mordida; la ficha no dice qué pasa con las paredes (en A3 el agujero lleva las 
 
 **Sigue:** que los arcos tarden menos (los círculos se muestrean contra toda la zona); PL15 de ubicación, QA8, QA9 y
 `support.width`.
+
+## 2026-10-27 — PL15: el centro sin cama
+
+**Hecho:** sin `machine.bed`, la pieza sigue donde viene (regla 4 de `placement.md`, diseño), salvo que se dé
+`placement.center` a mano: entonces va ahí, como en Tisma Slicer (PL15). Prueba nueva con el cubo de 10 a 30: queda en
+10 a 30, igual con `placement.arrange` en `false`, y de 40 a 60 con el centro en (50, 50). Tisma Slicer lo pone de 90 a
+110 sin centro porque siempre tiene una cama de 200 × 200; eso no se copia (lo dice la ficha).
+
+**Sigue:** QA8 (la revisión de estabilidad), QA9 y `support.width`.

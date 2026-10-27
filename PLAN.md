@@ -698,7 +698,7 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)
 - [ ] `placement.md` (F1): hecho (2026-10-26) centrar la pieza en la cama o en `placement.center` (regla 2, PL1, PL2,
-  PL3, PL6). Falta: varias copias en grilla con `placement.spacing` (PL7, PL8) y `placement.drop_to_bed` «no» (PL5,
+  PL3, PL6); PL15 el 2026-10-27 (sin cama, solo un centro dado a mano la mueve). Falta: varias copias en grilla con `placement.spacing` (PL7, PL8) y `placement.drop_to_bed` «no» (PL5,
   PL9); hoy la pieza siempre se apoya en la cama
 - [ ] `profile_pack.md` y `presets.md` (P3): bajar el paquete libre, los perfiles del sistema y los propios. Las
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
