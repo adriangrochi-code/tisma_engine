@@ -6447,4 +6447,14 @@ orden temperatura, flujo máximo, avance de presión, flujo, retracción (regla 
 16 casos. No probado con una impresora real: el envío usa la misma cola de comandos que los controles de la página
 Impresora.
 
-**Sigue:** `model_tools.md` (partes, modificadores y ajustes por objeto), que también pide `calibration_models.md`.
+**Después: volúmenes negativos (`model_tools.md`, regla 2).** El 3MF de un proyecto trae los volúmenes de tipo
+negativo en `ModelFile::negative`; la línea de comandos los escala, gira y centra con la pieza (alrededor del centro
+de la pieza, no del conjunto) y `slice_model` los corta en los mismos niveles y los resta de la región de cada capa
+antes del desplazamiento XY y de la compensación de agujeros. Las capas son las de la pieza: un negativo más alto no
+agrega capas. Con corte, separar o copias la línea de comandos todavía lo rechaza con un mensaje. MT1 (50 capas, X de
+90,2 a 109,8, 3000 mm³, contorno y agujero con dos perímetros cada uno) y MT3 (3600 mm³, el agujero de Z 3 a 7, piso y
+techo sólidos) en `[transform]`. El piso de MT3 a Z 2,6 debería ser un puente sobre el relleno vacío: el motor todavía
+no hace puentes internos (pendiente de I1). 670 de 670 en el árbol de trabajo.
+
+**Sigue:** partes con ajustes propios y ajustes por objeto (reglas 5, 7 y 8; MT7, MT8, MT11), después modificadores y
+rangos (P4).

@@ -741,9 +741,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
   con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
   En la interfaz, Espejar, Cortar con un plano horizontal, Separar en piezas y Medir caras y vértices (reglas 13, 14,
-  16, 18 y 20 en parte). Falta: el plano libre y los conectores del corte, las aristas y círculos de Medir y Separar en
-  partes (reglas 18 a 20), partes, modificadores y ajustes por objeto (reglas 1 a 10) y las copias en grilla
-  (regla 15)
+  16, 18 y 20 en parte). Volúmenes negativos (2026-10-27, regla 2, MT1 y MT3): el 3MF los trae aparte, siguen a la
+  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Falta: los negativos con
+  corte, separar o copias, el plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), partes con
+  ajustes propios, modificadores y ajustes por objeto y por rango (reglas 3 a 10), las copias en grilla (regla 15), y el
+  puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)

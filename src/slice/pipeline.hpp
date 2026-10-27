@@ -115,9 +115,12 @@ double bridge_bead(const Settings& settings);
 // object whose extruder is the number of one of `mixes` prints with that
 // blend: each layer with the filament its cycle gives (color_mixing.md);
 // a blend this machine cannot print is left out (rule 5).
+// The negative volumes (model_tools.md, rule 2), in the mesh's coordinates,
+// take their volume away from every layer they cross; they add no layers.
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
                         const StressField* stress = nullptr, const Painting* painting = nullptr,
-                        const std::vector<MeshObject>* objects = nullptr, const std::vector<ColorMix>* mixes = nullptr);
+                        const std::vector<MeshObject>* objects = nullptr, const std::vector<ColorMix>* mixes = nullptr,
+                        const IndexedMesh* negative = nullptr);
 
 // Object k of a model sliced object by object, as a model of its own (its
 // layers from 0), for what looks at a stack of layers (the stability review).

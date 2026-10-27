@@ -285,8 +285,16 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
 // cut or a split made, side by side. False, with the problem in err, when
 // pieces and copies are both asked for.
 bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copies, const std::string& name,
-                 std::vector<MeshObject>& objects, std::ostream& err) {
-    std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings);
+                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr) {
+    if (negative && negative->empty())
+        negative = nullptr;
+    // The negative volumes (model_tools.md, rule 2) follow the part; not yet
+    // through a cut, a split or copies.
+    if (negative && (copies > 1 || settings.transform_cut_z || settings.transform_split)) {
+        err << "error: negative volumes do not go with --copies, transform.cut_z or transform.split yet\n";
+        return false;
+    }
+    std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings, negative);
     if (parts.size() > 1) {
         if (copies > 1) {
             err << "error: --copies does not go with transform.cut_z or transform.split\n";
@@ -299,7 +307,7 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     if (copies > 1) {
         mesh = place_copies(mesh, copies, settings, name, &objects);
     } else {
-        place_on_bed(mesh, settings);
+        place_on_bed(mesh, settings, negative);
         objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
     }
     return true;
@@ -403,11 +411,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     // sequential.md, rule 2), or the model alone.
     std::vector<MeshObject> objects;
     const std::string file_name = std::filesystem::path(parsed->model).filename().string();
-    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err))
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative))
         return kExitUsage;
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
+    const IndexedMesh negative = weld_exact(stl.negative);
+    const IndexedMesh* cut = negative.triangles.empty() ? nullptr : &negative;
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
         return kExitModel;
@@ -450,13 +460,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects);
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects);
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {

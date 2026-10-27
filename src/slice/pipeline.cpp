@@ -368,12 +368,17 @@ struct PartFrame {
 
 // `tool`: the extruder of the part's lines, for their widths (the first
 // with none forced).
+// `negative`: the volumes that take material away (model_tools.md, rule 2),
+// compensated as the part; null when there are none.
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
-                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool = 1);
+                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool = 1,
+                         const IndexedMesh* negative = nullptr);
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1);
+                        const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1,
+                        const IndexedMesh* negative = nullptr);
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>& objects);
+                        const Painting* painting, const std::vector<MeshObject>& objects,
+                        const IndexedMesh* negative = nullptr);
 
 // Each list of a part's paths (walls and fills, not the support), with its layer.
 template <class F>
@@ -469,10 +474,12 @@ bool several_tools(const std::vector<MeshObject>& objects, const Settings& setti
 
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
                         const StressField* stress, const Painting* painting, const std::vector<MeshObject>* given,
-                        const std::vector<ColorMix>* mixes) {
+                        const std::vector<ColorMix>* mixes, const IndexedMesh* negative_volumes) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    const IndexedMesh* negative =
+        negative_volumes && !negative_volumes->triangles.empty() ? negative_volumes : nullptr;
     // A belt printer (belt_printer.md): the part turned so that the planes
     // along the gantry lie flat, sliced as on a bed; the writer puts the
     // G-code on the machine's axes. No skirt (rule 4).
@@ -480,6 +487,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         Settings flat = settings;
         flat.belt_enabled = false;
         flat.skirt_loops = 0;
+        if (negative) {
+            const IndexedMesh turned = belt_mesh(*negative, settings);
+            return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes, &turned);
+        }
         return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes);
     }
     // Curved layers (nonplanar.md): the mesh, split fine enough to bend,
@@ -488,11 +499,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     if (settings.curved_mode != CurvedMode::Disabled) {
         if (painting && !painting->empty())
             throw CurvedError("curved layers do not take painted faces yet (curved.mode)");
+        if (negative)
+            throw CurvedError("curved layers do not take negative volumes yet (curved.mode)");
         std::optional<CurvedField> field = curved_field(settings, input);
         if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
             Settings flat = settings;
             flat.curved_mode = CurvedMode::Disabled;
-            return slice_model(input, flat, gpu, stress, painting, given, mixes);
+            return slice_model(input, flat, gpu, stress, painting, given, mixes, negative);
         }
         const double longest =
             field->mode == CurvedMode::Wave ? std::clamp(2.0 * std::numbers::pi / field->k / 20.0, 0.25, 1.0) : 1.0;
@@ -547,7 +560,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     continue;
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
                 SlicedModel part = slice_plate(mesh, settings, gpu, stress, painting ? &paint : nullptr, nullptr,
-                                               object_tool(o, settings));
+                                               object_tool(o, settings), negative);
                 if (part.layers.empty())
                     continue;
                 if (object_tool(o, settings) != 1)
@@ -568,9 +581,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         // Each extruder's objects apart on the plate's layers
         // (multi_extruder.md, rule 1); one other than the first, every path its.
         if (several_tools(*objects, settings)) {
-            out = slice_plate(input, settings, gpu, stress, painting, objects);
+            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative);
         } else {
-            out = slice_plate(input, settings, gpu, stress, painting, nullptr, object_tool(objects->front(), settings));
+            out = slice_plate(input, settings, gpu, stress, painting, nullptr, object_tool(objects->front(), settings),
+                              negative);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -587,19 +601,20 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         return out;
     }
-    return slice_plate(input, settings, gpu, stress, painting, nullptr);
+    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative);
 }
 
 namespace {
 
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>* tools, int tool) {
+                        const Painting* painting, const std::vector<MeshObject>* tools, int tool,
+                        const IndexedMesh* negative) {
     // Several extruders print layer by layer, every extruder on every layer:
     // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
     if (settings.extruders > 1 && settings.detail_height > 0.0) {
         Settings flat = settings;
         flat.detail_height = 0.0;
-        return slice_plate(input, flat, gpu, stress, painting, tools, tool);
+        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative);
     }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
@@ -610,7 +625,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_plate(input, vase, gpu, stress, painting, tools, tool);
+        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -621,14 +636,17 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
-        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative);
         add_raft(raft, settings);
         return raft;
     }
     const IndexedMesh mesh = compensated(input, settings);
+    std::optional<IndexedMesh> cut;
+    if (negative)
+        cut = compensated(*negative, settings);
     if (!tools)
-        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool);
-    return slice_tools(mesh, settings, gpu, stress, painting, *tools);
+        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr);
+    return slice_tools(mesh, settings, gpu, stress, painting, *tools, cut ? &*cut : nullptr);
 }
 
 // A part's regions on given layers, as slice_layers makes them before its
@@ -716,8 +734,8 @@ void interlock(std::vector<std::vector<Polygons>>& regions, const std::vector<La
 // and their walls and fills, each path marked with its extruder, in place
 // of the plate's.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>& objects) {
-    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr);
+                        const Painting* painting, const std::vector<MeshObject>& objects, const IndexedMesh* negative) {
+    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative);
     if (out.layers.empty())
         return out;
     PartFrame frame;
@@ -802,7 +820,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
             continue;
         frame.regions = beamed.empty() ? nullptr : &beamed[p];
         SlicedModel part =
-            slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame, tool);
+            slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame, tool, negative);
         tag_tool(part, tool);
         zaa_points += part.zaa_points;
         // Their combined infill, in the same runs (above).
@@ -862,7 +880,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
 }
 
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& given, gpu::Context* gpu,
-                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool) {
+                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool,
+                         const IndexedMesh* negative) {
     const PartNozzles nozzles = part_nozzles(given, tool);
     const Settings& settings = nozzles.settings;
     SlicedModel out;
@@ -902,6 +921,24 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     std::vector<char> same_section;
     const std::vector<std::vector<Contour>> contours =
         slice_levels(mesh, height_field(mesh), heights, settings.gap_closing_radius, gpu, &same_section);
+    // The negative volumes' sections on the same levels (model_tools.md, rule
+    // 2): taken away from every layer they cross; the layers stay the part's.
+    std::vector<Polygons> cut;
+    if (negative) {
+        IndexedMesh oriented = *negative;
+        orient_consistently(oriented);
+        std::vector<char> cut_same;
+        const std::vector<std::vector<Contour>> cut_contours =
+            slice_levels(oriented, height_field(oriented), heights, settings.gap_closing_radius, gpu, &cut_same);
+        // A level like the one below comes back empty: it takes that one's.
+        std::vector<std::size_t> from(heights.size());
+        for (std::size_t l = 0; l < heights.size(); ++l)
+            from[l] = l > 0 && cut_same[l] ? from[l - 1] : l;
+        cut.resize(heights.size());
+        tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
+            cut[l] = layer_region(to_polygons(cut_contours[from[l]]), FillMode::Union);
+        });
+    }
 
     out.regions.resize(out.layers.size());
     out.walls.resize(out.layers.size());
@@ -938,6 +975,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         const bool same = l > 0 && same_section[l];
         source[l] = same ? source[l - 1] : l;
         copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
+                    (cut.empty() || cut[l] == cut[l - 1]) &&
                     !(l == 1 && settings.first_layer_one_wall) &&
                     !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
                     !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
@@ -949,6 +987,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             open[l] += c.closed ? 0 : 1;
         Polygons region = layer_region(simplify(to_polygons(contours[source[l]]), settings.simplify_tolerance),
                                        settings.fill_mode);
+        if (!cut.empty() && !cut[l].empty())
+            region = Clipper2Lib::Difference(region, cut[l], Clipper2Lib::FillRule::NonZero);
         const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
         if (frame && frame->regions)
