@@ -6157,3 +6157,29 @@ Tisma) y la interfaz P1.
 lateral de la pieza se ve con huecos entre capas.
 
 **Sigue:** subir R3b y el punto 5 cuando pase la verificación de Linux; después, la interfaz P1.
+
+## 2026-10-27 — Interfaz P1: el panel de ajustes, segundo paso
+
+**Hecho** (ficha `settings_panel.md`):
+- **Buscar un ajuste** (regla 5): un campo con lupa en la barra superior (Ctrl+F). Busca en el nombre del ajuste, su
+  tarjeta, su sección, su clave y lo que hace (de `docs/CONFIG.md`), sin mayúsculas ni tildes, y ordena por dónde
+  encontró cada palabra. Enter o un clic abren la pestaña, la sección y la tarjeta, traen la fila a la vista y la
+  resaltan 2 s; un ajuste que el nivel esconde se ve con la etiqueta de su nivel.
+- **Ver todo junto** (regla 4): todas las secciones una debajo de otra, con su título.
+- **Restablecer por tarjeta** (regla 8): el menú de tres puntos de cada tarjeta vuelve sus ajustes al perfil guardado
+  (`with_keys`, en `src/config/profiles.*`).
+- **Personalizado** (reglas 15 a 20): parte del nivel de antes; «Elegir ajustes…» con el árbol, las casillas a
+  medias, el filtro, «Partir de», Todos y Ninguno; el ojo tachado en cada fila; «+ Agregar ajuste» al pie de cada
+  tarjeta; Ctrl+Alt+4; exportar e importar la vista (`tisma-ui-view`), ignorando las claves que no existen; un ajuste
+  nuevo de otra versión se ve si su nivel entra en el de partida. Se recuerda en `interface.json`.
+- Los ajustes de resina, de la cinta y de las ondas tienen ahora su botón (i) y su nombre en la búsqueda.
+
+**Medido:** pruebas `settings view: …` (SP6, SP10, SP11, SP13, SP14, regla 8) y, con la interfaz entera,
+`ui_settings_basic`, `ui_settings_custom_search` y `ui_settings_same_gcode` (SP9: el mismo G-code en Básico y en
+Personalizado). Capturas revisadas: «costura» abre Calidad › Costura con la fila resaltada, todo junto, y el diálogo.
+
+**No hecho:** la tarjeta de la impresora con su dibujo, la cama y la boquilla rápida (21 a 26, 32 a 36), la cámara
+(27 a 31), la configuración de la impresora aparte con Calibración (37 a 40) y la conexión desde la tarjeta (41 a 44).
+
+**Sigue:** la tarjeta de la impresora y su configuración aparte.
+

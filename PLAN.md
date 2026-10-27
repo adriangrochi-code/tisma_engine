@@ -689,8 +689,10 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,
   los dependientes ocultos con su interruptor apagado, los cambios marcados y nunca ocultos (reglas 1 a 3, 6, 7 y 9 a
-  14). Falta: Personalizado (15 a 20), «Ver todo junto» (4), la búsqueda (5), Restablecer por tarjeta (8), la tarjeta
-  de la impresora con boquilla, cámara y conexión (21 a 44) y la configuración de la impresora aparte (hoy, una pestaña)
+  14). Segundo paso hecho (2026-10-27): «Ver todo junto» (4), la búsqueda de la barra superior (5), Restablecer por
+  tarjeta (8) y Personalizado con su diálogo, el ojo tachado, «+ Agregar ajuste» y exportar e importar la vista (15 a
+  20; SP6, SP6b, SP9 a SP14). Falta: la tarjeta de la impresora con boquilla, cámara y conexión (21 a 36, 41 a 44) y la
+  configuración de la impresora aparte (37 a 40; hoy, una pestaña)
 - [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…)
 - [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code

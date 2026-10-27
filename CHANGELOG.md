@@ -32,6 +32,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Relleno ondulado entrelazado** (ficha `interlock_infill.md`; `infill.waves`, en Impresión › Relleno › Relleno
   ondulado): el relleno poco denso sube y baja como un cartón de huevos, igual en cada capa, para que las capas
   encajen en vez de apoyarse en planos lisos. Funciona con cualquier patrón.
+- **Buscar un ajuste** (Ctrl+F, en la barra superior): por su nombre, su tarjeta, su clave o lo que hace; lleva al
+  ajuste y lo resalta.
+- **Panel de ajustes:** el nivel **Personalizado**, con «Elegir ajustes…», el ojo para quitar un ajuste de la vista,
+  «+ Agregar ajuste» y la vista exportable a otra computadora; **Ver todo junto**; y **Restablecer** en el menú de cada
+  tarjeta.
 - **Impresoras de cinta** (ficha `belt_printer.md`; grupo `belt`, en Impresora › Máquina › Impresora de cinta): para
   impresoras con el pórtico inclinado sobre una cinta (BlackBelt, Creality CR-30, IdeaFormer IR3). Se lamina en
   planos paralelos al pórtico y el G-code va en los ejes de la máquina, con la cinta en Z o en Y; la vista previa
