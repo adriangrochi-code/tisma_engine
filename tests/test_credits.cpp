@@ -57,7 +57,7 @@ TEST_CASE("credits: the data file reads, and a card shows its sources", "[ui][cr
     }
 }
 
-TEST_CASE("credits: every spec's «Basado en» has its credit (CR3)", "[ui][credits]") {
+TEST_CASE("credits: every spec's Basado en line has its credit (CR3)", "[ui][credits]") {
     const Credits& c = credits();
     const auto has_spec = [&](const std::string& spec) {
         return std::any_of(c.features.begin(), c.features.end(), [&](const FeatureCredit& f) { return f.spec == spec; });
@@ -127,7 +127,7 @@ TEST_CASE("credits: every library the program carries has its license and notice
     }
 }
 
-TEST_CASE("credits: «Basado en» in each language (CR1, CR4)", "[ui][credits]") {
+TEST_CASE("credits: Based on in each language (CR1, CR4)", "[ui][credits]") {
     const Language before = language();
     const auto fins = std::find_if(credits().features.begin(), credits().features.end(),
                                    [](const FeatureCredit& f) { return f.spec == "support_fins.md"; });
@@ -160,7 +160,7 @@ TEST_CASE("credits: what is not a credits file", "[ui][credits]") {
     CHECK(empty.libraries.empty());
 }
 
-TEST_CASE("credits: THIRD_PARTY.md's table and a spec's «Basado en» line read", "[ui][credits]") {
+TEST_CASE("credits: THIRD_PARTY.md's table and a spec's Basado en line read", "[ui][credits]") {
     const std::vector<ThirdPartyRow> rows = third_party_rows("# T\n\n| Biblioteca | CMake | Versión | Licencia | Leída en | URL | Uso |\n"
                                                              "|---|---|---|---|---|---|---|\n"
                                                              "| A | a | 1.0 (commit x) | MIT | LICENSE | https://a | Solo pruebas. |\n"
