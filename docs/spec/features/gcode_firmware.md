@@ -34,6 +34,9 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
      espera a que llegue;
    - Marlin y Klipper: `M104 S<t>` y `M109 S<t>`;
    - RepRapFirmware: `G10 S<t> P<herramienta>` y, para esperar, `M116`;
+     en RepRapFirmware el mismo `G10` sin parámetros es la retracción del firmware (`retraction_travel.md`, regla 7):
+     con las dos cosas, el G-code tiene `G10 S200 P0` para la temperatura y `G10` solo para retraer (medido el
+     27-10-2026). Al terminar, todos los firmwares apagan la boquilla con `M104 S0`, también RepRapFirmware;
    - si el G-code de inicio ya tiene comandos de temperatura de boquilla, cama o cámara, el motor no los agrega:
      la persona decide el orden.
 2. **Límites de la máquina** con `emit`, antes del G-code de inicio:

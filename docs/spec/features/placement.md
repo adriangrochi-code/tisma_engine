@@ -44,7 +44,8 @@ origen y, sin moverla, queda fuera de la cama.
      regla 3 (diseño). Tisma Slicer no tiene ese caso: siempre hay una cama (200 × 200 mm si no se da otra), así que
      con el centro dado a mano mueve el objeto igual (PL15).
 5. **Varios archivos en una misma placa:** en Tisma Slicer, la línea de comandos se cierra con una falla de memoria
-   al juntarlos (PL13). No se copia: el motor los ordena como en la regla 2.
+   al juntarlos (PL13), o lamina solo el último archivo de la lista (dos STL de 20 mm, 27-10-2026). No se copia: el
+   motor los junta y los ordena como en la regla 2.
 
 ## Pruebas
 
