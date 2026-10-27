@@ -4935,3 +4935,41 @@ paredes partidas en esquinas: 812 en el Benchy), inofensivo.
 
 **Sigue:** del punto 1 de lo pendiente, las ramas de los árboles que engordan y se juntan antes (SM13 remedido),
 los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15 de ubicación, QA8, QA9 y `support.width`.
+
+## 2026-10-27 — árboles: puntas enlazadas de a pares (SM13 remedido)
+
+**Por qué:** segundo ítem de lo pendiente, en orden: las ramas se juntaban más abajo que en la ficha. El equipo de
+fichas remidió SM13 (regla y tabla en `supports_more.md`, `spec/next` 2f55a4b): una capa bajo las 22 puntas ya hay 13
+piezas, 8 de ellas pares de puntas juntas de costado (unos 3,2 × 1,25 mm).
+
+**Hecho:**
+- Las puntas vecinas a no más del hueco entre puntas (la separación de las puntas menos su ancho) se enlazan de a pares,
+  por el hueco más chico primero; el soporte llena la envolvente de los dos discos (`TreeNode::to`), y se acercan al
+  ángulo máximo (`support.tree_angle`) hasta juntarse. Solo las puntas se enlazan: más abajo, las ramas se inclinan y
+  se juntan como antes.
+- Al juntarse, el radio queda a mitad de camino entre el de la más ancha y el de las dos áreas juntas.
+- **Arreglo:** una rama absorbida por otra que después se apoyaba en la pieza dejaba su ubicación en la capa de
+  separación; ahora la que absorbe se lleva sus ubicaciones y se vacían juntas (lo mostró la prueba del estante con
+  los cambios).
+- **Arreglo de lo de QA13 (sin publicar):** en el cráneo con soporte, el G-code se rechazaba por `;WIDTH:0.000`: al
+  cortar una pared en el borde de lo que cuelga, la punta de un cordón que se afina a nada quedaba como un tramo propio
+  sin movimiento. El escritor ya no escribe un ancho sin un movimiento que lo use, y no corta a menos de una micra de
+  los extremos de un tramo. Prueba nueva con esa punta sola (falla sin el arreglo).
+
+**Medido** (estante de SM13, piezas por capa en Z 7,2 / 7,0 / 6,2 / 5,2 / 4,2 / 2,2 / 0,4):
+
+| | Piezas |
+|---|---|
+| Ficha (Tisma Slicer) | 22 / 13 / 11 / 9 / 7 / 4 / 1 |
+| Antes | 21 / 21 / 19 / 15 / 8 / 7 / 3 |
+| Ahora | 21 / 11 / 12 / 10 / 5 / 5 / 4 |
+
+Probé también el radio de las dos áreas juntas (21 / 11 / 12 / 5 / 3 / 2 / 2) y el de la más ancha (21 / 11 / 12 /
+10 / 9 / 8 / 6): el promedio de los dos queda más cerca en total. Cerca de la cama la ficha junta todo en una pieza de
+11 × 22 mm y el motor deja 4. Benchy con árboles: 1,40 s contra 1,55 s antes (menos ramas); cráneo con árboles: 7,5 s
+contra 7,0 s. Los tres soportes en el cráneo y el Benchy con soporte, verificados. Fuzzer: 800 corridas, 0 fallas.
+
+**No probado:** los tamaños de cada pieza contra la ficha (la medida de la ficha es de borde a borde menos el ancho de
+línea, y la de mi guion es otra); la base ancha de los troncos cerca de la cama.
+
+**Sigue:** los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15, QA8, QA9 y `support.width`.

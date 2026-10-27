@@ -10,7 +10,9 @@ namespace tisma {
 // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15 to
 // 17). Tips under what overhangs go down as round branches, layer by layer:
 // each branch leans towards its nearest neighbour (at most angle_preferred
-// from the vertical) and joins it where they meet, widens on its way down,
+// from the vertical) and joins it where they meet; neighbours whose gap is no
+// wider than the tips' links them at once, filling the hull of the two, and
+// they close up at `angle` until they meet; it widens on its way down,
 // and keeps xy_gap off the part, leaning up to `angle` to get round it; one
 // that cannot rests on the part. The rest reach the bed. Own design on the
 // idea of Vanek, Galicia and Benes, «Clever Support» (2014): points under the
@@ -34,9 +36,13 @@ struct TreeParams {
 // tips.
 double tree_tip_spacing(double tip_diameter, double top_rate, double branch_distance);
 
-// A branch at a layer: its centre and radius, in mm.
+// A branch at a layer: its centre and radius, in mm, and the branch of the
+// same layer it is linked to on its way to joining it (an index into the
+// layer's nodes, or none): the support fills the hull of the two.
 struct TreeNode {
     double x = 0.0, y = 0.0, r = 0.0;
+    std::size_t to = kNoNode;
+    static constexpr std::size_t kNoNode = std::size_t(-1);
 };
 
 // The branches of every layer (regions[l] the part's region, heights[l] the

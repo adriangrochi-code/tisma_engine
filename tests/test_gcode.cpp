@@ -809,6 +809,28 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
     CHECK(thick_wall);
 }
 
+TEST_CASE("walls: a bead that tapers to nothing writes no width of 0", "[gcode]") {
+    // The tip of a variable-width bead has width 0; a piece of it that does
+    // not move (a repeated point, or a cut right at the tip) is not written,
+    // nor its width: the check refuses a ;WIDTH:0.
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    IndexedMesh m;
+    add_box(m, 0, 0, 10, 10, 1);
+    SlicedModel model = slice_model(m, s);
+    // A spike to its tip, then the tip alone as a piece of its own (as a wall
+    // cut where it starts to hang leaves it).
+    Toolpath spike, tip;
+    spike.index = tip.index = 1;
+    spike.points = {{{2.0, 5.0}, 0.4}, {{4.0, 5.0}, 0.0}};
+    tip.points = {{{4.0, 5.0}, 0.0}, {{4.0, 5.0002}, 0.0}};
+    model.walls[2].toolpaths.push_back(spike);
+    model.walls[2].toolpaths.push_back(tip);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    CHECK(out.str().find(";WIDTH:0.000") == std::string::npos);
+}
+
 TEST_CASE("walls: the stretches over the air are overhang perimeters at the bridges' speed (walls_extra.md, rule 8; "
           "W2)",
           "[gcode]") {

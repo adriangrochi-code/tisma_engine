@@ -20,6 +20,20 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   así llenan el hueco hasta el soporte en vez de caer en el aire; el puente entra 0,6 mm sobre la parte apoyada para
   anclarse. La capa de arriba ya es normal.
 
+### Cambiado
+
+- **Soportes en árbol más parecidos a la ficha** (`supports_more.md`, SM13 remedido): una capa bajo las puntas, las
+  vecinas se enlazan de a pares, con el soporte entre las dos, y se acercan hasta juntarse; las ramas juntadas
+  engordan menos. En el estante de la ficha, las piezas por capa bajando: 21, 11, 12, 10, 5, 5 y 4 (la ficha: 22, 13,
+  11, 9, 7, 4 y 1; antes 21, 21, 19, 15, 8, 7 y 3).
+
+### Corregido
+
+- Una rama de árbol que se juntaba con otra que después se apoyaba en la pieza dejaba su pedazo en la capa de
+  separación, pegado a la pieza.
+- El G-code no escribe un ancho de línea sin un movimiento que lo use (`;WIDTH:0.000` en la punta de un cordón que se
+  afina a nada, que la verificación rechazaba).
+
 ## [0.9.0-alpha.1] - 2026-10-27
 
 Cuarta versión publicada. Trae los soportes en árbol, la lectura de OBJ y 3MF con la pieza centrada en la cama, la

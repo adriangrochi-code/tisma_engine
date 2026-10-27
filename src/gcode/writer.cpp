@@ -230,7 +230,11 @@ Toolpath cut_at(const Toolpath& t, AreaIndex& areas) {
         areas.crossings(a.p, b.p, at);
         std::sort(at.begin(), at.end());
         const double dx = b.p.x - a.p.x, dy = b.p.y - a.p.y;
+        // Not within a micron of either end: no piece of nothing.
+        const double near_end = 1e-3 / std::max(std::hypot(dx, dy), 1e-9);
         for (const double u : at) {
+            if (u < near_end || u > 1.0 - near_end)
+                continue;
             ToolpathPoint p = a;
             p.p = {a.p.x + u * dx, a.p.y + u * dy};
             p.width = a.width + u * (b.width - a.width);
@@ -711,17 +715,6 @@ public:
             other_time_ += retracted_amount_ / retract_feed_;
         }
         const double width = (from.width + to.width) / 2.0;
-        if (width != width_value_) { // the same width writes the same text
-            width_value_ = width;
-            char w[kNumberCapacity];
-            const std::string_view width_text(w, format_fixed(w, width, 3));
-            if (width_text != width_) {
-                text_ += ";WIDTH:";
-                text_ += width_text;
-                text_ += '\n';
-                width_.assign(width_text);
-            }
-        }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
         // as thick as what is left down to the layer's bottom, by the Z written.
@@ -764,6 +757,19 @@ public:
         const std::string_view x_text(tx, format_fixed(tx, to.p.x, 3)), y_text(ty, format_fixed(ty, to.p.y, 3));
         if (x_text == x_ && y_text == y_)
             return;
+        // The width of the moves that follow, written only before one (the
+        // tip of a bead that tapers to nothing has no move of its own).
+        if (width != width_value_) { // the same width writes the same text
+            width_value_ = width;
+            char w[kNumberCapacity];
+            const std::string_view width_text(w, format_fixed(w, width, 3));
+            if (width_text != width_) {
+                text_ += ";WIDTH:";
+                text_ += width_text;
+                text_ += '\n';
+                width_.assign(width_text);
+            }
+        }
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
         // A slowed-down feed is rounded down to whole mm/min (as F is written), so

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <tuple>
 #include <unordered_map>
 
 namespace tisma {
@@ -135,8 +136,12 @@ Toolpath ring_path(const Polygon& ring, double bead) {
 struct Branch {
     TreeNode node;
     double grown = 0.0;   // mm below its tip
-    std::vector<std::pair<std::size_t, std::size_t>> recent; // its last placements (layer, index)
+    // Its placements (layer, index) in the last gap + 1 layers, and those of
+    // the branches it joined: where it rests on the part they are emptied.
+    std::vector<std::pair<std::size_t, std::size_t>> recent;
     bool alive = true;
+    std::size_t id = 0;   // for the links: indices change as branches end
+    std::size_t link = 0; // the id of the branch it is linked to, 0 for none
 };
 
 // The tips that cover an overhang not yet under a branch: candidates along
@@ -184,9 +189,36 @@ void add_tips(const Polygons& overhang, const Polygons& forbidden, double spacin
         double cx = x, cy = y;
         if (!covered && keep_clear(forbidden, cx, cy, tip_r, reach)) {
             grid.add(cx, cy, branches.size());
-            branches.push_back({{cx, cy, tip_r}, 0.0, {}, true});
+            branches.push_back({{cx, cy, tip_r}, 0.0, {}, true, 0, 0});
         }
     }
+}
+
+// The convex hull of points, counter-clockwise (Andrew's monotone chain).
+Polygon convex_hull(Polygon points) {
+    std::sort(points.begin(), points.end(), [](const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return a.x < b.x || (a.x == b.x && a.y < b.y);
+    });
+    points.erase(std::unique(points.begin(), points.end()), points.end());
+    if (points.size() < 3)
+        return points;
+    const auto cross = [](const Clipper2Lib::Point64& o, const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return double(a.x - o.x) * double(b.y - o.y) - double(a.y - o.y) * double(b.x - o.x);
+    };
+    Polygon hull(2 * points.size());
+    std::size_t k = 0;
+    for (std::size_t i = 0; i < points.size(); ++i) {
+        while (k >= 2 && cross(hull[k - 2], hull[k - 1], points[i]) <= 0.0)
+            --k;
+        hull[k++] = points[i];
+    }
+    for (std::size_t i = points.size() - 1, t = k + 1; i-- > 0;) {
+        while (k >= t && cross(hull[k - 2], hull[k - 1], points[i]) <= 0.0)
+            --k;
+        hull[k++] = points[i];
+    }
+    hull.resize(k - 1);
+    return hull;
 }
 
 } // namespace
@@ -217,6 +249,11 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
         base[l] = base[l - 1] + (l - 1 < heights.size() ? heights[l - 1] : 0.0);
     std::vector<Branch> branches;
     const double reach_range = 10.0 * std::max(params.branch_diameter, 1.0); // branches farther apart stay apart
+    // Neighbours no farther apart than the tips' gap link at once (SM13: a
+    // layer under the tips, most stand in pairs).
+    const double link_gap = std::max(spacing - 2.0 * tip_r, params.bead);
+    std::size_t next_id = 1;
+    std::unordered_map<std::size_t, std::size_t> index_of; // a branch's id to its index in `branches`
     for (std::size_t l = n; l-- > 0;) {
         // The tips under the interface of the overhang gap + interface + 1
         // layers up, off the part at this layer: one under a hole's rim, say,
@@ -225,14 +262,25 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
             const Polygons forbidden = regions[l].empty() ? Polygons{} : offset(regions[l], params.xy_gap);
             add_tips(overhangs[a], forbidden, spacing, tip_r, 2.0 * tip_r, branches);
         }
+        index_of.clear();
+        for (std::size_t i = 0; i < branches.size(); ++i) {
+            if (branches[i].id == 0)
+                branches[i].id = next_id++;
+            index_of[branches[i].id] = i;
+        }
         for (Branch& b : branches) {
             if (!b.alive)
                 continue;
             b.recent.push_back({l, out[l].size()});
-            if (b.recent.size() > gap + 1)
-                b.recent.erase(b.recent.begin());
+            std::erase_if(b.recent, [&](const auto& p) { return p.first > l + gap; });
+            b.node.to = TreeNode::kNoNode;
             out[l].push_back(b.node);
         }
+        // Each link once, from the branch with the lower id (a branch's
+        // placement on this layer is the last it pushed).
+        for (const Branch& b : branches)
+            if (b.alive && b.link > b.id)
+                out[l][b.recent.back().second].to = branches[index_of.at(b.link)].recent.back().second;
         if (l == 0)
             break;
         // Down a layer: lean towards the nearest branch that can be met before
@@ -247,9 +295,45 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
         CellGrid cells(std::max(spacing, 2.0 * branch_r));
         for (const std::size_t i : alive)
             cells.add(branches[i].node.x, branches[i].node.y, i);
+        // New links: the unlinked neighbours within the tips' gap that can meet
+        // before the bed, the narrowest gaps first.
+        double widest_r = 0.0;
+        for (const std::size_t i : alive)
+            widest_r = std::max(widest_r, branches[i].node.r);
+        std::vector<std::tuple<double, std::size_t, std::size_t>> pairs;
+        // Only tips link: lower down, branches lean and join as before.
+        const auto tip = [&](const Branch& b) { return b.node.r < branch_r; };
+        for (const std::size_t i : alive) {
+            const Branch& a = branches[i];
+            if (a.link || !tip(a))
+                continue;
+            cells.near(a.node.x, a.node.y, link_gap + a.node.r + widest_r, [&](std::size_t j) {
+                const Branch& b = branches[j];
+                if (j <= i || b.link || !tip(b))
+                    return;
+                const double d = std::hypot(b.node.x - a.node.x, b.node.y - a.node.y);
+                if (d - a.node.r - b.node.r <= link_gap && d * 0.5 <= base[l] * dodge + 1e-9)
+                    pairs.push_back({d - a.node.r - b.node.r, i, j});
+            });
+        }
+        std::sort(pairs.begin(), pairs.end());
+        for (const auto& [g, i, j] : pairs)
+            if (!branches[i].link && !branches[j].link)
+                branches[i].link = branches[j].id, branches[j].link = branches[i].id;
         std::vector<std::pair<double, double>> moves(branches.size(), {0.0, 0.0});
         for (const std::size_t i : alive) {
             const TreeNode& a = branches[i].node;
+            if (branches[i].link) {
+                // Linked: straight at its partner, as steep as `angle` allows,
+                // to meet it halfway.
+                const TreeNode& b = branches[index_of.at(branches[i].link)].node;
+                const double d = std::hypot(b.x - a.x, b.y - a.y);
+                if (d > 0.0) {
+                    const double go = std::min(down * dodge, d * 0.5);
+                    moves[i] = {(b.x - a.x) / d * go, (b.y - a.y) / d * go};
+                }
+                continue;
+            }
             double best = std::numeric_limits<double>::infinity();
             std::size_t partner = branches.size();
             for (std::int64_t k = 0; double(k - 1) * cells.cell() <= std::min(best, reach_range); ++k)
@@ -309,9 +393,16 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
                     const double wa = a.node.r * a.node.r, wb = b.node.r * b.node.r;
                     a.node.x = (a.node.x * wa + b.node.x * wb) / (wa + wb);
                     a.node.y = (a.node.y * wa + b.node.y * wb) / (wa + wb);
-                    a.node.r = std::sqrt(wa + wb); // as thick as both together, as trees grow
+                    // Halfway between the wider of the two and both areas
+                    // together: as trees grow, but the pieces of SM13 stay
+                    // apart as long as in the spec.
+                    a.node.r = 0.5 * (std::max(a.node.r, b.node.r) + std::sqrt(wa + wb));
                     a.grown = std::max(a.grown, b.grown);
+                    a.recent.insert(a.recent.end(), b.recent.begin(), b.recent.end());
                     b.alive = false;
+                    // Joined, the two are one: free to link again.
+                    if (a.link == b.id)
+                        a.link = 0;
                     joined = true;
                 }
             }
@@ -332,17 +423,33 @@ std::vector<std::vector<TreeNode>> tree_nodes(const std::vector<Polygons>& regio
                 continue;
             b.node.r = r;
             // It rests on the part: its lowest `gap` layers, right over the
-            // part, stay empty.
+            // part, stay empty, with those of the branches it joined there.
             b.alive = false;
-            for (std::size_t k = 0; k < std::min(gap, b.recent.size()); ++k) {
-                const auto [layer, index] = b.recent[b.recent.size() - 1 - k];
-                out[layer][index].r = 0.0;
-            }
+            for (const auto& [layer, index] : b.recent)
+                if (layer < l + gap)
+                    out[layer][index].r = 0.0;
         }
         std::erase_if(branches, [](const Branch& b) { return !b.alive; });
+        // A link to a branch that ended (joined another, or rests on the part) is gone.
+        index_of.clear();
+        for (std::size_t i = 0; i < branches.size(); ++i)
+            index_of[branches[i].id] = i;
+        for (Branch& b : branches)
+            if (b.link && (!index_of.contains(b.link) || branches[index_of.at(b.link)].link != b.id))
+                b.link = 0;
     }
-    for (auto& layer : out)
+    for (auto& layer : out) {
+        // Without the emptied nodes, the links to their new places.
+        std::vector<std::size_t> moved(layer.size(), TreeNode::kNoNode);
+        std::size_t kept = 0;
+        for (std::size_t i = 0; i < layer.size(); ++i)
+            if (layer[i].r > 0.0)
+                moved[i] = kept++;
+        for (TreeNode& t : layer)
+            if (t.to != TreeNode::kNoNode)
+                t.to = moved[t.to];
         std::erase_if(layer, [](const TreeNode& t) { return !(t.r > 0.0); });
+    }
     return out;
 }
 
@@ -359,14 +466,24 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
                     discs.push_back(p);
         if (nodes[l].empty() && discs.empty())
             return;
-        for (const TreeNode& t : nodes[l]) {
+        const auto disc_of = [](const TreeNode& t) {
             const int sides = std::clamp(int(std::ceil(2.0 * std::numbers::pi * t.r / 0.4)), 12, 64);
             Polygon disc;
             for (int k = 0; k < sides; ++k) {
                 const double a = 2.0 * std::numbers::pi * k / sides;
                 disc.push_back({to_units(t.x + t.r * std::cos(a)), to_units(t.y + t.r * std::sin(a))});
             }
-            discs.push_back(std::move(disc));
+            return disc;
+        };
+        for (const TreeNode& t : nodes[l]) {
+            discs.push_back(disc_of(t));
+            // Linked branches: the hull of the two, the support between them.
+            if (t.to != TreeNode::kNoNode && t.to < nodes[l].size()) {
+                Polygon both = discs.back();
+                const Polygon other = disc_of(nodes[l][t.to]);
+                both.insert(both.end(), other.begin(), other.end());
+                discs.push_back(convex_hull(std::move(both)));
+            }
         }
         Polygons area = Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
         if (l < regions.size() && !regions[l].empty())
