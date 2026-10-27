@@ -356,3 +356,13 @@ TEST_CASE("a change added at a layer starts that layer (preview.md, PV8 and PV9)
     CHECK(pause_layer == 29);
     CHECK(g.str().find("M117 Insertar tuerca") != std::string::npos);
 }
+
+TEST_CASE("a G-code without the kinds' comments has no types, and its heights and speeds (PV10)", "[gcode][preview]") {
+    const GcodePreview bare = read_gcode_preview("G1 Z0.2 F3000\nG1 X10 Y0 E0.5 F1200\nG1 X10 Y10 E1\n"
+                                                 "G1 Z0.4\nG1 X0 Y10 E1.5\n");
+    CHECK_FALSE(bare.typed);
+    REQUIRE(bare.layers.size() == 2);
+    CHECK(bare.moves[bare.extrusions.front()].height > 0.0f);
+    CHECK(bare.moves[bare.extrusions.front()].feed == 20.0f);
+    CHECK(read_gcode_preview(";TYPE:Perimeter\nG1 X10 E1\n").typed);
+}

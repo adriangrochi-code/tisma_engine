@@ -93,6 +93,7 @@ struct GcodePreview {
     std::array<std::size_t, kLineKinds> kind_moves{}; // extrusions per kind (travels for Travel)
     std::array<double, kLineKinds> kind_filament{};   // mm of filament per kind
     std::vector<PreviewMark> marks;                   // in the order of the file
+    bool typed = false;                               // the file names its lines' kinds (;TYPE:)
     // With time_preview: the moves' time by kind, in all and in the first
     // layer that extrudes (the time of retractions and waits left out).
     std::array<double, kLineKinds> kind_seconds{};

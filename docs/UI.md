@@ -151,8 +151,10 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
   desde lejos, con el mismo tamaño en pantalla, así la luz y las sombras siguen iguales); Z encuadra la pieza elegida
   o, sin elección, todo; E muestra el nombre de cada pieza; L oculta o muestra la leyenda.
 
-**Abrir** un `.gcode` lo muestra igual, también si no lo escribió el motor: el lector entiende G-code sin los
-comentarios del motor. Ese G-code no se puede volver a laminar ni exportar.
+**Abrir** un `.gcode` (o un `.bgcode`, el G-code binario) lo muestra igual, también si no lo escribió el motor: el
+lector entiende G-code sin los comentarios del motor; sin `;TYPE:`, la vista por tipo dice «Sin tipos» y las demás
+(altura, velocidad, ancho por el caudal) siguen andando. **Más › Vista previa de G-code…** abre uno, y soltar otro
+archivo sobre la ventana lo reemplaza. Ese G-code no se puede volver a laminar ni exportar.
 
 ### Perfiles y proyectos
 

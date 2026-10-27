@@ -139,6 +139,7 @@ private:
         if (c.starts_with("TYPE:")) {
             const std::string_view type = trim(c.substr(5));
             kind_ = line_kind(type);
+            out_.typed = true;
             // The user's G-code, once the print has started.
             if (kind_ == LineKind::Custom && !out_.extrusions.empty())
                 mark(MarkKind::Custom);

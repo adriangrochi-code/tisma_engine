@@ -19,6 +19,7 @@
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
 #include "fea/analysis.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/export.hpp"
 #include "resin/goo.hpp"
 #include "gcode/print_time.hpp"
@@ -92,7 +93,7 @@ constexpr const char* kIcons[] = {
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
 const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf"};
 
 bool is_model(const std::filesystem::path& path) {
@@ -2312,7 +2313,7 @@ void App::open_path(const std::filesystem::path& path) {
         load_model(path);
     else if (ext == ".tisma")
         open_project(path);
-    else if (ext == ".gcode" || ext == ".gco" || ext == ".g")
+    else if (ext == ".gcode" || ext == ".gco" || ext == ".g" || ext == ".bgcode")
         load_gcode(path);
     else if (ext == ".json")
         load_settings_file(path);
@@ -2508,6 +2509,15 @@ void App::load_gcode(const std::filesystem::path& path) {
     r.ok = true;
     r.settings = settings_;
     r.gcode = std::move(text).str();
+    // A binary G-code (gcode_extras.md): its G-code block, read back.
+    if (r.gcode.starts_with("GCDE")) {
+        try {
+            r.gcode = read_binary_gcode(r.gcode).gcode;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, utf8(path) + ": " + e.what());
+            return;
+        }
+    }
     r.preview = read_gcode_preview(r.gcode, settings_.filament_diameter);
     time_preview(r.preview, machine_kinematics(settings_), settings_.filament_diameter);
     if (r.preview.extrusions.empty()) {
@@ -3464,6 +3474,10 @@ void App::top_bar() {
                 apply_theme();
             }
             ImGui::EndMenu();
+        }
+        if (ImGui::MenuItem(tr(T::GcodePreviewMenu))) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"}, last_folder_);
         }
         if (ImGui::MenuItem(tr(T::ExportView))) {
             purpose_ = Purpose::ExportView;
@@ -6388,7 +6402,10 @@ void App::preview_panels() {
         ImGui::EndCombo();
     }
     const float swatch = ImGui::GetTextLineHeight();
-    if (preview_view_ == PreviewView::Kind) {
+    if (preview_view_ == PreviewView::Kind && !p.typed) {
+        // A G-code without the kinds' comments (rule 13, PV10).
+        ImGui::TextDisabled("%s", tr(T::NoTypes));
+    } else if (preview_view_ == PreviewView::Kind) {
         // Each kind: its colour, its time and share of the moves' time, and
         // its filament (rule 2).
         const double all = p.moves_seconds;

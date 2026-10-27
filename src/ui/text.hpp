@@ -492,6 +492,8 @@
     X(ByTool, "Extrusor", "Tool") \
     X(ByColorPrint, "Color por capa", "Color print") \
     X(ToolN, "Extrusor %d", "Tool %d") \
+    X(NoTypes, "Sin tipos: el G-code no dice qué es cada línea", "No types: the G-code does not say what each line is") \
+    X(GcodePreviewMenu, "Vista previa de G-code…", "G-code preview…") \
     X(AddAtLayer, "Agregar en esta capa un cambio de color (clic derecho: más)", "Add a colour change at this layer (right click: more)") \
     X(AddColorChange, "Cambio de color", "Colour change") \
     X(AddPause, "Pausa…", "Pause…") \
