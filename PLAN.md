@@ -716,7 +716,12 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   conexión con Bambu Lab ya tienen su crédito, que se verá bajo su panel cuando existan
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
-  escalar a medida, cortar, separar y copias en grilla
+  escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
+  comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
+  con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
+  Falta: las herramientas de la interfaz (Cortar con plano libre y conectores, Medir, Espejar, Escalar por medidas,
+  Separar en partes; reglas 16 a 20), partes, modificadores y ajustes por objeto (reglas 1 a 10) y las copias en grilla
+  (regla 15)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)

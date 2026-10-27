@@ -55,6 +55,7 @@ add_executable(tisma_tests
   test_settings_layout.cpp
   test_settings_view.cpp
   test_printer_card.cpp
+  test_transform.cpp
   test_vase.cpp
   test_travel.cpp
   test_cooling.cpp

@@ -27,7 +27,8 @@ un `SlicedModel` con todo lo que se va a imprimir, capa por capa. Después, `exp
 archivo .stl, .obj o .3mf
   │ read_model                        io/model          STL binario o ASCII, OBJ o 3MF (io/threemf sobre io/zip
   │                                                     e io/xml), detectado por el contenido y la extensión
-  │ place_on_bed                      slice/placement   la línea de comandos centra la pieza en la cama
+  │ apply_transform                   slice/transform   escala, giro, corte y separar (grupo transform)
+  │ place_on_bed, place_objects       slice/placement   la línea de comandos centra la pieza o las piezas en la cama
   ▼
 TriangleMesh ─ weld_exact ─────────▶ IndexedMesh       mesh/            vértices compartidos por igualdad exacta
   │

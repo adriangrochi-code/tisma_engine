@@ -24,6 +24,7 @@
 #include "slice/layers.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "slice/transform.hpp"
 #include "resin/goo.hpp"
 #include "resin/resin.hpp"
 
@@ -279,6 +280,31 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     return kExitOk;
 }
 
+// The model as the settings' transform group leaves it (model_tools.md,
+// rules 11 to 14), placed on the bed: one object, its copies, or the pieces a
+// cut or a split made, side by side. False, with the problem in err, when
+// pieces and copies are both asked for.
+bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copies, const std::string& name,
+                 std::vector<MeshObject>& objects, std::ostream& err) {
+    std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings);
+    if (parts.size() > 1) {
+        if (copies > 1) {
+            err << "error: --copies does not go with transform.cut_z or transform.split\n";
+            return false;
+        }
+        mesh = place_objects(parts, settings, name, &objects);
+        return true;
+    }
+    mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
+    if (copies > 1) {
+        mesh = place_copies(mesh, copies, settings, name, &objects);
+    } else {
+        place_on_bed(mesh, settings);
+        objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
+    }
+    return true;
+}
+
 // Whether the output is a resin printer's GOO file.
 bool goo_output(const std::string& path) {
     std::string ext = std::filesystem::path(path).extension().string();
@@ -295,11 +321,9 @@ int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model,
                         {settings.display_width, settings.display_height},
                         {0.0, settings.display_height}};
     std::vector<MeshObject> objects;
-    if (args.copies > 1)
-        model.mesh = place_copies(model.mesh, args.copies, settings, std::filesystem::path(args.model).filename().string(),
-                                  &objects);
-    else
-        place_on_bed(model.mesh, settings);
+    if (!place_model(model.mesh, settings, args.copies, std::filesystem::path(args.model).filename().string(), objects,
+                     err))
+        return kExitUsage;
     const auto start = std::chrono::steady_clock::now();
     ResinPrint print;
     try {
@@ -379,12 +403,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     // sequential.md, rule 2), or the model alone.
     std::vector<MeshObject> objects;
     const std::string file_name = std::filesystem::path(parsed->model).filename().string();
-    if (parsed->copies > 1) {
-        stl.mesh = place_copies(stl.mesh, parsed->copies, settings, file_name, &objects);
-    } else {
-        place_on_bed(stl.mesh, settings);
-        objects.push_back({file_name, 0, stl.mesh.triangle_count(), 0, 0});
-    }
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err))
+        return kExitUsage;
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);

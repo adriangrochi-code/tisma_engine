@@ -282,6 +282,16 @@ struct Settings {
     bool placement_arrange = true;
     std::optional<std::array<double, 2>> placement_center;
     double placement_spacing = 6.0; // mm between the boxes of copies (placement.md, rule 2)
+    // What the command line does to the model before it places it
+    // (docs/spec/features/model_tools.md, rules 11 to 14), about the centre of
+    // its box: scale (or fit in a box), turn about X, then Y, then Z, cut
+    // with a horizontal plane into two objects, split into its loose pieces.
+    // The interface does these with its own tools.
+    double transform_scale = 1.0;
+    std::optional<std::array<double, 3>> transform_scale_to_fit; // mm
+    std::array<double, 3> transform_rotate{0.0, 0.0, 0.0};       // degrees
+    std::optional<double> transform_cut_z;                       // mm above the bed
+    bool transform_split = false;
     // Object by object (docs/spec/features/sequential.md): each whole before
     // the next, the head within clearance_radius of the nozzle and the X
     // axis clearance_height above its tip.

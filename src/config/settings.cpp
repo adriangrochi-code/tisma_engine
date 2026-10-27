@@ -402,7 +402,8 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
+            group == "fuzzy" || group == "vase" || group == "placement" || group == "transform" || group == "arcs" ||
+            group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
@@ -605,6 +606,53 @@ Settings parse_checked(std::string_view text) {
         if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
             fail(k, "must be null (the centre of the bed) or [x, y] in mm");
         s.placement_center = std::array<double, 2>{v[0].get<double>(), v[1].get<double>()};
+    });
+    read_group(root, "transform", {"scale", "scale_to_fit", "rotate_x", "rotate_y", "rotate_z", "cut_z", "split"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "scale") {
+            // A factor, or a share as "N%": 2 and "200%" are the same.
+            double f = 0.0;
+            if (v.is_number()) {
+                f = v.get<double>();
+            } else if (v.is_string() && v.get<std::string>().ends_with('%')) {
+                const std::string t = v.get<std::string>();
+                char* end = nullptr;
+                f = std::strtod(t.c_str(), &end) / 100.0;
+                if (end != t.c_str() + t.size() - 1)
+                    f = 0.0;
+            }
+            if (!(f > 0.0 && f <= 1000.0))
+                fail(k, "must be a factor above 0 and at most 1000, or a share as \"N%\"");
+            s.transform_scale = f;
+        } else if (n == "scale_to_fit") {
+            if (v.is_null()) {
+                s.transform_scale_to_fit.reset();
+                return;
+            }
+            if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number() ||
+                !(v[0].get<double>() > 0.0) || !(v[1].get<double>() > 0.0) || !(v[2].get<double>() > 0.0))
+                fail(k, "must be null or [x, y, z] in mm, each above 0");
+            s.transform_scale_to_fit = std::array<double, 3>{v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+        } else if (n == "cut_z") {
+            if (v.is_null()) {
+                s.transform_cut_z.reset();
+                return;
+            }
+            const double z = number(g, n, k);
+            if (!(z > 0.0 && z <= 10000.0))
+                fail(k, "must be null or a height above 0 and at most 10000 mm");
+            s.transform_cut_z = z;
+        } else if (n == "split") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.transform_split = v.get<bool>();
+        } else {
+            const double a = number(g, n, k);
+            if (!(a >= -360.0 && a <= 360.0))
+                fail(k, "must be from -360 to 360 degrees");
+            s.transform_rotate[n == "rotate_x" ? 0 : n == "rotate_y" ? 1 : 2] = a;
+        }
     });
     read_group(root, "sequential", {"enabled", "clearance_radius", "clearance_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -2249,6 +2297,13 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
+        {"transform.scale", num(s.transform_scale)},
+        {"transform.scale_to_fit", s.transform_scale_to_fit ? json(*s.transform_scale_to_fit).dump() : std::string("none")},
+        {"transform.rotate_x", num(s.transform_rotate[0])},
+        {"transform.rotate_y", num(s.transform_rotate[1])},
+        {"transform.rotate_z", num(s.transform_rotate[2])},
+        {"transform.cut_z", s.transform_cut_z ? num(*s.transform_cut_z) : std::string("none")},
+        {"transform.split", flag(s.transform_split)},
         {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
         {"fuzzy.thickness", num(s.fuzzy_thickness)},
         {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
@@ -2661,6 +2716,14 @@ std::string settings_json(const Settings& s) {
          {{"arrange", s.placement_arrange},
           {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)},
           {"spacing", s.placement_spacing}}},
+        {"transform",
+         {{"scale", s.transform_scale},
+          {"scale_to_fit", s.transform_scale_to_fit ? json(*s.transform_scale_to_fit) : json(nullptr)},
+          {"rotate_x", s.transform_rotate[0]},
+          {"rotate_y", s.transform_rotate[1]},
+          {"rotate_z", s.transform_rotate[2]},
+          {"cut_z", s.transform_cut_z ? json(*s.transform_cut_z) : json(nullptr)},
+          {"split", s.transform_split}}},
         {"sequential",
          {{"enabled", s.sequential}, {"clearance_radius", s.clearance_radius}, {"clearance_height", s.clearance_height}}},
         {"extruders",

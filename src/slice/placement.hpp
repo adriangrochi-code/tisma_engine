@@ -52,4 +52,11 @@ std::array<double, 2> bed_centre(const Settings& settings);
 TriangleMesh place_copies(const TriangleMesh& mesh, std::size_t copies, const Settings& settings, const std::string& name,
                           std::vector<MeshObject>* objects);
 
+// Several objects in one mesh (model_tools.md, rules 13 and 14): each
+// lowered onto the bed and the set arranged as copies are, with
+// placement.spacing between their boxes; object k named `name` and its
+// number from 1.
+TriangleMesh place_objects(const std::vector<TriangleMesh>& meshes, const Settings& settings, const std::string& name,
+                           std::vector<MeshObject>* objects);
+
 } // namespace tisma

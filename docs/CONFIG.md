@@ -408,6 +408,20 @@ las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su p
 | `center` | `[x, y]` o `null` | `null` | mm | Dónde queda el centro de la pieza; `null` es el centro de la caja de la cama |
 | `spacing` | número | 6 | 0 a 1000 | Con `slice --copies N`, las copias van en una grilla compacta con esta separación entre sus cajas, y el conjunto centrado como una pieza sola (ficha `placement.md`, regla 2, PL7 y PL8); en la impresión secuencial, al menos `sequential.clearance_radius` (ficha `sequential.md`, regla 2). Es lo que la ficha `sequential.md` llama `arrange.distance` |
 
+### `transform`
+
+Lo que la línea de comandos le hace a la pieza antes de ubicarla (ficha `docs/spec/features/model_tools.md`, reglas 11
+a 14), alrededor del centro de su caja y en este orden: escala, giro, corte, separar. La interfaz lo hace con sus
+herramientas y no usa estos ajustes; tampoco están en su panel.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `scale` | número o `"N%"` | 1 | más de 0 a 1000 | Escala igual en los tres ejes: `2` y `"200%"` son lo mismo |
+| `scale_to_fit` | `[x, y, z]` o `null` | `null` | mm, más de 0 | Escala igual en los tres ejes hasta el mayor tamaño que entra en esa caja (el menor de los tres cocientes); con `scale`, se aplican los dos |
+| `rotate_x`, `rotate_y`, `rotate_z` | número | 0 | −360 a 360 | Giro en grados alrededor de X, después de Y, después de Z; la pieza vuelve a apoyarse en la cama |
+| `cut_z` | número o `null` | `null` | más de 0 a 10000 | Corta la pieza con un plano a esa altura sobre la cama: las dos mitades, cerradas con la cara del corte, quedan como dos objetos sin girar, cada uno apoyado en la cama y uno al lado del otro con `placement.spacing` |
+| `split` | booleano | `false` | | Cada pedazo suelto de la malla pasa a ser un objeto (con los huecos que tiene adentro), ordenados con `placement.spacing` |
+
 ### `sequential`
 
 De la ficha `docs/spec/features/sequential.md`: objeto por objeto. `enabled` va en el perfil de impresión; los dos

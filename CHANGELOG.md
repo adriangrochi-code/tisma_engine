@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Escalar, girar, cortar y separar desde la línea de comandos** (ficha `model_tools.md`; grupo `transform`): escala o
+  porcentaje, encajar en una caja, giros en X, Y y Z, un corte horizontal que deja dos piezas cerradas y separar los
+  pedazos sueltos de una malla, cada uno como un objeto ordenado en la cama.
 - **Panel de ayuda** (ficha `assistant.md`, primer paso): F1, el botón **?** o Más › Ayuda abren la ayuda con sus
   pestañas y su buscador. Sus textos llegan con el paquete de perfiles; mientras tanto ofrece el recorrido de la
   interfaz.

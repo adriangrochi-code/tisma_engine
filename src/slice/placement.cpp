@@ -122,4 +122,41 @@ TriangleMesh place_copies(const TriangleMesh& mesh, std::size_t copies, const Se
     return out;
 }
 
+TriangleMesh place_objects(const std::vector<TriangleMesh>& meshes, const Settings& s, const std::string& name,
+                           std::vector<MeshObject>* objects) {
+    TriangleMesh out;
+    std::vector<std::array<double, 2>> sizes, own;
+    std::vector<float> floor;
+    double lo[2] = {1e300, 1e300}, hi[2] = {-1e300, -1e300};
+    for (const TriangleMesh& m : meshes) {
+        const BoundingBox box = m.bounding_box();
+        sizes.push_back({double(box.max.x) - box.min.x, double(box.max.y) - box.min.y});
+        own.push_back({0.5 * (double(box.min.x) + box.max.x), 0.5 * (double(box.min.y) + box.max.y)});
+        floor.push_back(box.min.z);
+        lo[0] = std::min(lo[0], double(box.min.x)), lo[1] = std::min(lo[1], double(box.min.y));
+        hi[0] = std::max(hi[0], double(box.max.x)), hi[1] = std::max(hi[1], double(box.max.y));
+    }
+    if (meshes.empty())
+        return out;
+    // Without a bed to centre them on, the set stays where the model was.
+    const bool move = s.placement_arrange && (!s.bed.empty() || s.placement_center);
+    const std::array<double, 2> centre = move ? bed_centre(s) : std::array<double, 2>{0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])};
+    const double spacing = s.sequential ? std::max(s.placement_spacing, s.clearance_radius) : s.placement_spacing;
+    const std::vector<std::array<double, 2>> at = arrange_boxes(sizes, centre, spacing);
+    for (std::size_t k = 0; k < meshes.size(); ++k) {
+        if (objects)
+            objects->push_back({name + " " + std::to_string(k + 1), out.triangle_count(), meshes[k].triangle_count(), k, 0});
+        const float dx = float(at[k][0] - own[k][0]), dy = float(at[k][1] - own[k][1]), dz = -floor[k];
+        for (std::size_t t = 0; t < meshes[k].triangle_count(); ++t) {
+            Vec3f c[3];
+            for (int i = 0; i < 3; ++i) {
+                c[i] = meshes[k].corner(t, i);
+                c[i].x += dx, c[i].y += dy, c[i].z += dz;
+            }
+            out.add_triangle(c[0], c[1], c[2]);
+        }
+    }
+    return out;
+}
+
 } // namespace tisma

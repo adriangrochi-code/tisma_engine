@@ -6296,3 +6296,29 @@ tutoriales con anclas y eventos (reglas 15 a 19) y los enlaces desde la revisió
 
 **Sigue:** el resto de P1 que no espera datos; después P2.
 
+## 2026-10-27 — `model_tools.md`: escalar, girar, cortar y separar en el motor
+
+**Hecho:**
+- **Grupo `transform`** (reglas 11 a 14; `docs/CONFIG.md`): `scale` (factor o «N%»), `scale_to_fit` (el menor de los
+  tres cocientes), `rotate_x`, `rotate_y` y `rotate_z` (en ese orden, alrededor del centro de la caja), `cut_z` (desde
+  el punto más bajo de la pieza) y `split`. La línea de comandos lo aplica antes de ubicar la pieza; las piezas que
+  salen de un corte o de separar se apoyan cada una en la cama y se ordenan como las copias, con `placement.spacing`.
+  Con `--copies` da error.
+- **El corte** (`cut_mesh`): cada triángulo se reparte con los mismos puntos de cruce que usan los contornos del
+  laminado, y la cara del corte se llena con esos contornos (agujeros incluidos) por recorte de orejas: las dos
+  mitades quedan cerradas sin soldar nada.
+- **Separar** (`split_mesh`): las cáscaras unidas por vértices; una cáscara dentro de otra (un hueco) sigue con su
+  pieza.
+- **Espejar** (`mirror_mesh`, regla 16): alrededor del centro de la caja, con los triángulos dados vuelta para que
+  sigan mirando afuera.
+
+**Medido:** MT14 (100 capas y 48 000 mm³; 20 250 mm³ a 150 %), MT15 (la mitad), MT16 (con 45°, X de 82,6 a 117,4; con
+90° en X, 100 capas), MT17 (dos mitades de 3000 mm³; el cono de 256 lados da 916,3 ± 1 y 130,9 ± 0,3 mm³, las dos
+mitades cerradas), MT18 (sin separar, X de 80,2 a 119,8; separadas, de 87,2 a 112,8) y MT20, en `[transform]` (462
+comprobaciones), con un anillo con agujero cortado y una caja hueca separada.
+
+**No hecho:** las herramientas de la interfaz (Cortar con plano libre, conectores y cola de milano; Medir; Espejar;
+Escalar por medidas con candado; Separar en partes), las partes y modificadores, y las copias en grilla.
+
+**Sigue:** Espejar, Escalar por medidas y Cortar en la interfaz.
+
