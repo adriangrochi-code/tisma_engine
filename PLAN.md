@@ -808,7 +808,14 @@ Con el PR #23 (2026-10-26):
     (FS1 a FS14). Falta leer y escribir las mezclas y el extrusor de cada objeto en el 3MF (el motor no escribe 3MF ni
     lee los objetos de uno por separado) y en la línea de comandos
   - [ ] F7 no planar (la base, `surface`, `overhangs`, el cono según la pieza y `automatic` hechos, 2026-10-27;
-    falta `stress`, con el análisis estructural); resina (`resin.md`, `resin_supports.md`)
+    falta `stress`, con el análisis estructural); resina (`resin.md`, `resin_supports.md`), en tres partes:
+    - [x] R1, el núcleo (`resin.md`, reglas 1 a 12 y 20 a 22, RE1 a RE10; hecho 2026-10-27): los ajustes
+      (`machine.display_*`, grupo `resin`), las imágenes con el área exacta de cada píxel, el pie de elefante, las
+      correcciones de escala, absoluta y de Z, la gamma, el archivo GOO (escritura y lectura) y la salida `.goo` de la
+      línea de comandos, con sus tarjetas en el panel
+    - [ ] R2, las ventosas (reglas 13 a 15, VE1 a VE9) y las calibraciones de resina (reglas 16 a 19, CR1)
+    - [ ] R3, los soportes de resina (`resin_supports.md`) y la resina en la interfaz (laminar, vista previa de las
+      imágenes, exportar `.goo`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

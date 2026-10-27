@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Resina** (ficha `resin.md`; grupo `resin` y `machine.display_*`, en Material › Resina, Impresora › Máquina ›
+  Pantalla de resina y Otros › Resina: capas): `slice` con salida `.goo` lamina para impresoras de resina con pantalla
+  y escribe el archivo GOO de Elegoo. Cada capa es una imagen en grises con el área exacta que la sección cubre de
+  cada píxel; las capas de fondo se exponen más y se achican contra el pie de elefante; hay corrección de escala,
+  corrección absoluta del contorno, corrección de Z bajo lo que cuelga y gamma de los bordes. Por defecto, una Elegoo
+  Mars 5 con resina estándar.
 - **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
   en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
   cabeza, con el material según el espesor de cada punto; necesitan E relativa. Con `surface`, las capas de arriba

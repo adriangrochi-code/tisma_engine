@@ -140,6 +140,16 @@ volúmenes que un proyecto marca como modificadores, fuera).
   mezcla se lamina como un extrusor más; después `apply_mixes` (en `pipeline.cpp`) le da a cada capa el filamento que
   le toca, así el resto (plan de herramientas, torre, escritor) solo ve extrusores reales.
 
+### `resin/`: resina
+
+- **`resin.*`:** la impresión de resina (`docs/spec/features/resin.md`). `slice_resin` escala la pieza, la corta en
+  capas iguales con `slice_levels`, corrige cada sección (corrección absoluta, pie de elefante en las de fondo,
+  corrección de Z como intersección con las de abajo) y la pasa a la imagen de la pantalla: `coverage_rows` da, fila
+  por fila, la parte exacta de cada píxel que cubre la sección (cada borde suma, con signo, el área entre él y el lado
+  derecho del píxel; la suma a lo largo de la fila da la cobertura), `resin_grey` la pasa a gris y
+  `GooImageEncoder` la codifica sin guardar la imagen entera. Las capas van en paralelo.
+- **`goo.*`:** el archivo GOO de Elegoo (cabecera, capas y final, todo en big-endian), su escritura y su lectura.
+
 ### `geom/`: geometría
 
 - **`polygons.*`:** las operaciones con Clipper2 (regiones, offsets, simplificación, áreas).

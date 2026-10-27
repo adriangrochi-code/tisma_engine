@@ -6025,3 +6025,40 @@ nuestro `surface` saca menos soporte bajo el sombrero. Prueba nueva AU1 a AU3 (1
 **Sigue:** `stress` necesita las capas calculadas por el análisis estructural (regla 21 a 23): queda para cuando el
 análisis las calcule. Siguiente punto: resina (`resin.md`, `resin_supports.md`).
 
+## 2026-10-27 — Resina, R1: imágenes con el área exacta y el archivo GOO
+
+**Hecho** (ficha `resin.md`, reglas 1 a 12 y 20 a 22):
+- Ajustes: `machine.display_pixels_x`/`y`, `display_width`/`height` y `display_mirror_x`/`y` (los de la Elegoo Mars 5)
+  y el grupo `resin` (altura de capa, exposiciones, capas de fondo, pie de elefante, escalas, subidas y esperas,
+  potencias, suavizado, densidad, gamma, corrección de Z, corrección absoluta y los nombres de la cabecera). En los
+  perfiles: la altura de capa en el de impresión, el nombre de la impresora en el de impresora y lo demás en el de
+  material; en el panel, sus tarjetas (Material › Resina, Impresora › Máquina › Pantalla de resina y Otros › Resina:
+  capas).
+- `src/resin/resin.*`: la pieza escalada y apoyada, cortada en capas iguales a media altura; cada sección crecida por
+  la corrección absoluta, achicada en las capas de fondo contra el pie de elefante (la `i` de `N`,
+  `pie · (1 − i / N)`) y, con corrección de Z, recortada a lo que tienen debajo las secciones de las capas anteriores.
+  La imagen sale fila por fila con el área exacta de cada píxel (cada borde suma el área con signo hasta el lado
+  derecho del píxel; la suma a lo largo de la fila es la cobertura), el gris redondeado hacia arriba y la gamma; se
+  codifica a medida que sale, sin guardar la imagen entera. La vista previa es la pieza vista desde arriba, sombreada
+  por la pendiente de las alturas.
+- `src/resin/goo.*`: el archivo GOO, escrito y leído según la especificación de Elegoo: cabecera de 195 477 bytes,
+  capas y final; el modo avanzado se activa solo si alguna capa no sigue a la cabecera.
+- Línea de comandos: `slice … -o pieza.goo` lamina para resina, con la pieza centrada en la pantalla.
+
+**Medido:**
+- RE1 y RE2 iguales a Tisma Slicer byte a byte: 200 capas, imagen de 4586 bytes con suma de control `0x03`, grises 0,
+  131, 183 y 255, columnas 1763 a 2334 y filas 994 a 1565. Igual RE3 (2955 a 3526 con espejo, 571 a 1142 sin él),
+  RE4, RE5 (8, 7, 6, 6, 5, 4, 3, 2, 1, 0 píxeles), RE6 (600 columnas, 220 capas, 4620 mm³), RE7, RE8 (bordes 73 y 37,
+  21 y 5 con gamma 2; 326 612 píxeles con gamma 0) y RE9 (164 164 píxeles en las tres primeras capas de la losa).
+- RE10 es distinto a propósito: la ficha dice que la línea de comandos de Tisma Slicer no aplica la corrección
+  absoluta; el motor la aplica (regla 22).
+- Benchy local (solo para medir) en resina: 960 capas en 1,56 s con 4 núcleos, archivo de 12,2 MB.
+
+Pruebas nuevas en `tests/test_resin.cpp` (13 casos: el RLE, RE1 a RE10, los errores y los ajustes, un archivo dañado y la línea de
+comandos).
+
+**No hecho:** las ventosas (reglas 13 a 15), las calibraciones de resina (16 a 19), los soportes de resina
+(`resin_supports.md`) y la resina en la interfaz (laminar, ver las imágenes y exportar).
+
+**Sigue:** R2, las ventosas (VE1 a VE9) y la torre de exposición con el bloque de medidas (CR1).
+
