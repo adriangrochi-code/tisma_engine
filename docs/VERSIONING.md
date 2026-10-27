@@ -27,6 +27,7 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.6.0 | F5 (empezada), A1 y exportación verificada; primera publicada como 0.6.0-alpha.1 |
 | 0.7.0 | P1 (empezada): la interfaz `tisma`, calibraciones guiadas, perfiles y proyectos; publicada como 0.7.0-alpha.1 |
 | 0.8.0 | P2 y P3 (empezadas) y más de F5: catálogo y capacidades, altura de capa variable y por zona, Z anti-aliasing, rellenos nuevos, la pestaña Impresora, la revisión profunda; publicada como 0.8.0-alpha.1 |
+| 0.9.0 | Más de F5, P1 y la cobertura: soportes en árbol, OBJ y 3MF, costura en bufanda, modo vaso, el panel de ajustes nuevo, herramientas de la placa y pintura; publicada como 0.9.0-alpha.1 |
 
 ## Las ramas (decisión del dueño, 2026-10-24)
 

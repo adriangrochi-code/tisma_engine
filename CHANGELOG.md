@@ -10,23 +10,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
-### Corregido
+## [0.9.0-alpha.1] - 2026-10-27
 
-- **Soportes en árbol con ajustes extremos:** puntas muy finas, muy densas y muy juntas bajo un voladizo grande
-  agotaban la memoria y el proceso moría. Ahora las puntas nunca quedan más juntas que dos cordones, y el laminado
-  termina: el caso extremo de una losa de 100 × 100 mm, en 5 s.
-- **G-code con muchos lazos** (los de los soportes en árbol): escribirlo es de 10 a 20 veces más rápido. En una losa de
-  100 × 100 mm con árboles, 0,8 s en vez de 17 s, con el mismo G-code.
-- **Un 3MF dañado que dice tener una parte enorme** se rechaza con un mensaje claro, en vez de un error interno al
-  quedarse sin memoria.
-
-### Cambiado
-
-- **Soporte en grilla como pide la ficha `supports_skirt.md`** (segunda prueba de caja negra, QA10 a QA12): la zona
-  llega 1,6 mm más allá de lo que cuelga, así los pedazos chicos de una pieza orgánica se juntan en una zona firme; la
-  separación con la pieza es por defecto la mitad del ancho de las paredes (`support.xy_gap` acepta mm o un
-  porcentaje); la base va en líneas en una sola dirección (`support.line_angle`, nuevo) a `support.spacing` más un
-  cordón, y la interfaz cruzada a 90°, a la separación de los cordones.
+Cuarta versión publicada. Trae los soportes en árbol, la lectura de OBJ y 3MF con la pieza centrada en la cama, la
+costura en bufanda, el modo vaso, el panel de ajustes por secciones, tarjetas y niveles, las herramientas de la placa,
+pintar soportes, costuras y piel difusa sobre el modelo, la ayuda en la interfaz y la vista 3D con Vulkan. El soporte en
+grilla sigue ahora la ficha (margen, separación y líneas), el ventilador va según el tiempo de capa, la falda y el borde
+como pide la ficha, y las velocidades salen del perfil de la impresora. Laminar y armar el G-code es bastante más rápido
+(capas sólidas de abajo, piezas prismáticas, soportes, costura alineada, G-code en paralelo). Sigue siendo una alfa: los
+formatos de ajustes, perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y cada cambio se anota
+acá.
 
 ### Agregado
 
@@ -51,7 +44,6 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   y que al final del lazo pase otra vez sobre la rampa con el cordón cada vez más fino: la costura casi no se ve, con
   el mismo filamento. Con `walls.scarf_entire_loop`, la rampa da la vuelta entera y la pared sube en espiral. Ajustes
   del largo, la altura inicial, el tramo máximo, solo en lazos lisos (por defecto) y también en las paredes internas.
-
 - **Relaminar por etapas:** si después de laminar se cambia solo una velocidad, una temperatura, el ventilador, la
   retracción u otro ajuste que solo afecta al G-code, el programa no vuelve a cortar la pieza: rehace solo el G-code.
   En el Benchy, 0,4 s en vez de 1,4 s, con el mismo G-code byte a byte. La barra de estado dice «G-code rehecho».
@@ -59,7 +51,6 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Ranuras entre capas en la vista previa** (pedido del dueño): cada capa de una pared se ve como un tubo, con su
   ranura oscura contra la de arriba, calculada sobre el perfil del cordón; y los colores saturados ya no se lavan hacia
   el blanco.
-
 - **Ventana y vista 3D con Vulkan** (decisión del dueño; `PLAN.md`, «Vista con Vulkan»): `--graphics
   auto|vulkan|opengl` elige qué dibuja la ventana. Con Vulkan, los paneles y la vista 3D (cama, modelo, pintura, vista
   previa, MSAA y FXAA) los dibuja Vulkan, igual que OpenGL imagen contra imagen, con la luz rápida. La oclusión
@@ -89,7 +80,6 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   Costura): la pared externa pasa por puntos nuevos cada 0,4 a 1,2 mm, corridos al azar hasta 0,3 mm hacia afuera o
   hacia adentro, y la superficie queda rugosa. `external` deja lisos los agujeros, `all` también los hace rugosos; las
   paredes internas no cambian. También se pinta (Pintar > Piel difusa): donde se pintó, se aplica aunque esté apagada.
-
 - **Zonas de relleno chicas, sólidas** (`infill.solid_below_area`, 70 mm², de la ficha `surfaces_infill.md`; en la
   interfaz, sección Relleno): una isla del relleno de una capa más chica que eso (una pata fina, un perno) se llena
   sólida. Cambia las piezas chicas: un cubo de 10 mm con 3 paredes queda sólido entero, y una placa de 12 islas
@@ -97,6 +87,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Soporte en grilla como pide la ficha `supports_skirt.md`** (segunda prueba de caja negra, QA10 a QA12): la zona
+  llega 1,6 mm más allá de lo que cuelga, así los pedazos chicos de una pieza orgánica se juntan en una zona firme; la
+  separación con la pieza es por defecto la mitad del ancho de las paredes (`support.xy_gap` acepta mm o un
+  porcentaje); la base va en líneas en una sola dirección (`support.line_angle`, nuevo) a `support.spacing` más un
+  cordón, y la interfaz cruzada a 90°, a la separación de los cordones.
 - **Panel de ajustes nuevo** (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor, también los que no tenían lugar (bufanda, compensación, corte, soportes, ventilador, límites
   de la máquina), en pestañas Impresión, Material e Impresora; cada una con sus secciones en una columna de íconos
@@ -178,6 +173,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Soportes en árbol con ajustes extremos:** puntas muy finas, muy densas y muy juntas bajo un voladizo grande
+  agotaban la memoria y el proceso moría. Ahora las puntas nunca quedan más juntas que dos cordones, y el laminado
+  termina: el caso extremo de una losa de 100 × 100 mm, en 5 s.
+- **G-code con muchos lazos** (los de los soportes en árbol): escribirlo es de 10 a 20 veces más rápido. En una losa de
+  100 × 100 mm con árboles, 0,8 s en vez de 17 s, con el mismo G-code.
+- **Un 3MF dañado que dice tener una parte enorme** se rechaza con un mensaje claro, en vez de un error interno al
+  quedarse sin memoria.
 - Con `machine.min_layer_height` mayor que `machine.max_layer_height`, el error decía que la capa no entraba; ahora
   dice que los dos límites se contradicen (equipo de fichas).
 - Con la primera capa más gruesa que las demás, faltaba la última capa: un cubo de 10 mm con capas de 0,3 y 0,2 tenía
@@ -617,7 +619,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...HEAD
+[0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
 [0.6.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.6.0-alpha.1

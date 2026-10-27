@@ -4882,6 +4882,10 @@ corridas, 0 fallas); casos borde de lo agregado hoy (3MF dañados, árboles con 
 **Pruebas nuevas:** el orden con costura `nearest` entre 150 lazos y 150 tramos contra mirar cada punto; árboles con
 ajustes extremos (cantidad acotada de puntas, ninguna a menos de dos cordones); el 3MF de 4 GB.
 
+**Release 0.9.0-alpha.1:** `VERSION`, su sección del CHANGELOG (lo de los bloques desde la 0.8.0, en una sola lista
+por tipo) y la fila de `docs/VERSIONING.md`; `tools/release_notes.py --check` pasa; la CI de Linux pasó en el commit
+anterior y las pruebas de nuevo con la versión nueva.
+
 **Sigue:** QA13; las ramas de los árboles que engordan y se juntan antes, con las mediciones nuevas del equipo de fichas
 (a la altura de las puntas, pares que se tocan; cada rama pasa de 0,9 a 1,2 mm en una capa).
 
