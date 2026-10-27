@@ -223,7 +223,9 @@ add_library(tisma_core
   src/slice/color_mix.cpp
   src/slice/curved.cpp
   src/resin/goo.cpp
+  src/resin/hollow.cpp
   src/resin/resin.cpp
+  src/resin/supports.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
   src/support/tree.cpp

@@ -382,6 +382,22 @@ struct Settings {
     double resin_absolute_correction = 0.0;
     // What the file's header names: the printer's model and the resin's profile.
     std::string resin_printer_name = "MARS 5", resin_profile_name;
+    // Resin supports, pad and hollowing (resin_supports.md): points on the
+    // faces looking down, each a tip into the part on a pillar down to the
+    // pad (mm, degrees, percent); the pad under the supports, or around a
+    // part that stands on the platform; and the part hollowed with walls at
+    // least resin_hollow_wall thick, its inside rounded by
+    // resin_hollow_closing, with bars inside (percent, cells in mm).
+    bool resin_supports = true;
+    double resin_support_tip_diameter = 0.4, resin_support_tip_penetration = 0.2;
+    double resin_support_pillar_diameter = 1.0, resin_support_elevation = 5.0;
+    double resin_support_critical_angle = 45.0, resin_support_density = 100.0;
+    bool resin_pad = true;
+    double resin_pad_thickness = 2.0, resin_pad_margin = 1.6, resin_pad_wall_slope = 90.0;
+    bool resin_pad_around_object = false;
+    bool resin_hollow = false;
+    double resin_hollow_wall = 3.0, resin_hollow_closing = 2.0;
+    double resin_hollow_infill = 0.0, resin_hollow_infill_cell = 8.0;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;

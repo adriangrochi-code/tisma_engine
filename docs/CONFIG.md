@@ -507,7 +507,8 @@ De la ficha `docs/spec/features/resin.md`: impresión de resina con pantalla (MS
 lamina para resina y escribe el archivo GOO de Elegoo: cada capa es una imagen en grises de la pantalla
 (`machine.display_*`), con cada píxel según la parte de su área que cubre la sección (exacta, redondeada hacia
 arriba). Los valores por defecto son los de la Elegoo Mars 5 con una resina estándar genérica. La altura de capa va
-en el perfil de impresión, `printer_name` en el de impresora y lo demás en el de material.
+en el perfil de impresión, con los soportes, la base y el vaciado; `printer_name` en el de impresora y lo demás en el de
+material.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
@@ -530,6 +531,23 @@ en el perfil de impresión, `printer_name` en el de impresora y lo demás en el 
 | `absolute_correction` | número | 0 | −1 a 1 | Agranda (+) o achica (−) cada sección en XY, en mm |
 | `printer_name` | texto | `"MARS 5"` | hasta 31 bytes | Modelo de la impresora que se anota en la cabecera del archivo |
 | `profile_name` | texto | `""` | hasta 31 bytes | Nombre del perfil de resina que se anota en la cabecera |
+| `supports` | booleano | `true` | | Soportes (ficha `resin_supports.md`): puntos de apoyo en las caras que miran hacia abajo, cada uno con una punta que entra en la pieza sobre un pilar que baja hasta la base (o la plataforma). Con soportes, la pieza empieza en `pad_thickness + support_elevation` (sin base, en `support_elevation`) |
+| `support_tip_diameter` | número | 0.4 | 0,1 a 2 | Diámetro de la punta que toca la pieza, en mm |
+| `support_tip_penetration` | número | 0.2 | 0 a 2 | Cuánto entra la punta en la pieza, en mm |
+| `support_pillar_diameter` | número | 1 | 0,2 a 5 | Diámetro de los pilares, en mm; al pie se ensanchan al doble |
+| `support_elevation` | número | 5 | 0 a 50 | Cuánto levantan los soportes a la pieza sobre la base, en mm |
+| `support_critical_angle` | número | 45 | 10 a 80 | Ángulo de las uniones entre soportes, en grados desde la vertical |
+| `support_density` | número | 100 | 10 a 400 | Densidad relativa de los puntos de apoyo, en %: con 100, uno cada 4 mm en cada dirección |
+| `pad` | booleano | `true` | | Base bajo los soportes, pegada a la plataforma. Sin soportes y sin `pad_around_object` no tiene qué sostener: `slice` termina con código 4 |
+| `pad_thickness` | número | 2 | 0,1 a 10 | Espesor de la base, en mm |
+| `pad_margin` | número | 1.6 | 0 a 20 | Cuánto se extiende la base alrededor de lo que sostiene, en mm |
+| `pad_wall_slope` | número | 90 | 10 a 90 | Inclinación del borde de la base, en grados; 90 es vertical, menos la ensancha hacia abajo |
+| `pad_around_object` | booleano | `false` | | Base alrededor de la pieza, que queda apoyada en la plataforma sin elevarse |
+| `hollow` | booleano | `false` | | Vaciar la pieza: el hueco queda a `hollow_wall` o más de la superficie, también arriba y abajo. Un hueco cerrado es una ventosa hasta que tiene agujeros de drenaje |
+| `hollow_wall` | número | 3 | 0,5 a 20 | Espesor mínimo de la pared del vaciado, en mm |
+| `hollow_closing` | número | 2 | 0 a 20 | Cuánto se redondea el hueco, en mm: no sigue los detalles más chicos que esto, y la pared es más gruesa en las esquinas |
+| `hollow_infill` | número | 0 | 0 a 60 | Relleno interior del hueco, en %: barras de sección cuadrada verticales y a 45° en los planos XZ e YZ, con densidad = 5 · (ancho / celda)² |
+| `hollow_infill_cell` | número | 8 | 2 a 50 | Tamaño de la celda del relleno interior, en mm |
 
 ### `painting`
 

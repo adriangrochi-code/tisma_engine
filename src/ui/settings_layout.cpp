@@ -155,6 +155,26 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.standby_delta", A}}},
           {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
           {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}}},
+          {"resin_supports", T::SubResinSupports,
+           {{"resin.supports", N},
+            {"resin.support_elevation", N},
+            {"resin.support_density", N},
+            {"resin.support_tip_diameter", A},
+            {"resin.support_tip_penetration", A},
+            {"resin.support_pillar_diameter", A},
+            {"resin.support_critical_angle", A}}},
+          {"resin_pad", T::SubResinPad,
+           {{"resin.pad", N},
+            {"resin.pad_around_object", N},
+            {"resin.pad_thickness", A},
+            {"resin.pad_margin", A},
+            {"resin.pad_wall_slope", A}}},
+          {"resin_hollow", T::SubResinHollow,
+           {{"resin.hollow", N},
+            {"resin.hollow_wall", N},
+            {"resin.hollow_closing", A},
+            {"resin.hollow_infill", A},
+            {"resin.hollow_infill_cell", A}}},
           {"curved", T::SubCurved,
            {{"curved.mode", N},
             {"curved.pattern", N},
@@ -704,6 +724,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumMm, number(s.head_clearance_height).c_str());
     if (id == "resin_layers")
         return format(T::SumMm, number(s.resin_layer_height, 3).c_str());
+    if (id == "resin_supports")
+        return s.resin_supports ? format(T::SumMm, number(s.resin_support_elevation).c_str()) : tr(T::SumOff);
+    if (id == "resin_pad")
+        return s.resin_pad ? format(T::SumMm, number(s.resin_pad_thickness).c_str()) : tr(T::SumOff);
+    if (id == "resin_hollow")
+        return s.resin_hollow ? format(T::SumMm, number(s.resin_hollow_wall).c_str()) : tr(T::SumOff);
     if (id == "resin_display")
         return format(T::SumPixels, s.display_pixels_x, s.display_pixels_y);
     if (id == "resin_exposure")

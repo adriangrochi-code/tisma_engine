@@ -1,6 +1,7 @@
 #include "resin/resin.hpp"
 
 #include "calibration/calibration.hpp"
+#include "resin/supports.hpp"
 
 #include "slice/layers.hpp"
 #include "slice/level_set.hpp"
@@ -424,10 +425,21 @@ std::vector<Polygons> resin_sections(const IndexedMesh& mesh, const Settings& s)
     return sections_of(scaled, s, resin_layers(scaled, s));
 }
 
-ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::function<double(double z)>& exposure) {
+ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::function<double(double z)>& exposure,
+                       const std::vector<ResinDrain>& drains) {
     if (input.triangles.empty())
         throw ResinError("the model is empty");
-    const IndexedMesh mesh = scaled_mesh(input, s);
+    // The pad stands under the supports or around the part (resin_supports.md, rule 2, RS3).
+    if (s.resin_pad && !s.resin_supports && !s.resin_pad_around_object)
+        throw ResinError("the pad cannot be made with these settings: it goes under the supports (resin.supports) or "
+                         "around the part (resin.pad_around_object)");
+    IndexedMesh mesh = scaled_mesh(input, s);
+    // Where the part starts (rule 1): on the supports over the pad, or on the platform.
+    const bool raised = s.resin_supports && !s.resin_pad_around_object;
+    const double floor = s.resin_pad ? s.resin_pad_thickness : 0.0;
+    const double lift = raised ? floor + s.resin_support_elevation : 0.0;
+    for (Vec3f& v : mesh.vertices)
+        v.z = float(double(v.z) + lift);
     ResinPrint print;
     print.max_height = s.max_height > 0.0 ? s.max_height : 150.0;
     double box[4] = {1e300, 1e300, -1e300, -1e300}, top = 0.0;
@@ -437,13 +449,16 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
         top = std::max(top, double(v.z));
     }
     constexpr double kSlack = 1e-6;
-    if (box[0] < -kSlack || box[1] < -kSlack || box[2] > s.display_width + kSlack || box[3] > s.display_height + kSlack) {
-        char what[200];
-        std::snprintf(what, sizeof what,
-                      "the part (x %.2f to %.2f, y %.2f to %.2f mm) does not fit on the display (0 to %.2f by 0 to %.2f mm)",
-                      box[0], box[2], box[1], box[3], s.display_width, s.display_height);
-        throw ResinError(what);
-    }
+    auto fits = [&](const double b[4], const char* what) {
+        if (b[0] < -kSlack || b[1] < -kSlack || b[2] > s.display_width + kSlack || b[3] > s.display_height + kSlack) {
+            char text[240];
+            std::snprintf(text, sizeof text,
+                          "%s (x %.2f to %.2f, y %.2f to %.2f mm) does not fit on the display (0 to %.2f by 0 to %.2f mm)",
+                          what, b[0], b[2], b[1], b[3], s.display_width, s.display_height);
+            throw ResinError(text);
+        }
+    };
+    fits(box, "the part");
     if (top > print.max_height + kSlack) {
         char what[160];
         std::snprintf(what, sizeof what, "the part is %.2f mm tall: the printer prints up to %.2f mm (machine.max_height)",
@@ -453,28 +468,80 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     const std::vector<Layer> layers = resin_layers(mesh, s);
     if (layers.empty())
         throw ResinError("the part is thinner than half a layer");
-    for (const auto& t : mesh.triangles) {
-        const Vec3f& a = mesh.vertices[t[0]];
-        const Vec3f& b = mesh.vertices[t[1]];
-        const Vec3f& c = mesh.vertices[t[2]];
-        print.volume += (double(a.x) * (double(b.y) * c.z - double(b.z) * c.y) -
-                         double(a.y) * (double(b.x) * c.z - double(b.z) * c.x) +
-                         double(a.z) * (double(b.x) * c.y - double(b.y) * c.x)) /
-                        6.0;
+    const std::size_t count = layers.size();
+    const std::vector<Polygons> sections = sections_of(mesh, s, layers);
+
+    // The supports under the part as it is, and the pad (resin_supports.md, rules 2 and 3).
+    std::vector<ResinPillar> pillars;
+    if (s.resin_supports) {
+        // No point in a drain hole: its tip would plug it.
+        std::vector<std::array<double, 3>> points = support_points(mesh, sections, layers, s, floor);
+        std::erase_if(points, [&](const std::array<double, 3>& p) {
+            return std::any_of(drains.begin(), drains.end(), [&](const ResinDrain& d) {
+                const double dx = p[0] - d.x, dy = p[1] - d.y, dz = p[2] - d.z;
+                const double keep = 0.5 * d.diameter + s.resin_support_pillar_diameter;
+                return dx * dx + dy * dy + dz * dz < keep * keep;
+            });
+        });
+        pillars = support_pillars(points, sections, layers, s, floor);
     }
-    print.volume = std::abs(print.volume);
-    print.weight = print.volume / 1000.0 * s.resin_density;
+    const Polygons pad = s.resin_pad ? pad_outline(pillars, sections, layers, s) : Polygons{};
+    // The part hollowed, with its bars inside and its drain holes (rules 4 to 6).
+    std::vector<Polygons> part = sections;
+    if (s.resin_hollow) {
+        const std::vector<Polygons> hollows = hollow_sections(sections, layers, s);
+        const bool bars = s.resin_hollow_infill > 0.0;
+        if (bars)
+            print.bar_width = infill_bar_width(s);
+        tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
+            if (hollows[l].empty())
+                return;
+            const Polygons empty = bars ? Clipper2Lib::Difference(hollows[l], infill_bars(s, layers[l].slice_z() - lift, box),
+                                                                  Clipper2Lib::FillRule::NonZero)
+                                        : hollows[l];
+            part[l] = Clipper2Lib::Difference(part[l], empty, Clipper2Lib::FillRule::NonZero);
+        });
+    }
+    if (!drains.empty()) {
+        const std::vector<Polygons> holes = drain_sections(drains, layers);
+        tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
+            if (!holes[l].empty() && !part[l].empty())
+                part[l] = Clipper2Lib::Difference(part[l], holes[l], Clipper2Lib::FillRule::NonZero);
+        });
+    }
+    // Everything printed: the part, the supports and the pad.
+    std::vector<Polygons> all = part;
+    if (!pillars.empty() || !pad.empty())
+        tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
+            Polygons more = support_section(pillars, pad, s, layers[l].slice_z());
+            if (more.empty())
+                return;
+            more.insert(more.end(), part[l].begin(), part[l].end());
+            all[l] = Clipper2Lib::Union(more, Clipper2Lib::FillRule::NonZero);
+        });
+    double all_box[4] = {1e300, 1e300, -1e300, -1e300};
+    for (const Polygons& p : all)
+        if (!p.empty()) {
+            const Clipper2Lib::Rect64 b = Clipper2Lib::GetBounds(p);
+            all_box[0] = std::min(all_box[0], to_mm(b.left)), all_box[1] = std::min(all_box[1], to_mm(b.top));
+            all_box[2] = std::max(all_box[2], to_mm(b.right)), all_box[3] = std::max(all_box[3], to_mm(b.bottom));
+        }
+    if (all_box[2] >= all_box[0])
+        fits(all_box, "the part with its supports and pad");
 
     // The sections grown by the absolute correction (rule 22); the bottom
     // layers shrunk (rule 6), the first by the whole elephant's foot, the
     // next ones less, in a straight line; and of each, only what stands on
     // the last resin.z_correction_layers sections (rule 21).
-    const std::vector<Polygons> sections = sections_of(mesh, s, layers);
-    const std::size_t count = layers.size();
     std::vector<Polygons> grown(count);
     tbb::parallel_for(std::size_t(0), count, [&](std::size_t l) {
-        grown[l] = s.resin_absolute_correction != 0.0 ? offset(sections[l], s.resin_absolute_correction) : sections[l];
+        grown[l] = s.resin_absolute_correction != 0.0 && !all[l].empty() ? offset(all[l], s.resin_absolute_correction)
+                                                                          : all[l];
     });
+    // The resin it takes: what every layer cures.
+    for (std::size_t l = 0; l < count; ++l)
+        print.volume += area_mm2(grown[l]) * (layers[l].top - layers[l].bottom);
+    print.weight = print.volume / 1000.0 * s.resin_density;
     print.bottom_layers = std::max(1, s.resin_bottom_layers);
     const PixelGrid grid = display_grid(s);
     print.layers.resize(count);
@@ -520,10 +587,11 @@ ResinPrint slice_resin(const IndexedMesh& input, const Settings& s, const std::f
     for (const ResinLayer& l : print.layers)
         print.seconds += l.exposure + l.wait_after_cure + l.lift_distance / l.lift_speed + l.wait_after_lift +
                          l.retract_distance / l.retract_speed + l.wait_before_exposure;
-    // The part stands on the platform (resin supports are not made yet).
-    print.cups = find_cups(sections, s.resin_layer_height, false);
-    print.small_preview = preview(sections, layers, 116, box);
-    print.big_preview = preview(sections, layers, 290, box);
+    // The cups of the part as it is printed, open underneath when it is raised.
+    print.cups = find_cups(part, s.resin_layer_height, raised);
+    const double* view = all_box[2] >= all_box[0] ? all_box : box;
+    print.small_preview = preview(all, layers, 116, view);
+    print.big_preview = preview(all, layers, 290, view);
     return print;
 }
 
@@ -623,7 +691,7 @@ std::vector<ResinCup> find_cups(const std::vector<Polygons>& sections, double la
     return out;
 }
 
-std::vector<Warning> cup_warnings(const ResinPrint& print, const std::string& part) {
+std::vector<Warning> resin_warnings(const ResinPrint& print, const std::string& part) {
     std::vector<Warning> out;
     for (const ResinCup& c : print.cups) {
         char text[512];
@@ -633,6 +701,14 @@ std::vector<Warning> cup_warnings(const ResinPrint& print, const std::string& pa
                       "its floor, or turn the part so that the hollow opens towards the platform",
                       part.c_str(), c.z0, c.z1, c.first, c.last, c.area);
         out.push_back({"cupping", c.first, c.z0, text, c.area, "warning"});
+    }
+    if (print.bar_width > 0.0 && print.bar_width < 0.8) {
+        char text[256];
+        std::snprintf(text, sizeof text,
+                      "%s: the hollow's inner bars are %.2f mm wide, under 0.8 mm: they do not print well. Raise "
+                      "resin.hollow_infill or lower resin.hollow_infill_cell",
+                      part.c_str(), print.bar_width);
+        out.push_back({"thin_bars", -1, 0.0, text, print.bar_width, "warning"});
     }
     return out;
 }

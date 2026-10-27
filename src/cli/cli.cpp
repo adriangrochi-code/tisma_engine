@@ -320,7 +320,7 @@ int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model,
     }
     out << "wrote " << args.output << "\n";
     // The cups (resin.md, rules 13 to 15).
-    const std::vector<Warning> warnings = cup_warnings(print, std::filesystem::path(args.model).filename().string());
+    const std::vector<Warning> warnings = resin_warnings(print, std::filesystem::path(args.model).filename().string());
     out << "warnings: " << warnings.size() << "\n";
     if (!args.warnings.empty()) {
         if (!write_file(args.warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {

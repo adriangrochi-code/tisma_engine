@@ -51,10 +51,13 @@ IndexedMesh cube(double cx = 143.43 / 2, double cy = 89.6 / 2) {
     return weld_exact(m);
 }
 
-// The spec's base settings: the defaults with 10 bottom layers.
+// The spec's base settings: the defaults with 10 bottom layers, the part on
+// the platform without supports or pad.
 Settings base() {
     Settings s;
     s.resin_bottom_layers = 10;
+    s.resin_supports = false;
+    s.resin_pad = false;
     return s;
 }
 
@@ -593,7 +596,7 @@ TEST_CASE("resin VE9: a cup turned on a lathe warns, the solid cylinder does not
     // The print carries it, and its warning says how to fix it.
     const ResinPrint p = slice_resin(lathe_cup(true, 70, 45), s);
     REQUIRE(p.cups.size() == 1);
-    const std::vector<Warning> w = cup_warnings(p, "cup.stl");
+    const std::vector<Warning> w = resin_warnings(p, "cup.stl");
     REQUIRE(w.size() == 1);
     CHECK(w[0].kind == "cupping");
     CHECK(w[0].layer == 20);
@@ -675,6 +678,101 @@ TEST_CASE("resin: the exposure tower's part and the measuring block", "[resin]")
     CHECK_THROWS_AS(resin_scale_from(s, 0.0, 30.0, 10.0), ResinError);
 }
 
+TEST_CASE("resin RS1: supports and a pad under a cube", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_supports = true;
+    s.resin_pad = true;
+    const ResinPrint p = slice_resin(cube(), s);
+    REQUIRE(p.layers.size() == 340); // 2 + 5 + 10 mm
+    // Decoded: the pad from Z 0.05 to 2.0, the pillars from 2.0 to 7.0, the cube from 7.05.
+    auto lit = [&](std::size_t l) { return lit_of(pixels(p, l, s), s); };
+    const double px = 0.035 * 0.035;
+    const Lit pad = lit(20), pillars = lit(100), part = lit(160);
+    CHECK(double(pad.count) * px > 300.0);
+    // The pad reaches past the supports it holds, by resin.pad_margin.
+    CHECK((pad.c1 - pad.c0 + 1) * 0.035 > 16.0 + 2.0 + 2 * 1.6 - 0.2);
+    CHECK_THAT(double(pillars.count) * px, WithinAbs(19.6, 3.0)); // 25 pillars of 1 mm
+    CHECK_THAT(double(part.count) * px, WithinAbs(400.0, 3.0));
+    CHECK(lit(139).count < pad.count);          // Z 7.0: the tips, under the cube
+    CHECK(double(lit(140).count) * px > 395.0); // Z 7.05: the cube
+    CHECK(p.volume > 4000.0 + 2.0 * 300.0);
+    CHECK(p.cups.empty());
+    // Without the pad, the pillars stand on the platform and the cube starts at Z 5.05.
+    s.resin_pad = false;
+    const ResinPrint bare = slice_resin(cube(), s);
+    CHECK(bare.layers.size() == 300);
+    // The feet, twice the pillar's diameter (less the elephant's foot on the first layer).
+    CHECK_THAT(double(lit_of(pixels(bare, 0, s), s).count) * px, WithinAbs(25 * 3.14159 * 0.8 * 0.8, 6.0));
+    CHECK_THAT(double(lit_of(pixels(bare, 20, s), s).count) * px, WithinAbs(19.6, 3.0));
+}
+
+TEST_CASE("resin RS3: a pad with nothing to hold is an error", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_pad = true;
+    CHECK_THROWS_WITH(slice_resin(cube(), s), ContainsSubstring("the pad cannot be made"));
+    // Around the part, it stands on the platform with the part.
+    s.resin_pad_around_object = true;
+    const ResinPrint p = slice_resin(cube(), s);
+    CHECK(p.layers.size() == 200);
+    CHECK(double(lit_of(pixels(p, 10, s), s).count) * 0.035 * 0.035 > 23.0 * 23.0);
+    CHECK_THAT(double(lit_of(pixels(p, 100, s), s).count) * 0.035 * 0.035, WithinAbs(400.0, 3.0));
+}
+
+TEST_CASE("resin RS2 and RS4: a hollowed cube", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_hollow = true;
+    s.resin_hollow_wall = 2.0;
+    s.resin_hollow_closing = 2.0;
+    const IndexedMesh part = cube();
+    const ResinPrint p = slice_resin(part, s);
+    // Solid at the bottom and the top, hollow in the middle with 2 mm walls or more.
+    auto area = [&](std::size_t l) { return double(lit_of(pixels(p, l, s), s).count) * 0.035 * 0.035; };
+    CHECK_THAT(area(30), WithinAbs(400.0, 3.0));
+    CHECK_THAT(area(199), WithinAbs(400.0, 3.0));
+    const double middle = area(100);
+    CHECK(middle < 400.0 - 15.0 * 15.0);
+    CHECK(middle > 400.0 - 16.0 * 16.0 - 2.0);
+    CHECK(p.volume > 2300.0);
+    CHECK(p.volume < 2800.0);
+    // The closed hollow is a cup until it has drain holes (rule 4).
+    REQUIRE(p.cups.size() == 1);
+    CHECK(p.cups[0].first >= 39);
+    CHECK(p.cups[0].last <= 161);
+    // RS4: with 3 mm walls the 20 x 20 x 10 mm cube still has room for a hollow.
+    s.resin_hollow_wall = 3.0;
+    const ResinPrint thick = slice_resin(part, s);
+    CHECK(thick.volume < 4000.0 - 400.0);
+    CHECK(double(lit_of(pixels(thick, 100, s), s).count) * 0.035 * 0.035 < 400.0 - 13.0 * 13.0);
+}
+
+TEST_CASE("resin: the hollow's inner bars and the drain holes", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_hollow = true;
+    s.resin_hollow_wall = 2.0;
+    s.resin_hollow_infill = 20.0;
+    CHECK_THAT(infill_bar_width(s), WithinAbs(1.6, 1e-12)); // 8 · √(0.2 / 5)
+    const ResinPrint bars = slice_resin(cube(), s);
+    s.resin_hollow_infill = 0.0;
+    const ResinPrint empty = slice_resin(cube(), s);
+    CHECK(bars.volume > empty.volume + 100.0);
+    CHECK(resin_warnings(bars, "cube.stl").size() == 1); // the cup; the bars are wide enough
+    s.resin_hollow_infill = 3.0;
+    const std::vector<Warning> thin = resin_warnings(slice_resin(cube(), s), "cube.stl");
+    CHECK(std::any_of(thin.begin(), thin.end(), [](const Warning& w) { return w.kind == "thin_bars"; }));
+    // Raised on supports, a drain hole in the floor opens the hollow: no cup.
+    s.resin_hollow_infill = 0.0;
+    s.resin_supports = true;
+    s.resin_pad = true;
+    CHECK(slice_resin(cube(), s).cups.size() == 1);
+    const ResinDrain drain{143.43 / 2, 89.6 / 2, 7.0, 0.0, 0.0, -1.0, 3.0, 4.0};
+    const ResinPrint drained = slice_resin(cube(), s, {}, {drain});
+    CHECK(drained.cups.empty());
+    // The hole goes through the floor: the cube's first layer has it (7 mm2).
+    const ResinPrint whole = slice_resin(cube(), s);
+    const double hole = double(lit_of(pixels(whole, 140, s), s).count - lit_of(pixels(drained, 140, s), s).count);
+    CHECK_THAT(hole * 0.035 * 0.035, WithinAbs(7.0, 0.5));
+}
+
 TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
     const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_resin_cli";
     std::filesystem::create_directories(dir);
@@ -692,7 +790,7 @@ TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
             stl << "endloop\nendfacet\n";
         }
         stl << "endsolid c\n";
-        std::ofstream(dir / "resin.json") << R"({"resin": {"bottom_layers": 10}})";
+        std::ofstream(dir / "resin.json") << R"({"resin": {"bottom_layers": 10, "supports": false, "pad": false}})";
     }
     const std::string model = (dir / "cube.stl").string(), config = (dir / "resin.json").string(),
                       goo = (dir / "cube.goo").string();

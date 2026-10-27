@@ -3465,6 +3465,30 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::DisplayMirrorY, "machine.display_mirror_y", s.display_mirror_y);
     } else if (id == "resin_layers") {
         mm(T::ResinLayerHeight, "resin.layer_height", s.resin_layer_height, 0.005, 0.5, "%.3f mm", 0.001f);
+    } else if (id == "resin_supports") {
+        // Resin supports, pad and hollowing (resin_supports.md).
+        flag(T::ResinSupports, "resin.supports", s.resin_supports);
+        mm(T::ResinElevation, "resin.support_elevation", s.resin_support_elevation, 0.0, 50.0, "%.1f mm", 0.1f);
+        mm(T::ResinSupportDensity, "resin.support_density", s.resin_support_density, 10.0, 400.0, "%.0f %%", 1.0f);
+        mm(T::ResinTipDiameter, "resin.support_tip_diameter", s.resin_support_tip_diameter, 0.1, 2.0, "%.2f mm", 0.01f);
+        mm(T::ResinTipPenetration, "resin.support_tip_penetration", s.resin_support_tip_penetration, 0.0, 2.0, "%.2f mm",
+           0.01f);
+        mm(T::ResinPillarDiameter, "resin.support_pillar_diameter", s.resin_support_pillar_diameter, 0.2, 5.0, "%.2f mm",
+           0.01f);
+        mm(T::ResinCriticalAngle, "resin.support_critical_angle", s.resin_support_critical_angle, 10.0, 80.0, "%.0f°",
+           0.5f);
+    } else if (id == "resin_pad") {
+        flag(T::ResinPad, "resin.pad", s.resin_pad);
+        flag(T::ResinPadAroundObject, "resin.pad_around_object", s.resin_pad_around_object);
+        mm(T::ResinPadThickness, "resin.pad_thickness", s.resin_pad_thickness, 0.1, 10.0, "%.1f mm", 0.1f);
+        mm(T::ResinPadMargin, "resin.pad_margin", s.resin_pad_margin, 0.0, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinPadWallSlope, "resin.pad_wall_slope", s.resin_pad_wall_slope, 10.0, 90.0, "%.0f°", 0.5f);
+    } else if (id == "resin_hollow") {
+        flag(T::ResinHollow, "resin.hollow", s.resin_hollow);
+        mm(T::ResinHollowWall, "resin.hollow_wall", s.resin_hollow_wall, 0.5, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinHollowClosing, "resin.hollow_closing", s.resin_hollow_closing, 0.0, 20.0, "%.1f mm", 0.1f);
+        mm(T::ResinHollowInfill, "resin.hollow_infill", s.resin_hollow_infill, 0.0, 60.0, "%.0f %%", 0.5f);
+        mm(T::ResinHollowInfillCell, "resin.hollow_infill_cell", s.resin_hollow_infill_cell, 2.0, 50.0, "%.1f mm", 0.1f);
     } else if (id == "resin_exposure") {
         mm(T::ResinExposure, "resin.exposure", s.resin_exposure, 0.1, 600.0, "%.2f s", 0.01f);
         mm(T::ResinBottomExposure, "resin.bottom_exposure", s.resin_bottom_exposure, 0.1, 600.0, "%.1f s", 0.1f);

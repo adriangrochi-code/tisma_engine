@@ -878,7 +878,10 @@ Settings parse_checked(std::string_view text) {
                 "scale_z", "lift_distance", "lift_speed", "bottom_lift_distance", "bottom_lift_speed", "retract_speed",
                 "wait_before_exposure", "wait_after_cure", "wait_after_lift", "light_pwm", "bottom_light_pwm",
                 "antialiasing", "density", "gamma", "z_correction_layers", "absolute_correction", "printer_name",
-                "profile_name"},
+                "profile_name", "supports", "support_tip_diameter", "support_tip_penetration", "support_pillar_diameter",
+                "support_elevation", "support_critical_angle", "support_density", "pad", "pad_thickness", "pad_margin",
+                "pad_wall_slope", "pad_around_object", "hollow", "hollow_wall", "hollow_closing", "hollow_infill",
+                "hollow_infill_cell"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "printer_name" || n == "profile_name") {
             // Into a 32-byte field of the file, ended by a zero.
@@ -886,6 +889,15 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_string() || v.get<std::string>().size() > 31)
                 fail(k, "must be a text of at most 31 bytes");
             (n == "printer_name" ? s.resin_printer_name : s.resin_profile_name) = v.get<std::string>();
+            return;
+        }
+        if (n == "supports" || n == "pad" || n == "pad_around_object" || n == "hollow") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "supports" ? s.resin_supports
+             : n == "pad"    ? s.resin_pad
+             : n == "hollow" ? s.resin_hollow
+                             : s.resin_pad_around_object) = g.at(n).get<bool>();
             return;
         }
         const double d = number(g, n, k);
@@ -935,6 +947,32 @@ Settings parse_checked(std::string_view text) {
             s.resin_gamma = in(0.0, 5.0);
         else if (n == "z_correction_layers")
             s.resin_z_correction_layers = int(in(0.0, 100.0, true));
+        else if (n == "support_tip_diameter")
+            s.resin_support_tip_diameter = in(0.1, 2.0);
+        else if (n == "support_tip_penetration")
+            s.resin_support_tip_penetration = in(0.0, 2.0);
+        else if (n == "support_pillar_diameter")
+            s.resin_support_pillar_diameter = in(0.2, 5.0);
+        else if (n == "support_elevation")
+            s.resin_support_elevation = in(0.0, 50.0);
+        else if (n == "support_critical_angle")
+            s.resin_support_critical_angle = in(10.0, 80.0);
+        else if (n == "support_density")
+            s.resin_support_density = in(10.0, 400.0);
+        else if (n == "pad_thickness")
+            s.resin_pad_thickness = in(0.1, 10.0);
+        else if (n == "pad_margin")
+            s.resin_pad_margin = in(0.0, 20.0);
+        else if (n == "pad_wall_slope")
+            s.resin_pad_wall_slope = in(10.0, 90.0);
+        else if (n == "hollow_wall")
+            s.resin_hollow_wall = in(0.5, 20.0);
+        else if (n == "hollow_closing")
+            s.resin_hollow_closing = in(0.0, 20.0);
+        else if (n == "hollow_infill")
+            s.resin_hollow_infill = in(0.0, 60.0);
+        else if (n == "hollow_infill_cell")
+            s.resin_hollow_infill_cell = in(2.0, 50.0);
         else
             s.resin_absolute_correction = in(-1.0, 1.0);
     });
@@ -2311,6 +2349,23 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"resin.absolute_correction", num(s.resin_absolute_correction)},
         {"resin.printer_name", text(s.resin_printer_name)},
         {"resin.profile_name", text(s.resin_profile_name)},
+        {"resin.supports", flag(s.resin_supports)},
+        {"resin.support_tip_diameter", num(s.resin_support_tip_diameter)},
+        {"resin.support_tip_penetration", num(s.resin_support_tip_penetration)},
+        {"resin.support_pillar_diameter", num(s.resin_support_pillar_diameter)},
+        {"resin.support_elevation", num(s.resin_support_elevation)},
+        {"resin.support_critical_angle", num(s.resin_support_critical_angle)},
+        {"resin.support_density", num(s.resin_support_density)},
+        {"resin.pad", flag(s.resin_pad)},
+        {"resin.pad_thickness", num(s.resin_pad_thickness)},
+        {"resin.pad_margin", num(s.resin_pad_margin)},
+        {"resin.pad_wall_slope", num(s.resin_pad_wall_slope)},
+        {"resin.pad_around_object", flag(s.resin_pad_around_object)},
+        {"resin.hollow", flag(s.resin_hollow)},
+        {"resin.hollow_wall", num(s.resin_hollow_wall)},
+        {"resin.hollow_closing", num(s.resin_hollow_closing)},
+        {"resin.hollow_infill", num(s.resin_hollow_infill)},
+        {"resin.hollow_infill_cell", num(s.resin_hollow_infill_cell)},
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", speed(s.wall_speed)},
@@ -2615,7 +2670,24 @@ std::string settings_json(const Settings& s) {
           {"z_correction_layers", s.resin_z_correction_layers},
           {"absolute_correction", s.resin_absolute_correction},
           {"printer_name", s.resin_printer_name},
-          {"profile_name", s.resin_profile_name}}},
+          {"profile_name", s.resin_profile_name},
+          {"supports", s.resin_supports},
+          {"support_tip_diameter", s.resin_support_tip_diameter},
+          {"support_tip_penetration", s.resin_support_tip_penetration},
+          {"support_pillar_diameter", s.resin_support_pillar_diameter},
+          {"support_elevation", s.resin_support_elevation},
+          {"support_critical_angle", s.resin_support_critical_angle},
+          {"support_density", s.resin_support_density},
+          {"pad", s.resin_pad},
+          {"pad_thickness", s.resin_pad_thickness},
+          {"pad_margin", s.resin_pad_margin},
+          {"pad_wall_slope", s.resin_pad_wall_slope},
+          {"pad_around_object", s.resin_pad_around_object},
+          {"hollow", s.resin_hollow},
+          {"hollow_wall", s.resin_hollow_wall},
+          {"hollow_closing", s.resin_hollow_closing},
+          {"hollow_infill", s.resin_hollow_infill},
+          {"hollow_infill_cell", s.resin_hollow_infill_cell}}},
         {"head",
          {{"free_angle_x", s.head_free_angle_x},
           {"free_angle_y", s.head_free_angle_y},

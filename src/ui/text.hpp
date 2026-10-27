@@ -1049,6 +1049,26 @@
     X(SumPixels, "%d × %d px", "%d × %d px") \
     X(SumLift, "%s mm a %s mm/s", "%s mm at %s mm/s") \
     X(SumResinDensity, "%s g/ml", "%s g/ml") \
+    X(SubResinSupports, "Resina: soportes", "Resin: supports") \
+    X(SubResinPad, "Resina: base", "Resin: pad") \
+    X(SubResinHollow, "Resina: vaciado", "Resin: hollowing") \
+    X(ResinSupports, "Soportes", "Supports") \
+    X(ResinTipDiameter, "Diámetro de la punta", "Tip diameter") \
+    X(ResinTipPenetration, "Penetración de la punta", "Tip penetration") \
+    X(ResinPillarDiameter, "Diámetro de los pilares", "Pillar diameter") \
+    X(ResinElevation, "Elevación", "Elevation") \
+    X(ResinCriticalAngle, "Ángulo de las uniones", "Junction angle") \
+    X(ResinSupportDensity, "Densidad de los puntos", "Point density") \
+    X(ResinPad, "Base", "Pad") \
+    X(ResinPadThickness, "Espesor de la base", "Pad thickness") \
+    X(ResinPadMargin, "Margen de la base", "Pad margin") \
+    X(ResinPadWallSlope, "Inclinación del borde", "Pad wall slope") \
+    X(ResinPadAroundObject, "Base alrededor de la pieza", "Pad around the object") \
+    X(ResinHollow, "Vaciar la pieza", "Hollow the part") \
+    X(ResinHollowWall, "Espesor de la pared", "Wall thickness") \
+    X(ResinHollowClosing, "Redondeo del hueco", "Closing distance") \
+    X(ResinHollowInfill, "Relleno interior", "Inner infill") \
+    X(ResinHollowInfillCell, "Celda del relleno", "Infill cell") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \

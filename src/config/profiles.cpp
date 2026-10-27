@@ -157,7 +157,10 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
     if (group == "resin") {
         if (key == "printer_name")
             return ProfileKind::Printer;
-        return key == "layer_height" ? ProfileKind::Print : ProfileKind::Filament;
+        // The supports, the pad and the hollowing are the print's.
+        if (key == "layer_height" || key.starts_with("support") || key.starts_with("pad") || key.starts_with("hollow"))
+            return ProfileKind::Print;
+        return ProfileKind::Filament;
     }
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||

@@ -4,6 +4,7 @@
 #include "geom/polygons.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "report/warnings.hpp"
+#include "resin/hollow.hpp"
 
 #include <array>
 #include <cstddef>
@@ -118,6 +119,7 @@ struct ResinPrint {
     double weight = 0.0;          // g
     double seconds = 0.0;         // the print's estimated time
     double max_height = 150.0;    // the printer's, mm
+    double bar_width = 0.0;       // the hollow's inner bars, mm; 0: none
     // Previews (116 by 116 and 290 by 290 pixels, RGB565, row by row from
     // the top): the part seen from above, shaded by its height.
     std::vector<std::uint16_t> small_preview, big_preview;
@@ -131,17 +133,22 @@ std::vector<Polygons> resin_sections(const IndexedMesh& mesh, const Settings& se
 // The part's print (rules 1 to 8 and 20 to 22): the sections grown by
 // resin.absolute_correction, the bottom layers shrunk against the
 // elephant's foot, what hangs left dark for resin.z_correction_layers
-// layers; coded images, exposures and moves; and the cups, with the part
-// on the platform. exposure(z) gives the exposure of the normal layer whose
-// middle is at z (the exposure tower), else resin.exposure. Throws
-// ResinError when the part does not fit on the display or under
-// machine.max_height (150 mm when 0).
+// layers; coded images, exposures and moves; and the cups. With
+// resin.supports the part stands on supports over the pad (and its cups are
+// open underneath), hollowed with resin.hollow, with the drain holes taken
+// out (docs/spec/features/resin_supports.md). exposure(z) gives the
+// exposure of the normal layer whose middle is at z (the exposure tower),
+// else resin.exposure. Throws ResinError when the part (or its supports and
+// pad) does not fit on the display or under machine.max_height (150 mm when
+// 0), or when the pad has nothing to stand under or around.
 ResinPrint slice_resin(const IndexedMesh& mesh, const Settings& settings,
-                       const std::function<double(double z)>& exposure = {});
+                       const std::function<double(double z)>& exposure = {},
+                       const std::vector<ResinDrain>& drains = {});
 
-// The warning of each cup (rule 15), for the warnings' JSON: the part, the
-// heights and the largest section, and how to fix it.
-std::vector<Warning> cup_warnings(const ResinPrint& print, const std::string& part);
+// The print's warnings, for the warnings' JSON: each cup (resin.md, rule
+// 15) with the part, the heights and the largest section, and how to fix
+// it; and inner bars thinner than 0.8 mm (resin_supports.md, rule 5).
+std::vector<Warning> resin_warnings(const ResinPrint& print, const std::string& part);
 
 // The exposure tower (rules 16 and 17): a base and a band per exposure, from
 // start to end by step, each `band` mm tall.
