@@ -220,6 +220,36 @@ Settings with_profile(const Settings& settings, ProfileKind kind, const Settings
     return result;
 }
 
+Settings with_keys(const Settings& settings, const Settings& from, const std::vector<std::string>& keys) {
+    ordered_json out = settings_object(settings);
+    const ordered_json source = settings_object(from);
+    for (const std::string& key : keys) {
+        const std::size_t dot = key.find('.');
+        if (dot == std::string::npos) {
+            if (source.contains(key))
+                out[key] = source.at(key);
+            continue;
+        }
+        const std::string group = key.substr(0, dot), name = key.substr(dot + 1);
+        if (!source.contains(group) || !out.contains(group))
+            continue;
+        if (group == "machine" && name.starts_with("variables.")) {
+            const std::string variable = name.substr(10);
+            const ordered_json& from_variables = source.at(group).at("variables");
+            ordered_json& variables = out.at(group).at("variables");
+            if (from_variables.contains(variable))
+                variables[variable] = from_variables.at(variable);
+            else
+                variables.erase(variable);
+        } else if (source.at(group).contains(name)) {
+            out.at(group)[name] = source.at(group).at(name);
+        }
+    }
+    Settings result = parse_settings(out.dump());
+    result.ignored_groups = settings.ignored_groups;
+    return result;
+}
+
 bool same_profile(ProfileKind kind, const Settings& a, const Settings& b) {
     return profile_settings_json(kind, a) == profile_settings_json(kind, b);
 }

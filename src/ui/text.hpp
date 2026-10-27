@@ -728,6 +728,22 @@
     X(ResetCardTip, "Vuelve los ajustes de este apartado a los del perfil guardado", "Takes this part's settings back to the saved profile") \
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
+    X(ChooseSettingsTitle, "Los ajustes que se ven en Personalizado", "The settings Custom shows") \
+    X(StartFrom, "Partir de:", "Start from:") \
+    X(AllSettings, "Todos", "All") \
+    X(NoSettings, "Ninguno", "None") \
+    X(Accept, "Aceptar", "Accept") \
+    X(FilterSettings, "Filtrar ajustes", "Filter settings") \
+    X(HideSetting, "Quitar de la vista", "Take out of the view") \
+    X(AddSetting, "+ Agregar ajuste", "+ Add a setting") \
+    X(SearchSettings, "Buscar un ajuste (Ctrl+F)", "Search a setting (Ctrl+F)") \
+    X(SearchNoMatch, "Ningún ajuste coincide", "No setting matches") \
+    X(ExportView, "Exportar vista…", "Export view…") \
+    X(ImportView, "Importar vista…", "Import view…") \
+    X(ExportViewTitle, "Exportar la vista de los ajustes", "Export the settings view") \
+    X(ImportViewTitle, "Importar una vista de los ajustes", "Import a settings view") \
+    X(ViewExported, "Vista guardada en %s", "View saved to %s") \
+    X(ViewImported, "Vista cargada: %d ajustes", "View loaded: %d settings") \
     X(VaseMode, "Modo vaso (espiral)", "Vase mode (spiral)") \
     X(SequentialRow, "Objeto por objeto", "One object at a time") \
     X(SequentialTip, "Cada objeto se imprime entero antes del siguiente: si uno falla, los otros siguen. Necesita lugar para el cabezal entre los objetos", "Each object is printed whole before the next: if one fails, the others go on. The head needs room between the objects") \

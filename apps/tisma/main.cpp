@@ -26,7 +26,8 @@ constexpr const char* kUsage =
     "                                   [--tool move|rotate|scale|lay|paint|material|mixing]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
-    "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
+    "                                   [--level basic|normal|advanced|custom] [--section TAB/SECTION]\n"
+    "                                   [--search TEXT] [--single-column] [--choose-settings]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
@@ -99,10 +100,17 @@ int main(int argc, char** argv) {
             options.info = value();
         } else if (arg == "--level") {
             options.level = value();
-            if (options.level != "basic" && options.level != "normal" && options.level != "advanced") {
-                std::fprintf(stderr, "error: --level must be basic, normal or advanced\n");
+            if (options.level != "basic" && options.level != "normal" && options.level != "advanced" &&
+                options.level != "custom") {
+                std::fprintf(stderr, "error: --level must be basic, normal, advanced or custom\n");
                 return 2;
             }
+        } else if (arg == "--search") {
+            options.search = value();
+        } else if (arg == "--single-column") {
+            options.single_column = true;
+        } else if (arg == "--choose-settings") {
+            options.choose_settings = true;
         } else if (arg == "--section") {
             options.section = value(); // print/quality, material/cooling, printer/machine...
         } else if (arg == "--tips") {

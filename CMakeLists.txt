@@ -290,12 +290,13 @@ if(TISMA_BUILD_UI)
     src/ui/slicing.cpp
     src/ui/presets.cpp
     src/ui/settings_layout.cpp
+    src/ui/settings_view.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
     src/ui/help.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
-  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)
+  target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
   add_subdirectory(apps/tisma)
 endif()
 

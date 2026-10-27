@@ -53,6 +53,7 @@ add_executable(tisma_tests
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp
+  test_settings_view.cpp
   test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
@@ -224,6 +225,28 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_paint_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode)
+    # The settings panel (settings_panel.md): the same G-code in Basic and in
+    # Custom (SP9), the search going to a setting (SP6) with all the sections
+    # together (SP6b), and the dialog that chooses what Custom shows.
+    add_test(NAME ui_settings_basic
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level basic
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.png)
+    add_test(NAME ui_settings_custom_search
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level custom
+              --search seam --single-column --choose-settings
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.png)
+    add_test(NAME ui_settings_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode)
+    set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)
+    set_tests_properties(ui_settings_custom_search PROPERTIES FIXTURES_SETUP ui_level_custom)
+    set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")
+    set_tests_properties(ui_settings_basic ui_settings_custom_search PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
     set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
     set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")

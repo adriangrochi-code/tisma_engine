@@ -41,6 +41,12 @@ std::string profile_settings_json(ProfileKind kind, const Settings& settings);
 // `settings` with every setting of `kind` taken from `from`, the rest kept.
 Settings with_profile(const Settings& settings, ProfileKind kind, const Settings& from);
 
+// `settings` with these keys taken from `from`, the rest kept: "group.key",
+// a printer variable as "machine.variables.name", or a key of its own such as
+// "changes" (a card's Reset, settings_panel.md, rule 8). A variable `from`
+// does not have is taken out.
+Settings with_keys(const Settings& settings, const Settings& from, const std::vector<std::string>& keys);
+
 // Whether a and b agree in every setting of `kind`.
 bool same_profile(ProfileKind kind, const Settings& a, const Settings& b);
 

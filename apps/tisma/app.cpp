@@ -36,6 +36,7 @@
 #include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
 #include "ui/settings_layout.hpp"
+#include "ui/settings_view.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
@@ -258,7 +259,18 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
-enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+enum class Purpose {
+    Open,
+    AddModel,
+    SaveGcode,
+    LoadSettings,
+    SaveSettings,
+    SaveProject,
+    SaveExtruderTest,
+    LoadCase,
+    ExportView,
+    ImportView
+};
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
 enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint, Material };
@@ -362,11 +374,23 @@ private:
                 const char* tip, float height);
     bool icon_button(const char* id, const char* icon_name, const char* tip, float size);
     // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
-    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary);
+    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset);
     bool card_rows(std::string_view id, bool& bed);
     bool setting_shown(std::string_view key, std::string_view card) const;
     bool setting_applies(std::string_view key) const;
     bool card_shown(const SubsectionLayout& sub) const;
+    // Whether the level (or the Custom view) shows a setting, before what
+    // else shows it.
+    bool view_shows(std::string_view key) const;
+    // The settings of the chosen profiles, as saved: what a change is
+    // measured from and a card's Reset goes back to (rule 8).
+    Settings saved_settings() const;
+    void choose_level(ViewLevel level);
+    // The search (rule 5): the field in the top bar, and going to a setting.
+    void search_box(float width, float height);
+    void go_to_setting(const std::string& key);
+    // Choosing what Custom shows (rule 16).
+    void choose_settings_dialog();
 
     AppOptions options_;
     GLFWwindow* window_ = nullptr;
@@ -387,6 +411,22 @@ private:
     std::map<std::string, float> card_heights_;
     std::set<std::string> show_all_cards_;
     std::set<std::string> changed_keys_;
+    // Custom (rules 15 to 19): the settings it shows; «See all together»
+    // (rule 4); the search's text, the setting it went to (lit for 2 s, and
+    // shown whatever the level until the section changes), and the dialog
+    // that chooses what Custom shows, with its draft and its filter.
+    CustomView custom_view_;
+    bool single_column_ = false;
+    std::string search_query_;
+    bool search_focus_ = false;
+    bool search_list_hovered_ = false;
+    std::string highlight_key_;
+    double highlight_until_ = 0.0;
+    bool scroll_to_highlight_ = false;
+    std::set<std::string> revealed_keys_;
+    bool choose_open_ = false;
+    CustomView choose_draft_;
+    std::string choose_query_;
     ImTextureID logo_ = 0;
     // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
     // panels and the 3D view drawn by it. The view goes first at shutdown.
@@ -642,8 +682,9 @@ const std::map<std::string, SettingDoc>& setting_docs() {
     return docs;
 }
 
-// The setting each row of the panel edits, for its info button.
-const char* row_key(T label) {
+// The setting each row of the panel edits, for its info button and the
+// search.
+const std::map<T, const char*>& row_keys() {
     static const std::map<T, const char*> keys = {
         {T::LayerHeight, "layers.height"}, {T::FirstLayerHeight, "layers.first_height"},
         {T::LayerHeights, "layers.heights"},
@@ -804,9 +845,57 @@ const char* row_key(T label) {
         {T::CurvedUniformFlow, "curved.uniform_flow"}, {T::CurvedOverhangThreshold, "curved.overhang_threshold"},
         {T::HeadFreeAngleX, "head.free_angle_x"},
         {T::HeadFreeAngleY, "head.free_angle_y"}, {T::HeadClearanceHeight, "head.clearance_height"},
-        {T::HeadClearanceRadius, "head.clearance_radius"}, {T::HeadProfile, "head.profile"}};
-    const auto it = keys.find(label);
-    return it == keys.end() ? nullptr : it->second;
+        {T::HeadClearanceRadius, "head.clearance_radius"}, {T::HeadProfile, "head.profile"},
+        {T::BeltEnabled, "belt.enabled"}, {T::BeltAngle, "belt.angle"}, {T::BeltIsZ, "belt.belt_is_z"},
+        {T::InterlockWaves, "infill.waves"}, {T::WaveAmplitude, "infill.wave_amplitude"},
+        {T::WaveLength, "infill.wave_length"}, {T::Technology, "machine.technology"},
+        {T::DisplayPixelsX, "machine.display_pixels_x"}, {T::DisplayPixelsY, "machine.display_pixels_y"},
+        {T::DisplayWidth, "machine.display_width"}, {T::DisplayHeight, "machine.display_height"},
+        {T::DisplayMirrorX, "machine.display_mirror_x"}, {T::DisplayMirrorY, "machine.display_mirror_y"},
+        {T::ResinLayerHeight, "resin.layer_height"}, {T::ResinExposure, "resin.exposure"},
+        {T::ResinBottomExposure, "resin.bottom_exposure"}, {T::ResinBottomLayers, "resin.bottom_layers"},
+        {T::ResinElephantFoot, "resin.elephant_foot"}, {T::ResinScaleX, "resin.scale_x"},
+        {T::ResinScaleY, "resin.scale_y"}, {T::ResinScaleZ, "resin.scale_z"},
+        {T::ResinAbsoluteCorrection, "resin.absolute_correction"}, {T::ResinZCorrection, "resin.z_correction_layers"},
+        {T::ResinGamma, "resin.gamma"}, {T::ResinAntialiasing, "resin.antialiasing"},
+        {T::ResinLiftDistance, "resin.lift_distance"}, {T::ResinLiftSpeed, "resin.lift_speed"},
+        {T::ResinBottomLiftDistance, "resin.bottom_lift_distance"}, {T::ResinBottomLiftSpeed, "resin.bottom_lift_speed"},
+        {T::ResinRetractSpeed, "resin.retract_speed"}, {T::ResinWaitAfterCure, "resin.wait_after_cure"},
+        {T::ResinWaitAfterLift, "resin.wait_after_lift"}, {T::ResinWaitBeforeExposure, "resin.wait_before_exposure"},
+        {T::ResinLightPwm, "resin.light_pwm"}, {T::ResinBottomLightPwm, "resin.bottom_light_pwm"},
+        {T::ResinDensity, "resin.density"}, {T::ResinBottleCost, "resin.bottle_cost"},
+        {T::ResinBottleVolume, "resin.bottle_volume"}, {T::ResinBottleWeight, "resin.bottle_weight"},
+        {T::ResinPrinterName, "resin.printer_name"}, {T::ResinProfileName, "resin.profile_name"},
+        {T::ResinSupports, "resin.supports"}, {T::ResinSupportDensity, "resin.support_density"},
+        {T::ResinElevation, "resin.support_elevation"}, {T::ResinPillarDiameter, "resin.support_pillar_diameter"},
+        {T::ResinTipDiameter, "resin.support_tip_diameter"}, {T::ResinTipPenetration, "resin.support_tip_penetration"},
+        {T::ResinCriticalAngle, "resin.support_critical_angle"}, {T::ResinPad, "resin.pad"},
+        {T::ResinPadAroundObject, "resin.pad_around_object"}, {T::ResinPadMargin, "resin.pad_margin"},
+        {T::ResinPadThickness, "resin.pad_thickness"}, {T::ResinPadWallSlope, "resin.pad_wall_slope"},
+        {T::ResinHollow, "resin.hollow"}, {T::ResinHollowWall, "resin.hollow_wall"},
+        {T::ResinHollowClosing, "resin.hollow_closing"}, {T::ResinHollowInfill, "resin.hollow_infill"},
+        {T::ResinHollowInfillCell, "resin.hollow_infill_cell"}};
+    return keys;
+}
+
+const char* row_key(T label) {
+    const auto it = row_keys().find(label);
+    return it == row_keys().end() ? nullptr : it->second;
+}
+
+// A setting's row name, for the search and the list of settings to show; the
+// key itself when no row names it.
+std::string key_label(std::string_view key) {
+    static const std::map<std::string, T, std::less<>> labels = [] {
+        std::map<std::string, T, std::less<>> m;
+        for (const auto& [label, k] : row_keys())
+            m.emplace(k, label);
+        m.emplace("machine.variables.temperature", T::NozzleTemp);
+        m.emplace("machine.variables.bed_temperature", T::BedTemp);
+        return m;
+    }();
+    const auto it = labels.find(key);
+    return it == labels.end() ? std::string(key) : std::string(tr(it->second));
 }
 
 // The setting whose info card is kept open (--info, for screenshots).
@@ -864,24 +953,70 @@ void info_button(T label, const char* key) {
 // A gray tag after the next row's label: the level of a changed setting that
 // the panel's level would hide (settings_panel.md, rule 12).
 const char* g_row_tag = nullptr;
+// The next row's setting, as the panel asked whether to show it.
+const char* g_row_key = nullptr;
+// The setting the search went to (rule 5): its row lit in this colour, and
+// brought into sight once.
+std::string g_highlight_key;
+ImU32 g_highlight_colour = 0;
+bool g_scroll_highlight = false;
+// In Custom, an eye on the hovered row hides its setting (rule 16): the key
+// to hide, for the panel.
+bool g_custom_rows = false;
+std::string g_hide_key;
+
+// The eye struck through, in a square of `size` at `at`.
+void eye_struck(ImDrawList* dl, ImVec2 at, float size, ImU32 colour) {
+    const ImVec2 c(at.x + size * 0.5f, at.y + size * 0.5f);
+    dl->AddEllipse(c, ImVec2(size * 0.45f, size * 0.26f), colour, 0.0f, 20, 1.3f);
+    dl->AddCircleFilled(c, size * 0.12f, colour);
+    dl->AddLine(ImVec2(at.x + size * 0.12f, at.y + size * 0.88f), ImVec2(at.x + size * 0.88f, at.y + size * 0.12f), colour,
+                1.5f);
+}
 
 // Rows of the settings tables: a label (with a tooltip and, for a setting of
 // the engine, its info button) and a control.
 void label_cell(T label, const char* tip = nullptr) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
+    const std::string key = g_row_key ? g_row_key : row_key(label) ? row_key(label) : "";
+    g_row_key = nullptr;
+    if (!key.empty() && key == g_highlight_key) {
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, g_highlight_colour);
+        if (g_scroll_highlight) {
+            ImGui::SetScrollHereY(0.35f);
+            g_scroll_highlight = false;
+        }
+    }
+    const ImVec2 cell = ImGui::GetCursorScreenPos();
+    const float column = ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", tip);
-    if (const char* key = row_key(label))
-        info_button(label, key);
+    if (const char* info = row_key(label))
+        info_button(label, info);
     if (g_row_tag) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", g_row_tag);
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", tr(T::HiddenChanged));
         g_row_tag = nullptr;
+    }
+    const float tall = ImGui::GetFrameHeight();
+    if (g_custom_rows && !key.empty() && ImGui::IsWindowHovered() &&
+        ImGui::IsMouseHoveringRect(cell, ImVec2(cell.x + column, cell.y + tall))) {
+        const float size = tall * 0.72f;
+        const ImVec2 at(cell.x + column - size, cell.y + (tall - size) * 0.5f);
+        ImGui::SetCursorScreenPos(at);
+        ImGui::PushID(key.c_str());
+        if (ImGui::InvisibleButton("##hide", ImVec2(size, size)))
+            g_hide_key = key;
+        const bool hovered = ImGui::IsItemHovered();
+        eye_struck(ImGui::GetWindowDrawList(), at, size, ImGui::GetColorU32(hovered ? ImGuiCol_CheckMark : ImGuiCol_TextDisabled));
+        if (hovered)
+            ImGui::SetTooltip("%s", tr(T::HideSetting));
+        ImGui::PopID();
     }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1156,12 +1291,24 @@ bool App::init(std::string& error) {
         tour_step_ = options_.tour;
     g_open_info = options_.info;
     if (!options_.level.empty())
-        view_level_ = options_.level == "basic" ? ViewLevel::Basic : options_.level == "advanced" ? ViewLevel::Advanced
-                                                                                                 : ViewLevel::Normal;
+        choose_level(view_level_from(options_.level));
+    if (options_.single_column)
+        single_column_ = true;
     if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
         const std::string tab = options_.section.substr(0, slash);
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
+    }
+    if (!options_.search.empty()) {
+        const std::vector<SettingHit> hits = search_settings(
+            options_.search, [](std::string_view key) { return SettingText{key_label(key), {}}; });
+        if (!hits.empty())
+            go_to_setting(hits.front().key);
+    }
+    if (options_.choose_settings) {
+        choose_level(ViewLevel::Custom);
+        choose_draft_ = custom_view_;
+        choose_open_ = true;
     }
     if (options_.light)
         theme_ = light_theme();
@@ -1348,8 +1495,21 @@ void App::load_preferences() {
         // The settings panel: level, section by tab and the cards open or folded.
         if (j.contains("ui") && j.at("ui").is_object()) {
             const nlohmann::json& ui = j.at("ui");
-            const std::string level = ui.value("level", std::string("normal"));
-            view_level_ = level == "basic" ? ViewLevel::Basic : level == "advanced" ? ViewLevel::Advanced : ViewLevel::Normal;
+            view_level_ = view_level_from(ui.value("level", std::string("normal")));
+            // The Custom view: its keys, the level it started from, and the
+            // keys there were then (settings_panel.md, rules 15 to 18).
+            custom_view_.base = view_level_from(ui.value("custom_base", std::string("normal")));
+            if (custom_view_.base == ViewLevel::Custom)
+                custom_view_.base = ViewLevel::Normal;
+            for (auto& [list, keys] : {std::pair<const char*, std::set<std::string>*>{"custom_visible", &custom_view_.visible},
+                                       {"custom_known", &custom_view_.known}})
+                if (ui.contains(list) && ui.at(list).is_array())
+                    for (const auto& key : ui.at(list))
+                        if (key.is_string())
+                            keys->insert(key.get<std::string>());
+            if (view_level_ == ViewLevel::Custom && custom_view_.known.empty())
+                custom_view_ = custom_view_from(custom_view_.base);
+            single_column_ = ui.value("single_column", false);
             if (ui.contains("section") && ui.at("section").is_array())
                 for (std::size_t t = 0; t < std::min<std::size_t>(3, ui.at("section").size()); ++t)
                     if (ui.at("section")[t].is_string())
@@ -1387,7 +1547,11 @@ void App::save_preferences() {
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["tips_seen"] = tips_seen_;
-        j["ui"]["level"] = view_level_ == ViewLevel::Basic ? "basic" : view_level_ == ViewLevel::Advanced ? "advanced" : "normal";
+        j["ui"]["level"] = std::string(view_level_name(view_level_));
+        j["ui"]["custom_base"] = std::string(view_level_name(custom_view_.base));
+        j["ui"]["custom_visible"] = custom_view_.visible;
+        j["ui"]["custom_known"] = custom_view_.known;
+        j["ui"]["single_column"] = single_column_;
         j["ui"]["section"] = panel_section_;
         j["ui"]["cards"] = card_open_;
         // Without the changes of a calibration tower left on the bed.
@@ -1841,10 +2005,7 @@ void App::refresh_profiles() {
     // changes», and what a level never hides.
     changed_keys_.clear();
     try {
-        Settings saved = settings_;
-        for (const ProfileKind kind : kProfileKinds)
-            if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
-                saved = with_profile(saved, kind, p->settings);
+        const Settings saved = saved_settings();
         std::map<std::string, std::string> before;
         for (auto& [key, value] : describe(saved))
             before[key] = std::move(value);
@@ -2515,6 +2676,17 @@ void App::top_bar() {
                2.0f + ImGui::CalcTextSize(label).x;
     };
     const float right = width_of(tr(T::Open)) + width_of(tr(T::Slice)) + width_of(tr(T::Export)) + more_w + gap * 3.0f;
+    // The search for a setting, between the tabs and the actions.
+    {
+        const float from = ImGui::GetCursorPosX() + 10.0f * scale_;
+        const float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
+        const float w = std::min(300.0f * scale_, room);
+        if (w > 120.0f * scale_) {
+            ImGui::SetCursorPos(ImVec2(from, top));
+            search_box(w, button_h);
+            ImGui::SameLine();
+        }
+    }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
     if (button("##open", "tisma_folder", tr(T::Open), false, false, true, tr(T::OpenTip), button_h)) {
@@ -2561,6 +2733,14 @@ void App::top_bar() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem(tr(T::ExportView))) {
+            purpose_ = Purpose::ExportView;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
+        }
+        if (ImGui::MenuItem(tr(T::ImportView))) {
+            purpose_ = Purpose::ImportView;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
+        }
         if (ImGui::MenuItem(tr(T::Tutorial)))
             tour_step_ = 0;
         if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
@@ -2583,16 +2763,23 @@ void App::top_bar() {
     ImGui::PopStyleColor();
 }
 
+// Whether a setting is of the printer's kind: a resin printer's settings, or
+// the rest (interface.md, «Con una impresora de resina»; settings_panel.md,
+// rule 1).
+bool of_technology(const Settings& s, std::string_view key) {
+    if (key == "machine.technology" || key == "machine.max_height")
+        return true;
+    const bool resin = key.starts_with("resin.") || key.starts_with("machine.display_");
+    return resin == (s.machine_technology == MachineTechnology::Msla);
+}
+
 // Whether a setting does anything with the others as they are: the ones
 // that hang on a switch hide while it is off (settings_panel.md, rule 6).
 bool App::setting_applies(std::string_view key) const {
     const Settings& s = settings_;
-    // A resin printer's settings, or the rest (interface.md, «Con una
-    // impresora de resina»; settings_panel.md, rule 1).
     if (key == "machine.technology" || key == "machine.max_height")
         return true;
-    const bool resin = key.starts_with("resin.") || key.starts_with("machine.display_");
-    if (resin != (s.machine_technology == MachineTechnology::Msla))
+    if (!of_technology(s, key))
         return false;
     if (key.starts_with("support.tree_"))
         return s.support && s.support_style == SupportStyle::Organic;
@@ -2627,10 +2814,257 @@ bool App::setting_applies(std::string_view key) const {
 bool App::setting_shown(std::string_view key, std::string_view card) const {
     if (!setting_applies(key))
         return false;
+    const std::string k(key);
+    return view_shows(key) || show_all_cards_.contains(std::string(card)) || changed_keys_.contains(k) ||
+           revealed_keys_.contains(k);
+}
+
+bool App::view_shows(std::string_view key) const {
+    if (view_level_ == ViewLevel::Custom)
+        return custom_shows(custom_view_, key);
     const std::optional<SettingPlace> place = setting_place(key);
-    const SettingLevel level = place ? place->level : SettingLevel::Advanced;
-    return level_shows(view_level_, level) || show_all_cards_.contains(std::string(card)) ||
-           changed_keys_.contains(std::string(key));
+    return level_shows(view_level_, place ? place->level : SettingLevel::Advanced);
+}
+
+Settings App::saved_settings() const {
+    Settings saved = settings_;
+    for (const ProfileKind kind : kProfileKinds)
+        if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
+            saved = with_profile(saved, kind, p->settings);
+    return saved;
+}
+
+// A level for the panel; Custom the first time shows what the level before
+// it showed (rule 15).
+void App::choose_level(ViewLevel level) {
+    if (level == ViewLevel::Custom && custom_view_.known.empty())
+        custom_view_ = custom_view_from(view_level_);
+    view_level_ = level;
+    show_all_cards_.clear();
+}
+
+// The search goes to a setting (rule 5): its tab, section and card open, the
+// row brought into sight and lit for 2 s; shown, with its level's tag, if
+// the level hides it.
+void App::go_to_setting(const std::string& key) {
+    const std::optional<SettingPlace> place = setting_place(key);
+    if (!place)
+        return;
+    if (tab_ != Tab::Prepare && tab_ != Tab::Preview)
+        set_tab(Tab::Prepare);
+    panel_tab_ = place->tab;
+    panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
+    card_open_[std::string(place->subsection->id)] = true;
+    show_all_cards_.clear();
+    revealed_keys_.clear();
+    if (!view_shows(key))
+        revealed_keys_.insert(key);
+    highlight_key_ = key;
+    // A screenshot keeps it lit until it is taken.
+    highlight_until_ = options_.screenshot.empty() ? ImGui::GetTime() + 2.0 : 1e30;
+    scroll_to_highlight_ = true;
+}
+
+// The search field of the top bar (interface.md, «Búsqueda de ajustes»): the
+// settings that match as one types, by name, card, key or what they do;
+// Enter or a click goes to one.
+void App::search_box(float width, float height) {
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, height * 0.5f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(height * 0.9f, std::max(0.0f, (height - ImGui::GetFontSize()) * 0.5f)));
+    ImGui::SetNextItemWidth(width);
+    if (search_focus_) {
+        ImGui::SetKeyboardFocusHere();
+        search_focus_ = false;
+    }
+    const bool enter = ImGui::InputTextWithHint("##search", tr(T::SearchSettings), &search_query_,
+                                                ImGuiInputTextFlags_EnterReturnsTrue);
+    const bool active = ImGui::IsItemActive() || ImGui::IsItemFocused();
+    const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    ImGui::PopStyleVar(2);
+    // The magnifier.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const float r = height * 0.18f;
+    const ImVec2 c(lo.x + height * 0.45f, (lo.y + hi.y) * 0.5f - r * 0.25f);
+    const ImU32 dim = ImGui::GetColorU32(rgb(theme_.text_dim));
+    dl->AddCircle(c, r, dim, 16, 1.5f);
+    dl->AddLine(ImVec2(c.x + r * 0.7f, c.y + r * 0.7f), ImVec2(c.x + r * 1.6f, c.y + r * 1.6f), dim, 1.8f);
+    if (search_query_.empty())
+        return;
+    const Settings& s = settings_;
+    const auto& docs = setting_docs();
+    const std::vector<SettingHit> hits = search_settings(
+        search_query_,
+        [&](std::string_view key) {
+            const auto doc = docs.find(std::string(key));
+            return SettingText{key_label(key), doc != docs.end() ? doc->second.meaning : std::string()};
+        },
+        [&](std::string_view key) { return of_technology(s, key); }, 10);
+    if (enter && !hits.empty()) {
+        go_to_setting(hits.front().key);
+        search_query_.clear();
+        ImGui::SetWindowFocus(nullptr);
+        return;
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        search_query_.clear();
+        return;
+    }
+    if (!active && !search_list_hovered_)
+        return;
+    // The matches under the field.
+    ImGui::SetNextWindowPos(ImVec2(lo.x, hi.y + 4.0f * scale_));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(std::max(width, 320.0f * scale_), 0), ImVec2(FLT_MAX, FLT_MAX));
+    ImGui::Begin("##search_results", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    search_list_hovered_ = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+    if (hits.empty())
+        ImGui::TextDisabled("%s", tr(T::SearchNoMatch));
+    for (const SettingHit& hit : hits) {
+        const std::string label = key_label(hit.key) + "##" + hit.key;
+        if (ImGui::Selectable(label.c_str())) {
+            go_to_setting(hit.key);
+            search_query_.clear();
+            search_list_hovered_ = false;
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s › %s", tr(hit.place.section->title), tr(hit.place.subsection->title));
+    }
+    ImGui::End();
+}
+
+// What Custom shows, chosen in a tree of tab, section, card and setting
+// (rule 16), each with its box; a section's or a card's box sets all of it
+// and shows a dash when only some are on. «Start from» a level, all or none;
+// a filter; Cancel or Accept.
+void App::choose_settings_dialog() {
+    if (choose_open_) {
+        ImGui::OpenPopup("###choose_settings");
+        choose_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f * scale_, vp->Size.y * 0.8f), ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::ChooseSettingsTitle)) + "###choose_settings";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_NoSavedSettings))
+        return;
+    CustomView& draft = choose_draft_;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(tr(T::StartFrom));
+    for (const auto& [level, name] : {std::pair{ViewLevel::Basic, T::LevelBasic},
+                                      {ViewLevel::Normal, T::LevelNormal},
+                                      {ViewLevel::Advanced, T::LevelAdvanced}}) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(name)))
+            draft = custom_view_from(level);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::AllSettings))) {
+        draft = custom_view_from(ViewLevel::Advanced);
+        draft.base = custom_view_.base;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::NoSettings))) {
+        draft.visible.clear();
+        draft.known.insert(panel_keys().begin(), panel_keys().end());
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputTextWithHint("##filter", tr(T::FilterSettings), &choose_query_);
+    const std::string filter = fold(choose_query_);
+    const auto matches = [&](std::string_view key) {
+        return of_technology(settings_, key) &&
+               (filter.empty() || fold(key_label(key)).find(filter) != std::string::npos ||
+                fold(key).find(filter) != std::string::npos);
+    };
+    // A box for many settings: on when all are, a dash when some are.
+    const auto group_box = [&](const char* id, const std::vector<SettingEntry>& entries) {
+        int on = 0, all = 0;
+        for (const SettingEntry& e : entries)
+            if (matches(e.key))
+                ++all, on += custom_shows(draft, e.key) ? 1 : 0;
+        bool value = all > 0 && on == all;
+        if (ImGui::Checkbox(id, &value))
+            custom_set(draft, entries, value);
+        if (on > 0 && on < all) {
+            const ImVec2 a = ImGui::GetItemRectMin();
+            const float box = ImGui::GetFrameHeight();
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(a.x + box * 0.25f, a.y + box * 0.45f),
+                                                      ImVec2(a.x + box * 0.75f, a.y + box * 0.55f),
+                                                      ImGui::GetColorU32(ImGuiCol_CheckMark));
+        }
+        ImGui::SameLine();
+    };
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##tree", ImVec2(0, -bottom), ImGuiChildFlags_Borders);
+    for (const auto& [tab, tab_name] : {std::pair{SettingsTab::Print, T::Print},
+                                        {SettingsTab::Material, T::Material},
+                                        {SettingsTab::Printer, T::Printer}}) {
+        ImGui::PushID(int(tab));
+        if (!filter.empty())
+            ImGui::SetNextItemOpen(true);
+        if (ImGui::TreeNodeEx(tr(tab_name), ImGuiTreeNodeFlags_DefaultOpen)) {
+            for (const SectionLayout& section : settings_layout(tab)) {
+                std::vector<SettingEntry> in_section;
+                for (const SubsectionLayout& sub : section.subsections)
+                    for (const SettingEntry& e : sub.settings)
+                        if (matches(e.key))
+                            in_section.push_back(e);
+                if (in_section.empty())
+                    continue;
+                ImGui::PushID(section.id.data(), section.id.data() + section.id.size());
+                group_box("##section", in_section);
+                if (!filter.empty())
+                    ImGui::SetNextItemOpen(true);
+                if (ImGui::TreeNode(tr(section.title))) {
+                    for (const SubsectionLayout& sub : section.subsections) {
+                        std::vector<SettingEntry> in_card;
+                        for (const SettingEntry& e : sub.settings)
+                            if (matches(e.key))
+                                in_card.push_back(e);
+                        if (in_card.empty())
+                            continue;
+                        ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
+                        group_box("##card", in_card);
+                        if (!filter.empty())
+                            ImGui::SetNextItemOpen(true);
+                        if (ImGui::TreeNode(tr(sub.title))) {
+                            for (const SettingEntry& e : in_card) {
+                                bool value = custom_shows(draft, e.key);
+                                const std::string label = key_label(e.key) + "##" + std::string(e.key);
+                                if (ImGui::Checkbox(label.c_str(), &value))
+                                    custom_set(draft, {e}, value);
+                                ImGui::SameLine();
+                                ImGui::TextDisabled("%s", tr(e.level == SettingLevel::Basic    ? T::LevelBasic
+                                                             : e.level == SettingLevel::Normal ? T::LevelNormal
+                                                                                               : T::LevelAdvanced));
+                            }
+                            ImGui::TreePop();
+                        }
+                        ImGui::PopID();
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    const float w = 120.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2.0f * w - ImGui::GetStyle().ItemSpacing.x -
+                         ImGui::GetStyle().WindowPadding.x);
+    if (ImGui::Button(tr(T::Cancel), ImVec2(w, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Accept), ImVec2(w, 0))) {
+        custom_view_ = draft;
+        view_level_ = ViewLevel::Custom;
+        show_all_cards_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
 }
 
 bool App::card_shown(const SubsectionLayout& sub) const {
@@ -2638,10 +3072,10 @@ bool App::card_shown(const SubsectionLayout& sub) const {
                        [&](const SettingEntry& e) { return setting_shown(e.key, sub.id); });
 }
 
-// A card of the panel: its title, «N changes» in violet, and, folded, the
-// line that sums it up; a click on the title folds or opens it. Its
-// background is as tall as the card was in the last frame.
-bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary) {
+// A card of the panel: its title, «N changes» in violet, its menu (Reset,
+// rule 8) and, folded, the line that sums it up; a click on the title folds
+// or opens it. Its background is as tall as the card was in the last frame.
+bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset) {
     const std::string id(sub.id);
     const auto known = card_open_.find(id);
     bool open = known != card_open_.end() ? known->second : first;
@@ -2656,6 +3090,7 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
                       7.0f * scale_);
     ImGui::PushID(id.c_str());
     ImGui::SetCursorScreenPos(ImVec2(start.x, start.y));
+    ImGui::SetNextItemAllowOverlap();
     if (ImGui::InvisibleButton("##head", ImVec2(width, header + 2.0f * pad * 0.85f))) {
         open = !open;
         card_open_[id] = open;
@@ -2674,10 +3109,27 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
                               hovered ? violet : dim);
     const float text_x = start.x + pad + 2.0f * a + 8.0f * scale_;
     dl->AddText(ImVec2(text_x, start.y + pad), hovered ? violet : strong, tr(sub.title));
+    // The menu: three dots at the right of the title.
+    const float dots = line * 1.1f;
+    const ImVec2 menu_at(start.x + width - pad - dots, start.y + pad);
+    ImGui::SetCursorScreenPos(menu_at);
+    if (ImGui::InvisibleButton("##menu", ImVec2(dots, line)))
+        ImGui::OpenPopup("##card_menu");
+    const bool menu_hovered = ImGui::IsItemHovered();
+    for (int i = 0; i < 3; ++i)
+        dl->AddCircleFilled(ImVec2(menu_at.x + dots * (0.2f + 0.3f * float(i)), menu_at.y + line * 0.5f), 1.7f * scale_,
+                            menu_hovered ? violet : dim);
+    if (ImGui::BeginPopup("##card_menu")) {
+        if (ImGui::MenuItem(tr(T::ResetCard), nullptr, false, changes > 0))
+            reset = true;
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", tr(T::ResetCardTip));
+        ImGui::EndPopup();
+    }
     if (changes > 0) {
         const std::string count = changes == 1 ? std::string(tr(T::OneChangeCount)) : format(tr(T::ChangesCount), changes);
         const float w = ImGui::CalcTextSize(count.c_str()).x;
-        dl->AddText(ImVec2(start.x + width - pad - w, start.y + pad), violet, count.c_str());
+        dl->AddText(ImVec2(menu_at.x - 6.0f * scale_ - w, start.y + pad), violet, count.c_str());
     }
     if (!open) {
         // The summary, cut to the card's width.
@@ -2726,7 +3178,11 @@ void App::settings_panel() {
     // The tabs, and the level on their right.
     {
         const float gap = ImGui::GetStyle().ItemSpacing.x;
-        const float level_width = 118.0f * scale_;
+        // The level's chip, as wide as its longest name.
+        float level_width = 0.0f;
+        for (const T name : {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom})
+            level_width = std::max(level_width, ImGui::CalcTextSize((std::string("    ") + tr(name)).c_str()).x);
+        level_width += ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().FramePadding.x;
         const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
         const std::array<std::pair<SettingsTab, T>, 3> tabs = {
             {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Printer}}};
@@ -2741,10 +3197,11 @@ void App::settings_panel() {
             ImGui::SameLine(0, gap);
         }
         // The level: a dot of its colour and its name.
-        constexpr std::array<std::tuple<ViewLevel, T, T, std::uint32_t>, 3> levels = {
+        constexpr std::array<std::tuple<ViewLevel, T, T, std::uint32_t>, 4> levels = {
             {{ViewLevel::Basic, T::LevelBasic, T::LevelBasicTip, 0x3FBF7Fu},
              {ViewLevel::Normal, T::LevelNormal, T::LevelNormalTip, 0xE8B83Du},
-             {ViewLevel::Advanced, T::LevelAdvanced, T::LevelAdvancedTip, 0xE5484Du}}};
+             {ViewLevel::Advanced, T::LevelAdvanced, T::LevelAdvancedTip, 0xE5484Du},
+             {ViewLevel::Custom, T::LevelCustom, T::LevelCustomTip, 0x9B6BFFu}}};
         std::uint32_t dot = 0xE8B83D;
         const char* name = tr(T::LevelNormal);
         for (const auto& [level, title, tip, colour] : levels)
@@ -2753,17 +3210,23 @@ void App::settings_panel() {
         ImGui::SetNextItemWidth(level_width);
         const std::string preview = std::string("    ") + name;
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        if (ImGui::BeginCombo("##level", preview.c_str())) {
+        if (ImGui::BeginCombo("##level", preview.c_str(), ImGuiComboFlags_HeightLarge)) {
             for (const auto& [level, title, tip, colour] : levels) {
                 const ImVec2 row = ImGui::GetCursorScreenPos();
                 const std::string item = std::string("    ") + tr(title) + "##" + std::to_string(int(level));
                 if (ImGui::Selectable(item.c_str(), level == view_level_))
-                    view_level_ = level, show_all_cards_.clear();
+                    choose_level(level);
                 if (ImGui::IsItemHovered())
                     ImGui::SetTooltip("%s", tr(tip));
                 ImGui::GetWindowDrawList()->AddCircleFilled(
                     ImVec2(row.x + 6.0f * scale_, row.y + ImGui::GetTextLineHeight() * 0.5f), 4.0f * scale_,
                     ImGui::GetColorU32(rgb(colour)));
+            }
+            ImGui::Separator();
+            if (ImGui::Selectable(tr(T::ChooseSettings))) {
+                choose_level(ViewLevel::Custom);
+                choose_draft_ = custom_view_;
+                choose_open_ = true;
             }
             ImGui::EndCombo();
         }
@@ -2773,20 +3236,41 @@ void App::settings_panel() {
             ImVec2(at.x + ImGui::GetStyle().FramePadding.x + 4.0f * scale_, at.y + ImGui::GetFrameHeight() * 0.5f),
             4.0f * scale_, ImGui::GetColorU32(rgb(dot)));
     }
-    // Ctrl+Alt+1, 2 and 3 choose the level (rule 14).
+    // Ctrl+Alt+1 to 4 choose the level (rule 14).
     if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyAlt) {
         if (ImGui::IsKeyPressed(ImGuiKey_1))
-            view_level_ = ViewLevel::Basic, show_all_cards_.clear();
+            choose_level(ViewLevel::Basic);
         if (ImGui::IsKeyPressed(ImGuiKey_2))
-            view_level_ = ViewLevel::Normal, show_all_cards_.clear();
+            choose_level(ViewLevel::Normal);
         if (ImGui::IsKeyPressed(ImGuiKey_3))
-            view_level_ = ViewLevel::Advanced, show_all_cards_.clear();
+            choose_level(ViewLevel::Advanced);
+        if (ImGui::IsKeyPressed(ImGuiKey_4))
+            choose_level(ViewLevel::Custom);
     }
     const ProfileKind kind = panel_tab_ == SettingsTab::Print      ? ProfileKind::Print
                              : panel_tab_ == SettingsTab::Material ? ProfileKind::Filament
                                                                    : ProfileKind::Printer;
     profile_row(kind);
+    // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
+    if (ImGui::SmallButton(tr(single_column_ ? T::SeeBySection : T::SeeAllTogether)))
+        single_column_ = !single_column_;
+    if (view_level_ == ViewLevel::Custom) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::ChooseSettings))) {
+            choose_draft_ = custom_view_;
+            choose_open_ = true;
+        }
+    }
     ImGui::Spacing();
+
+    // The setting the search went to stays lit for 2 s.
+    if (!highlight_key_.empty() && ImGui::GetTime() > highlight_until_)
+        highlight_key_.clear();
+    g_highlight_key = highlight_key_;
+    g_highlight_colour = ImGui::GetColorU32(rgb(theme_.accent, 0.35f));
+    g_scroll_highlight = scroll_to_highlight_;
+    scroll_to_highlight_ = false;
+    g_custom_rows = view_level_ == ViewLevel::Custom;
 
     const std::vector<SectionLayout>& layout = settings_layout(panel_tab_);
     std::string& chosen = panel_section_[std::size_t(panel_tab_)];
@@ -2803,59 +3287,68 @@ void App::settings_panel() {
     const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     const float column = 70.0f * scale_;
     // The column of sections: an icon and its name, the chosen one in violet;
-    // a dot where something differs from the profile.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
-    for (const SectionLayout* section : sections) {
-        const bool selected = section->id == chosen;
-        ImGui::PushID(section->id.data(), section->id.data() + section->id.size());
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
-        const float tall = icon_size + small + 16.0f * scale_;
-        if (ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected) {
-            chosen = std::string(section->id);
-            show_all_cards_.clear();
+    // a dot where something differs from the profile. All together, none.
+    if (!single_column_) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+        for (const SectionLayout* section : sections) {
+            const bool selected = section->id == chosen;
+            ImGui::PushID(section->id.data(), section->id.data() + section->id.size());
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
+            const float tall = icon_size + small + 16.0f * scale_;
+            if (ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected) {
+                chosen = std::string(section->id);
+                show_all_cards_.clear();
+                revealed_keys_.clear();
+            }
+            const bool hovered = ImGui::IsItemHovered();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            if (selected || hovered)
+                dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
+                                  ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
+                                  7.0f * scale_);
+            const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
+            const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
+            dl->AddImage(icon(std::string(section->icon.substr(0, section->icon.size() - 4)).c_str()),
+                         ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
+                         ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
+            const char* name = tr(section->title);
+            const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
+            dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
+            const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
+                return std::any_of(sub.settings.begin(), sub.settings.end(),
+                                   [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
+            });
+            if (marked)
+                dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
+                                    ImGui::GetColorU32(rgb(theme_.accent_hover)));
+            if (hovered) {
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(name);
+                for (const SubsectionLayout& sub : section->subsections)
+                    if (card_shown(sub))
+                        ImGui::BulletText("%s", tr(sub.title));
+                ImGui::EndTooltip();
+            }
+            ImGui::PopID();
         }
-        const bool hovered = ImGui::IsItemHovered();
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        if (selected || hovered)
-            dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
-                              ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
-                              7.0f * scale_);
-        const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
-        const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
-        dl->AddImage(icon(std::string(section->icon.substr(0, section->icon.size() - 4)).c_str()),
-                     ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
-                     ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
-        const char* name = tr(section->title);
-        const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
-        dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
-        const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
-            return std::any_of(sub.settings.begin(), sub.settings.end(),
-                               [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
-        });
-        if (marked)
-            dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
-                                ImGui::GetColorU32(rgb(theme_.accent_hover)));
-        if (hovered) {
-            ImGui::BeginTooltip();
-            ImGui::TextUnformatted(name);
-            for (const SubsectionLayout& sub : section->subsections)
-                if (card_shown(sub))
-                    ImGui::BulletText("%s", tr(sub.title));
-            ImGui::EndTooltip();
-        }
-        ImGui::PopID();
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::SameLine(0, 4.0f * scale_);
     }
-    ImGui::EndChild();
-    ImGui::PopStyleVar();
-    ImGui::SameLine(0, 4.0f * scale_);
 
-    // The chosen section's cards.
+    // The chosen section's cards, or every section's one below the other.
     ImGui::BeginChild("##cards", ImVec2(0, -footer));
     for (const SectionLayout* section : sections) {
-        if (section->id != chosen)
+        if (!single_column_ && section->id != chosen)
             continue;
+        if (single_column_) {
+            ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
+            ImGui::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
+            ImGui::PopFont();
+            ImGui::Spacing();
+        }
         bool first = true;
         for (const SubsectionLayout& sub : section->subsections) {
             if (!card_shown(sub))
@@ -2864,22 +3357,58 @@ void App::settings_panel() {
                 return changed_keys_.contains(std::string(e.key));
             }));
             const ImVec2 start = ImGui::GetCursorScreenPos();
-            if (settings_card(sub, first, changes, subsection_summary(sub.id, settings_))) {
+            bool reset = false;
+            const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
+            if (reset) {
+                // Back to the saved profile, this card's settings only (rule 8).
+                std::vector<std::string> keys;
+                for (const SettingEntry& e : sub.settings)
+                    keys.emplace_back(e.key);
+                try {
+                    settings_ = with_keys(settings_, saved_settings(), keys);
+                    changed = true;
+                    bed |= sub.id == "bed_volume";
+                } catch (const std::exception& e) {
+                    fail(T::CannotOpen, e.what());
+                }
+            }
+            if (open) {
                 ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
                 changed |= card_rows(sub.id, bed);
-                // Basic tells what it hides (rule 11).
-                int hidden = 0;
-                for (const SettingEntry& e : sub.settings)
-                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
-                if (hidden > 0) {
-                    ImGui::Spacing();
-                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
-                                                                                        : T::MoreSettingsAdvanced),
-                                                     hidden)
-                                                  .c_str());
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(tr(T::ShowAll)))
-                        show_all_cards_.insert(std::string(sub.id));
+                if (view_level_ == ViewLevel::Custom) {
+                    // Settings of this card Custom leaves out, to add back (rule 16).
+                    std::vector<std::string_view> hidden;
+                    for (const SettingEntry& e : sub.settings)
+                        if (setting_applies(e.key) && !setting_shown(e.key, sub.id))
+                            hidden.push_back(e.key);
+                    if (!hidden.empty()) {
+                        ImGui::Spacing();
+                        if (ImGui::SmallButton(tr(T::AddSetting)))
+                            ImGui::OpenPopup("##add_setting");
+                        if (ImGui::BeginPopup("##add_setting")) {
+                            for (const std::string_view key : hidden)
+                                if (ImGui::Selectable((key_label(key) + "##" + std::string(key)).c_str())) {
+                                    custom_view_.visible.insert(std::string(key));
+                                    custom_view_.known.insert(std::string(key));
+                                }
+                            ImGui::EndPopup();
+                        }
+                    }
+                } else {
+                    // Basic tells what it hides (rule 11).
+                    int hidden = 0;
+                    for (const SettingEntry& e : sub.settings)
+                        hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
+                    if (hidden > 0) {
+                        ImGui::Spacing();
+                        ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
+                                                                                            : T::MoreSettingsAdvanced),
+                                                         hidden)
+                                                      .c_str());
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton(tr(T::ShowAll)))
+                            show_all_cards_.insert(std::string(sub.id));
+                    }
                 }
                 ImGui::PopID();
             }
@@ -2889,8 +3418,17 @@ void App::settings_panel() {
             ImGui::Dummy(ImVec2(0, 0));
             first = false;
         }
+        if (single_column_)
+            ImGui::Spacing();
     }
     ImGui::EndChild();
+    // A setting the eye took out of Custom (rule 16).
+    if (!g_hide_key.empty()) {
+        custom_view_.visible.erase(g_hide_key);
+        custom_view_.known.insert(g_hide_key);
+        g_hide_key.clear();
+    }
+    g_custom_rows = false;
 
     // Settings files.
     ImGui::Separator();
@@ -2929,8 +3467,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (!setting_shown(key, id))
             return false;
         const std::optional<SettingPlace> place = setting_place(key);
-        if (place && !level_shows(view_level_, place->level) && !show_all_cards_.contains(std::string(id)))
-            g_row_tag = tr(place->level == SettingLevel::Normal ? T::LevelNormal : T::LevelAdvanced);
+        if (place && !view_shows(key) && !show_all_cards_.contains(std::string(id)))
+            g_row_tag = tr(place->level == SettingLevel::Basic    ? T::LevelBasic
+                           : place->level == SettingLevel::Normal ? T::LevelNormal
+                                                                  : T::LevelAdvanced);
+        g_row_key = key;
         return true;
     };
     if (!ImGui::BeginTable("##rows", 2, ImGuiTableFlags_SizingStretchProp,
@@ -5355,6 +5896,31 @@ void App::dialogs() {
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
+        case Purpose::ExportView: {
+            // The Custom view, or the level's as one (rule 17).
+            const CustomView view = view_level_ == ViewLevel::Custom ? custom_view_ : custom_view_from(view_level_);
+            std::ofstream out(chosen, std::ios::binary);
+            out << custom_view_json(view);
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::ViewExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ImportView: {
+            std::ifstream in(chosen, std::ios::binary);
+            std::ostringstream text;
+            text << in.rdbuf();
+            try {
+                custom_view_ = parse_custom_view(text.str());
+                choose_level(ViewLevel::Custom);
+                notify(format(tr(T::ViewImported), int(custom_view_.visible.size())));
+            } catch (const ViewError& e) {
+                fail(T::CannotOpen, e.what());
+            }
+            break;
+        }
         case Purpose::SaveProject: save_project_to(chosen); break;
         case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
@@ -5440,6 +6006,7 @@ void App::dialogs() {
     }
 
     catalog_dialog();
+    choose_settings_dialog();
 
     if (about_open_) {
         ImGui::OpenPopup("###about");
@@ -5514,6 +6081,8 @@ void App::layout() {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
+        search_focus_ = true;
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(false);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
