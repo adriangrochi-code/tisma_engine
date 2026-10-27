@@ -154,6 +154,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
           {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
+          {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}}},
           {"curved", T::SubCurved,
            {{"curved.mode", N},
             {"curved.pattern", N},
@@ -271,6 +272,33 @@ const std::vector<SectionLayout>& material_layout() {
             {"extrusion.ramming", A}}},
           {"mmu_times", T::SubMmuTimes,
            {{"extrusion.toolchange_delay", A}, {"extrusion.load_time", A}, {"extrusion.unload_time", A}}}}},
+        // Resin (resin.md): the resin's exposures, moves and corrections.
+        {"resin", T::SecResin, "section_flow.svg",
+         {{"resin_exposure", T::SubResinExposure,
+           {{"resin.exposure", N},
+            {"resin.bottom_exposure", N},
+            {"resin.bottom_layers", N},
+            {"resin.light_pwm", A},
+            {"resin.bottom_light_pwm", A}}},
+          {"resin_moves", T::SubResinMoves,
+           {{"resin.lift_distance", N},
+            {"resin.lift_speed", N},
+            {"resin.bottom_lift_distance", A},
+            {"resin.bottom_lift_speed", A},
+            {"resin.retract_speed", N},
+            {"resin.wait_before_exposure", N},
+            {"resin.wait_after_cure", A},
+            {"resin.wait_after_lift", A}}},
+          {"resin_corrections", T::SubResinCorrections,
+           {{"resin.elephant_foot", N},
+            {"resin.scale_x", A},
+            {"resin.scale_y", A},
+            {"resin.scale_z", A},
+            {"resin.absolute_correction", A},
+            {"resin.z_correction_layers", A},
+            {"resin.gamma", A},
+            {"resin.antialiasing", A}}},
+          {"resin_material", T::SubResinMaterial, {{"resin.density", N}, {"resin.profile_name", A}}}}},
         {"needs", T::SecNeeds, "section_needs.svg",
          {{"needs", T::SubNeeds, {{"extrusion.abrasive", N}, {"extrusion.needs_enclosure", N}}}}},
     };
@@ -293,6 +321,14 @@ const std::vector<SectionLayout>& printer_layout() {
             {"head.clearance_height", N},
             {"head.clearance_radius", N},
             {"head.profile", A}}},
+          {"resin_display", T::SubResinDisplay,
+           {{"machine.display_pixels_x", N},
+            {"machine.display_pixels_y", N},
+            {"machine.display_width", N},
+            {"machine.display_height", N},
+            {"machine.display_mirror_x", N},
+            {"machine.display_mirror_y", N},
+            {"resin.printer_name", A}}},
           {"stability", T::SubStability,
            {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
         {"nozzle", T::SecNozzle, "section_nozzle.svg",
@@ -666,6 +702,18 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumMm, number(s.curved_ramp_height).c_str());
     if (id == "head")
         return format(T::SumMm, number(s.head_clearance_height).c_str());
+    if (id == "resin_layers")
+        return format(T::SumMm, number(s.resin_layer_height, 3).c_str());
+    if (id == "resin_display")
+        return format(T::SumPixels, s.display_pixels_x, s.display_pixels_y);
+    if (id == "resin_exposure")
+        return format(T::SumResinExposure, number(s.resin_exposure).c_str(), number(s.resin_bottom_exposure).c_str());
+    if (id == "resin_moves")
+        return format(T::SumLift, number(s.resin_lift_distance).c_str(), number(s.resin_lift_speed).c_str());
+    if (id == "resin_corrections")
+        return format(T::SumMm, number(s.resin_elephant_foot).c_str());
+    if (id == "resin_material")
+        return format(T::SumResinDensity, number(s.resin_density).c_str());
     if (id == "stability")
         return s.review_nozzle_force > 0.0 ? format(T::SumNozzleForce, number(s.review_nozzle_force, 3).c_str())
                                            : tr(T::SumNotMeasured);

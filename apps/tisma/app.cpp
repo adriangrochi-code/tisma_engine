@@ -3455,6 +3455,45 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::HeadClearanceHeight, "head.clearance_height", s.head_clearance_height, 0.1, 1000.0, "%.1f mm", 0.1f);
         mm(T::HeadClearanceRadius, "head.clearance_radius", s.head_clearance_radius, 0.1, 1000.0, "%.1f mm", 0.1f);
         count(T::HeadProfile, "head.profile", s.head_profile.size());
+    } else if (id == "resin_display") {
+        // A resin printer's display (resin.md).
+        whole(T::DisplayPixelsX, "machine.display_pixels_x", s.display_pixels_x, 1, 32767);
+        whole(T::DisplayPixelsY, "machine.display_pixels_y", s.display_pixels_y, 1, 32767);
+        mm(T::DisplayWidth, "machine.display_width", s.display_width, 1.0, 1000.0, "%.2f mm", 0.01f);
+        mm(T::DisplayHeight, "machine.display_height", s.display_height, 1.0, 1000.0, "%.2f mm", 0.01f);
+        flag(T::DisplayMirrorX, "machine.display_mirror_x", s.display_mirror_x);
+        flag(T::DisplayMirrorY, "machine.display_mirror_y", s.display_mirror_y);
+    } else if (id == "resin_layers") {
+        mm(T::ResinLayerHeight, "resin.layer_height", s.resin_layer_height, 0.005, 0.5, "%.3f mm", 0.001f);
+    } else if (id == "resin_exposure") {
+        mm(T::ResinExposure, "resin.exposure", s.resin_exposure, 0.1, 600.0, "%.2f s", 0.01f);
+        mm(T::ResinBottomExposure, "resin.bottom_exposure", s.resin_bottom_exposure, 0.1, 600.0, "%.1f s", 0.1f);
+        whole(T::ResinBottomLayers, "resin.bottom_layers", s.resin_bottom_layers, 0, 1000);
+        whole(T::ResinLightPwm, "resin.light_pwm", s.resin_light_pwm, 0, 255);
+        whole(T::ResinBottomLightPwm, "resin.bottom_light_pwm", s.resin_bottom_light_pwm, 0, 255);
+    } else if (id == "resin_moves") {
+        mm(T::ResinLiftDistance, "resin.lift_distance", s.resin_lift_distance, 0.0, 100.0, "%.1f mm", 0.1f);
+        mm(T::ResinLiftSpeed, "resin.lift_speed", s.resin_lift_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinBottomLiftDistance, "resin.bottom_lift_distance", s.resin_bottom_lift_distance, 0.0, 100.0, "%.1f mm",
+           0.1f);
+        mm(T::ResinBottomLiftSpeed, "resin.bottom_lift_speed", s.resin_bottom_lift_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinRetractSpeed, "resin.retract_speed", s.resin_retract_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);
+        mm(T::ResinWaitBeforeExposure, "resin.wait_before_exposure", s.resin_wait_before_exposure, 0.0, 600.0, "%.1f s",
+           0.1f);
+        mm(T::ResinWaitAfterCure, "resin.wait_after_cure", s.resin_wait_after_cure, 0.0, 600.0, "%.1f s", 0.1f);
+        mm(T::ResinWaitAfterLift, "resin.wait_after_lift", s.resin_wait_after_lift, 0.0, 600.0, "%.1f s", 0.1f);
+    } else if (id == "resin_corrections") {
+        mm(T::ResinElephantFoot, "resin.elephant_foot", s.resin_elephant_foot, 0.0, 2.0, "%.2f mm", 0.01f);
+        mm(T::ResinScaleX, "resin.scale_x", s.resin_scale_x, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinScaleY, "resin.scale_y", s.resin_scale_y, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinScaleZ, "resin.scale_z", s.resin_scale_z, 0.5, 2.0, "%.4f", 0.0005f);
+        mm(T::ResinAbsoluteCorrection, "resin.absolute_correction", s.resin_absolute_correction, -1.0, 1.0, "%+.3f mm",
+           0.001f);
+        whole(T::ResinZCorrection, "resin.z_correction_layers", s.resin_z_correction_layers, 0, 100);
+        mm(T::ResinGamma, "resin.gamma", s.resin_gamma, 0.0, 5.0, "%.2f", 0.01f);
+        whole(T::ResinAntialiasing, "resin.antialiasing", s.resin_antialiasing, 1, 16);
+    } else if (id == "resin_material") {
+        mm(T::ResinDensity, "resin.density", s.resin_density, 0.01, 10.0, "%.2f g/ml", 0.01f);
     } else if (id == "stability") {
         mm(T::NozzleForce, "review.nozzle_force", s.review_nozzle_force, 0.0, 1000.0, "%.3f N", 0.001f);
         mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);
@@ -3596,6 +3635,20 @@ bool App::card_rows(std::string_view id, bool& bed) {
         ImGui::SetNextItemWidth(-9.0f * scale_);
         changed |= ImGui::InputText("##filename_format", &s.filename_format);
     }
+    // The names the GOO file's header carries (resin.md, rule 10), full
+    // width, at most 31 bytes.
+    for (const auto& [card, key, label, text] :
+         {std::tuple{"resin_display", "resin.printer_name", T::ResinPrinterName, &s.resin_printer_name},
+          std::tuple{"resin_material", "resin.profile_name", T::ResinProfileName, &s.resin_profile_name}})
+        if (id == card && shown(key)) {
+            ImGui::TextUnformatted(tr(label));
+            ImGui::SetNextItemWidth(-9.0f * scale_);
+            ImGui::PushID(key);
+            changed |= ImGui::InputText("##name", text);
+            ImGui::PopID();
+            if (text->size() > 31)
+                text->resize(31);
+        }
     // The templates below the table, full width (gcode_templates.md).
     if (id == "gcode_templates") {
         const std::pair<T, std::pair<const char*, std::string*>> texts[] = {

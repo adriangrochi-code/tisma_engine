@@ -405,7 +405,7 @@ Settings parse_checked(std::string_view text) {
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
-            group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
+            group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -872,6 +872,72 @@ Settings parse_checked(std::string_view text) {
             (n == "clearance_height" ? s.head_clearance_height : s.head_clearance_radius) = d;
         }
     });
+    // Resin printing (resin.md).
+    read_group(root, "resin",
+               {"layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
+                "scale_z", "lift_distance", "lift_speed", "bottom_lift_distance", "bottom_lift_speed", "retract_speed",
+                "wait_before_exposure", "wait_after_cure", "wait_after_lift", "light_pwm", "bottom_light_pwm",
+                "antialiasing", "density", "gamma", "z_correction_layers", "absolute_correction", "printer_name",
+                "profile_name"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "printer_name" || n == "profile_name") {
+            // Into a 32-byte field of the file, ended by a zero.
+            const json& v = g.at(n);
+            if (!v.is_string() || v.get<std::string>().size() > 31)
+                fail(k, "must be a text of at most 31 bytes");
+            (n == "printer_name" ? s.resin_printer_name : s.resin_profile_name) = v.get<std::string>();
+            return;
+        }
+        const double d = number(g, n, k);
+        auto in = [&](double lo, double hi, bool whole = false) {
+            if (!(d >= lo && d <= hi) || (whole && d != std::floor(d))) {
+                char range[96];
+                std::snprintf(range, sizeof range, whole ? "must be a whole number from %g to %g" : "must be from %g to %g",
+                              lo, hi);
+                fail(k, range);
+            }
+            return d;
+        };
+        auto above = [&](double hi, const char* unit) {
+            if (!(d > 0.0 && d <= hi)) {
+                char range[96];
+                std::snprintf(range, sizeof range, "must be above 0 and at most %g %s", hi, unit);
+                fail(k, range);
+            }
+            return d;
+        };
+        if (n == "layer_height")
+            s.resin_layer_height = in(0.005, 0.5);
+        else if (n == "exposure" || n == "bottom_exposure")
+            (n == "exposure" ? s.resin_exposure : s.resin_bottom_exposure) = above(600.0, "s");
+        else if (n == "bottom_layers")
+            s.resin_bottom_layers = int(in(0.0, 1000.0, true));
+        else if (n == "elephant_foot")
+            s.resin_elephant_foot = in(0.0, 2.0);
+        else if (n == "scale_x" || n == "scale_y" || n == "scale_z")
+            (n == "scale_x" ? s.resin_scale_x : n == "scale_y" ? s.resin_scale_y : s.resin_scale_z) = in(0.5, 2.0);
+        else if (n == "lift_distance" || n == "bottom_lift_distance")
+            (n == "lift_distance" ? s.resin_lift_distance : s.resin_bottom_lift_distance) = in(0.0, 100.0);
+        else if (n == "lift_speed" || n == "bottom_lift_speed" || n == "retract_speed")
+            (n == "lift_speed" ? s.resin_lift_speed : n == "bottom_lift_speed" ? s.resin_bottom_lift_speed : s.resin_retract_speed) =
+                above(100.0, "mm/s");
+        else if (n == "wait_before_exposure" || n == "wait_after_cure" || n == "wait_after_lift")
+            (n == "wait_before_exposure" ? s.resin_wait_before_exposure
+             : n == "wait_after_cure"    ? s.resin_wait_after_cure
+                                         : s.resin_wait_after_lift) = in(0.0, 600.0);
+        else if (n == "light_pwm" || n == "bottom_light_pwm")
+            (n == "light_pwm" ? s.resin_light_pwm : s.resin_bottom_light_pwm) = int(in(0.0, 255.0, true));
+        else if (n == "antialiasing")
+            s.resin_antialiasing = int(in(1.0, 16.0, true));
+        else if (n == "density")
+            s.resin_density = above(10.0, "g/ml");
+        else if (n == "gamma")
+            s.resin_gamma = in(0.0, 5.0);
+        else if (n == "z_correction_layers")
+            s.resin_z_correction_layers = int(in(0.0, 100.0, true));
+        else
+            s.resin_absolute_correction = in(-1.0, 1.0);
+    });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
             fail(k, "must be true or false");
@@ -1001,9 +1067,31 @@ Settings parse_checked(std::string_view text) {
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
-                "extruders", "extruder_offset", "single_extruder_mmu"},
+                "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
+                "display_width", "display_height", "display_mirror_x", "display_mirror_y"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   // A resin printer's display (resin.md).
+                   if (n == "display_mirror_x" || n == "display_mirror_y") {
+                       if (!v.is_boolean())
+                           fail(k, "must be true or false");
+                       (n == "display_mirror_x" ? s.display_mirror_x : s.display_mirror_y) = v.get<bool>();
+                       return;
+                   }
+                   if (n == "display_pixels_x" || n == "display_pixels_y") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 1.0 && d <= 32767.0) || d != std::floor(d))
+                           fail(k, "must be a whole number from 1 to 32767");
+                       (n == "display_pixels_x" ? s.display_pixels_x : s.display_pixels_y) = int(d);
+                       return;
+                   }
+                   if (n == "display_width" || n == "display_height") {
+                       const double d = number(g, n, k);
+                       if (!(d > 0.0 && d <= 1000.0))
+                           fail(k, "must be above 0 and at most 1000 mm");
+                       (n == "display_width" ? s.display_width : s.display_height) = d;
+                       return;
+                   }
                    // Several extruders (multi_extruder.md): as many as the
                    // colour channel paints, each nozzle's offset from the first.
                    if (n == "extruders") {
@@ -2192,6 +2280,37 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
+        {"machine.display_pixels_x", std::to_string(s.display_pixels_x)},
+        {"machine.display_pixels_y", std::to_string(s.display_pixels_y)},
+        {"machine.display_width", num(s.display_width)},
+        {"machine.display_height", num(s.display_height)},
+        {"machine.display_mirror_x", flag(s.display_mirror_x)},
+        {"machine.display_mirror_y", flag(s.display_mirror_y)},
+        {"resin.layer_height", num(s.resin_layer_height)},
+        {"resin.exposure", num(s.resin_exposure)},
+        {"resin.bottom_exposure", num(s.resin_bottom_exposure)},
+        {"resin.bottom_layers", std::to_string(s.resin_bottom_layers)},
+        {"resin.elephant_foot", num(s.resin_elephant_foot)},
+        {"resin.scale_x", num(s.resin_scale_x)},
+        {"resin.scale_y", num(s.resin_scale_y)},
+        {"resin.scale_z", num(s.resin_scale_z)},
+        {"resin.lift_distance", num(s.resin_lift_distance)},
+        {"resin.lift_speed", num(s.resin_lift_speed)},
+        {"resin.bottom_lift_distance", num(s.resin_bottom_lift_distance)},
+        {"resin.bottom_lift_speed", num(s.resin_bottom_lift_speed)},
+        {"resin.retract_speed", num(s.resin_retract_speed)},
+        {"resin.wait_before_exposure", num(s.resin_wait_before_exposure)},
+        {"resin.wait_after_cure", num(s.resin_wait_after_cure)},
+        {"resin.wait_after_lift", num(s.resin_wait_after_lift)},
+        {"resin.light_pwm", std::to_string(s.resin_light_pwm)},
+        {"resin.bottom_light_pwm", std::to_string(s.resin_bottom_light_pwm)},
+        {"resin.antialiasing", std::to_string(s.resin_antialiasing)},
+        {"resin.density", num(s.resin_density)},
+        {"resin.gamma", num(s.resin_gamma)},
+        {"resin.z_correction_layers", std::to_string(s.resin_z_correction_layers)},
+        {"resin.absolute_correction", num(s.resin_absolute_correction)},
+        {"resin.printer_name", text(s.resin_printer_name)},
+        {"resin.profile_name", text(s.resin_profile_name)},
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
         {"speed.walls", speed(s.wall_speed)},
@@ -2471,6 +2590,32 @@ std::string settings_json(const Settings& s) {
           {"flow_policy", s.curved_flow == CurvedFlow::Preserve ? "preserve" : s.curved_flow == CurvedFlow::Uniform ? "uniform" : "off"},
           {"uniform_flow", s.curved_uniform_flow},
           {"overhang_threshold", s.curved_overhang_threshold}}},
+        {"resin",
+         {{"layer_height", s.resin_layer_height},
+          {"exposure", s.resin_exposure},
+          {"bottom_exposure", s.resin_bottom_exposure},
+          {"bottom_layers", s.resin_bottom_layers},
+          {"elephant_foot", s.resin_elephant_foot},
+          {"scale_x", s.resin_scale_x},
+          {"scale_y", s.resin_scale_y},
+          {"scale_z", s.resin_scale_z},
+          {"lift_distance", s.resin_lift_distance},
+          {"lift_speed", s.resin_lift_speed},
+          {"bottom_lift_distance", s.resin_bottom_lift_distance},
+          {"bottom_lift_speed", s.resin_bottom_lift_speed},
+          {"retract_speed", s.resin_retract_speed},
+          {"wait_before_exposure", s.resin_wait_before_exposure},
+          {"wait_after_cure", s.resin_wait_after_cure},
+          {"wait_after_lift", s.resin_wait_after_lift},
+          {"light_pwm", s.resin_light_pwm},
+          {"bottom_light_pwm", s.resin_bottom_light_pwm},
+          {"antialiasing", s.resin_antialiasing},
+          {"density", s.resin_density},
+          {"gamma", s.resin_gamma},
+          {"z_correction_layers", s.resin_z_correction_layers},
+          {"absolute_correction", s.resin_absolute_correction},
+          {"printer_name", s.resin_printer_name},
+          {"profile_name", s.resin_profile_name}}},
         {"head",
          {{"free_angle_x", s.head_free_angle_x},
           {"free_angle_y", s.head_free_angle_y},
@@ -2562,6 +2707,12 @@ std::string settings_json(const Settings& s) {
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
+          {"display_pixels_x", s.display_pixels_x},
+          {"display_pixels_y", s.display_pixels_y},
+          {"display_width", s.display_width},
+          {"display_height", s.display_height},
+          {"display_mirror_x", s.display_mirror_x},
+          {"display_mirror_y", s.display_mirror_y},
           {"max_flow", s.machine_max_flow},
           {"max_nozzle_temp", s.max_nozzle_temp},
           {"max_bed_temp", s.max_bed_temp},

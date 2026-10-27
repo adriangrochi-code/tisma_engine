@@ -151,6 +151,14 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         return ProfileKind::Printer;
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;
+    // Resin (resin.md): the layer height is the print's, the printer's name
+    // the printer's, the rest (exposures, lifts, waits, how the resin shrinks
+    // and the corrections) the resin's.
+    if (group == "resin") {
+        if (key == "printer_name")
+            return ProfileKind::Printer;
+        return key == "layer_height" ? ProfileKind::Print : ProfileKind::Filament;
+    }
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
         group == "vase" || group == "placement" || group == "arcs" || group == "ironing" || group == "output" ||

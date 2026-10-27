@@ -222,6 +222,8 @@ add_library(tisma_core
   src/slice/wipe_tower.cpp
   src/slice/color_mix.cpp
   src/slice/curved.cpp
+  src/resin/goo.cpp
+  src/resin/resin.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
   src/support/tree.cpp

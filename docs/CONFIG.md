@@ -186,7 +186,10 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `silent_mode` | booleano | `false` | | La impresora tiene modo silencioso (ficha `gcode_extras.md`, regla 7): el G-code lleva una segunda estimación, `; estimated printing time (silent mode)` y la de la primera capa, con los límites de `silent`, y `M73 Q S` con `gcode.progress` |
 | `silent` | objeto | `{}` | | Los límites del modo silencioso, por nombre: cualquiera de `max_feed_x` … `max_feed_e`, `max_accel_x` … `max_accel_e`, `acceleration`, `travel_acceleration`, `retract_acceleration`, `jerk_x` … `jerk_e`, `junction_deviation`, `min_extrude_feed`, `min_travel_feed` y `corner_speed`, ≥ 0. El que falta es el normal. Solo cambian la estimación; los que se escriben son los normales |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
-| `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
+| `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba (en resina, 150 mm, los de la Elegoo Mars 5) |
+| `display_pixels_x`, `display_pixels_y` | entero | 4098, 2560 | 1 a 32767 | Resina (ficha `resin.md`): resolución de la pantalla. El píxel mide `display_width / display_pixels_x` (0,035 mm en la Mars 5), y en Y lo mismo con la altura |
+| `display_width`, `display_height` | número | 143.43, 89.6 | más de 0 a 1000 | Resina: tamaño del área que ilumina la pantalla, en mm. X e Y se miden desde su esquina; la pieza va centrada en ella salvo que `placement` diga otra cosa, y si no entra, `slice` termina con código 4 |
+| `display_mirror_x`, `display_mirror_y` | booleano | `true`, `false` | | Resina: espejar las imágenes; con `display_mirror_x` las columnas van al revés, con `display_mirror_y` las filas |
 | `extruders` | entero | 1 | 1 a 16 | Cantidad de extrusores (ficha `multi_extruder.md`). Cada objeto de la placa se imprime con el suyo (en la interfaz, en el objeto; por omisión el 1) y cada tipo de extrusión con el de `extruders`. Con más de uno: cada extrusor que se usa se calienta al empezar (`M104 S… T<n>` con `variables.temperature[n]`, esperado con `M109 S… T<n>` después del inicio), se corre `gcode.toolchange` con `previous_extruder` −1 y se elige el primero (`T<n>`); cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un cambio por extrusor (reglas 3 y 6, ME1). La cama de la primera capa es la `first_layer_bed_temperature` (o `bed_temperature`) del primer extrusor que imprime, y desde la segunda capa la `bed_temperature` del primero que imprime en ella, con `M140` (regla 4, ME3). Los objetos de cada extrusor se laminan aparte sobre las capas de la placa: cada uno lleva sus perímetros donde toca a otro; lo de un extrusor anterior queda de ese. Sin `layers.detail_height` |
 | `single_extruder_mmu` | booleano | `false` | | Un solo extrusor que cambia de filamento (MMU): cada cambio purga en la torre el volumen de `wipe_tower.purge_volumes` (ficha `multi_extruder.md`, regla 12); sin esto, con varias boquillas, la torre solo ceba |
 | `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5); al cambiar, la boquilla nueva se mueve primero sobre el mismo punto. Con `single_extruder_mmu` (una sola boquilla) no se usa |
@@ -497,6 +500,36 @@ curvas. Va en el perfil de impresora.
 | `clearance_height` | número | 3 | más de 0 a 1000 | Distancia vertical, en mm, de la punta de la boquilla a lo más bajo de la cabeza a su alrededor |
 | `clearance_radius` | número | 15 | más de 0 a 1000 | Distancia horizontal, en mm, de la boquilla a lo más lejano de esas partes bajas |
 | `profile` | lista o texto | `[]` | alturas más de 0, ángulos de 1 a 89 | El ángulo libre medido a varias alturas: `[[2, 45], [5, 30]]` o `"2:45;5:30"`. Lo ya impreso no puede subir más que cada altura dentro de la distancia que alcanza su ángulo |
+
+### `resin`
+
+De la ficha `docs/spec/features/resin.md`: impresión de resina con pantalla (MSLA). `slice` con una salida `.goo`
+lamina para resina y escribe el archivo GOO de Elegoo: cada capa es una imagen en grises de la pantalla
+(`machine.display_*`), con cada píxel según la parte de su área que cubre la sección (exacta, redondeada hacia
+arriba). Los valores por defecto son los de la Elegoo Mars 5 con una resina estándar genérica. La altura de capa va
+en el perfil de impresión, `printer_name` en el de impresora y lo demás en el de material.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `layer_height` | número | 0.05 | 0,005 a 0,5 | Altura de todas las capas, en mm. La capa `n` (desde 0) tiene su tope en `(n + 1) · altura` y se corta en su mitad |
+| `exposure`, `bottom_exposure` | número | 2.5, 30 | más de 0 a 600 | Exposición de las capas normales y de las de fondo, en s |
+| `bottom_layers` | entero | 5 | 0 a 1000 | Capas de fondo: usan `bottom_exposure`, la subida de fondo y `bottom_light_pwm`. Con 0, igual la primera es de fondo |
+| `elephant_foot` | número | 0.2 | 0 a 2 | Cuánto se achica la primera capa en XY, en mm. La capa `i` de las `N` de fondo se achica `elephant_foot · (1 − i / N)` |
+| `scale_x`, `scale_y`, `scale_z` | número | 1 | 0,5 a 2 | Corrección de escala de la resina: la pieza se escala antes de cortar, en X e Y desde el centro de su caja y en Z desde su base |
+| `lift_distance`, `lift_speed` | número | 5, 1.6667 | 0 a 100; más de 0 a 100 | Subida de la plataforma después de cada capa normal, en mm y mm/s. La bajada recorre la misma distancia |
+| `bottom_lift_distance`, `bottom_lift_speed` | número | 7, 1.3333 | 0 a 100; más de 0 a 100 | Lo mismo en las capas de fondo |
+| `retract_speed` | número | 2.5 | más de 0 a 100 | Velocidad de bajada, en mm/s |
+| `wait_before_exposure` | número | 2.5 | 0 a 600 | Espera con la plataforma abajo antes de exponer, en s |
+| `wait_after_cure` | número | 1 | 0 a 600 | Espera después de exponer, antes de subir, en s |
+| `wait_after_lift` | número | 0 | 0 a 600 | Espera arriba, antes de bajar, en s |
+| `light_pwm`, `bottom_light_pwm` | entero | 255 | 0 a 255 | Potencia de la luz de las capas normales y de las de fondo |
+| `antialiasing` | entero | 8 | 1 a 16 | Nivel de suavizado que se anota en el archivo; las imágenes siempre llevan el suavizado exacto |
+| `density` | número | 1 | más de 0 a 10 | Densidad de la resina en g/ml, para el peso |
+| `gamma` | número | 1 | 0 a 5 | Curva de los grises del borde: cada gris `g` pasa a `255 · (g / 255)^gamma`, redondeado y nunca a 0. 1 deja el suavizado como sale, más alto oscurece el borde; 0 lo quita: un píxel queda blanco si la sección cubre la mitad o más, si no negro |
+| `z_correction_layers` | entero | 0 | 0 a 100 | De cada sección se ilumina solo lo que tiene debajo las secciones de estas capas: lo que cuelga queda sin exponer en sus primeras capas, porque la luz de las de arriba lo cura igual |
+| `absolute_correction` | número | 0 | −1 a 1 | Agranda (+) o achica (−) cada sección en XY, en mm |
+| `printer_name` | texto | `"MARS 5"` | hasta 31 bytes | Modelo de la impresora que se anota en la cabecera del archivo |
+| `profile_name` | texto | `""` | hasta 31 bytes | Nombre del perfil de resina que se anota en la cabecera |
 
 ### `painting`
 

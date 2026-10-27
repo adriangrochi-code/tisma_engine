@@ -351,6 +351,37 @@ struct Settings {
     double head_free_angle_x = 0.0, head_free_angle_y = 0.0;
     double head_clearance_height = 3.0, head_clearance_radius = 15.0;
     std::vector<std::array<double, 2>> head_profile;
+    // An MSLA resin printer (docs/spec/features/resin.md): its display's
+    // pixels, the size of the area it lights (mm), and whether the images are
+    // mirrored. The defaults are an Elegoo Mars 5's.
+    int display_pixels_x = 4098, display_pixels_y = 2560;
+    double display_width = 143.43, display_height = 89.6;
+    bool display_mirror_x = true, display_mirror_y = false;
+    // Resin printing (resin.md): every layer resin_layer_height thick, the
+    // first resin_bottom_layers (at least one) exposed longer and lifted
+    // further; seconds, mm and mm/s. The part is scaled first, the bottom
+    // layers shrunk against the elephant's foot, every section grown by
+    // resin_absolute_correction, and what hangs left dark for its first
+    // resin_z_correction_layers layers. resin_gamma bends the greys of the
+    // edges (0: black and white). The defaults are a generic standard resin's
+    // on a Mars 5.
+    double resin_layer_height = 0.05;
+    double resin_exposure = 2.5, resin_bottom_exposure = 30.0;
+    int resin_bottom_layers = 5;
+    double resin_elephant_foot = 0.2;
+    double resin_scale_x = 1.0, resin_scale_y = 1.0, resin_scale_z = 1.0;
+    double resin_lift_distance = 5.0, resin_lift_speed = 1.6667;
+    double resin_bottom_lift_distance = 7.0, resin_bottom_lift_speed = 1.3333;
+    double resin_retract_speed = 2.5;
+    double resin_wait_before_exposure = 2.5, resin_wait_after_cure = 1.0, resin_wait_after_lift = 0.0;
+    int resin_light_pwm = 255, resin_bottom_light_pwm = 255;
+    int resin_antialiasing = 8;
+    double resin_density = 1.0; // g/ml
+    double resin_gamma = 1.0;
+    int resin_z_correction_layers = 0;
+    double resin_absolute_correction = 0.0;
+    // What the file's header names: the printer's model and the resin's profile.
+    std::string resin_printer_name = "MARS 5", resin_profile_name;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;

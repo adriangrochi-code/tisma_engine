@@ -24,7 +24,11 @@
 #include "slice/layers.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "resin/goo.hpp"
+#include "resin/resin.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <chrono>
 #include <exception>
@@ -42,7 +46,8 @@ namespace {
 
 constexpr std::string_view kUsage =
     "usage:\n"
-    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | folder> [--warnings <out.json>]\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
+    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
     "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
@@ -274,6 +279,57 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     return kExitOk;
 }
 
+// Whether the output is a resin printer's GOO file.
+bool goo_output(const std::string& path) {
+    std::string ext = std::filesystem::path(path).extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return ext == ".goo";
+}
+
+// Resin (resin.md): the part's images and the platform's moves in a GOO
+// file, the part centred on the display unless the settings place it.
+int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model, std::ostream& out, std::ostream& err) {
+    if (settings.bed.empty())
+        settings.bed = {{0.0, 0.0},
+                        {settings.display_width, 0.0},
+                        {settings.display_width, settings.display_height},
+                        {0.0, settings.display_height}};
+    std::vector<MeshObject> objects;
+    if (args.copies > 1)
+        model.mesh = place_copies(model.mesh, args.copies, settings, std::filesystem::path(args.model).filename().string(),
+                                  &objects);
+    else
+        place_on_bed(model.mesh, settings);
+    const auto start = std::chrono::steady_clock::now();
+    ResinPrint print;
+    try {
+        print = slice_resin(weld_exact(model.mesh), settings);
+    } catch (const ResinError& e) {
+        err << "error: " << e.what() << "\n";
+        return kExitModel;
+    }
+    out << "layers: " << print.layers.size() << "\n";
+    out << "volume_mm3: " << print.volume << "\n";
+    out << "weight_g: " << print.weight << "\n";
+    out << "print_seconds: " << std::llround(print.seconds) << "\n";
+    out << "slice_ms: " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()
+        << "\n";
+    if (!write_file(args.output, [&](std::ostream& f) { write_goo(f, print, settings, goo_time_now()); })) {
+        err << "error: cannot write '" << args.output << "'\n";
+        return kExitInput;
+    }
+    out << "wrote " << args.output << "\n";
+    out << "warnings: 0\n";
+    if (!args.warnings.empty()) {
+        if (!write_file(args.warnings, [&](std::ostream& report) { report << warnings_json({}); })) {
+            err << "error: cannot write '" << args.warnings << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << args.warnings << "\n";
+    }
+    return kExitOk;
+}
+
 int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err);
     if (!parsed) {
@@ -289,6 +345,14 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    if (goo_output(parsed->output)) {
+        ModelFile model;
+        double seconds = 0.0;
+        if (int rc = load_model(parsed->model, model, seconds, err); rc != kExitOk)
+            return rc;
+        out << "read " << model.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+        return slice_resin_file(*parsed, settings, model, out, err);
+    }
     // The templates' input_filename_base (gcode_templates.md, rule 7).
     settings.input_name = std::filesystem::path(parsed->model).stem().string();
     // The speeds come from the printer's profile; those the file does not give

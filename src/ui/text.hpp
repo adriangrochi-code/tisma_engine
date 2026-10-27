@@ -1007,6 +1007,48 @@
     X(HeadClearanceHeight, "Altura libre", "Clearance height") \
     X(HeadClearanceRadius, "Radio libre", "Clearance radius") \
     X(HeadProfile, "Perfil de la cabeza", "Head profile") \
+    X(SecResin, "Resina", "Resin") \
+    X(SubResinLayers, "Resina: capas", "Resin: layers") \
+    X(SubResinDisplay, "Pantalla de resina", "Resin display") \
+    X(SubResinExposure, "Exposición", "Exposure") \
+    X(SubResinMoves, "Subida y esperas", "Lift and waits") \
+    X(SubResinCorrections, "Correcciones de resina", "Resin corrections") \
+    X(SubResinMaterial, "Datos de la resina", "Resin data") \
+    X(ResinLayerHeight, "Altura de capa", "Layer height") \
+    X(DisplayPixelsX, "Píxeles en X", "Pixels in X") \
+    X(DisplayPixelsY, "Píxeles en Y", "Pixels in Y") \
+    X(DisplayWidth, "Ancho de la pantalla", "Display width") \
+    X(DisplayHeight, "Alto de la pantalla", "Display height") \
+    X(DisplayMirrorX, "Espejar en X", "Mirror in X") \
+    X(DisplayMirrorY, "Espejar en Y", "Mirror in Y") \
+    X(ResinPrinterName, "Modelo de la impresora en el archivo", "Printer model in the file") \
+    X(ResinProfileName, "Perfil de resina en el archivo", "Resin profile in the file") \
+    X(ResinExposure, "Exposición", "Exposure") \
+    X(ResinBottomExposure, "Exposición de fondo", "Bottom exposure") \
+    X(ResinBottomLayers, "Capas de fondo", "Bottom layers") \
+    X(ResinLightPwm, "Potencia de la luz", "Light power") \
+    X(ResinBottomLightPwm, "Potencia de la luz de fondo", "Bottom light power") \
+    X(ResinLiftDistance, "Subida", "Lift distance") \
+    X(ResinLiftSpeed, "Velocidad de subida", "Lift speed") \
+    X(ResinBottomLiftDistance, "Subida de fondo", "Bottom lift distance") \
+    X(ResinBottomLiftSpeed, "Velocidad de subida de fondo", "Bottom lift speed") \
+    X(ResinRetractSpeed, "Velocidad de bajada", "Retract speed") \
+    X(ResinWaitBeforeExposure, "Espera antes de exponer", "Wait before exposure") \
+    X(ResinWaitAfterCure, "Espera después de exponer", "Wait after curing") \
+    X(ResinWaitAfterLift, "Espera arriba", "Wait after lifting") \
+    X(ResinElephantFoot, "Pie de elefante", "Elephant foot") \
+    X(ResinScaleX, "Escala en X", "Scale in X") \
+    X(ResinScaleY, "Escala en Y", "Scale in Y") \
+    X(ResinScaleZ, "Escala en Z", "Scale in Z") \
+    X(ResinAbsoluteCorrection, "Corrección absoluta", "Absolute correction") \
+    X(ResinZCorrection, "Corrección de Z", "Z correction") \
+    X(ResinGamma, "Gamma del borde", "Edge gamma") \
+    X(ResinAntialiasing, "Suavizado en el archivo", "Anti-aliasing in the file") \
+    X(ResinDensity, "Densidad", "Density") \
+    X(SumResinExposure, "%s s · fondo %s s", "%s s · bottom %s s") \
+    X(SumPixels, "%d × %d px", "%d × %d px") \
+    X(SumLift, "%s mm a %s mm/s", "%s mm at %s mm/s") \
+    X(SumResinDensity, "%s g/ml", "%s g/ml") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \
