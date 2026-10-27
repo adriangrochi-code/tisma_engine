@@ -54,6 +54,7 @@ add_executable(tisma_tests
   test_scarf.cpp
   test_settings_layout.cpp
   test_settings_view.cpp
+  test_printer_card.cpp
   test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
@@ -242,6 +243,17 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_settings_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode)
+    # The printer's card with a catalog printer of several nozzles and beds
+    # (SP22), and the printer's page on its calibrations (SP28, SP29).
+    add_test(NAME ui_printer_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+              "--profile" "printer=Raise3D E3 0.4 mm" --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_card.png)
+    add_test(NAME ui_printer_page
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --section printer/calibration
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_page.png)
+    set_tests_properties(ui_printer_card ui_printer_page PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)
     set_tests_properties(ui_settings_custom_search PROPERTIES FIXTURES_SETUP ui_level_custom)
     set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")

@@ -37,6 +37,7 @@
 #include "ui/scene.hpp"
 #include "ui/settings_layout.hpp"
 #include "ui/settings_view.hpp"
+#include "ui/printer_card.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
@@ -56,7 +57,9 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -391,6 +394,16 @@ private:
     void go_to_setting(const std::string& key);
     // Choosing what Custom shows (rule 16).
     void choose_settings_dialog();
+    // A section in the column of sections, and a section's cards.
+    bool section_button(std::string_view id, const char* title, const char* icon_name, bool selected, bool marked,
+                        float column);
+    void section_cards(const SectionLayout& section, bool& changed, bool& bed);
+    // The printer's card on top of the panel, its nozzle change, and its page.
+    void printer_card();
+    void choose_nozzle(double diameter, const std::string& profile);
+    void printer_page();
+    void record_calibration(CalibrationKind kind);
+    void notify_undo(std::string text, std::function<void()> undo);
 
     AppOptions options_;
     GLFWwindow* window_ = nullptr;
@@ -427,6 +440,17 @@ private:
     bool choose_open_ = false;
     CustomView choose_draft_;
     std::string choose_query_;
+    // The printer's card and its page (rules 21 to 40): the page open and its
+    // section, the printer list's search, the size asked for «Other…», the
+    // bed chosen on printers with several, and each printer's calibrations
+    // applied (rule 38) and notes, kept in the preferences.
+    bool printer_page_ = false;
+    std::string printer_section_ = "machine";
+    std::string printer_query_;
+    double other_nozzle_ = 0.4;
+    std::string bed_type_;
+    std::map<std::string, std::map<std::string, CalibrationRecord>> calibration_records_;
+    std::map<std::string, std::string> printer_notes_;
     ImTextureID logo_ = 0;
     // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
     // panels and the 3D view drawn by it. The view goes first at shutdown.
@@ -542,6 +566,7 @@ private:
         std::string text;
         bool error = false;
         double until = 0.0;
+        std::function<void()> undo; // with it, the toast has an «Undo» button
     };
     std::vector<Toast> toasts_;
     bool error_open_ = false;
@@ -974,6 +999,594 @@ void eye_struck(ImDrawList* dl, ImVec2 at, float size, ImU32 colour) {
                 1.5f);
 }
 
+// The printer card's drawings (settings_panel.md, rules 34 to 36): the
+// engine's own, one ink on a soft background, in a square of `size` at `at`.
+void draw_back(ImDrawList* dl, ImVec2 at, float size, ImU32 back) {
+    dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), back, size * 0.18f);
+}
+
+void draw_printer(ImDrawList* dl, ImVec2 at, float size, PrinterKind kind, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    const float w = std::max(1.0f, size * 0.045f);
+    switch (kind) {
+    case PrinterKind::Resin:
+        // The lid over the vat, the plate hanging from its arm.
+        dl->AddRect(p(0.25f, 0.14f), p(0.75f, 0.62f), ink, size * 0.06f, w);
+        dl->AddLine(p(0.5f, 0.2f), p(0.5f, 0.42f), ink, w);
+        dl->AddRectFilled(p(0.38f, 0.42f), p(0.62f, 0.47f), ink);
+        dl->AddRectFilled(p(0.2f, 0.62f), p(0.8f, 0.84f), ink, size * 0.03f);
+        break;
+    case PrinterKind::Pellets:
+    case PrinterKind::Open:
+        // Two uprights, the gantry with its head, the bed.
+        dl->AddLine(p(0.2f, 0.16f), p(0.2f, 0.82f), ink, w);
+        dl->AddLine(p(0.8f, 0.16f), p(0.8f, 0.82f), ink, w);
+        dl->AddLine(p(0.2f, 0.36f), p(0.8f, 0.36f), ink, w);
+        dl->AddRectFilled(p(0.42f, 0.3f), p(0.58f, 0.46f), ink, size * 0.02f);
+        dl->AddTriangleFilled(p(0.46f, 0.46f), p(0.54f, 0.46f), p(0.5f, 0.52f), ink);
+        if (kind == PrinterKind::Pellets) // the hopper on the head
+            dl->AddQuadFilled(p(0.4f, 0.12f), p(0.6f, 0.12f), p(0.55f, 0.3f), p(0.45f, 0.3f), ink);
+        dl->AddRectFilled(p(0.14f, 0.7f), p(0.86f, 0.76f), ink, size * 0.02f);
+        break;
+    case PrinterKind::Enclosed:
+        // A box with its door, the head inside.
+        dl->AddRect(p(0.16f, 0.14f), p(0.84f, 0.86f), ink, size * 0.06f, w);
+        dl->AddRect(p(0.24f, 0.26f), p(0.76f, 0.76f), ink, size * 0.04f, w * 0.7f);
+        dl->AddRectFilled(p(0.43f, 0.34f), p(0.57f, 0.46f), ink, size * 0.02f);
+        dl->AddRectFilled(p(0.3f, 0.64f), p(0.7f, 0.69f), ink);
+        break;
+    case PrinterKind::Delta:
+        // Three towers, the arms down to the effector, a round bed.
+        for (const float x : {0.2f, 0.5f, 0.8f})
+            dl->AddLine(p(x, 0.12f), p(x, 0.78f), ink, w);
+        dl->AddLine(p(0.2f, 0.3f), p(0.47f, 0.52f), ink, w * 0.8f);
+        dl->AddLine(p(0.8f, 0.3f), p(0.53f, 0.52f), ink, w * 0.8f);
+        dl->AddCircleFilled(p(0.5f, 0.54f), size * 0.05f, ink);
+        dl->AddEllipseFilled(p(0.5f, 0.78f), ImVec2(size * 0.32f, size * 0.07f), ink);
+        break;
+    case PrinterKind::Belt:
+        // The belt on its two rollers, the gantry leaning over it.
+        dl->AddRect(p(0.1f, 0.66f), p(0.9f, 0.8f), ink, size * 0.07f, w);
+        dl->AddCircleFilled(p(0.17f, 0.73f), size * 0.035f, ink);
+        dl->AddCircleFilled(p(0.83f, 0.73f), size * 0.035f, ink);
+        dl->AddLine(p(0.3f, 0.66f), p(0.62f, 0.18f), ink, w);
+        dl->AddRectFilled(p(0.42f, 0.36f), p(0.56f, 0.48f), ink, size * 0.02f);
+        break;
+    }
+}
+
+void draw_bed(ImDrawList* dl, ImVec2 at, float size, BedFamily family, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    const float w = std::max(1.0f, size * 0.045f);
+    // The plate seen from a little above.
+    dl->AddQuad(p(0.22f, 0.3f), p(0.86f, 0.3f), p(0.78f, 0.74f), p(0.14f, 0.74f), ink, w);
+    switch (family) {
+    case BedFamily::Textured:
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 3; ++j)
+                dl->AddCircleFilled(p(0.3f + 0.13f * float(i) - 0.03f * float(j), 0.4f + 0.12f * float(j)),
+                                    size * 0.022f, ink);
+        break;
+    case BedFamily::Smooth:
+        dl->AddLine(p(0.32f, 0.62f), p(0.5f, 0.4f), ink, w * 0.6f);
+        break;
+    case BedFamily::Glass:
+        dl->AddLine(p(0.3f, 0.66f), p(0.48f, 0.36f), ink, w);
+        dl->AddLine(p(0.42f, 0.66f), p(0.6f, 0.36f), ink, w * 0.6f);
+        break;
+    case BedFamily::Cool:
+        for (int i = 0; i < 3; ++i) {
+            const float a = float(i) * 3.14159265f / 3.0f;
+            const float dx = 0.13f * std::cos(a), dy = 0.13f * std::sin(a);
+            dl->AddLine(p(0.5f - dx, 0.52f - dy), p(0.5f + dx, 0.52f + dy), ink, w);
+        }
+        break;
+    case BedFamily::Engineering:
+        dl->AddTriangleFilled(p(0.5f, 0.36f), p(0.6f, 0.64f), p(0.4f, 0.64f), ink);
+        dl->AddCircleFilled(p(0.5f, 0.6f), size * 0.08f, ink);
+        break;
+    case BedFamily::Other:
+        break;
+    }
+}
+
+void draw_nozzle(ImDrawList* dl, ImVec2 at, float size, const NozzleLook& look, ImU32 ink, ImU32 back) {
+    draw_back(dl, at, size, back);
+    const auto p = [&](float x, float y) { return ImVec2(at.x + x * size, at.y + y * size); };
+    // The body (longer for high flow), the hex, and the cone whose tip grows
+    // with the diameter.
+    const float bottom = look.high_flow ? 0.66f : 0.56f;
+    dl->AddRectFilled(p(0.32f, 0.14f), p(0.68f, 0.3f), ink, size * 0.02f);
+    dl->AddRectFilled(p(0.4f, 0.3f), p(0.6f, bottom), ink);
+    const float tip = 0.03f + 0.09f * float(look.size);
+    dl->AddQuadFilled(p(0.36f, bottom), p(0.64f, bottom), p(0.5f + tip, 0.84f), p(0.5f - tip, 0.84f), ink);
+    if (look.hardened) // stripes across the body, in the background's colour
+        for (int i = 0; i < 4; ++i) {
+            const float y = 0.33f + 0.07f * float(i);
+            dl->AddLine(p(0.4f, y + 0.05f), p(0.6f, y), back, std::max(1.0f, size * 0.035f));
+        }
+}
+
+// A gear, for the printer's settings.
+void draw_gear(ImDrawList* dl, ImVec2 c, float r, ImU32 ink) {
+    for (int i = 0; i < 8; ++i) {
+        const float a = float(i) * 3.14159265f / 4.0f;
+        dl->AddLine(ImVec2(c.x + std::cos(a) * r * 0.55f, c.y + std::sin(a) * r * 0.55f),
+                    ImVec2(c.x + std::cos(a) * r, c.y + std::sin(a) * r), ink, r * 0.32f);
+    }
+    dl->AddCircleFilled(c, r * 0.7f, ink);
+}
+
+// A calibration's name, as its card in Calibrate shows it.
+const char* calibration_title(CalibrationKind kind) {
+    switch (kind) {
+    case CalibrationKind::Dimensions: return tr(T::CalDimensions);
+    case CalibrationKind::Temperature: return tr(T::CalTemperature);
+    case CalibrationKind::Retraction: return tr(T::CalRetraction);
+    case CalibrationKind::Flow: return tr(T::CalFlow);
+    case CalibrationKind::Speed: return tr(T::CalSpeed);
+    case CalibrationKind::RetractionSpeed: return tr(T::CalRetractionSpeed);
+    case CalibrationKind::PressureAdvance: return tr(T::CalPressureAdvance);
+    case CalibrationKind::FirstLayer: return tr(T::CalFirstLayer);
+    case CalibrationKind::Fit: return tr(T::CalFit);
+    case CalibrationKind::MaxFlow: return tr(T::CalMaxFlow);
+    case CalibrationKind::Acceleration: return tr(T::CalAcceleration);
+    case CalibrationKind::ElephantFoot: return tr(T::CalElephantFoot);
+    case CalibrationKind::ResinExposure: return tr(T::CalResinExposure);
+    case CalibrationKind::ResinMeasure: return tr(T::CalResinMeasure);
+    }
+    return "";
+}
+
+// A nozzle's name: "0,4 mm" and, when known, "· hardened steel".
+std::string nozzle_text(double diameter, bool hardened) {
+    char text[32];
+    std::snprintf(text, sizeof text, "%g mm", diameter);
+    std::string out = text;
+    if (language() == Language::Spanish)
+        std::replace(out.begin(), out.end(), '.', ',');
+    if (hardened)
+        out += std::string(" · ") + tr(T::HardenedSteel);
+    return out;
+}
+
+// The drawing of a printer in the catalog, by what it says of itself.
+PrinterKind catalog_kind(const PrinterModel& p) {
+    if (p.kinematics == "belt")
+        return PrinterKind::Belt;
+    if (p.circular || p.kinematics == "delta")
+        return PrinterKind::Delta;
+    return p.enclosed ? PrinterKind::Enclosed : PrinterKind::Open;
+}
+
+// The printer's card on top of the panel (settings_panel.md, rules 21 and 32
+// to 36): the printer with its drawing, the bed on printers with several, the
+// gear to its settings; below, the nozzle, changed with one click.
+void App::printer_card() {
+    const std::size_t k = std::size_t(ProfileKind::Printer);
+    const Profile* chosen = find_profile(ProfileKind::Printer, chosen_profile_[k]);
+    const Catalog& catalog = builtin_catalog();
+    const std::optional<CatalogMatch> match = chosen ? catalog_model_of(catalog, chosen->name) : std::nullopt;
+    const float em = ImGui::GetFontSize(), gap = ImGui::GetStyle().ItemSpacing.x;
+    const float pic = 3.0f * em, small = 2.0f * em, line = ImGui::GetFrameHeight();
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.accent_hover)), back = ImGui::GetColorU32(rgb(theme_.accent, 0.18f));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImGui::PushID("##printer_card");
+
+    // The printer.
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    draw_printer(dl, at, pic, printer_kind(settings_), ink, back);
+    ImGui::Dummy(ImVec2(pic, pic));
+    ImGui::SameLine(0, gap);
+    ImGui::BeginGroup();
+    static const std::vector<std::string> no_beds;
+    const std::vector<std::string>& beds = match ? match->model->bed_surfaces : no_beds;
+    const bool several_beds = beds.size() >= 2;
+    const float rest = ImGui::GetContentRegionAvail().x - line - gap;
+    std::string preview = chosen ? chosen->name : std::string(tr(T::NoProfile));
+    if (chosen && profile_modified_[k])
+        preview += " *";
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (pic - 2.0f * line - ImGui::GetStyle().ItemSpacing.y) * 0.5f);
+    ImGui::SetNextItemWidth(several_beds ? rest * 0.6f : rest);
+    const Profile* picked = nullptr;
+    const PrinterModel* from_catalog = nullptr;
+    if (ImGui::BeginCombo("##printer", preview.c_str(), ImGuiComboFlags_HeightLargest)) {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (ImGui::IsWindowAppearing())
+            ImGui::SetKeyboardFocusHere();
+        ImGui::InputTextWithHint("##find", tr(T::SearchPrinter), &printer_query_);
+        const std::string query = fold(printer_query_);
+        const auto wanted = [&](std::string_view name) { return query.empty() || fold(name).find(query) != std::string::npos; };
+        // A row of the list: the drawing (2 em) and the name.
+        const auto row = [&](const char* id, const std::string& name, PrinterKind kind, bool selected) {
+            const ImVec2 r = ImGui::GetCursorScreenPos();
+            const bool hit = ImGui::Selectable(id, selected, 0, ImVec2(0, small));
+            draw_printer(ImGui::GetWindowDrawList(), r, small, kind, ink, back);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                ImGui::GetColorU32(ImGuiCol_Text), name.c_str());
+            return hit;
+        };
+        // The person's printers first, then the engine's, then the catalog by brand.
+        if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), [&](const Profile& p) { return wanted(p.name); })) {
+            ImGui::SeparatorText(tr(T::MyPrinters));
+            for (const Profile& p : user_profiles_[k])
+                if (wanted(p.name) && row(("##u" + p.name).c_str(), p.name, printer_kind(p.settings), chosen == &p))
+                    picked = &p;
+        }
+        if (std::any_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(), [&](const Profile& p) { return wanted(p.name); })) {
+            ImGui::SeparatorText(tr(T::BuiltinProfiles));
+            for (const Profile& p : builtin_profiles_[k])
+                if (wanted(p.name) && row(("##b" + p.name).c_str(), p.name, printer_kind(p.settings), chosen == &p))
+                    picked = &p;
+        }
+        ImGui::SeparatorText(tr(T::FromCatalog));
+        for (std::size_t i = 0; i < catalog.printers.size();) {
+            const std::string& vendor = catalog.printers[i].vendor;
+            std::size_t j = i;
+            std::vector<const PrinterModel*> models;
+            for (; j < catalog.printers.size() && catalog.printers[j].vendor == vendor; ++j)
+                if (wanted(vendor + " " + catalog.printers[j].model))
+                    models.push_back(&catalog.printers[j]);
+            if (!models.empty()) {
+                if (!query.empty())
+                    ImGui::SetNextItemOpen(true);
+                if (ImGui::TreeNode(vendor.c_str())) {
+                    for (const PrinterModel* m : models)
+                        if (row(("##c" + vendor + m->model).c_str(), m->model, catalog_kind(*m), false))
+                            from_catalog = m;
+                    ImGui::TreePop();
+                }
+            }
+            i = j;
+        }
+        ImGui::Separator();
+        if (ImGui::Selectable(tr(T::AddPrinter)))
+            catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+        ImGui::EndCombo();
+    }
+    if (picked) {
+        choose_profile(ProfileKind::Printer, *picked);
+        bed_type_.clear();
+    }
+    if (from_catalog) {
+        // Its stock nozzle; the profile made before, if there is one.
+        const std::string name = printer_profile_name(*from_catalog, from_catalog->nozzles.front());
+        if (const Profile* p = find_profile(ProfileKind::Printer, name))
+            choose_profile(ProfileKind::Printer, *p);
+        else
+            add_catalog_profile(printer_profile(*from_catalog, from_catalog->nozzles.front()));
+        bed_type_.clear();
+    }
+    // The bed, on printers with several (rule 32): the maker's names.
+    if (several_beds) {
+        if (std::find(beds.begin(), beds.end(), bed_type_) == beds.end())
+            bed_type_ = beds.front();
+        ImGui::SameLine(0, gap);
+        const ImVec2 b = ImGui::GetCursorScreenPos();
+        draw_bed(dl, b, line, bed_family(bed_type_), ink, back);
+        ImGui::Dummy(ImVec2(line, line));
+        ImGui::SameLine(0, gap * 0.5f);
+        ImGui::SetNextItemWidth(rest * 0.4f - line - gap * 1.5f);
+        if (ImGui::BeginCombo("##bed", bed_type_.c_str())) {
+            for (const std::string& bed : beds) {
+                const ImVec2 r = ImGui::GetCursorScreenPos();
+                if (ImGui::Selectable(("##" + bed).c_str(), bed == bed_type_, 0, ImVec2(0, small)))
+                    bed_type_ = bed;
+                draw_bed(ImGui::GetWindowDrawList(), r, small, bed_family(bed), ink, back);
+                ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                    ImGui::GetColorU32(ImGuiCol_Text), bed.c_str());
+            }
+            ImGui::EndCombo();
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::BedType));
+    }
+    // The gear: the printer's settings (rule 37).
+    ImGui::SameLine(0, gap);
+    {
+        const ImVec2 g = ImGui::GetCursorScreenPos();
+        if (ImGui::InvisibleButton("##gear", ImVec2(line, line)))
+            printer_page_ = true;
+        const bool hovered = ImGui::IsItemHovered();
+        draw_gear(dl, ImVec2(g.x + line * 0.5f, g.y + line * 0.5f), line * 0.38f,
+                  ImGui::GetColorU32(rgb(hovered ? theme_.accent_hover : theme_.text_dim)));
+        dl->AddCircleFilled(ImVec2(g.x + line * 0.5f, g.y + line * 0.5f), line * 0.12f, ImGui::GetColorU32(rgb(theme_.panel)));
+        if (hovered)
+            ImGui::SetTooltip("%s", tr(T::PrinterSettingsTip));
+    }
+
+    // The nozzle (rules 21 to 23).
+    const std::vector<NozzleChoice> nozzles =
+        nozzle_choices(catalog, chosen ? chosen->name : std::string(), settings_.nozzle_diameter);
+    {
+        const ImVec2 n = ImGui::GetCursorScreenPos();
+        draw_nozzle(dl, n, line, nozzle_look(settings_.nozzle_diameter, settings_.hardened_nozzle), ink, back);
+        ImGui::Dummy(ImVec2(line, line));
+        ImGui::SameLine(0, gap * 0.5f);
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    bool other = false;
+    if (ImGui::BeginCombo("##nozzle", nozzle_text(settings_.nozzle_diameter, settings_.hardened_nozzle).c_str())) {
+        for (const NozzleChoice& c : nozzles) {
+            const ImVec2 r = ImGui::GetCursorScreenPos();
+            const bool now = std::abs(c.diameter - settings_.nozzle_diameter) < 1e-9;
+            if (ImGui::Selectable(("##n" + std::to_string(c.diameter)).c_str(), now, 0, ImVec2(0, small)) && !now)
+                choose_nozzle(c.diameter, c.profile);
+            draw_nozzle(ImGui::GetWindowDrawList(), r, small, nozzle_look(c.diameter, now && settings_.hardened_nozzle),
+                        ink, back);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(r.x + small + gap, r.y + (small - em) * 0.5f),
+                                                ImGui::GetColorU32(ImGuiCol_Text),
+                                                nozzle_text(c.diameter, now && settings_.hardened_nozzle).c_str());
+        }
+        // A printer not from the catalog: another size (rule 23).
+        if (nozzles.size() == 1 && nozzles.front().profile.empty() && ImGui::Selectable(tr(T::OtherNozzle)))
+            other = true;
+        ImGui::EndCombo();
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tr(T::Nozzle));
+    if (other) {
+        other_nozzle_ = settings_.nozzle_diameter;
+        ImGui::OpenPopup("##other_nozzle");
+    }
+    if (ImGui::BeginPopup("##other_nozzle")) {
+        ImGui::TextUnformatted(tr(T::OtherNozzleTitle));
+        ImGui::SetNextItemWidth(120.0f * scale_);
+        ImGui::InputDouble("mm", &other_nozzle_, 0.05, 0.1, "%.2f");
+        other_nozzle_ = std::clamp(other_nozzle_, 0.1, 3.0);
+        if (ImGui::Button(tr(T::OkButton))) {
+            choose_nozzle(other_nozzle_, {});
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::EndGroup();
+    ImGui::PopID();
+    ImGui::Spacing();
+}
+
+// One click to another nozzle (rule 22): the printer's profile for it (made
+// from the catalog when there is none yet), or, for a printer of its own,
+// the size alone, the profile marked changed (rule 23). A toast says so,
+// with Undo.
+void App::choose_nozzle(double diameter, const std::string& profile) {
+    const Settings before = settings_;
+    const std::array<std::string, 3> profiles = chosen_profile_;
+    if (!profile.empty()) {
+        if (const Profile* p = find_profile(ProfileKind::Printer, profile))
+            choose_profile(ProfileKind::Printer, *p);
+        else if (const std::optional<CatalogMatch> match = catalog_model_of(builtin_catalog(), profile))
+            add_catalog_profile(printer_profile(*match->model, diameter));
+    } else {
+        settings_.nozzle_diameter = diameter;
+        bed_changed();
+        settings_changed();
+    }
+    notify_undo(format(tr(T::NozzleChanged), nozzle_text(diameter, false).c_str()), [this, before, profiles] {
+        settings_ = before;
+        chosen_profile_ = profiles;
+        profiles_checked_.clear();
+        bed_changed();
+        settings_changed();
+    });
+}
+
+// A calibration's result applied: its day, the nozzle and the filament, for
+// the printer page (rule 38).
+void App::record_calibration(CalibrationKind kind) {
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    if (printer.empty())
+        return;
+    const std::time_t now = std::time(nullptr);
+    char date[16] = "";
+    if (const std::tm* t = std::localtime(&now))
+        std::strftime(date, sizeof date, "%Y-%m-%d", t);
+    calibration_records_[printer][calibration_kind_name(kind)] =
+        CalibrationRecord{date, settings_.nozzle_diameter, chosen_profile_[std::size_t(ProfileKind::Filament)]};
+}
+
+// The printer's own page (rules 37 to 40), the whole width: back to the
+// plate, its profile, and its sections: the machine, the nozzle, the limits,
+// the G-code, its calibrations, its connection and the person's notes.
+void App::printer_page() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - top - bottom));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##printer_page", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    bool changed = false, bed = false;
+    refresh_profiles();
+    if (ImGui::Button(tr(T::BackToPlate)) ||
+        (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsAnyItemActive() &&
+         !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)))
+        printer_page_ = false;
+    ImGui::SameLine();
+    ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+    ImGui::TextUnformatted(tr(T::PrinterSettingsTitle));
+    ImGui::PopFont();
+    {
+        const float w = std::min(ImGui::GetContentRegionAvail().x, 520.0f * scale_);
+        ImGui::BeginChild("##printer_profile", ImVec2(w, ImGui::GetFrameHeightWithSpacing()));
+        profile_row(ProfileKind::Printer);
+        ImGui::EndChild();
+    }
+    ImGui::Separator();
+
+    // The sections: the printer's settings, then its calibrations, its
+    // connection and the notes.
+    const std::vector<SectionLayout>& layout = settings_layout(SettingsTab::Printer);
+    std::vector<const SectionLayout*> sections;
+    for (const SectionLayout& section : layout)
+        if (std::any_of(section.subsections.begin(), section.subsections.end(),
+                        [&](const SubsectionLayout& sub) { return card_shown(sub); }))
+            sections.push_back(&section);
+    struct Extra {
+        const char* id;
+        T title;
+        const char* icon;
+    };
+    static constexpr Extra extras[] = {{"calibration", T::SecCalibration, "tisma_calibrate"},
+                                       {"connection", T::SecConnection, "tisma_printer"},
+                                       {"notes", T::SecNotes, "section_other"}};
+    const bool known = std::any_of(sections.begin(), sections.end(), [&](const SectionLayout* s) { return s->id == printer_section_; }) ||
+                       std::any_of(std::begin(extras), std::end(extras), [&](const Extra& e) { return printer_section_ == e.id; });
+    if (!known)
+        printer_section_ = sections.empty() ? "calibration" : std::string(sections.front()->id);
+    // The column as wide as its longest name.
+    float column = 84.0f * scale_;
+    {
+        const float small = ImGui::GetFontSize() * 0.78f;
+        const auto fit = [&](const char* name) {
+            column = std::max(column, ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name).x + 18.0f * scale_);
+        };
+        for (const SectionLayout* section : sections)
+            fit(tr(section->title));
+        for (const Extra& e : extras)
+            fit(tr(e.title));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::BeginChild("##printer_sections", ImVec2(column, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+    for (const SectionLayout* section : sections) {
+        const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
+            return std::any_of(sub.settings.begin(), sub.settings.end(),
+                               [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
+        });
+        const std::string icon_name(section->icon.substr(0, section->icon.size() - 4));
+        if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == printer_section_, marked, column))
+            printer_section_ = std::string(section->id), show_all_cards_.clear(), revealed_keys_.clear();
+    }
+    for (const Extra& e : extras)
+        if (section_button(e.id, tr(e.title), e.icon, printer_section_ == e.id, false, column))
+            printer_section_ = e.id;
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::SameLine(0, 8.0f * scale_);
+
+    ImGui::BeginChild("##printer_cards", ImVec2(std::min(ImGui::GetContentRegionAvail().x, 720.0f * scale_), 0));
+    g_custom_rows = view_level_ == ViewLevel::Custom;
+    for (const SectionLayout* section : sections)
+        if (section->id == printer_section_)
+            section_cards(*section, changed, bed);
+    g_custom_rows = false;
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    if (printer_section_ == "calibration") {
+        // Each calibration this printer takes: what it fixes, its value now,
+        // whether it was made and with what (rule 38).
+        const std::vector<CalibrationKind> kinds = printer_calibrations(settings_);
+        const auto records = calibration_records_.find(printer);
+        const auto record_of = [&](CalibrationKind kind) -> const CalibrationRecord* {
+            if (records == calibration_records_.end())
+                return nullptr;
+            const auto it = records->second.find(calibration_kind_name(kind));
+            return it == records->second.end() ? nullptr : &it->second;
+        };
+        int done = 0;
+        std::optional<CalibrationKind> next;
+        for (const CalibrationKind kind : kinds) {
+            if (calibration_state(record_of(kind), settings_.nozzle_diameter) == CalibrationState::Done)
+                ++done;
+            else if (!next)
+                next = kind;
+        }
+        ImGui::Text(tr(T::CalibratedCount), done, int(kinds.size()));
+        ImGui::SameLine();
+        if (next && ImGui::SmallButton(tr(T::CalibrateInOrder))) {
+            printer_page_ = false;
+            set_tab(Tab::Calibration);
+            create_calibration(*next, false);
+        }
+        ImGui::Spacing();
+        const std::map<std::string, std::string> values = [&] {
+            std::map<std::string, std::string> m;
+            for (auto& [key, value] : describe(settings_))
+                m[key] = std::move(value);
+            return m;
+        }();
+        if (ImGui::BeginTable("##calibrations", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+            for (const CalibrationKind kind : kinds) {
+                ImGui::PushID(int(kind));
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(calibration_title(kind));
+                ImGui::TableNextColumn();
+                if (const std::string_view key = calibration_key(kind); !key.empty()) {
+                    std::string value;
+                    if (key == "machine.variables.temperature") {
+                        const auto t = settings_.variables.find("temperature");
+                        value = t != settings_.variables.end() && !t->second.empty() ? t->second.front() + " °C" : "—";
+                    } else if (const auto v = values.find(std::string(key)); v != values.end()) {
+                        value = v->second == "null" ? "—" : v->second;
+                    }
+                    ImGui::TextDisabled("%s: %s", key_label(key).c_str(), value.c_str());
+                }
+                ImGui::TableNextColumn();
+                const CalibrationRecord* record = record_of(kind);
+                switch (calibration_state(record, settings_.nozzle_diameter)) {
+                case CalibrationState::Missing:
+                    ImGui::TextDisabled("%s", tr(T::NotCalibrated));
+                    break;
+                case CalibrationState::Done:
+                    ImGui::TextColored(rgb(0x3FBF7F), tr(T::CalibratedOn), record->date.c_str());
+                    break;
+                case CalibrationState::OtherNozzle:
+                    ImGui::TextColored(rgb(0xE8B83D), tr(T::CalibratedOtherNozzle),
+                                       nozzle_text(record->nozzle, false).c_str());
+                    break;
+                }
+                if (record && filament_calibration(kind) && !record->filament.empty()) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled(tr(T::CalibratedWith), record->filament.c_str());
+                }
+                ImGui::TableNextColumn();
+                if (ImGui::SmallButton(tr(T::CalibrateButton))) {
+                    printer_page_ = false;
+                    set_tab(Tab::Calibration);
+                    create_calibration(kind, false);
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+    } else if (printer_section_ == "connection") {
+        // The connection is the Printer tab's for now (rule 43 waits for the
+        // network connections).
+        const bool connected = printer_ && printer_->status().state != device::PrinterState::Disconnected &&
+                               printer_->status().state != device::PrinterState::Error;
+        ImGui::PushTextWrapPos(0.0f);
+        if (connected)
+            ImGui::Text(tr(T::ConnectionNow), device_port_ == "sim" ? tr(T::DeviceSimulated) : device_port_.c_str());
+        else
+            ImGui::TextDisabled("%s", tr(T::ConnectionNone));
+        ImGui::PopTextWrapPos();
+        if (ImGui::Button(tr(T::OpenInDevices))) {
+            printer_page_ = false;
+            set_tab(Tab::Device);
+        }
+    } else if (printer_section_ == "notes") {
+        std::string& notes = printer_notes_[printer];
+        ImGui::InputTextMultiline("##notes", &notes, ImVec2(-FLT_MIN, 18.0f * ImGui::GetTextLineHeight()));
+        if (notes.empty() && !ImGui::IsItemActive()) {
+            const ImVec2 at = ImGui::GetItemRectMin();
+            ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 8.0f * scale_, at.y + 6.0f * scale_),
+                                                ImGui::GetColorU32(ImGuiCol_TextDisabled), tr(T::NotesHint));
+        }
+    }
+    ImGui::EndChild();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    if (bed)
+        bed_changed();
+    if (changed)
+        settings_changed();
+}
+
+
 // Rows of the settings tables: a label (with a tooltip and, for a setting of
 // the engine, its info button) and a control.
 void label_cell(T label, const char* tip = nullptr) {
@@ -1298,6 +1911,9 @@ bool App::init(std::string& error) {
         const std::string tab = options_.section.substr(0, slash);
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
+        // The printer's settings are on its page (settings_panel.md, rule 37).
+        if (panel_tab_ == SettingsTab::Printer)
+            printer_page_ = true, printer_section_ = options_.section.substr(slash + 1), panel_tab_ = SettingsTab::Print;
     }
     if (!options_.search.empty()) {
         const std::vector<SettingHit> hits = search_settings(
@@ -1386,6 +2002,13 @@ bool App::init(std::string& error) {
         const std::size_t eq = choice.find('=');
         const auto kind = profile_kind_from_name(choice.substr(0, eq));
         const Profile* p = kind && eq != std::string::npos ? find_profile(*kind, choice.substr(eq + 1)) : nullptr;
+        // A printer of the catalog by its profile's name, for this run.
+        if (!p && kind == ProfileKind::Printer)
+            if (const std::optional<CatalogMatch> m = catalog_model_of(builtin_catalog(), choice.substr(eq + 1))) {
+                std::vector<Profile>& mine = user_profiles_[std::size_t(ProfileKind::Printer)];
+                mine.push_back(printer_profile(*m->model, m->nozzle));
+                p = &mine.back();
+            }
         if (!p) {
             error = "--profile " + choice + ": no such profile";
             return false;
@@ -1510,6 +2133,7 @@ void App::load_preferences() {
             if (view_level_ == ViewLevel::Custom && custom_view_.known.empty())
                 custom_view_ = custom_view_from(custom_view_.base);
             single_column_ = ui.value("single_column", false);
+            bed_type_ = ui.value("bed_type", std::string());
             if (ui.contains("section") && ui.at("section").is_array())
                 for (std::size_t t = 0; t < std::min<std::size_t>(3, ui.at("section").size()); ++t)
                     if (ui.at("section")[t].is_string())
@@ -1518,6 +2142,20 @@ void App::load_preferences() {
                 for (const auto& [card, open] : ui.at("cards").items())
                     if (open.is_boolean())
                         card_open_[card] = open.get<bool>();
+        }
+        // Each printer's calibrations applied and notes (settings_panel.md, rule 38).
+        if (j.contains("printers") && j.at("printers").is_object()) {
+            for (const auto& [printer, data] : j.at("printers").items()) {
+                if (!data.is_object())
+                    continue;
+                if (data.contains("notes") && data.at("notes").is_string())
+                    printer_notes_[printer] = data.at("notes").get<std::string>();
+                if (data.contains("calibrations") && data.at("calibrations").is_object())
+                    for (const auto& [kind, r] : data.at("calibrations").items())
+                        if (r.is_object() && calibration_kind_from_name(kind))
+                            calibration_records_[printer][kind] = CalibrationRecord{
+                                r.value("date", std::string()), r.value("nozzle", 0.0), r.value("filament", std::string())};
+            }
         }
         if (j.contains("profiles") && j.at("profiles").is_object())
             for (const auto& [kind, name] : j.at("profiles").items())
@@ -1552,6 +2190,13 @@ void App::save_preferences() {
         j["ui"]["custom_visible"] = custom_view_.visible;
         j["ui"]["custom_known"] = custom_view_.known;
         j["ui"]["single_column"] = single_column_;
+        j["ui"]["bed_type"] = bed_type_;
+        for (const auto& [printer, notes] : printer_notes_)
+            if (!notes.empty())
+                j["printers"][printer]["notes"] = notes;
+        for (const auto& [printer, records] : calibration_records_)
+            for (const auto& [kind, r] : records)
+                j["printers"][printer]["calibrations"][kind] = {{"date", r.date}, {"nozzle", r.nozzle}, {"filament", r.filament}};
         j["ui"]["section"] = panel_section_;
         j["ui"]["cards"] = card_open_;
         // Without the changes of a calibration tower left on the bed.
@@ -1569,7 +2214,12 @@ void App::save_preferences() {
 }
 
 void App::notify(std::string text, bool error) {
-    toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds});
+    toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
+}
+
+// A toast with «Undo», kept twice as long.
+void App::notify_undo(std::string text, std::function<void()> undo) {
+    toasts_.push_back({std::move(text), false, ImGui::GetTime() + 2.0 * kToastSeconds, std::move(undo)});
 }
 
 void App::fail(T title, std::string message, std::vector<std::string> details) {
@@ -2852,7 +3502,12 @@ void App::go_to_setting(const std::string& key) {
         return;
     if (tab_ != Tab::Prepare && tab_ != Tab::Preview)
         set_tab(Tab::Prepare);
-    panel_tab_ = place->tab;
+    // A printer's setting is on its page (rule 37).
+    printer_page_ = place->tab == SettingsTab::Printer;
+    if (printer_page_)
+        printer_section_ = std::string(place->section->id);
+    else
+        panel_tab_ = place->tab;
     panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
     card_open_[std::string(place->subsection->id)] = true;
     show_all_cards_.clear();
@@ -3150,6 +3805,110 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
     return open;
 }
 
+// A section in a column of sections (settings_panel.md, rule 1): its icon
+// and name, the chosen one in violet, and a dot where something differs from
+// the profile. True when clicked; the caller's tooltip asks IsItemHovered.
+bool App::section_button(std::string_view id, const char* name, const char* icon_name, bool selected, bool marked,
+                         float column) {
+    ImGui::PushID(id.data(), id.data() + id.size());
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
+    const float tall = icon_size + small + 16.0f * scale_;
+    const bool clicked = ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected;
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (selected || hovered)
+        dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
+                          ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
+                          7.0f * scale_);
+    const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
+    const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
+    dl->AddImage(icon(icon_name), ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
+                 ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
+    const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
+    dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
+    if (marked)
+        dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
+                            ImGui::GetColorU32(rgb(theme_.accent_hover)));
+    ImGui::PopID();
+    return clicked;
+}
+
+// A section's cards: each with its rows when open, its Reset (rule 8), and
+// at its foot what the level hides (rule 11) or, in Custom, the settings to
+// add back (rule 16).
+void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) {
+    bool first = true;
+    for (const SubsectionLayout& sub : section.subsections) {
+        if (!card_shown(sub))
+            continue;
+        const int changes = int(std::count_if(sub.settings.begin(), sub.settings.end(), [&](const SettingEntry& e) {
+            return changed_keys_.contains(std::string(e.key));
+        }));
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        bool reset = false;
+        const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
+        if (reset) {
+            // Back to the saved profile, this card's settings only (rule 8).
+            std::vector<std::string> keys;
+            for (const SettingEntry& e : sub.settings)
+                keys.emplace_back(e.key);
+            try {
+                settings_ = with_keys(settings_, saved_settings(), keys);
+                changed = true;
+                bed |= sub.id == "bed_volume";
+            } catch (const std::exception& e) {
+                fail(T::CannotOpen, e.what());
+            }
+        }
+        if (open) {
+            ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
+            changed |= card_rows(sub.id, bed);
+            if (view_level_ == ViewLevel::Custom) {
+                // Settings of this card Custom leaves out, to add back (rule 16).
+                std::vector<std::string_view> hidden;
+                for (const SettingEntry& e : sub.settings)
+                    if (setting_applies(e.key) && !setting_shown(e.key, sub.id))
+                        hidden.push_back(e.key);
+                if (!hidden.empty()) {
+                    ImGui::Spacing();
+                    if (ImGui::SmallButton(tr(T::AddSetting)))
+                        ImGui::OpenPopup("##add_setting");
+                    if (ImGui::BeginPopup("##add_setting")) {
+                        for (const std::string_view key : hidden)
+                            if (ImGui::Selectable((key_label(key) + "##" + std::string(key)).c_str())) {
+                                custom_view_.visible.insert(std::string(key));
+                                custom_view_.known.insert(std::string(key));
+                            }
+                        ImGui::EndPopup();
+                    }
+                }
+            } else {
+                // Basic tells what it hides (rule 11).
+                int hidden = 0;
+                for (const SettingEntry& e : sub.settings)
+                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
+                if (hidden > 0) {
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
+                                                                                        : T::MoreSettingsAdvanced),
+                                                     hidden)
+                                                  .c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::ShowAll)))
+                        show_all_cards_.insert(std::string(sub.id));
+                }
+            }
+            ImGui::PopID();
+        }
+        const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
+        card_heights_[std::string(sub.id)] = end - start.y;
+        ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
+        ImGui::Dummy(ImVec2(0, 0));
+        first = false;
+    }
+}
+
 // The settings panel (docs/spec/features/settings_panel.md): the Print,
 // Material and Printer tabs, each with its profile, its sections in a column
 // of icons and the chosen section's cards; a level (Basic, Normal, Advanced)
@@ -3166,14 +3925,23 @@ void App::settings_panel() {
     refresh_profiles();
     bool changed = false, bed = false;
 
-    // A setting asked with --info opens its tab, section and card.
+    // A setting asked with --info opens its tab (or the printer's page),
+    // section and card.
     if (!g_open_info.empty())
         if (const std::optional<SettingPlace> place = setting_place(g_open_info)) {
-            panel_tab_ = place->tab;
+            if (place->tab == SettingsTab::Printer)
+                printer_page_ = true, printer_section_ = std::string(place->section->id);
+            else
+                panel_tab_ = place->tab;
             panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
             card_open_[std::string(place->subsection->id)] = true;
             view_level_ = ViewLevel::Advanced;
         }
+    // On top, the printer's card (rule 32); the printer's settings have a
+    // page of their own, and the panel the Print and Material tabs.
+    printer_card();
+    if (panel_tab_ == SettingsTab::Printer)
+        panel_tab_ = SettingsTab::Print;
 
     // The tabs, and the level on their right.
     {
@@ -3183,9 +3951,9 @@ void App::settings_panel() {
         for (const T name : {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom})
             level_width = std::max(level_width, ImGui::CalcTextSize((std::string("    ") + tr(name)).c_str()).x);
         level_width += ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().FramePadding.x;
-        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
-        const std::array<std::pair<SettingsTab, T>, 3> tabs = {
-            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Printer}}};
+        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 2.0f * gap) / 2.0f;
+        const std::array<std::pair<SettingsTab, T>, 2> tabs = {
+            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}}};
         for (const auto& [tab, title] : tabs) {
             const bool chosen = panel_tab_ == tab;
             ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame, 0.0f));
@@ -3247,10 +4015,7 @@ void App::settings_panel() {
         if (ImGui::IsKeyPressed(ImGuiKey_4))
             choose_level(ViewLevel::Custom);
     }
-    const ProfileKind kind = panel_tab_ == SettingsTab::Print      ? ProfileKind::Print
-                             : panel_tab_ == SettingsTab::Material ? ProfileKind::Filament
-                                                                   : ProfileKind::Printer;
-    profile_row(kind);
+    profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
     if (ImGui::SmallButton(tr(single_column_ ? T::SeeBySection : T::SeeAllTogether)))
         single_column_ = !single_column_;
@@ -3286,52 +4051,29 @@ void App::settings_panel() {
 
     const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     const float column = 70.0f * scale_;
-    // The column of sections: an icon and its name, the chosen one in violet;
-    // a dot where something differs from the profile. All together, none.
+    // The column of sections (all together, none).
     if (!single_column_) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
         for (const SectionLayout* section : sections) {
-            const bool selected = section->id == chosen;
-            ImGui::PushID(section->id.data(), section->id.data() + section->id.size());
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
-            const float tall = icon_size + small + 16.0f * scale_;
-            if (ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected) {
-                chosen = std::string(section->id);
-                show_all_cards_.clear();
-                revealed_keys_.clear();
-            }
-            const bool hovered = ImGui::IsItemHovered();
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            if (selected || hovered)
-                dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
-                                  ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
-                                  7.0f * scale_);
-            const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
-            const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
-            dl->AddImage(icon(std::string(section->icon.substr(0, section->icon.size() - 4)).c_str()),
-                         ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
-                         ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
-            const char* name = tr(section->title);
-            const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
-            dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
             const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
                 return std::any_of(sub.settings.begin(), sub.settings.end(),
                                    [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
             });
-            if (marked)
-                dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
-                                    ImGui::GetColorU32(rgb(theme_.accent_hover)));
-            if (hovered) {
+            const std::string icon_name(section->icon.substr(0, section->icon.size() - 4));
+            if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == chosen, marked, column)) {
+                chosen = std::string(section->id);
+                show_all_cards_.clear();
+                revealed_keys_.clear();
+            }
+            if (ImGui::IsItemHovered()) {
                 ImGui::BeginTooltip();
-                ImGui::TextUnformatted(name);
+                ImGui::TextUnformatted(tr(section->title));
                 for (const SubsectionLayout& sub : section->subsections)
                     if (card_shown(sub))
                         ImGui::BulletText("%s", tr(sub.title));
                 ImGui::EndTooltip();
             }
-            ImGui::PopID();
         }
         ImGui::EndChild();
         ImGui::PopStyleVar();
@@ -3349,85 +4091,11 @@ void App::settings_panel() {
             ImGui::PopFont();
             ImGui::Spacing();
         }
-        bool first = true;
-        for (const SubsectionLayout& sub : section->subsections) {
-            if (!card_shown(sub))
-                continue;
-            const int changes = int(std::count_if(sub.settings.begin(), sub.settings.end(), [&](const SettingEntry& e) {
-                return changed_keys_.contains(std::string(e.key));
-            }));
-            const ImVec2 start = ImGui::GetCursorScreenPos();
-            bool reset = false;
-            const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
-            if (reset) {
-                // Back to the saved profile, this card's settings only (rule 8).
-                std::vector<std::string> keys;
-                for (const SettingEntry& e : sub.settings)
-                    keys.emplace_back(e.key);
-                try {
-                    settings_ = with_keys(settings_, saved_settings(), keys);
-                    changed = true;
-                    bed |= sub.id == "bed_volume";
-                } catch (const std::exception& e) {
-                    fail(T::CannotOpen, e.what());
-                }
-            }
-            if (open) {
-                ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
-                changed |= card_rows(sub.id, bed);
-                if (view_level_ == ViewLevel::Custom) {
-                    // Settings of this card Custom leaves out, to add back (rule 16).
-                    std::vector<std::string_view> hidden;
-                    for (const SettingEntry& e : sub.settings)
-                        if (setting_applies(e.key) && !setting_shown(e.key, sub.id))
-                            hidden.push_back(e.key);
-                    if (!hidden.empty()) {
-                        ImGui::Spacing();
-                        if (ImGui::SmallButton(tr(T::AddSetting)))
-                            ImGui::OpenPopup("##add_setting");
-                        if (ImGui::BeginPopup("##add_setting")) {
-                            for (const std::string_view key : hidden)
-                                if (ImGui::Selectable((key_label(key) + "##" + std::string(key)).c_str())) {
-                                    custom_view_.visible.insert(std::string(key));
-                                    custom_view_.known.insert(std::string(key));
-                                }
-                            ImGui::EndPopup();
-                        }
-                    }
-                } else {
-                    // Basic tells what it hides (rule 11).
-                    int hidden = 0;
-                    for (const SettingEntry& e : sub.settings)
-                        hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
-                    if (hidden > 0) {
-                        ImGui::Spacing();
-                        ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
-                                                                                            : T::MoreSettingsAdvanced),
-                                                         hidden)
-                                                      .c_str());
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton(tr(T::ShowAll)))
-                            show_all_cards_.insert(std::string(sub.id));
-                    }
-                }
-                ImGui::PopID();
-            }
-            const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
-            card_heights_[std::string(sub.id)] = end - start.y;
-            ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
-            ImGui::Dummy(ImVec2(0, 0));
-            first = false;
-        }
+        section_cards(*section, changed, bed);
         if (single_column_)
             ImGui::Spacing();
     }
     ImGui::EndChild();
-    // A setting the eye took out of Custom (rule 16).
-    if (!g_hide_key.empty()) {
-        custom_view_.visible.erase(g_hide_key);
-        custom_view_.known.insert(g_hide_key);
-        g_hide_key.clear();
-    }
     g_custom_rows = false;
 
     // Settings files.
@@ -5687,6 +6355,7 @@ void App::calibration_panel() {
                     settings_.scale_z = next.scale_z, settings_.hole_offset = next.hole_offset;
                     // The block printed with these values would now measure as designed.
                     measured_ = {dimension_test_.x, dimension_test_.y, dimension_test_.z, dimension_test_.hole};
+                    record_calibration(CalibrationKind::Dimensions);
                     settings_changed();
                     notify(format(tr(T::CompensationApplied), next.scale_x, next.scale_y, next.scale_z,
                                   next.hole_offset));
@@ -5708,6 +6377,7 @@ void App::calibration_panel() {
                 if (button("##apply_shrink", nullptr, tr(T::ApplyShrink), true, false, true, nullptr, button_h)) {
                     settings_.first_layer_shrink = next;
                     elephant_bottom_ = elephant_body_; // printed with this shrink, the bottom would match the body
+                    record_calibration(CalibrationKind::ElephantFoot);
                     settings_changed();
                     notify(format(tr(T::ShrinkApplied), next));
                 }
@@ -5726,6 +6396,7 @@ void App::calibration_panel() {
                     settings_.resin_scale_z = std::clamp(next[2], 0.5, 2.0);
                     resin_measured_[0] = resin_measured_[1] = 30.0;
                     resin_measured_[2] = 10.0;
+                    record_calibration(CalibrationKind::ResinMeasure);
                     settings_changed();
                     notify(tr(T::ResinScaleApplied));
                 }
@@ -5751,6 +6422,7 @@ void App::calibration_panel() {
                     if (button("##use", nullptr, format(tr(T::UseValue), value.c_str()).c_str(), true, false, true,
                                nullptr, button_h)) {
                         apply_calibration(card.kind, *chosen_value_, settings_);
+                        record_calibration(card.kind);
                         settings_changed();
                         notify(format(tr(T::ValueApplied), value.c_str()));
                         calibration_.reset();
@@ -5863,6 +6535,7 @@ void App::create_calibration(CalibrationKind kind, bool custom) {
 }
 
 void App::toasts() {
+    std::function<void()> undo; // pressed: run after the toasts are drawn
     const double now = ImGui::GetTime();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return t.until < now; }),
                   toasts_.end());
@@ -5878,13 +6551,23 @@ void App::toasts() {
         ImGui::Begin(id.c_str(), nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-                         ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+                         ImGuiWindowFlags_NoNav | (it->undo ? 0 : ImGuiWindowFlags_NoInputs));
+        ImGui::AlignTextToFramePadding();
         ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", it->text.c_str());
+        if (it->undo) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(tr(T::Undo))) {
+                undo = std::move(it->undo);
+                it->until = 0.0;
+            }
+        }
         y -= ImGui::GetWindowHeight() + 8.0f * scale_;
         ImGui::End();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
     }
+    if (undo)
+        undo();
 }
 
 void App::dialogs() {
@@ -6036,22 +6719,29 @@ void App::dialogs() {
 void App::layout() {
     viewport();
     top_bar();
-    settings_panel();
-    status_bar();
-    view_tools();
-    if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
-        plate_tools();
-    mixing_dialog();
-    if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
-        empty_hint();
-    if (tab_ == Tab::Preview)
-        preview_panels();
-    if (tab_ == Tab::Analysis)
-        analysis_panel();
-    if (tab_ == Tab::Calibration)
-        calibration_panel();
-    if (tab_ == Tab::Device)
-        device_panel();
+    // The printer's page covers the panel and the view (settings_panel.md,
+    // rule 37) until it goes back to the plate.
+    if (printer_page_) {
+        printer_page();
+        status_bar();
+    } else {
+        settings_panel();
+        status_bar();
+        view_tools();
+        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+            plate_tools();
+        mixing_dialog();
+        if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
+            empty_hint();
+        if (tab_ == Tab::Preview)
+            preview_panels();
+        if (tab_ == Tab::Analysis)
+            analysis_panel();
+        if (tab_ == Tab::Calibration)
+            calibration_panel();
+        if (tab_ == Tab::Device)
+            device_panel();
+    }
     // Each function's tip the first time it is used.
     if (tool_ != last_tool_) {
         last_tool_ = tool_;

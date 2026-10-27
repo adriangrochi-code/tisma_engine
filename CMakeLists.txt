@@ -291,6 +291,7 @@ if(TISMA_BUILD_UI)
     src/ui/presets.cpp
     src/ui/settings_layout.cpp
     src/ui/settings_view.cpp
+    src/ui/printer_card.cpp
     src/ui/raytrace.cpp
     src/ui/plate.cpp
     src/ui/help.cpp

@@ -728,6 +728,33 @@
     X(ResetCardTip, "Vuelve los ajustes de este apartado a los del perfil guardado", "Takes this part's settings back to the saved profile") \
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
+    X(Undo, "Deshacer", "Undo") \
+    X(BackToPlate, "‹ Placa", "‹ Plate") \
+    X(PrinterSettingsTitle, "Configuración de la impresora", "Printer settings") \
+    X(PrinterSettingsTip, "Configuración de la impresora: máquina, boquilla, límites, G-code y calibración", "Printer settings: machine, nozzle, limits, G-code and calibration") \
+    X(SecCalibration, "Calibración", "Calibration") \
+    X(SecConnection, "Conexión", "Connection") \
+    X(SecNotes, "Notas", "Notes") \
+    X(SearchPrinter, "Buscar impresora", "Search printer") \
+    X(MyPrinters, "Mis impresoras", "My printers") \
+    X(OtherPrinters, "Otras", "Others") \
+    X(AddPrinter, "Agregar impresora…", "Add printer…") \
+    X(BedType, "Cama", "Bed") \
+    X(HardenedSteel, "acero endurecido", "hardened steel") \
+    X(OtherNozzle, "Otra…", "Other…") \
+    X(OtherNozzleTitle, "Otra boquilla", "Another nozzle") \
+    X(NozzleChanged, "Boquilla de %s", "%s nozzle") \
+    X(NotCalibrated, "Sin calibrar", "Not calibrated") \
+    X(CalibratedOn, "Calibrado el %s", "Calibrated on %s") \
+    X(CalibratedOtherNozzle, "Calibrado con otra boquilla (%s)", "Calibrated with another nozzle (%s)") \
+    X(CalibratedWith, "con %s", "with %s") \
+    X(CalibratedCount, "%d de %d calibradas", "%d of %d calibrated") \
+    X(CalibrateInOrder, "Calibrar en orden", "Calibrate in order") \
+    X(CalibrateButton, "Calibrar", "Calibrate") \
+    X(OpenInDevices, "Abrir en Dispositivos", "Open in Devices") \
+    X(ConnectionNone, "Sin conectar. La conexión por USB está en la pestaña Impresora.", "Not connected. The USB connection is in the Printer tab.") \
+    X(ConnectionNow, "Conectada por USB: %s", "Connected by USB: %s") \
+    X(NotesHint, "Notas sobre esta impresora: arreglos, repuestos, lo que sirvió…", "Notes about this printer: fixes, spare parts, what worked…") \
     X(ChooseSettingsTitle, "Los ajustes que se ven en Personalizado", "The settings Custom shows") \
     X(StartFrom, "Partir de:", "Start from:") \
     X(AllSettings, "Todos", "All") \
