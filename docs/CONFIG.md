@@ -428,6 +428,26 @@ el perfil de impresión.
 | `standby_delta` | número | −5 | −300 a 300 | Cuánto cambia la temperatura de los que esperan, en °C |
 | `wipe_tower` | entero | 0 | 0 a 16 | Extrusor que imprime la torre de purga en las capas sin cambio; 0: el que esté imprimiendo |
 
+### `interlocking`
+
+De la ficha `docs/spec/features/multi_extruder.md` (regla 17): vigas entre materiales. Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `beams` | booleano | `false` | | Donde se tocan las partes de dos extrusores, lo que está a menos de `depth` anchos de viga del borde entre ellas (y a más de `boundary_avoidance` del exterior) se corta en franjas de `beam_width` a `orientation` grados, giradas 90° cada `beam_layers` capas, que van a una parte y a la otra por turnos: cada material entra en el otro con vigas (ME11; diseño propio). Las partes se laminan con esas regiones: sus perímetros siguen las vigas |
+| `beam_width` | número | 0,8 | 0,1 a 100 | Ancho de las vigas, en mm |
+| `beam_layers` | entero | 2 | 1 a 100 | Capas antes de que las vigas giren 90° |
+| `orientation` | número | 22,5 | −360 a 360 | Dirección de las vigas, en grados |
+| `depth` | entero | 2 | 0 a 100 | Hasta dónde llegan desde el borde entre materiales, en anchos de viga |
+| `boundary_avoidance` | entero | 2 | 0 a 100 | Distancia al exterior de la pieza sin vigas, en anchos de viga |
+
+### `painting`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `max_region_width` | número | 0 | 0 a 1000 | Ancho máximo de una región pintada de un color, en mm; 0: sin límite (regla 18): se lee y se guarda; el motor todavía no lamina los colores pintados |
+| `interlocking_depth` | número | 0 | 0 a 1000 | Entrelazado entre regiones pintadas, en mm (regla 18): se lee y se guarda |
+
 ### `mmu`
 
 De la ficha `docs/spec/features/multi_extruder.md` (regla 15): un solo extrusor que cambia de filamento

@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Vigas entre materiales** (ficha `multi_extruder.md`, en Otros › Entrelazado entre materiales): donde se tocan
+  dos materiales, cada uno entra en el otro con vigas que cambian de dirección cada pocas capas.
 - **MMU de un extrusor** (ficha `multi_extruder.md`, en Impresora › MMU y Material › Carga y descarga en la MMU): cada
   cambio comprime la punta sobre la torre, descarga el filamento hasta el tubo de enfriamiento, lo enfría con idas y
   vueltas, cambia, carga el nuevo y purga.

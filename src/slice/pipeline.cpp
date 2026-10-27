@@ -359,6 +359,9 @@ struct PartFrame {
     const std::vector<Polygons>* taken = nullptr;
     const std::vector<Polygons>* support = nullptr;
     Point2d centre;
+    // The part's regions when the beams between materials changed them
+    // (multi_extruder.md, rule 17); null: its own.
+    const std::vector<Polygons>* regions = nullptr;
 };
 
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
@@ -495,6 +498,85 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
     return slice_tools(mesh, settings, gpu, stress, painting, *tools);
 }
 
+// A part's regions on given layers, as slice_layers makes them before its
+// walls: its level contours, the fill mode, the XY offset, the first layer's
+// shrink and the holes' offset.
+std::vector<Polygons> part_regions(IndexedMesh mesh, const Settings& settings, const std::vector<Layer>& layers,
+                                   gpu::Context* gpu) {
+    orient_consistently(mesh);
+    std::vector<float> heights;
+    for (const Layer& l : layers)
+        heights.push_back(float(l.slice_z()));
+    std::vector<char> same;
+    const std::vector<std::vector<Contour>> contours =
+        slice_levels(mesh, height_field(mesh), heights, settings.gap_closing_radius, gpu, &same);
+    std::vector<std::size_t> source(layers.size());
+    for (std::size_t l = 0; l < layers.size(); ++l)
+        source[l] = l > 0 && same[l] ? source[l - 1] : l;
+    std::vector<Polygons> regions(layers.size());
+    tbb::parallel_for(std::size_t(0), layers.size(), [&](std::size_t l) {
+        const Polygons region = layer_region(simplify(to_polygons(contours[source[l]]), settings.simplify_tolerance),
+                                             settings.fill_mode);
+        const double shrink = l == 0 ? settings.first_layer_shrink : 0.0;
+        regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
+    });
+    return regions;
+}
+
+// Beams between two materials (multi_extruder.md, rule 17; own design): on
+// each layer, what lies within interlocking.depth beam widths of the
+// border between two parts, and that far from the outside, is cut in
+// stripes interlocking.beam_width wide at interlocking.orientation, turned
+// 90 degrees every interlocking.beam_layers layers; the stripes go to the
+// two parts in turn, so each part's beams go into the other.
+void interlock(std::vector<std::vector<Polygons>>& regions, const std::vector<Layer>& layers, const Settings& s) {
+    const double w = s.interlock_width;
+    const double depth = s.interlock_depth * w, avoid = s.interlock_avoidance * w;
+    tbb::parallel_for(std::size_t(0), layers.size(), [&](std::size_t l) {
+        const double angle = (s.interlock_orientation + (l / std::size_t(std::max(s.interlock_layers, 1)) % 2 ? 90.0 : 0.0)) *
+                             std::numbers::pi / 180.0;
+        const double c = std::cos(angle), sn = std::sin(angle);
+        for (std::size_t a = 0; a < regions.size(); ++a)
+            for (std::size_t b = a + 1; b < regions.size(); ++b) {
+                Polygons& ra = regions[a][l];
+                Polygons& rb = regions[b][l];
+                if (ra.empty() || rb.empty())
+                    continue;
+                Polygons zone = Clipper2Lib::Union(Clipper2Lib::Intersect(ra, offset(rb, depth), Clipper2Lib::FillRule::NonZero),
+                                                   Clipper2Lib::Intersect(rb, offset(ra, depth), Clipper2Lib::FillRule::NonZero),
+                                                   Clipper2Lib::FillRule::NonZero);
+                if (avoid > 0.0)
+                    zone = Clipper2Lib::Intersect(zone, offset(Clipper2Lib::Union(ra, rb, Clipper2Lib::FillRule::NonZero), -avoid),
+                                                  Clipper2Lib::FillRule::NonZero);
+                if (zone.empty())
+                    continue;
+                // The zone's box across the stripes: v along c, s turned.
+                double lo_u = 1e300, hi_u = -1e300, lo_v = 1e300, hi_v = -1e300;
+                for (const Polygon& p : zone)
+                    for (const auto& q : p) {
+                        const double x = to_mm(q.x), y = to_mm(q.y);
+                        const double u = c * x + sn * y, v = -sn * x + c * y;
+                        lo_u = std::min(lo_u, u), hi_u = std::max(hi_u, u), lo_v = std::min(lo_v, v), hi_v = std::max(hi_v, v);
+                    }
+                Polygons even, odd;
+                for (auto k = static_cast<long long>(std::floor(lo_v / w)); double(k) * w < hi_v; ++k) {
+                    const double v0 = double(k) * w, v1 = v0 + w;
+                    Polygon stripe;
+                    for (const auto& [u, v] : {std::pair{lo_u - w, v0}, std::pair{hi_u + w, v0}, std::pair{hi_u + w, v1},
+                                               std::pair{lo_u - w, v1}})
+                        stripe.push_back({to_units(c * u - sn * v), to_units(sn * u + c * v)});
+                    (k % 2 == 0 ? even : odd).push_back(std::move(stripe));
+                }
+                const Polygons to_a = Clipper2Lib::Intersect(zone, even, Clipper2Lib::FillRule::NonZero);
+                const Polygons to_b = Clipper2Lib::Intersect(zone, odd, Clipper2Lib::FillRule::NonZero);
+                ra = Clipper2Lib::Union(Clipper2Lib::Difference(ra, zone, Clipper2Lib::FillRule::NonZero), to_a,
+                                        Clipper2Lib::FillRule::NonZero);
+                rb = Clipper2Lib::Union(Clipper2Lib::Difference(rb, zone, Clipper2Lib::FillRule::NonZero), to_b,
+                                        Clipper2Lib::FillRule::NonZero);
+            }
+    });
+}
+
 // Several extruders (multi_extruder.md, rule 1): the whole plate sliced
 // once for its outline on every layer, its support, skirt and brim; then
 // each extruder's objects (the first extruder first) on the same layers,
@@ -544,23 +626,36 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         if (!from.empty())
             to = to.empty() ? from : Clipper2Lib::Union(to, from, Clipper2Lib::FillRule::NonZero);
     };
-    for (const int tool : tools) {
-        IndexedMesh part_mesh;
-        Painting part_paint;
+    std::vector<IndexedMesh> part_meshes(tools.size());
+    std::vector<Painting> part_paints(tools.size());
+    for (std::size_t p = 0; p < tools.size(); ++p)
         for (const MeshObject& o : objects) {
-            if (object_tool(o, settings) != tool)
+            if (object_tool(o, settings) != tools[p])
                 continue;
             const IndexedMesh piece = object_mesh(mesh, o);
             if (painting)
-                part_paint.append(object_painting(*painting, o), part_mesh.triangles.size());
-            const auto base = std::uint32_t(part_mesh.vertices.size());
-            part_mesh.vertices.insert(part_mesh.vertices.end(), piece.vertices.begin(), piece.vertices.end());
+                part_paints[p].append(object_painting(*painting, o), part_meshes[p].triangles.size());
+            const auto base = std::uint32_t(part_meshes[p].vertices.size());
+            part_meshes[p].vertices.insert(part_meshes[p].vertices.end(), piece.vertices.begin(), piece.vertices.end());
             for (const auto& t : piece.triangles)
-                part_mesh.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+                part_meshes[p].triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
         }
+    // Beams between the materials (rule 17): every part's regions first.
+    std::vector<std::vector<Polygons>> beamed;
+    if (settings.interlock_beams && tools.size() > 1) {
+        beamed.resize(tools.size());
+        for (std::size_t p = 0; p < tools.size(); ++p)
+            beamed[p] = part_meshes[p].triangles.empty() ? std::vector<Polygons>(n)
+                                                         : part_regions(part_meshes[p], settings, frame.stack.layers, gpu);
+        interlock(beamed, frame.stack.layers, settings);
+    }
+    for (std::size_t p = 0; p < tools.size(); ++p) {
+        const int tool = tools[p];
+        const IndexedMesh& part_mesh = part_meshes[p];
         if (part_mesh.triangles.empty())
             continue;
-        SlicedModel part = slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paint : nullptr, &frame);
+        frame.regions = beamed.empty() ? nullptr : &beamed[p];
+        SlicedModel part = slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame);
         tag_tool(part, tool);
         zaa_points += part.zaa_points;
         tbb::parallel_for(std::size_t(0), std::min(n, part.layers.size()), [&](std::size_t l) {
@@ -680,7 +775,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
         source[l] = same ? source[l - 1] : l;
         copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
                     !(l == 1 && settings.first_layer_one_wall) &&
-                    !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]);
+                    !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
+                    !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
     }
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         if (copied[l])
@@ -691,6 +787,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
                                        settings.fill_mode);
         const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
+        if (frame && frame->regions)
+            out.regions[l] = (*frame->regions)[l];
         // Where an earlier extruder's part is, this one is not.
         if (frame && frame->taken && !(*frame->taken)[l].empty())
             out.regions[l] = Clipper2Lib::Difference(out.regions[l], (*frame->taken)[l], Clipper2Lib::FillRule::NonZero);

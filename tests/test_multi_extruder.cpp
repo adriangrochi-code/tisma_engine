@@ -601,3 +601,26 @@ TEST_CASE("wipe tower: an MMU rams, unloads, cools and loads at each change (ME9
     const std::string load = "\nT1\nG1 E18.00000 F180\nG1 E63.00000 F1680\nG1 E9.00000 F180\n";
     CHECK(text.compare(change, load.size(), load) == 0);
 }
+
+TEST_CASE("extruders: beams of each material go into the other (ME11)", "[extruders]") {
+    Settings s = base();
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    const Trace plain = trace(gcode_of(two_colours(), s));
+    s.interlock_beams = true;
+    const Trace beams = trace(gcode_of(two_colours(), s));
+    // Without beams extruder 1 stops at X 99.8; with them its beams reach
+    // into the other half (2 beam widths, 1.6 mm).
+    CHECK_THAT(plain.box.at(0)[2], WithinAbs(99.8, 0.02));
+    CHECK(beams.box.at(0)[2] > 101.0);
+    CHECK(beams.box.at(1)[0] < 99.0);
+    // The border between them a comb: each half's outer wall much longer.
+    CHECK_THAT(laid(plain, 10, 0, "External perimeter"), WithinAbs(58.4, 0.5));
+    CHECK(laid(beams, 10, 0, "External perimeter") > 80.0);
+    CHECK(laid(beams, 10, 1, "External perimeter") > 80.0);
+    // Two layers alike, then the beams turn.
+    CHECK_THAT(laid(beams, 10, 0, "External perimeter"), WithinAbs(laid(beams, 11, 0, "External perimeter"), 1e-6));
+    CHECK(std::abs(laid(beams, 12, 0, "External perimeter") - laid(beams, 11, 0, "External perimeter")) > 1.0);
+    // Clear of the outside: the halves' outer sides stay straight there.
+    CHECK_THAT(beams.box.at(0)[1], WithinAbs(90.2, 0.02));
+}

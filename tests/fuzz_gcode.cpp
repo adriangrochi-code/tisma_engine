@@ -384,6 +384,14 @@ int main(int argc, char** argv) {
             s.toolchange_length = {uni(0, 12), uni(0, 12)};
             s.toolchange_restart_extra = {uni(0, 2)};
             s.interface_shells = pick(2) == 0;
+            if (pick(3) == 0) {
+                s.interlock_beams = true;
+                s.interlock_width = uni(0.4, 2.0);
+                s.interlock_layers = 1 + pick(3);
+                s.interlock_orientation = uni(0, 180);
+                s.interlock_depth = pick(4);
+                s.interlock_avoidance = pick(4);
+            }
             if (pick(2) == 0)
                 s.extruder_offset = {{0.0, 0.0}, {uni(-5, 5), uni(-5, 5)}};
             s.gcode_toolchange = std::array{"", ";TC [previous_extruder] [next_extruder] {toolchange_z}",

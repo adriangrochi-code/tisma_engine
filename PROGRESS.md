@@ -5799,3 +5799,21 @@ fallas.
 descarga son uno para todos los filamentos (no por extrusor).
 
 **Sigue:** 4d, las vigas de entrelazado (regla 17, ME11).
+
+## 2026-10-27 — Punto 4d: vigas entre materiales
+
+**Hecho** (ficha `multi_extruder.md`, regla 17): con `interlocking.beams`, antes de laminar las partes de cada extrusor
+se calculan las regiones de todas; donde dos se tocan, lo que está a menos de `depth` anchos de viga del borde entre
+ellas (y a más de `boundary_avoidance` del exterior de la pieza) se corta en franjas de `beam_width` a `orientation`
+grados, giradas 90° cada `beam_layers` capas, que van por turnos a una parte y a la otra. Cada parte se lamina con su
+región así cambiada (`PartFrame::regions`): sus perímetros y su relleno siguen las vigas. Grupo `painting` (regla 18):
+se lee y se guarda; espera a que se laminen los colores pintados. En la interfaz: Otros › Entrelazado entre
+materiales; `docs/CONFIG.md`.
+
+**Medido** (ME11, dos colores con relleno al 20 %; entre paréntesis Tisma Slicer): el extrusor 1 llega hasta X 101,52
+(102,48; sin vigas 99,8); el perímetro externo de cada mitad pasa de 58,4 a 123,3 mm (de 58,3 a 119); las capas 10 y
+11 iguales y la 12 distinta, como la ficha.
+
+Prueba nueva ME11 (12 en `tests/test_multi_extruder.cpp`); fuzzer con vigas: 300 corridas (semilla 47), 0 fallas.
+
+**Sigue:** 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12).

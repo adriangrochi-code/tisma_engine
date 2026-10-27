@@ -359,6 +359,7 @@ Settings parse_checked(std::string_view text) {
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
+            group == "interlocking" || group == "painting" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -687,6 +688,41 @@ Settings parse_checked(std::string_view text) {
          : n == "cooling_tube_position" ? s.mmu_cooling_tube_position
          : n == "parking_position"      ? s.mmu_parking_position
                                         : s.mmu_extra_loading_move) = d;
+    });
+    // Beams between materials (multi_extruder.md, rules 17 and 18).
+    read_group(root, "interlocking", {"beams", "beam_width", "beam_layers", "orientation", "depth", "boundary_avoidance"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "beams") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.interlock_beams = v.get<bool>();
+            return;
+        }
+        if (n == "beam_layers" || n == "depth" || n == "boundary_avoidance") {
+            if (!v.is_number_integer() || v.get<long long>() < (n == "beam_layers" ? 1 : 0) || v.get<long long>() > 100)
+                fail(k, n == "beam_layers" ? "must be a whole number from 1 to 100" : "must be a whole number from 0 to 100");
+            (n == "beam_layers" ? s.interlock_layers : n == "depth" ? s.interlock_depth : s.interlock_avoidance) =
+                int(v.get<long long>());
+            return;
+        }
+        const double d = number(g, n, k);
+        if (n == "beam_width") {
+            if (!(d >= 0.1 && d <= 100.0))
+                fail(k, "must be from 0.1 to 100 mm");
+            s.interlock_width = d;
+            return;
+        }
+        if (!(d >= -360.0 && d <= 360.0))
+            fail(k, "must be from -360 to 360 degrees");
+        s.interlock_orientation = d;
+    });
+    read_group(root, "painting", {"max_region_width", "interlocking_depth"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const double d = number(g, n, k);
+        if (!(d >= 0.0 && d <= 1000.0))
+            fail(k, "must be from 0 to 1000 mm");
+        (n == "max_region_width" ? s.paint_max_region_width : s.paint_interlocking_depth) = d;
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -1895,6 +1931,14 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
         {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
         {"surfaces.interface_shells", flag(s.interface_shells)},
+        {"interlocking.beams", flag(s.interlock_beams)},
+        {"interlocking.beam_width", num(s.interlock_width)},
+        {"interlocking.beam_layers", std::to_string(s.interlock_layers)},
+        {"interlocking.orientation", num(s.interlock_orientation)},
+        {"interlocking.depth", std::to_string(s.interlock_depth)},
+        {"interlocking.boundary_avoidance", std::to_string(s.interlock_avoidance)},
+        {"painting.max_region_width", num(s.paint_max_region_width)},
+        {"painting.interlocking_depth", num(s.paint_interlocking_depth)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -2202,6 +2246,14 @@ std::string settings_json(const Settings& s) {
           {"bed_temperature_from", s.bed_temperature_from},
           {"ooze_prevention", s.ooze_prevention},
           {"standby_delta", s.standby_delta}}},
+        {"interlocking",
+         {{"beams", s.interlock_beams},
+          {"beam_width", s.interlock_width},
+          {"beam_layers", s.interlock_layers},
+          {"orientation", s.interlock_orientation},
+          {"depth", s.interlock_depth},
+          {"boundary_avoidance", s.interlock_avoidance}}},
+        {"painting", {{"max_region_width", s.paint_max_region_width}, {"interlocking_depth", s.paint_interlocking_depth}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},

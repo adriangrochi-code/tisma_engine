@@ -775,7 +775,11 @@ const char* row_key(T label) {
         {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
         {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
         {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
-        {T::UnloadTime, "extrusion.unload_time"}};
+        {T::UnloadTime, "extrusion.unload_time"}, {T::InterlockBeams, "interlocking.beams"},
+        {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
+        {T::InterlockOrientation, "interlocking.orientation"}, {T::InterlockDepth, "interlocking.depth"},
+        {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
+        {T::PaintInterlockingDepth, "painting.interlocking_depth"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3154,6 +3158,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "interlocking") {
+        // Beams between materials (multi_extruder.md, rules 17 and 18).
+        flag(T::InterlockBeams, "interlocking.beams", s.interlock_beams);
+        mm(T::InterlockWidth, "interlocking.beam_width", s.interlock_width, 0.1, 100.0, "%.2f mm", 0.01f);
+        whole(T::InterlockLayers, "interlocking.beam_layers", s.interlock_layers, 1, 100);
+        mm(T::InterlockOrientation, "interlocking.orientation", s.interlock_orientation, -360.0, 360.0, "%.1f°", 0.5f);
+        whole(T::InterlockDepth, "interlocking.depth", s.interlock_depth, 0, 100);
+        whole(T::InterlockAvoidance, "interlocking.boundary_avoidance", s.interlock_avoidance, 0, 100);
+        mm(T::PaintMaxRegionWidth, "painting.max_region_width", s.paint_max_region_width, 0.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::PaintInterlockingDepth, "painting.interlocking_depth", s.paint_interlocking_depth, 0.0, 1000.0, "%.1f mm",
+           0.1f);
     } else if (id == "mmu") {
         // A single-extruder MMU's change (multi_extruder.md, rule 15).
         mm(T::CoolingTubeLength, "mmu.cooling_tube_length", s.mmu_cooling_tube_length, 0.0, 1000.0, "%.1f mm", 0.1f);

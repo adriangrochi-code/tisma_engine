@@ -938,6 +938,15 @@
     X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
     X(MinPurgeOnTower, "Purga mínima en la torre", "Minimum purge on the tower") \
     X(SubMmu, "MMU", "MMU") \
+    X(SubInterlocking, "Entrelazado entre materiales", "Interlocking between materials") \
+    X(InterlockBeams, "Vigas entre materiales", "Beams between materials") \
+    X(InterlockWidth, "Ancho de las vigas", "Beam width") \
+    X(InterlockLayers, "Capas por dirección", "Layers per direction") \
+    X(InterlockOrientation, "Dirección de las vigas", "Beam direction") \
+    X(InterlockDepth, "Profundidad (vigas)", "Depth (beams)") \
+    X(InterlockAvoidance, "Distancia al exterior (vigas)", "Distance to the outside (beams)") \
+    X(PaintMaxRegionWidth, "Ancho máximo de una región pintada", "Widest painted region") \
+    X(PaintInterlockingDepth, "Entrelazado de las regiones pintadas", "Painted regions' interlocking") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \

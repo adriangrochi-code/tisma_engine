@@ -184,6 +184,18 @@ struct Settings {
     // Where one extruder's part rests on another's, each keeps its own top
     // and bottom solid layers, as if apart (multi_extruder.md, rule 16).
     bool interface_shells = false;
+    // Where two extruders' parts touch, beams of each go into the other
+    // (multi_extruder.md, rule 17): how wide (mm), how many layers before
+    // they turn 90 degrees, at what angle, how far from the border between
+    // them and how far from the outside they stay (in beam widths).
+    bool interlock_beams = false;
+    double interlock_width = 0.8;
+    int interlock_layers = 2;
+    double interlock_orientation = 22.5;
+    int interlock_depth = 2, interlock_avoidance = 2;
+    // Painted regions of a colour (rule 18): their widest and how deep they
+    // interlock, mm (read; the colour channel is not sliced yet).
+    double paint_max_region_width = 0.0, paint_interlocking_depth = 0.0;
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;

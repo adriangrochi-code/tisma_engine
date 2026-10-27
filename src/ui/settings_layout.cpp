@@ -153,6 +153,15 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.bed_temperature_from", A},
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
+          {"interlocking", T::SubInterlocking,
+           {{"interlocking.beams", N},
+            {"interlocking.beam_width", A},
+            {"interlocking.beam_layers", A},
+            {"interlocking.orientation", A},
+            {"interlocking.depth", A},
+            {"interlocking.boundary_avoidance", A},
+            {"painting.max_region_width", A},
+            {"painting.interlocking_depth", A}}},
           {"wipe_tower", T::SubWipeTower,
            {{"wipe_tower.enabled", N},
             {"wipe_tower.width", N},
@@ -554,6 +563,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumByKind);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
+    if (id == "interlocking")
+        return s.interlock_beams ? format(T::SumMm, number(s.interlock_width).c_str()) : tr(T::SumOff);
     if (id == "mmu")
         return s.single_extruder_mmu ? format(T::SumMm, number(s.mmu_parking_position).c_str()) : tr(T::SumOff);
     if (id == "mmu_load")
