@@ -5269,3 +5269,26 @@ X11: `E-2` sale `E-4.81056`, sin `M200`. 465 pruebas pasan; fuzzer con las opcio
 
 **Sigue:** el resto de `gcode_extras.md` (sabores viejos, modo silencioso, miniaturas, binario, arcos, comentarios
 detallados, contracción).
+
+## 2026-10-27 — Punto 2: contracción del filamento y comentarios detallados
+
+**Hecho** (ficha `gcode_extras.md`):
+- regla 4 (X3): `extrusion.shrinkage_xy` y `extrusion.shrinkage_z` (0 a 20 %): la pieza se lamina 100 / (100 − p)
+  veces más grande, alrededor del centro de su base, como la escala de `compensation` (se multiplican). La ficha dice
+  que en Tisma Slicer el ajuste no cambió nada desde la línea de comandos; el motor sí lo aplica, con el factor que
+  propone la ficha. En el panel, Filamento › Contracción;
+- regla 12 (X12): `gcode.verbose_comments`: cada línea que escribe el motor termina con `; ` y qué hace, con los
+  textos de la ficha (`perimeter`, `infill`, `infill (bridge)`, `skirt`, `retract`, `unretract`, `lift`, `reset
+  extrusion distance`, `simple layer change`, `travel to first layer point`, `move to first perimeter point`, `move to
+  first infill point`, `enable fan`, `disable fan`…) y unos propios para lo que la ficha no nombra (`lower`, `set
+  acceleration`, `support material`, `gap fill`, `ironing`). El G-code del usuario no cambia. Apagado no cuesta nada.
+
+**Medido:** X3: un cubo de 20 × 20 × 10 con 1 % y 2 % se lamina de 20,202 × 20,202 × 10,204 mm, 51 capas en vez de
+50. X12: en un cubo de 20 mm con relleno al 20 % y falda, 1684 `; infill`, 600 `; perimeter`, 161 `; retract`, 80
+`; skirt`, 50 `; simple layer change`; sin los comentarios, línea por línea el mismo G-code que sin el ajuste, y el
+verificador lo acepta. 467 pruebas pasan; fuzzer con contracción y comentarios: 400 corridas (semilla 1) y 1000
+(semilla 271027), 0 fallas.
+
+**Sigue:** los sabores viejos (X5), el modo silencioso (X6, con los límites de la máquina), los arcos (X10), el
+G-code binario (X8) y las miniaturas (X7, con la interfaz).
+
