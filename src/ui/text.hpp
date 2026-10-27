@@ -492,6 +492,18 @@
     X(ByTool, "Extrusor", "Tool") \
     X(ByColorPrint, "Color por capa", "Color print") \
     X(ToolN, "Extrusor %d", "Tool %d") \
+    X(IconTravels, "Viajes: los movimientos sin extruir", "Travels: the moves that do not extrude") \
+    X(IconWipes, "Barridos: la boquilla que barre al terminar un lazo", "Wipes: the nozzle wiping at a loop's end") \
+    X(IconRetracts, "Retracciones: donde se retrae el filamento", "Retractions: where the filament is pulled back") \
+    X(IconUnretracts, "Vueltas de retracción: donde se vuelve a empujar", "Unretractions: where it is pushed back") \
+    X(IconSeams, "Costuras: donde empieza cada lazo de pared externa", "Seams: where each outer wall loop starts") \
+    X(IconToolChanges, "Cambios de herramienta", "Tool changes") \
+    X(IconColorChanges, "Cambios de color", "Colour changes") \
+    X(IconPauses, "Pausas", "Pauses") \
+    X(IconCustom, "G-code propio: donde va un G-code puesto por la persona", "Custom G-code: where the user's own G-code goes") \
+    X(IconGravity, "Centro de gravedad de lo impreso", "Centre of gravity of what is printed") \
+    X(IconNozzle, "Boquilla en el último movimiento dibujado", "Nozzle at the last move drawn") \
+    X(NozzleAt, "X %.2f · Y %.2f · Z %.2f · %.0f mm/s", "X %.2f · Y %.2f · Z %.2f · %.0f mm/s") \
     X(ColorN, "Color %d", "Color %d") \
     X(FirstLayerTime, "Primera capa", "First layer") \
     X(MovesTime, "Movimientos", "Moves") \

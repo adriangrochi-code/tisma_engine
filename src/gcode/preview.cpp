@@ -104,8 +104,12 @@ public:
                     continue;
                 }
                 if (letter == 'T') { // the extruder from now on
-                    if (v && *v >= 0.0 && *v < 256.0)
+                    if (v && *v >= 0.0 && *v < 256.0 && static_cast<std::uint8_t>(*v) != tool_) {
+                        if (tool_seen_)
+                            mark(MarkKind::ToolChange);
                         tool_ = static_cast<std::uint8_t>(*v);
+                    }
+                    tool_seen_ = true;
                     return;
                 }
                 if (letter != 'G' && letter != 'M')
@@ -135,6 +139,16 @@ private:
         if (c.starts_with("TYPE:")) {
             const std::string_view type = trim(c.substr(5));
             kind_ = line_kind(type);
+            // The user's G-code, once the print has started.
+            if (kind_ == LineKind::Custom && !out_.extrusions.empty())
+                mark(MarkKind::Custom);
+            seam_open_ = false;
+        } else if (c == "COLOR_CHANGE") {
+            colour_comment_ = true;
+            mark(MarkKind::ColorChange);
+        } else if (c == "PAUSE_PRINT") {
+            pause_comment_ = true;
+            mark(MarkKind::Pause);
         } else if (c == "LAYER_CHANGE") {
             layer_comments_ = true;
             // A layer of only travels (the start G-code before the first
@@ -187,8 +201,21 @@ private:
         } else if ((code == 104 || code == 109) && at('S') && (!at('T') || *at('T') == double(tool_))) {
             temperature_ = static_cast<std::uint16_t>(std::lround(std::clamp(*at('S'), 0.0, 1000.0)));
         } else if (code == 600) {
+            // Marked already by the engine's ;COLOR_CHANGE.
+            if (!colour_comment_)
+                mark(MarkKind::ColorChange);
+            colour_comment_ = false;
             ++color_;
+        } else if (code == 601 || code == 0 || code == 1) {
+            if (!pause_comment_)
+                mark(MarkKind::Pause);
         }
+    }
+
+    void mark(MarkKind kind) {
+        if (out_.layers.empty())
+            new_layer(z_);
+        out_.marks.push_back({float(x_), float(y_), float(z_), kind, static_cast<std::uint32_t>(out_.layers.size() - 1)});
     }
 
     void g(double code, const Words& w) {
@@ -245,6 +272,10 @@ private:
                 z_ = *at('Z');
             if (at(e_axis_))
                 e_ = *at(e_axis_);
+        } else if (code == 10 && !at('P') && !at('L')) {
+            mark(MarkKind::Retract); // the firmware's retraction
+        } else if (code == 11) {
+            mark(MarkKind::Unretract);
         } else if (code == 28) {
             const auto named = [&](char letter) { return w.present[letter - 'A']; };
             const bool all = !named('X') && !named('Y') && !named('Z');
@@ -261,8 +292,18 @@ private:
         const double dx = x - x_, dy = y - y_, dz = z - z_;
         const double xy = std::hypot(dx, dy);
         const double length = std::hypot(xy, dz);
-        if (length <= 0.0)
-            return; // a retraction, an unretraction or a feed change
+        if (length <= 0.0) {
+            // A retraction (the rest of one a wipe began is the same one) or
+            // an unretraction (or a feed change).
+            if (de < -kExtrudeMin && !wiping_)
+                mark(MarkKind::Retract);
+            else if (de > kExtrudeMin)
+                mark(MarkKind::Unretract);
+            if (de > kExtrudeMin)
+                wiping_ = false;
+            return;
+        }
+        colour_comment_ = pause_comment_ = false;
         const bool extrudes = de > kExtrudeMin;
         if (extrudes && !layer_comments_ &&
             (out_.layers.empty() || std::abs(z - out_.layers.back().z) > kNewZ)) {
@@ -280,6 +321,11 @@ private:
         mv.layer = static_cast<std::uint32_t>(out_.layers.size() - 1);
         PreviewLayer& layer = out_.layers.back();
         if (extrudes) {
+            // An outer wall's loop starts here: its seam.
+            if (kind_ == LineKind::OuterWall && !seam_open_)
+                mark(MarkKind::Seam);
+            seam_open_ = kind_ == LineKind::OuterWall;
+            wiping_ = false;
             double height = layer.height > 0.0 ? layer.height : height_ > 0.0 ? height_ : std::max(z, 0.0);
             // Off the layer's Z (Z anti-aliasing, docs/ZAA.md): what is left down to its bottom.
             if (nonplanar_ && height_ > 0.0)
@@ -305,6 +351,12 @@ private:
         } else {
             mv.kind = LineKind::Travel;
             out_.travelled += length;
+            seam_open_ = false;
+            // Retracting as it goes: a wipe, whose start is a retraction.
+            mv.wipe = de < -kExtrudeMin;
+            if (mv.wipe && !wiping_)
+                mark(MarkKind::Retract);
+            wiping_ = mv.wipe;
         }
         ++out_.kind_moves[static_cast<std::size_t>(mv.kind)];
         out_.moves.push_back(mv);
@@ -324,6 +376,11 @@ private:
     LineKind kind_ = LineKind::Other;
     std::uint8_t fan_ = 0, tool_ = 0;
     std::uint16_t temperature_ = 0, color_ = 0;
+    bool tool_seen_ = false;      // a T came before: the next one changes the tool
+    bool seam_open_ = false;      // in an outer wall's loop
+    bool wiping_ = false;         // the last move was a wipe
+    bool colour_comment_ = false; // ;COLOR_CHANGE marked the M600 that follows
+    bool pause_comment_ = false;  // ;PAUSE_PRINT marked the pause that follows
 };
 
 } // namespace

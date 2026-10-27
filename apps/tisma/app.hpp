@@ -44,6 +44,8 @@ struct AppOptions {
     std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
     std::string search;  // a search for a setting, gone to as Enter would (settings_panel.md, rule 5)
     bool single_column = false;   // the panel's «See all together» (rule 4)
+    bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
+    bool labels = false;          // the parts' names over them (E)
     bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed

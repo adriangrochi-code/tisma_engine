@@ -129,8 +129,18 @@ Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído 
     movimientos y su filamento en metros y gramos (con `extrusion.density`, o 1,24 g/cm³ si no se sabe). En las vistas
     con números, una escala de 11 pasos iguales de azul (lo menos) a rojo (lo más); en la logarítmica, iguales en
     logaritmo; el extrusor y el color, uno por fila.
-  - Los viajes se pueden mostrar.
+  - **Fila de íconos** (regla 11), cada uno con su texto al pasar el puntero: viajes, barridos (los viajes que
+    retraen mientras van), retracciones, vueltas de retracción, costuras (donde empieza cada lazo de pared externa),
+    cambios de herramienta, cambios de color, pausas, G-code propio, centro de gravedad de lo dibujado y la boquilla en
+    la última extrusión de la capa de arriba (con su posición y velocidad al pasar el puntero). Las marcas son puntos de
+    colores distintos sobre la vista; viajes, costuras y boquilla vienen encendidos. El lector del G-code las toma de
+    las retracciones (E solo, G10/G11, el barrido), de `;TYPE:External perimeter`, `T`, `;COLOR_CHANGE`/`M600`,
+    `;PAUSE_PRINT`/`M601` y `;TYPE:Custom`.
   - Los números: tiempo estimado, primera capa, filamento (metros y cm³), capas y líneas del G-code.
+- **Teclas de la vista** (placa y vista previa, regla 10): 0 isométrica, 1 arriba, 2 abajo, 3 frente, 4 atrás,
+  5 izquierda, 6 derecha; K pasa a vista ortogonal y vuelve (se recuerda; se hace con un teleobjetivo: un ángulo de 1°
+  desde lejos, con el mismo tamaño en pantalla, así la luz y las sombras siguen iguales); Z encuadra la pieza elegida
+  o, sin elección, todo; E muestra el nombre de cada pieza; L oculta o muestra la leyenda.
 
 **Abrir** un `.gcode` lo muestra igual, también si no lo escribió el motor: el lector entiende G-code sin los
 comentarios del motor. Ese G-code no se puede volver a laminar ni exportar.
@@ -298,7 +308,7 @@ Varios STL en la línea de comandos arman una placa: el primero la abre y los de
 move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
 `--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). `--level basic|normal|advanced|custom` elige el nivel del
 panel, `--search TEXTO` va al primer ajuste que encuentra, `--single-column` muestra todo junto y `--choose-settings`
-abre «Elegir ajustes…». `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
+abre «Elegir ajustes…». `--ortho` y `--labels` hacen lo de K y E. `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
 (`machine`, `nozzle`, `limits`, `gcode`, `calibration`, `connection`, `notes`), y `--profile "printer=Marca Modelo 0.4 mm"`
 elige también un modelo del catálogo con esa boquilla, solo para esa vez. Las capturas no muestran la ayuda salvo que se pida:
 `--tips` (los consejos), `--tour PASO` (el asistente, de 0 a 6) y `--info grupo.clave` (la tarjeta de un ajuste).

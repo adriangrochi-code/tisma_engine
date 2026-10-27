@@ -53,7 +53,20 @@ struct PreviewMove {
     std::uint8_t tool = 0;         // the extruder (T)
     std::uint16_t temperature = 0; // C the nozzle is set to (M104, M109)
     std::uint16_t color = 0;       // the colour changes (M600) before it
+    bool wipe = false;             // a travel that retracts as it goes (a wipe)
     std::uint32_t layer = 0;       // index into GcodePreview::layers
+};
+
+// A point the preview can mark (preview.md, rule 11): where the filament is
+// retracted or pushed back, where an outer wall's loop starts (its seam),
+// where the tool or the colour changes, where the print pauses, and where
+// the user's own G-code goes (after the first layer starts).
+enum class MarkKind : std::uint8_t { Retract, Unretract, Seam, ToolChange, ColorChange, Pause, Custom };
+inline constexpr std::size_t kMarkKinds = 7;
+struct PreviewMark {
+    float x = 0, y = 0, z = 0;
+    MarkKind kind = MarkKind::Retract;
+    std::uint32_t layer = 0;
 };
 
 struct PreviewLayer {
@@ -79,6 +92,7 @@ struct GcodePreview {
     std::size_t arcs = 0; // G2/G3 moves (with I and J, drawn along their circle)
     std::array<std::size_t, kLineKinds> kind_moves{}; // extrusions per kind (travels for Travel)
     std::array<double, kLineKinds> kind_filament{};   // mm of filament per kind
+    std::vector<PreviewMark> marks;                   // in the order of the file
     // With time_preview: the moves' time by kind, in all and in the first
     // layer that extrudes (the time of retractions and waits left out).
     std::array<double, kLineKinds> kind_seconds{};

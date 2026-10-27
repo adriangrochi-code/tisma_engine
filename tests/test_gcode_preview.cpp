@@ -10,6 +10,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <numbers>
@@ -235,4 +237,81 @@ TEST_CASE("the preview's moves take their time with the accelerations (preview.m
                WithinAbs(p.moves_seconds, 1e-4));
     // A move slowed by the turn takes longer than at its feed.
     CHECK(p.moves[0].seconds > 2.0f);
+}
+
+TEST_CASE("the preview marks retractions, seams and changes (preview.md, rule 11, PV7)", "[gcode][preview]") {
+    const GcodePreview p = read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nT0\n;TYPE:External perimeter\n;WIDTH:0.45\nG1 X0 Y0 Z0.2 F600\n"
+        "G1 X10 E1\nG1 Y10 E2\nG1 X0 E3\nG1 Y0 E4\n"
+        // a wipe that retracts, the rest of the retraction, a travel, the unretraction
+        "G1 X2 Y0 E3.6\nG1 E3.2\nG1 X20 Y0\nG1 E4\n"
+        "G1 X30 E5\nG1 Y10 E6\n;TYPE:Perimeter\nG1 X20 E7\n"
+        "G10\nG1 X40\nG11\n;COLOR_CHANGE\nM600\nT1\n;PAUSE_PRINT\nM601\n;TYPE:Custom\nG4 P100\n"
+        ";TYPE:External perimeter\nG1 X50 E8\n");
+    std::array<int, kMarkKinds> count{};
+    for (const PreviewMark& m : p.marks)
+        ++count[std::size_t(m.kind)];
+    CHECK(count[std::size_t(MarkKind::Retract)] == 2);   // the wipe's, then G10
+    CHECK(count[std::size_t(MarkKind::Unretract)] == 2); // E back, then G11
+    CHECK(count[std::size_t(MarkKind::Seam)] == 3);      // each outer wall's start
+    CHECK(count[std::size_t(MarkKind::ToolChange)] == 1);
+    CHECK(count[std::size_t(MarkKind::ColorChange)] == 1);
+    CHECK(count[std::size_t(MarkKind::Pause)] == 1);
+    CHECK(count[std::size_t(MarkKind::Custom)] == 1);
+    // The first seam where the loop starts; the wipe is a travel of its own kind.
+    CHECK(p.marks.front().kind == MarkKind::Seam);
+    CHECK(p.marks.front().x == 0.0f);
+    CHECK(std::count_if(p.moves.begin(), p.moves.end(), [](const PreviewMove& m) { return m.wipe; }) == 1);
+}
+
+TEST_CASE("the preview marks as many retractions as the engine's G-code makes (PV7)", "[gcode][preview]") {
+    // Two cubes apart: a retraction on every travel between them.
+    IndexedMesh two;
+    for (const float x0 : {0.0f, 40.0f}) {
+        const std::uint32_t b = std::uint32_t(two.vertices.size());
+        for (const float z : {0.0f, 5.0f})
+            for (const auto& [x, y] : {std::pair{0.0f, 0.0f}, {10.0f, 0.0f}, {10.0f, 10.0f}, {0.0f, 10.0f}})
+                two.vertices.push_back({x0 + x + 80.0f, y + 100.0f, z});
+        const auto quad = [&](std::uint32_t a, std::uint32_t c, std::uint32_t d, std::uint32_t e) {
+            two.triangles.push_back({b + a, b + c, b + d});
+            two.triangles.push_back({b + a, b + d, b + e});
+        };
+        quad(0, 3, 2, 1);
+        quad(4, 5, 6, 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    }
+    Settings s = test_printer();
+    s.gpu = GpuMode::Off;
+    std::ostringstream g;
+    write_gcode(g, slice_model(two, s), s);
+    const std::string text = g.str();
+    // The retractions in the text: E going down from where it was pushed to.
+    int retractions = 0;
+    bool retracted = false;
+    double e = 0.0;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line);) {
+        line = line.substr(0, line.find(';'));
+        if (line.rfind("G92", 0) == 0) {
+            e = 0.0;
+            continue;
+        }
+        if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+            continue;
+        const std::size_t at = line.find(" E");
+        if (at == std::string::npos)
+            continue;
+        const double next = std::stod(line.substr(at + 2));
+        const double de = s.relative_extrusion ? next : next - e;
+        e = s.relative_extrusion ? e + next : next;
+        if (de < -1e-7 && !retracted)
+            ++retractions, retracted = true;
+        else if (de > 1e-7)
+            retracted = false;
+    }
+    REQUIRE(retractions > 0);
+    const GcodePreview p = read_gcode_preview(text, s.filament_diameter);
+    const auto marked = std::count_if(p.marks.begin(), p.marks.end(), [](const PreviewMark& m) { return m.kind == MarkKind::Retract; });
+    CHECK(marked == retractions);
 }

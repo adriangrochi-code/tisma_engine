@@ -301,6 +301,11 @@ constexpr ViewInfo kViewInfo[kPreviewViews] = {
     {T::ByColorPrint, ColorMode::Speed, PreviewValue::ColorPrint},
 };
 
+// The colours of the preview's marks (rule 11), in MarkKind order, and of
+// the wipes.
+constexpr std::uint32_t kMarkColours[kMarkKinds] = {0xFF5A36, 0x3FBF7F, 0xF0F0F0, 0xFFD23F, 0xE04FD0, 0x9B6BFF, 0x4FA3FF};
+constexpr std::uint32_t kWipeColour = 0x7FE0C0;
+
 enum class Purpose {
     Open,
     AddModel,
@@ -373,6 +378,8 @@ private:
     void poll_jobs();
     void show_preview();
     void upload_preview();
+    void preview_overlay(const GcodePreview& preview);
+    void part_labels();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
@@ -561,7 +568,13 @@ private:
     int top_layer_ = 0; // 0-based
     int bottom_layer_ = 0;
     bool only_layer_ = false;
-    bool show_travels_ = false;
+    bool show_travels_ = true;
+    // The preview's icon row (preview.md, rule 11): wipes, the marks by kind,
+    // the centre of gravity and the nozzle (travels: show_travels_).
+    bool show_wipes_ = false, show_gravity_ = false, show_nozzle_ = true;
+    bool show_legend_ = true;  // L hides the preview's legend
+    bool show_labels_ = false; // E shows the parts' names
+    std::array<bool, kMarkKinds> show_marks_{false, false, true, false, false, false, false}; // seams on
     ColorMode color_mode_ = ColorMode::Kind; // the shader's, from the view
     PreviewView preview_view_ = PreviewView::Kind;
     std::uint32_t kind_mask_ = 0xFFFFFFFFu;
@@ -1948,6 +1961,10 @@ bool App::init(std::string& error) {
         choose_level(view_level_from(options_.level));
     if (options_.single_column)
         single_column_ = true;
+    if (options_.ortho)
+        camera_.orthographic = true;
+    if (options_.labels)
+        show_labels_ = true;
     if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
         const std::string tab = options_.section.substr(0, slash);
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
@@ -2177,6 +2194,7 @@ void App::load_preferences() {
                 custom_view_ = custom_view_from(custom_view_.base);
             single_column_ = ui.value("single_column", false);
             bed_type_ = ui.value("bed_type", std::string());
+            camera_.orthographic = ui.value("orthographic", false);
             if (ui.contains("section") && ui.at("section").is_array())
                 for (std::size_t t = 0; t < std::min<std::size_t>(3, ui.at("section").size()); ++t)
                     if (ui.at("section")[t].is_string())
@@ -2234,6 +2252,7 @@ void App::save_preferences() {
         j["ui"]["custom_known"] = custom_view_.known;
         j["ui"]["single_column"] = single_column_;
         j["ui"]["bed_type"] = bed_type_;
+        j["ui"]["orthographic"] = camera_.orthographic;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -2459,7 +2478,7 @@ Vec3 App::mouse_ray() const {
     const ImVec2 m = ImGui::GetIO().MousePos;
     const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
     const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
-    const float half = std::tan(0.5f * camera_.fov), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
+    const float half = std::tan(0.5f * camera_.lens_fov()), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
     return normalize(camera_.forward() + camera_.right() * (nx * half * aspect) + camera_.up() * (ny * half));
 }
 
@@ -5186,7 +5205,7 @@ void App::viewport() {
         painted_ = false;
     }
     if (brush_depth_ && view_size_.y > 0.0f) {
-        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.fov)) * 0.5f * view_size_.y;
+        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
     if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -6006,6 +6025,105 @@ void App::empty_hint() {
     ImGui::PopStyleVar(2);
 }
 
+// What the icon row shows over the paths (preview.md, rule 11), drawn over
+// the 3D view: the marks of the layers drawn, the wipes, the centre of
+// gravity of what is drawn and the nozzle at its last extrusion.
+void App::preview_overlay(const GcodePreview& p) {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](float x, float y, float z, ImVec2& out) {
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const std::uint32_t lo = std::uint32_t(bottom_layer_), hi = std::uint32_t(top_layer_);
+    ImVec2 a, b;
+    if (show_wipes_)
+        for (std::uint32_t l = lo; l <= hi && l < p.layers.size(); ++l)
+            for (std::size_t i = p.layers[l].first; i < p.layers[l].first + p.layers[l].count; ++i)
+                if (const PreviewMove& m = p.moves[i];
+                    m.wipe && project(m.x0, m.y0, m.z0, a) && project(m.x1, m.y1, m.z1, b))
+                    dl->AddLine(a, b, ImGui::GetColorU32(rgb(kWipeColour)), 2.0f * scale_);
+    if (std::any_of(show_marks_.begin(), show_marks_.end(), [](bool on) { return on; }))
+        for (const PreviewMark& m : p.marks)
+            if (m.layer >= lo && m.layer <= hi && show_marks_[std::size_t(m.kind)] && project(m.x, m.y, m.z, a))
+                dl->AddCircleFilled(a, 3.5f * scale_, ImGui::GetColorU32(rgb(kMarkColours[std::size_t(m.kind)])));
+    if (show_gravity_) {
+        // Each extrusion's middle, by its volume.
+        double sum = 0.0, cx = 0.0, cy = 0.0, cz = 0.0;
+        for (std::uint32_t l = lo; l <= hi && l < p.layers.size(); ++l)
+            for (std::size_t e = p.layers[l].first_extrusion; e < p.layers[l].first_extrusion + p.layers[l].extrusion_count; ++e) {
+                const PreviewMove& m = p.moves[p.extrusions[e]];
+                const double length = std::hypot(double(m.x1) - m.x0, double(m.y1) - m.y0, double(m.z1) - m.z0);
+                const double v = double(m.width) * m.height * length;
+                sum += v;
+                cx += v * 0.5 * (double(m.x0) + m.x1), cy += v * 0.5 * (double(m.y0) + m.y1);
+                cz += v * (0.5 * (double(m.z0) + m.z1) - 0.5 * m.height);
+            }
+        if (sum > 0.0 && project(float(cx / sum), float(cy / sum), float(cz / sum), a)) {
+            const float r = 7.0f * scale_;
+            const ImU32 ink = ImGui::GetColorU32(rgb(0xFFFFFF)), shade = ImGui::GetColorU32(ImVec4(0, 0, 0, 0.6f));
+            dl->AddCircleFilled(a, r, shade);
+            dl->AddCircle(a, r, ink, 20, 1.8f * scale_);
+            dl->AddLine(ImVec2(a.x - r * 1.5f, a.y), ImVec2(a.x + r * 1.5f, a.y), ink, 1.5f * scale_);
+            dl->AddLine(ImVec2(a.x, a.y - r * 1.5f), ImVec2(a.x, a.y + r * 1.5f), ink, 1.5f * scale_);
+        }
+    }
+    if (show_nozzle_ && hi < p.layers.size() && p.layers[hi].extrusion_count > 0) {
+        const PreviewMove& m = p.moves[p.extrusions[p.layers[hi].first_extrusion + p.layers[hi].extrusion_count - 1]];
+        if (project(m.x1, m.y1, m.z1, a)) {
+            // The nozzle standing on the point, and where it is when the mouse is on it.
+            const float s = 16.0f * scale_;
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.accent_hover)), edge = ImGui::GetColorU32(ImVec4(0, 0, 0, 0.7f));
+            dl->AddRectFilled(ImVec2(a.x - s * 0.35f, a.y - s * 1.6f), ImVec2(a.x + s * 0.35f, a.y - s * 0.7f), c);
+            dl->AddTriangleFilled(ImVec2(a.x - s * 0.4f, a.y - s * 0.7f), ImVec2(a.x + s * 0.4f, a.y - s * 0.7f), a, c);
+            dl->AddTriangle(ImVec2(a.x - s * 0.4f, a.y - s * 0.7f), ImVec2(a.x + s * 0.4f, a.y - s * 0.7f), a, edge, 1.2f);
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            if (!ImGui::GetIO().WantCaptureMouse && std::abs(mouse.x - a.x) < s * 0.5f && mouse.y > a.y - s * 1.7f &&
+                mouse.y < a.y + 2.0f)
+                ImGui::SetTooltip(tr(T::NozzleAt), double(m.x1), double(m.y1), double(m.z1), double(m.feed));
+        }
+    }
+    dl->PopClipRect();
+}
+
+// Each part's name over it (E, preview.md, rule 10).
+void App::part_labels() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        if (placed_meshes_[i].empty())
+            continue;
+        Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+        for (const Vec3f& c : placed_meshes_[i].corners()) {
+            lo = Vec3{std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+            hi = Vec3{std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+        }
+        const Vec3 top{(lo.x + hi.x) * 0.5f, (lo.y + hi.y) * 0.5f, hi.z};
+        const float w = vp[3] * top.x + vp[7] * top.y + vp[11] * top.z + vp[15];
+        if (!(w > 1e-6f))
+            continue;
+        const float x = (vp[0] * top.x + vp[4] * top.y + vp[8] * top.z + vp[12]) / w;
+        const float y = (vp[1] * top.x + vp[5] * top.y + vp[9] * top.z + vp[13]) / w;
+        const ImVec2 at(view_pos_.x + (x * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - y * 0.5f) * view_size_.y);
+        const ImVec2 size = ImGui::CalcTextSize(objects_[i].name.c_str());
+        const ImVec2 box(at.x - size.x * 0.5f - 6.0f * scale_, at.y - size.y - 14.0f * scale_);
+        dl->AddRectFilled(box, ImVec2(box.x + size.x + 12.0f * scale_, box.y + size.y + 6.0f * scale_),
+                          ImGui::GetColorU32(rgb(theme_.panel, 0.85f)), 5.0f * scale_);
+        dl->AddText(ImVec2(box.x + 6.0f * scale_, box.y + 3.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)),
+                    objects_[i].name.c_str());
+    }
+}
+
 void App::preview_panels() {
     if (!result_)
         return;
@@ -6064,6 +6182,9 @@ void App::preview_panels() {
         bottom_layer_ = top_layer_;
     else
         bottom_layer_ = 0;
+    preview_overlay(p);
+    if (!show_legend_)
+        return;
 
     // The legend and the numbers, bottom left.
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + view_size_.y - margin), ImGuiCond_Always,
@@ -6204,19 +6325,52 @@ void App::preview_panels() {
             ImGui::TextUnformatted(text_of(step).c_str());
         }
     }
-    bool travel = show_travels_;
-    if (ImGui::Checkbox("##travel", &travel))
-        show_travels_ = travel;
-    ImGui::SameLine();
+    // The icon row (rule 11): each shows or hides something over the paths.
     {
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const float y = at.y + ImGui::GetFrameHeight() * 0.5f;
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(at.x, y), ImVec2(at.x + swatch, y),
-                                            ImGui::GetColorU32(rgb(kind_colour(LineKind::Travel))), 2.0f * scale_);
-        ImGui::Dummy(ImVec2(swatch, swatch));
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(tr(T::KindTravel));
+        const float size = ImGui::GetFrameHeight();
+        const ImU32 off = ImGui::GetColorU32(rgb(theme_.frame)), on = ImGui::GetColorU32(rgb(theme_.accent, 0.45f));
+        int n = 0;
+        const auto icon_toggle = [&](const char* id, bool& value, T tip, const std::function<void(ImDrawList*, ImVec2, float)>& draw) {
+            if (n++ % 6 != 0)
+                ImGui::SameLine(0, 4.0f * scale_);
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            if (ImGui::InvisibleButton(id, ImVec2(size, size)))
+                value = !value;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), value ? on : off, 5.0f * scale_);
+            draw(dl, at, size);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tr(tip));
+        };
+        icon_toggle("##travels", show_travels_, T::IconTravels, [&](ImDrawList* dl, ImVec2 a, float s) {
+            dl->AddLine(ImVec2(a.x + s * 0.2f, a.y + s * 0.7f), ImVec2(a.x + s * 0.8f, a.y + s * 0.3f),
+                        ImGui::GetColorU32(rgb(kind_colour(LineKind::Travel))), 2.0f * scale_);
+        });
+        icon_toggle("##wipes", show_wipes_, T::IconWipes, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImVec2 pts[4] = {ImVec2(a.x + s * 0.2f, a.y + s * 0.6f), ImVec2(a.x + s * 0.4f, a.y + s * 0.35f),
+                                   ImVec2(a.x + s * 0.6f, a.y + s * 0.65f), ImVec2(a.x + s * 0.8f, a.y + s * 0.4f)};
+            dl->AddPolyline(pts, 4, ImGui::GetColorU32(rgb(kWipeColour)), 2.0f * scale_, ImDrawFlags_None);
+        });
+        static constexpr T mark_tips[kMarkKinds] = {T::IconRetracts, T::IconUnretracts, T::IconSeams, T::IconToolChanges,
+                                                    T::IconColorChanges, T::IconPauses, T::IconCustom};
+        for (std::size_t k = 0; k < kMarkKinds; ++k) {
+            const std::string id = "##mark" + std::to_string(k);
+            icon_toggle(id.c_str(), show_marks_[k], mark_tips[k], [&](ImDrawList* dl, ImVec2 a, float s) {
+                dl->AddCircleFilled(ImVec2(a.x + s * 0.5f, a.y + s * 0.5f), s * 0.18f, ImGui::GetColorU32(rgb(kMarkColours[k])));
+            });
+        }
+        icon_toggle("##gravity", show_gravity_, T::IconGravity, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.text));
+            dl->AddCircle(ImVec2(a.x + s * 0.5f, a.y + s * 0.5f), s * 0.22f, c, 16, 1.5f);
+            dl->AddLine(ImVec2(a.x + s * 0.2f, a.y + s * 0.5f), ImVec2(a.x + s * 0.8f, a.y + s * 0.5f), c, 1.2f);
+            dl->AddLine(ImVec2(a.x + s * 0.5f, a.y + s * 0.2f), ImVec2(a.x + s * 0.5f, a.y + s * 0.8f), c, 1.2f);
+        });
+        icon_toggle("##nozzle", show_nozzle_, T::IconNozzle, [&](ImDrawList* dl, ImVec2 a, float s) {
+            const ImU32 c = ImGui::GetColorU32(rgb(theme_.accent_hover));
+            dl->AddRectFilled(ImVec2(a.x + s * 0.32f, a.y + s * 0.18f), ImVec2(a.x + s * 0.68f, a.y + s * 0.42f), c);
+            dl->AddTriangleFilled(ImVec2(a.x + s * 0.3f, a.y + s * 0.42f), ImVec2(a.x + s * 0.7f, a.y + s * 0.42f),
+                                  ImVec2(a.x + s * 0.5f, a.y + s * 0.8f), c);
+        });
     }
     ImGui::Separator();
     if (ImGui::BeginTable("##numbers", 2)) {
@@ -6857,6 +7011,8 @@ void App::layout() {
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
+        if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
+            part_labels();
         if (tab_ == Tab::Analysis)
             analysis_panel();
         if (tab_ == Tab::Calibration)
@@ -6895,6 +7051,41 @@ void App::layout() {
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
         search_focus_ = true;
+    // The view's keys (preview.md, rule 10) while no text field has the keyboard.
+    const ImGuiIO& keys = ImGui::GetIO();
+    if (!keys.WantTextInput && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&
+        tab_ != Tab::Calibration && tab_ != Tab::Device) {
+        static constexpr std::pair<ImGuiKey, StandardView> fixed[] = {
+            {ImGuiKey_0, StandardView::Iso},  {ImGuiKey_1, StandardView::Top},  {ImGuiKey_2, StandardView::Bottom},
+            {ImGuiKey_3, StandardView::Front}, {ImGuiKey_4, StandardView::Back}, {ImGuiKey_5, StandardView::Left},
+            {ImGuiKey_6, StandardView::Right}};
+        for (const auto& [key, view] : fixed)
+            if (ImGui::IsKeyPressed(key, false) ||
+                ImGui::IsKeyPressed(ImGuiKey(int(ImGuiKey_Keypad0) + (int(key) - int(ImGuiKey_0))), false)) {
+                camera_.set_view(view);
+                frame_all();
+            }
+        if (ImGui::IsKeyPressed(ImGuiKey_K, false))
+            camera_.orthographic = !camera_.orthographic;
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+            // The chosen part, or everything.
+            if (tab_ == Tab::Prepare && selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() &&
+                !placed_meshes_[std::size_t(selected_)].empty()) {
+                Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
+                for (const Vec3f& c : placed_meshes_[std::size_t(selected_)].corners()) {
+                    lo = Vec3{std::min(lo.x, c.x), std::min(lo.y, c.y), std::min(lo.z, c.z)};
+                    hi = Vec3{std::max(hi.x, c.x), std::max(hi.y, c.y), std::max(hi.z, c.z)};
+                }
+                camera_.fit(lo, hi, view_size_.x / std::max(view_size_.y, 1.0f));
+            } else {
+                frame_all();
+            }
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+            show_labels_ = !show_labels_;
+        if (ImGui::IsKeyPressed(ImGuiKey_L, false))
+            show_legend_ = !show_legend_;
+    }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(false);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))

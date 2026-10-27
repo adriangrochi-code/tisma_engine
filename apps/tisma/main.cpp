@@ -28,6 +28,7 @@ constexpr const char* kUsage =
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
     "                                   [--level basic|normal|advanced|custom] [--section TAB/SECTION]\n"
     "                                   [--search TEXT] [--single-column] [--choose-settings]\n"
+    "                                   [--ortho] [--labels]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
@@ -109,6 +110,10 @@ int main(int argc, char** argv) {
             options.search = value();
         } else if (arg == "--single-column") {
             options.single_column = true;
+        } else if (arg == "--ortho") {
+            options.ortho = true;
+        } else if (arg == "--labels") {
+            options.labels = true;
         } else if (arg == "--choose-settings") {
             options.choose_settings = true;
         } else if (arg == "--section") {

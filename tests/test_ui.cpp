@@ -140,6 +140,29 @@ TEST_CASE("ui: the camera frames a box and moves with the mouse", "[ui]") {
     CHECK(dot(cam.target - before, cam.right()) < 0.0f);
 }
 
+TEST_CASE("ui: the orthographic view keeps sizes whatever the depth (preview.md, rule 10)", "[ui]") {
+    OrbitCamera cam;
+    cam.target = {0, 0, 0};
+    cam.distance = 300.0f;
+    cam.set_view(StandardView::Front);
+    // A 10 mm bar at the target and 100 mm nearer: its size on the screen.
+    const auto width_at = [&](float y) {
+        const Mat4 vp = cam.projection(1.0f) * cam.view();
+        return transform_point(vp, Vec3{5.0f, y, 0.0f}).x - transform_point(vp, Vec3{-5.0f, y, 0.0f}).x;
+    };
+    const float far = width_at(0.0f), near = width_at(-100.0f);
+    CHECK(near / far > 1.3f); // perspective: nearer is bigger
+    cam.orthographic = true;
+    const float far_o = width_at(0.0f), near_o = width_at(-100.0f);
+    CHECK(near_o / far_o < 1.01f);
+    // The target keeps its size on the screen, so zoom and pan feel the same.
+    CHECK_THAT(double(far_o), Catch::Matchers::WithinRel(double(far), 1e-3));
+    CHECK(length(cam.eye() - cam.target) > 10.0f * cam.distance);
+    // The bottom view looks up.
+    cam.set_view(StandardView::Bottom);
+    CHECK(cam.forward().z > 0.99f);
+}
+
 TEST_CASE("ui: a model goes to the middle of the bed, on it", "[ui]") {
     BoundingBox box;
     box.min = {10, -5, 2};
