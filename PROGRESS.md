@@ -6183,3 +6183,29 @@ Personalizado). Capturas revisadas: «costura» abre Calidad › Costura con la 
 
 **Sigue:** la tarjeta de la impresora y su configuración aparte.
 
+## 2026-10-27 — Interfaz P1: la tarjeta de la impresora y su página
+
+**Hecho** (ficha `settings_panel.md`, reglas 21 a 23 y 32 a 40):
+- **Tarjeta de la impresora** arriba del panel: el dibujo según el tipo (resina, cinta, delta por la cama redonda,
+  cerrada o abierta), la lista de impresoras con buscador (las propias, las del programa y las 144 del catálogo por
+  marca, cada una con su dibujo), las camas con su dibujo cuando el modelo trae varias, el engranaje y la boquilla.
+- **Boquilla rápida:** un clic cambia al perfil de la impresora con esa boquilla (lo crea desde el catálogo si falta) y
+  un aviso con **Deshacer** devuelve la impresora y los ajustes de antes; una impresora propia tiene **Otra…**, que
+  cambia el diámetro y deja el perfil marcado con su asterisco.
+- **Configuración de la impresora aparte:** página a todo el ancho con «‹ Placa» y Escape. El panel queda con
+  Impresión y Material. Secciones Máquina, Boquilla y extrusor, Límites y G-code (las mismas tarjetas y niveles),
+  Calibración (cada prueba con lo que fija, su valor, su estado y el filamento; «N de M calibradas» y «Calibrar en
+  orden»), Conexión y Notas. Lo calibrado se anota al usar un resultado en Calibrar.
+- `--profile printer=…` acepta un modelo del catálogo con su boquilla («Raise3D E3 0.4 mm»), solo para esa vez.
+
+**Medido:** pruebas `printer card: …` (SP25, SP26, SP27, regla 21 y regla 38 con SP29 y SP30), y con la interfaz
+entera `ui_printer_card` (SP22, la Raise3D E3 con sus camas) y `ui_printer_page` (SP28). Capturas revisadas.
+
+**No hecho:** la cámara (27 a 31) y la conexión por red desde la tarjeta (41 a 44), que esperan
+`printer_connections.md` (F9); la boquilla que informa la impresora conectada (26); el diálogo de cambios sin guardar
+(24) y los perfiles de impresión y filamento compatibles al cambiar de boquilla (22), que esperan los perfiles de
+`presets.md` y `profile_pack.md`; la cama elegida no cambia todavía la temperatura (`profiles.md`, regla 4). Pellets
+no tiene dibujo propio hasta que exista `machine.feedstock`.
+
+**Sigue:** el resto de P1 (`preview.md`, `credits.md`, `assistant.md`), después P2.
+

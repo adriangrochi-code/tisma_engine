@@ -32,6 +32,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Relleno ondulado entrelazado** (ficha `interlock_infill.md`; `infill.waves`, en Impresión › Relleno › Relleno
   ondulado): el relleno poco denso sube y baja como un cartón de huevos, igual en cada capa, para que las capas
   encajen en vez de apoyarse en planos lisos. Funciona con cualquier patrón.
+- **Tarjeta de la impresora** arriba del panel: la impresora con su dibujo y una lista con buscador (también las del
+  catálogo, por marca), la cama en las impresoras que traen varias y la boquilla, que se cambia con un clic y se puede
+  deshacer. El engranaje abre la **configuración de la impresora** en una página aparte, con su sección de
+  **Calibración** (qué está calibrado, cuándo y con qué boquilla y filamento), la conexión y notas.
 - **Buscar un ajuste** (Ctrl+F, en la barra superior): por su nombre, su tarjeta, su clave o lo que hace; lleva al
   ajuste y lo resalta.
 - **Panel de ajustes:** el nivel **Personalizado**, con «Elegir ajustes…», el ojo para quitar un ajuste de la vista,

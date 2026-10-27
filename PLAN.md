@@ -691,8 +691,12 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   los dependientes ocultos con su interruptor apagado, los cambios marcados y nunca ocultos (reglas 1 a 3, 6, 7 y 9 a
   14). Segundo paso hecho (2026-10-27): «Ver todo junto» (4), la búsqueda de la barra superior (5), Restablecer por
   tarjeta (8) y Personalizado con su diálogo, el ojo tachado, «+ Agregar ajuste» y exportar e importar la vista (15 a
-  20; SP6, SP6b, SP9 a SP14). Falta: la tarjeta de la impresora con boquilla, cámara y conexión (21 a 36, 41 a 44) y la
-  configuración de la impresora aparte (37 a 40; hoy, una pestaña)
+  20; SP6, SP6b, SP9 a SP14). Tercer paso hecho (2026-10-27): la tarjeta de la impresora con sus dibujos, la lista con
+  buscador por marca, las camas, la boquilla rápida con Deshacer y «Otra…» (21 a 23, 32 a 36), y la configuración de la
+  impresora en una página aparte con Calibración, Conexión y Notas (37 a 40). Falta: la cámara (27 a 31), la conexión
+  por red desde la tarjeta (41 a 44), la boquilla de la impresora conectada (26), el diálogo de cambios sin guardar al
+  cambiar de boquilla (24, con `presets.md`), los perfiles compatibles al cambiar de boquilla (22, con
+  `profile_pack.md`) y la temperatura de cama por tipo de cama (`profiles.md`, regla 4)
 - [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…)
 - [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
