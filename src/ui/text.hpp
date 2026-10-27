@@ -900,6 +900,26 @@
     X(LabelsNone, "No", "No") \
     X(LabelsOctoPrint, "Comentarios (OctoPrint)", "Comments (OctoPrint)") \
     X(LabelsFirmware, "Del firmware (cancelar un objeto)", "The firmware's (cancel one object)") \
+    X(SubExtruders, "Extrusores", "Extruders") \
+    X(SubMultiMaterial, "Varios materiales", "Several materials") \
+    X(ExtrudersRow, "Cantidad de extrusores", "Number of extruders") \
+    X(ExtruderOffsetRow, "Desfase de las boquillas", "Nozzle offsets") \
+    X(ToolchangeLength, "Retracción al cambiar de herramienta", "Retraction at a tool change") \
+    X(ToolchangeRestartExtra, "Extra al volver a la herramienta", "Extra when the tool comes back") \
+    X(ToolchangeGcode, "G-code al cambiar de herramienta", "Tool change G-code") \
+    X(WallsExtruder, "Extrusor de los perímetros", "Walls extruder") \
+    X(InfillExtruder, "Extrusor del relleno", "Infill extruder") \
+    X(SolidInfillExtruder, "Extrusor del relleno sólido", "Solid infill extruder") \
+    X(SupportExtruder, "Extrusor del soporte", "Support extruder") \
+    X(SupportInterfaceExtruder, "Extrusor de la interfaz del soporte", "Support interface extruder") \
+    X(BedTemperatureFrom, "Temperatura de cama del extrusor", "Bed temperature from extruder") \
+    X(OozePrevention, "Bajar la temperatura de los que esperan", "Lower the waiting extruders' temperature") \
+    X(StandbyDelta, "Cuánto bajarla", "By how much") \
+    X(InterfaceShells, "Capas sólidas entre materiales", "Solid layers between materials") \
+    X(SumExtrudersN, "%d extrusores", "%d extruders") \
+    X(SumOneExtruder, "Un extrusor", "One extruder") \
+    X(SumObjectExtruder, "El de cada objeto", "Each object's own") \
+    X(SumByKind, "Por tipo de extrusión", "By kind of extrusion") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
     X(LimitsIgnore, "No usarlos", "Do not use them") \

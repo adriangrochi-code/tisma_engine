@@ -21,7 +21,10 @@ namespace tisma {
 // slits narrower than a bead, so a bottom surface inside the region below
 // (regions, one per layer) is no bridge and the bead area is not computed.
 inline constexpr double kBridgeAngleStep = 5.0; // degrees
+// With `others` (one per layer: what other extruders' parts lay there,
+// multi_extruder.md), that counts as printed below too.
 void find_bridges(std::vector<LayerSurfaces>& surfaces, const std::vector<Polygons>& regions,
-                  const std::vector<LayerWalls>& walls, bool sparse_printed, double width);
+                  const std::vector<LayerWalls>& walls, bool sparse_printed, double width,
+                  const std::vector<Polygons>* others = nullptr);
 
 } // namespace tisma

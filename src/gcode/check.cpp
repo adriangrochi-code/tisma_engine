@@ -241,6 +241,10 @@ private:
         for (const Parameter& q : parameters)
             param[q.letter - 'A'] = q.value;
         const int n = p.code;
+        if (kind == 'T') {
+            tool_change(n);
+            return;
+        }
         if (kind == 'G' && n >= 0 && n <= 3)
             move(n, param);
         else if (kind == 'G' && n == 90)
@@ -267,6 +271,43 @@ private:
         }
     }
 
+    // Another extruder (multi_extruder.md, rule 5): the leaving one keeps its
+    // filament pulled back; the next one's, pulled back when it left, comes
+    // back with its own extra.
+    void tool_change(int n) {
+        if (limits_.toolchange_length.empty() || n < 0)
+            return;
+        const auto at = [](std::vector<double>& list, std::size_t k) -> double& {
+            if (list.size() <= k)
+                list.resize(k + 1, 0.0);
+            return list[k];
+        };
+        at(pulled_, tool_) = retracted_;
+        tool_ = std::size_t(n);
+        retracted_ = at(pulled_, tool_);
+        at(pulled_, tool_) = 0.0;
+        target_ = retracted_;
+        tool_back_ = retracted_ > 1e-9;
+        pulling_ = false;
+    }
+
+    // A tool change's retraction: standing, up to the leaving tool's
+    // retraction.toolchange_length with what a retraction pulled already.
+    bool toolchange_pull(double amount) {
+        if (limits_.toolchange_length.empty())
+            return false;
+        const std::vector<double>& lengths = limits_.toolchange_length;
+        const double length = lengths[std::min(tool_, lengths.size() - 1)];
+        if (std::abs(retracted_ + amount - length) > slack())
+            return false;
+        if (retracted_ <= 1e-9)
+            ++out_.stats.retractions;
+        out_.stats.filament -= amount;
+        retracted_ = target_ = retracted_ + amount;
+        pulling_ = false;
+        return true;
+    }
+
     // The firmware's retraction (retraction_travel.md, rule 7): a bare G10
     // pulls back, G11 undoes it, no E moves.
     void firmware_retraction(bool pull) {
@@ -281,6 +322,7 @@ private:
             if (retracted_ <= 1e-9)
                 problem("pushes filament without a retraction to undo");
             retracted_ = 0.0;
+            tool_back_ = false;
         }
     }
 
@@ -415,6 +457,8 @@ private:
         } else if (moves) {
             ++out_.stats.travels;
             out_.stats.travel_path += length;
+        } else if (de < -1e-9 && toolchange_pull(-de)) {
+            // A tool change's retraction, counted.
         } else if (de < -1e-9) {
             if (limits_.wipe) {
                 pull_back(-de);
@@ -434,9 +478,10 @@ private:
                 problem("pushes filament without a retraction to undo");
             else if (limits_.firmware_retraction)
                 problem("pushes filament with E after a G10 retraction");
-            else if (std::abs(de - retracted_ - limits_.restart_extra) > slack())
+            else if (const double extra = restart_extra(); std::abs(de - retracted_ - extra) > slack())
                 problem("undoes " + text(de) + " mm of a " + text(retracted_) + " mm retraction" +
-                        (limits_.restart_extra > 0.0 ? " and " + text(limits_.restart_extra) + " mm more" : ""));
+                        (extra > 0.0 ? " and " + text(extra) + " mm more" : ""));
+            tool_back_ = false;
             if (limits_.wipe && retracted_ > 1e-9 && std::abs(retracted_ - target_) > slack())
                 problem("retracts " + text(retracted_) + " mm instead of " + text(target_));
             retracted_ = 0.0;
@@ -463,6 +508,15 @@ private:
             problem("retracts " + text(retracted_) + " mm instead of " + text(target_));
     }
 
+    // What comes back past a retraction: a tool's own extra when it comes
+    // back from a change (multi_extruder.md, rule 5), else restart_extra.
+    double restart_extra() const {
+        if (!tool_back_ || limits_.toolchange_restart_extra.empty())
+            return limits_.restart_extra;
+        const std::vector<double>& extras = limits_.toolchange_restart_extra;
+        return extras[std::min(tool_, extras.size() - 1)];
+    }
+
     // How far the pieces of a retraction may add up from its length: E is
     // rounded to 5 decimals in each one.
     double slack() const { return kRetractSlack + 1e-5 * double(pieces_); }
@@ -483,6 +537,9 @@ private:
     double target_ = 0.0; // the length of the retraction under way
     std::size_t pieces_ = 0; // its pieces so far (a wipe's)
     bool pulling_ = false;   // the last move was one of them
+    std::size_t tool_ = 0;        // the extruder printing, from 0
+    std::vector<double> pulled_;  // each extruder's filament pulled back when it left
+    bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool awaiting_z_ = false;
     bool new_object_ = false; // after ;NEXT_OBJECT, until the next object's first ;Z:
     std::optional<double> layer_z_, height_, width_;
@@ -596,6 +653,19 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     limits.restart_extra = s.restart_extra * e_scale;
     limits.wipe = s.wipe;
     limits.firmware_retraction = s.firmware_retraction;
+    if (s.extruders > 1) {
+        for (int e = 0; e < s.extruders; ++e) {
+            limits.toolchange_length.push_back(per_extruder(s.toolchange_length, std::size_t(e), 10.0) * e_scale);
+            limits.toolchange_restart_extra.push_back(per_extruder(s.toolchange_restart_extra, std::size_t(e)) * e_scale);
+        }
+        // Each nozzle's offset comes off its X and Y (rule 8).
+        double off_lo[2] = {0.0, 0.0}, off_hi[2] = {0.0, 0.0};
+        for (const auto& o : s.extruder_offset)
+            for (int a = 0; a < 2; ++a)
+                off_lo[a] = std::min(off_lo[a], o[std::size_t(a)]), off_hi[a] = std::max(off_hi[a], o[std::size_t(a)]);
+        limits.min_x -= off_hi[0], limits.max_x -= off_lo[0];
+        limits.min_y -= off_hi[1], limits.max_y -= off_lo[1];
+    }
     limits.flow = s.flow / 100.0;
     GcodeLimits::Change current{0.0, s.retract_length * e_scale, s.flow / 100.0};
     for (const HeightChange& c : s.changes) {

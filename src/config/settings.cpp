@@ -213,6 +213,18 @@ const std::array<const char*, 14> kFilamentRetractionNames = {
     "retraction.on_layer_change", "retraction.wipe",   "retraction.before_wipe",     "travel.ramping_lift",
     "travel.slope",           "travel.max_lift"};
 
+double per_extruder(const std::vector<double>& values, std::size_t extruder, double fallback) {
+    if (values.empty())
+        return fallback;
+    return values[std::min(extruder, values.size() - 1)];
+}
+
+std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t extruder) {
+    if (extruder >= settings.extruder_offset.size())
+        return {0.0, 0.0};
+    return settings.extruder_offset[extruder];
+}
+
 Settings with_filament_retraction(const Settings& settings) {
     Settings s = settings;
     for (const auto& [key, v] : settings.filament_retraction) {
@@ -344,7 +356,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "sequential" ||
+            group == "sequential" || group == "extruders" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -558,14 +570,47 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be from 0 to 1000 mm");
         (n == "clearance_radius" ? s.clearance_radius : s.clearance_height) = d;
     });
+    // Which extruder prints what (multi_extruder.md, rules 2, 4 and 7).
+    read_group(root, "extruders",
+               {"walls", "infill", "solid_infill", "support", "support_interface", "bed_temperature_from",
+                "ooze_prevention", "standby_delta"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "ooze_prevention") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.ooze_prevention = g.at(n).get<bool>();
+            return;
+        }
+        const double d = number(g, n, k);
+        if (n == "standby_delta") {
+            if (!(d >= -300.0 && d <= 300.0))
+                fail(k, "must be from -300 to 300 C");
+            s.standby_delta = d;
+            return;
+        }
+        if (!(d >= 0.0 && d <= double(kMaxExtruders)) || d != std::floor(d))
+            fail(k, "must be 0 (the object's) or an extruder from 1 to " + std::to_string(kMaxExtruders));
+        (n == "walls"                ? s.extruder_walls
+         : n == "infill"             ? s.extruder_infill
+         : n == "solid_infill"       ? s.extruder_solid_infill
+         : n == "support"            ? s.extruder_support
+         : n == "support_interface"  ? s.extruder_support_interface
+                                     : s.bed_temperature_from) = int(d);
+    });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
             fail(k, "must be true or false");
         s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
-                                  "bottom_min_thickness"},
+                                  "bottom_min_thickness", "interface_shells"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "interface_shells") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.interface_shells = g.at(n).get<bool>();
+            return;
+        }
         if (n == "top_min_thickness" || n == "bottom_min_thickness") {
             const double v = number(g, n, k);
             if (v < 0.0 || v > 100.0)
@@ -680,9 +725,35 @@ Settings parse_checked(std::string_view text) {
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
-                "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent"},
+                "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
+                "extruders", "extruder_offset"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   // Several extruders (multi_extruder.md): as many as the
+                   // colour channel paints, each nozzle's offset from the first.
+                   if (n == "extruders") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 1.0 && d <= double(kMaxExtruders)) || d != std::floor(d))
+                           fail(k, "must be a whole number from 1 to " + std::to_string(kMaxExtruders));
+                       s.extruders = int(d);
+                       return;
+                   }
+                   if (n == "extruder_offset") {
+                       const char* what = "must be a list of [x, y] offsets in mm, one per extruder, from -1000 to 1000";
+                       if (!v.is_array() || v.size() > std::size_t(kMaxExtruders))
+                           fail(k, what);
+                       std::vector<std::array<double, 2>> offsets;
+                       for (const json& p : v) {
+                           if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                               fail(k, what);
+                           const double x = p[0].get<double>(), y = p[1].get<double>();
+                           if (!(std::abs(x) <= 1000.0 && std::abs(y) <= 1000.0))
+                               fail(k, what);
+                           offsets.push_back({x, y});
+                       }
+                       s.extruder_offset = std::move(offsets);
+                       return;
+                   }
                    if (n == "limits_usage") {
                        s.limits_usage = choice<LimitsUsage>(
                            g, n, k,
@@ -892,8 +963,26 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "lift_above", "lift_below", "firmware"},
+                "before_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   // A tool change's (multi_extruder.md, rule 5): one value for
+                   // every extruder, or a list by extruder.
+                   if (n == "toolchange_length" || n == "toolchange_restart_extra") {
+                       const double top = n == "toolchange_length" ? 200.0 : 10.0;
+                       const std::string what = "must be a length from 0 to " + std::to_string(int(top)) +
+                                                " mm, or a list of them by extruder";
+                       const json& v = g.at(n);
+                       std::vector<double> list;
+                       for (const json& x : v.is_array() ? v : json::array({v})) {
+                           if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= top))
+                               fail(k, what);
+                           list.push_back(x.get<double>());
+                       }
+                       if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                           fail(k, what);
+                       (n == "toolchange_length" ? s.toolchange_length : s.toolchange_restart_extra) = std::move(list);
+                       return;
+                   }
                    if (n == "on_layer_change" || n == "wipe" || n == "firmware") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
@@ -1271,7 +1360,8 @@ Settings parse_checked(std::string_view text) {
         s.post_process = std::move(scripts);
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
-                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels"},
+                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
+                               "toolchange"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
             s.object_labels = choice<ObjectLabels>(
@@ -1296,6 +1386,7 @@ Settings parse_checked(std::string_view text) {
                 fail(k, "must be a string");
             (n == "color_change" ? s.gcode_color_change
              : n == "pause"      ? s.gcode_pause
+             : n == "toolchange" ? s.gcode_toolchange
              : n == "before_layer" ? s.gcode_before_layer
              : n == "between_objects" ? s.gcode_between_objects
                                    : s.gcode_after_layer) = g.at(n).get<std::string>();
@@ -1576,6 +1667,19 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"sequential.enabled", flag(s.sequential)},
         {"sequential.clearance_radius", num(s.clearance_radius)},
         {"sequential.clearance_height", num(s.clearance_height)},
+        {"machine.extruders", std::to_string(s.extruders)},
+        {"machine.extruder_offset", json(s.extruder_offset).dump()},
+        {"extruders.walls", std::to_string(s.extruder_walls)},
+        {"extruders.infill", std::to_string(s.extruder_infill)},
+        {"extruders.solid_infill", std::to_string(s.extruder_solid_infill)},
+        {"extruders.support", std::to_string(s.extruder_support)},
+        {"extruders.support_interface", std::to_string(s.extruder_support_interface)},
+        {"extruders.bed_temperature_from", std::to_string(s.bed_temperature_from)},
+        {"extruders.ooze_prevention", flag(s.ooze_prevention)},
+        {"extruders.standby_delta", num(s.standby_delta)},
+        {"retraction.toolchange_length", json(s.toolchange_length).dump()},
+        {"retraction.toolchange_restart_extra", json(s.toolchange_restart_extra).dump()},
+        {"gcode.toolchange", text(s.gcode_toolchange)},
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -1601,6 +1705,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
         {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
+        {"surfaces.interface_shells", flag(s.interface_shells)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -1898,12 +2003,22 @@ std::string settings_json(const Settings& s) {
           {"spacing", s.placement_spacing}}},
         {"sequential",
          {{"enabled", s.sequential}, {"clearance_radius", s.clearance_radius}, {"clearance_height", s.clearance_height}}},
+        {"extruders",
+         {{"walls", s.extruder_walls},
+          {"infill", s.extruder_infill},
+          {"solid_infill", s.extruder_solid_infill},
+          {"support", s.extruder_support},
+          {"support_interface", s.extruder_support_interface},
+          {"bed_temperature_from", s.bed_temperature_from},
+          {"ooze_prevention", s.ooze_prevention},
+          {"standby_delta", s.standby_delta}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
           {"top_min_thickness", s.top_min_thickness},
-          {"bottom_min_thickness", s.bottom_min_thickness}}},
+          {"bottom_min_thickness", s.bottom_min_thickness},
+          {"interface_shells", s.interface_shells}}},
         {"infill",
          {{"density", s.infill_density},
           {"angle", s.infill_angle},
@@ -1957,6 +2072,8 @@ std::string settings_json(const Settings& s) {
           {"min_layer_height", s.min_layer_height},
           {"max_layer_height", s.max_layer_height},
           {"z_offset", s.z_offset},
+          {"extruders", s.extruders},
+          {"extruder_offset", s.extruder_offset},
           {"max_flow", s.machine_max_flow},
           {"max_nozzle_temp", s.max_nozzle_temp},
           {"max_bed_temp", s.max_bed_temp},
@@ -1999,7 +2116,9 @@ std::string settings_json(const Settings& s) {
           {"before_wipe", s.before_wipe},
           {"lift_above", s.lift_above},
           {"lift_below", s.lift_below},
-          {"firmware", s.firmware_retraction}}},
+          {"firmware", s.firmware_retraction},
+          {"toolchange_length", s.toolchange_length},
+          {"toolchange_restart_extra", s.toolchange_restart_extra}}},
         {"travel",
          {{"ramping_lift", s.ramping_lift},
           {"slope", s.travel_slope},
@@ -2105,6 +2224,7 @@ std::string settings_json(const Settings& s) {
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
           {"between_objects", s.gcode_between_objects},
+          {"toolchange", s.gcode_toolchange},
           {"volumetric_e", s.volumetric_e},
           {"verbose_comments", s.verbose_comments},
           {"arcs", s.gcode_arcs},
@@ -2166,6 +2286,16 @@ void check_settings(const Settings& s) {
     if (s.firmware_retraction && with_filament_retraction(s).wipe)
         throw SettingsError("retraction.wipe: the wipe retracts while the nozzle moves, which the firmware's "
                             "retraction (retraction.firmware) cannot do");
+    // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
+    for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
+                                 {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
+                                 {"extruders.support_interface", s.extruder_support_interface},
+                                 {"extruders.bed_temperature_from", s.bed_temperature_from}})
+        if (e > s.extruders) {
+            std::snprintf(text, sizeof text, "%s: extruder %d, but the machine has %d (machine.extruders)", key, e,
+                          s.extruders);
+            throw SettingsError(text);
+        }
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);

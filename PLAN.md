@@ -774,6 +774,21 @@ Con el PR #23 (2026-10-26):
     la retracción del firmware (`G10`/`G11`), los viajes rectos o con desvío máximo, los lazos en sentido horario y
     los valores propios del material. Faltan la rampa más empinada ante obstáculos (regla 6, la ficha no la midió) y
     editar los valores del material en la interfaz (hoy se ven; se editan en el archivo)
+- [ ] Punto 4 de lo pendiente para integrar (orden aprobado por el dueño, 2026-10-27): varios extrusores y materiales
+  (`multi_extruder.md`, `multimaterial.md`), después F7 no planar y resina:
+  - [x] 4a, el núcleo de varios extrusores (`multi_extruder.md`, reglas 1 a 8 y 16; ME1 a ME5 y ME10; hecho
+    2026-10-27): `machine.extruders` y `machine.extruder_offset`, el extrusor de cada objeto y de cada tipo de
+    extrusión (`extruders.*`), un cambio por extrusor y por capa empezando con el último, la secuencia del cambio
+    (`retraction.toolchange_length` y `toolchange_restart_extra`, `gcode.toolchange`, `T<n>`), la espera con menos
+    temperatura, la cama por extrusor y las cáscaras entre materiales (`surfaces.interface_shells`). Falta asignar el
+    extrusor de cada objeto desde la línea de comandos y la interfaz, y los colores pintados (regla 1, con
+    `model_tools.md`)
+  - [ ] 4b, la torre de purga (reglas 9 a 14, ME6 a ME8)
+  - [ ] 4c, la MMU de un extrusor (regla 15, ME9)
+  - [ ] 4d, las vigas de entrelazado (regla 17, ME11) y las regiones pintadas (regla 18)
+  - [ ] 4e, el soporte sincronizado y la altura máxima por extrusor (reglas 19 y 20, ME12)
+  - [ ] 4f, `multimaterial.md` (MM1 a MM6) y `color_mixing.md`
+  - [ ] F7 no planar; resina (`resin.md`, `resin_supports.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`

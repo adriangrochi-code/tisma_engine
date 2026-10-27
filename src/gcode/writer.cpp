@@ -799,6 +799,50 @@ public:
             if (s.max_lift > 0.0)
                 lift_ = s.max_lift;
         }
+        pulled_.assign(std::size_t(std::max(s.extruders, 1)) + 1, 0.0);
+    }
+
+    // The extruder printing (from 1; 0: the only one) and its nozzle's
+    // offset, subtracted from every X and Y written (multi_extruder.md, rule 8).
+    int tool() const { return tool_; }
+    void set_tool(int tool, std::array<double, 2> offset) {
+        tool_ = tool;
+        offset_ = offset;
+        x_.clear(), y_.clear();
+    }
+
+    // A change of tool (multi_extruder.md, rule 5): the leaving tool's
+    // filament pulled back by `length` in all (what a retraction pulled
+    // counts), standing; `lines` as they are (the change's G-code, its user
+    // part `user` when that has commands of its own); then the next tool,
+    // whose filament comes back at its first extrusion by what it was pulled
+    // when it left and `restart` more (a tool not used yet: nothing).
+    void tool_change(int next, double length, double restart, const std::string& lines, bool user,
+                     std::array<double, 2> offset) {
+        extruder_off();
+        wiped_path_.clear();
+        double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
+        if (firmware_) {
+            retract(0.0);
+            pulled = retracted_ ? retract_ : 0.0;
+        } else {
+            const double now = retracted_ ? retracted_amount_ : 0.0;
+            if (length > now + 1e-9) {
+                const double more = length - now;
+                e_ = relative_ ? -more : e_ - more;
+                move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_, {}, {}, "retract for the tool change");
+                other_time_ += more / retract_feed_;
+            }
+            pulled = std::max(length, now);
+        }
+        custom(lines, user);
+        set_tool(next, offset);
+        double& back = pulled_[std::size_t(std::clamp(next, 0, int(pulled_.size()) - 1))];
+        retracted_ = back > 1e-9;
+        retracted_amount_ = firmware_ ? 0.0 : back;
+        tool_back_ = retracted_;
+        tool_restart_ = restart;
+        back = 0.0;
     }
 
     // Plans the time of the moves since the last call (they end at rest), and
@@ -1235,7 +1279,8 @@ public:
         // A piece that rounds to no move at 3 decimals is not written; its E
         // (next to nothing) goes with the next piece.
         char tx[kNumberCapacity], ty[kNumberCapacity];
-        const std::string_view x_text(tx, format_fixed(tx, to.p.x, 3)), y_text(ty, format_fixed(ty, to.p.y, 3));
+        const std::string_view x_text(tx, format_fixed(tx, to.p.x - offset_[0], 3)),
+            y_text(ty, format_fixed(ty, to.p.y - offset_[1], 3));
         if (x_text == x_ && y_text == y_)
             return;
         // The width of the moves that follow, written only before one (the
@@ -1275,7 +1320,7 @@ public:
         pending_ = 0.0;
         const Point2d& end = points[a.last].p;
         char tx[kNumberCapacity], ty[kNumberCapacity], buffer[kNumberCapacity];
-        const std::string_view x_text(tx, format_fixed(tx, end.x, 3)), y_text(ty, format_fixed(ty, end.y, 3));
+        const std::string_view x_text(tx, format_fixed(tx, end.x - offset_[0], 3)), y_text(ty, format_fixed(ty, end.y - offset_[1], 3));
         text_ += a.ccw ? "G3 X" : "G2 X";
         text_ += x_text;
         text_ += " Y";
@@ -1416,15 +1461,19 @@ private:
         retracted_ = false;
         const double feed = unretract_feed_ > 0.0 ? unretract_feed_ : retract_feed_;
         if (firmware_) {
+            tool_back_ = false;
             text_ += "G11";
             line_end("unretract");
             clock(0.0, 0.0, 0.0, retract_, feed, false);
             other_time_ += retract_ / feed;
             return;
         }
-        const double back = retracted_amount_ + restart_extra_;
+        // A tool back from a change: its own extra (multi_extruder.md, rule 5).
+        const double extra = tool_back_ ? tool_restart_ : restart_extra_;
+        tool_back_ = false;
+        const double back = retracted_amount_ + extra;
         e_ = relative_ ? back : e_ + back;
-        total_e_ += restart_extra_;
+        total_e_ += extra;
         move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
         other_time_ += back / feed;
     }
@@ -1611,8 +1660,8 @@ private:
                 last.assign(t);
             }
         };
-        axis('X', x, 3, x_, x_text);
-        axis('Y', y, 3, y_, y_text);
+        axis('X', x ? std::optional<double>(*x - offset_[0]) : std::nullopt, 3, x_, x_text);
+        axis('Y', y ? std::optional<double>(*y - offset_[1]) : std::nullopt, 3, y_, y_text);
         axis('Z', z, 3, z_, {});
         if (dialect_.e_axis != 0)
             axis(dialect_.e_axis, e ? std::optional<double>(*e * e_scale_) : std::nullopt, 5, e_text_, {});
@@ -1696,6 +1745,14 @@ private:
     bool known_ = false;     // the position is known (after the first move in XY)
     bool resync_ = false;    // after a change's own G-code: the next travel writes everything
     bool retracted_ = false;
+    // Several extruders (multi_extruder.md): the one printing, its nozzle's
+    // offset, what each one's filament was pulled back at its last change
+    // (by extruder from 1), and the extra of a tool back from a change.
+    int tool_ = 0;
+    std::array<double, 2> offset_{0.0, 0.0};
+    std::vector<double> pulled_;
+    bool tool_back_ = false;
+    double tool_restart_ = 0.0;
     std::string x_, y_, z_, e_text_, width_;
     double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
     long f_ = std::numeric_limits<long>::min(); // none written yet
@@ -1954,6 +2011,29 @@ bool sets_temperature(std::string_view gcode) {
     return false;
 }
 
+namespace {
+
+// Whether G-code has the command that changes to tool `tool` (T<tool>) on a
+// line of its own (multi_extruder.md, rule 5).
+bool changes_tool(std::string_view gcode, int tool) {
+    const std::string wanted = "T" + std::to_string(tool);
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        line = line.substr(std::min(line.find_first_not_of(" \t"), line.size()));
+        std::string word(line.substr(0, line.find_first_of(" \t;\r")));
+        for (char& c : word)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        if (word == wanted)
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
 std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
     const std::string v = fixed(value, 4);
     switch (flavor) {
@@ -2062,6 +2142,58 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 << fixed((lo[1] + hi[1]) / 2.0, 3) << " POLYGON=[" << polygon << "]\n";
         }
     }
+    // Several extruders (multi_extruder.md, rule 2): a path's extruder is its
+    // kind's (extruders.walls...), else its part's (1 when it has none); the
+    // support's, else whichever is printing (0). One extruder: all 0.
+    const int fill_tool[7] = {s.extruder_solid_infill, s.extruder_solid_infill, s.extruder_solid_infill,
+                              s.extruder_solid_infill, s.extruder_infill,       s.extruder_support,
+                              s.extruder_support_interface};
+    const auto tool_of = [&](const Toolpath& t, int chosen, bool part) {
+        if (s.extruders <= 1)
+            return 0;
+        return std::clamp(chosen > 0 ? chosen : t.tool > 0 ? int(t.tool) : part ? 1 : 0, 0, kMaxExtruders);
+    };
+    // The extruders a layer's paths ask for (0: any).
+    const auto layer_tools = [&](std::size_t l) {
+        std::array<bool, kMaxExtruders + 1> used{};
+        if (s.extruders <= 1)
+            return used;
+        const auto note = [&](const std::vector<Toolpath>& paths, int chosen, bool part) {
+            for (const Toolpath& t : paths)
+                if (!t.points.empty())
+                    used[std::size_t(tool_of(t, chosen, part))] = true;
+        };
+        if (l < model.walls.size())
+            note(model.walls[l].toolpaths, s.extruder_walls, true), note(model.walls[l].gaps, s.extruder_walls, true);
+        if (l < model.fills.size()) {
+            const LayerFill& f = model.fills[l];
+            const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,
+                                                     &f.support_interface};
+            for (std::size_t k = 0; k < 7; ++k)
+                note(*kinds[k], fill_tool[k], k < 5);
+            note(f.arcs, s.extruder_walls, true), note(f.overhang_walls, s.extruder_walls, true);
+            note(f.ironing, s.extruder_solid_infill, true);
+        }
+        return used;
+    };
+    // The extruders the print uses, and the first (rule 3): the lowest of
+    // the first layer that asks for one.
+    std::array<bool, kMaxExtruders + 1> tools_used{};
+    int initial_tool = 0;
+    if (s.extruders > 1) {
+        for (std::size_t l = 0; l < model.layers.size(); ++l) {
+            const std::array<bool, kMaxExtruders + 1> used = layer_tools(l);
+            for (int e = 1; e <= kMaxExtruders; ++e)
+                if (used[std::size_t(e)]) {
+                    tools_used[std::size_t(e)] = true;
+                    if (initial_tool == 0)
+                        initial_tool = e;
+                }
+        }
+        if (initial_tool == 0)
+            initial_tool = 1;
+        tools_used[std::size_t(initial_tool)] = true;
+    }
     // The chamber the filament wants, when the machine heats one: set before
     // the start (so it heats while the nozzle does) and again after it, once
     // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
@@ -2075,28 +2207,122 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // variables and the print's; globals reach the templates that follow.
     TemplateContext templates = template_context(s, model);
     templates.variables["current_object_idx"] = TemplateValue::of(0LL); // sequential.md, rule 3
+    // Several extruders (gcode_templates.md, rule 7; multi_extruder.md).
+    if (s.extruders > 1) {
+        templates.variables["num_extruders"] = TemplateValue::of(static_cast<long long>(s.extruders));
+        templates.variables["initial_extruder"] = templates.variables["initial_tool"] =
+            TemplateValue::of(static_cast<long long>(initial_tool - 1));
+        std::vector<TemplateValue> used;
+        for (int e = 1; e <= s.extruders; ++e)
+            used.push_back(TemplateValue::of(bool(tools_used[std::size_t(e)])));
+        templates.variables["is_extruder_used"] = TemplateValue::of(std::move(used));
+    }
+    templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(std::max(initial_tool - 1, 0)));
     const std::string start_gcode = render_template(s.start_gcode, templates, "machine.start_gcode");
-    const auto first_value = [&](const char* name) {
+    // A temperature variable's value for an extruder (from 0): one per
+    // extruder, a shorter list its last; 0 when not given.
+    const auto value_of = [&](const char* name, std::size_t extruder = 0) {
         const auto it = s.variables.find(name);
-        return it == s.variables.end() || it->second.empty() ? 0.0 : std::atof(it->second.front().c_str());
+        if (it == s.variables.end() || it->second.empty())
+            return 0.0;
+        return std::atof(it->second[std::min(extruder, it->second.size() - 1)].c_str());
     };
-    const double nozzle = first_value("temperature"), bed = first_value("bed_temperature");
+    // The nozzle's temperature command for an extruder (from 1; 0: the only one).
+    const auto nozzle_gcode = [&](bool wait, int tool, double celsius, const char* note = nullptr) {
+        const std::string c = std::to_string(std::lround(celsius));
+        const std::string t = std::to_string(std::max(tool - 1, 0));
+        std::string line;
+        if (wait && dialect.wait == Dialect::Wait::M116)
+            line = "M116";
+        else if (dialect.g10 && !wait)
+            line = "G10 S" + c + " P" + t;
+        else
+            line = std::string(wait ? "M109 " : "M104 ") + dialect.temperature + c +
+                   (tool > 0 || (!wait && dialect.tool_on_m104) ? " T" + t : "");
+        if (note)
+            line += std::string(" ;") + note;
+        return line + "\n";
+    };
+    // The bed's first-layer temperature: with several extruders that of
+    // extruders.bed_temperature_from, or of the first to print (rule 4).
+    const int bed_tool = s.bed_temperature_from > 0 ? s.bed_temperature_from : initial_tool;
+    const double nozzle = value_of("temperature"),
+                 bed = s.extruders > 1 && value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1)) > 0.0
+                           ? value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1))
+                           : value_of("bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
     // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
     const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
     const bool heat_nozzle = heat && nozzle > 0.0;
     if (heat && bed > 0.0)
         out << (dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") << dialect.temperature << std::lround(bed)
             << "\n";
-    const std::string celsius = std::to_string(std::lround(nozzle));
-    if (heat_nozzle)
-        out << (dialect.g10 ? "G10 S" + celsius + " P0"
-                            : std::string("M104 ") + dialect.temperature + celsius + (dialect.tool_on_m104 ? " T0" : ""))
-            << "\n";
+    // Several extruders: each one used set, then waited for after the start
+    // (ME1); with extruders.ooze_prevention, the ones that wait at their
+    // temperature plus extruders.standby_delta, and only the first waited
+    // for (rule 7).
+    const auto standby = [&](int tool) { return value_of("temperature", std::size_t(tool - 1)) + s.standby_delta; };
+    // The lines of a change from extruder `previous` to `next` (from 1;
+    // previous 0: to the first one, at the start), and whether the user's
+    // part has commands of its own (multi_extruder.md, rules 5 to 7): with
+    // extruders.ooze_prevention the leaving one down to its standby
+    // temperature; its filament's end; gcode.toolchange with
+    // previous_extruder, next_extruder and toolchange_z; T<next> unless that
+    // G-code has it; with ooze prevention the next one waited for at its
+    // temperature; its filament's start.
+    const auto toolchange_text = [&](int previous, int next, bool middle) {
+        std::string lines, user;
+        const auto add_user = [&](const std::string& text) {
+            if (text.empty())
+                return;
+            user += text + "\n";
+            lines += text + "\n";
+        };
+        if (middle && s.ooze_prevention && value_of("temperature", std::size_t(previous - 1)) > 0.0)
+            lines += nozzle_gcode(false, previous, standby(previous), "cooldown");
+        if (middle) {
+            templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
+            add_user(render_template(s.filament_end_gcode, templates, "extrusion.end_gcode"));
+        }
+        templates.variables["previous_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
+        templates.variables["next_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
+        templates.variables["toolchange_z"] = templates.variables["layer_z"];
+        const std::string change = render_template(s.gcode_toolchange, templates, "gcode.toolchange");
+        add_user(change);
+        if (!changes_tool(change, next - 1))
+            lines += "T" + std::to_string(next - 1) + "\n";
+        if (middle && s.ooze_prevention && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
+            dialect.wait != Dialect::Wait::None)
+            lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)));
+        templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
+        if (middle)
+            add_user(render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"));
+        return std::pair<std::string, bool>{lines, Emitter::commands(user)};
+    };
+    if (heat && s.extruders > 1) {
+        for (int e = 1; e <= kMaxExtruders; ++e)
+            if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0)
+                out << nozzle_gcode(false, e,
+                                    s.ooze_prevention && e != initial_tool ? standby(e)
+                                                                           : value_of("temperature", std::size_t(e - 1)));
+    } else if (heat_nozzle) {
+        out << nozzle_gcode(false, 0, nozzle);
+    }
     if (!start_gcode.empty())
         out << start_gcode << "\n";
-    if (heat_nozzle && dialect.wait != Dialect::Wait::None)
-        out << (dialect.wait == Dialect::Wait::M116 ? std::string("M116") : std::string("M109 ") + dialect.temperature + celsius)
-            << "\n";
+    if (heat && s.extruders > 1 && dialect.wait != Dialect::Wait::None) {
+        for (int e = 1; e <= kMaxExtruders; ++e)
+            if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
+                (!s.ooze_prevention || e == initial_tool))
+                out << nozzle_gcode(true, e, value_of("temperature", std::size_t(e - 1)));
+    } else if (heat_nozzle && dialect.wait != Dialect::Wait::None) {
+        out << nozzle_gcode(true, 0, nozzle);
+    }
+    // Several extruders: the change's G-code to the first one too, from
+    // none (rule 6), and its T unless that G-code has it.
+    if (s.extruders > 1) {
+        out << toolchange_text(0, initial_tool, false).first;
+        g.set_tool(initial_tool, extruder_offset_of(s, std::size_t(initial_tool - 1)));
+    }
     // The filament's own start, after the printer's (rule 9).
     if (const std::string text = render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"); !text.empty())
         out << text << "\n";
@@ -2262,7 +2488,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // Object labels (gcode_firmware.md, rule 4): before this path, the
         // label switches to this object (-1: none); kKeepLabel: no switch.
         int label = kKeepLabel;
+        // The extruder that lays it (multi_extruder.md); 0: whichever is printing.
+        int tool = 0;
     };
+    // The extruder the plans are at: the one the last layer planned ended with.
+    int planned_tool = initial_tool;
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
     // the plans, which only pick among them (perimeters.md, rule 8).
@@ -2364,6 +2594,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // as thick as the layer and the gap: the height changes around it.
         const double layer_height = layer.top - layer.bottom;
         double base_height = layer_height, laid_height = layer_height;
+        int laying_tool = 0; // the extruder of the paths laid now
         auto lay = [&](Toolpath path, const char* type, double feed) {
             if (path.points.empty())
                 return;
@@ -2372,6 +2603,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 laid_height = h;
             }
             steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
+            steps.back().tool = laying_tool;
         };
         // Where this layer's walls hang (walls_extra.md, rule 8) and rest on
         // the support (supports_skirt.md, rule 4).
@@ -2519,223 +2751,249 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             pending.clear();
             deferring = false;
         };
-        // Skirt, then brim, before the part, at the first layer's speed.
-        // A draft shield goes up to the top (skirt_brim_raft.md, rule 4).
-        // Printed object by object, each its own (sequential.md).
-        const std::vector<Toolpath>& skirt = model.sequential ? model.objects[object_of[l]].skirt : model.skirt;
-        const std::vector<Toolpath>& brim = model.sequential ? model.objects[object_of[l]].brim : model.brim;
-        if (local(l) < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled)
-            group(skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
-        if (local(l) == 0)
-            group(brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
-        // Every island is finished before the next, the nearest one first. In an
-        // island: walls from the inside out, the outer wall (bead 0) last, each
-        // bead index in nearest order; then the fills, one kind after the other.
-        struct Island {
-            std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
-            std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
-            std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
-            std::vector<Toolpath> arcs;                 // over overhangs, in their order
-            std::vector<Toolpath> overhang_walls;       // loops over overhangs, from the outline in
-            std::vector<Toolpath> ironing;              // over the top surfaces, after the fills
-            std::vector<Point2d> ends;                  // where its paths start or end
-        };
-        const std::vector<Polygons>& pieces = plan.pieces;
-        std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
-        const std::vector<std::array<std::int64_t, 4>>& piece_box = plan.boxes;
-        auto island = [&](const Toolpath& t) -> Island& {
-            if (pieces.size() <= 1)
-                return islands.front();
-            // As island_of: the first island whose outline holds the point and
-            // none of whose holes do.
-            const Point2d p = t.points.front().p;
-            const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
-            for (std::size_t k = 0; k < pieces.size(); ++k) {
-                const auto& b = piece_box[k];
-                if (q.x < b[0] || q.x > b[2] || q.y < b[1] || q.y > b[3])
-                    continue;
-                if (Clipper2Lib::PointInPolygon(q, pieces[k].front()) == Clipper2Lib::PointInPolygonResult::IsOutside)
-                    continue;
-                bool in_hole = false;
-                for (std::size_t h = 1; h < pieces[k].size() && !in_hole; ++h)
-                    in_hole = Clipper2Lib::PointInPolygon(q, pieces[k][h]) == Clipper2Lib::PointInPolygonResult::IsInside;
-                if (!in_hole)
-                    return islands[k];
-            }
-            return islands[pieces.size()];
-        };
-        auto add = [&](Island& i, const Toolpath& t) {
-            i.ends.push_back(t.points.front().p);
-            if (!t.closed)
-                i.ends.push_back(t.points.back().p);
-        };
-        if (l < model.walls.size())
-            for (std::size_t k = 0; k < model.walls[l].toolpaths.size(); ++k)
-                if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty()) {
-                    Island& i = island(t);
-                    i.walls[t.index].push_back(t);
-                    i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
-                    add(i, t);
-                }
-        // Gap fill between walls of one width (walls_extra.md, rule 1).
-        if (l < model.walls.size())
-            for (const Toolpath& t : model.walls[l].gaps)
-                if (!t.points.empty()) {
-                    Island& i = island(t);
-                    i.fills[3].push_back(t);
-                    add(i, t);
-                }
-        if (l < model.fills.size()) {
-            const LayerFill& f = model.fills[l];
-            const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,
-                                                     &f.support_interface};
-            for (std::size_t k = 0; k < 7; ++k)
-                for (const Toolpath& t : *kinds[k])
-                    if (!t.points.empty()) {
-                        Island& i = island(t);
-                        i.fills[k].push_back(t);
-                        add(i, t);
-                    }
-            for (const Toolpath& t : f.arcs)
-                if (!t.points.empty()) {
-                    Island& i = island(t);
-                    i.arcs.push_back(t);
-                    add(i, t);
-                }
-            for (const Toolpath& t : f.overhang_walls)
-                if (!t.points.empty()) {
-                    Island& i = island(t);
-                    i.overhang_walls.push_back(t);
-                    add(i, t);
-                }
-            for (const Toolpath& t : f.ironing)
-                if (!t.points.empty()) {
-                    Island& i = island(t);
-                    i.ironing.push_back(t);
-                    add(i, t);
-                }
+        // The layer's extruders one after another (multi_extruder.md, rule
+        // 3): the one the layer below ended with first, the rest in order;
+        // what any extruder may print goes with the first.
+        std::vector<int> order;
+        {
+            const std::array<bool, kMaxExtruders + 1> used = layer_tools(l);
+            if (planned_tool > 0 && used[std::size_t(planned_tool)])
+                order.push_back(planned_tool);
+            for (int e = 1; e <= kMaxExtruders; ++e)
+                if (used[std::size_t(e)] && e != planned_tool)
+                    order.push_back(e);
+            if (order.empty())
+                order.push_back(0);
         }
         const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
                                           "Gap fill",        "Internal infill",  "Support material",
                                           "Support material interface"};
-        std::vector<bool> done(islands.size(), false);
-        // Object labels: each island's object (printed one after another,
-        // the layer's), and an object's islands one after another; the paths
-        // in no island in none.
-        std::vector<int> island_object(islands.size(), -1);
-        if (labels != Labels::None) {
-            for (std::size_t k = 0; k < pieces.size(); ++k) {
-                if (model.sequential) {
-                    island_object[k] = int(object_of[l]);
-                    continue;
-                }
-                const Clipper2Lib::Point64 q = pieces[k].front().front();
-                for (std::size_t o = 0; o < model.objects.size(); ++o)
-                    if (Clipper2Lib::PointInPolygon(q, model.objects[o].outline) !=
-                        Clipper2Lib::PointInPolygonResult::IsOutside) {
-                        island_object[k] = int(o);
-                        break;
-                    }
-            }
-            if (model.sequential || pieces.size() <= 1)
-                island_object.back() = island_object.front();
-        }
-        const auto slot = [&](std::size_t k) {
-            return island_object[k] < 0 ? model.objects.size() : std::size_t(island_object[k]);
-        };
-        std::vector<std::size_t> left(model.objects.size() + 1, 0);
-        for (std::size_t k = 0; k < islands.size(); ++k)
-            if (!islands[k].ends.empty())
-                ++left[slot(k)];
-        std::size_t current = model.objects.size(); // the object being printed
-        const auto eligible = [&](std::size_t k) {
-            return labels == Labels::None || current == model.objects.size() || left[current] == 0 || slot(k) == current;
-        };
         int label_now = -1;
-        // The boxes of the islands' path ends bound how near each island can be,
-        // so most are not looked at: the same pick as looking at every end
-        // (the nearest, and among equals the first island), without the
-        // islands-squared cost.
-        std::vector<std::array<double, 4>> end_box(islands.size());
-        for (std::size_t k = 0; k < islands.size(); ++k) {
-            auto& b = end_box[k];
-            b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
-                 std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
-            for (const Point2d& p : islands[k].ends)
-                b[0] = std::min(b[0], p.x), b[1] = std::min(b[1], p.y), b[2] = std::max(b[2], p.x), b[3] = std::max(b[3], p.y);
-        }
-        const auto box_distance = [&](std::size_t k) {
-            const auto& b = end_box[k];
-            const double dx = std::max({b[0] - cursor.x, 0.0, cursor.x - b[2]});
-            const double dy = std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]});
-            return std::hypot(dx, dy);
-        };
-        for (;;) {
-            std::size_t next = islands.size();
-            double nearest = std::numeric_limits<double>::max();
-            const auto look = [&](std::size_t k) {
-                for (const Point2d& p : islands[k].ends) {
-                    const double d = std::hypot(p.x - cursor.x, p.y - cursor.y);
-                    if (d < nearest || (d == nearest && k < next))
-                        nearest = d, next = k;
+        for (std::size_t group_index = 0; group_index < order.size(); ++group_index) {
+            const int tool = order[group_index];
+            const bool first_group = group_index == 0;
+            laying_tool = tool;
+            const auto mine = [&](const Toolpath& t, int chosen, bool part) {
+                const int e = tool_of(t, chosen, part);
+                return e == tool || (first_group && e == 0);
+            };
+            // Skirt, then brim, before the part, at the first layer's speed.
+            // A draft shield goes up to the top (skirt_brim_raft.md, rule 4).
+            // Printed object by object, each its own (sequential.md).
+            const std::vector<Toolpath>& skirt = model.sequential ? model.objects[object_of[l]].skirt : model.skirt;
+            const std::vector<Toolpath>& brim = model.sequential ? model.objects[object_of[l]].brim : model.brim;
+            if (first_group && (local(l) < std::size_t(std::max(s.skirt_layers, 0)) || s.draft_shield == DraftShield::Enabled))
+                group(skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+            if (first_group && local(l) == 0)
+                group(brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
+            // Every island is finished before the next, the nearest one first. In an
+            // island: walls from the inside out, the outer wall (bead 0) last, each
+            // bead index in nearest order; then the fills, one kind after the other.
+            struct Island {
+                std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
+                std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
+                std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
+                std::vector<Toolpath> arcs;                 // over overhangs, in their order
+                std::vector<Toolpath> overhang_walls;       // loops over overhangs, from the outline in
+                std::vector<Toolpath> ironing;              // over the top surfaces, after the fills
+                std::vector<Point2d> ends;                  // where its paths start or end
+            };
+            const std::vector<Polygons>& pieces = plan.pieces;
+            std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
+            const std::vector<std::array<std::int64_t, 4>>& piece_box = plan.boxes;
+            auto island = [&](const Toolpath& t) -> Island& {
+                if (pieces.size() <= 1)
+                    return islands.front();
+                // As island_of: the first island whose outline holds the point and
+                // none of whose holes do.
+                const Point2d p = t.points.front().p;
+                const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+                for (std::size_t k = 0; k < pieces.size(); ++k) {
+                    const auto& b = piece_box[k];
+                    if (q.x < b[0] || q.x > b[2] || q.y < b[1] || q.y > b[3])
+                        continue;
+                    if (Clipper2Lib::PointInPolygon(q, pieces[k].front()) == Clipper2Lib::PointInPolygonResult::IsOutside)
+                        continue;
+                    bool in_hole = false;
+                    for (std::size_t h = 1; h < pieces[k].size() && !in_hole; ++h)
+                        in_hole = Clipper2Lib::PointInPolygon(q, pieces[k][h]) == Clipper2Lib::PointInPolygonResult::IsInside;
+                    if (!in_hole)
+                        return islands[k];
                 }
+                return islands[pieces.size()];
             };
-            // The island whose box is nearest first, for a tight bound; then the
-            // others whose box could hold something as near.
-            std::size_t first_look = islands.size();
-            double seed_distance = std::numeric_limits<double>::max();
-            for (std::size_t k = 0; k < islands.size(); ++k)
-                if (!done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) < seed_distance)
-                    seed_distance = box_distance(k), first_look = k;
-            if (first_look == islands.size())
-                break;
-            look(first_look);
-            for (std::size_t k = 0; k < islands.size(); ++k)
-                if (k != first_look && !done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) <= nearest)
-                    look(k);
-            if (next == islands.size())
-                break;
-            done[next] = true;
-            current = slot(next);
-            --left[current];
-            const std::size_t first_step = steps.size();
-            const Island& i = islands[next];
-            auto walls = [&](int index, const std::vector<Toolpath>& paths) {
-                const bool outer = index == 0;
-                const auto found = i.candidates.find(index);
-                group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
-                      found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
+            auto add = [&](Island& i, const Toolpath& t) {
+                i.ends.push_back(t.points.front().p);
+                if (!t.closed)
+                    i.ends.push_back(t.points.back().p);
             };
-            if (s.zaa) {
-                for (const auto& [index, paths] : i.walls)
-                    deferring = deferring || off_top({&paths});
-                deferring = deferring || off_top({&i.fills[1], &i.fills[3]});
-            }
-            // The arcs over an overhang first, in their order, from the centre
-            // out: the walls round them then rest on their ends
-            // (arc_overhangs.md, rule 4).
-            for (Toolpath t : i.arcs)
-                lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
-            for (const auto& [index, paths] : i.walls)
-                walls(index, paths);
-            // The loops over an overhang, from its outline in, after the walls
-            // they hang from (walls_extra.md, rule 5).
-            for (Toolpath t : i.overhang_walls)
-                lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
-            for (std::size_t k = 0; k < 7; ++k)
-                group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
-            // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
-            group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
-            flush();
-            // The island's object's label from its first path on.
-            if (labels != Labels::None && island_object[next] != label_now)
-                for (std::size_t k = first_step; k < steps.size(); ++k)
-                    if (steps[k].type) {
-                        steps[k].label = label_now = island_object[next];
-                        break;
+            if (l < model.walls.size())
+                for (std::size_t k = 0; k < model.walls[l].toolpaths.size(); ++k)
+                    if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty() && mine(t, s.extruder_walls, true)) {
+                        Island& i = island(t);
+                        i.walls[t.index].push_back(t);
+                        i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
+                        add(i, t);
                     }
+            // Gap fill between walls of one width (walls_extra.md, rule 1).
+            if (l < model.walls.size())
+                for (const Toolpath& t : model.walls[l].gaps)
+                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                        Island& i = island(t);
+                        i.fills[3].push_back(t);
+                        add(i, t);
+                    }
+            if (l < model.fills.size()) {
+                const LayerFill& f = model.fills[l];
+                const std::vector<Toolpath>* kinds[7] = {&f.solid, &f.top, &f.bridge, &f.gaps, &f.sparse, &f.support,
+                                                         &f.support_interface};
+                for (std::size_t k = 0; k < 7; ++k)
+                    for (const Toolpath& t : *kinds[k])
+                        if (!t.points.empty() && mine(t, fill_tool[k], k < 5)) {
+                            Island& i = island(t);
+                            i.fills[k].push_back(t);
+                            add(i, t);
+                        }
+                for (const Toolpath& t : f.arcs)
+                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                        Island& i = island(t);
+                        i.arcs.push_back(t);
+                        add(i, t);
+                    }
+                for (const Toolpath& t : f.overhang_walls)
+                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                        Island& i = island(t);
+                        i.overhang_walls.push_back(t);
+                        add(i, t);
+                    }
+                for (const Toolpath& t : f.ironing)
+                    if (!t.points.empty() && mine(t, s.extruder_solid_infill, true)) {
+                        Island& i = island(t);
+                        i.ironing.push_back(t);
+                        add(i, t);
+                    }
+            }
+            std::vector<bool> done(islands.size(), false);
+            // Object labels: each island's object (printed one after another,
+            // the layer's), and an object's islands one after another; the paths
+            // in no island in none.
+            std::vector<int> island_object(islands.size(), -1);
+            if (labels != Labels::None) {
+                for (std::size_t k = 0; k < pieces.size(); ++k) {
+                    if (model.sequential) {
+                        island_object[k] = int(object_of[l]);
+                        continue;
+                    }
+                    const Clipper2Lib::Point64 q = pieces[k].front().front();
+                    for (std::size_t o = 0; o < model.objects.size(); ++o)
+                        if (Clipper2Lib::PointInPolygon(q, model.objects[o].outline) !=
+                            Clipper2Lib::PointInPolygonResult::IsOutside) {
+                            island_object[k] = int(o);
+                            break;
+                        }
+                }
+                if (model.sequential || pieces.size() <= 1)
+                    island_object.back() = island_object.front();
+            }
+            const auto slot = [&](std::size_t k) {
+                return island_object[k] < 0 ? model.objects.size() : std::size_t(island_object[k]);
+            };
+            std::vector<std::size_t> left(model.objects.size() + 1, 0);
+            for (std::size_t k = 0; k < islands.size(); ++k)
+                if (!islands[k].ends.empty())
+                    ++left[slot(k)];
+            std::size_t current = model.objects.size(); // the object being printed
+            const auto eligible = [&](std::size_t k) {
+                return labels == Labels::None || current == model.objects.size() || left[current] == 0 || slot(k) == current;
+            };
+            // The boxes of the islands' path ends bound how near each island can be,
+            // so most are not looked at: the same pick as looking at every end
+            // (the nearest, and among equals the first island), without the
+            // islands-squared cost.
+            std::vector<std::array<double, 4>> end_box(islands.size());
+            for (std::size_t k = 0; k < islands.size(); ++k) {
+                auto& b = end_box[k];
+                b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                     std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+                for (const Point2d& p : islands[k].ends)
+                    b[0] = std::min(b[0], p.x), b[1] = std::min(b[1], p.y), b[2] = std::max(b[2], p.x), b[3] = std::max(b[3], p.y);
+            }
+            const auto box_distance = [&](std::size_t k) {
+                const auto& b = end_box[k];
+                const double dx = std::max({b[0] - cursor.x, 0.0, cursor.x - b[2]});
+                const double dy = std::max({b[1] - cursor.y, 0.0, cursor.y - b[3]});
+                return std::hypot(dx, dy);
+            };
+            for (;;) {
+                std::size_t next = islands.size();
+                double nearest = std::numeric_limits<double>::max();
+                const auto look = [&](std::size_t k) {
+                    for (const Point2d& p : islands[k].ends) {
+                        const double d = std::hypot(p.x - cursor.x, p.y - cursor.y);
+                        if (d < nearest || (d == nearest && k < next))
+                            nearest = d, next = k;
+                    }
+                };
+                // The island whose box is nearest first, for a tight bound; then the
+                // others whose box could hold something as near.
+                std::size_t first_look = islands.size();
+                double seed_distance = std::numeric_limits<double>::max();
+                for (std::size_t k = 0; k < islands.size(); ++k)
+                    if (!done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) < seed_distance)
+                        seed_distance = box_distance(k), first_look = k;
+                if (first_look == islands.size())
+                    break;
+                look(first_look);
+                for (std::size_t k = 0; k < islands.size(); ++k)
+                    if (k != first_look && !done[k] && !islands[k].ends.empty() && eligible(k) && box_distance(k) <= nearest)
+                        look(k);
+                if (next == islands.size())
+                    break;
+                done[next] = true;
+                current = slot(next);
+                --left[current];
+                const std::size_t first_step = steps.size();
+                const Island& i = islands[next];
+                auto walls = [&](int index, const std::vector<Toolpath>& paths) {
+                    const bool outer = index == 0;
+                    const auto found = i.candidates.find(index);
+                    group(paths, outer ? "External perimeter" : "Perimeter",
+                          speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
+                          found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
+                };
+                if (s.zaa) {
+                    for (const auto& [index, paths] : i.walls)
+                        deferring = deferring || off_top({&paths});
+                    deferring = deferring || off_top({&i.fills[1], &i.fills[3]});
+                }
+                // The arcs over an overhang first, in their order, from the centre
+                // out: the walls round them then rest on their ends
+                // (arc_overhangs.md, rule 4).
+                for (Toolpath t : i.arcs)
+                    lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
+                for (const auto& [index, paths] : i.walls)
+                    walls(index, paths);
+                // The loops over an overhang, from its outline in, after the walls
+                // they hang from (walls_extra.md, rule 5).
+                for (Toolpath t : i.overhang_walls)
+                    lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
+                for (std::size_t k = 0; k < 7; ++k)
+                    group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
+                // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
+                group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
+                flush();
+                // The island's object's label from its first path on.
+                if (labels != Labels::None && island_object[next] != label_now)
+                    for (std::size_t k = first_step; k < steps.size(); ++k)
+                        if (steps[k].type) {
+                            steps[k].label = label_now = island_object[next];
+                            break;
+                        }
+            }
         }
+        if (order.back() > 0)
+            planned_tool = order.back();
+        laying_tool = 0;
         // The thick zone of a group that ends here: the whole group's height at
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
         if (l < model.thick.size() && !model.thick[l].empty()) {
@@ -2847,6 +3105,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 p.path = stretch(path, at, to);
                 p.type = st.type;
                 p.feed = feed;
+                p.tool = st.tool;
                 if (first) {
                     p.path.retract = st.path.retract;
                     p.from = st.from;
@@ -2906,11 +3165,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         return std::lround(std::atof(it->second.front().c_str()));
                 return std::nullopt;
             };
-            if (const std::optional<long> bed = value("first_layer_bed_temperature", "bed_temperature"))
-                lines += std::string("M140 ") + dialect.temperature + std::to_string(*bed) + "\n";
-            if (const std::optional<long> nozzle = value("first_layer_temperature", "temperature"))
-                lines += dialect.g10 ? "G10 S" + std::to_string(*nozzle) + " P0\n"
-                                     : std::string("M104 ") + dialect.temperature + std::to_string(*nozzle) +
+            if (const std::optional<long> bed_c = value("first_layer_bed_temperature", "bed_temperature"))
+                lines += std::string("M140 ") + dialect.temperature + std::to_string(*bed_c) + "\n";
+            if (const std::optional<long> nozzle_c = value("first_layer_temperature", "temperature"))
+                lines += dialect.g10 ? "G10 S" + std::to_string(*nozzle_c) + " P0\n"
+                                     : std::string("M104 ") + dialect.temperature + std::to_string(*nozzle_c) +
                                            (dialect.tool_on_m104 ? " T0" : "") + "\n";
         }
         g.next_object(k, printed_top, centre, s.travel_speed, lines, between);
@@ -2942,6 +3201,21 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         else
             g.progress(long(l * 100 / model.layers.size()));
         g.custom(a.lines, a.user);
+        // The bed for the rest of the print, from the second layer
+        // (multi_extruder.md, rule 4): that of extruders.bed_temperature_from,
+        // or of the first extruder to print on that layer.
+        if (s.extruders > 1 && l == 1) {
+            int first = g.tool();
+            for (const Step& st : steps)
+                if (st.type && st.tool > 0) {
+                    first = st.tool;
+                    break;
+                }
+            const int from = s.bed_temperature_from > 0 ? s.bed_temperature_from : std::max(first, 1);
+            const double rest = value_of("bed_temperature", std::size_t(from - 1));
+            if (rest > 0.0 && std::lround(rest) != std::lround(bed))
+                g.custom(std::string("M140 ") + dialect.temperature + std::to_string(std::lround(rest)) + "\n");
+        }
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
         g.set_forced_flow(a.volumetric_flow);
@@ -2972,19 +3246,34 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (highest > 0.0)
                 g.set_clearance(std::max(g.clearance(), highest));
         }
-        int label = -1; // the object label open
+        int label = -1;  // the object label open
+        int wanted = -1; // the one the paths ask for
         for (std::size_t k = 0; k < steps.size(); ++k) {
             const Step& step = steps[k];
             if (!step.type) {
                 g.set_height(step.height);
                 continue;
             }
-            if (step.label != kKeepLabel && step.label != label) {
+            if (step.label != kKeepLabel)
+                wanted = step.label;
+            // Another extruder (multi_extruder.md, rule 5), outside any
+            // object's label: cancelling an object keeps the change.
+            if (step.tool > 0 && step.tool != g.tool()) {
                 if (label >= 0)
                     g.raw(label_end(std::size_t(label)));
-                if (step.label >= 0)
-                    g.raw(label_start(std::size_t(step.label)));
-                label = step.label;
+                label = -1;
+                const int from = g.tool();
+                const auto [lines, user] = toolchange_text(from, step.tool, true);
+                g.tool_change(step.tool, per_extruder(s.toolchange_length, std::size_t(std::max(from - 1, 0)), 10.0),
+                              per_extruder(s.toolchange_restart_extra, std::size_t(step.tool - 1)), lines, user,
+                              extruder_offset_of(s, std::size_t(step.tool - 1)));
+            }
+            if (wanted != label) {
+                if (label >= 0)
+                    g.raw(label_end(std::size_t(label)));
+                if (wanted >= 0)
+                    g.raw(label_start(std::size_t(wanted)));
+                label = wanted;
             }
             const Toolpath& t = step.path;
             if (s.gcode_progress && k > 0)

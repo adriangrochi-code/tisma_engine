@@ -62,6 +62,10 @@ enum class TopOneWall { None, Top, Topmost };
 // of each part, or every solid layer.
 enum class IroningSurfaces { Top, Topmost, Solid };
 
+// The most extruders a machine has: as many as the colour channel of the
+// painting tells apart (kPaintMaxMark, docs/PAINTING.md).
+inline constexpr int kMaxExtruders = 16;
+
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
 // "changes"): each set value takes effect from the first layer whose top is
 // above z and stays until another change sets it again.
@@ -177,6 +181,9 @@ struct Settings {
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
+    // Where one extruder's part rests on another's, each keeps its own top
+    // and bottom solid layers, as if apart (multi_extruder.md, rule 16).
+    bool interface_shells = false;
     double infill_density = 20.0; // percent
     double infill_angle = 45.0;   // degrees
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
@@ -250,6 +257,23 @@ struct Settings {
     // axis clearance_height above its tip.
     bool sequential = false;
     double clearance_radius = 20.0, clearance_height = 20.0;
+    // Several extruders (docs/spec/features/multi_extruder.md): how many the
+    // machine has. Each object prints with its own (MeshObject::extruder),
+    // and a kind of extrusion with the one given here, from 1 (rule 2); 0:
+    // the object's, and for the support whichever extruder is printing.
+    int extruders = 1;
+    std::vector<std::array<double, 2>> extruder_offset; // mm, each nozzle from the first, by extruder (rule 8)
+    int extruder_walls = 0, extruder_infill = 0, extruder_solid_infill = 0, extruder_support = 0,
+        extruder_support_interface = 0;
+    int bed_temperature_from = 0; // the extruder whose bed temperatures hold (rule 4); 0: the first to print
+    bool ooze_prevention = false; // the extruders that wait cool down by standby_delta (rule 7)
+    double standby_delta = -5.0;  // C
+    // A tool change (rule 5): the leaving tool's retraction and what comes
+    // back past it when the tool is used again, mm by extruder (a list
+    // shorter than the extruders repeats its last value); the change's
+    // G-code, with previous_extruder, next_extruder and toolchange_z.
+    std::vector<double> toolchange_length{10.0}, toolchange_restart_extra{0.0};
+    std::string gcode_toolchange;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -528,6 +552,12 @@ double* limit_named(Settings& settings, std::string_view name);
 
 // The settings with the silent mode's limits in place of the normal ones.
 Settings silent_settings(const Settings& settings);
+
+// A value of a list by extruder (from 0): a shorter list repeats its last
+// value; an empty one gives `fallback`.
+double per_extruder(const std::vector<double>& values, std::size_t extruder, double fallback = 0.0);
+// Extruder `extruder`'s nozzle offset (machine.extruder_offset), mm.
+std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t extruder);
 
 // The settings a filament may give its own value of (retraction_travel.md,
 // rule 10), and the settings with the filament's values in place.

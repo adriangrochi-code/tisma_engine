@@ -5637,3 +5637,57 @@ Klipper, la segunda copia centrada en 113 (Tisma Slicer: 74, porque no centra el
 
 **Sigue:** el punto 3 queda completo salvo la cáscara vertical (W4, con la pregunta al equipo de fichas). Sigue el
 punto 4 (multimaterial, F7, resina).
+
+## 2026-10-27 — Punto 4a: el núcleo de varios extrusores
+
+**Hecho** (ficha `multi_extruder.md`, reglas 1 a 8 y 16):
+- ajustes nuevos: `machine.extruders` (1 a 16) y `machine.extruder_offset`; el grupo `extruders` (`walls`, `infill`,
+  `solid_infill`, `support`, `support_interface`, `bed_temperature_from`, `ooze_prevention`, `standby_delta`);
+  `retraction.toolchange_length` y `toolchange_restart_extra` (un valor o una lista por extrusor); `gcode.toolchange`;
+  `surfaces.interface_shells`. Cada objeto de la placa (`MeshObject::extruder`) tiene su extrusor;
+- el corte: con objetos de extrusores distintos, la placa se lamina entera (contorno de cada capa, soporte, falda,
+  borde, balsa) y cada extrusor aparte sobre esas mismas capas. Cada parte tiene sus perímetros donde toca a otra; lo
+  de todas las partes sostiene sus paredes, puentes y voladizos; las superficies ven lo de las otras como propio salvo
+  con `surfaces.interface_shells`; lo que ya es de un extrusor anterior no es de este. Cada camino lleva su extrusor
+  (`Toolpath::tool`). Con un solo extrusor en la máquina, nada cambia;
+- el escritor: cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un
+  grupo por extrusor (el soporte sin extrusor propio, la falda y el borde van con el primero); el cambio retrae lo que
+  falta hasta `toolchange_length`, quieto, cierra la etiqueta del objeto abierta, escribe la espera con menos
+  temperatura, el fin del filamento, `gcode.toolchange` (`previous_extruder`, `next_extruder`, `toolchange_z`), `T<n>`
+  si el texto no lo tiene, la espera del que entra y el inicio de su filamento; al volver, el filamento de esa
+  herramienta vuelve lo que retrajo y su extra. Al empezar: cada extrusor usado calentado y esperado (o a su
+  temperatura de espera), el G-code de cambio con `previous_extruder` −1 y `T` al primero; la cama de la primera capa
+  y, desde la segunda, la del extrusor que corresponde (`M140`). El desfase de cada boquilla se resta de sus X e Y. Las
+  variables `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used` y `current_extruder`;
+- el verificador sigue cada herramienta: su retracción de cambio, lo que retrajo cada una y su extra al volver, y el
+  área de movimiento corrida por los desfases;
+- en la interfaz: Impresora › Boquilla › Extrusores (cantidad, desfases, retracción de cambio y su extra, G-code de
+  cambio), Otros › Varios materiales (el extrusor de cada tipo, la cama, la espera) y las capas sólidas entre
+  materiales en Superficies; `docs/CONFIG.md` con todas las claves.
+
+**Medido** (con las piezas de la ficha: dos mitades de 10 × 20 × 10 mm y dos bloques apilados de 20 × 20 × 5 mm):
+- ME1: `M104 S200 T0`, `M104 S220 T1`, el inicio, `M109 S200 T0`, `M109 S220 T1`, `T0`; capa 0 con T0 y T1, capa 1
+  con T1 y T0…: 51 `T` en 50 capas, como la ficha. Cada mitad con su perímetro externo de 58,4 mm;
+- ME2: `G1 E-4`, `;TC 0->1 at 0.2`, `T1`; al volver a T0, `G1 E5`. Con `T{next_extruder} ; mine` en el texto, ningún
+  `T` más; al empezar, `;TC -1` y `T0 ; mine`. La ficha muestra también `M107` después de `T1`: el motor no lo escribe
+  (el ventilador sigue el de la capa);
+- ME3: perímetros con T0, relleno, sólido y superficie con T1; la capa 5 empieza con el relleno (T1); `M190 S55` y en
+  la segunda capa `M140 S70`; todo con el extrusor 2: 55 y 50 desde el 1, 75 y 70 con 0;
+- ME4: `M104 S190 T1` al empezar, sin esperarlo; en cada cambio `M104 S170 T0 ;cooldown`, `T1`, `M109 S220 T1`;
+- ME5: la mitad del extrusor 2 de X 90,2 a 99,8 e Y 85,2 a 104,8;
+- ME10: sin el ajuste, relleno ralo en las capas 21 a 27 de los dos materiales; con él, las capas 22 a 24 sólidas
+  (la 24 superficie de arriba) y 25 a 27 sólidas, sin puente (apoyan en el bloque de abajo). Tisma Slicer imprime la
+  capa 22 como puente interno sobre el relleno; el motor no hace puentes internos sobre el relleno ralo en ningún caso
+  (pasa lo mismo con P13 de `infill_patterns.md`): queda anotado para hacerlo aparte.
+
+Velocidad (dos cubos de 40 mm lado a lado, relleno al 20 %, 200 capas, con la CI de Linux corriendo en paralelo): con
+un extrusor 5 ms de corte y 11 ms de G-code; con dos, 12 ms y 20 ms (la placa entera más cada parte; el G-code con los
+cambios). 7 pruebas nuevas (`tests/test_multi_extruder.cpp`); el fuzzer con dos y tres extrusores (copias de extrusores
+distintos, extrusor por tipo, desfases, espera, texto de cambio): 300 corridas (semilla 41), 0 fallas. Suite: 541
+pruebas pasan.
+
+**No hecho:** elegir el extrusor de cada objeto desde la línea de comandos o la interfaz (las pruebas lo dan en los
+objetos); los colores pintados (regla 1, con `model_tools.md`); el tiempo de los cambios en la estimación; la vista
+previa no colorea por extrusor.
+
+**Sigue:** 4b, la torre de purga (reglas 9 a 14, ME6 a ME8).

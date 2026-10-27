@@ -138,6 +138,7 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `bottom_layers` | entero | 3 | 0 a 1000 | Capas sólidas encima de cada superficie inferior expuesta |
 | `top_min_thickness` | mm | 0 | 0 a 100 | Si las capas sólidas de arriba suman menos, se agregan capas del alto nominal hasta llegar (`docs/INFILL.md`) |
 | `bottom_min_thickness` | mm | 0 | 0 a 100 | Lo mismo con las de abajo |
+| `interface_shells` | booleano | `false` | | Con varios extrusores, donde la parte de uno apoya sobre la de otro, cada una lleva sus capas sólidas de arriba y de abajo como si fueran piezas separadas; sin esto, lo de los otros materiales tapa como si fuera la misma pieza (ficha `multi_extruder.md`, regla 16, ME10) |
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores |
 
 ### `infill`
@@ -186,6 +187,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `silent` | objeto | `{}` | | Los límites del modo silencioso, por nombre: cualquiera de `max_feed_x` … `max_feed_e`, `max_accel_x` … `max_accel_e`, `acceleration`, `travel_acceleration`, `retract_acceleration`, `jerk_x` … `jerk_e`, `junction_deviation`, `min_extrude_feed`, `min_travel_feed` y `corner_speed`, ≥ 0. El que falta es el normal. Solo cambian la estimación; los que se escriben son los normales |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
 | `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
+| `extruders` | entero | 1 | 1 a 16 | Cantidad de extrusores (ficha `multi_extruder.md`). Cada objeto de la placa se imprime con el suyo (en la interfaz, en el objeto; por omisión el 1) y cada tipo de extrusión con el de `extruders`. Con más de uno: cada extrusor que se usa se calienta al empezar (`M104 S… T<n>` con `variables.temperature[n]`, esperado con `M109 S… T<n>` después del inicio), se corre `gcode.toolchange` con `previous_extruder` −1 y se elige el primero (`T<n>`); cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un cambio por extrusor (reglas 3 y 6, ME1). La cama de la primera capa es la `first_layer_bed_temperature` (o `bed_temperature`) del primer extrusor que imprime, y desde la segunda capa la `bed_temperature` del primero que imprime en ella, con `M140` (regla 4, ME3). Los objetos de cada extrusor se laminan aparte sobre las capas de la placa: cada uno lleva sus perímetros donde toca a otro; lo de un extrusor anterior queda de ese. Sin `layers.detail_height` |
+| `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5) |
 | `z_offset` | número | 0 | −10 a 10 | Se suma a todas las Z de la pieza en el G-code, también al comentario `;Z:` (ficha `gcode_extras.md`, regla 5); puede dar Z negativas. No toca el G-code de inicio. Los cambios por altura (`changes`) van por esa Z escrita |
 | `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del hot end, en mm³/s. Ninguna extrusión lo pasa: su velocidad baja a flujo / (ancho × alto × `extrusion.flow`), redondeada hacia abajo a mm/min enteros. Con `extrusion.max_flow` vale el menor de los dos. 0: sin límite |
@@ -304,6 +307,8 @@ de siempre). Las partes más angostas que dos líneas no se planchan.
 | `before_wipe` | número | 0 | 0 a 100 | Parte de la retracción, en %, que se hace quieta antes del barrido (regla 3) |
 | `lift_above`, `lift_below` | número | 0 | ≥ 0 | El salto en Z (`lift`, o la rampa de `travel`) solo en las capas cuya Z está por encima de `lift_above` y por debajo de `lift_below`, en mm; 0: sin límite (regla 4, prueba R4) |
 | `firmware` | booleano | `false` | | Cada retracción es un `G10` y cada vuelta un `G11`, sin movimientos de E: el largo y la velocidad los pone el firmware (`M207`, `M208`); `length` sigue diciendo si se retrae (0: no) y el salto en Z sigue en el G-code. `restart_extra` no se escribe (regla 7, prueba R6) |
+| `toolchange_length` | número o lista | 10 | 0 a 200 | Con varios extrusores, cuánto retrae, quieta, la herramienta que se deja antes de un cambio, en mm (lo que ya retrajo cuenta); un valor para todas o una lista por extrusor (una lista corta repite el último). Al volver a usar esa herramienta, su filamento vuelve eso más `toolchange_restart_extra` (ficha `multi_extruder.md`, regla 5, ME2) |
+| `toolchange_restart_extra` | número o lista | 0 | 0 a 10 | Filamento de más al volver a usar una herramienta después de un cambio, en mm, por extrusor como `toolchange_length` |
 
 ### `travel`
 
@@ -405,6 +410,22 @@ espacios del cabezal, en el de impresora.
 | `clearance_radius` | número | 20 | 0 a 1000 | Radio, en mm, de un cilindro centrado en la boquilla que encierra el cabezal: las copias se acomodan al menos a esta distancia, y dos objetos más cerca son un error (regla 2, SQ2) |
 | `clearance_height` | número | 20 | 0 a 1000 | Distancia en Z, en mm, de la punta de la boquilla a lo primero que puede chocar arriba (el eje X): un objeto más alto que esto que no es el último es un error (regla 4; Tisma Slicer no lo rechaza, SQ4) |
 
+### `extruders`
+
+De la ficha `docs/spec/features/multi_extruder.md`: qué extrusor imprime qué, con `machine.extruders` mayor que 1. Va en
+el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `walls` | entero | 0 | 0 a 16 | Extrusor de los perímetros (también los de voladizo, los arcos y el relleno entre perímetros), desde 1; 0: el del objeto (regla 2, ME3) |
+| `infill` | entero | 0 | 0 a 16 | Extrusor del relleno ralo; 0: el del objeto |
+| `solid_infill` | entero | 0 | 0 a 16 | Extrusor del relleno sólido, las superficies, los puentes y el planchado; 0: el del objeto |
+| `support` | entero | 0 | 0 a 16 | Extrusor del soporte; 0: el que esté imprimiendo (sin cambio de herramienta) |
+| `support_interface` | entero | 0 | 0 a 16 | Extrusor de la interfaz del soporte; 0: el que esté imprimiendo |
+| `bed_temperature_from` | entero | 0 | 0 a 16 | Extrusor cuyas temperaturas de cama valen; 0: el primero que imprime en la primera capa (para la primera) y en la segunda (para el resto) (regla 4, ME3) |
+| `ooze_prevention` | booleano | `false` | | Los extrusores que esperan bajan a su temperatura más `standby_delta`: al empezar (sin esperarlos) y antes de cada cambio la que se deja (`M104 … ;cooldown`); la que entra espera su temperatura con `M109` (regla 7, ME4) |
+| `standby_delta` | número | −5 | −300 a 300 | Cuánto cambia la temperatura de los que esperan, en °C |
+
 ### `compute`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -463,6 +484,7 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
+| `toolchange` | texto | `""` | | G-code de cada cambio de herramienta (ficha `multi_extruder.md`, regla 5), con `previous_extruder`, `next_extruder` (desde 0) y `toolchange_z` (la Z de la capa). El cambio: la retracción de `retraction.toolchange_length`; con `extruders.ooze_prevention`, la que deja a su temperatura de espera (`M104 S… T<n> ;cooldown`); el fin del filamento que sale (`extrusion.end_gcode`); este texto; `T<n>` si el texto no tiene ya esa línea; con `ooze_prevention`, la espera de la que entra (`M109 S… T<n>`); el inicio del filamento que entra (`extrusion.start_gcode`). Al empezar también se corre, con `previous_extruder` −1 (regla 6). Cada cambio queda fuera de las etiquetas de objetos |
 | `progress` | booleano | `false` | | `M73 P<porcentaje> R<minutos restantes>` al empezar y cada vez que cambia el porcentaje entero o los minutos, por el tiempo estimado (ficha `gcode_firmware.md`, regla 5), hasta `M73 P100 R0` al final; con `machine.silent_mode`, también `M73 Q S` con el tiempo del modo silencioso (salvo con `reprap` y los dialectos antiguos). Las marcas van al empezar cada capa y cada trayectoria |
 | `object_labels` | texto | `"none"` | `none`, `octoprint`, `firmware` | Cada objeto de la placa (o copia de `slice --copies`) marcado en el G-code, para cancelar uno solo durante la impresión (ficha `gcode_firmware.md`, regla 4). `firmware`: en Marlin, al empezar `M486 S<n>`, `M486 A<nombre> (Instance <k>)` y `M486 S-1` por objeto, y en cada capa sus movimientos entre `M486 S<n>` y `M486 S-1`; en RepRapFirmware, lo mismo con `M486 S<n> A"<nombre> (Instance <k>)"` en una línea; en Klipper, `EXCLUDE_OBJECT_DEFINE NAME='<nombre>' CENTER=x,y POLYGON=[[x,y],...]` (la envolvente del objeto; espacios y puntos como `_`) y en cada capa `EXCLUDE_OBJECT_START`/`EXCLUDE_OBJECT_END`; en los demás firmwares, nada. `octoprint`: comentarios `; printing object <nombre> id:<objeto> copy <copia>` y `; stop printing object …`. En cada capa, los objetos de a uno: todas las islas de uno antes del siguiente |
 | `auto_temperatures` | booleano | `true` | | Si el G-code de inicio de la impresora (ya resuelto) no tiene comandos de temperatura (`M104`, `M109`, `M140`, `M190`, `M141`, `M191`, `M116`, `G10 S`), el motor escribe antes la de la cama con espera (`M190 S…`, con `variables.bed_temperature`) y la de la boquilla (`M104 S…`), y después del inicio espera la boquilla (`M109 S…`), cada dialecto con los suyos (ficha `gcode_templates.md`, regla 10). `false`: nunca |

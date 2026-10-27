@@ -369,6 +369,28 @@ int main(int argc, char** argv) {
                 one.add_triangle(shape.vertices[t[0]], shape.vertices[t[1]], shape.vertices[t[2]]);
             mesh = weld_exact(place_copies(one, std::size_t(2 + pick(2)), s, name, &objects));
         }
+        // Several extruders (multi_extruder.md): the copies each with one,
+        // a kind of extrusion with another, the nozzles offset.
+        if (pick(5) == 0) {
+            s.extruders = 2 + pick(2);
+            for (std::size_t k = 0; k < objects.size(); ++k)
+                objects[k].extruder = 1 + int(k % std::size_t(s.extruders));
+            for (int* kind : {&s.extruder_walls, &s.extruder_infill, &s.extruder_solid_infill, &s.extruder_support,
+                              &s.extruder_support_interface})
+                *kind = pick(3) == 0 ? pick(s.extruders + 1) : 0;
+            s.bed_temperature_from = pick(s.extruders + 1);
+            s.ooze_prevention = pick(3) == 0;
+            s.standby_delta = -uni(0, 40);
+            s.toolchange_length = {uni(0, 12), uni(0, 12)};
+            s.toolchange_restart_extra = {uni(0, 2)};
+            s.interface_shells = pick(2) == 0;
+            if (pick(2) == 0)
+                s.extruder_offset = {{0.0, 0.0}, {uni(-5, 5), uni(-5, 5)}};
+            s.gcode_toolchange = std::array{"", ";TC [previous_extruder] [next_extruder] {toolchange_z}",
+                                            "T{next_extruder} ; own"}[std::size_t(pick(3))];
+            s.variables["temperature"] = {"200", "215", "230"};
+            s.variables["bed_temperature"] = {"60", "70"};
+        }
         // With TISMA_FUZZ_RUN set to a run's number, that run's model and
         // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
         if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)

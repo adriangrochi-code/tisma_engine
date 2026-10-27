@@ -63,7 +63,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.bottom_layers", B},
             {"surfaces.top_min_thickness", B},
             {"surfaces.bottom_min_thickness", B},
-            {"surfaces.top_pattern", B}}},
+            {"surfaces.top_pattern", B},
+            {"surfaces.interface_shells", A}}},
           {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}}},
           {"infill_more", T::SubInfillMore,
            {{"infill.wall_overlap", A},
@@ -143,6 +144,15 @@ const std::vector<SectionLayout>& print_layout() {
             {"adhesion.raft_first_layer_expansion", A}}}}},
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}, {"sequential.enabled", N}}},
+          {"multi_material", T::SubMultiMaterial,
+           {{"extruders.walls", N},
+            {"extruders.infill", N},
+            {"extruders.solid_infill", N},
+            {"extruders.support", N},
+            {"extruders.support_interface", N},
+            {"extruders.bed_temperature_from", A},
+            {"extruders.ooze_prevention", A},
+            {"extruders.standby_delta", A}}},
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
@@ -231,7 +241,13 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.min_layer_height", N},
             {"machine.max_layer_height", N}}},
           {"extruder", T::SubExtruder,
-           {{"machine.filament_diameter", B}, {"machine.max_flow", N}, {"machine.relative_extrusion", N}}}}},
+           {{"machine.filament_diameter", B}, {"machine.max_flow", N}, {"machine.relative_extrusion", N}}},
+          {"extruders", T::SubExtruders,
+           {{"machine.extruders", N},
+            {"machine.extruder_offset", A},
+            {"retraction.toolchange_length", A},
+            {"retraction.toolchange_restart_extra", A},
+            {"gcode.toolchange", A}}}}},
         {"limits", T::SecLimits, "section_limits.svg",
          {{"speeds", T::SubSpeedLimits,
            {{"machine.max_feed_x", N},
@@ -497,6 +513,13 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                : s.vase               ? std::string(tr(T::VaseMode))
                : s.sequential         ? std::string(tr(T::SequentialRow))
                                       : std::string(tr(T::SumNormalPrint));
+    if (id == "multi_material")
+        return s.extruder_walls == 0 && s.extruder_infill == 0 && s.extruder_solid_infill == 0 &&
+                       s.extruder_support == 0 && s.extruder_support_interface == 0
+                   ? tr(T::SumObjectExtruder)
+                   : tr(T::SumByKind);
+    if (id == "extruders")
+        return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)

@@ -60,6 +60,7 @@
 #include <set>
 #include <sstream>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace tisma::ui {
@@ -750,7 +751,15 @@ const char* row_key(T label) {
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
         {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}, {T::SequentialRow, "sequential.enabled"},
         {T::ClearanceRadius, "sequential.clearance_radius"}, {T::ClearanceHeight, "sequential.clearance_height"},
-        {T::BetweenObjectsGcode, "gcode.between_objects"}, {T::ObjectLabelsRow, "gcode.object_labels"}};
+        {T::BetweenObjectsGcode, "gcode.between_objects"}, {T::ObjectLabelsRow, "gcode.object_labels"},
+        {T::ExtrudersRow, "machine.extruders"}, {T::ExtruderOffsetRow, "machine.extruder_offset"},
+        {T::ToolchangeLength, "retraction.toolchange_length"},
+        {T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra"}, {T::ToolchangeGcode, "gcode.toolchange"},
+        {T::WallsExtruder, "extruders.walls"}, {T::InfillExtruder, "extruders.infill"},
+        {T::SolidInfillExtruder, "extruders.solid_infill"}, {T::SupportExtruder, "extruders.support"},
+        {T::SupportInterfaceExtruder, "extruders.support_interface"},
+        {T::BedTemperatureFrom, "extruders.bed_temperature_from"}, {T::OozePrevention, "extruders.ooze_prevention"},
+        {T::StandbyDelta, "extruders.standby_delta"}, {T::InterfaceShells, "surfaces.interface_shells"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -2935,6 +2944,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         if (shown("surfaces.top_pattern"))
             changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
         if (shown("infill.pattern"))
@@ -3118,6 +3128,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "special_modes") {
         flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
         flag(T::SequentialRow, "sequential.enabled", s.sequential, tr(T::SequentialTip));
+    } else if (id == "multi_material") {
+        // Which extruder prints what (multi_extruder.md, rules 2, 4, 7 and 16); 0: the object's.
+        whole(T::WallsExtruder, "extruders.walls", s.extruder_walls, 0, kMaxExtruders);
+        whole(T::InfillExtruder, "extruders.infill", s.extruder_infill, 0, kMaxExtruders);
+        whole(T::SolidInfillExtruder, "extruders.solid_infill", s.extruder_solid_infill, 0, kMaxExtruders);
+        whole(T::SupportExtruder, "extruders.support", s.extruder_support, 0, kMaxExtruders);
+        whole(T::SupportInterfaceExtruder, "extruders.support_interface", s.extruder_support_interface, 0, kMaxExtruders);
+        whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
+        flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
+        mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
     } else if (id == "fuzzy") {
         if (shown("fuzzy.mode"))
             changed |= row(T::FuzzySkin, s.fuzzy_mode,
@@ -3249,6 +3269,19 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 200.0,
            s.machine_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
         flag(T::RelativeE, "machine.relative_extrusion", s.relative_extrusion);
+    } else if (id == "extruders") {
+        // Several extruders (multi_extruder.md): a list by extruder edits
+        // here while it holds one value for all.
+        whole(T::ExtrudersRow, "machine.extruders", s.extruders, 1, kMaxExtruders);
+        count(T::ExtruderOffsetRow, "machine.extruder_offset", s.extruder_offset.size());
+        for (const auto& [label, key, list, top] :
+             {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
+            if (list->size() == 1)
+                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+            else
+                count(label, key, list->size());
+        }
     } else if (id == "speeds") {
         mm(T::MaxFeedX, "machine.max_feed_x", s.max_feed_x, 0.0, 2000.0, "%.0f mm/s", 0.5f);
         mm(T::MaxFeedY, "machine.max_feed_y", s.max_feed_y, 0.0, 2000.0, "%.0f mm/s", 0.5f);
@@ -3344,6 +3377,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
                                                      ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
                 ImGui::PopID();
             }
+    }
+    // The tool change's G-code below the table, full width (multi_extruder.md, rule 5).
+    if (id == "extruders" && shown("gcode.toolchange")) {
+        ImGui::TextUnformatted(tr(T::ToolchangeGcode));
+        changed |= ImGui::InputTextMultiline("##toolchange", &s.gcode_toolchange,
+                                             ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
     }
     // The start and end G-code below the table, full width.
     if (id == "start_end") {

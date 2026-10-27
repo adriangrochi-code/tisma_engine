@@ -344,6 +344,59 @@ SlicedModel object_part(const SlicedModel& model, std::size_t k) {
     return out;
 }
 
+namespace {
+
+// One extruder's part of a plate printed with several (multi_extruder.md,
+// rule 1), sliced on the plate's layers. What every part lays (`cover`)
+// holds up the walls, bridges and overhangs; the skins see it too, unless
+// surfaces.interface_shells keeps each part's own. What the parts before
+// it took (`taken`) is not this one's. The support is the plate's: the part
+// rests on it but lays none, nor skirt or brim. Its fills are centred where
+// the plate's are.
+struct PartFrame {
+    LayerStack stack;
+    const std::vector<Polygons>* cover = nullptr;
+    const std::vector<Polygons>* taken = nullptr;
+    const std::vector<Polygons>* support = nullptr;
+    Point2d centre;
+};
+
+SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
+                         const StressField* stress, const Painting* painting, const PartFrame* frame);
+SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
+                        const Painting* painting, const std::vector<MeshObject>* tools);
+SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
+                        const Painting* painting, const std::vector<MeshObject>& objects);
+
+// Every path of a part's walls and fills (not the support) printed by `tool`.
+void tag_tool(SlicedModel& part, int tool) {
+    const auto tag = [&](std::vector<Toolpath>& paths) {
+        for (Toolpath& t : paths)
+            t.tool = std::uint8_t(tool);
+    };
+    for (LayerWalls& w : part.walls)
+        tag(w.toolpaths), tag(w.gaps);
+    for (LayerFill& f : part.fills)
+        for (std::vector<Toolpath>* list : {&f.top, &f.solid, &f.sparse, &f.bridge, &f.gaps, &f.arcs, &f.overhang_walls, &f.ironing})
+            tag(*list);
+    for (ThickLayer& t : part.thick)
+        tag(t.walls), tag(t.fill.top), tag(t.fill.solid), tag(t.fill.sparse), tag(t.fill.bridge), tag(t.fill.gaps);
+}
+
+// An object's extruder on this machine: one it has (the first with one).
+int object_tool(const MeshObject& o, const Settings& settings) {
+    return std::clamp(o.extruder, 1, std::max(settings.extruders, 1));
+}
+
+// Whether the plate's objects print with more than one extruder.
+bool several_tools(const std::vector<MeshObject>& objects, const Settings& settings) {
+    return std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
+        return object_tool(o, settings) != object_tool(objects.front(), settings);
+    });
+}
+
+} // namespace
+
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
                         const StressField* stress, const Painting* painting, const std::vector<MeshObject>* objects) {
     SlicedModel out;
@@ -363,6 +416,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 SlicedModel part = slice_model(mesh, settings, gpu, stress, painting ? &paint : nullptr);
                 if (part.layers.empty())
                     continue;
+                if (object_tool(o, settings) != 1)
+                    tag_tool(part, object_tool(o, settings));
                 SlicedObject object{o.name, o.object, o.instance, outline_of(mesh),
                                     part.layers.back().top - part.layers.front().bottom, 0, 0, {}, {}};
                 append_object(out, std::move(part), std::move(object));
@@ -374,7 +429,15 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             }
             return out;
         }
-        out = slice_model(input, settings, gpu, stress, painting);
+        // Each extruder's objects apart on the plate's layers
+        // (multi_extruder.md, rule 1); one other than the first, every path its.
+        if (several_tools(*objects, settings)) {
+            out = slice_plate(input, settings, gpu, stress, painting, objects);
+        } else {
+            out = slice_model(input, settings, gpu, stress, painting);
+            if (object_tool(objects->front(), settings) != 1)
+                tag_tool(out, object_tool(objects->front(), settings));
+        }
         for (const MeshObject& o : *objects) {
             const IndexedMesh mesh = object_mesh(input, o);
             if (mesh.triangles.empty())
@@ -386,6 +449,20 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         return out;
     }
+    return slice_plate(input, settings, gpu, stress, painting, nullptr);
+}
+
+namespace {
+
+SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
+                        const Painting* painting, const std::vector<MeshObject>* tools) {
+    // Several extruders print layer by layer, every extruder on every layer:
+    // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
+    if (settings.extruders > 1 && settings.detail_height > 0.0) {
+        Settings flat = settings;
+        flat.detail_height = 0.0;
+        return slice_plate(input, flat, gpu, stress, painting, tools);
+    }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
     if (settings.vase && (settings.wall_count != 1 || settings.infill_density != 0.0 || settings.top_layers != 0 ||
@@ -395,7 +472,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_model(input, vase, gpu, stress, painting);
+        return slice_plate(input, vase, gpu, stress, painting, tools);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -406,11 +483,129 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
-        SlicedModel raft = slice_model(input, part, gpu, stress, painting);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools);
         add_raft(raft, settings);
         return raft;
     }
-    IndexedMesh mesh = compensated(input, settings);
+    const IndexedMesh mesh = compensated(input, settings);
+    if (!tools)
+        return slice_layers(mesh, settings, gpu, stress, painting, nullptr);
+    return slice_tools(mesh, settings, gpu, stress, painting, *tools);
+}
+
+// Several extruders (multi_extruder.md, rule 1): the whole plate sliced
+// once for its outline on every layer, its support, skirt and brim; then
+// each extruder's objects (the first extruder first) on the same layers,
+// and their walls and fills, each path marked with its extruder, in place
+// of the plate's.
+SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
+                        const Painting* painting, const std::vector<MeshObject>& objects) {
+    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr);
+    if (out.layers.empty())
+        return out;
+    PartFrame frame;
+    {
+        IndexedMesh oriented = mesh;
+        orient_consistently(oriented); // as slice_layers plans the plate's layers
+        float min_z = oriented.vertices.front().z, max_z = min_z;
+        float min_x = oriented.vertices.front().x, max_x = min_x, min_y = oriented.vertices.front().y, max_y = min_y;
+        for (const Vec3f& v : oriented.vertices) {
+            min_z = std::min(min_z, v.z), max_z = std::max(max_z, v.z);
+            min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
+            min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
+        }
+        frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
+        frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
+    }
+    const std::size_t n = out.layers.size();
+    std::vector<Polygons> taken(n);
+    frame.cover = &out.regions;
+    frame.taken = &taken;
+    frame.support = &out.support_areas;
+    Settings part_settings = settings;
+    part_settings.support = false;
+    std::vector<int> tools;
+    for (const MeshObject& o : objects)
+        tools.push_back(object_tool(o, settings));
+    std::sort(tools.begin(), tools.end());
+    tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+    std::vector<LayerWalls> walls(n);
+    std::vector<LayerFill> fills(n);
+    std::vector<LayerSurfaces> surfaces(n);
+    std::vector<Polygons> hanging(n), on_support(n), air_bridges(n);
+    std::vector<double> support_gap(n, 0.0);
+    std::size_t zaa_points = 0;
+    const auto add = [](std::vector<Toolpath>& to, std::vector<Toolpath>& from) {
+        to.insert(to.end(), std::make_move_iterator(from.begin()), std::make_move_iterator(from.end()));
+    };
+    const auto unite = [](Polygons& to, const Polygons& from) {
+        if (!from.empty())
+            to = to.empty() ? from : Clipper2Lib::Union(to, from, Clipper2Lib::FillRule::NonZero);
+    };
+    for (const int tool : tools) {
+        IndexedMesh part_mesh;
+        Painting part_paint;
+        for (const MeshObject& o : objects) {
+            if (object_tool(o, settings) != tool)
+                continue;
+            const IndexedMesh piece = object_mesh(mesh, o);
+            if (painting)
+                part_paint.append(object_painting(*painting, o), part_mesh.triangles.size());
+            const auto base = std::uint32_t(part_mesh.vertices.size());
+            part_mesh.vertices.insert(part_mesh.vertices.end(), piece.vertices.begin(), piece.vertices.end());
+            for (const auto& t : piece.triangles)
+                part_mesh.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+        }
+        if (part_mesh.triangles.empty())
+            continue;
+        SlicedModel part = slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paint : nullptr, &frame);
+        tag_tool(part, tool);
+        zaa_points += part.zaa_points;
+        tbb::parallel_for(std::size_t(0), std::min(n, part.layers.size()), [&](std::size_t l) {
+            unite(taken[l], part.regions[l]);
+            LayerWalls& w = part.walls[l];
+            add(walls[l].toolpaths, w.toolpaths);
+            add(walls[l].gaps, w.gaps);
+            unite(walls[l].infill, w.infill);
+            LayerFill& f = part.fills[l];
+            for (auto [to, from] : {std::pair{&fills[l].top, &f.top}, {&fills[l].solid, &f.solid}, {&fills[l].sparse, &f.sparse},
+                                    {&fills[l].bridge, &f.bridge}, {&fills[l].gaps, &f.gaps}, {&fills[l].arcs, &f.arcs},
+                                    {&fills[l].overhang_walls, &f.overhang_walls}, {&fills[l].ironing, &f.ironing}})
+                add(*to, *from);
+            const LayerSurfaces& s = part.surfaces[l];
+            if (surfaces[l].bridge.empty() && !s.bridge.empty())
+                surfaces[l].bridge_angle = s.bridge_angle;
+            unite(surfaces[l].top, s.top);
+            unite(surfaces[l].top_under, s.top_under);
+            unite(surfaces[l].bottom, s.bottom);
+            unite(surfaces[l].sparse, s.sparse);
+            unite(surfaces[l].bridge, s.bridge);
+            unite(hanging[l], part.hanging[l]);
+            unite(on_support[l], part.on_support[l]);
+            unite(air_bridges[l], part.air_bridges[l]);
+            support_gap[l] = std::max(support_gap[l], part.support_gap[l]);
+        });
+    }
+    // The plate's support stays, printed by its own extruder.
+    for (std::size_t l = 0; l < n; ++l) {
+        fills[l].support = std::move(out.fills[l].support);
+        fills[l].support_interface = std::move(out.fills[l].support_interface);
+    }
+    out.walls = std::move(walls);
+    out.fills = std::move(fills);
+    out.surfaces = std::move(surfaces);
+    out.hanging = std::move(hanging);
+    out.on_support = std::move(on_support);
+    out.air_bridges = std::move(air_bridges);
+    out.support_gap = std::move(support_gap);
+    out.zaa_points = zaa_points;
+    return out;
+}
+
+SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
+                         const StressField* stress, const Painting* painting, const PartFrame* frame) {
+    SlicedModel out;
+    IndexedMesh mesh = compensated_mesh;
     // The painted pieces before any triangle is turned: a tree follows the
     // order of its triangle's corners.
     std::array<std::vector<PaintedPiece>, 5> painted; // support enforce, block, seam enforce, block, fuzzy skin
@@ -434,7 +629,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     // with variable heights, planned layer by layer (docs/VARIABLE_LAYERS.md).
     const int ratio = detail_ratio(settings);
     const double stack_height = settings.layer_height / double(ratio); // nominal, for the support's gap
-    const LayerStack stack = plan_layer_stack(mesh, min_z, max_z, settings);
+    const LayerStack stack = frame ? frame->stack : plan_layer_stack(mesh, min_z, max_z, settings);
     out.layers = stack.layers;
     std::vector<float> heights;
     heights.reserve(out.layers.size());
@@ -482,7 +677,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         const bool same = l > 0 && same_section[l];
         source[l] = same ? source[l - 1] : l;
         copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
-                    !(l == 1 && settings.first_layer_one_wall);
+                    !(l == 1 && settings.first_layer_one_wall) &&
+                    !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]);
     }
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         if (copied[l])
@@ -493,6 +689,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                        settings.fill_mode);
         const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
+        // Where an earlier extruder's part is, this one is not.
+        if (frame && frame->taken && !(*frame->taken)[l].empty())
+            out.regions[l] = Clipper2Lib::Difference(out.regions[l], (*frame->taken)[l], Clipper2Lib::FillRule::NonZero);
         // What an opening by the thinnest bead removes is too thin to print.
         const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
         out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
@@ -516,6 +715,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             out.thin_area[l] = out.thin_area[l - 1];
             out.walls[l] = out.walls[l - 1];
         }
+    // What holds a layer up, and what its skins see: with several extruders,
+    // every part's (the skins their own with surfaces.interface_shells).
+    const std::vector<Polygons>& held = frame && frame->cover ? *frame->cover : out.regions;
+    const std::vector<Polygons>& skins = settings.interface_shells ? out.regions : held;
     // Only the outer wall over the top surfaces (walls_extra.md, rule 10):
     // every one, or the part's topmost (its last layer).
     if (settings.top_one_wall != TopOneWall::None && settings.wall_count > 1 && !out.layers.empty()) {
@@ -525,7 +728,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             if (out.regions[l].empty() || (l == 0 && settings.first_layer_one_wall))
                 return;
             std::optional<LayerWalls> walls =
-                one_wall_on_top(out.regions[l], l < last ? out.regions[l + 1] : nothing, settings, beading);
+                one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, settings, beading);
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
@@ -548,11 +751,20 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     const int top_count = shell(settings.top_layers, settings.top_min_thickness);
     const int bottom_count = shell(settings.bottom_layers, settings.bottom_min_thickness);
     out.surfaces = variable_layers(settings)
-                       ? classify_surfaces(out.regions, infill, skin_counts(stack.share, top_count, +1),
+                       ? classify_surfaces(skins, infill, skin_counts(stack.share, top_count, +1),
                                            skin_counts(stack.share, bottom_count, -1), settings.wall_width)
-                       : classify_surfaces(out.regions, infill, top_count * ratio, bottom_count * ratio,
+                       : classify_surfaces(skins, infill, top_count * ratio, bottom_count * ratio,
                                            settings.wall_width);
-    find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width);
+    // What the other extruders' parts lay counts as printed below.
+    std::vector<Polygons> others;
+    if (frame && frame->cover) {
+        others.resize(out.layers.size());
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            others[l] = Clipper2Lib::Difference(held[l], out.regions[l], Clipper2Lib::FillRule::NonZero);
+        });
+    }
+    find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width,
+                 others.empty() ? nullptr : &others);
     out.air_bridges.resize(out.surfaces.size());
     for (std::size_t l = 0; l < out.surfaces.size(); ++l)
         out.air_bridges[l] = out.surfaces[l].bridge;
@@ -601,11 +813,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         ap.overlap = settings.arcs_overlap;
         ap.max_distance = settings.arcs_max_distance;
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
-            if (out.regions[l].empty() || out.regions[l - 1].empty())
+            if (out.regions[l].empty() || held[l - 1].empty())
                 return;
             // Round beads, as the bridges' (rule 3): pi/4 of the width squared.
             const double round = std::numbers::pi / 4.0 * settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
-            for (ArcZone& z : overhang_arcs(out.regions[l], out.regions[l - 1], ap)) {
+            for (ArcZone& z : overhang_arcs(out.regions[l], held[l - 1], ap)) {
                 for (Toolpath& t : z.arcs) {
                     t.gap = round;
                     t.retract = true;
@@ -628,11 +840,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     if (settings.extra_on_overhangs && !settings.arcs) {
         const double w = settings.wall_width;
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
-            if (out.regions[l].empty() || out.regions[l - 1].empty())
+            if (out.regions[l].empty() || held[l - 1].empty())
                 return;
             const double round = std::max(0.0, std::numbers::pi / 4.0 * w - (out.layers[l].top - out.layers[l].bottom));
             Polygons taken;
-            for (const HeldZone& z : held_zones(out.regions[l], out.regions[l - 1], w)) {
+            for (const HeldZone& z : held_zones(out.regions[l], held[l - 1], w)) {
                 const Polygons area = Clipper2Lib::Intersect(z.zone, out.walls[l].infill, Clipper2Lib::FillRule::NonZero);
                 if (area.empty())
                     continue;
@@ -661,7 +873,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         });
     }
     out.support_areas.resize(out.layers.size());
-    if (settings.support) {
+    if (settings.support && !frame) {
         std::vector<double> thickness;
         for (const Layer& layer : out.layers)
             thickness.push_back(layer.top - layer.bottom);
@@ -705,6 +917,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     // rests on it; its bridge reaches kBridgeAnchor over the part around it,
     // taken from the sparse infill, and the writer lays its walls and bridge
     // there as thick as the layer and the gap.
+    // A part rests on the plate's support; it lays none itself.
+    const std::vector<Polygons>& support_at = frame && frame->support ? *frame->support : out.support_areas;
     out.hanging.resize(out.layers.size());
     out.on_support.resize(out.layers.size());
     out.support_gap.assign(out.layers.size(), 0.0);
@@ -713,19 +927,19 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
         if (out.regions[l].empty())
             return;
-        out.hanging[l] = Clipper2Lib::Difference(out.regions[l], offset(out.regions[l - 1], settings.wall_width / 2.0),
+        out.hanging[l] = Clipper2Lib::Difference(out.regions[l], offset(held[l - 1], settings.wall_width / 2.0),
                                                  Clipper2Lib::FillRule::NonZero);
         if (l < support_gap_layers + 1)
             return;
         const std::size_t top = l - 1 - support_gap_layers; // the support's last layer under this one
-        if (out.support_areas[top].empty())
+        if (support_at[top].empty())
             return;
         // The support keeps support.xy_gap off the part: that much and a bead
         // more of what hangs still lies over it.
         const double xy_gap = settings.support_xy_gap.of(settings.wall_width);
         Polygons on = Clipper2Lib::Intersect(
-            Clipper2Lib::Difference(out.regions[l], out.regions[l - 1], Clipper2Lib::FillRule::NonZero),
-            offset(out.support_areas[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);
+            Clipper2Lib::Difference(out.regions[l], held[l - 1], Clipper2Lib::FillRule::NonZero),
+            offset(support_at[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);
         // Arcs instead, where there are (arc_overhangs.md, rule 11).
         if (!arc_areas[l].empty())
             on = Clipper2Lib::Difference(on, arc_areas[l], Clipper2Lib::FillRule::NonZero);
@@ -832,7 +1046,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     fill.bridge_width = bridge_bead(settings);
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
-    fill.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
+    fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress
     // bands and the dense infill left of the sparse infill.
     std::vector<std::vector<Toolpath>> branches;
@@ -854,7 +1068,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.seam_enforce = painted_areas(painted[2], out.layers, settings.wall_width);
     if (!painted[3].empty())
         out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
-    if (!out.regions.empty()) {
+    if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         const AdhesionShape shape = adhesion_shape(settings);
         out.brim = brim_loops(out.regions.front(), shape, settings.wall_width, first);
@@ -966,7 +1180,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (settings.ironing_surfaces == IroningSurfaces::Topmost && n > 0) {
             above.resize(n);
             for (std::size_t l = n - 1; l-- > 0;)
-                above[l] = Clipper2Lib::Union(above[l + 1], out.regions[l + 1], Clipper2Lib::FillRule::NonZero);
+                above[l] = Clipper2Lib::Union(above[l + 1], skins[l + 1], Clipper2Lib::FillRule::NonZero);
         }
         const double spacing = settings.ironing_spacing;
         // As ;WIDTH writes it (three decimals), so the material matches what
@@ -981,7 +1195,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                           Clipper2Lib::FillRule::NonZero);
             } else {
                 const Polygons& cover = settings.ironing_surfaces == IroningSurfaces::Topmost ? above[l]
-                                        : l + 1 < n                                         ? out.regions[l + 1]
+                                        : l + 1 < n                                         ? skins[l + 1]
                                                                                             : nothing;
                 area = Clipper2Lib::Intersect(Clipper2Lib::Difference(out.regions[l], cover, Clipper2Lib::FillRule::NonZero),
                                               offset(out.regions[l], -settings.nozzle_diameter / 2.0),
@@ -1058,4 +1272,5 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     return out;
 }
 
+} // namespace
 } // namespace tisma

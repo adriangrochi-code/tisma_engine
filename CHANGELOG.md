@@ -12,6 +12,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Varios extrusores** (ficha `multi_extruder.md`): impresoras de varias boquillas con `machine.extruders`; cada
+  objeto se imprime con su extrusor y cada tipo de extrusión puede ir con otro (perímetros, relleno, relleno sólido,
+  soporte, interfaz). Cada capa empieza con el extrusor con el que terminó la anterior, un cambio por extrusor; el
+  cambio retrae su largo propio, corre el G-code de cambio y vuelve el filamento con su extra. Temperaturas por
+  extrusor al empezar, espera con menos temperatura para los que no imprimen, cama del extrusor que corresponde,
+  desfase de cada boquilla y capas sólidas entre materiales opcionales. En Impresora › Boquilla › Extrusores y Otros ›
+  Varios materiales.
 - **Etiquetas de objetos** (ficha `gcode_firmware.md`, en Impresora › G-code › Firmware): cada objeto marcado en el
   G-code para cancelar uno solo durante la impresión, con `M486` (Marlin y RepRapFirmware), `EXCLUDE_OBJECT`
   (Klipper) o los comentarios de OctoPrint.
