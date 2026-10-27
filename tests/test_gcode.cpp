@@ -1002,3 +1002,80 @@ TEST_CASE("numbers in the G-code: the fast formatter writes what std::to_chars w
     }
     CHECK(differ == 0);
 }
+
+TEST_CASE("ironing: the top surface ironed after its fill, at 45 degrees, with a share of the material (ironing.md, "
+          "IR1)",
+          "[gcode][ironing]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.relative_extrusion = true;
+    s.min_layer_time = 0.0;
+    s.ironing = true; // 15 %, 0.1 mm, 15 mm/s
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    const std::vector<Extrusion> moves = extrusions(out.str());
+    double length = 0.0, e = 0.0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    bool after_top = false, top_after = false;
+    for (const Extrusion& x : moves) {
+        if (x.type == "Top solid infill" && x.z == "10.000")
+            after_top = true, top_after = top_after || length > 0.0;
+        if (x.type != "Ironing")
+            continue;
+        INFO(x.z << " (" << x.x0 << ", " << x.y0 << ") to (" << x.x1 << ", " << x.y1 << ")");
+        CHECK(x.z == "10.000"); // only the top layer
+        CHECK(after_top);
+        CHECK(x.feed == 15.0 * 60.0);
+        CHECK(x.height == "0.200");
+        length += x.length(), e += x.e;
+        if (x.length() > 1.0) { // the lines, not the steps between them: along X (the top fill at 135)
+            CHECK(std::abs(x.y1 - x.y0) < 1e-6);
+            x0 = std::min({x0, x.x0, x.x1}), x1 = std::max({x1, x.x0, x.x1});
+            y0 = std::min(y0, x.y0), y1 = std::max(y1, x.y0);
+        }
+    }
+    CHECK_FALSE(top_after); // after the top fill, not before
+    // 0.1 x 15 % x 0.2 = 0.003 mm3 per mm: 0.001247 mm of filament.
+    CHECK_THAT(e / length, Catch::Matchers::WithinAbs(0.001247, 0.00001));
+    // IR1: X 0.205 to 19.795, Y 0.35 to 19.75; 3822 mm in all.
+    CHECK_THAT(x0, Catch::Matchers::WithinAbs(0.2, 0.05));
+    CHECK_THAT(x1, Catch::Matchers::WithinAbs(19.8, 0.05));
+    CHECK(y0 > 0.15);
+    CHECK(y0 < 0.4);
+    CHECK(y1 > 19.6);
+    CHECK(y1 < 19.85);
+    CHECK_THAT(length, Catch::Matchers::WithinRel(3822.0, 0.02));
+}
+
+TEST_CASE("ironing: every top surface, the topmost only, or every solid layer (ironing.md)", "[gcode][ironing]") {
+    // A step: a block 30 x 20 x 4 with another 10 x 20 on it up to Z 8.
+    IndexedMesh m;
+    add_box(m, 0, 0, 30, 20, 4);
+    add_box(m, 0, 0, 10, 20, 8, 4);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.ironing = true;
+    const auto ironed = [&](IroningSurfaces which) {
+        s.ironing_surfaces = which;
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, s), s);
+        std::set<std::string> zs;
+        for (const Extrusion& x : extrusions(out.str()))
+            if (x.type == "Ironing")
+                zs.insert(x.z);
+        return zs;
+    };
+    CHECK(ironed(IroningSurfaces::Top) == std::set<std::string>{"4.000", "8.000"});
+    CHECK(ironed(IroningSurfaces::Topmost) == std::set<std::string>{"4.000", "8.000"}); // the step's top is under nothing
+    CHECK(ironed(IroningSurfaces::Solid).size() > 6); // the solid layers at the bottom and under both tops
+    // Under a bridge-like roof the lower top is not the topmost.
+    IndexedMesh roofed;
+    add_box(roofed, 0, 0, 30, 20, 4);
+    add_box(roofed, 0, 0, 5, 20, 8, 4);
+    add_box(roofed, 25, 0, 30, 20, 8, 4);
+    add_box(roofed, 0, 0, 30, 20, 10, 8);
+    m = roofed;
+    CHECK(ironed(IroningSurfaces::Topmost) == std::set<std::string>{"10.000"});
+    CHECK(ironed(IroningSurfaces::Top) == std::set<std::string>{"4.000", "10.000"});
+}

@@ -5180,3 +5180,23 @@ que con paredes variables (medido con la CI de Linux corriendo al lado: Benchy 0
 más corto (Benchy 133 000 líneas contra 337 000). Fuzzer con paredes fijas: 900 corridas, 0 fallas.
 
 **Sigue:** planchado (`ironing.md`).
+
+## 2026-10-27 — Punto 2: planchado
+
+**Hecho** (ficha `ironing.md`, reglas 1 a 5): grupo `ironing` (`enabled`, `surfaces` `top`/`topmost`/`solid`, `flow`
+15 %, `spacing` 0,1 mm, `speed` 15 mm/s, los de la ficha). En la misma capa y a la misma Z, después de los rellenos
+de cada isla, líneas a 45° del relleno de arriba, en zigzag, sobre lo que la capa de arriba no cubre (o lo que nada de
+más arriba cubre, o todas las superficies sólidas), también sobre los perímetros, hasta media boquilla del borde;
+`;TYPE:Ironing`. Cada línea es un cordón de `spacing × flow` de ancho (redondeado a lo que escribe `;WIDTH`) y la
+altura de la capa. En el panel, Calidad › Planchado.
+
+**Corregido:** las etiquetas de `speed.overhang_*` terminaban en «%», que la prueba de textos lee como formato y ASan
+la vio leer fuera de la cadena en la CI de Linux de la sesión (commit aparte). Esa corrida terminó con esa falla y
+subí `dev` igual por no mirar el código de salida: el arreglo va en el siguiente envío, después de una CI completa.
+
+**Medido:** IR1: solo en la capa de arriba, después de su relleno (135°), líneas a 0°, 0,1 mm, 15 mm/s, 0,001247 mm de
+filamento por mm, ejes entre X 0,2 y 19,8 (la ficha: 0,205 y 19,795), largo dentro del 2 % de 3822 mm. Escalón y
+techo: `top`, `topmost` y `solid` planchan lo que deben. Benchy y cráneo con planchado: G-code verificado (122 y 200
+tramos de planchado). Fuzzer con planchado: 800 corridas, 0 fallas (antes del redondeo del ancho, 2 fallas).
+
+**Sigue:** balsa (`skirt_brim_raft.md`).

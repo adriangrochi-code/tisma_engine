@@ -35,7 +35,13 @@ const std::vector<SectionLayout>& print_layout() {
             {"compensation.scale_y", A},
             {"compensation.scale_z", A},
             {"compensation.hole_offset", A}}},
-          {"slopes", T::SubSlopes, {{"zaa.enabled", N}, {"zaa.min_thickness", A}, {"zaa.raise", A}}}}},
+          {"slopes", T::SubSlopes, {{"zaa.enabled", N}, {"zaa.min_thickness", A}, {"zaa.raise", A}}},
+          {"ironing", T::SubIroning,
+           {{"ironing.enabled", N},
+            {"ironing.surfaces", A},
+            {"ironing.flow", A},
+            {"ironing.spacing", A},
+            {"ironing.speed", A}}}}},
         {"strength", T::SecStrength, "section_strength.svg",
          {{"walls", T::SubWalls,
            {{"walls.count", B},
@@ -372,6 +378,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumSpeed, speed_text(s.travel_speed).c_str());
     if (id == "limits")
         return format(T::SumSpeed, speed_text(s.max_speed).c_str());
+    if (id == "ironing")
+        return s.ironing ? format(T::SumIroning, number(s.ironing_speed, 0).c_str()) : tr(T::SumOff);
     if (id == "overhang_speeds")
         return s.dynamic_overhangs ? tr(T::SumBySupport) : tr(T::SumOff);
     if (id == "accel_kinds")

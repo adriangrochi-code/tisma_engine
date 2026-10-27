@@ -218,7 +218,7 @@ Settings parse_checked(std::string_view text) {
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
-            group == "acceleration")
+            group == "acceleration" || group == "ironing")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -877,6 +877,35 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must be from 0.1 to 20 mm");
                    s.fuzzy_point_distance = v;
                });
+    read_group(root, "ironing", {"enabled", "surfaces", "flow", "spacing", "speed"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "enabled") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.ironing = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "surfaces") {
+                       s.ironing_surfaces = choice<IroningSurfaces>(
+                           g, n, k,
+                           {{"top", IroningSurfaces::Top}, {"topmost", IroningSurfaces::Topmost}, {"solid", IroningSurfaces::Solid}});
+                       return;
+                   }
+                   const double v = number(g, n, k);
+                   if (n == "flow") {
+                       if (!(v > 0.0 && v <= 100.0))
+                           fail(k, "must be more than 0 and at most 100 %");
+                       s.ironing_flow = v;
+                   } else if (n == "spacing") {
+                       if (!(v >= 0.01 && v <= 2.0))
+                           fail(k, "must be from 0.01 to 2 mm");
+                       s.ironing_spacing = v;
+                   } else {
+                       if (!(v > 0.0 && v <= 1000.0))
+                           fail(k, "must be more than 0 and at most 1000 mm/s");
+                       s.ironing_speed = v;
+                   }
+               });
     read_group(root, "arcs", {"enabled", "overlap", "speed", "max_distance"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "enabled") {
@@ -1147,6 +1176,13 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"arcs.overlap", num(s.arcs_overlap)},
         {"arcs.speed", num(s.arcs_speed)},
         {"arcs.max_distance", num(s.arcs_max_distance)},
+        {"ironing.enabled", flag(s.ironing)},
+        {"ironing.surfaces", s.ironing_surfaces == IroningSurfaces::Topmost ? "topmost"
+                             : s.ironing_surfaces == IroningSurfaces::Solid ? "solid"
+                                                                            : "top"},
+        {"ironing.flow", num(s.ironing_flow)},
+        {"ironing.spacing", num(s.ironing_spacing)},
+        {"ironing.speed", num(s.ironing_speed)},
         {"review.nozzle_force", num(s.review_nozzle_force)},
         {"review.bed_adhesion", num(s.review_bed_adhesion)},
         {"review.max_deflection", num(s.review_max_deflection)},
@@ -1483,6 +1519,14 @@ std::string settings_json(const Settings& s) {
           {"overlap", s.arcs_overlap},
           {"speed", s.arcs_speed},
           {"max_distance", s.arcs_max_distance}}},
+        {"ironing",
+         {{"enabled", s.ironing},
+          {"surfaces", s.ironing_surfaces == IroningSurfaces::Topmost ? "topmost"
+                       : s.ironing_surfaces == IroningSurfaces::Solid ? "solid"
+                                                                      : "top"},
+          {"flow", s.ironing_flow},
+          {"spacing", s.ironing_spacing},
+          {"speed", s.ironing_speed}}},
         {"review",
          {{"nozzle_force", s.review_nozzle_force},
           {"bed_adhesion", s.review_bed_adhesion},

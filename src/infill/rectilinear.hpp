@@ -44,6 +44,7 @@ struct LayerFill {
     std::vector<Toolpath> support;           // support lines (support_areas)
     std::vector<Toolpath> support_interface; // dense support right under the part
     std::vector<Toolpath> arcs; // over overhangs held from one side, in printing order (arc_overhangs.md)
+    std::vector<Toolpath> ironing; // over the top surfaces, after their fill (ironing.md)
 };
 
 // What lines leave uncovered in a region, filled with variable-width beads

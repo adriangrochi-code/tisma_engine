@@ -255,6 +255,22 @@ que falta), ni las de la balsa y la torre de purga.
 | `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |
 | `short_travel` | número | 0 | 0 a 100 000 | Viajes más cortos que `retraction.min_travel`; 0: `travel` |
 
+### `ironing`
+
+Planchado (ficha `ironing.md`): después del relleno de arriba de cada isla, en la misma capa y a la misma Z, la
+boquilla vuelve a pasar sobre la superficie expuesta (también sobre los perímetros, hasta media boquilla del borde) en
+líneas a 45° de las del relleno de arriba, `;TYPE:Ironing`. Cada línea va como un cordón de `spacing × flow` de ancho
+y la altura de la capa: por mm, `flow` de lo que pondría una capa normal a esa separación (0,003 mm³ con los valores
+de siempre). Las partes más angostas que dos líneas no se planchan.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | — | Plancha |
+| `surfaces` | texto | `"top"` | `top`, `topmost`, `solid` | `top`: lo que la capa de arriba no cubre; `topmost`: lo que nada de más arriba cubre (la superficie más alta de cada parte); `solid`: todas las superficies sólidas de cada capa |
+| `flow` | número | 15 | más de 0 a 100 | Material, en % de una capa de la altura normal |
+| `spacing` | número | 0,1 | 0,01 a 2 | Separación entre líneas, en mm |
+| `speed` | número | 15 | más de 0 a 1000 | Velocidad, en mm/s (la de la ficha, no una de la impresora) |
+
 ### `retraction`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

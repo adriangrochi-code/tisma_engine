@@ -321,6 +321,7 @@ TEST_CASE("settings written as JSON read back the same", "[settings]") {
         "support": {"enabled": true, "threshold_angle": 50, "z_gap": 0.15, "xy_gap": 0.8, "spacing": 2, "interface_layers": 2},
         "cooling": {"min_layer_time": 8, "min_speed": 12, "fan_min": 20, "fan_max": 90, "fan_off_layers": 2},
         "compute": {"gpu": "off"},
+        "ironing": {"enabled": true, "surfaces": "topmost", "flow": 20, "spacing": 0.12, "speed": 18},
         "compensation": {"scale_x": 99.6, "scale_y": 100.4, "scale_z": 99.9, "hole_offset": 0.08},
         "extrusion": {"flow": 97, "pressure_advance": 0.04, "max_flow": 18, "chamber_temperature": 45, "abrasive": true,
                       "needs_enclosure": true, "infill_max_speed": 50, "infill_max_crossing_speed": 35,

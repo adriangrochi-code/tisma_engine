@@ -563,8 +563,7 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     - patentes que evitar o revisar en la sección 6 del documento (entre ellas las B-splines filtradas y las espirales
       de Fermat conectadas)
     - lo nuevo de 2018 a 2026 (`docs/QUALITY_2026.md`, 2026-10-26), por ganancia contra esfuerzo:
-      - [ ] Q13: planchado según `ironing.md` (Ra −60 a −83 % en cuatro estudios); hoy es solo un tipo de la vista
-        previa
+      - [x] Q13: planchado según `ironing.md` (Ra −60 a −83 % en cuatro estudios; hecho 2026-10-27)
       - [ ] Q14: sección redondeada para los cordones sin vecinos (relleno ralo, capas combinadas, paredes de un
         cordón): el rectángulo pone 11 a 27 % de más; explicaría P11 de `docs/INFILL.md`
       - [ ] Q15: sin bordes débiles entre bandas de densidad del relleno (Hutton y Bartolai 2023: +26 a +33 % de
@@ -742,7 +741,7 @@ Con el PR #23 (2026-10-26):
     purga), y el ecualizador del caudal (8 y 9, V7);
   - [x] relleno de huecos (`walls_extra.md`, `walls.generator` `fixed` y `walls.gap_fill`, W6 y V1; hecho
     2026-10-27). Falta el relleno concéntrico de ancho fijo (regla 1, último punto);
-  - [ ] planchado (`ironing.md`);
+  - [x] planchado (`ironing.md`, IR1; hecho 2026-10-27);
   - [ ] balsa (`skirt_brim_raft.md`);
   - [ ] cambio de color y pausas, y los extras del G-code (`gcode_extras.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas

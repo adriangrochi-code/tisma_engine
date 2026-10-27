@@ -31,6 +31,10 @@ enum class FuzzyMode { None, External, All };
 // fill between them.
 enum class WallGenerator { Variable, Fixed };
 
+// Which surfaces are ironed (ironing.md): every top surface, only the highest
+// of each part, or every solid layer.
+enum class IroningSurfaces { Top, Topmost, Solid };
+
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
 // "changes"): each set value takes effect from the first layer whose top is
 // above z and stays until another change sets it again.
@@ -112,6 +116,15 @@ struct Settings {
     double arcs_overlap = 10.0;     // percent of the width each arc lies on the one before
     double arcs_speed = 5.0;        // mm/s; 0: the bridges' (speed.bridges)
     double arcs_max_distance = 0.0; // mm from the arcs' centre; 0: no limit
+
+    // ironing (ironing.md): after a top surface, the nozzle goes over it again
+    // in lines `spacing` apart, with `flow` % of a layer's material per mm of
+    // that spacing; the spec's speed, not the printer's.
+    bool ironing = false;
+    IroningSurfaces ironing_surfaces = IroningSurfaces::Top;
+    double ironing_flow = 15.0;   // %
+    double ironing_spacing = 0.1; // mm
+    double ironing_speed = 15.0;  // mm/s
     // The stability review (docs/spec/features/stability.md): measured with
     // its calibration piece; 0 is not measured yet.
     double review_nozzle_force = 0.0;   // N, the nozzle's push on the layer it prints

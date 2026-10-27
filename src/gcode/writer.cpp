@@ -1628,6 +1628,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Toolpath> arcs;                 // over overhangs, in their order
+            std::vector<Toolpath> ironing;              // over the top surfaces, after the fills
             std::vector<Point2d> ends;                  // where its paths start or end
         };
         const std::vector<Polygons>& pieces = plan.pieces;
@@ -1690,6 +1691,12 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 if (!t.points.empty()) {
                     Island& i = island(t);
                     i.arcs.push_back(t);
+                    add(i, t);
+                }
+            for (const Toolpath& t : f.ironing)
+                if (!t.points.empty()) {
+                    Island& i = island(t);
+                    i.ironing.push_back(t);
                     add(i, t);
                 }
         }
@@ -1763,6 +1770,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 walls(index, paths);
             for (std::size_t k = 0; k < 7; ++k)
                 group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
+            // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
+            group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
             flush();
         }
         // The thick zone of a group that ends here: the whole group's height at

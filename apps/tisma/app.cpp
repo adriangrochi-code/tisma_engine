@@ -680,7 +680,9 @@ const char* row_key(T label) {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
-        {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"}, {T::ScaleXRow, "compensation.scale_x"},
+        {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
+        {T::IroningEnabled, "ironing.enabled"}, {T::IroningSurfacesRow, "ironing.surfaces"},
+        {T::IroningFlow, "ironing.flow"}, {T::IroningSpacing, "ironing.spacing"}, {T::IroningSpeed, "ironing.speed"}, {T::ScaleXRow, "compensation.scale_x"},
         {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
         {T::HoleCorrection, "compensation.hole_offset"}, {T::XyOffset, "slicing.xy_offset"},
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
@@ -2838,6 +2840,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::ScaleYRow, "compensation.scale_y", s.scale_y, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::ScaleZRow, "compensation.scale_z", s.scale_z, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::HoleCorrection, "compensation.hole_offset", s.hole_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+    } else if (id == "ironing") {
+        flag(T::IroningEnabled, "ironing.enabled", s.ironing);
+        if (shown("ironing.surfaces"))
+            changed |= row(T::IroningSurfacesRow, s.ironing_surfaces,
+                           {{IroningSurfaces::Top, tr(T::IroningTop)},
+                            {IroningSurfaces::Topmost, tr(T::IroningTopmost)},
+                            {IroningSurfaces::Solid, tr(T::IroningSolid)}});
+        mm(T::IroningFlow, "ironing.flow", s.ironing_flow, 1.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::IroningSpacing, "ironing.spacing", s.ironing_spacing, 0.01, 2.0, "%.2f mm", 0.005f);
+        mm(T::IroningSpeed, "ironing.speed", s.ironing_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
     } else if (id == "slopes") {
         flag(T::Zaa, "zaa.enabled", s.zaa, tr(T::ZaaTip));
         mm(T::ZaaMinThickness, "zaa.min_thickness", s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f,

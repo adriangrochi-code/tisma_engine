@@ -589,6 +589,46 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             out.fills[l] = out.fills[l - period];
             round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
         }
+    // Ironing (ironing.md): lines `spacing` apart at 45 degrees to the layer's
+    // top fill, as wide as spacing times flow so that each mm lays that share
+    // of a layer's material (rule 3), over the whole exposed top, walls
+    // included, half a nozzle from the edge (rule 4: 0.2 to 0.35 mm). Top:
+    // what the layer above does not cover; topmost: what nothing above covers;
+    // solid: every solid surface.
+    if (settings.ironing) {
+        const std::size_t n = out.layers.size();
+        std::vector<Polygons> above; // topmost: everything above each layer
+        if (settings.ironing_surfaces == IroningSurfaces::Topmost && n > 0) {
+            above.resize(n);
+            for (std::size_t l = n - 1; l-- > 0;)
+                above[l] = Clipper2Lib::Union(above[l + 1], out.regions[l + 1], Clipper2Lib::FillRule::NonZero);
+        }
+        const double spacing = settings.ironing_spacing;
+        // As ;WIDTH writes it (three decimals), so the material matches what
+        // the G-code says: a tiny width loses much in the rounding otherwise.
+        const double width = std::max(0.001, std::round(spacing * settings.ironing_flow / 100.0 * 1000.0) / 1000.0);
+        const Polygons nothing;
+        tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) {
+            Polygons area;
+            if (settings.ironing_surfaces == IroningSurfaces::Solid) {
+                const LayerSurfaces& s = out.surfaces[l];
+                area = Clipper2Lib::Union(Clipper2Lib::Union(s.top, s.bottom, Clipper2Lib::FillRule::NonZero), s.bridge,
+                                          Clipper2Lib::FillRule::NonZero);
+            } else {
+                const Polygons& cover = settings.ironing_surfaces == IroningSurfaces::Topmost ? above[l]
+                                        : l + 1 < n                                         ? out.regions[l + 1]
+                                                                                            : nothing;
+                area = Clipper2Lib::Intersect(Clipper2Lib::Difference(out.regions[l], cover, Clipper2Lib::FillRule::NonZero),
+                                              offset(out.regions[l], -settings.nozzle_diameter / 2.0),
+                                              Clipper2Lib::FillRule::NonZero);
+            }
+            area = offset(offset(area, -spacing), spacing); // nothing narrower than two lines
+            if (area.empty())
+                return;
+            const double angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + 45.0;
+            out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width, true);
+        });
+    }
     // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
     // beads stack, in patterns that repeat layer to layer, and not with thick
     // layers or stress bands.

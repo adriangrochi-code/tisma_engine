@@ -852,6 +852,16 @@
     X(SumBySupport, "Según el apoyo", "By support") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
+    X(SubIroning, "Planchado", "Ironing") \
+    X(IroningEnabled, "Planchar", "Iron") \
+    X(IroningSurfacesRow, "Qué superficies", "Which surfaces") \
+    X(IroningTop, "Todas las de arriba", "Every top surface") \
+    X(IroningTopmost, "Solo la más alta", "Only the topmost") \
+    X(IroningSolid, "Todas las capas sólidas", "Every solid layer") \
+    X(IroningFlow, "Flujo", "Flow") \
+    X(IroningSpacing, "Separación", "Spacing") \
+    X(IroningSpeed, "Velocidad", "Speed") \
+    X(SumIroning, "Planchado a %s mm/s", "Ironing at %s mm/s") \
     X(WallGeneratorRow, "Ancho de los cordones", "Bead width") \
     X(WallVariable, "Variable", "Variable") \
     X(WallFixed, "Fijo", "Fixed") \

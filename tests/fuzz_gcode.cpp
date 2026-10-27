@@ -149,6 +149,14 @@ int main(int argc, char** argv) {
             s.scarf_inner = pick(3) == 0;
         }
         s.detect_overhangs = pick(4) != 0;
+        if (pick(4) == 0) { // ironing
+            s.ironing = true;
+            s.ironing_surfaces = std::array{IroningSurfaces::Top, IroningSurfaces::Topmost,
+                                            IroningSurfaces::Solid}[std::size_t(pick(3))];
+            s.ironing_flow = uni(5, 40);
+            s.ironing_spacing = uni(0.05, 0.4);
+            s.ironing_speed = uni(5, 60);
+        }
         if (pick(4) == 0) { // walls of one width
             s.wall_generator = WallGenerator::Fixed;
             s.wall_gap_fill = pick(4) != 0;

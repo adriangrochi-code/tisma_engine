@@ -56,6 +56,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Paredes de ancho fijo con relleno de huecos** (ficha `walls_extra.md`; `walls.generator` `fixed` y
   `walls.gap_fill`, en Resistencia › Paredes): lazos todos del mismo ancho, y lo que queda entre ellos se llena con
   cordones de relleno de huecos a `speed.gap_fill`.
+- **Planchado** (ficha `ironing.md`; grupo `ironing`, en Calidad › Planchado): la boquilla vuelve a pasar sobre las
+  superficies de arriba con muy poco material en líneas muy juntas, para alisarlas; todas, solo la más alta o todas
+  las capas sólidas.
 - **Topes del relleno por filamento** (`extrusion.infill_max_speed` y `extrusion.infill_max_crossing_speed`, en
   Filamento › Flujo): el relleno disperso no pasa de ese tope, uno para los patrones cuyas líneas se cruzan en la capa y
   otro para los demás.

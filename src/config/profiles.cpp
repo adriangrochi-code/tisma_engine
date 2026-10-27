@@ -145,7 +145,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         return ProfileKind::Filament;
     if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
-        group == "vase" || group == "placement" || group == "arcs")
+        group == "vase" || group == "placement" || group == "arcs" || group == "ironing")
         return ProfileKind::Print;
     return std::nullopt;
 }

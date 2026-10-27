@@ -103,6 +103,7 @@ Settings without_gcode_settings(Settings s) {
     s.accel_short_travel = d.accel_short_travel;
     s.dynamic_overhangs = d.dynamic_overhangs, s.overhang_speeds = d.overhang_speeds;
     s.flow_slope_up = d.flow_slope_up, s.flow_slope_down = d.flow_slope_down;
+    s.ironing_speed = d.ironing_speed;
     s.acceleration = d.acceleration, s.travel_acceleration = d.travel_acceleration;
     s.max_feed_x = d.max_feed_x, s.max_feed_y = d.max_feed_y, s.max_feed_z = d.max_feed_z, s.max_feed_e = d.max_feed_e;
     s.retract_length = d.retract_length, s.retract_speed = d.retract_speed, s.retract_lift = d.retract_lift;
