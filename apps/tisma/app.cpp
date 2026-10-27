@@ -2602,6 +2602,10 @@ bool App::setting_applies(std::string_view key) const {
         return s.zaa;
     if (key == "infill.nonplanar_amplitude" || key == "infill.nonplanar_wavelength")
         return s.infill_nonplanar;
+    if (key == "infill.wave_amplitude" || key == "infill.wave_length")
+        return s.infill_waves;
+    if (key == "belt.angle" || key == "belt.belt_is_z")
+        return s.belt_enabled;
     if (key == "infill.dense_density")
         return s.infill_dense_under_top;
     if (key == "infill.combine_layers")
@@ -3101,6 +3105,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
         mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
            0.05f);
+        // The interlocking waves (interlock_infill.md): one kind at a time.
+        if (shown("infill.waves") && row(T::InterlockWaves, s.infill_waves, tr(T::InterlockWavesTip))) {
+            if (s.infill_waves)
+                s.infill_nonplanar = false;
+            changed = true;
+        }
+        mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
+        mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
     }
     // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
     else if (id == "first_layer") {
@@ -3504,6 +3516,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::HeadClearanceHeight, "head.clearance_height", s.head_clearance_height, 0.1, 1000.0, "%.1f mm", 0.1f);
         mm(T::HeadClearanceRadius, "head.clearance_radius", s.head_clearance_radius, 0.1, 1000.0, "%.1f mm", 0.1f);
         count(T::HeadProfile, "head.profile", s.head_profile.size());
+    } else if (id == "belt") {
+        // A belt printer (belt_printer.md).
+        flag(T::BeltEnabled, "belt.enabled", s.belt_enabled, tr(T::BeltEnabledTip));
+        mm(T::BeltAngle, "belt.angle", s.belt_angle, 10.0, 80.0, "%.0f°", 0.5f);
+        flag(T::BeltIsZ, "belt.belt_is_z", s.belt_is_z);
     } else if (id == "resin_display") {
         // A resin printer's display (resin.md).
         whole(T::DisplayPixelsX, "machine.display_pixels_x", s.display_pixels_x, 1, 32767);

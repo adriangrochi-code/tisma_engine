@@ -54,6 +54,17 @@ bool on_bed(const std::vector<std::array<double, 2>>& bed, double x, double y) {
     return in;
 }
 
+// A belt printer's bed is only as wide as its belt, which runs on along y
+// (belt_printer.md).
+bool on_bed(const Settings& s, double x, double y) {
+    if (!s.belt_enabled)
+        return on_bed(s.bed, x, y);
+    double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+    for (const auto& p : s.bed)
+        lo = std::min(lo, p[0]), hi = std::max(hi, p[0]);
+    return x >= lo - kOnEdge && x <= hi + kOnEdge;
+}
+
 } // namespace
 
 std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
@@ -63,7 +74,7 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
     float top = -std::numeric_limits<float>::max(), bottom = std::numeric_limits<float>::max();
     for (const Vec3f& v : mesh.vertices) {
         top = std::max(top, v.z), bottom = std::min(bottom, v.z);
-        if (!s.bed.empty() && !on_bed(s.bed, v.x, v.y)) {
+        if (!s.bed.empty() && !on_bed(s, v.x, v.y)) {
             char text[160];
             std::snprintf(text, sizeof text, "the model is outside the bed (machine.bed): a point at x %.3f, y %.3f",
                           double(v.x), double(v.y));

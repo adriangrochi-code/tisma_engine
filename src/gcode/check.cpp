@@ -168,6 +168,28 @@ private:
         ++out_.problem_count;
     }
 
+    // A belt printer's belt and gantry back to the slicing plane and the
+    // point in it (belt_printer.md, rule 2): s = belt · sin α, v = gantry −
+    // s · cot α.
+    void belt_to_layer(std::optional<double>* param) {
+        std::optional<double>& py = param['Y' - 'A'];
+        std::optional<double>& pz = param['Z' - 'A'];
+        if (!py && !pz)
+            return;
+        if (py)
+            (limits_.belt_is_z ? gantry_ : belt_) = *py;
+        if (pz)
+            (limits_.belt_is_z ? belt_ : gantry_) = *pz;
+        py.reset(), pz.reset();
+        if (!belt_)
+            return;
+        const double a = limits_.belt_angle * std::numbers::pi / 180.0;
+        const double s = *belt_ * std::sin(a);
+        pz = s;
+        if (gantry_)
+            py = *gantry_ - s / std::tan(a);
+    }
+
     // The engine's comments carry the layer, the line type and the width.
     void comment(std::string_view c) {
         auto value = [&](std::string_view key) -> std::optional<double> {
@@ -247,8 +269,12 @@ private:
             tool_change(n);
             return;
         }
-        if (kind == 'G' && n >= 0 && n <= 3)
+        if (kind == 'G' && n >= 0 && n <= 3) {
+            // From the first layer on, as the writer moved them (belt_gcode).
+            if (limits_.belt && out_.stats.layers > 0)
+                belt_to_layer(param);
             move(n, param);
+        }
         else if (kind == 'G' && n == 90)
             absolute_ = true;
         else if (kind == 'G' && n == 91)
@@ -547,6 +573,7 @@ private:
     GcodeCheck out_;
     std::size_t line_ = 0;
     bool custom_ = false;
+    std::optional<double> belt_, gantry_; // a belt printer's axes, where last written
     bool nonplanar_ = false; // in a ;NONPLANAR block
     double layer_height_ = 0.0; // the last ;HEIGHT out of a ;NONPLANAR block: the layer's
     bool absolute_ = true;
@@ -606,6 +633,11 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     const double margin = 2.0 * (s.brim_width + s.brim_gap + skirt) + 2.0 * s.wall_width + 1.0;
     limits.min_x = lo[0] - margin, limits.max_x = hi[0] + margin;
     limits.min_y = lo[1] - margin, limits.max_y = hi[1] + margin;
+    if (s.belt_enabled) { // on the slicing planes; the belt runs on along y (belt_printer.md)
+        limits.belt = true;
+        limits.belt_angle = s.belt_angle;
+        limits.belt_is_z = s.belt_is_z;
+    }
     if (!s.bed.empty()) { // and never off the bed
         double bed_lo[2] = {std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()};
         double bed_hi[2] = {-bed_lo[0], -bed_lo[1]};
@@ -613,7 +645,8 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
             for (int a = 0; a < 2; ++a)
                 bed_lo[a] = std::min(bed_lo[a], p[std::size_t(a)]), bed_hi[a] = std::max(bed_hi[a], p[std::size_t(a)]);
         limits.min_x = std::max(limits.min_x, bed_lo[0]), limits.max_x = std::min(limits.max_x, bed_hi[0]);
-        limits.min_y = std::max(limits.min_y, bed_lo[1]), limits.max_y = std::min(limits.max_y, bed_hi[1]);
+        if (!s.belt_enabled)
+            limits.min_y = std::max(limits.min_y, bed_lo[1]), limits.max_y = std::min(limits.max_y, bed_hi[1]);
     }
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     // A ramping lift climbs to travel.max_lift (retraction_travel.md, rule 5).

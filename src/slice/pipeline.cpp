@@ -11,6 +11,7 @@
 #include "infill/nonplanar.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "perimeters/fuzzy.hpp"
+#include "slice/belt.hpp"
 #include "slice/painted.hpp"
 #include "support/support.hpp"
 #include "support/tree.hpp"
@@ -472,6 +473,15 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // A belt printer (belt_printer.md): the part turned so that the planes
+    // along the gantry lie flat, sliced as on a bed; the writer puts the
+    // G-code on the machine's axes. No skirt (rule 4).
+    if (settings.belt_enabled) {
+        Settings flat = settings;
+        flat.belt_enabled = false;
+        flat.skirt_loops = 0;
+        return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes);
+    }
     // Curved layers (nonplanar.md): the mesh, split fine enough to bend,
     // moved to z - D and sliced flat; the G-code bends it back. The objects
     // keep their triangles, each one's pieces in its place.

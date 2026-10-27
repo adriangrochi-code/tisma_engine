@@ -102,6 +102,10 @@
     X(NonplanarInfillTip, "El relleno sube y baja en Z mientras avanza, igual en todas las capas, así cada capa se anida en la de abajo y la unión queda inclinada: más resistencia en Z. Solo con patrones que se repiten capa a capa (grilla, triángulos, estrellas, panal, alineado, concéntrico, curvas). Ver docs/NONPLANAR_INFILL.md.", "The infill goes up and down in Z as it runs, the same in every layer, so each layer nests on the one below and the joint leans: stronger in Z. Only with patterns that repeat layer to layer (grid, triangles, stars, honeycomb, aligned, concentric, curves). See docs/NONPLANAR_INFILL.md.") \
     X(NonplanarAmplitude, "Altura de la onda", "Wave height")                                                         \
     X(NonplanarWavelength, "Largo de la onda", "Wavelength")                                                          \
+    X(InterlockWaves, "Ondas entrelazadas", "Interlocking waves") \
+    X(InterlockWavesTip, "El relleno sube y baja como un cartón de huevos, igual en cada capa, así las capas encajan en vez de apoyarse en planos lisos.", "The infill rises and falls like an egg crate, the same in every layer, so the layers nest instead of lying on flat planes.") \
+    X(WaveAmplitude, "Altura de las ondas", "Wave height") \
+    X(WaveLength, "Largo de las ondas", "Wave length") \
     X(TopPattern, "Superficie superior", "Top surface")                                                               \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \
@@ -1063,6 +1067,12 @@
     X(Technology, "Tipo de impresora", "Printer type") \
     X(TechnologyFdm, "Filamento (FDM)", "Filament (FDM)") \
     X(TechnologyMsla, "Resina (MSLA)", "Resin (MSLA)") \
+    X(SubBelt, "Impresora de cinta", "Belt printer") \
+    X(BeltEnabled, "Impresora de cinta", "Belt printer") \
+    X(BeltEnabledTip, "El pórtico está inclinado sobre una cinta que se lleva la pieza: se lamina en planos paralelos al pórtico y el G-code va en los ejes de la máquina. Sin soportes, balsa, borde ni falda.", "The gantry leans over a belt that carries the part away: the layers are planes along the gantry and the G-code is on the machine's axes. No supports, raft, brim or skirt.") \
+    X(BeltAngle, "Ángulo del pórtico", "Gantry angle") \
+    X(BeltIsZ, "La cinta es el eje Z", "The belt is the Z axis") \
+    X(SumDegrees, "%s°", "%s°") \
     X(ResinLayersN, "%d capas", "%d layers") \
     X(ExportGoo, "Exportar GOO", "Export GOO") \
     X(ResinUsed, "Resina", "Resin") \

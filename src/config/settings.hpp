@@ -219,6 +219,12 @@ struct Settings {
     bool infill_nonplanar = false;
     double infill_nonplanar_amplitude = 250.0; // percent of the layer height, trough to crest
     double infill_nonplanar_wavelength = 2.0;  // mm
+    // Interlocking waves (interlock_infill.md): the sparse infill on the egg
+    // crate a · sin(2πX/λ) · sin(2πY/λ) in the bed's X and Y, the same in
+    // every layer; a in percent of the layer height, λ in mm.
+    bool infill_waves = false;
+    double infill_wave_amplitude = 50.0;
+    double infill_wave_length = 10.0;
     bool infill_dense_under_top = false;
     double infill_dense_density = 40.0; // percent
     // Stress-guided infill (docs/INFILL.md): up to this density where the
@@ -355,6 +361,12 @@ struct Settings {
     double head_free_angle_x = 0.0, head_free_angle_y = 0.0;
     double head_clearance_height = 3.0, head_clearance_radius = 15.0;
     std::vector<std::array<double, 2>> head_profile;
+    // A belt printer (belt_printer.md): the gantry at belt_angle degrees over
+    // the belt; with belt_is_z the belt is the firmware's Z and the gantry Y,
+    // else the other way round.
+    bool belt_enabled = false;
+    double belt_angle = 45.0;
+    bool belt_is_z = true;
     // The printer's kind: the interface shows the settings of that kind and
     // slices for it (an MSLA printer gets a GOO file).
     MachineTechnology machine_technology = MachineTechnology::Fdm;

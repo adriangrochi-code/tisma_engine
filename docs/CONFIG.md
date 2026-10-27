@@ -151,6 +151,9 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `nonplanar` | sí/no | no | — | Relleno ondulado: sube y baja en Z, igual en todas las capas, solo con patrones que se repiten capa a capa (`docs/NONPLANAR_INFILL.md`) |
 | `nonplanar_amplitude` | % | 250 | 0 a 500 | Altura de la onda, de valle a cresta, en % de la altura de capa |
 | `nonplanar_wavelength` | mm | 2 | 0,5 a 20 | Largo de la onda |
+| `waves` | sí/no | no | — | Relleno ondulado entrelazado (ficha `interlock_infill.md`): el relleno poco denso sobre la superficie `a · sin(2πX/λ) · sin(2πY/λ)`, con X e Y de la cama, la misma en todas las capas, así cada capa encaja en la de abajo. Las ondas se apagan cerca de las paredes y del relleno sólido; el material sigue el espesor real hasta la capa de abajo. Con cualquier patrón; no con `nonplanar`, `gcode.arcs`, el modo espiral ni las capas curvas |
+| `wave_amplitude` | % | 50 | 0 a 200 | `a`, en % de la altura de capa: cuánto sube y baja el relleno desde la capa |
+| `wave_length` | mm | 10 | 1 a 100 | `λ`: distancia entre dos crestas, en X y en Y |
 | `solid_every` | entero | 0 | 0 a 1000 | Las capas N, 2N, 3N… llevan relleno sólido en todo el relleno disperso, impreso como puente sobre el de abajo; 0: nunca (`docs/INFILL.md`) |
 | `solid_below_area` | número | 70 | 0 a 10000 | Una isla del relleno de una capa más chica que esto, en mm², se llena sólida: una pata fina, un perno (ficha `surfaces_infill.md`, regla 9). Se mide lo que queda adentro de las paredes, no la cara entera: con 3 paredes de 0,4 mm, un cilindro de 4,8 mm de radio (72 mm² de cara) deja unos 41 mm² de relleno y sale sólido. Con `density` 0 no se aplica. 0: nunca |
 | `pattern` | texto | `"rectilinear"` | `rectilinear`, `grid`, `gyroid`, `triangles`, `cubic`, `adaptive_cubic`, `support_cubic`, `lightning`, `stars`, `aligned_rectilinear`, `zigzag`, `line`, `honeycomb`, `concentric`, `hilbert`, `archimedean`, `octagram` | Patrón del relleno disperso: `rectilinear`, líneas que giran 90° cada capa y se unen en zigzag; `grid`, las dos direcciones en cada capa, cada una al doble de separación (el mismo material); `gyroid`, el corte de la superficie giroide a la altura de cada capa, con el período que da la densidad (`angle` no se usa); `triangles`, tres familias de líneas a `angle`, +60° y +120°, cada una con un tercio del material, iguales en todas las capas; `cubic`, las mismas tres familias corridas `z / √2` con la altura: las caras de cubos apoyados en un vértice, resistentes en las tres direcciones; `adaptive_cubic`, el cúbico a 0°, 60° y 120° con cubos chicos junto a las paredes y superficies y más grandes adentro, con menos material en piezas grandes; `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno no sostiene; `lightning`, solo ramas desde las paredes hasta debajo de los techos, para piezas que solo se miran; `stars`, los triángulos con una familia corrida media separación (estrellas de seis puntas, el patrón por defecto de Tisma Slicer); `aligned_rectilinear`, el rectilíneo sin girar entre capas; `zigzag`, igual al rectilíneo; `line`, el rectilíneo con una línea de cada dos girada 6,7°; `honeycomb`, panales hexagonales que coinciden en todas las capas, con la dirección principal girando 60° por capa; `concentric`, lazos paralelos al borde; `hilbert`, la curva de Hilbert girada `angle`; `archimedean`, cuerdas de una espiral de Arquímedes alrededor del centro de la pieza; `octagram`, una espiral con forma de estrella de ocho puntas; las tres curvas son iguales en todas las capas (`docs/INFILL.md`) |
@@ -501,6 +504,24 @@ curvas. Va en el perfil de impresora.
 | `clearance_height` | número | 3 | más de 0 a 1000 | Distancia vertical, en mm, de la punta de la boquilla a lo más bajo de la cabeza a su alrededor |
 | `clearance_radius` | número | 15 | más de 0 a 1000 | Distancia horizontal, en mm, de la boquilla a lo más lejano de esas partes bajas |
 | `profile` | lista o texto | `[]` | alturas más de 0, ángulos de 1 a 89 | El ángulo libre medido a varias alturas: `[[2, 45], [5, 30]]` o `"2:45;5:30"`. Lo ya impreso no puede subir más que cada altura dentro de la distancia que alcanza su ángulo |
+
+### `belt`
+
+De la ficha `docs/spec/features/belt_printer.md`: impresoras de cinta, con el pórtico inclinado sobre una cinta que
+se lleva la pieza (Z sin fin). Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | sí/no | no | — | La impresora es de cinta: la pieza, apoyada en la cinta como en una cama, se lamina en planos paralelos al pórtico, `h` aparte entre ellos, y el G-code va en los ejes de la máquina |
+| `angle` | número | 45 | 10 a 80 | Ángulo α, en grados, entre el pórtico (el plano de impresión) y la cinta |
+| `belt_is_z` | sí/no | sí | — | Sí: la cinta es el eje Z del firmware y el pórtico el Y. No: la cinta es Y y el pórtico Z |
+
+Con `x` a lo ancho de la cinta, `y` a lo largo y `z` la altura sobre ella, la capa de `;Z:` `s` es el plano
+`y · sin α + z · cos α = s`. Cada punto va a X = `x`, la cinta a `s / sin α` (avanza `h / sin α` por capa) y el
+pórtico a `z / sin α`, la distancia desde la cinta a lo largo del pórtico. `;Z:` lleva `s`, no la posición de la
+cinta. La cama solo limita X: la cinta sigue a lo largo de Y. En la cinta no hay soportes, balsa, borde, torre de
+purga, impresión secuencial, modo espiral, arcos `G2`/`G3`, capas curvas ni ondas en el relleno (un error lo dice); la
+falda no se imprime.
 
 ### `resin`
 

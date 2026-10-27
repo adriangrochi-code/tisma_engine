@@ -76,7 +76,12 @@ const std::vector<SectionLayout>& print_layout() {
           {"combine", T::SubCombine,
            {{"infill.combine_layers", A}, {"infill.combine_auto", A}, {"infill.combine_max_height", A}}},
           {"wavy", T::SubWavy,
-           {{"infill.nonplanar", N}, {"infill.nonplanar_amplitude", N}, {"infill.nonplanar_wavelength", N}}}}},
+           {{"infill.nonplanar", N},
+            {"infill.nonplanar_amplitude", N},
+            {"infill.nonplanar_wavelength", N},
+            {"infill.waves", N},
+            {"infill.wave_amplitude", A},
+            {"infill.wave_length", A}}}}},
         {"speed", T::SecSpeed, "section_speed.svg",
          {{"first_layer", T::SubFirstLayerSpeed,
            {{"speed.first_layer", N}, {"speed.first_layer_infill", A}, {"speed.first_layer_over_raft", A}}},
@@ -347,6 +352,7 @@ const std::vector<SectionLayout>& printer_layout() {
             {"head.clearance_height", N},
             {"head.clearance_radius", N},
             {"head.profile", A}}},
+          {"belt", T::SubBelt, {{"belt.enabled", N}, {"belt.angle", N}, {"belt.belt_is_z", N}}},
           {"resin_display", T::SubResinDisplay,
            {{"machine.display_pixels_x", N},
             {"machine.display_pixels_y", N},
@@ -592,7 +598,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                : s.infill_combine_layers > 1 ? format(T::SumCombine, s.infill_combine_layers)
                                              : tr(T::SumNotCombined);
     if (id == "wavy")
-        return s.infill_nonplanar ? format(T::SumMm, number(s.infill_nonplanar_wavelength).c_str()) : tr(T::SumOff);
+        return s.infill_waves       ? format(T::SumMm, number(s.infill_wave_length).c_str())
+               : s.infill_nonplanar ? format(T::SumMm, number(s.infill_nonplanar_wavelength).c_str())
+                                    : tr(T::SumOff);
     if (id == "first_layer")
         return format(T::SumSpeed, speed_text(s.first_layer_speed).c_str());
     if (id == "walls_surfaces")
@@ -728,6 +736,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumMm, number(s.curved_ramp_height).c_str());
     if (id == "head")
         return format(T::SumMm, number(s.head_clearance_height).c_str());
+    if (id == "belt")
+        return s.belt_enabled ? format(T::SumDegrees, number(s.belt_angle).c_str()) : tr(T::SumOff);
     if (id == "resin_layers")
         return format(T::SumMm, number(s.resin_layer_height, 3).c_str());
     if (id == "resin_supports")

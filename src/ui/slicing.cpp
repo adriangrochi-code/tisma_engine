@@ -8,10 +8,12 @@
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "report/stability.hpp"
+#include "slice/belt.hpp"
 #include "slice/printable.hpp"
 
 #include <oneapi/tbb/parallel_invoke.h>
 
+#include <algorithm>
 #include <chrono>
 #include <sstream>
 #include <utility>
@@ -211,6 +213,15 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
             [&] {
                 const auto begin = std::chrono::steady_clock::now();
                 out.preview = read_gcode_preview(out.gcode, settings.filament_diameter, dialect_of(settings.flavor).e_axis);
+                // A belt printer's G-code is on the machine's axes: the part
+                // back where it lies on the belt (belt_printer.md).
+                if (settings.belt_enabled) {
+                    float y0 = 0.0f;
+                    if (!mesh.empty())
+                        y0 = std::min_element(mesh.corners().begin(), mesh.corners().end(),
+                                              [](const Vec3f& a, const Vec3f& b) { return a.y < b.y; })->y;
+                    belt_preview(out.preview, settings, y0);
+                }
                 out.preview_seconds = seconds_since(begin);
             });
         out.ok = true;

@@ -56,6 +56,11 @@ struct GcodeLimits {
     // bent by the field, its bead as thick as the layer by J there.
     std::optional<CurvedField> curved;
     double z_offset = 0.0; // machine.z_offset, which the field does not bend
+    // A belt printer (belt_printer.md): the moves are on the machine's axes,
+    // the belt and the gantry, and go back to the slicing planes to be checked.
+    bool belt = false;
+    double belt_angle = 45.0; // degrees
+    bool belt_is_z = true;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4) and vase
     // mode's turns: how far below its layer's Z an extrusion in a ;NONPLANAR
     // block may go, as a share of the layer's height (they start down at the

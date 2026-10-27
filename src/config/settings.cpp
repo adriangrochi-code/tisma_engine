@@ -405,7 +405,8 @@ Settings parse_checked(std::string_view text) {
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
-            group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin")
+            group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
+            group == "belt")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -872,6 +873,19 @@ Settings parse_checked(std::string_view text) {
             (n == "clearance_height" ? s.head_clearance_height : s.head_clearance_radius) = d;
         }
     });
+    // Belt printers (belt_printer.md).
+    read_group(root, "belt", {"enabled", "angle", "belt_is_z"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "angle") {
+            const double d = number(g, n, k);
+            if (!(d >= 10.0 && d <= 80.0))
+                fail(k, "must be from 10 to 80 degrees");
+            s.belt_angle = d;
+            return;
+        }
+        if (!g.at(n).is_boolean())
+            fail(k, "must be true or false");
+        (n == "enabled" ? s.belt_enabled : s.belt_is_z) = g.at(n).get<bool>();
+    });
     // Resin printing (resin.md).
     read_group(root, "resin",
                {"layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
@@ -1015,14 +1029,29 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
-                                "nonplanar_wavelength"},
+                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length"},
                [&](const json& g, const std::string& n, const std::string& k) {
-        if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar") {
+        if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar" || n == "waves") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "combine_auto"      ? s.infill_combine_auto
              : n == "dense_under_top" ? s.infill_dense_under_top
+             : n == "waves"           ? s.infill_waves
                                       : s.infill_nonplanar) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "wave_amplitude") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 200.0)
+                fail(k, "must be from 0 to 200 (percent of the layer height)");
+            s.infill_wave_amplitude = v;
+            return;
+        }
+        if (n == "wave_length") {
+            const double v = number(g, n, k);
+            if (v < 1.0 || v > 100.0)
+                fail(k, "must be from 1 to 100 mm");
+            s.infill_wave_length = v;
             return;
         }
         if (n == "nonplanar_amplitude") {
@@ -2292,6 +2321,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.nonplanar", flag(s.infill_nonplanar)},
         {"infill.nonplanar_amplitude", num(s.infill_nonplanar_amplitude)},
         {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
+        {"infill.waves", flag(s.infill_waves)},
+        {"infill.wave_amplitude", num(s.infill_wave_amplitude)},
+        {"infill.wave_length", num(s.infill_wave_length)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
         {"machine.nozzle_diameter", s.nozzle_diameters.empty() ? num(s.nozzle_diameter) : json(s.nozzle_diameters).dump()},
@@ -2333,6 +2365,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
         {"machine.technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+        {"belt.enabled", flag(s.belt_enabled)},
+        {"belt.angle", num(s.belt_angle)},
+        {"belt.belt_is_z", flag(s.belt_is_z)},
         {"machine.display_pixels_x", std::to_string(s.display_pixels_x)},
         {"machine.display_pixels_y", std::to_string(s.display_pixels_y)},
         {"machine.display_width", num(s.display_width)},
@@ -2663,6 +2698,7 @@ std::string settings_json(const Settings& s) {
           {"flow_policy", s.curved_flow == CurvedFlow::Preserve ? "preserve" : s.curved_flow == CurvedFlow::Uniform ? "uniform" : "off"},
           {"uniform_flow", s.curved_uniform_flow},
           {"overhang_threshold", s.curved_overhang_threshold}}},
+        {"belt", {{"enabled", s.belt_enabled}, {"angle", s.belt_angle}, {"belt_is_z", s.belt_is_z}}},
         {"resin",
          {{"layer_height", s.resin_layer_height},
           {"exposure", s.resin_exposure},
@@ -2759,6 +2795,9 @@ std::string settings_json(const Settings& s) {
           {"nonplanar", s.infill_nonplanar},
           {"nonplanar_amplitude", s.infill_nonplanar_amplitude},
           {"nonplanar_wavelength", s.infill_nonplanar_wavelength},
+          {"waves", s.infill_waves},
+          {"wave_amplitude", s.infill_wave_amplitude},
+          {"wave_length", s.infill_wave_length},
           {"combine_max_height", s.infill_combine_max_height.percent
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},
@@ -3063,6 +3102,7 @@ void check_settings(const Settings& s) {
         for (const auto& [on, key] : {std::pair{s.vase, "vase.enabled"},
                                       {s.zaa, "zaa.enabled"},
                                       {s.infill_nonplanar, "infill.nonplanar"},
+                                      {s.infill_waves, "infill.waves"},
                                       {s.scarf != ScarfMode::Nowhere, "walls.scarf"},
                                       {s.gcode_arcs, "gcode.arcs"},
                                       {s.sequential, "sequential.enabled"},
@@ -3070,6 +3110,30 @@ void check_settings(const Settings& s) {
                                       {s.wipe_tower && s.extruders > 1, "wipe_tower.enabled"}})
             if (on)
                 throw SettingsError(std::string(key) + ": not with curved layers (curved.mode)");
+    }
+    // A belt printer has no bed around the part, nor an end to print the
+    // next object on (belt_printer.md, rule 4). The skirt, on by default, is
+    // left out instead.
+    if (s.belt_enabled)
+        for (const auto& [on, key] : {std::pair{s.support, "support.enabled"},
+                                      {s.raft_layers > 0, "adhesion.raft_layers"},
+                                      {s.brim_width > 0.0, "adhesion.brim_width"},
+                                      {s.wipe_tower && s.extruders > 1, "wipe_tower.enabled"},
+                                      {s.sequential, "sequential.enabled"},
+                                      {s.vase, "vase.enabled"},
+                                      {s.gcode_arcs, "gcode.arcs"},
+                                      {s.curved_mode != CurvedMode::Disabled, "curved.mode"},
+                                      {s.infill_waves, "infill.waves"}})
+            if (on)
+                throw SettingsError(std::string(key) + ": not on a belt printer (belt.enabled)");
+    // The interlocking waves (interlock_infill.md, rule 4): one kind of wavy
+    // infill at a time, flat moves only besides them, no spiral.
+    if (s.infill_waves) {
+        for (const auto& [on, key] : {std::pair{s.infill_nonplanar, "infill.nonplanar"},
+                                      {s.gcode_arcs, "gcode.arcs"},
+                                      {s.vase, "vase.enabled"}})
+            if (on)
+                throw SettingsError(std::string(key) + ": not with the interlocking waves (infill.waves)");
     }
     // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
     for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
