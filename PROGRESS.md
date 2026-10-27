@@ -5825,3 +5825,41 @@ a 0,296 mm, o 0,247 con `machine.max_layer_height` 0,25), que pide imprimir el s
 anotado en `PLAN.md`.
 
 **Sigue:** 4f, `multimaterial.md` y `color_mixing.md`.
+
+## 2026-10-27 — Punto 4f, primera parte: boquillas distintas
+
+**Hecho** (ficha `multimaterial.md`, reglas 1 a 5, 9 a 11):
+- `machine.nozzle_diameter` acepta una lista, una boquilla por extrusor (un número las cambia todas). Los anchos de
+  las líneas son para la boquilla del primero y cada línea toma la de su extrusor en proporción: las paredes y lo que
+  va con su ancho (sólido, puentes, soporte) la del extrusor de las paredes; el relleno ralo la del relleno
+  (`FillParams::sparse_width`). Con boquillas distintas ninguna capa pasa el 75 % de la más fina (regla 2).
+- `multi.fine_walls_coarse_infill`: con boquillas distintas, perímetros, sólido, soporte, interfaz y torre con la más
+  fina; el relleno ralo con la más gruesa, combinado en tantas capas como entren en el 75 % de su boquilla
+  (`kind_extruders`, que reemplaza a los `extruders.*` mientras está prendido; al apagarlo vuelven, regla 4).
+- `multi.color_mixing` (sin poner: no con una MMU, sí con una boquilla por filamento); en la interfaz, prenderla con
+  una MMU avisa antes del costo («Cancelar» / «Prender»).
+- Con una MMU, después de laminar, el aviso `purge` (información) con los gramos que van a la torre y dentro de los
+  objetos (regla 10).
+- En la interfaz: la boquilla de cada extrusor debajo de la general, que dice «boquillas distintas» si no coinciden
+  (Impresora › Boquilla), y la tarjeta Otros › Boquillas distintas y colores; `docs/CONFIG.md`.
+
+**Corregido:** con varios extrusores el relleno combinado (`infill.combine_*`) se perdía: el laminado por extrusor no
+juntaba las capas gruesas de cada parte, y el escritor las imprimía fuera de los grupos de cada extrusor (sin cambio
+de herramienta). Ahora cada extrusor imprime las suyas en su grupo, todas las partes en las mismas tandas de capas, y
+el plan de herramientas las cuenta.
+
+**Medido** (MM1: cubo de 20 mm, boquillas 0,25 y 0,6, capas de 0,15, paredes de 0,3): perímetros y sólido con el
+extrusor 1 (cordón de 0,3), relleno ralo solo con el 2, de 0,72 mm de ancho (0,3 × 0,6 / 0,25) y 0,45 mm de alto (tres
+capas, el 75 % de 0,6), una capa de cada tres, con su cambio a `T1` en cada una. MM5: los gramos del aviso son los de
+la torre del pie del G-code; purgando en el relleno, parte pasa a los objetos. Tisma Slicer no se midió en estos casos.
+
+Pruebas nuevas (`tests/test_multi_extruder.cpp`, 17 en total): MM1, MM2, MM3 y la regla 2, MM5 y el relleno combinado
+de dos extrusores; fuzzer con boquillas distintas: 600 corridas (semillas 48 y 49), 0 fallas. La interfaz (MM3, MM4,
+MM6) se compiló y sus pruebas de tarjetas y ayuda pasan; no se probó a mano.
+
+**No hecho:** un `support.width` propio de cada boquilla (regla 5: el soporte sale de la fina con el ancho de sus
+paredes); el diámetro de cada extrusor no se escribe en la variable `nozzle_diameter` de las plantillas (sigue siendo
+una lista de uno).
+
+**Sigue:** 4f, segunda parte: `color_mixing.md` (las mezclas, FS1 a FS14).
+

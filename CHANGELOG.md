@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Boquillas distintas** (ficha `multimaterial.md`, en Impresora › Boquilla y Otros › Boquillas distintas y colores):
+  cada extrusor con su boquilla; los anchos de las líneas siguen a la de cada extrusor, y «paredes finas, relleno
+  grueso» imprime el relleno con la boquilla gruesa en capas combinadas. La mezcla de colores se ofrece con aviso de
+  costo en las impresoras de una sola boquilla, y después de laminar se avisa cuánto filamento va a la purga.
 - **Vigas entre materiales** (ficha `multi_extruder.md`, en Otros › Entrelazado entre materiales): donde se tocan
   dos materiales, cada uno entra en el otro con vigas que cambian de dirección cada pocas capas.
 - **MMU de un extrusor** (ficha `multi_extruder.md`, en Impresora › MMU y Material › Carga y descarga en la MMU): cada
@@ -136,6 +140,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Con varios extrusores, el relleno combinado (`infill.combine_layers`) se perdía.
 - El laminado ya no se cuelga cuando una región de paredes trae anillos sin área (pasaba con «un solo perímetro arriba»
   en una esfera), y el reparto de los cordones de ancho variable es lineal en vez de cuadrático o peor en esos casos.
 - Las pruebas de los arcos en voladizos (A1 a A4) volvieron: el commit de los arcos `G2`/`G3` había escrito las suyas

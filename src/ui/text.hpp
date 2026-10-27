@@ -948,6 +948,13 @@
     X(InterlockAvoidance, "Distancia al exterior (vigas)", "Distance to the outside (beams)") \
     X(PaintMaxRegionWidth, "Ancho máximo de una región pintada", "Widest painted region") \
     X(PaintInterlockingDepth, "Entrelazado de las regiones pintadas", "Painted regions' interlocking") \
+    X(SubMultiNozzle, "Boquillas distintas y colores", "Different nozzles and colours") \
+    X(FineWallsCoarseInfill, "Paredes finas, relleno grueso", "Fine walls, coarse infill") \
+    X(ColorMixingRow, "Mezcla de colores", "Color mixing") \
+    X(ColorMixingCost, "Con una sola boquilla, cada capa con mezcla es un cambio de filamento con su purga: la impresión usa bastante más filamento y tarda más.", "With a single nozzle, every mixed layer is a filament change with its purge: the print uses much more filament and takes longer.") \
+    X(TurnOn, "Prender", "Turn on") \
+    X(DifferentNozzles, "boquillas distintas", "different nozzles") \
+    X(ExtruderNozzle, "   Extrusor %d", "   Extruder %d") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \

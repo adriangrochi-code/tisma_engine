@@ -227,6 +227,36 @@ std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t e
     return settings.extruder_offset[extruder];
 }
 
+double nozzle_of(const Settings& settings, int extruder) {
+    if (settings.single_extruder_mmu || extruder < 1)
+        return settings.nozzle_diameter;
+    return per_extruder(settings.nozzle_diameters, std::size_t(extruder - 1), settings.nozzle_diameter);
+}
+
+KindExtruders kind_extruders(const Settings& s) {
+    KindExtruders k{s.extruder_walls,  s.extruder_infill,           s.extruder_solid_infill,
+                    s.extruder_support, s.extruder_support_interface, s.extruder_wipe_tower};
+    if (!s.fine_walls_coarse_infill || s.extruders < 2)
+        return k;
+    // The finest and the coarsest nozzle, the first of equals.
+    int fine = 1, coarse = 1;
+    for (int e = 2; e <= s.extruders; ++e) {
+        if (nozzle_of(s, e) < nozzle_of(s, fine))
+            fine = e;
+        if (nozzle_of(s, e) > nozzle_of(s, coarse))
+            coarse = e;
+    }
+    if (fine == coarse)
+        return k; // all the same
+    k.walls = k.solid_infill = k.support = k.support_interface = k.wipe_tower = fine;
+    k.infill = coarse;
+    return k;
+}
+
+bool color_mixing_offered(const Settings& settings) {
+    return settings.color_mixing.value_or(!settings.single_extruder_mmu);
+}
+
 Settings with_filament_retraction(const Settings& settings) {
     Settings s = settings;
     for (const auto& [key, v] : settings.filament_retraction) {
@@ -359,7 +389,7 @@ Settings parse_checked(std::string_view text) {
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
-            group == "interlocking" || group == "painting" ||
+            group == "interlocking" || group == "painting" || group == "multi" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -724,6 +754,21 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be from 0 to 1000 mm");
         (n == "max_region_width" ? s.paint_max_region_width : s.paint_interlocking_depth) = d;
     });
+    // Different nozzles and mixed colours (multimaterial.md).
+    read_group(root, "multi", {"fine_walls_coarse_infill", "color_mixing"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "color_mixing" && v.is_null()) { // unset: by the printer (rules 9 and 11)
+            s.color_mixing.reset();
+            return;
+        }
+        if (!v.is_boolean())
+            fail(k, n == "color_mixing" ? "must be true, false or null" : "must be true or false");
+        if (n == "color_mixing")
+            s.color_mixing = v.get<bool>();
+        else
+            s.fine_walls_coarse_infill = v.get<bool>();
+    });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
             fail(k, "must be true or false");
@@ -865,6 +910,23 @@ Settings parse_checked(std::string_view text) {
                        s.extruders = int(d);
                        return;
                    }
+                   // One nozzle for all, or one per extruder (multimaterial.md, rule 1).
+                   if (n == "nozzle_diameter" && v.is_array()) {
+                       const char* what = "must be a number, or a list of one per extruder, each from 0.05 to 5 mm";
+                       if (v.empty() || v.size() > std::size_t(kMaxExtruders))
+                           fail(k, what);
+                       std::vector<double> nozzles;
+                       for (const json& d : v) {
+                           if (!d.is_number() || !(d.get<double>() >= 0.05 && d.get<double>() <= 5.0))
+                               fail(k, what);
+                           nozzles.push_back(d.get<double>());
+                       }
+                       s.nozzle_diameter = nozzles.front();
+                       s.nozzle_diameters = std::move(nozzles);
+                       return;
+                   }
+                   if (n == "nozzle_diameter")
+                       s.nozzle_diameters.clear(); // the same for all
                    if (n == "single_extruder_mmu") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -1946,6 +2008,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"interlocking.boundary_avoidance", std::to_string(s.interlock_avoidance)},
         {"painting.max_region_width", num(s.paint_max_region_width)},
         {"painting.interlocking_depth", num(s.paint_interlocking_depth)},
+        {"multi.fine_walls_coarse_infill", flag(s.fine_walls_coarse_infill)},
+        {"multi.color_mixing", s.color_mixing ? flag(*s.color_mixing) : "auto"},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -1962,7 +2026,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
         {"infill.combine_max_height", s.infill_combine_max_height.percent ? num(s.infill_combine_max_height.value) + "%"
                                                                           : num(s.infill_combine_max_height.value)},
-        {"machine.nozzle_diameter", num(s.nozzle_diameter)},
+        {"machine.nozzle_diameter", s.nozzle_diameters.empty() ? num(s.nozzle_diameter) : json(s.nozzle_diameters).dump()},
         {"machine.filament_diameter", num(s.filament_diameter)},
         {"machine.relative_extrusion", flag(s.relative_extrusion)},
         {"machine.flavor", flavor},
@@ -2262,6 +2326,9 @@ std::string settings_json(const Settings& s) {
           {"depth", s.interlock_depth},
           {"boundary_avoidance", s.interlock_avoidance}}},
         {"painting", {{"max_region_width", s.paint_max_region_width}, {"interlocking_depth", s.paint_interlocking_depth}}},
+        {"multi",
+         {{"fine_walls_coarse_infill", s.fine_walls_coarse_infill},
+          {"color_mixing", s.color_mixing ? ordered_json(*s.color_mixing) : ordered_json(nullptr)}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},
@@ -2307,7 +2374,7 @@ std::string settings_json(const Settings& s) {
                                      ? ordered_json(json(s.infill_combine_max_height.value).dump() + "%")
                                      : ordered_json(s.infill_combine_max_height.value)}}},
         {"machine",
-         {{"nozzle_diameter", s.nozzle_diameter},
+         {{"nozzle_diameter", s.nozzle_diameters.empty() ? ordered_json(s.nozzle_diameter) : ordered_json(s.nozzle_diameters)},
           {"filament_diameter", s.filament_diameter},
           {"relative_extrusion", s.relative_extrusion},
           {"flavor", flavor},
@@ -2542,12 +2609,26 @@ void check_settings(const Settings& s) {
         throw SettingsError(text);
     }
     const double nozzle = s.nozzle_diameter;
-    const double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
+    double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
+    // Different nozzles (multimaterial.md, rule 2): each lays at most 75 %
+    // of its diameter, and every layer may hold any extruder's lines but
+    // the coarse one's combined infill.
+    bool several = false;
+    for (int e = 2; e <= s.extruders; ++e)
+        several = several || nozzle_of(s, e) != nozzle_of(s, 1);
+    if (several) {
+        const KindExtruders kinds = kind_extruders(s);
+        for (int e = 1; e <= s.extruders; ++e)
+            if (!(s.fine_walls_coarse_infill && e == kinds.infill && kinds.infill != kinds.walls))
+                top = std::min(top, 0.75 * nozzle_of(s, e));
+    }
     for (const auto& [key, h] : {std::pair{"layers.height", s.layer_height}, {"layers.first_height", s.first_layer_height}}) {
         if (h > top + 1e-9) {
             std::snprintf(text, sizeof text,
-                          "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, or "
-                          "machine.max_layer_height)",
+                          several ? "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (75 %% of the "
+                                    "finest nozzle, machine.nozzle_diameter, or machine.max_layer_height)"
+                                  : "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, or "
+                                    "machine.max_layer_height)",
                           key, h, top);
             throw SettingsError(text);
         }

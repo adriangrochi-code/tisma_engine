@@ -24,21 +24,29 @@ std::array<bool, kMaxExtruders + 1> layer_tools(const SlicedModel& model, std::s
     std::array<bool, kMaxExtruders + 1> used{};
     if (s.extruders <= 1)
         return used;
+    const KindExtruders kinds = kind_extruders(s);
     const auto note = [&](const std::vector<Toolpath>& paths, int chosen, bool part) {
         for (const Toolpath& t : paths)
             if (!t.points.empty())
                 used[std::size_t(path_tool(t, chosen, part, s))] = true;
     };
     if (layer < model.walls.size())
-        note(model.walls[layer].toolpaths, s.extruder_walls, true), note(model.walls[layer].gaps, s.extruder_walls, true);
+        note(model.walls[layer].toolpaths, kinds.walls, true), note(model.walls[layer].gaps, kinds.walls, true);
     if (layer < model.fills.size()) {
         const LayerFill& f = model.fills[layer];
-        note(f.solid, s.extruder_solid_infill, true), note(f.top, s.extruder_solid_infill, true);
-        note(f.bridge, s.extruder_solid_infill, true), note(f.gaps, s.extruder_solid_infill, true);
-        note(f.sparse, s.extruder_infill, true);
-        note(f.support, s.extruder_support, false), note(f.support_interface, s.extruder_support_interface, false);
-        note(f.arcs, s.extruder_walls, true), note(f.overhang_walls, s.extruder_walls, true);
-        note(f.ironing, s.extruder_solid_infill, true);
+        note(f.solid, kinds.solid_infill, true), note(f.top, kinds.solid_infill, true);
+        note(f.bridge, kinds.solid_infill, true), note(f.gaps, kinds.solid_infill, true);
+        note(f.sparse, kinds.infill, true);
+        note(f.support, kinds.support, false), note(f.support_interface, kinds.support_interface, false);
+        note(f.arcs, kinds.walls, true), note(f.overhang_walls, kinds.walls, true);
+        note(f.ironing, kinds.solid_infill, true);
+    }
+    // A thick zone's and the combined infill's (docs/LOCAL_LAYERS.md, docs/INFILL.md).
+    if (layer < model.thick.size()) {
+        const ThickLayer& t = model.thick[layer];
+        note(t.walls, kinds.walls, true), note(t.fill.sparse, kinds.infill, true);
+        note(t.fill.solid, kinds.solid_infill, true), note(t.fill.top, kinds.solid_infill, true);
+        note(t.fill.bridge, kinds.solid_infill, true), note(t.fill.gaps, kinds.solid_infill, true);
     }
     return used;
 }
@@ -66,6 +74,7 @@ void plan_sinks(ToolPlan& plan, const SlicedModel& model, const Settings& s) {
     bool any = false;
     for (const SlicedObject& o : model.objects)
         any = any || o.wipe_into_infill || o.wipe_into_object;
+    const KindExtruders kinds = kind_extruders(s);
     tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) {
         const std::vector<int>& order = plan.order[l];
         plan.sinks[l].assign(order.size(), {});
@@ -104,16 +113,16 @@ void plan_sinks(ToolPlan& plan, const SlicedModel& model, const Settings& s) {
         };
         if (l < model.fills.size()) {
             const LayerFill& f = model.fills[l];
-            consider(f.sparse, 4, s.extruder_infill, true);
-            consider(f.solid, 0, s.extruder_solid_infill, true), consider(f.top, 1, s.extruder_solid_infill, true);
-            consider(f.bridge, 2, s.extruder_solid_infill, true), consider(f.gaps, 3, s.extruder_solid_infill, true);
-            consider(f.arcs, ToolPlan::kArc, s.extruder_walls, true);
-            consider(f.overhang_walls, ToolPlan::kOverhangWall, s.extruder_walls, true);
-            consider(f.ironing, ToolPlan::kIroning, s.extruder_solid_infill, true);
+            consider(f.sparse, 4, kinds.infill, true);
+            consider(f.solid, 0, kinds.solid_infill, true), consider(f.top, 1, kinds.solid_infill, true);
+            consider(f.bridge, 2, kinds.solid_infill, true), consider(f.gaps, 3, kinds.solid_infill, true);
+            consider(f.arcs, ToolPlan::kArc, kinds.walls, true);
+            consider(f.overhang_walls, ToolPlan::kOverhangWall, kinds.walls, true);
+            consider(f.ironing, ToolPlan::kIroning, kinds.solid_infill, true);
         }
         if (l < model.walls.size()) {
-            consider(model.walls[l].gaps, ToolPlan::kWallGap, s.extruder_walls, true);
-            consider(model.walls[l].toolpaths, ToolPlan::kWall, s.extruder_walls, true);
+            consider(model.walls[l].gaps, ToolPlan::kWallGap, kinds.walls, true);
+            consider(model.walls[l].toolpaths, ToolPlan::kWall, kinds.walls, true);
         }
         std::vector<char> taken(candidates.size(), 0);
         for (std::size_t g = 0; g < order.size(); ++g) {

@@ -2299,10 +2299,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         mmu_swap.extra_time = s.load_time + s.unload_time;
     }
     // The extruders.* of each kind of fill (solid, top, bridge, gaps, sparse,
-    // support, support interface).
-    const int fill_tool[7] = {s.extruder_solid_infill, s.extruder_solid_infill, s.extruder_solid_infill,
-                              s.extruder_solid_infill, s.extruder_infill,       s.extruder_support,
-                              s.extruder_support_interface};
+    // support, support interface), and of the walls (with the nozzles'
+    // multi.fine_walls_coarse_infill in place, multimaterial.md, rule 3).
+    const KindExtruders kind_tools = kind_extruders(s);
+    const int fill_tool[7] = {kind_tools.solid_infill, kind_tools.solid_infill, kind_tools.solid_infill,
+                              kind_tools.solid_infill, kind_tools.infill,       kind_tools.support,
+                              kind_tools.support_interface};
     // The chamber the filament wants, when the machine heats one: set before
     // the start (so it heats while the nozzle does) and again after it, once
     // it reaches extrusion.chamber_min_temperature (gcode_extras.md, rule 3).
@@ -3018,7 +3020,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             };
             if (l < model.walls.size())
                 for (std::size_t k = 0; k < model.walls[l].toolpaths.size(); ++k)
-                    if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty() && mine(t, s.extruder_walls, true)) {
+                    if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty() && mine(t, kind_tools.walls, true)) {
                         Island& i = island(t);
                         i.walls[t.index].push_back(t);
                         i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
@@ -3027,7 +3029,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             // Gap fill between walls of one width (walls_extra.md, rule 1).
             if (l < model.walls.size())
                 for (const Toolpath& t : model.walls[l].gaps)
-                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                    if (!t.points.empty() && mine(t, kind_tools.walls, true)) {
                         Island& i = island(t);
                         i.fills[3].push_back(t);
                         add(i, t);
@@ -3044,19 +3046,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                             add(i, t);
                         }
                 for (const Toolpath& t : f.arcs)
-                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                    if (!t.points.empty() && mine(t, kind_tools.walls, true)) {
                         Island& i = island(t);
                         i.arcs.push_back(t);
                         add(i, t);
                     }
                 for (const Toolpath& t : f.overhang_walls)
-                    if (!t.points.empty() && mine(t, s.extruder_walls, true)) {
+                    if (!t.points.empty() && mine(t, kind_tools.walls, true)) {
                         Island& i = island(t);
                         i.overhang_walls.push_back(t);
                         add(i, t);
                     }
                 for (const Toolpath& t : f.ironing)
-                    if (!t.points.empty() && mine(t, s.extruder_solid_infill, true)) {
+                    if (!t.points.empty() && mine(t, kind_tools.solid_infill, true)) {
                         Island& i = island(t);
                         i.ironing.push_back(t);
                         add(i, t);
@@ -3179,41 +3181,55 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                             break;
                         }
             }
+            // The thick zone of a group that ends here: the whole group's
+            // height at once, the nozzle at its top (docs/LOCAL_LAYERS.md);
+            // the combined infill too (docs/INFILL.md). Each extruder its own.
+            if (l < model.thick.size() && !model.thick[l].empty()) {
+                const ThickLayer& t = model.thick[l];
+                const auto own = [&](const std::vector<Toolpath>& paths, int chosen) {
+                    std::vector<Toolpath> kept;
+                    for (const Toolpath& p : paths)
+                        if (mine(p, chosen, true))
+                            kept.push_back(p);
+                    return kept;
+                };
+                std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
+                for (Toolpath& w : own(t.walls, kind_tools.walls))
+                    by_index[w.index].push_back(std::move(w));
+                const std::array<std::vector<Toolpath>, 5> kinds = {
+                    own(t.fill.solid, fill_tool[0]), own(t.fill.top, fill_tool[1]), own(t.fill.bridge, fill_tool[2]),
+                    own(t.fill.gaps, fill_tool[3]), own(t.fill.sparse, fill_tool[4])};
+                if (!by_index.empty() || std::any_of(kinds.begin(), kinds.end(), [](const auto& k) { return !k.empty(); })) {
+                    steps.push_back({{}, nullptr, 0.0, t.height, {}, {}});
+                    base_height = laid_height = t.height;
+                    in_thick = true;
+                    std::vector<Toolpath> walls_all;
+                    for (const auto& [index, paths] : by_index)
+                        walls_all.insert(walls_all.end(), paths.begin(), paths.end());
+                    deferring = s.zaa && off_top({&walls_all, &kinds[1], &kinds[3]});
+                    const std::size_t first_step = steps.size();
+                    for (const auto& [index, paths] : by_index) {
+                        const bool outer = index == 0;
+                        group(paths, outer ? "External perimeter" : "Perimeter",
+                              speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
+                    }
+                    for (std::size_t k = 0; k < 5; ++k)
+                        group(kinds[k], fill_type[k], fill_feed(k), SeamMode::Nearest);
+                    flush();
+                    // A thick zone spans the objects: in none.
+                    if (labels != Labels::None && label_now != -1)
+                        for (std::size_t k = first_step; k < steps.size(); ++k)
+                            if (steps[k].type) {
+                                steps[k].label = label_now = -1;
+                                break;
+                            }
+                    steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
+                    base_height = laid_height = layer_height;
+                    in_thick = false;
+                }
+            }
         }
         laying_tool = 0;
-        // The thick zone of a group that ends here: the whole group's height at
-        // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
-        if (l < model.thick.size() && !model.thick[l].empty()) {
-            const ThickLayer& t = model.thick[l];
-            steps.push_back({{}, nullptr, 0.0, t.height, {}, {}});
-            base_height = laid_height = t.height;
-            in_thick = true;
-            deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
-            const std::size_t first_step = steps.size();
-            std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
-            for (const Toolpath& w : t.walls)
-                by_index[w.index].push_back(w);
-            for (const auto& [index, paths] : by_index) {
-                const bool outer = index == 0;
-                group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
-            }
-            const std::vector<Toolpath>* kinds[5] = {&t.fill.solid, &t.fill.top, &t.fill.bridge, &t.fill.gaps,
-                                                     &t.fill.sparse};
-            for (std::size_t k = 0; k < 5; ++k)
-                group(*kinds[k], fill_type[k], fill_feed(k), SeamMode::Nearest);
-            flush();
-            // A thick zone spans the objects: in none.
-            if (labels != Labels::None && label_now != -1)
-                for (std::size_t k = first_step; k < steps.size(); ++k)
-                    if (steps[k].type) {
-                        steps[k].label = label_now = -1;
-                        break;
-                    }
-            steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
-            base_height = laid_height = layer_height;
-            in_thick = false;
-        }
         return steps;
     };
 
@@ -3802,6 +3818,35 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << "; total filament cost = " << fixed(cost, 2) << "\n";
         out << "; total filament used for wipe tower [g] = "
             << fixed(g.tower_e() * std::numbers::pi * r * r / 1000.0 * s.filament_density, 2) << "\n";
+    }
+    // With one nozzle for several filaments, what the changes purge, on the
+    // wipe tower and into the objects (multimaterial.md, rule 10), in grams
+    // when the filament's density is known.
+    if (warnings && s.single_extruder_mmu && s.extruders > 1) {
+        double into_objects = 0.0; // mm3
+        for (std::size_t l = 0; l < tool_plan.order.size() && l < tool_plan.tower_purge.size(); ++l)
+            for (std::size_t k = 0; k < tool_plan.order[l].size() && k < tool_plan.tower_purge[l].size(); ++k)
+                if (const int from = tool_plan.change_from[l][k]; from > 0)
+                    into_objects += std::max(0.0, purge_volume(s, from, tool_plan.order[l][k]) - tool_plan.tower_purge[l][k]);
+        const double r = s.filament_diameter / 2.0, area = std::numbers::pi * r * r;
+        const double tower_mm = g.tower_e(), objects_mm = into_objects / area;
+        if (tower_mm + objects_mm > 0.0) {
+            char text[240];
+            if (s.filament_density > 0.0) {
+                const auto grams = [&](double mm) { return mm * area / 1000.0 * s.filament_density; };
+                std::snprintf(text, sizeof text,
+                              "The filament changes purge %.2f g of filament: %.2f g on the wipe tower and %.2f g into "
+                              "the objects",
+                              grams(tower_mm + objects_mm), grams(tower_mm), grams(objects_mm));
+                warnings->push_back({"purge", -1, 0.0, text, grams(tower_mm + objects_mm), "information"});
+            } else {
+                std::snprintf(text, sizeof text,
+                              "The filament changes purge %.0f mm of filament: %.0f mm on the wipe tower and %.0f mm "
+                              "into the objects",
+                              tower_mm + objects_mm, tower_mm, objects_mm);
+                warnings->push_back({"purge", -1, 0.0, text, tower_mm + objects_mm, "information"});
+            }
+        }
     }
     // Each setting on one comment line: a line break in a value (a start
     // G-code variable, say) would otherwise end the comment and run the rest

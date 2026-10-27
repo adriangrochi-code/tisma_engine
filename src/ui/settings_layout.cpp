@@ -153,6 +153,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.bed_temperature_from", A},
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
+          {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
           {"interlocking", T::SubInterlocking,
            {{"interlocking.beams", N},
             {"interlocking.beam_width", A},
@@ -561,6 +562,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                        s.extruder_support == 0 && s.extruder_support_interface == 0
                    ? tr(T::SumObjectExtruder)
                    : tr(T::SumByKind);
+    if (id == "multi_nozzle")
+        return s.fine_walls_coarse_infill ? tr(T::FineWallsCoarseInfill)
+               : color_mixing_offered(s)  ? tr(T::ColorMixingRow)
+                                          : tr(T::SumOff);
     if (id == "extruders")
         return s.extruders > 1 ? format(T::SumExtrudersN, s.extruders) : tr(T::SumOneExtruder);
     if (id == "interlocking")
@@ -632,9 +637,14 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "stability")
         return s.review_nozzle_force > 0.0 ? format(T::SumNozzleForce, number(s.review_nozzle_force, 3).c_str())
                                            : tr(T::SumNotMeasured);
-    if (id == "nozzle_size")
+    if (id == "nozzle_size") {
+        // One per extruder: "different nozzles" while they differ (multimaterial.md, rule 1).
+        for (int e = 2; e <= s.extruders; ++e)
+            if (nozzle_of(s, e) != nozzle_of(s, 1))
+                return tr(T::DifferentNozzles);
         return s.hardened_nozzle ? format(T::SumHardened, number(s.nozzle_diameter).c_str())
                                  : format(T::SumMm, number(s.nozzle_diameter).c_str());
+    }
     if (id == "extruder")
         return format(T::SumMm, number(s.filament_diameter).c_str());
     if (id == "speeds")

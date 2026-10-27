@@ -779,7 +779,8 @@ const char* row_key(T label) {
         {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
         {T::InterlockOrientation, "interlocking.orientation"}, {T::InterlockDepth, "interlocking.depth"},
         {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
-        {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"}};
+        {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"},
+        {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3159,6 +3160,36 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "multi_nozzle") {
+        // Different nozzles and mixed colours (multimaterial.md, rules 3, 9
+        // and 11): with one nozzle for every filament, turning the mixing on
+        // first says what it costs.
+        flag(T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill", s.fine_walls_coarse_infill);
+        if (shown("multi.color_mixing")) {
+            bool mixing = color_mixing_offered(s);
+            if (row(T::ColorMixingRow, mixing)) {
+                if (mixing && s.single_extruder_mmu)
+                    ImGui::OpenPopup("##mixing_cost");
+                else {
+                    s.color_mixing = mixing;
+                    changed = true;
+                }
+            }
+            if (ImGui::BeginPopup("##mixing_cost")) {
+                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
+                ImGui::TextUnformatted(tr(T::ColorMixingCost));
+                ImGui::PopTextWrapPos();
+                if (ImGui::Button(tr(T::Cancel)))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SameLine();
+                if (ImGui::Button(tr(T::TurnOn))) {
+                    s.color_mixing = true;
+                    changed = true;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+        }
     } else if (id == "interlocking") {
         // Beams between materials (multi_extruder.md, rules 17 and 18).
         flag(T::InterlockBeams, "interlocking.beams", s.interlock_beams);
@@ -3337,7 +3368,41 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);
         mm(T::MaxDeflection, "review.max_deflection", s.review_max_deflection, 0.001, 10.0, "%.3f mm", 0.001f);
     } else if (id == "nozzle_size") {
-        mm(T::Nozzle, "machine.nozzle_diameter", s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
+        // One nozzle per extruder (multimaterial.md, rule 1): each under the
+        // general one, which sets them all and says "different nozzles"
+        // while they differ.
+        if (shown("machine.nozzle_diameter")) {
+            bool differ = false;
+            for (int e = 2; e <= s.extruders; ++e)
+                differ = differ || nozzle_of(s, e) != nozzle_of(s, 1);
+            if (row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, differ ? tr(T::DifferentNozzles) : "%.2f mm", 0.005f)) {
+                s.nozzle_diameters.clear();
+                changed = true;
+            }
+            for (int e = 1; e <= s.extruders && s.extruders > 1 && !s.single_extruder_mmu; ++e) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(format(tr(T::ExtruderNozzle), e).c_str());
+                ImGui::TableNextColumn();
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                double v = nozzle_of(s, e);
+                const double low = 0.1, high = 2.0;
+                ImGui::PushID("extruder_nozzle");
+                ImGui::PushID(e);
+                if (ImGui::DragScalar("##v", ImGuiDataType_Double, &v, 0.005f, &low, &high, "%.2f mm",
+                                      ImGuiSliderFlags_AlwaysClamp)) {
+                    std::vector<double> nozzles;
+                    for (int k = 1; k <= s.extruders; ++k)
+                        nozzles.push_back(k == e ? v : nozzle_of(s, k));
+                    s.nozzle_diameters = std::move(nozzles);
+                    s.nozzle_diameter = s.nozzle_diameters.front();
+                    changed = true;
+                }
+                ImGui::PopID();
+                ImGui::PopID();
+            }
+        }
         flag(T::HardenedNozzle, "machine.hardened_nozzle", s.hardened_nozzle);
         mm(T::MinLayerHeight, "machine.min_layer_height", s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f,
            tr(T::LayerLimitTip));

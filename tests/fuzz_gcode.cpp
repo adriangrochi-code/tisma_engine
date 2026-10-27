@@ -384,6 +384,17 @@ int main(int argc, char** argv) {
             s.toolchange_length = {uni(0, 12), uni(0, 12)};
             s.toolchange_restart_extra = {uni(0, 2)};
             s.interface_shells = pick(2) == 0;
+            // Different nozzles (multimaterial.md), where the layers fit 75 % of the finest.
+            if (pick(3) == 0) {
+                const std::vector<double> nozzles = {s.nozzle_diameter, s.nozzle_diameter * uni(0.8, 1.8)};
+                const double finest = std::min(nozzles[0], nozzles[1]);
+                if (std::max(s.layer_height, s.first_layer_height) <= 0.75 * finest) {
+                    s.nozzle_diameters = nozzles;
+                    s.fine_walls_coarse_infill = pick(2) == 0;
+                    if (pick(2) == 0)
+                        s.infill_combine_auto = true;
+                }
+            }
             if (pick(3) == 0) {
                 s.interlock_beams = true;
                 s.interlock_width = uni(0.4, 2.0);

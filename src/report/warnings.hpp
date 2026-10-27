@@ -11,12 +11,13 @@ struct Settings;
 // A slicing problem for Tisma to show (docs/spec/BEHAVIOR.md, "Errores y
 // avisos"). layer is -1 (and z unused) for the whole model.
 struct Warning {
-    std::string kind; // "thin_detail", "layer_time", "open_contours", "gpu_fallback", and the machine's
+    std::string kind; // "thin_detail", "layer_time", "open_contours", "gpu_fallback", "purge", and the machine's
                       // capabilities: "nozzle_temperature", "bed_temperature", "chamber", "enclosure", "abrasive"
     int layer = -1;
     double z = 0.0;
     std::string message;
-    double value = 0.0; // mm2 for thin_detail, s for layer_time, a count for open_contours
+    double value = 0.0; // mm2 for thin_detail, s for layer_time, a count for open_contours, g (mm without a
+                        // density) for purge
     std::string severity = "warning"; // "critical", "warning" or "information" (print_review.md)
 };
 

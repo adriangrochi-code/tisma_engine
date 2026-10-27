@@ -165,7 +165,7 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `nozzle_diameter` | número | 0.4 | > 0 | Diámetro de la boquilla, en mm |
+| `nozzle_diameter` | número o lista | 0.4 | > 0; lista: 0,05 a 5, hasta 16 | Diámetro de la boquilla, en mm. Una lista da la de cada extrusor, desde el primero (ficha `multimaterial.md`, regla 1); una lista más corta que los extrusores repite el último valor; un número las cambia todas. Los anchos de las líneas (`walls.width`, `support.width`) son para la boquilla del primero: cada línea toma el de su extrusor en proporción (las paredes y lo que se imprime con su ancho, el del extrusor de las paredes; el relleno ralo, el del relleno). Con boquillas distintas, ninguna capa pasa el 75 % de la boquilla más fina (regla 2), salvo el relleno combinado de la gruesa con `multi.fine_walls_coarse_infill` |
 | `filament_diameter` | número | 1.75 | > 0 | Diámetro del filamento, en mm: la E de cada tramo es su volumen sobre esta sección |
 | `relative_extrusion` | booleano | false | | `true`: E relativa (`M83`), cada movimiento lleva su E (en Marlin, con `G92 E0` después del salto en Z de cada capa, para que el firmware no pierda precisión; ficha `gcode_firmware.md`, regla 3); `false`: absoluta (`M82`), con `G92 E0` en cada capa |
 | `flavor` | texto | `"reprap"` | `marlin`, `marlin_legacy`, `klipper`, `reprap`, `reprapfirmware`, `repetier`, `smoothie`, `teacup`, `makerware`, `sailfish`, `mach3`, `machinekit`, `no_extrusion` | Dialecto de G-code. `marlin` es Marlin 2 y `marlin_legacy` Marlin 1 (su `M204 S` es la aceleración al imprimir); `reprapfirmware` es el de Duet (temperatura con `G10 S… P0`, espera con `M116`), y `reprap` el RepRap genérico. Con `variables.temperature` y un G-code de inicio sin comandos de temperatura, el motor fija la de la boquilla antes del inicio (`M104 S…`) y la espera después (`M109 S…`), cada dialecto con los suyos (ficha `gcode_firmware.md`, regla 1). Los antiguos (ficha `gcode_extras.md`, regla 6; `src/gcode/dialect.hpp`): `repetier` y `smoothie` escriben como `reprap`; `teacup` apaga el ventilador con `M106 S0`; `makerware` y `sailfish` ponen la E siempre absoluta, sin `M82` ni `G92`, el ventilador con `M126` y `M127`, `M104 S… T0` y `M73 P…` (avance) en cada capa, y `makerware` además `M101` antes de extruir y `M103` después; `mach3` y `machinekit` llaman `A` al extrusor y escriben temperaturas y ventilador con `P` (`M104 P215`, `M106 P252.45`), `machinekit` vuelve `A` a 0 en cada capa y termina con `M2`; `no_extrusion`, los mismos movimientos sin E. Con los antiguos, salvo `repetier` y `smoothie`, no se escriben aceleraciones (`M204`) ni avance de presión. La vista previa del panel lee la `A` de `mach3` y `machinekit`; con `no_extrusion` solo ve viajes |
@@ -441,6 +441,18 @@ De la ficha `docs/spec/features/multi_extruder.md` (regla 17): vigas entre mater
 | `orientation` | número | 22,5 | −360 a 360 | Dirección de las vigas, en grados |
 | `depth` | entero | 2 | 0 a 100 | Hasta dónde llegan desde el borde entre materiales, en anchos de viga |
 | `boundary_avoidance` | entero | 2 | 0 a 100 | Distancia al exterior de la pieza sin vigas, en anchos de viga |
+
+### `multi`
+
+De la ficha `docs/spec/features/multimaterial.md`: boquillas distintas y mezcla de colores. Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `fine_walls_coarse_infill` | booleano | `false` | | Con boquillas de tamaños distintos (`machine.nozzle_diameter` como lista): los perímetros, el relleno sólido, el soporte, su interfaz y la torre de purga con la boquilla más fina; el relleno ralo con la más gruesa, combinado en tantas capas como entren en el 75 % de su boquilla (regla 3, MM1). Reemplaza los `extruders.*` mientras está prendido; al apagarlo vuelven los del perfil (regla 4, MM2) |
+| `color_mixing` | booleano o `null` | `null` | | Ofrecer colores mezclados (reglas 9 y 11). `null`: según la impresora, no con una MMU de una sola boquilla (`machine.single_extruder_mmu`, que purga en cada cambio) y sí con una boquilla por filamento. En la interfaz, prenderla con una MMU avisa antes del costo (MM4) |
+
+Con una MMU de una sola boquilla, después de laminar se avisa cuánto filamento va a la purga, en la torre y dentro de los
+objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM5).
 
 ### `painting`
 

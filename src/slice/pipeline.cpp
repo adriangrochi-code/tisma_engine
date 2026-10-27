@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 
@@ -364,10 +365,12 @@ struct PartFrame {
     const std::vector<Polygons>* regions = nullptr;
 };
 
+// `tool`: the extruder of the part's lines, for their widths (the first
+// with none forced).
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
-                         const StressField* stress, const Painting* painting, const PartFrame* frame);
+                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool = 1);
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>* tools);
+                        const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1);
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects);
 
@@ -389,6 +392,36 @@ void tag_tool(SlicedModel& part, int tool) {
 // An object's extruder on this machine: one it has (the first with one).
 int object_tool(const MeshObject& o, const Settings& settings) {
     return std::clamp(o.extruder, 1, std::max(settings.extruders, 1));
+}
+
+// Different nozzles (multimaterial.md, rule 3; own design): the line widths
+// are for machine.nozzle_diameter, the first extruder's, and each line
+// takes its extruder's nozzle in proportion. The walls and what is laid
+// with their width (the solid infill, the bridges, the support) the walls'
+// extruder's, the sparse infill the infill's; with
+// multi.fine_walls_coarse_infill, the sparse infill combined over as many
+// layers as 75 % of its nozzle holds (rule 2).
+struct PartNozzles {
+    Settings settings;   // with the walls' width and nozzle
+    double sparse_width; // mm
+    double infill_nozzle; // mm
+};
+PartNozzles part_nozzles(const Settings& s, int tool) {
+    PartNozzles p{s, s.wall_width, s.nozzle_diameter};
+    if (s.extruders < 2 || s.nozzle_diameters.empty() || s.single_extruder_mmu)
+        return p;
+    const KindExtruders kinds = kind_extruders(s);
+    const double walls = nozzle_of(s, kinds.walls > 0 ? kinds.walls : tool);
+    const double infill = nozzle_of(s, kinds.infill > 0 ? kinds.infill : tool);
+    p.settings.wall_width = s.wall_width * walls / s.nozzle_diameter;
+    p.settings.nozzle_diameter = walls;
+    p.sparse_width = s.wall_width * infill / s.nozzle_diameter;
+    p.infill_nozzle = infill;
+    if (s.fine_walls_coarse_infill && infill != walls) {
+        p.settings.infill_combine_auto = true;
+        p.settings.infill_combine_max_height = {75.0, true};
+    }
+    return p;
 }
 
 // Whether the plate's objects print with more than one extruder.
@@ -416,7 +449,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (mesh.triangles.empty())
                     continue;
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
-                SlicedModel part = slice_model(mesh, settings, gpu, stress, painting ? &paint : nullptr);
+                SlicedModel part = slice_plate(mesh, settings, gpu, stress, painting ? &paint : nullptr, nullptr,
+                                               object_tool(o, settings));
                 if (part.layers.empty())
                     continue;
                 if (object_tool(o, settings) != 1)
@@ -438,7 +472,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (several_tools(*objects, settings)) {
             out = slice_plate(input, settings, gpu, stress, painting, objects);
         } else {
-            out = slice_model(input, settings, gpu, stress, painting);
+            out = slice_plate(input, settings, gpu, stress, painting, nullptr, object_tool(objects->front(), settings));
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -460,13 +494,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
 namespace {
 
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>* tools) {
+                        const Painting* painting, const std::vector<MeshObject>* tools, int tool) {
     // Several extruders print layer by layer, every extruder on every layer:
     // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
     if (settings.extruders > 1 && settings.detail_height > 0.0) {
         Settings flat = settings;
         flat.detail_height = 0.0;
-        return slice_plate(input, flat, gpu, stress, painting, tools);
+        return slice_plate(input, flat, gpu, stress, painting, tools, tool);
     }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
@@ -477,7 +511,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_plate(input, vase, gpu, stress, painting, tools);
+        return slice_plate(input, vase, gpu, stress, painting, tools, tool);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -488,13 +522,13 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
-        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool);
         add_raft(raft, settings);
         return raft;
     }
     const IndexedMesh mesh = compensated(input, settings);
     if (!tools)
-        return slice_layers(mesh, settings, gpu, stress, painting, nullptr);
+        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool);
     return slice_tools(mesh, settings, gpu, stress, painting, *tools);
 }
 
@@ -613,8 +647,21 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         tools.push_back(object_tool(o, settings));
     std::sort(tools.begin(), tools.end());
     tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+    // The combined infill (docs/INFILL.md) in the same runs for every part,
+    // as thick as the finest of their infill nozzles holds.
+    if (settings.infill_combine_auto || settings.infill_combine_layers > 1 || settings.fine_walls_coarse_infill) {
+        double most = std::numeric_limits<double>::infinity();
+        for (const int tool : tools) {
+            const PartNozzles nozzles = part_nozzles(settings, tool);
+            if (nozzles.settings.infill_combine_auto || nozzles.settings.infill_combine_layers > 1)
+                most = std::min(most, combine_max_height(nozzles.settings, nozzles.infill_nozzle));
+        }
+        if (std::isfinite(most))
+            part_settings.infill_combine_max_height = {most, false};
+    }
     std::vector<LayerWalls> walls(n);
     std::vector<LayerFill> fills(n);
+    std::vector<ThickLayer> thick;
     std::vector<LayerSurfaces> surfaces(n);
     std::vector<Polygons> hanging(n), on_support(n), air_bridges(n);
     std::vector<double> support_gap(n, 0.0);
@@ -655,9 +702,24 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         if (part_mesh.triangles.empty())
             continue;
         frame.regions = beamed.empty() ? nullptr : &beamed[p];
-        SlicedModel part = slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame);
+        SlicedModel part =
+            slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame, tool);
         tag_tool(part, tool);
         zaa_points += part.zaa_points;
+        // Their combined infill, in the same runs (above).
+        if (!part.thick.empty()) {
+            thick.resize(n);
+            for (std::size_t l = 0; l < std::min(n, part.thick.size()); ++l) {
+                ThickLayer& to = thick[l];
+                ThickLayer& from = part.thick[l];
+                if (from.empty())
+                    continue;
+                to.height = from.height;
+                add(to.walls, from.walls);
+                add(to.fill.sparse, from.fill.sparse), add(to.fill.solid, from.fill.solid), add(to.fill.top, from.fill.top);
+                add(to.fill.bridge, from.fill.bridge), add(to.fill.gaps, from.fill.gaps);
+            }
+        }
         tbb::parallel_for(std::size_t(0), std::min(n, part.layers.size()), [&](std::size_t l) {
             unite(taken[l], part.regions[l]);
             LayerWalls& w = part.walls[l];
@@ -690,6 +752,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     }
     out.walls = std::move(walls);
     out.fills = std::move(fills);
+    out.thick = std::move(thick);
     out.surfaces = std::move(surfaces);
     out.hanging = std::move(hanging);
     out.on_support = std::move(on_support);
@@ -699,8 +762,10 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     return out;
 }
 
-SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
-                         const StressField* stress, const Painting* painting, const PartFrame* frame) {
+SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& given, gpu::Context* gpu,
+                         const StressField* stress, const Painting* painting, const PartFrame* frame, int tool) {
+    const PartNozzles nozzles = part_nozzles(given, tool);
+    const Settings& settings = nozzles.settings;
     SlicedModel out;
     IndexedMesh mesh = compensated_mesh;
     // The painted pieces before any triangle is turned: a tree follows the
@@ -1124,8 +1189,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
     // run. Layer heights by zone already print it thick: not with them; nor
     // lightning, whose branches each layer draws from the one above.
     const std::vector<std::array<std::size_t, 2>> combined =
-        stack.groups.empty() && settings.infill_density > 0.0 && !lightning ? combine_runs(out.layers, settings)
-                                                                            : std::vector<std::array<std::size_t, 2>>{};
+        stack.groups.empty() && settings.infill_density > 0.0 && !lightning
+            ? combine_runs(out.layers, settings, nozzles.infill_nozzle)
+            : std::vector<std::array<std::size_t, 2>>{};
     std::vector<Polygons> combined_region(combined.size());
     tbb::parallel_for(std::size_t(0), combined.size(), [&](std::size_t r) {
         const auto [first, last] = combined[r];
@@ -1144,6 +1210,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
                     settings.monotonic_top};
     fill.bridge_width = bridge_bead(settings);
+    fill.sparse_width = nozzles.sparse_width;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
@@ -1155,8 +1222,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
         for (std::size_t l = 0; l < left.size(); ++l)
             left[l] = out.surfaces[l].sparse;
         LightningParams lp;
-        lp.width = settings.wall_width;
-        lp.reach = lightning_reach(settings.wall_width, settings.infill_density / 100.0);
+        lp.width = nozzles.sparse_width;
+        lp.reach = lightning_reach(nozzles.sparse_width, settings.infill_density / 100.0);
         branches = lightning_layers(whole_sparse, out.regions, out.layers, lp, &left);
     }
     // The stress bands and the dense infill hold up loads and skins all

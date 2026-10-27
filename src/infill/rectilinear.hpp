@@ -68,6 +68,7 @@ struct FillParams {
     double bridge_width = 0.0;  // the bridges' round beads, and how far apart their lines are; 0: width
     const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
     Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
+    double sparse_width = 0.0;         // the sparse infill's bead, from its own nozzle (multimaterial.md, rule 3); 0: width
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

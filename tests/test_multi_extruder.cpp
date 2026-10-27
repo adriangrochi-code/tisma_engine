@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <limits>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -623,4 +624,237 @@ TEST_CASE("extruders: beams of each material go into the other (ME11)", "[extrud
     CHECK(std::abs(laid(beams, 12, 0, "External perimeter") - laid(beams, 11, 0, "External perimeter")) > 1.0);
     // Clear of the outside: the halves' outer sides stay straight there.
     CHECK_THAT(beams.box.at(0)[1], WithinAbs(90.2, 0.02));
+}
+
+// Different nozzles (docs/spec/features/multimaterial.md, rules 1 to 5 and
+// 10; tests MM1, MM2 and MM5).
+
+TEST_CASE("nozzles: one per extruder, read and written, and each one's layer limit (MM3, rule 2)", "[extruders][nozzles]") {
+    Settings s = parse_settings(R"({"machine": {"extruders": 2, "nozzle_diameter": [0.4, 0.6]},
+                                    "multi": {"fine_walls_coarse_infill": true, "color_mixing": false}})");
+    CHECK(s.nozzle_diameter == 0.4);
+    CHECK(s.nozzle_diameters == std::vector<double>{0.4, 0.6});
+    CHECK(nozzle_of(s, 1) == 0.4);
+    CHECK(nozzle_of(s, 2) == 0.6);
+    CHECK(nozzle_of(s, 3) == 0.6); // a short list repeats its last
+    CHECK(s.fine_walls_coarse_infill);
+    REQUIRE(s.color_mixing.has_value());
+    CHECK_FALSE(*s.color_mixing);
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.nozzle_diameters == s.nozzle_diameters);
+    CHECK(back.fine_walls_coarse_infill);
+    CHECK(back.color_mixing == s.color_mixing);
+    // The general one sets them all (rule 1).
+    s = parse_settings(R"({"machine": {"nozzle_diameter": 0.5}})");
+    CHECK(s.nozzle_diameters.empty());
+    CHECK(nozzle_of(s, 2) == 0.5);
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"nozzle_diameter": []}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"nozzle_diameter": [0.4, -1]}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"multi": {"color_mixing": 1}})"), SettingsError);
+    // Mixed colours offered by default with a nozzle per filament, not with
+    // an MMU (rules 9 and 11).
+    Settings mixing = base();
+    CHECK(color_mixing_offered(mixing));
+    mixing.single_extruder_mmu = true;
+    CHECK_FALSE(color_mixing_offered(mixing));
+    mixing.color_mixing = true;
+    CHECK(color_mixing_offered(mixing));
+    // Each nozzle lays 75 % of its diameter at most (rule 2): 0.3 with 0.4.
+    Settings layers = base();
+    layers.nozzle_diameters = {0.4, 0.6};
+    layers.layer_height = layers.first_layer_height = 0.3;
+    CHECK_NOTHROW(check_settings(layers));
+    layers.layer_height = 0.32;
+    CHECK_THROWS_AS(check_settings(layers), SettingsError);
+    layers.nozzle_diameters.clear(); // one nozzle: up to its diameter, as before
+    CHECK_NOTHROW(check_settings(layers));
+}
+
+namespace {
+
+// MM1's printer: nozzles of 0.25 and 0.6, 0.15 mm layers, a 20 mm cube
+// with sparse infill, walls 0.3 wide for the fine nozzle.
+Settings nozzles_base() {
+    Settings s = base();
+    s.nozzle_diameter = 0.25;
+    s.nozzle_diameters = {0.25, 0.6};
+    s.layer_height = s.first_layer_height = 0.15;
+    s.wall_width = 0.3;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    s.fine_walls_coarse_infill = true;
+    return s;
+}
+
+// The ;WIDTH and ;HEIGHT of each line type's extrusions, and the layers
+// it shows up in.
+struct Shown {
+    std::map<std::string, std::vector<double>> widths, heights;
+    std::map<std::string, std::vector<int>> layers;
+};
+
+Shown shown(const std::string& text) {
+    Shown out;
+    std::istringstream in(text);
+    std::string line, type;
+    int layer = -1;
+    while (std::getline(in, line)) {
+        if (line == ";LAYER_CHANGE")
+            ++layer;
+        else if (line.rfind(";TYPE:", 0) == 0) {
+            type = line.substr(6);
+            std::vector<int>& at = out.layers[type];
+            if (at.empty() || at.back() != layer)
+                at.push_back(layer);
+        } else if (line.rfind(";WIDTH:", 0) == 0)
+            out.widths[type].push_back(std::atof(line.c_str() + 7));
+        else if (line.rfind(";HEIGHT:", 0) == 0)
+            out.heights[type].push_back(std::atof(line.c_str() + 8));
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("nozzles: fine walls, coarse sparse infill combined (MM1)", "[extruders][nozzles]") {
+    const Settings s = nozzles_base();
+    REQUIRE_NOTHROW(check_settings(s));
+    const KindExtruders kinds = kind_extruders(s);
+    CHECK(kinds.walls == 1);
+    CHECK(kinds.solid_infill == 1);
+    CHECK(kinds.support == 1);
+    CHECK(kinds.support_interface == 1);
+    CHECK(kinds.wipe_tower == 1);
+    CHECK(kinds.infill == 2);
+    const std::string text = gcode_of(cube(1), s);
+    const Trace t = trace(text);
+    double walls_1 = 0.0, solid_1 = 0.0, sparse_1 = 0.0, sparse_2 = 0.0, other_2 = 0.0;
+    for (const auto& [key, length] : t.extruded) {
+        const auto& [layer, tool, type] = key;
+        if (tool == 0 && (type == "External perimeter" || type == "Perimeter"))
+            walls_1 += length;
+        else if (tool == 0 && (type == "Solid infill" || type == "Top solid infill"))
+            solid_1 += length;
+        else if (type == "Internal infill")
+            (tool == 1 ? sparse_2 : sparse_1) += length;
+        else if (tool == 1)
+            other_2 += length;
+    }
+    CHECK(walls_1 > 0.0);
+    CHECK(solid_1 > 0.0);
+    CHECK(sparse_2 > 0.0);
+    CHECK(sparse_1 == 0.0);
+    CHECK(other_2 == 0.0);
+    // The coarse nozzle's infill: 0.72 mm wide (0.3 by 0.6 / 0.25), combined
+    // three layers at a time (0.45 mm, 75 % of 0.6), a layer in three.
+    const Shown lines = shown(text);
+    REQUIRE(lines.widths.count("Internal infill"));
+    for (const double w : lines.widths.at("Internal infill"))
+        CHECK_THAT(w, WithinAbs(0.72, 0.005));
+    for (const char* walls : {"External perimeter", "Perimeter"})
+        if (lines.widths.count(walls))
+            for (const double w : lines.widths.at(walls))
+                CHECK(w < 0.4);
+    int thick = 0;
+    for (std::size_t at = text.find(";HEIGHT:0.450\n"); at != std::string::npos; at = text.find(";HEIGHT:0.450\n", at + 1)) {
+        CHECK(text.find(";TYPE:Internal infill", at) < text.find(";HEIGHT:0.150", at));
+        ++thick;
+    }
+    CHECK(thick > 10);
+    std::set<int> infill_layers, all_layers;
+    for (const auto& [key, length] : t.extruded) {
+        all_layers.insert(std::get<0>(key));
+        if (std::get<2>(key) == "Internal infill" && length > 0.0)
+            infill_layers.insert(std::get<0>(key));
+    }
+    CHECK(int(infill_layers.size()) < int(all_layers.size()) / 3 + 3);
+    CHECK(int(infill_layers.size()) > int(all_layers.size()) / 3 - 6);
+    // Each with its change to the coarse nozzle.
+    int to_coarse = 0;
+    for (const auto& [layer, tool] : t.changes)
+        to_coarse += tool == 1;
+    CHECK(to_coarse == int(infill_layers.size()));
+}
+
+TEST_CASE("nozzles: turned off, every kind back to the print's extruders (MM2)", "[extruders][nozzles]") {
+    Settings s = nozzles_base();
+    s.fine_walls_coarse_infill = false;
+    const KindExtruders kinds = kind_extruders(s);
+    CHECK(kinds.walls == 0);
+    CHECK(kinds.infill == 0);
+    CHECK(kinds.solid_infill == 0);
+    s.extruder_infill = 2; // the print profile's own choice holds
+    CHECK(kind_extruders(s).infill == 2);
+    s.extruder_infill = 0;
+    // The cube prints with its extruder only, the infill each layer.
+    const std::string text = gcode_of(cube(1), s);
+    for (const auto& [layer, tool] : trace(text).changes)
+        CHECK(tool == 0);
+    const Shown lines = shown(text);
+    for (const double h : lines.heights.at("Internal infill"))
+        CHECK_THAT(h, WithinAbs(0.15, 0.005));
+    // Nozzles all alike: the switch changes nothing.
+    s.fine_walls_coarse_infill = true;
+    s.nozzle_diameters = {0.25, 0.25};
+    CHECK(kind_extruders(s).infill == 0);
+    // A cube on the coarse extruder takes its widths.
+    s.nozzle_diameters = {0.25, 0.6};
+    s.fine_walls_coarse_infill = false;
+    const Shown coarse = shown(gcode_of(cube(2), s));
+    REQUIRE(coarse.widths.count("Perimeter"));
+    for (const double w : coarse.widths.at("Perimeter"))
+        CHECK(w > 0.5);
+}
+
+TEST_CASE("nozzles: the purge after slicing, on the tower and into the objects (MM5)", "[extruders][nozzles][tower]") {
+    Settings s = tower_base(true);
+    s.filament_density = 1.24;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    const auto purge_of = [&](const Plate& p) {
+        const SlicedModel model = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, nullptr, &p.objects);
+        std::ostringstream out;
+        std::vector<Warning> warnings;
+        write_gcode(out, model, s, &warnings);
+        for (const Warning& w : warnings)
+            if (w.kind == "purge")
+                return std::make_pair(w, out.str());
+        return std::make_pair(Warning{}, out.str());
+    };
+    const auto [plain, text] = purge_of(two_colours());
+    REQUIRE(plain.kind == "purge");
+    CHECK(plain.severity == "information");
+    CHECK_THAT(plain.message, ContainsSubstring("on the wipe tower") && ContainsSubstring("0.00 g into the objects"));
+    // The same grams as the footer's tower line.
+    const std::size_t at = text.find("; total filament used for wipe tower [g] = ");
+    REQUIRE(at != std::string::npos);
+    CHECK_THAT(plain.value, WithinAbs(std::atof(text.c_str() + at + 43), 0.006));
+    Plate infill = two_colours();
+    for (MeshObject& o : infill.objects)
+        o.wipe_into_infill = true;
+    const Warning into = purge_of(infill).first;
+    REQUIRE(into.kind == "purge");
+    CHECK_THAT(into.message, !ContainsSubstring("0.00 g into the objects"));
+    // A purge is a purge, wherever it goes: about as much in all.
+    CHECK_THAT(into.value, WithinAbs(plain.value, 0.25 * plain.value));
+    // A nozzle per filament: no purge to report.
+    s.single_extruder_mmu = false;
+    CHECK(purge_of(two_colours()).first.kind.empty());
+}
+
+TEST_CASE("extruders: each extruder's parts keep their combined infill", "[extruders][nozzles]") {
+    Settings s = base();
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    s.infill_combine_layers = 2;
+    const std::string text = gcode_of(two_colours(), s);
+    const Trace t = trace(text);
+    double sparse[2] = {0.0, 0.0};
+    for (const auto& [key, length] : t.extruded)
+        if (std::get<2>(key) == "Internal infill")
+            sparse[std::get<1>(key)] += length;
+    CHECK(sparse[0] > 100.0);
+    CHECK(sparse[1] > 100.0);
+    CHECK_THAT(sparse[0], WithinAbs(sparse[1], 0.2 * sparse[1]));
+    CHECK(text.find(";HEIGHT:0.400\n") != std::string::npos);
 }

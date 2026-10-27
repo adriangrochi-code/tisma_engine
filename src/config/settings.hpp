@@ -224,6 +224,10 @@ struct Settings {
 
     // machine
     double nozzle_diameter = 0.4;   // mm
+    // Each extruder's nozzle, from the first (multimaterial.md, rule 1): a
+    // list shorter than the extruders repeats its last value; empty: all
+    // nozzle_diameter, which is the first's.
+    std::vector<double> nozzle_diameters;
     double z_offset = 0.0;          // mm added to every Z of the part (gcode_extras.md, rule 5)
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
@@ -310,6 +314,13 @@ struct Settings {
     bool wipe_tower_no_sparse_layers = false;
     std::vector<std::vector<double>> purge_volumes;
     int extruder_wipe_tower = 0;
+    // Different nozzles (multimaterial.md, rule 3): the walls, the solid
+    // infill, the support and the wipe tower with the finest, the sparse
+    // infill with the coarsest, combined over as many layers as 75 % of its
+    // nozzle holds. And whether to offer mixed colours (rules 9 and 11;
+    // unset: not with a single-extruder MMU, which purges at each change).
+    bool fine_walls_coarse_infill = false;
+    std::optional<bool> color_mixing;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -615,6 +626,20 @@ double per_extruder(const std::vector<double>& values, std::size_t extruder, dou
 // Extruder `extruder`'s nozzle offset (machine.extruder_offset), mm; none
 // with a single-extruder MMU, which has one nozzle.
 std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t extruder);
+// Extruder `extruder`'s nozzle (from 1; 0 or a single-extruder MMU:
+// machine.nozzle_diameter), mm.
+double nozzle_of(const Settings& settings, int extruder);
+// The extruder of each kind of extrusion (extruders.*; 0: the object's):
+// with multi.fine_walls_coarse_infill and nozzles of different sizes, the
+// finest for all but the sparse infill, which takes the coarsest
+// (multimaterial.md, rule 3); turned off, the print's own again (rule 4).
+struct KindExtruders {
+    int walls = 0, infill = 0, solid_infill = 0, support = 0, support_interface = 0, wipe_tower = 0;
+};
+KindExtruders kind_extruders(const Settings& settings);
+// Whether mixed colours are offered (multimaterial.md, rules 9 and 11):
+// multi.color_mixing, else not with a single-extruder MMU.
+bool color_mixing_offered(const Settings& settings);
 
 // The settings a filament may give its own value of (retraction_travel.md,
 // rule 10), and the settings with the filament's values in place.
