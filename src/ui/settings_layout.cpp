@@ -154,6 +154,23 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
           {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
+          {"curved", T::SubCurved,
+           {{"curved.mode", N},
+            {"curved.pattern", N},
+            {"curved.fit_head", N},
+            {"curved.amplitude", A},
+            {"curved.wavelength", A},
+            {"curved.angle", A},
+            {"curved.twist", A},
+            {"curved.cone_angle", A}}},
+          {"curved_more", T::SubCurvedMore,
+           {{"curved.flat_below", A},
+            {"curved.ramp_height", A},
+            {"curved.flat_top", A},
+            {"curved.segment_length", A},
+            {"curved.max_slope", A},
+            {"curved.flow_policy", A},
+            {"curved.uniform_flow", A}}},
           {"interlocking", T::SubInterlocking,
            {{"interlocking.beams", N},
             {"interlocking.beam_width", A},
@@ -269,6 +286,12 @@ const std::vector<SectionLayout>& printer_layout() {
             {"sequential.clearance_radius", A},
             {"sequential.clearance_height", A}}},
           {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}},
+          {"head", T::SubHead,
+           {{"head.free_angle_x", N},
+            {"head.free_angle_y", N},
+            {"head.clearance_height", N},
+            {"head.clearance_radius", N},
+            {"head.profile", A}}},
           {"stability", T::SubStability,
            {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
         {"nozzle", T::SecNozzle, "section_nozzle.svg",
@@ -634,6 +657,14 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     }
     if (id == "enclosure")
         return s.enclosed ? tr(T::SumClosed) : tr(T::SumOpen);
+    if (id == "curved")
+        return s.curved_mode == CurvedMode::Disabled ? tr(T::SumOff)
+               : s.curved_mode == CurvedMode::Wave   ? tr(T::CurvedWave)
+                                                     : tr(T::CurvedCone);
+    if (id == "curved_more")
+        return format(T::SumMm, number(s.curved_ramp_height).c_str());
+    if (id == "head")
+        return format(T::SumMm, number(s.head_clearance_height).c_str());
     if (id == "stability")
         return s.review_nozzle_force > 0.0 ? format(T::SumNozzleForce, number(s.review_nozzle_force, 3).c_str())
                                            : tr(T::SumNotMeasured);

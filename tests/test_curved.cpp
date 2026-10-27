@@ -1,0 +1,270 @@
+// Curved layers (docs/spec/features/nonplanar.md; tests NP1 to NP4).
+
+#include "config/settings.hpp"
+#include "gcode/check.hpp"
+#include "gcode/writer.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "mesh/mesh.hpp"
+#include "slice/curved.hpp"
+#include "slice/pipeline.hpp"
+#include "test_printer.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <algorithm>
+#include <map>
+#include <cmath>
+#include <numbers>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace tisma;
+using Catch::Matchers::ContainsSubstring;
+using Catch::Matchers::WithinAbs;
+
+namespace {
+
+void add_box(TriangleMesh& m, float x0, float y0, float z0, float x1, float y1, float z1) {
+    const Vec3f v[8] = {{x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0},
+                        {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}};
+    const auto quad = [&](int a, int b, int c, int d) {
+        m.add_triangle(v[a], v[b], v[c]);
+        m.add_triangle(v[a], v[c], v[d]);
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    quad(0, 1, 5, 4);
+    quad(1, 2, 6, 5);
+    quad(2, 3, 7, 6);
+    quad(3, 0, 4, 7);
+}
+
+// The spec's block: 40 x 40 x 12 mm centred on X 100, Y 100.
+IndexedMesh block() {
+    TriangleMesh m;
+    add_box(m, 80, 80, 0, 120, 120, 12);
+    return weld_exact(m);
+}
+
+Settings base(CurvedPattern pattern = CurvedPattern::Egg) {
+    Settings s = test_printer();
+    s.flavor = GcodeFlavor::Marlin;
+    s.relative_extrusion = true;
+    s.bed = {{0, 0}, {250, 0}, {250, 210}, {0, 210}};
+    s.layer_height = s.first_layer_height = 0.2;
+    s.skirt_loops = 0;
+    s.curved_mode = CurvedMode::Wave;
+    s.curved_pattern = pattern;
+    return s;
+}
+
+std::string gcode_of(const SlicedModel& model, const Settings& s) {
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string()
+                                 : std::to_string(check.problems.front().line) + ": " + check.problems.front().message));
+    CHECK(check.ok());
+    return out.str();
+}
+
+// The extruded moves of the layer at flat Z `z`: (x, y, z) of each end,
+// the filament and the line type.
+struct Move {
+    double x0, y0, z0, x1, y1, z1, e;
+    std::string type;
+};
+
+std::vector<Move> layer_moves(const std::string& text, const std::string& z) {
+    std::vector<Move> out;
+    std::istringstream in(text);
+    std::string line, type;
+    double x = 0, y = 0, zz = 0;
+    bool inside = false;
+    while (std::getline(in, line)) {
+        if (line.rfind(";Z:", 0) == 0)
+            inside = line.substr(3) == z;
+        if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = zz, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            if (w[0] == ';')
+                break;
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        if (inside && e > 0.0 && (nx != x || ny != y))
+            out.push_back({x, y, zz, nx, ny, nz, e, type});
+        x = nx, y = ny, zz = nz;
+    }
+    return out;
+}
+
+int layer_count(const std::string& text) {
+    int n = 0;
+    for (std::size_t at = text.find(";LAYER_CHANGE"); at != std::string::npos; at = text.find(";LAYER_CHANGE", at + 1))
+        ++n;
+    return n;
+}
+
+} // namespace
+
+TEST_CASE("curved layers: the egg crate wave, fitted to the head (NP1)", "[curved]") {
+    const Settings s = base();
+    const std::optional<CurvedField> f = curved_field(s, block());
+    REQUIRE(f);
+    // λ = π · 3 / tan 20° = 25.894 mm; the amplitude as J ≤ 1.4 in the ramp lets it (0.952).
+    CHECK_THAT(2.0 * std::numbers::pi / f->k, WithinAbs(25.894, 0.001));
+    CHECK_THAT(f->amplitude, WithinAbs(0.952, 0.004));
+    const SlicedModel model = slice_model(block(), s);
+    const std::string text = gcode_of(model, s);
+    Settings flat = s;
+    flat.curved_mode = CurvedMode::Disabled;
+    CHECK(layer_count(gcode_of(slice_model(block(), flat), flat)) == 60);
+    CHECK(std::abs(layer_count(text) - 65) <= 1); // Tisma Slicer: 65
+    // The first three layers flat.
+    for (const char* z : {"0.200", "0.400", "0.600"}) {
+        const std::vector<Move> moves = layer_moves(text, z);
+        REQUIRE_FALSE(moves.empty());
+        for (const Move& m : moves)
+            CHECK_THAT(m.z1, WithinAbs(std::atof(z), 1e-6));
+    }
+    // Layer 41 (Z 8.2): every point on Z = 8.2 + a sin(k(X - 100)) sin(k(Y - 100)).
+    const std::vector<Move> moves = layer_moves(text, "8.200");
+    REQUIRE(moves.size() > 200);
+    double worst = 0.0;
+    for (const Move& m : moves)
+        worst = std::max(worst, std::abs(m.z1 - (8.2 + f->amplitude * std::sin(f->k * (m.x1 - 100.0)) *
+                                                          std::sin(f->k * (m.y1 - 100.0)))));
+    CHECK(worst < 0.0015); // Tisma Slicer: 0.0022 at most
+}
+
+TEST_CASE("curved layers: ridges along X (NP2)", "[curved]") {
+    const Settings s = base(CurvedPattern::Ridges);
+    const std::optional<CurvedField> f = curved_field(s, block());
+    REQUIRE(f);
+    CHECK_THAT(f->amplitude, WithinAbs(0.952, 0.004));
+    const std::string text = gcode_of(slice_model(block(), s), s);
+    const std::vector<Move> moves = layer_moves(text, "8.200");
+    REQUIRE(moves.size() > 200);
+    double worst = 0.0;
+    for (const Move& m : moves)
+        worst = std::max(worst, std::abs(m.z1 - (8.2 + f->amplitude * std::sin(f->k * (m.x1 - 100.0)))));
+    CHECK(worst < 0.0015); // Tisma Slicer: 0.0008
+}
+
+TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved]") {
+    Settings s = base();
+    s.infill_density = 20.0;
+    const std::optional<CurvedField> f = curved_field(s, block());
+    REQUIRE(f);
+    const std::string text = gcode_of(slice_model(block(), s), s);
+    // Layer 11 (Z 2.2, in the ramp): filament per mm over the flat amount
+    // by J, on the infill.
+    const double area = std::numbers::pi * 0.25 * s.filament_diameter * s.filament_diameter;
+    std::vector<double> ratio;
+    double j_lo = 10.0, j_hi = 0.0;
+    for (const Move& m : layer_moves(text, "2.200")) {
+        if (m.type != "Internal infill")
+            continue;
+        const double length = std::hypot(m.x1 - m.x0, m.y1 - m.y0);
+        if (length < 0.2)
+            continue;
+        const double j = f->thickness(0.5 * (m.x0 + m.x1), 0.5 * (m.y0 + m.y1), 0.5 * (m.z0 + m.z1));
+        j_lo = std::min(j_lo, j), j_hi = std::max(j_hi, j);
+        ratio.push_back(m.e / length / (s.wall_width * s.layer_height / area * j));
+    }
+    REQUIRE(ratio.size() > 100);
+    std::sort(ratio.begin(), ratio.end());
+    CHECK_THAT(ratio[ratio.size() / 2], WithinAbs(1.0, 0.01));
+    CHECK(j_lo < 0.95); // Tisma Slicer: J from 0.82 to 1.36
+    CHECK(j_hi > 1.05);
+}
+
+TEST_CASE("curved layers: need relative E, and only what is done (NP4)", "[curved]") {
+    Settings s = base();
+    s.relative_extrusion = false;
+    CHECK_THROWS_WITH(check_settings(s), ContainsSubstring("relative E"));
+    s.relative_extrusion = true;
+    CHECK_NOTHROW(check_settings(s));
+    s.curved_mode = CurvedMode::Surface;
+    CHECK_THROWS_AS(check_settings(s), SettingsError);
+    s.curved_mode = CurvedMode::Wave;
+    s.zaa = true;
+    CHECK_THROWS_AS(check_settings(s), SettingsError);
+    // Settings read and written.
+    const Settings back = parse_settings(R"({"machine": {"relative_extrusion": true},
+        "curved": {"mode": "wave", "pattern": "twisted", "amplitude": 0.4, "fit_head": false, "flat_top": true},
+        "head": {"free_angle_x": 30, "clearance_height": 4, "profile": "2:45;5:30"}})");
+    CHECK(back.curved_pattern == CurvedPattern::Twisted);
+    CHECK(back.curved_amplitude == 0.4);
+    CHECK_FALSE(back.curved_fit_head);
+    CHECK(back.head_free_angle_x == 30.0);
+    CHECK(back.head_profile == std::vector<std::array<double, 2>>{{2.0, 45.0}, {5.0, 30.0}});
+    const Settings again = parse_settings(settings_json(back));
+    CHECK(again.curved_mode == CurvedMode::Wave);
+    CHECK(again.head_profile == back.head_profile);
+    CHECK(again.curved_flat_top);
+}
+
+TEST_CASE("curved layers: a cone, the twisted ridges, and what the head does not allow", "[curved]") {
+    Settings s = base();
+    s.curved_mode = CurvedMode::Conical;
+    s.curved_fit_head = false;
+    s.curved_cone_angle = 3.0; // steeper does not fit J on this block (10 degrees: J up to 7.8)
+    s.curved_ramp_height = 8.0;
+    const std::optional<CurvedField> f = curved_field(s, block());
+    REQUIRE(f);
+    CHECK_THAT(f->cone, WithinAbs(std::tan(3.0 * std::numbers::pi / 180.0), 1e-9));
+    const std::string cone = gcode_of(slice_model(block(), s), s);
+    const std::vector<Move> moves = layer_moves(cone, "11.000");
+    REQUIRE_FALSE(moves.empty());
+    for (const Move& m : moves) { // rises outwards
+        const double r = std::hypot(m.x1 - 100.0, m.y1 - 100.0);
+        CHECK_THAT(m.z1, WithinAbs(11.0 + f->cone * (std::sqrt(r * r + 4.0) - 2.0), 0.0015));
+    }
+    // Too steep for the head without fitting it: an error, not a crash.
+    s.curved_cone_angle = 40.0;
+    CHECK_THROWS_AS(curved_field(s, block()), CurvedError);
+    // Twisted ridges slice and check.
+    Settings t = base(CurvedPattern::Twisted);
+    gcode_of(slice_model(block(), t), t);
+    // A wave too deep for the head's clearance, not fitted: an error.
+    Settings deep = base();
+    deep.curved_fit_head = false;
+    deep.curved_amplitude = 2.0;
+    deep.curved_wavelength = 60.0;
+    deep.curved_ramp_height = 12.0;
+    CHECK_THROWS_WITH(curved_field(deep, block()), ContainsSubstring("clearance"));
+}
+
+TEST_CASE("curved layers: the mesh split to bend, still closed", "[curved]") {
+    std::vector<std::uint32_t> origin;
+    const IndexedMesh m = refined_mesh(block(), 1.0, 0.6, &origin);
+    REQUIRE(origin.size() == m.triangles.size());
+    CHECK(m.triangles.size() > 1000);
+    // Each edge in two triangles, once each way.
+    std::map<std::pair<std::uint32_t, std::uint32_t>, int> edges;
+    for (const auto& t : m.triangles)
+        for (int e = 0; e < 3; ++e)
+            ++edges[{t[std::size_t(e)], t[std::size_t((e + 1) % 3)]}];
+    for (const auto& [e, n] : edges) {
+        CHECK(n == 1);
+        CHECK(edges.count({e.second, e.first}) == 1);
+    }
+    // Children follow their parent's order.
+    CHECK(std::is_sorted(origin.begin(), origin.end()));
+}

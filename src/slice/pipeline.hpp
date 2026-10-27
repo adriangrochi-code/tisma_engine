@@ -6,6 +6,7 @@
 #include "infill/rectilinear.hpp"
 #include "surfaces/surfaces.hpp"
 #include "slice/color_mix.hpp"
+#include "slice/curved.hpp"
 #include "slice/layers.hpp"
 #include "slice/local_layers.hpp"
 #include "slice/variable_layers.hpp"
@@ -14,6 +15,7 @@
 #include "mesh/paint.hpp"
 #include "slice/placement.hpp"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -80,6 +82,10 @@ struct SlicedModel {
     // printed one after another, their layers one after the other's here.
     std::vector<SlicedObject> objects;
     bool sequential = false;
+    // Curved layers (nonplanar.md): the field the layers were sliced
+    // through; the layers above are flat in its space, and the G-code puts
+    // every point back on its curve.
+    std::optional<CurvedField> curved;
 };
 
 // The mesh as the compensation settings ask (docs/CALIBRATION.md): scaled by

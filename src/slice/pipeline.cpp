@@ -472,6 +472,39 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // Curved layers (nonplanar.md): the mesh, split fine enough to bend,
+    // moved to z - D and sliced flat; the G-code bends it back. The objects
+    // keep their triangles, each one's pieces in its place.
+    if (settings.curved_mode != CurvedMode::Disabled) {
+        if (painting && !painting->empty())
+            throw CurvedError("curved layers do not take painted faces yet (curved.mode)");
+        std::optional<CurvedField> field = curved_field(settings, input);
+        const double longest =
+            field->mode == CurvedMode::Wave ? std::clamp(2.0 * std::numbers::pi / field->k / 20.0, 0.25, 1.0) : 1.0;
+        std::vector<std::uint32_t> origin;
+        IndexedMesh bent = refined_mesh(input, longest, field->flat_below, &origin);
+        flatten_mesh(bent, *field);
+        std::vector<MeshObject> pieces;
+        if (given) {
+            // Where each object's first triangle's pieces start, and how many.
+            std::vector<std::size_t> first(input.triangles.size() + 1, origin.size());
+            for (std::size_t t = origin.size(); t-- > 0;)
+                first[origin[t]] = t;
+            for (std::size_t t = input.triangles.size(); t-- > 0;)
+                first[t] = std::min(first[t], first[t + 1]);
+            pieces = *given;
+            for (MeshObject& o : pieces) {
+                const std::size_t a = first[std::min(o.first, input.triangles.size())];
+                const std::size_t b = first[std::min(o.first + o.count, input.triangles.size())];
+                o.first = a, o.count = b - a;
+            }
+        }
+        Settings flat = settings;
+        flat.curved_mode = CurvedMode::Disabled;
+        out = slice_model(bent, flat, gpu, stress, nullptr, given ? &pieces : nullptr, mixes);
+        out.curved = std::move(field);
+        return out;
+    }
     // Each object's extruder: one the machine has (the first with one), or
     // the number of a blend it can print (color_mixing.md, rule 5).
     std::vector<ColorMix> blends;

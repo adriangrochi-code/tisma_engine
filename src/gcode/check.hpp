@@ -1,6 +1,9 @@
 #pragma once
 
+#include "slice/curved.hpp"
+
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,6 +52,10 @@ struct GcodeLimits {
     // a ;NONPLANAR block may leave its layer's Z either way; there each
     // move's ;HEIGHT is its bead's own thickness.
     double wave = 0.0;
+    // Curved layers (nonplanar.md): each extrusion at its layer's flat Z
+    // bent by the field, its bead as thick as the layer by J there.
+    std::optional<CurvedField> curved;
+    double z_offset = 0.0; // machine.z_offset, which the field does not bend
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4) and vase
     // mode's turns: how far below its layer's Z an extrusion in a ;NONPLANAR
     // block may go, as a share of the layer's height (they start down at the

@@ -971,6 +971,41 @@
     X(LayerSequencePreview, "Secuencia de capas", "Layer sequence preview") \
     X(MixingTemplateError, "La plantilla de cambio de herramienta no funciona con la mezcla", "The tool change template does not work with mixing") \
     X(OkButton, "Aceptar", "OK") \
+    X(SubCurved, "Capas curvas", "Curved layers") \
+    X(SubCurvedMore, "Capas curvas: transición y caudal", "Curved layers: transition and flow") \
+    X(SubHead, "Cabezal", "Print head") \
+    X(CurvedModeRow, "Capas curvas", "Curved layers") \
+    X(CurvedWave, "Onda", "Wave") \
+    X(CurvedCone, "Cono", "Cone") \
+    X(CurvedOverhangs, "Voladizos", "Overhangs") \
+    X(CurvedStress, "Tensiones", "Stress") \
+    X(CurvedSurface, "Caras superiores", "Top faces") \
+    X(CurvedAutomatic, "Automático", "Automatic") \
+    X(CurvedPatternRow, "Forma de la onda", "Wave shape") \
+    X(CurvedEgg, "Huevera", "Egg crate") \
+    X(CurvedRidges, "Crestas", "Ridges") \
+    X(CurvedTwisted, "Crestas torcidas", "Twisted ridges") \
+    X(CurvedFitHead, "Ajustar a la cabeza", "Fit to the head") \
+    X(CurvedAmplitude, "Amplitud", "Amplitude") \
+    X(CurvedWavelength, "Largo de onda", "Wavelength") \
+    X(CurvedAngle, "Dirección de las crestas", "Ridge direction") \
+    X(CurvedTwist, "Giro por mm", "Twist per mm") \
+    X(CurvedConeAngle, "Pendiente del cono", "Cone slope") \
+    X(CurvedFlatBelow, "Planas por debajo de", "Flat below") \
+    X(CurvedRampHeight, "Alto de la transición", "Transition height") \
+    X(CurvedFlatTop, "Planas arriba de todo", "Flat at the top") \
+    X(CurvedSegment, "Largo de los tramos", "Piece length") \
+    X(CurvedMaxSlope, "Pendiente máxima", "Steepest slope") \
+    X(CurvedFlowPolicy, "Caudal", "Flow") \
+    X(CurvedFlowKeep, "Mantener", "Keep") \
+    X(CurvedFlowUniform, "Parejo", "Uniform") \
+    X(CurvedFlowOff, "Sin tocar", "Leave as is") \
+    X(CurvedUniformFlow, "Caudal parejo", "Uniform flow") \
+    X(HeadFreeAngleX, "Ángulo libre a lo largo de X", "Free angle along X") \
+    X(HeadFreeAngleY, "Ángulo libre a lo largo de Y", "Free angle along Y") \
+    X(HeadClearanceHeight, "Altura libre", "Clearance height") \
+    X(HeadClearanceRadius, "Radio libre", "Clearance radius") \
+    X(HeadProfile, "Perfil de la cabeza", "Head profile") \
     X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
     X(SubMmuTimes, "Tiempos del cambio", "Change times") \
     X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \

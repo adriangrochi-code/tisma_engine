@@ -454,6 +454,49 @@ De la ficha `docs/spec/features/multimaterial.md`: boquillas distintas y mezcla 
 Con una MMU de una sola boquilla, después de laminar se avisa cuánto filamento va a la purga, en la torre y dentro de los
 objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM5).
 
+### `curved`
+
+De la ficha `docs/spec/features/nonplanar.md`: capas curvas en una impresora de 3 ejes. Cada capa es la superficie
+`z = s + D(x, y, z)`: la malla se refina, se mueve a `z − D`, se lamina con capas planas y cada punto del G-code vuelve
+a su curva, con el material por el espesor local `J = 1 / (1 − ∂D/∂z)`. `x` e `y` se miden desde el centro de la caja
+de la pieza. Va en el perfil de impresión. Necesita E relativa (regla 7) y no va con el modo vaso, el Z anti-aliasing,
+el relleno ondulado, la costura en rampa, los arcos G2/G3, la impresión secuencial, las alturas por zona, la torre de
+purga ni las caras pintadas.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `mode` | texto | `"disabled"` | `disabled`, `wave`, `conical`, `overhangs`, `stress`, `surface`, `automatic` | `wave`: una onda; `conical`: un cono `tan(cone_angle) · (√(x² + y² + 4) − 2)`, hoy solo sin `fit_head`. Los modos según la pieza (`nonplanar_modes.md`) todavía no están: dan error |
+| `pattern` | texto | `"egg"` | `egg`, `ridges`, `twisted` | La onda: `egg` `a · sin(kx) · sin(ky)`; `ridges` `a · sin(k(x cos θ + y sin θ))`; `twisted`, crestas cuya dirección gira `twist` grados por mm de altura (regla 1) |
+| `amplitude` | número | 0,6 | 0 a 50 | Amplitud `a` de la onda, en mm, sin `fit_head` |
+| `wavelength` | número | 16 | 1 a 1000 | Largo `λ` de la onda, en mm, sin `fit_head` (`k = 2π / λ`) |
+| `angle` | número | 0 | −360 a 360 | Dirección θ de las crestas, en grados; con 0 la altura cambia a lo largo de X |
+| `twist` | número | 3 | −360 a 360 | `twisted`: giro de la dirección, en grados por mm de altura |
+| `cone_angle` | número | 15 | −60 a 60 | `conical` sin `fit_head`: pendiente del cono, en grados; positivo sube hacia afuera |
+| `fit_head` | booleano | `true` | | Capas tan curvas como deja la cabeza (regla 3): `λ = π · head.clearance_height / tan` del menor ángulo libre (de 4 a 100 mm), la amplitud con esa pendiente y como mucho la mitad de `head.clearance_height`, y achicada por bisección hasta que `J` quede entre 0,6 y 1,4 en toda la pieza (NP1: 0,954 mm). Sin esto, una capa más empinada que lo que deja la cabeza, que sube junto a la boquilla más que `head.clearance_height` o con `J` fuera de esos límites es un error |
+| `flat_below` | número | 0,6 | 0 a 1000 | Por debajo de esta altura de la pieza, en mm, las capas son planas (regla 8) |
+| `ramp_height` | número | 5 | 0,1 a 1000 | Alto de la transición de plano a curvo, en mm: `rampa = S((z − flat_below) / ramp_height)`, con `S(t) = t²(3 − 2t)` |
+| `flat_top` | booleano | `false` | | Vuelve a capas planas en los últimos `ramp_height` mm de la pieza |
+| `segment_length` | número | 0,5 | 0,05 a 50 | Cada cuánto se parte un movimiento sobre una capa curva; los tramos que quedan en línea (dentro de `gcode.resolution`) y con casi el mismo `J` se vuelven a unir |
+| `max_slope` | número | 20 | 1 a 80 | Pendiente máxima, en grados, si la cabeza no se midió |
+| `flow_policy` | texto | `"preserve"` | `preserve`, `uniform`, `off` | `preserve`: donde la capa es más gruesa (`J` > 1) la velocidad baja para mantener el caudal; donde es más fina no sube. `uniform` hace hoy lo mismo que `preserve`. `off`: no toca las velocidades |
+| `uniform_flow` | número | 0 | 0 a 1000 | Caudal de `uniform`, en mm³/s (se lee; todavía no se usa) |
+
+Cada tramo extruye su material plano por `J` en su punto medio (regla 4, NP3) y va como mucho a la velocidad que deja
+`machine.max_feed_z` en Z (regla 5). El verificador del G-code comprueba que cada punto extruido esté sobre la curva de
+su capa y que su material sea el plano por `J`.
+
+### `head`
+
+De la ficha `docs/spec/features/nonplanar.md` (reglas 3 y 6): la cabeza alrededor de la boquilla, para las capas
+curvas. Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `free_angle_x`, `free_angle_y` | número | 0 | 0, o 1 a 89 | La pendiente más empinada, en grados, que la cabeza deja subir a lo largo de X y de Y; 0: no medido (`curved.max_slope`). Una capa con pendiente `(gx, gy)` entra si `(gx / tan αx)² + (gy / tan αy)² ≤ 1` |
+| `clearance_height` | número | 3 | más de 0 a 1000 | Distancia vertical, en mm, de la punta de la boquilla a lo más bajo de la cabeza a su alrededor |
+| `clearance_radius` | número | 15 | más de 0 a 1000 | Distancia horizontal, en mm, de la boquilla a lo más lejano de esas partes bajas |
+| `profile` | lista o texto | `[]` | alturas más de 0, ángulos de 1 a 89 | El ángulo libre medido a varias alturas: `[[2, 45], [5, 30]]` o `"2:45;5:30"`. Lo ya impreso no puede subir más que cada altura dentro de la distancia que alcanza su ángulo |
+
 ### `painting`
 
 | Clave | Tipo | Por defecto | Rango | Significado |

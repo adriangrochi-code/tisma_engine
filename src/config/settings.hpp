@@ -61,6 +61,10 @@ enum class TopOneWall { None, Top, Topmost };
 // Which surfaces are ironed (ironing.md): every top surface, only the highest
 // of each part, or every solid layer.
 enum class IroningSurfaces { Top, Topmost, Solid };
+// Curved layers (docs/spec/features/nonplanar.md, nonplanar_modes.md).
+enum class CurvedMode { Disabled, Wave, Conical, Overhangs, Stress, Surface, Automatic };
+enum class CurvedPattern { Egg, Ridges, Twisted };
+enum class CurvedFlow { Preserve, Uniform, Off };
 
 // The most extruders a machine has: as many as the colour channel of the
 // painting tells apart (kPaintMaxMark, docs/PAINTING.md).
@@ -321,6 +325,31 @@ struct Settings {
     // unset: not with a single-extruder MMU, which purges at each change).
     bool fine_walls_coarse_infill = false;
     std::optional<bool> color_mixing;
+    // Curved layers (docs/spec/features/nonplanar.md): each layer the
+    // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
+    // curved_flat_below over curved_ramp_height (and out at the top with
+    // curved_flat_top); with curved_fit_head as curved as the head lets it
+    // be. Moves split every curved_segment_length mm to follow the curve.
+    CurvedMode curved_mode = CurvedMode::Disabled;
+    CurvedPattern curved_pattern = CurvedPattern::Egg;
+    double curved_amplitude = 0.6, curved_wavelength = 16.0; // mm
+    double curved_angle = 0.0, curved_twist = 3.0;           // degrees, degrees per mm
+    double curved_cone_angle = 15.0;                          // degrees
+    bool curved_fit_head = true;
+    double curved_flat_below = 0.6, curved_ramp_height = 5.0; // mm
+    bool curved_flat_top = false;
+    double curved_segment_length = 0.5; // mm
+    double curved_max_slope = 20.0;     // degrees, without a measured head
+    CurvedFlow curved_flow = CurvedFlow::Preserve;
+    double curved_uniform_flow = 0.0; // mm3/s; 0: 80 % of machine.max_flow
+    // The print head around the nozzle (nonplanar.md, rule 6): the steepest
+    // slope it lets the nozzle climb along X and along Y (degrees; 0: not
+    // measured), how far below its lowest parts the tip is and how far out
+    // those reach, and the free angle measured at several heights (mm,
+    // degrees).
+    double head_free_angle_x = 0.0, head_free_angle_y = 0.0;
+    double head_clearance_height = 3.0, head_clearance_radius = 15.0;
+    std::vector<std::array<double, 2>> head_profile;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -637,6 +666,8 @@ struct KindExtruders {
     int walls = 0, infill = 0, solid_infill = 0, support = 0, support_interface = 0, wipe_tower = 0;
 };
 KindExtruders kind_extruders(const Settings& settings);
+// curved.mode's name in the settings.
+const char* curved_mode_name(CurvedMode mode);
 // Whether mixed colours are offered (multimaterial.md, rules 9 and 11):
 // multi.color_mixing, else not with a single-extruder MMU.
 bool color_mixing_offered(const Settings& settings);

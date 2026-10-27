@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Capas curvas** (ficha `nonplanar.md`, en Impresión › Otros › Capas curvas e Impresora › Máquina › Cabezal): capas
+  en onda (huevera, crestas, crestas torcidas) o en cono para una impresora común de 3 ejes, tan curvas como deja la
+  cabeza, con el material según el espesor de cada punto; necesitan E relativa.
 - **Mezcla de colores** (ficha `color_mixing.md`): extrusores virtuales que alternan filamentos capa por capa para
   dar colores nuevos, con su diálogo (lista, mezclas de dos colores, editor con deslizador y secuencia de capas) y
   degradés por altura; cada pieza elige su extrusor, real o virtual, con la herramienta «Extrusor y color del
@@ -145,7 +148,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Corregido
 
 - Con varios extrusores, el relleno combinado (`infill.combine_layers`) se perdía.
-- La compresión de la MMU podía ir más rápido que la velocidad máxima de la impresora.
+- La compresión de la MMU podía ir más rápido que la extrusión más rápida configurada.
 - El laminado ya no se cuelga cuando una región de paredes trae anillos sin área (pasaba con «un solo perímetro arriba»
   en una esfera), y el reparto de los cordones de ancho variable es lineal en vez de cuadrático o peor en esos casos.
 - Las pruebas de los arcos en voladizos (A1 a A4) volvieron: el commit de los arcos `G2`/`G3` había escrito las suyas

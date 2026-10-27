@@ -147,7 +147,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         return key == "enabled" ? ProfileKind::Print : ProfileKind::Printer;
     // The stability review's measurements: the printer's push and its bed's
     // hold; the accelerations by kind, like the speeds.
-    if (group == "review" || group == "acceleration")
+    if (group == "review" || group == "acceleration" || group == "head")
         return ProfileKind::Printer;
     if (group == "cooling" || group == "extrusion" || group == "compensation")
         return ProfileKind::Filament;
@@ -155,7 +155,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
         group == "vase" || group == "placement" || group == "arcs" || group == "ironing" || group == "output" ||
         group == "extruders" || group == "wipe_tower" || group == "interlocking" || group == "painting" ||
-        group == "multi")
+        group == "multi" || group == "curved")
         return ProfileKind::Print;
     return std::nullopt;
 }

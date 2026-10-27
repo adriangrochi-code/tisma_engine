@@ -322,9 +322,8 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
             if (s.single_extruder_mmu)
                 for (const double flow : s.ramming)
                     if (flow > 0.0) {
-                        // No faster than the machine prints (speed.max).
-                        const double feed = flow / (ram_bead * h);
-                        feeds.push_back(s.max_speed > 0.0 ? std::min(feed, s.max_speed) : feed);
+                        // No faster than any extrusion is asked to go (within speed.max).
+                        feeds.push_back(std::min(flow / (ram_bead * h), fastest_extrusion(s)));
                         lengths.push_back(0.25 * feeds.back());
                         total += lengths.back();
                     }

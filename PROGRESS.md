@@ -5909,3 +5909,45 @@ botón de degradés no está en la interfaz (la ficha dice que Tisma Slicer tamp
 
 **Sigue:** F7 no planar; después resina (`resin.md`, `resin_supports.md`).
 
+## 2026-10-27 — F7, la base: capas curvas
+
+**Hecho** (ficha `nonplanar.md`, reglas 1 a 8):
+- Ajustes `curved.*` (Impresión › Otros › Capas curvas) y `head.*` (Impresora › Máquina › Cabezal), en
+  `docs/CONFIG.md`.
+- `src/slice/curved.*`: el campo `D = g · rampa` con la huevera, las crestas, las crestas torcidas y el cono; la rampa
+  `S(t)` desde `flat_below` y, con `flat_top`, de vuelta a plano arriba; el ajuste a la cabeza (`λ = π · altura libre /
+  tan`, la amplitud con esa pendiente y como mucho media altura libre, achicada por bisección hasta que `J` quede en
+  [0,6; 1,4] y no haya choque); sin ajuste, una capa demasiado empinada, que choca o con `J` fuera de límites es un
+  error claro.
+- El laminado (`slice_model`): la malla se refina (cada arista más larga que λ/20, entre 0,25 y 1 mm, partida en
+  mitades compartidas, así sigue cerrada; las de la zona plana no) y se mueve a `z − D`; se lamina plano; los objetos
+  conservan sus triángulos.
+- El G-code (`curve_gcode`, al final de `write_gcode`): cada movimiento sobre una capa curva se parte cada
+  `segment_length`, cada punto vuelve a su Z real (`z − D = z'`, por iteración), el material de cada tramo es el plano
+  por `J` en su medio, la velocidad baja donde `J` > 1 (no sube donde es menor, para no pasar los límites) y Z no pasa
+  `machine.max_feed_z`; los tramos en línea y con casi el mismo `J` se vuelven a unir. Funciona con E y con el eje A.
+- El verificador comprueba que cada extrusión esté sobre la curva de su capa y que su material sea el plano por `J`.
+- Requisitos y límites: E relativa (NP4); no va con el modo vaso, el ZAA, el relleno ondulado, la costura en rampa,
+  los arcos G2/G3, la impresión secuencial, las alturas por zona, la torre de purga ni las caras pintadas (error).
+
+**Medido** (bloque de 40 × 40 × 12 mm en X 100, Y 100; entre paréntesis Tisma Slicer): NP1 `λ` 25,894 mm, amplitud
+0,9545 mm (0,955; 0,952 calculado), 65 capas (65; plano 60), capas 1 a 3 planas, capa 41 (Z 8,2) con error mediano
+0,00024 mm y máximo 0,0006 (0,0009 y 0,0022); NP2 crestas, error máximo menor a 0,0015 (0,0008); NP3 en la capa 11
+(Z 2,2, dentro de la rampa) la relación material / (plano · `J`) tiene mediana 0,9999 y el 80 % entre 0,9985 y 1,0014
+(1,000; 0,994 a 1,006), con `J` de 0,81 a 1,37 (0,82 a 1,36); NP4 con E absoluta, error. El G-code del bloque pesa
+3,96 MB (103 mil líneas; plano 168 kB) y la interfaz lo lamina en 3,2 s.
+
+**Corregido** (el fuzzer): la compresión de la MMU ahora no pasa la extrusión más rápida configurada
+(`fastest_extrusion`, el mismo límite que el verificador).
+
+Pruebas nuevas: `tests/test_curved.cpp` (6 casos: NP1 a NP4, el cono y las crestas torcidas, la malla refinada
+cerrada); fuzzer con capas curvas: 1200 corridas (semillas 52 a 55), 0 fallas. Captura de la vista previa con la
+huevera bajo Xvfb.
+
+**No hecho:** suavizar las capas donde la cabeza chocaría (regla 6: hoy, sin ajuste, es un error, y con ajuste la
+amplitud se achica para toda la pieza); el tope de aceleración de Z (regla 5, solo la velocidad); el caudal `uniform`
+(hace lo mismo que `preserve`); el cono según los voladizos y los demás modos (`nonplanar_modes.md`); las caras
+pintadas con capas curvas. La estimación de tiempo y el filamento del pie del G-code son los del laminado plano.
+
+**Sigue:** F7, `surface` (las caras de arriba inclinadas como una sola capa) con `nonplanar_modes.md`; después resina.
+

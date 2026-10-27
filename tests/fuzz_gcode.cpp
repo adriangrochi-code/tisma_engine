@@ -8,6 +8,7 @@
 #include "config/settings.hpp"
 #include "gcode/binary.hpp"
 #include "gcode/check.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/writer.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -447,6 +448,26 @@ int main(int argc, char** argv) {
                     s.purge_volumes = {{0, uni(0, 300), uni(0, 300)}, {uni(0, 300), 0, uni(0, 300)}, {uni(0, 300), uni(0, 300), 0}};
             }
         }
+        // Curved layers (nonplanar.md): a wave fitted to the head, or a
+        // gentle cone, without what does not go with them.
+        if (pick(12) == 0) {
+            s.curved_mode = pick(3) == 0 ? CurvedMode::Conical : CurvedMode::Wave;
+            s.curved_pattern = std::array{CurvedPattern::Egg, CurvedPattern::Ridges, CurvedPattern::Twisted}[std::size_t(pick(3))];
+            s.curved_angle = uni(0, 90);
+            s.curved_fit_head = s.curved_mode == CurvedMode::Wave;
+            s.curved_cone_angle = uni(-1, 1);
+            s.curved_ramp_height = uni(8, 12);
+            s.curved_flat_top = pick(3) == 0;
+            s.curved_flat_below = uni(0.2, 2);
+            s.head_free_angle_x = pick(2) == 0 ? 0.0 : uni(10, 40);
+            s.relative_extrusion = true;
+            s.vase = s.zaa = s.infill_nonplanar = s.gcode_arcs = s.sequential = false;
+            s.scarf = ScarfMode::Nowhere;
+            s.detail_height = 0.0;
+            s.wipe_tower = false;
+            if (!relative_e(s))
+                s.flavor = GcodeFlavor::Marlin;
+        }
         // With TISMA_FUZZ_RUN set to a run's number, that run's model and
         // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
         if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
@@ -499,6 +520,8 @@ int main(int argc, char** argv) {
                 std::printf("\n");
                 dump(run, mesh, s, out.str());
             }
+        } catch (const CurvedError&) {
+            ++rejected; // curved layers the part cannot take, said so
         } catch (const std::exception& e) {
             ++failures;
             std::printf("run %d (%s): exception %s\n", run, name, e.what());

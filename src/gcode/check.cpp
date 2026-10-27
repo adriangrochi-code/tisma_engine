@@ -422,7 +422,16 @@ private:
             if (lowered && layer_z_ && known_[2] && std::max(position_[2], to[2]) > *layer_z_ + kPositionSlack)
                 problem("extrudes the wipe tower at Z" + text(std::max(position_[2], to[2])) + ", above the layer's Z" +
                         text(*layer_z_));
-            if (at_layer) {
+            if (at_layer && limits_.curved) {
+                // On the layer's curve (nonplanar.md): its flat Z bent at
+                // each end, both rounded.
+                const double flat = *layer_z_ - limits_.z_offset;
+                for (const auto& [x, y, z] : {std::array{position_[0], position_[1], position_[2]}, std::array{to[0], to[1], to[2]}})
+                    if (std::abs(z - (limits_.curved->real_z(x, y, flat) + limits_.z_offset)) > 2.0 * kPositionSlack) {
+                        problem("extrudes at Z" + text(z) + ", not on the layer's curve at Z" + text(*layer_z_));
+                        break;
+                    }
+            } else if (at_layer) {
                 const double h = height_.value_or(0.0);
                 // Off the layer's Z (Z anti-aliasing) the bound comes from the
                 // layer's true top, and both it and the move's Z are rounded.
@@ -443,8 +452,11 @@ private:
             } else if (known_[0] && known_[1]) {
                 // Off the layer's Z (Z anti-aliasing), the bead is what is left down to its bottom.
                 // In a nonplanar block, ;HEIGHT is the bead's own thickness.
-                const double thickness =
-                    *height_ + (at_layer && !nonplanar_ ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
+                double thickness =
+                    *height_ + (at_layer && !nonplanar_ && !limits_.curved ? ((position_[2] - *layer_z_) + (to[2] - *layer_z_)) / 2.0 : 0.0);
+                if (limits_.curved) // by the local thickness J (nonplanar.md, rule 4)
+                    thickness *= limits_.curved->thickness(0.5 * (position_[0] + to[0]), 0.5 * (position_[1] + to[1]),
+                                                           0.5 * (position_[2] + to[2]) - limits_.z_offset);
                 const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 // ;HEIGHT, written to 3 decimals, may hide half the last one:
@@ -610,6 +622,11 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     // machine.z_offset moves every Z (gcode_extras.md, rule 5), below the bed too.
     limits.max_z += std::max(0.0, s.z_offset);
     limits.min_z = std::min(0.0, s.z_offset);
+    limits.z_offset = s.z_offset;
+    if (model.curved) { // the layers' curves go up and down by the field
+        limits.curved = model.curved;
+        limits.max_z += model.curved->most();
+    }
     if (s.zaa) {
         limits.zaa_below = 1.0 - s.zaa_min_thickness / 100.0;
         limits.zaa_above = s.zaa_raise ? 0.5 : 0.0;

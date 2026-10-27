@@ -7,12 +7,14 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 namespace tisma {
@@ -227,6 +229,19 @@ std::array<double, 2> extruder_offset_of(const Settings& settings, std::size_t e
     return settings.extruder_offset[extruder];
 }
 
+const char* curved_mode_name(CurvedMode mode) {
+    switch (mode) {
+    case CurvedMode::Wave: return "wave";
+    case CurvedMode::Conical: return "conical";
+    case CurvedMode::Overhangs: return "overhangs";
+    case CurvedMode::Stress: return "stress";
+    case CurvedMode::Surface: return "surface";
+    case CurvedMode::Automatic: return "automatic";
+    case CurvedMode::Disabled: break;
+    }
+    return "disabled";
+}
+
 double nozzle_of(const Settings& settings, int extruder) {
     if (settings.single_extruder_mmu || extruder < 1)
         return settings.nozzle_diameter;
@@ -389,7 +404,7 @@ Settings parse_checked(std::string_view text) {
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
             group == "fuzzy" || group == "vase" || group == "placement" || group == "arcs" || group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
-            group == "interlocking" || group == "painting" || group == "multi" ||
+            group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
@@ -768,6 +783,93 @@ Settings parse_checked(std::string_view text) {
             s.color_mixing = v.get<bool>();
         else
             s.fine_walls_coarse_infill = v.get<bool>();
+    });
+    // Curved layers (nonplanar.md) and the print head around the nozzle.
+    read_group(root, "curved",
+               {"mode", "pattern", "amplitude", "wavelength", "angle", "twist", "cone_angle", "fit_head", "flat_below",
+                "ramp_height", "flat_top", "segment_length", "max_slope", "flow_policy", "uniform_flow"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "mode") {
+            s.curved_mode = choice<CurvedMode>(g, n, k,
+                                               {{"disabled", CurvedMode::Disabled}, {"wave", CurvedMode::Wave},
+                                                {"conical", CurvedMode::Conical}, {"overhangs", CurvedMode::Overhangs},
+                                                {"stress", CurvedMode::Stress}, {"surface", CurvedMode::Surface},
+                                                {"automatic", CurvedMode::Automatic}});
+        } else if (n == "pattern") {
+            s.curved_pattern = choice<CurvedPattern>(
+                g, n, k, {{"egg", CurvedPattern::Egg}, {"ridges", CurvedPattern::Ridges}, {"twisted", CurvedPattern::Twisted}});
+        } else if (n == "flow_policy") {
+            s.curved_flow = choice<CurvedFlow>(
+                g, n, k, {{"preserve", CurvedFlow::Preserve}, {"uniform", CurvedFlow::Uniform}, {"off", CurvedFlow::Off}});
+        } else if (n == "fit_head" || n == "flat_top") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            (n == "fit_head" ? s.curved_fit_head : s.curved_flat_top) = v.get<bool>();
+        } else {
+            const double d = number(g, n, k);
+            const std::map<std::string, std::tuple<double*, double, double>> targets = {
+                {"amplitude", {&s.curved_amplitude, 0.0, 50.0}},       {"wavelength", {&s.curved_wavelength, 1.0, 1000.0}},
+                {"angle", {&s.curved_angle, -360.0, 360.0}},           {"twist", {&s.curved_twist, -360.0, 360.0}},
+                {"cone_angle", {&s.curved_cone_angle, -60.0, 60.0}},   {"flat_below", {&s.curved_flat_below, 0.0, 1000.0}},
+                {"ramp_height", {&s.curved_ramp_height, 0.1, 1000.0}}, {"segment_length", {&s.curved_segment_length, 0.05, 50.0}},
+                {"max_slope", {&s.curved_max_slope, 1.0, 80.0}},       {"uniform_flow", {&s.curved_uniform_flow, 0.0, 1000.0}}};
+            const auto& [target, lo, hi] = targets.at(n);
+            if (!(d >= lo && d <= hi)) {
+                char range[96];
+                std::snprintf(range, sizeof range, "must be from %g to %g", lo, hi);
+                fail(k, range);
+            }
+            *target = d;
+        }
+    });
+    read_group(root, "head", {"free_angle_x", "free_angle_y", "clearance_height", "clearance_radius", "profile"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "profile") {
+            // [[height, angle], ...], or the text "height:angle;height:angle".
+            const char* what = "must be [[height mm, free angle degrees], ...] or \"2:45;5:30\", heights above 0, angles "
+                               "from 1 to 89";
+            std::vector<std::array<double, 2>> steps;
+            if (v.is_string()) {
+                std::stringstream pairs(v.get<std::string>());
+                for (std::string pair; std::getline(pairs, pair, ';');) {
+                    if (pair.find_first_not_of(" \t") == std::string::npos)
+                        continue;
+                    const std::size_t colon = pair.find(':');
+                    if (colon == std::string::npos)
+                        fail(k, what);
+                    char* end = nullptr;
+                    const double h = std::strtod(pair.c_str(), &end);
+                    const double a = std::strtod(pair.c_str() + colon + 1, nullptr);
+                    steps.push_back({h, a});
+                }
+            } else if (v.is_array()) {
+                for (const json& p : v) {
+                    if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                        fail(k, what);
+                    steps.push_back({p[0].get<double>(), p[1].get<double>()});
+                }
+            } else {
+                fail(k, what);
+            }
+            for (const auto& [h, a] : steps)
+                if (!(h > 0.0 && h <= 1000.0 && a >= 1.0 && a <= 89.0))
+                    fail(k, what);
+            std::sort(steps.begin(), steps.end());
+            s.head_profile = std::move(steps);
+            return;
+        }
+        const double d = number(g, n, k);
+        if (n == "free_angle_x" || n == "free_angle_y") {
+            if (!(d == 0.0 || (d >= 1.0 && d <= 89.0)))
+                fail(k, "must be 0 (not measured) or from 1 to 89 degrees");
+            (n == "free_angle_x" ? s.head_free_angle_x : s.head_free_angle_y) = d;
+        } else {
+            if (!(d > 0.0 && d <= 1000.0))
+                fail(k, "must be above 0 and at most 1000 mm");
+            (n == "clearance_height" ? s.head_clearance_height : s.head_clearance_radius) = d;
+        }
     });
     read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (!g.at(n).is_boolean())
@@ -2009,6 +2111,30 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"painting.max_region_width", num(s.paint_max_region_width)},
         {"painting.interlocking_depth", num(s.paint_interlocking_depth)},
         {"multi.fine_walls_coarse_infill", flag(s.fine_walls_coarse_infill)},
+        {"curved.mode", curved_mode_name(s.curved_mode)},
+        {"curved.pattern", s.curved_pattern == CurvedPattern::Egg      ? "egg"
+                           : s.curved_pattern == CurvedPattern::Ridges ? "ridges"
+                                                                       : "twisted"},
+        {"curved.amplitude", num(s.curved_amplitude)},
+        {"curved.wavelength", num(s.curved_wavelength)},
+        {"curved.angle", num(s.curved_angle)},
+        {"curved.twist", num(s.curved_twist)},
+        {"curved.cone_angle", num(s.curved_cone_angle)},
+        {"curved.fit_head", flag(s.curved_fit_head)},
+        {"curved.flat_below", num(s.curved_flat_below)},
+        {"curved.ramp_height", num(s.curved_ramp_height)},
+        {"curved.flat_top", flag(s.curved_flat_top)},
+        {"curved.segment_length", num(s.curved_segment_length)},
+        {"curved.max_slope", num(s.curved_max_slope)},
+        {"curved.flow_policy", s.curved_flow == CurvedFlow::Preserve  ? "preserve"
+                               : s.curved_flow == CurvedFlow::Uniform ? "uniform"
+                                                                      : "off"},
+        {"curved.uniform_flow", num(s.curved_uniform_flow)},
+        {"head.free_angle_x", num(s.head_free_angle_x)},
+        {"head.free_angle_y", num(s.head_free_angle_y)},
+        {"head.clearance_height", num(s.head_clearance_height)},
+        {"head.clearance_radius", num(s.head_clearance_radius)},
+        {"head.profile", json(s.head_profile).dump()},
         {"multi.color_mixing", s.color_mixing ? flag(*s.color_mixing) : "auto"},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
@@ -2326,6 +2452,28 @@ std::string settings_json(const Settings& s) {
           {"depth", s.interlock_depth},
           {"boundary_avoidance", s.interlock_avoidance}}},
         {"painting", {{"max_region_width", s.paint_max_region_width}, {"interlocking_depth", s.paint_interlocking_depth}}},
+        {"curved",
+         {{"mode", curved_mode_name(s.curved_mode)},
+          {"pattern", s.curved_pattern == CurvedPattern::Egg ? "egg" : s.curved_pattern == CurvedPattern::Ridges ? "ridges" : "twisted"},
+          {"amplitude", s.curved_amplitude},
+          {"wavelength", s.curved_wavelength},
+          {"angle", s.curved_angle},
+          {"twist", s.curved_twist},
+          {"cone_angle", s.curved_cone_angle},
+          {"fit_head", s.curved_fit_head},
+          {"flat_below", s.curved_flat_below},
+          {"ramp_height", s.curved_ramp_height},
+          {"flat_top", s.curved_flat_top},
+          {"segment_length", s.curved_segment_length},
+          {"max_slope", s.curved_max_slope},
+          {"flow_policy", s.curved_flow == CurvedFlow::Preserve ? "preserve" : s.curved_flow == CurvedFlow::Uniform ? "uniform" : "off"},
+          {"uniform_flow", s.curved_uniform_flow}}},
+        {"head",
+         {{"free_angle_x", s.head_free_angle_x},
+          {"free_angle_y", s.head_free_angle_y},
+          {"clearance_height", s.head_clearance_height},
+          {"clearance_radius", s.head_clearance_radius},
+          {"profile", s.head_profile}}},
         {"multi",
          {{"fine_walls_coarse_infill", s.fine_walls_coarse_infill},
           {"color_mixing", s.color_mixing ? ordered_json(*s.color_mixing) : ordered_json(nullptr)}}},
@@ -2655,6 +2803,30 @@ void check_settings(const Settings& s) {
     if (s.wipe_tower && s.extruders > 1 && !relative_e(s))
         throw SettingsError("wipe_tower.enabled: the wipe tower needs relative E (machine.relative_extrusion, on a "
                             "flavor that has M83)");
+    // Curved layers (nonplanar.md): relative E (rule 7, NP4), and only what
+    // the engine curves so far.
+    if (s.curved_mode != CurvedMode::Disabled) {
+        if (!relative_e(s))
+            throw SettingsError("curved.mode: curved layers need relative E (machine.relative_extrusion, on a flavor that "
+                                "has M83)");
+        if (s.curved_mode != CurvedMode::Wave && s.curved_mode != CurvedMode::Conical)
+            throw SettingsError(std::string("curved.mode: ") + curved_mode_name(s.curved_mode) +
+                                " (layers from the part, nonplanar_modes.md) is not done yet: use wave, or conical "
+                                "without curved.fit_head");
+        if (s.curved_mode == CurvedMode::Conical && s.curved_fit_head)
+            throw SettingsError("curved.fit_head: the cone from the part's overhangs (nonplanar_modes.md) is not done "
+                                "yet; a cone of curved.cone_angle needs curved.fit_head false");
+        for (const auto& [on, key] : {std::pair{s.vase, "vase.enabled"},
+                                      {s.zaa, "zaa.enabled"},
+                                      {s.infill_nonplanar, "infill.nonplanar"},
+                                      {s.scarf != ScarfMode::Nowhere, "walls.scarf"},
+                                      {s.gcode_arcs, "gcode.arcs"},
+                                      {s.sequential, "sequential.enabled"},
+                                      {s.detail_height > 0.0, "layers.detail_height"},
+                                      {s.wipe_tower && s.extruders > 1, "wipe_tower.enabled"}})
+            if (on)
+                throw SettingsError(std::string(key) + ": not with curved layers (curved.mode)");
+    }
     // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
     for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
                                  {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},

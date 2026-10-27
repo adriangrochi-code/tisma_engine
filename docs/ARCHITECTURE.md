@@ -132,6 +132,9 @@ volúmenes que un proyecto marca como modificadores, fuera).
   `PartFrame` que les dice qué hay en las otras partes; cada camino lleva su extrusor (`Toolpath::tool`).
 - `wipe_tower.cpp` decide el orden de los extrusores de cada capa (`plan_tools`, que usan el escritor, el
   verificador y `printable.cpp`) y arma la torre de purga: un bloque de líneas por cambio, el contorno y el relleno.
+- `curved.cpp` tiene las capas curvas (`docs/spec/features/nonplanar.md`): el campo `D` y su ajuste a la cabeza
+  (`curved_field`), la malla refinada (`refined_mesh`) y movida a `z − D` (`flatten_mesh`), que `slice_model` lamina
+  plana, y `curve_gcode`, que el escritor usa al final para devolver cada punto del G-code a su curva.
 - `color_mix.cpp` tiene las mezclas de colores (`docs/spec/features/color_mixing.md`): el ciclo de capas de cada
   mezcla (`mix_cycle`, `mix_order`), los degradés por bandas (`mix_layers`) y su JSON. Un objeto con el número de una
   mezcla se lamina como un extrusor más; después `apply_mixes` (en `pipeline.cpp`) le da a cada capa el filamento que

@@ -792,7 +792,16 @@ const char* row_key(T label) {
         {T::InterlockOrientation, "interlocking.orientation"}, {T::InterlockDepth, "interlocking.depth"},
         {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
         {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"},
-        {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"}};
+        {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"},
+        {T::CurvedModeRow, "curved.mode"}, {T::CurvedPatternRow, "curved.pattern"}, {T::CurvedFitHead, "curved.fit_head"},
+        {T::CurvedAmplitude, "curved.amplitude"}, {T::CurvedWavelength, "curved.wavelength"},
+        {T::CurvedAngle, "curved.angle"}, {T::CurvedTwist, "curved.twist"}, {T::CurvedConeAngle, "curved.cone_angle"},
+        {T::CurvedFlatBelow, "curved.flat_below"}, {T::CurvedRampHeight, "curved.ramp_height"},
+        {T::CurvedFlatTop, "curved.flat_top"}, {T::CurvedSegment, "curved.segment_length"},
+        {T::CurvedMaxSlope, "curved.max_slope"}, {T::CurvedFlowPolicy, "curved.flow_policy"},
+        {T::CurvedUniformFlow, "curved.uniform_flow"}, {T::HeadFreeAngleX, "head.free_angle_x"},
+        {T::HeadFreeAngleY, "head.free_angle_y"}, {T::HeadClearanceHeight, "head.clearance_height"},
+        {T::HeadClearanceRadius, "head.clearance_radius"}, {T::HeadProfile, "head.profile"}};
     const auto it = keys.find(label);
     return it == keys.end() ? nullptr : it->second;
 }
@@ -3229,6 +3238,41 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 ImGui::EndPopup();
             }
         }
+    } else if (id == "curved") {
+        // Curved layers (nonplanar.md).
+        if (shown("curved.mode"))
+            changed |= row(T::CurvedModeRow, s.curved_mode,
+                           {{CurvedMode::Disabled, tr(T::SumOff)},
+                            {CurvedMode::Wave, tr(T::CurvedWave)},
+                            {CurvedMode::Conical, tr(T::CurvedCone)},
+                            {CurvedMode::Overhangs, tr(T::CurvedOverhangs)},
+                            {CurvedMode::Stress, tr(T::CurvedStress)},
+                            {CurvedMode::Surface, tr(T::CurvedSurface)},
+                            {CurvedMode::Automatic, tr(T::CurvedAutomatic)}});
+        if (shown("curved.pattern"))
+            changed |= row(T::CurvedPatternRow, s.curved_pattern,
+                           {{CurvedPattern::Egg, tr(T::CurvedEgg)},
+                            {CurvedPattern::Ridges, tr(T::CurvedRidges)},
+                            {CurvedPattern::Twisted, tr(T::CurvedTwisted)}});
+        flag(T::CurvedFitHead, "curved.fit_head", s.curved_fit_head);
+        mm(T::CurvedAmplitude, "curved.amplitude", s.curved_amplitude, 0.0, 50.0, "%.2f mm", 0.01f);
+        mm(T::CurvedWavelength, "curved.wavelength", s.curved_wavelength, 1.0, 1000.0, "%.1f mm", 0.1f);
+        mm(T::CurvedAngle, "curved.angle", s.curved_angle, -360.0, 360.0, "%.0f°", 0.5f);
+        mm(T::CurvedTwist, "curved.twist", s.curved_twist, -360.0, 360.0, "%.1f°/mm", 0.1f);
+        mm(T::CurvedConeAngle, "curved.cone_angle", s.curved_cone_angle, -60.0, 60.0, "%.1f°", 0.1f);
+    } else if (id == "curved_more") {
+        mm(T::CurvedFlatBelow, "curved.flat_below", s.curved_flat_below, 0.0, 1000.0, "%.2f mm", 0.01f);
+        mm(T::CurvedRampHeight, "curved.ramp_height", s.curved_ramp_height, 0.1, 1000.0, "%.1f mm", 0.1f);
+        flag(T::CurvedFlatTop, "curved.flat_top", s.curved_flat_top);
+        mm(T::CurvedSegment, "curved.segment_length", s.curved_segment_length, 0.05, 50.0, "%.2f mm", 0.01f);
+        mm(T::CurvedMaxSlope, "curved.max_slope", s.curved_max_slope, 1.0, 80.0, "%.0f°", 0.5f);
+        if (shown("curved.flow_policy"))
+            changed |= row(T::CurvedFlowPolicy, s.curved_flow,
+                           {{CurvedFlow::Preserve, tr(T::CurvedFlowKeep)},
+                            {CurvedFlow::Uniform, tr(T::CurvedFlowUniform)},
+                            {CurvedFlow::Off, tr(T::CurvedFlowOff)}});
+        mm(T::CurvedUniformFlow, "curved.uniform_flow", s.curved_uniform_flow, 0.0, 1000.0,
+           s.curved_uniform_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
     } else if (id == "interlocking") {
         // Beams between materials (multi_extruder.md, rules 17 and 18).
         flag(T::InterlockBeams, "interlocking.beams", s.interlock_beams);
@@ -3402,6 +3446,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "enclosure") {
         flag(T::Enclosed, "machine.enclosed", s.enclosed);
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);
+    } else if (id == "head") {
+        // The print head around the nozzle (nonplanar.md, rule 6).
+        mm(T::HeadFreeAngleX, "head.free_angle_x", s.head_free_angle_x, 0.0, 89.0, s.head_free_angle_x > 0.0 ? "%.0f°" : "—", 0.5f);
+        mm(T::HeadFreeAngleY, "head.free_angle_y", s.head_free_angle_y, 0.0, 89.0, s.head_free_angle_y > 0.0 ? "%.0f°" : "—", 0.5f);
+        mm(T::HeadClearanceHeight, "head.clearance_height", s.head_clearance_height, 0.1, 1000.0, "%.1f mm", 0.1f);
+        mm(T::HeadClearanceRadius, "head.clearance_radius", s.head_clearance_radius, 0.1, 1000.0, "%.1f mm", 0.1f);
+        count(T::HeadProfile, "head.profile", s.head_profile.size());
     } else if (id == "stability") {
         mm(T::NozzleForce, "review.nozzle_force", s.review_nozzle_force, 0.0, 1000.0, "%.3f N", 0.001f);
         mm(T::BedAdhesion, "review.bed_adhesion", s.review_bed_adhesion, 0.0, 1000.0, "%.3f N/mm²", 0.001f);

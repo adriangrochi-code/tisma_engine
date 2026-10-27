@@ -518,8 +518,10 @@ pieza cambia y gruesas donde no. Diseño en `docs/LOCAL_LAYERS.md` (local adapti
     el campo optimizado de CurviSlicer y un término de resistencia con el análisis propio (F7); en 5 ejes, S³-Slicer
     (F9). Actualizado el 2026-10-26 (`docs/NONPLANAR_2026.md`): F7 sobre las superficies de corte en grilla 2D de
     Double QuickCurve, en este orden:
-    - [ ] la base, probada con `wave` (NP1 a NP4): campo en los vértices, material según `J`, tope de Z, choques con
-      un mapa de alturas y el perfil del cabezal, verificador y vista previa
+    - [ ] la base, probada con `wave` (NP1 a NP4): hechos (2026-10-27) la onda (huevera, crestas, torcidas) y el cono
+      fijo, la rampa, el ajuste a la cabeza con `J` entre 0,6 y 1,4, la malla refinada y deformada, el G-code curvado
+      con el material por `J` y el tope de velocidad de Z, el verificador sobre la curva y la vista previa. Faltan
+      suavizar las capas donde la cabeza chocaría (hoy es un error), el tope de aceleración de Z y el caudal `uniform`
     - [ ] `surface` con la superficie de arriba, y el Z anti-aliasing encima
     - [ ] `overhangs` con la superficie de abajo; `automatic`; `conical`
     - [ ] `stress`, solo si el análisis «como impresa» muestra ganancia
@@ -804,7 +806,8 @@ Con el PR #23 (2026-10-26):
     ciclo de capas, los degradés, el proyecto, el extrusor de cada objeto en la interfaz y el diálogo de mezclas
     (FS1 a FS14). Falta leer y escribir las mezclas y el extrusor de cada objeto en el 3MF (el motor no escribe 3MF ni
     lee los objetos de uno por separado) y en la línea de comandos
-  - [ ] F7 no planar; resina (`resin.md`, `resin_supports.md`)
+  - [ ] F7 no planar (la base hecha, 2026-10-27; siguen `surface`, `overhangs`, el cono según la pieza y
+    `automatic`); resina (`resin.md`, `resin_supports.md`)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
