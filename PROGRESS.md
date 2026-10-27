@@ -6209,3 +6209,34 @@ no tiene dibujo propio hasta que exista `machine.feedstock`.
 
 **Sigue:** el resto de P1 (`preview.md`, `credits.md`, `assistant.md`), después P2.
 
+## 2026-10-27 — Interfaz P1: la vista previa (`preview.md`)
+
+**Hecho:**
+- **Las 13 vistas** (regla 1): tipo de línea, alto de capa, ancho, velocidad, velocidad alcanzada, ventilador,
+  temperatura, caudal, caudal alcanzado, tiempo de capa lineal y logarítmico, extrusor y color por capa. El lector del
+  G-code guarda en cada movimiento el ventilador, la temperatura, el extrusor y los cambios de color, y `time_preview`
+  le da su tiempo con las velocidades y aceleraciones de la impresora (el mismo cálculo del tiempo estimado, capa por
+  capa en paralelo). Las instancias llevan el número de la vista, así los dos renderizadores colorean igual.
+- **Leyenda:** por tipo, cada uno con su tiempo, su parte del tiempo y su filamento en metros y gramos; en las vistas
+  con números, 11 pasos iguales (en logaritmo para la logarítmica). Debajo, la primera capa además del total.
+- **Fila de íconos** (regla 11): viajes, barridos, retracciones, vueltas, costuras, cambios de herramienta y de color,
+  pausas, G-code propio, centro de gravedad y boquilla, dibujados sobre la vista.
+- **Deslizadores** (reglas 4, 9 y 12): el de capas con dos manijas, altura y número, el «+» con cambio de color, pausa
+  con mensaje o G-code (cambios por altura que empiezan esa capa), sus marcas, y el de movimientos dentro de la capa de
+  arriba (los renderizadores cortan esa capa).
+- **Teclas** (regla 10): 0 a 6 vistas fijas (con la de abajo), K ortogonal (un teleobjetivo, sin tocar los shaders; se
+  recuerda), Z encuadrar, E nombres de las piezas, L leyenda.
+- **Visor** (regla 13): abre `.bgcode`, «Sin tipos» sin `;TYPE:`, y Más › Vista previa de G-code….
+
+**Medido:** pruebas del lector (ventilador, temperatura, extrusor, color, marcas, tiempos de 2,05 s para 100 mm a
+50 mm/s con 1000 mm/s²), PV2 y PV3 (pasos de 23 mm/s y de 0,038 mm), PV7 (tantas retracciones marcadas como las del
+G-code del motor), PV8 y PV9 (el cambio de color empieza la capa 25 y la pausa la 30, con su mensaje), PV10, el corte
+de la capa de arriba y la cámara ortogonal. Capturas de las vistas, los íconos, los deslizadores y la vista ortogonal
+(también con ray tracing).
+
+**No hecho:** el ícono Pieza (el modelo transparente sobre las trayectorias necesita transparencia en los dos
+renderizadores); el visor en una ventana aparte; el extrusor del cambio de color con varios extrusores; el panel
+táctil y «Girar libre»; PV1 contra Tisma Slicer (falta la pieza en voladizo de sus pruebas).
+
+**Sigue:** `credits.md` y `assistant.md` (P1); después P2.
+

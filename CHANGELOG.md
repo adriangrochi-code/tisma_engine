@@ -32,6 +32,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Relleno ondulado entrelazado** (ficha `interlock_infill.md`; `infill.waves`, en Impresión › Relleno › Relleno
   ondulado): el relleno poco denso sube y baja como un cartón de huevos, igual en cada capa, para que las capas
   encajen en vez de apoyarse en planos lisos. Funciona con cualquier patrón.
+- **Vista previa más completa** (ficha `preview.md`): 13 maneras de colorear (velocidad alcanzada, ventilador,
+  temperatura, caudal, tiempo de capa…), la leyenda por tipo con tiempo, porcentaje y filamento, una fila de íconos
+  para ver retracciones, costuras, cambios, pausas, el centro de gravedad y la boquilla, el deslizador de capas con dos
+  manijas y el «+» para poner un cambio de color, una pausa o G-code en una capa, el deslizador de movimientos, la
+  vista ortogonal (K) y las teclas 0 a 6, Z, E y L. El visor abre también G-code binario.
 - **Tarjeta de la impresora** arriba del panel: la impresora con su dibujo y una lista con buscador (también las del
   catálogo, por marca), la cama en las impresoras que traen varias y la boquilla, que se cambia con un clic y se puede
   deshacer. El engranaje abre la **configuración de la impresora** en una página aparte, con su sección de

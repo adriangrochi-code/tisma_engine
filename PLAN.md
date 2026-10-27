@@ -697,7 +697,13 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   por red desde la tarjeta (41 a 44), la boquilla de la impresora conectada (26), el diálogo de cambios sin guardar al
   cambiar de boquilla (24, con `presets.md`), los perfiles compatibles al cambiar de boquilla (22, con
   `profile_pack.md`) y la temperatura de cama por tipo de cama (`profiles.md`, regla 4)
-- [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…)
+- [ ] `preview.md` (P1): las vistas de la vista previa (tipo, velocidad, tiempo de capa, ancho…). Hecho (2026-10-27):
+  las 13 vistas con la leyenda por tipo (tiempo, parte y filamento) y la escala de 11 pasos (reglas 1 a 3, 6 a 8; PV2 a
+  PV4), los dos deslizadores de capas y el de movimientos (4, 9), las teclas de la vista con la ortogonal (10), la fila
+  de íconos con las marcas, el centro de gravedad y la boquilla (11, PV7), el «+» para cambio de color, pausa o G-code
+  en una capa (12, PV8, PV9) y el visor con G-code binario y sin tipos (13, PV10). Falta: la pieza transparente sobre
+  las trayectorias (ícono Pieza), el visor en una ventana aparte sin placa ni ajustes, el extrusor del cambio de color
+  con varios extrusores, el panel táctil y «Girar libre», y medir PV1 contra Tisma Slicer con la pieza en voladizo
 - [ ] `credits.md` (P1): «Basado en…» en cada función que sale de otra fuente
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
