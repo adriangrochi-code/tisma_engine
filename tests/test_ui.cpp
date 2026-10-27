@@ -585,6 +585,7 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
         {"machine.relative_extrusion", [](Settings& s) { s.relative_extrusion = !s.relative_extrusion; }},
         {"machine.flavor", [](Settings& s) { s.flavor = GcodeFlavor::Klipper; }},
         {"walls.scarf", [](Settings& s) { s.scarf = ScarfMode::Everywhere, s.scarf_only_smooth = false, s.scarf_length = 5.0; }},
+        {"walls.detect_overhangs", [](Settings& s) { s.detect_overhangs = !s.detect_overhangs; }},
     };
     for (const auto& [name, change] : changes) {
         INFO(name);

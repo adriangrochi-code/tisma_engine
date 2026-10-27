@@ -84,6 +84,10 @@ struct Settings {
     bool scarf_entire_loop = false;   // the ramp the whole way round
     double scarf_max_segment = 1.0;   // mm, the longest piece of the ramp
     bool scarf_inner = false;         // the inner walls too
+    // The stretches of a wall wholly over the air, or over the support, are
+    // overhang perimeters, at the bridges' speed and fan
+    // (docs/spec/features/walls_extra.md, rule 8).
+    bool detect_overhangs = true;
     // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
     // spiral, a layer each turn, over flat bottom layers.
     bool vase = false;

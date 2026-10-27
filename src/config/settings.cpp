@@ -275,7 +275,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
-                "scarf_entire_loop", "scarf_max_segment", "scarf_inner"},
+                "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "seam") {
             s.seam = choice<SeamMode>(g, n, k,
@@ -289,12 +289,13 @@ Settings parse_checked(std::string_view text) {
                                          {"everywhere", ScarfMode::Everywhere}});
             return;
         }
-        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner") {
+        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "scarf_only_smooth"   ? s.scarf_only_smooth
              : n == "scarf_entire_loop" ? s.scarf_entire_loop
-                                        : s.scarf_inner) = g.at(n).get<bool>();
+             : n == "scarf_inner"       ? s.scarf_inner
+                                        : s.detect_overhangs) = g.at(n).get<bool>();
             return;
         }
         if (n == "scarf_start_height") {
@@ -973,6 +974,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.scarf_entire_loop", flag(s.scarf_entire_loop)},
         {"walls.scarf_max_segment", num(s.scarf_max_segment)},
         {"walls.scarf_inner", flag(s.scarf_inner)},
+        {"walls.detect_overhangs", flag(s.detect_overhangs)},
         {"vase.enabled", flag(s.vase)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
@@ -1145,7 +1147,8 @@ std::string settings_json(const Settings& s) {
           {"scarf_length", s.scarf_length},
           {"scarf_entire_loop", s.scarf_entire_loop},
           {"scarf_max_segment", s.scarf_max_segment},
-          {"scarf_inner", s.scarf_inner}}},
+          {"scarf_inner", s.scarf_inner},
+          {"detect_overhangs", s.detect_overhangs}}},
         {"vase", {{"enabled", s.vase}}},
         {"placement",
          {{"arrange", s.placement_arrange}, {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)}}},

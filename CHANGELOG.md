@@ -10,6 +10,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Perímetros en voladizo** (ficha `walls_extra.md`, regla 8; `walls.detect_overhangs`, encendido por defecto, en
+  Resistencia › Paredes): los tramos de pared que quedan enteros en el aire se marcan `Overhang perimeter`, van a la
+  velocidad de los puentes y con su ventilador. En el Benchy, 218 mm en 34 capas.
+- **La primera capa sobre el soporte** (ficha `supports_skirt.md`, regla 4; prueba de caja negra QA13): sobre el
+  soporte, las paredes y el puente se hacen tan gruesos como la capa más la separación en Z (0,4 mm con capas de 0,2),
+  así llenan el hueco hasta el soporte en vez de caer en el aire; el puente entra 0,6 mm sobre la parte apoyada para
+  anclarse. La capa de arriba ya es normal.
+
 ## [0.9.0-alpha.1] - 2026-10-27
 
 Cuarta versión publicada. Trae los soportes en árbol, la lectura de OBJ y 3MF con la pieza centrada en la cama, la

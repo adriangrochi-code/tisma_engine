@@ -26,6 +26,29 @@ namespace {
 // mm the grid support reaches past what overhangs (supports_skirt.md, rule 2:
 // about 1.6 in test S4).
 constexpr double kSupportMargin = 1.6;
+// mm the bridge over the support reaches over the part around it
+// (supports_skirt.md, rule 4: about 0.6 mm in the test S4).
+constexpr double kBridgeAnchor = 0.6;
+
+// The bridge lines over the support fill the Z gap under them
+// (supports_skirt.md, rule 4): the ones with most of their length within
+// `reach` of where the layer rests on the support.
+void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double gap, double reach) {
+    const Polygons near = offset(on, reach);
+    for (Toolpath& t : bridges) {
+        double inside = 0.0, total = 0.0;
+        for (std::size_t i = 1; i < t.points.size(); ++i) {
+            const Point2d a = t.points[i - 1].p, b = t.points[i].p;
+            const double length = std::hypot(b.x - a.x, b.y - a.y);
+            total += length;
+            if (region_contains(near, (a.x + b.x) / 2.0, (a.y + b.y) / 2.0))
+                inside += length;
+        }
+        if (total > 0.0 ? inside > total / 2.0
+                        : !t.points.empty() && region_contains(near, t.points.front().p.x, t.points.front().p.y))
+            t.gap = gap;
+    }
+}
 
 } // namespace
 
@@ -220,6 +243,88 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             s.sparse = Clipper2Lib::Difference(s.sparse, small, Clipper2Lib::FillRule::NonZero);
             s.bottom = Clipper2Lib::Union(s.bottom, solid, Clipper2Lib::FillRule::NonZero);
         });
+    out.support_areas.resize(out.layers.size());
+    if (settings.support) {
+        std::vector<double> thickness;
+        for (const Layer& layer : out.layers)
+            thickness.push_back(layer.top - layer.bottom);
+        SupportParams sp;
+        sp.threshold_angle = settings.support_angle;
+        sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
+        sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        sp.margin = kSupportMargin;
+        sp.bead = settings.wall_width;
+        sp.automatic = settings.support_automatic;
+        sp.gpu = gpu;
+        // A painted face's own layer, a little wider: its overhang lies under it.
+        const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
+        const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
+        if (!painted[0].empty())
+            sp.enforce = &enforce;
+        if (!painted[1].empty())
+            sp.block = &block;
+        if (settings.support_style == SupportStyle::Organic) {
+            TreeParams tp;
+            tp.angle = settings.tree_angle;
+            tp.angle_preferred = settings.tree_angle_preferred;
+            tp.tip_diameter = settings.tree_tip_diameter;
+            tp.branch_diameter = settings.tree_branch_diameter;
+            tp.widen_angle = settings.tree_branch_diameter_angle;
+            tp.tip_spacing = tree_tip_spacing(settings.tree_tip_diameter, settings.tree_top_rate, settings.tree_branch_distance);
+            tp.xy_gap = sp.xy_gap;
+            tp.bead = settings.wall_width;
+            tp.z_gap_layers = sp.z_gap_layers;
+            tp.interface_layers = settings.support_interface_layers;
+            const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
+            out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
+        } else {
+            out.support_areas = support_areas(out.regions, thickness, sp);
+        }
+    }
+    // Where the walls hang (walls_extra.md, rule 8): past the layer below's
+    // region grown by half a bead, a bead has nothing of it under it. And the
+    // part's first layer over the support (supports_skirt.md, rule 4): what
+    // hangs over the top of the support, a Z gap under the layer's bottom,
+    // rests on it; its bridge reaches kBridgeAnchor over the part around it,
+    // taken from the sparse infill, and the writer lays its walls and bridge
+    // there as thick as the layer and the gap.
+    out.hanging.resize(out.layers.size());
+    out.on_support.resize(out.layers.size());
+    out.support_gap.assign(out.layers.size(), 0.0);
+    const std::size_t support_gap_layers =
+        std::size_t(std::max(0L, std::lround(settings.support_z_gap / stack_height)));
+    tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
+        if (out.regions[l].empty())
+            return;
+        out.hanging[l] = Clipper2Lib::Difference(out.regions[l], offset(out.regions[l - 1], settings.wall_width / 2.0),
+                                                 Clipper2Lib::FillRule::NonZero);
+        if (l < support_gap_layers + 1)
+            return;
+        const std::size_t top = l - 1 - support_gap_layers; // the support's last layer under this one
+        if (out.support_areas[top].empty())
+            return;
+        // The support keeps support.xy_gap off the part: that much and a bead
+        // more of what hangs still lies over it.
+        const double xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        Polygons on = Clipper2Lib::Intersect(
+            Clipper2Lib::Difference(out.regions[l], out.regions[l - 1], Clipper2Lib::FillRule::NonZero),
+            offset(out.support_areas[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);
+        on = offset(offset(on, -settings.wall_width / 4.0), settings.wall_width / 4.0);
+        if (on.empty())
+            return;
+        out.support_gap[l] = std::max(0.0, out.layers[l].bottom - out.layers[top].top);
+        LayerSurfaces& surface = out.surfaces[l];
+        const Polygons resting = Clipper2Lib::Intersect(surface.bridge, offset(on, settings.wall_width),
+                                                        Clipper2Lib::FillRule::NonZero);
+        if (!resting.empty() && !surface.sparse.empty()) {
+            // The lines' ends, half a bead inside, kBridgeAnchor past the edge of the part below.
+            const Polygons anchor = Clipper2Lib::Intersect(offset(on, kBridgeAnchor + settings.wall_width / 2.0),
+                                                           surface.sparse, Clipper2Lib::FillRule::NonZero);
+            surface.sparse = Clipper2Lib::Difference(surface.sparse, anchor, Clipper2Lib::FillRule::NonZero);
+            surface.bridge = Clipper2Lib::Union(surface.bridge, anchor, Clipper2Lib::FillRule::NonZero);
+        }
+        out.on_support[l] = std::move(on);
+    });
     // Adaptive and support cubic infill (docs/INFILL.md): how deep each point
     // lies in the whole sparse infill, from all its surfaces or from the ones
     // it holds up, before stress bands and the rest take parts of it.
@@ -328,44 +433,6 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.seam_enforce = painted_areas(painted[2], out.layers, settings.wall_width);
     if (!painted[3].empty())
         out.seam_block = painted_areas(painted[3], out.layers, settings.wall_width);
-    out.support_areas.resize(out.layers.size());
-    if (settings.support) {
-        std::vector<double> thickness;
-        for (const Layer& layer : out.layers)
-            thickness.push_back(layer.top - layer.bottom);
-        SupportParams sp;
-        sp.threshold_angle = settings.support_angle;
-        sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
-        sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
-        sp.margin = kSupportMargin;
-        sp.bead = settings.wall_width;
-        sp.automatic = settings.support_automatic;
-        sp.gpu = gpu;
-        // A painted face's own layer, a little wider: its overhang lies under it.
-        const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
-        const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
-        if (!painted[0].empty())
-            sp.enforce = &enforce;
-        if (!painted[1].empty())
-            sp.block = &block;
-        if (settings.support_style == SupportStyle::Organic) {
-            TreeParams tp;
-            tp.angle = settings.tree_angle;
-            tp.angle_preferred = settings.tree_angle_preferred;
-            tp.tip_diameter = settings.tree_tip_diameter;
-            tp.branch_diameter = settings.tree_branch_diameter;
-            tp.widen_angle = settings.tree_branch_diameter_angle;
-            tp.tip_spacing = tree_tip_spacing(settings.tree_tip_diameter, settings.tree_top_rate, settings.tree_branch_distance);
-            tp.xy_gap = sp.xy_gap;
-            tp.bead = settings.wall_width;
-            tp.z_gap_layers = sp.z_gap_layers;
-            tp.interface_layers = settings.support_interface_layers;
-            const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
-            out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
-        } else {
-            out.support_areas = support_areas(out.regions, thickness, sp);
-        }
-    }
     if (!out.regions.empty()) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         out.brim = brim_loops(out.regions.front(), settings.brim_width, settings.wall_width, first);
@@ -380,7 +447,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     const auto plain = [&](std::size_t l) {
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
-               dense_region[l].empty() && out.support_areas[l].empty();
+               dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty();
     };
     std::vector<char> repeats(out.layers.size(), 0);
     if (period > 0)
@@ -395,6 +462,9 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                           if (repeats[l])
                               return;
                           out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          if (!out.on_support[l].empty())
+                              rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
+                                              kBridgeAnchor + settings.wall_width);
                           if (l < branches.size())
                               out.fills[l].sparse = std::move(branches[l]);
                           for (std::size_t b = 0; l < banded.size() && b < banded[l].size(); ++b) {

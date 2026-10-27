@@ -665,7 +665,7 @@ const char* row_key(T label) {
         {T::ScarfMode, "walls.scarf"}, {T::ScarfLength, "walls.scarf_length"},
         {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
-        {T::ScarfInner, "walls.scarf_inner"}, {T::ScaleXRow, "compensation.scale_x"},
+        {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"}, {T::ScaleXRow, "compensation.scale_x"},
         {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
         {T::HoleCorrection, "compensation.hole_offset"}, {T::XyOffset, "slicing.xy_offset"},
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
@@ -2823,6 +2823,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // Print: Strength.
     else if (id == "walls") {
         whole(T::Walls, "walls.count", s.wall_count, 0, 50);
+        flag(T::DetectOverhangs, "walls.detect_overhangs", s.detect_overhangs);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);

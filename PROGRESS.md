@@ -4889,3 +4889,49 @@ anterior y las pruebas de nuevo con la versión nueva.
 **Sigue:** QA13; las ramas de los árboles que engordan y se juntan antes, con las mediciones nuevas del equipo de fichas
 (a la altura de las puntas, pares que se tocan; cada rama pasa de 0,9 a 1,2 mm en una capa).
 
+
+## 2026-10-27 — QA13: la primera capa sobre el soporte y los perímetros en voladizo
+
+**Por qué:** pedido del dueño de seguir en orden lo pendiente; lo primero, QA13 de la segunda prueba de caja negra
+(`docs/spec/qa/2026-10-26-segunda-prueba.md`). La respuesta del equipo de fichas (regla 4 de `supports_skirt.md`,
+rama `spec/next` 2f55a4b, `tools/check_spec.py` limpio) se fusionó en `dev`.
+
+**Hecho:**
+- **Regla 8 de `walls_extra.md`** (`walls.detect_overhangs`, nuevo, encendido): un tramo de pared cuyo cordón queda
+  entero fuera de la capa de abajo (su eje fuera de la región de abajo agrandada medio cordón) es `Overhang
+  perimeter`, a la velocidad de los puentes (`speed.solid_infill`) y con su ventilador (`cooling.fan_bridges`). La
+  pared se corta justo donde cruza ese borde. En la interfaz, Resistencia › Paredes (Avanzado).
+- **Regla 4 de `supports_skirt.md`:** donde la primera capa de la pieza cuelga sobre el tope del soporte, sus
+  perímetros y su puente llevan la altura de la capa más la separación en Z (`;HEIGHT:0.400` y el doble de filamento
+  por mm con capas de 0,2); el puente entra 0,6 mm sobre la parte apoyada, sacado del relleno disperso. El resto de la
+  capa y la capa siguiente, normales.
+- Los soportes se calculan antes de las zonas del relleno (no dependen de ellas), para que el anclaje del puente quede
+  en las superficies antes de que el relleno las use.
+
+**Medido:**
+
+| Estante S4, Z 8,2 | Ficha (Tisma Slicer) | Antes | Ahora |
+|---|---|---|---|
+| Perímetros sobre el soporte | `Overhang perimeter`, alto 0,4, X 100,2 a 109,8 | comunes, 0,2 | `Overhang perimeter`, 0,4, X 100,2 a 109,8 |
+| Perímetros sobre la columna | comunes, 0,2 | comunes, 0,2 | comunes, 0,2 |
+| Puente | alto 0,4, X 99,41 a 109,04 | 0,2, X 100,2 a 108,6 | 0,4, X 99,4 a 108,6 |
+| Z 8,4 | normal | normal | normal |
+
+El puente termina en 108,6 y no en 109,04: sus líneas van en otra dirección que las de Tisma Slicer (el motor no
+cuenta el soporte como apoyo al elegir el ángulo). Benchy: 218 mm de perímetros en voladizo en 34 capas; el laminado
+tarda lo mismo (0,59 a 0,65 s antes y después, dentro del ruido). Cráneo escaneado (546 684 triángulos, 1503 tramos
+en voladizo): mirando cada borde de lo que cuelga para cada tramo de pared tardaba 4,8 s en vez de 2,7; con un
+índice por capa (la caja de cada polígono y los bordes en una grilla de celdas), 2,72 s contra 2,66 antes, con el
+mismo G-code byte a byte; con soporte, 3,60 contra 3,42 s. Fuzzer con la detección al azar: 1300 corridas, 0 fallas.
+
+**Pruebas nuevas:** QA13 en el estante (áreas, alturas, tipos, el anclaje y el doble de filamento por mm; sin la
+detección, los tipos comunes y la altura igual); W2 (los dos tramos sobre el aire, a la velocidad de los puentes); el
+ajuste nuevo (lectura, error y relaminado por etapas); el ventilador de los puentes también en los perímetros en
+voladizo.
+
+**No probado:** el cordón redondo de los puentes de la regla 8 (con `speed.bridges` y `gcode_motion.md`, en el paso 2
+de la cobertura); los viajes de largo cero entre tramos de una pared escriben un `G1 F` suelto (ya pasaba con las
+paredes partidas en esquinas: 812 en el Benchy), inofensivo.
+
+**Sigue:** del punto 1 de lo pendiente, las ramas de los árboles que engordan y se juntan antes (SM13 remedido),
+los arcos en voladizos (reglas 7 a 11 de `arc_overhangs.md`), PL15 de ubicación, QA8, QA9 y `support.width`.

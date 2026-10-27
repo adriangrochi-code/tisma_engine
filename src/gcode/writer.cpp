@@ -93,6 +93,214 @@ std::string fixed_number(double v, int decimals) { return fixed(v, decimals); }
 
 namespace {
 
+// The stretches of a wall whose bead lies wholly off the layer below
+// (walls_extra.md, rule 8), by each piece's middle in `hanging`, and of those
+// the ones in `on_support`, which fill the support's Z gap `gap`
+// (supports_skirt.md, rule 4). Without `detect`, only the latter. The wall is
+// cut where its stretches change, keeping its order from its start (a loop's
+// seam), into open pieces; a wall all of one kind stays whole. Each piece says
+// whether it is an overhang perimeter.
+struct WallPiece {
+    Toolpath path;
+    bool overhang = false;
+};
+// A region prepared for many tests along a layer's walls: each polygon's box
+// for the point tests, and the edges in a grid of cells for the crossings.
+class AreaIndex {
+public:
+    explicit AreaIndex(const Polygons& region) : region_(region) {
+        box_ = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+        for (const Polygon& poly : region) {
+            std::array<double, 4> b = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
+                                       std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
+            for (std::size_t i = 0; i < poly.size(); ++i) {
+                const Point2d p{to_mm(poly[i].x), to_mm(poly[i].y)};
+                const Point2d q{to_mm(poly[(i + 1) % poly.size()].x), to_mm(poly[(i + 1) % poly.size()].y)};
+                edges_.push_back({p, q});
+                b = {std::min(b[0], p.x), std::min(b[1], p.y), std::max(b[2], p.x), std::max(b[3], p.y)};
+            }
+            boxes_.push_back(b);
+            box_ = {std::min(box_[0], b[0]), std::min(box_[1], b[1]), std::max(box_[2], b[2]), std::max(box_[3], b[3])};
+        }
+        if (edges_.empty())
+            return;
+        // About as many cells as edges, at most 512 a side.
+        const double w = std::max(box_[2] - box_[0], 1e-6), h = std::max(box_[3] - box_[1], 1e-6);
+        cell_ = std::max(std::sqrt(w * h / double(edges_.size())), std::max(w, h) / 512.0);
+        nx_ = std::size_t(w / cell_) + 1, ny_ = std::size_t(h / cell_) + 1;
+        cells_.resize(nx_ * ny_);
+        for (std::uint32_t e = 0; e < edges_.size(); ++e) {
+            const auto [x0, y0, x1, y1] = cell_box(edges_[e].a, edges_[e].b);
+            for (std::size_t y = y0; y <= y1; ++y)
+                for (std::size_t x = x0; x <= x1; ++x)
+                    cells_[y * nx_ + x].push_back(e);
+        }
+        seen_.assign(edges_.size(), 0);
+    }
+
+    // Whether the segment from a to b can meet the region at all.
+    bool near(const Point2d& a, const Point2d& b) const {
+        return !edges_.empty() && std::max(a.x, b.x) >= box_[0] && std::min(a.x, b.x) <= box_[2] &&
+               std::max(a.y, b.y) >= box_[1] && std::min(a.y, b.y) <= box_[3];
+    }
+
+    // As region_contains, looking only at the polygons whose box holds the point.
+    bool contains(double x, double y) const {
+        if (edges_.empty() || x < box_[0] || x > box_[2] || y < box_[1] || y > box_[3])
+            return false;
+        const Clipper2Lib::Point64 q{to_units(x), to_units(y)};
+        int winding = 0;
+        for (std::size_t k = 0; k < region_.size(); ++k) {
+            const auto& b = boxes_[k];
+            if (x < b[0] || x > b[2] || y < b[1] || y > b[3])
+                continue;
+            const Clipper2Lib::PointInPolygonResult r = Clipper2Lib::PointInPolygon(q, region_[k]);
+            if (r == Clipper2Lib::PointInPolygonResult::IsOn)
+                return true;
+            if (r == Clipper2Lib::PointInPolygonResult::IsInside)
+                winding += Clipper2Lib::IsPositive(region_[k]) ? 1 : -1;
+        }
+        return winding != 0;
+    }
+
+    // Where along the segment from a to b (0 to 1, ends left out) it crosses
+    // the region's outline, added to `at`.
+    void crossings(const Point2d& a, const Point2d& b, std::vector<double>& at) {
+        if (!near(a, b))
+            return;
+        ++stamp_;
+        const double dx = b.x - a.x, dy = b.y - a.y;
+        const auto [x0, y0, x1, y1] = cell_box(a, b);
+        for (std::size_t y = y0; y <= y1; ++y)
+            for (std::size_t x = x0; x <= x1; ++x)
+                for (const std::uint32_t k : cells_[y * nx_ + x]) {
+                    if (seen_[k] == stamp_)
+                        continue;
+                    seen_[k] = stamp_;
+                    const Edge& e = edges_[k];
+                    if (std::max(e.a.x, e.b.x) < std::min(a.x, b.x) || std::min(e.a.x, e.b.x) > std::max(a.x, b.x) ||
+                        std::max(e.a.y, e.b.y) < std::min(a.y, b.y) || std::min(e.a.y, e.b.y) > std::max(a.y, b.y))
+                        continue;
+                    const double ex = e.b.x - e.a.x, ey = e.b.y - e.a.y;
+                    const double d = dx * ey - dy * ex;
+                    if (d == 0.0)
+                        continue;
+                    const double u = ((e.a.x - a.x) * ey - (e.a.y - a.y) * ex) / d; // along the segment
+                    const double v = ((e.a.x - a.x) * dy - (e.a.y - a.y) * dx) / d; // along the edge
+                    if (u > 1e-9 && u < 1.0 - 1e-9 && v >= 0.0 && v <= 1.0)
+                        at.push_back(u);
+                }
+    }
+
+private:
+    struct Edge {
+        Point2d a, b;
+    };
+    std::array<std::size_t, 4> cell_box(const Point2d& a, const Point2d& b) const {
+        const auto cx = [&](double x) { return std::size_t(std::clamp((x - box_[0]) / cell_, 0.0, double(nx_ - 1))); };
+        const auto cy = [&](double y) { return std::size_t(std::clamp((y - box_[1]) / cell_, 0.0, double(ny_ - 1))); };
+        return {cx(std::min(a.x, b.x)), cy(std::min(a.y, b.y)), cx(std::max(a.x, b.x)), cy(std::max(a.y, b.y))};
+    }
+    const Polygons& region_;
+    std::vector<std::array<double, 4>> boxes_;
+    std::array<double, 4> box_{};
+    std::vector<Edge> edges_;
+    double cell_ = 1.0;
+    std::size_t nx_ = 1, ny_ = 1;
+    std::vector<std::vector<std::uint32_t>> cells_;
+    std::vector<std::uint32_t> seen_;
+    std::uint32_t stamp_ = 0;
+};
+
+// The wall with a point added wherever it crosses the outline of `areas`, so
+// each piece between two points lies on one side of it. The added points take
+// the width and heights in between.
+Toolpath cut_at(const Toolpath& t, AreaIndex& areas) {
+    const std::size_t n = t.points.size();
+    const std::size_t segments = t.closed && n > 2 ? n : n - 1;
+    Toolpath out = t;
+    out.points.clear();
+    std::vector<double> at;
+    for (std::size_t i = 0; i < segments; ++i) {
+        const ToolpathPoint& a = t.points[i];
+        const ToolpathPoint& b = t.points[(i + 1) % n];
+        out.points.push_back(a);
+        at.clear();
+        areas.crossings(a.p, b.p, at);
+        std::sort(at.begin(), at.end());
+        const double dx = b.p.x - a.p.x, dy = b.p.y - a.p.y;
+        for (const double u : at) {
+            ToolpathPoint p = a;
+            p.p = {a.p.x + u * dx, a.p.y + u * dy};
+            p.width = a.width + u * (b.width - a.width);
+            p.dz = a.dz + u * (b.dz - a.dz);
+            p.below = a.below + u * (b.below - a.below);
+            out.points.push_back(p);
+        }
+    }
+    if (!(t.closed && n > 2))
+        out.points.push_back(t.points.back());
+    return out;
+}
+
+std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, const AreaIndex& on_support, double gap,
+                                   bool detect) {
+    if (wall.points.size() < 2)
+        return {{wall, false}};
+    // Most walls are nowhere near what hangs.
+    bool near = false;
+    for (std::size_t i = 0; i < wall.points.size() && !near; ++i)
+        near = hanging.near(wall.points[i].p, wall.points[(i + 1) % wall.points.size()].p);
+    if (!near)
+        return {{wall, false}};
+    const Toolpath t = cut_at(wall, hanging);
+    const std::size_t n = t.points.size();
+    const std::size_t segments = t.closed && n > 2 ? n : n - 1;
+    // 0: held, 1: over the air, 2: over the support.
+    std::vector<unsigned char> kind(segments, 0);
+    for (std::size_t i = 0; i < segments; ++i) {
+        const Point2d& a = t.points[i].p;
+        const Point2d& b = t.points[(i + 1) % n].p;
+        const double x = (a.x + b.x) / 2.0, y = (a.y + b.y) / 2.0;
+        if (!hanging.contains(x, y))
+            continue;
+        if (on_support.contains(x, y))
+            kind[i] = 2;
+        else if (detect)
+            kind[i] = 1;
+    }
+    if (std::all_of(kind.begin(), kind.end(), [](unsigned char k) { return k == 0; }))
+        return {{wall, false}};
+    const auto piece_of = [&](unsigned char k) {
+        WallPiece piece;
+        piece.path.index = t.index;
+        piece.path.gap = k == 2 ? gap : 0.0;
+        piece.overhang = detect && k != 0;
+        return piece;
+    };
+    if (std::all_of(kind.begin(), kind.end(), [&](unsigned char k) { return k == kind.front(); })) {
+        WallPiece whole = piece_of(kind.front());
+        whole.path.points = t.points;
+        whole.path.closed = t.closed;
+        whole.path.wavy = t.wavy;
+        return {std::move(whole)};
+    }
+    std::vector<WallPiece> out;
+    WallPiece piece = piece_of(kind.front());
+    piece.path.points.push_back(t.points.front());
+    for (std::size_t i = 0; i < segments; ++i) {
+        if (kind[i] != (i == 0 ? kind.front() : kind[i - 1])) {
+            out.push_back(std::move(piece));
+            piece = piece_of(kind[i]);
+            piece.path.points.push_back(t.points[i]);
+        }
+        piece.path.points.push_back(t.points[(i + 1) % n]);
+    }
+    out.push_back(std::move(piece));
+    return out;
+}
+
 // Z anti-aliasing (docs/ZAA.md): the pieces of a path where its points go from
 // below the layer's top to on it, or above it; each piece lies on one side,
 // and the piece after a change starts at the last point before it.
@@ -426,7 +634,8 @@ public:
             text_ += '\n';
             type_ = t;
             outer_ = std::strcmp(t, "External perimeter") == 0;
-            bridge_ = std::strcmp(t, "Bridge infill") == 0;
+            // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
+            bridge_ = std::strcmp(t, "Bridge infill") == 0 || std::strcmp(t, "Overhang perimeter") == 0;
         }
     }
 
@@ -962,10 +1171,31 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         auto speed = [&](double v) {
             return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
+        // A path that fills the support's Z gap (supports_skirt.md, rule 4) is
+        // as thick as the layer and the gap: the height changes around it.
+        const double layer_height = layer.top - layer.bottom;
+        double base_height = layer_height, laid_height = layer_height;
         auto lay = [&](Toolpath path, const char* type, double feed) {
-            if (!path.points.empty())
-                steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
+            if (path.points.empty())
+                return;
+            if (const double h = base_height + path.gap; h != laid_height) {
+                steps.push_back({{}, nullptr, 0.0, h, {}, {}});
+                laid_height = h;
+            }
+            steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
         };
+        // Where this layer's walls hang (walls_extra.md, rule 8) and rest on
+        // the support (supports_skirt.md, rule 4).
+        const Polygons* const hanging_area =
+            l < model.hanging.size() && !model.hanging[l].empty() ? &model.hanging[l] : nullptr;
+        const Polygons& on_support_area = l < model.on_support.size() ? model.on_support[l] : none;
+        const double support_gap = l < model.support_gap.size() ? model.support_gap[l] : 0.0;
+        // A vase's wall stays one turn of its spiral (vase_mode.md, rule 4).
+        const bool split_walls = hanging_area && !s.vase && (s.detect_overhangs || !on_support_area.empty());
+        std::optional<AreaIndex> hanging, on_support;
+        if (split_walls)
+            hanging.emplace(*hanging_area), on_support.emplace(on_support_area);
+        bool in_thick = false;
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
         // lower ones first, so the nozzle never runs beside a higher bead it
@@ -996,19 +1226,33 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                          bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {}) {
             std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams,
                                                         walls && !painted.empty() ? &painted : nullptr, candidates);
+            std::vector<Pending> typed;
+            typed.reserve(ordered.size());
+            for (Toolpath& t : ordered) {
+                if (!walls || in_thick || !split_walls) {
+                    typed.push_back({std::move(t), type, feed});
+                    continue;
+                }
+                // Overhang perimeters at the bridges' speed (walls_extra.md, rule 8).
+                for (WallPiece& piece : wall_pieces(t, *hanging, *on_support, support_gap, s.detect_overhangs))
+                    typed.push_back({std::move(piece.path), piece.overhang ? "Overhang perimeter" : type,
+                                     piece.overhang ? speed(s.solid_infill_speed) : feed});
+            }
             if (deferring) {
-                for (const Toolpath& t : ordered) {
-                    if (t.wavy) { // its waves are its own: not cut by height
-                        pending.push_back({t, type, feed});
+                for (Pending& p : typed) {
+                    if (p.path.wavy) { // its waves are its own: not cut by height
+                        pending.push_back(std::move(p));
                         continue;
                     }
-                    for (Toolpath& piece : split_by_height(t))
-                        pending.push_back({std::move(piece), type, feed});
+                    for (Toolpath& piece : split_by_height(p.path)) {
+                        piece.gap = p.path.gap;
+                        pending.push_back({std::move(piece), p.type, p.feed});
+                    }
                 }
                 return;
             }
-            for (Toolpath& t : ordered)
-                lay(std::move(t), type, feed);
+            for (Pending& p : typed)
+                lay(std::move(p.path), p.type, p.feed);
         };
         auto off_top = [](std::initializer_list<const std::vector<Toolpath>*> lists) {
             for (const std::vector<Toolpath>* list : lists)
@@ -1172,6 +1416,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         if (l < model.thick.size() && !model.thick[l].empty()) {
             const ThickLayer& t = model.thick[l];
             steps.push_back({{}, nullptr, 0.0, t.height, {}, {}});
+            base_height = laid_height = t.height;
+            in_thick = true;
             deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
@@ -1187,6 +1433,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
             flush();
             steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
+            base_height = laid_height = layer_height;
+            in_thick = false;
         }
         return steps;
     };

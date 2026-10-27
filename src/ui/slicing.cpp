@@ -107,6 +107,7 @@ Settings without_gcode_settings(Settings s) {
     s.scarf = d.scarf, s.scarf_only_smooth = d.scarf_only_smooth, s.scarf_start_height = d.scarf_start_height;
     s.scarf_length = d.scarf_length, s.scarf_entire_loop = d.scarf_entire_loop;
     s.scarf_max_segment = d.scarf_max_segment, s.scarf_inner = d.scarf_inner;
+    s.detect_overhangs = d.detect_overhangs;
     return s;
 }
 

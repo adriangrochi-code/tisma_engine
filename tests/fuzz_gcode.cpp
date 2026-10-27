@@ -148,6 +148,7 @@ int main(int argc, char** argv) {
             s.scarf_max_segment = uni(0.2, 3);
             s.scarf_inner = pick(3) == 0;
         }
+        s.detect_overhangs = pick(4) != 0;
         s.min_layer_time = uni(0, 30);
         s.filament_diameter = pick(4) == 0 ? 2.85 : 1.75;
         s.xy_offset = pick(4) == 0 ? uni(-0.2, 0.2) : 0.0;
@@ -252,9 +253,9 @@ int main(int argc, char** argv) {
                 for (const auto& step : s.layer_heights)
                     std::printf(" %.3f:%.3f", step[0], step[1]);
                 std::printf("\n");
-                std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d\n", int(s.vase), int(s.scarf),
-                            int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length, int(s.scarf_entire_loop),
-                            s.scarf_max_segment, int(s.scarf_inner));
+                std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d overhangs %d\n",
+                            int(s.vase), int(s.scarf), int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length,
+                            int(s.scarf_entire_loop), s.scarf_max_segment, int(s.scarf_inner), int(s.detect_overhangs));
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);

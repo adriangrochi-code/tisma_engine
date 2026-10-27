@@ -30,6 +30,15 @@ struct SlicedModel {
     std::vector<Toolpath> skirt; // around the first layer, on the first adhesion.skirt_layers layers
     std::vector<Toolpath> brim;  // around the first layer, on the first layer
     std::vector<Polygons> support_areas; // one per layer (empty unless support.enabled): where support goes
+    // One per layer: where a wall's bead lies wholly off the layer below, over
+    // the air or the support (walls_extra.md, rule 8); the region past the
+    // layer below's grown by half a bead. Empty on the first layer.
+    std::vector<Polygons> hanging;
+    // The part's first layer over the support (supports_skirt.md, rule 4), one
+    // per layer: where it rests on the support's top, and how far under the
+    // layer's bottom that top is (mm: the Z gap).
+    std::vector<Polygons> on_support;
+    std::vector<double> support_gap;
     // Painted seams (docs/PAINTING.md), one area per layer; empty when none was painted.
     std::vector<Polygons> seam_enforce, seam_block;
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)

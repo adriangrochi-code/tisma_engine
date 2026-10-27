@@ -400,7 +400,9 @@ TEST_CASE("cooling: short layers slow down to the minimum layer time with the fa
     CHECK(slowest_text.find(" F1\n") != std::string::npos);
 }
 
-TEST_CASE("cooling: bridges get their own fan, and the layer's comes back after (cooling.md, rule 3)", "[gcode]") {
+TEST_CASE("cooling: bridges and overhang perimeters get their own fan, and the layer's comes back after (cooling.md, "
+          "rule 3; walls_extra.md, rule 8)",
+          "[gcode]") {
     // A plate on two pillars (as in tests/test_surfaces.cpp): its first layer bridges the gap.
     IndexedMesh m;
     add_box(m, 0, 0, 5, 10, 5);
@@ -412,7 +414,7 @@ TEST_CASE("cooling: bridges get their own fan, and the layer's comes back after 
     std::ostringstream out;
     write_gcode(out, slice_model(m, s), s);
     std::string fan, type;
-    int layer = -1, bridge_moves = 0, other_moves = 0;
+    int layer = -1, bridge_moves = 0, overhang_moves = 0, other_moves = 0;
     std::set<int> bridge_layers;
     for (const std::string& line : lines_of(out.str())) {
         if (line == ";LAYER_CHANGE")
@@ -423,9 +425,10 @@ TEST_CASE("cooling: bridges get their own fan, and the layer's comes back after 
             type = line.substr(6);
         else if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos) {
             INFO("layer " << layer << ", " << type << ", " << fan);
-            if (type == "Bridge infill") {
+            if (type == "Bridge infill" || type == "Overhang perimeter") {
+                // The walls over the gap hang too (surfaces_infill.md, I6).
                 CHECK(fan == "M106 S230");
-                ++bridge_moves;
+                ++(type == "Bridge infill" ? bridge_moves : overhang_moves);
                 bridge_layers.insert(layer);
             } else if (layer >= s.fan_off_layers) {
                 CHECK((fan == "M106 S128" || fan == "M107"));
@@ -437,6 +440,7 @@ TEST_CASE("cooling: bridges get their own fan, and the layer's comes back after 
     }
     CHECK(bridge_layers == std::set<int>{25});
     CHECK(bridge_moves > 0);
+    CHECK(overhang_moves > 0);
     CHECK(other_moves > 0);
 }
 
@@ -679,6 +683,169 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
     write_gcode(out, model, s);
     CHECK(out.str().find(";TYPE:Support material\n") != std::string::npos);
     CHECK(out.str().find(";TYPE:Support material interface\n") != std::string::npos);
+}
+
+namespace {
+
+// The extrusions of a G-code with relative E, with what the preview reads.
+struct Extrusion {
+    std::string z, type, height;
+    double x0, y0, x1, y1, e, feed;
+    double length() const { return std::hypot(x1 - x0, y1 - y0); }
+};
+std::vector<Extrusion> extrusions(const std::string& gcode) {
+    std::vector<Extrusion> out;
+    std::string z, type, height;
+    double x = 0.0, y = 0.0, feed = 0.0;
+    for (const std::string& line : lines_of(gcode)) {
+        if (line.rfind(";Z:", 0) == 0)
+            z = line.substr(3);
+        else if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        else if (line.rfind(";HEIGHT:", 0) == 0)
+            height = line.substr(8);
+        else if (line.rfind("G1 ", 0) == 0) {
+            double nx = x, ny = y, e = 0.0;
+            std::istringstream words(line.substr(3));
+            for (std::string w; words >> w;) {
+                const double v = std::stod(w.substr(1));
+                if (w[0] == 'X')
+                    nx = v;
+                else if (w[0] == 'Y')
+                    ny = v;
+                else if (w[0] == 'E')
+                    e = v;
+                else if (w[0] == 'F')
+                    feed = v;
+            }
+            if (e > 0.0 && (nx != x || ny != y))
+                out.push_back({z, type, height, x, y, nx, ny, e, feed});
+            x = nx, y = ny;
+        }
+    }
+    return out;
+}
+
+// The shelf of supports_skirt.md, test S4: a column 10 x 20 x 8 mm with a
+// slab 20 x 20 x 2 mm on it (Z 8 to 10) that sticks out 10 mm in +X.
+IndexedMesh shelf() {
+    IndexedMesh m;
+    add_box(m, 0, 0, 10, 20, 8);
+    add_box(m, 0, 0, 20, 20, 10, 8);
+    return m;
+}
+
+} // namespace
+
+TEST_CASE("support: the part's first layer over it fills the Z gap, its walls overhang perimeters (supports_skirt.md, "
+          "rule 4; QA13)",
+          "[gcode][support]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.relative_extrusion = true;
+    s.wall_count = 2; // as in the test
+    const IndexedMesh m = shelf();
+    const SlicedModel model = slice_model(m, s);
+    REQUIRE(model.layers.size() == 50);
+    // The slab's first layer (Z 8.2) rests on the support's top (Z 7.8): a
+    // 0.2 mm gap under it; the next has the slab under it.
+    CHECK_THAT(model.support_gap[40], WithinRel(0.2, 1e-9));
+    CHECK(region_contains(model.on_support[40], 15.0, 10.0));
+    CHECK_FALSE(region_contains(model.on_support[40], 5.0, 10.0));
+    CHECK(model.on_support[41].empty());
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::vector<Extrusion> moves = extrusions(out.str());
+    double overhang = 0.0, bridge = 0.0, bridge_min_x = 1e9, bridge_e = 0.0, solid_e = 0.0, solid = 0.0;
+    for (const Extrusion& x : moves) {
+        INFO(x.z << " " << x.type << " " << x.height << " (" << x.x0 << ", " << x.y0 << ") to (" << x.x1 << ", " << x.y1 << ")");
+        if (x.z == "8.200") {
+            if (x.type == "Overhang perimeter") {
+                // Over the support, as thick as the layer and the gap: from
+                // where the bead leaves the column (X 10 and half a bead) out.
+                CHECK(x.height == "0.400");
+                CHECK(std::min(x.x0, x.x1) > 10.15);
+                overhang += x.length();
+            } else if (x.type == "Perimeter" || x.type == "External perimeter") {
+                CHECK(x.height == "0.200");
+                CHECK(std::max(x.x0, x.x1) < 10.25);
+            } else if (x.type == "Bridge infill") {
+                // Its lines start about 0.6 mm over the column, the whole bridge 0.4 thick.
+                CHECK(x.height == "0.400");
+                bridge_min_x = std::min({bridge_min_x, x.x0, x.x1});
+                bridge += x.length();
+                bridge_e += x.e;
+            } else {
+                CHECK(x.height == "0.200");
+            }
+        } else if (x.z == "8.400") {
+            CHECK(x.height == "0.200");
+            CHECK(x.type != "Overhang perimeter");
+            CHECK(x.type != "Bridge infill");
+            if (x.type == "Solid infill")
+                solid += x.length(), solid_e += x.e;
+        } else {
+            CHECK(x.type != "Overhang perimeter");
+        }
+    }
+    // Two walls round the 10 mm that stick out: about 2 x 38 mm.
+    CHECK(overhang > 70.0);
+    CHECK(overhang < 80.0);
+    CHECK_THAT(bridge_min_x, Catch::Matchers::WithinAbs(9.4, 0.1));
+    // Twice the filament per mm of the solid infill above: twice as thick.
+    REQUIRE(bridge > 0.0);
+    REQUIRE(solid > 0.0);
+    CHECK_THAT((bridge_e / bridge) / (solid_e / solid), WithinRel(2.0, 0.02));
+    // Without walls.detect_overhangs the walls keep their types, still as thick
+    // over the support.
+    s.detect_overhangs = false;
+    std::ostringstream plain;
+    write_gcode(plain, model, s);
+    CHECK(plain.str().find(";TYPE:Overhang perimeter") == std::string::npos);
+    bool thick_wall = false;
+    for (const Extrusion& x : extrusions(plain.str()))
+        thick_wall = thick_wall || (x.z == "8.200" && x.type == "External perimeter" && x.height == "0.400");
+    CHECK(thick_wall);
+}
+
+TEST_CASE("walls: the stretches over the air are overhang perimeters at the bridges' speed (walls_extra.md, rule 8; "
+          "W2)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.relative_extrusion = true;
+    s.wall_count = 2; // as in the test
+    s.solid_infill_speed = 25.0; // the bridges', apart from the walls'
+    const SlicedModel model = slice_model(shelf(), s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    std::vector<double> pieces; // each run of overhang moves
+    bool in_run = false;
+    for (const Extrusion& x : extrusions(out.str())) {
+        INFO(x.z << " " << x.type);
+        const bool overhang = x.type == "Overhang perimeter";
+        if (overhang) {
+            CHECK(x.z == "8.200");
+            CHECK(x.height == "0.200"); // over the air: no gap to fill
+            CHECK(x.feed == 25.0 * 60.0);
+            if (!in_run)
+                pieces.push_back(0.0);
+            pieces.back() += x.length();
+        }
+        in_run = overhang;
+    }
+    // The outer and the inner wall, each from X 10 and half a bead round the
+    // 10 mm that stick out (W2: 38.70 and 37.07 mm with 0.45 mm walls).
+    REQUIRE(pieces.size() == 2);
+    std::sort(pieces.begin(), pieces.end());
+    CHECK_THAT(pieces[1], Catch::Matchers::WithinAbs(38.8, 0.2));
+    CHECK(pieces[0] < pieces[1]);
+    CHECK(pieces[0] > 36.0);
+    s.detect_overhangs = false;
+    std::ostringstream off;
+    write_gcode(off, model, s);
+    CHECK(off.str().find(";TYPE:Overhang perimeter") == std::string::npos);
 }
 
 TEST_CASE("numbers in the G-code: the fast formatter writes what std::to_chars writes", "[gcode]") {

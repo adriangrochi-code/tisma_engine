@@ -712,14 +712,16 @@ Con el PR #23 (2026-10-26):
   - QA8: la revisión de estabilidad (`print_review.md`, `stability.md`, claves `review.*`);
   - QA9: paredes más finas que la boquilla con `walls.min_line_width` (`perimeters.md`);
   - segunda prueba (`docs/spec/qa/2026-10-26-segunda-prueba.md`), soporte en grilla del estante de S4. Hechos
-    (2026-10-26): QA10, QA11 y QA12. Falta QA13:
+    (2026-10-26): QA10, QA11 y QA12; QA13 el 2026-10-27, con la regla 8 de `walls_extra.md` (perímetros en voladizo,
+    `walls.detect_overhangs`). Falta de esa regla el cordón redondo de los puentes (con `speed.bridges` y la ficha
+    `gcode_motion.md`, en el paso 2 de la cobertura):
     - QA10: la zona de soporte unos 1,6 mm más allá de lo que cuelga (`supports_skirt.md`, regla 2); hoy termina
       0,15 mm adentro, y en piezas orgánicas sale en pedazos sueltos. La más importante;
     - QA11: la separación XY medida desde la cara de la pieza (el eje de la línea a 0,425 mm de la cara, no a 0,8);
     - QA12: la base en líneas paralelas a `support.line_angle` en todas las capas, cada `support.spacing` más un
       cordón (2,857 mm);
-    - QA13: la primera capa sobre el soporte, con la altura de capa más la separación y los perímetros como
-      `;TYPE:Overhang perimeter` (regla 4);
+    - [x] QA13: la primera capa sobre el soporte, con la altura de capa más la separación y los perímetros como
+      `;TYPE:Overhang perimeter` (regla 4; hecho 2026-10-27);
   - de K1 (`cooling.md`) e I1 (`surfaces_infill.md`): la primera capa sólida sobre el relleno ralo es un puente
     (regla 6). Hecho (2026-10-26): solo la capa de arriba de todo es «Top solid infill» (regla 2);
   - `cooling.enabled`

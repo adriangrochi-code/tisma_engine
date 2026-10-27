@@ -131,6 +131,9 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
+    CHECK(Settings().detect_overhangs);
+    CHECK_FALSE(parse_settings(R"({"walls": {"detect_overhangs": false}})").detect_overhangs);
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"detect_overhangs": 1}})"), ContainsSubstring("must be true or false"));
     CHECK(parse_settings(R"({"speed": {"outer_wall": 35}})").outer_wall_speed.of(60.0) == 35.0);
     const Settings r = parse_settings(R"({"retraction": {"length": 0.8, "speed": 35, "lift": 0.2, "min_travel": 1.5},
                                           "walls": {"seam": "rear"}})");

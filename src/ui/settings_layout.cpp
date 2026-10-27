@@ -37,7 +37,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"compensation.hole_offset", A}}},
           {"slopes", T::SubSlopes, {{"zaa.enabled", N}, {"zaa.min_thickness", A}, {"zaa.raise", A}}}}},
         {"strength", T::SecStrength, "section_strength.svg",
-         {{"walls", T::SubWalls, {{"walls.count", B}}},
+         {{"walls", T::SubWalls, {{"walls.count", B}, {"walls.detect_overhangs", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
             {"surfaces.bottom_layers", B},

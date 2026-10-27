@@ -60,6 +60,9 @@ struct Toolpath {
     bool closed = false;
     int index = 0;      // bead index, counted from the outline
     bool wavy = false;  // nonplanar infill (docs/NONPLANAR_INFILL.md): each bead fills the gap down to the one below
+    // mm the bead also fills under the layer's bottom: the part's first layer
+    // over the support reaches down to the support's top (supports_skirt.md, rule 4).
+    double gap = 0.0;
 };
 
 // Connects the sites of each bead index inside every trapezoid into extrusion
