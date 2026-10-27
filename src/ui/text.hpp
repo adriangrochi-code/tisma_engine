@@ -845,10 +845,10 @@
     X(SubAccelerations, "Aceleraciones", "Accelerations") \
     X(SubOverhangSpeeds, "Voladizos", "Overhangs") \
     X(DynamicOverhangs, "Más lento según el apoyo", "Slower by support") \
-    X(Overhang0, "Sin apoyo (0 %)", "Unsupported (0 %)") \
-    X(Overhang1, "Apoyado al 25 %", "25 % supported") \
-    X(Overhang2, "Apoyado al 50 %", "50 % supported") \
-    X(Overhang3, "Apoyado al 75 %", "75 % supported") \
+    X(Overhang0, "Sin apoyo", "Unsupported") \
+    X(Overhang1, "Apoyado un cuarto", "A quarter supported") \
+    X(Overhang2, "Apoyado la mitad", "Half supported") \
+    X(Overhang3, "Apoyado tres cuartos", "Three quarters supported") \
     X(SumBySupport, "Según el apoyo", "By support") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \

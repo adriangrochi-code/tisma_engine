@@ -52,8 +52,9 @@ std::string conversions(const char* text) {
             continue;
         while (*p && !std::isalpha(static_cast<unsigned char>(*p)))
             ++p;
-        if (*p)
-            out += *p;
+        if (!*p)
+            break; // a '%' with no conversion after it: never past the end
+        out += *p;
     }
     return out;
 }
