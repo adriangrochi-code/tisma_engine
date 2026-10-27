@@ -9,6 +9,8 @@
 #include "resin/goo.hpp"
 #include "resin/resin.hpp"
 
+#include "test_temp.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -876,7 +878,7 @@ TEST_CASE("resin: the hollow's inner bars and the drain holes", "[resin][resin_s
 }
 
 TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_resin_cli";
+    const std::filesystem::path dir = test_temp_dir() / "tisma_resin_cli";
     std::filesystem::create_directories(dir);
     {
         std::ofstream stl(dir / "cube.stl");
@@ -900,12 +902,16 @@ TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
     const std::vector<std::string_view> args = {"slice", model, "--config", config, "-o", goo};
     REQUIRE(run_cli(args, out, err) == 0);
     CHECK_THAT(out.str(), ContainsSubstring("layers: 200"));
-    std::ifstream in(goo, std::ios::binary);
-    const GooFile f = read_goo(in);
-    CHECK(f.layers.size() == 200);
-    // Centred on the display, as RE1 and RE2.
-    CHECK(f.layers[100].image.size() == 4586);
-    CHECK(f.layers[100].image.back() == 0x03);
+    {
+        // Closed before the next run writes the file again (Windows does not
+        // let an open file be replaced).
+        std::ifstream in(goo, std::ios::binary);
+        const GooFile f = read_goo(in);
+        CHECK(f.layers.size() == 200);
+        // Centred on the display, as RE1 and RE2.
+        CHECK(f.layers[100].image.size() == 4586);
+        CHECK(f.layers[100].image.back() == 0x03);
+    }
     // A cup on the platform goes into the warnings.
     {
         std::ofstream stl(dir / "cup.stl");
@@ -922,10 +928,13 @@ TEST_CASE("resin: a .goo output from the command line", "[resin][cli]") {
     const std::string cup = (dir / "cup.stl").string(), warnings = (dir / "cup.json").string();
     std::ostringstream out2, err2;
     const std::vector<std::string_view> cup_args = {"slice", cup, "--config", config, "-o", goo, "--warnings", warnings};
-    REQUIRE(run_cli(cup_args, out2, err2) == 0);
+    const int code = run_cli(cup_args, out2, err2);
+    INFO(err2.str());
+    REQUIRE(code == 0);
     CHECK_THAT(out2.str(), ContainsSubstring("warnings: 1"));
     std::ifstream report(warnings);
     const std::string json{std::istreambuf_iterator<char>(report), std::istreambuf_iterator<char>()};
+    report.close();
     CHECK_THAT(json, ContainsSubstring("\"cupping\""));
     CHECK_THAT(json, ContainsSubstring("cup.stl: a cup from z"));
     // A resin printer asks for a .goo file.
