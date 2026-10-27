@@ -7,6 +7,8 @@
 #include "file_browser.hpp"
 #include "gl.hpp"
 #include "renderer.hpp"
+#include "vk_view.hpp"
+#include "vk_window.hpp"
 
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -19,19 +21,26 @@
 #include "fea/analysis.hpp"
 #include "gcode/export.hpp"
 #include "gcode/print_time.hpp"
+#include "io/model.hpp"
 #include "io/stl.hpp"
 #include "project/project.hpp"
 #include "ui/camera.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
+#include "ui/help.hpp"
+#include "ui/plate.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
 #include "ui/scene.hpp"
+#include "ui/settings_layout.hpp"
 #include "ui/slicing.hpp"
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#ifdef TISMA_VULKAN_WINDOW
+#include <imgui_impl_vulkan.h>
+#endif
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <misc/cpp/imgui_stdlib.h>
@@ -39,6 +48,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -47,7 +57,9 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <sstream>
+#include <string_view>
 #include <utility>
 
 namespace tisma::ui {
@@ -56,7 +68,7 @@ namespace {
 // Sizes in screen units before the monitor's scale.
 constexpr float kTopBar = 56.0f;
 constexpr float kStatusBar = 30.0f;
-constexpr float kPanel = 350.0f;
+constexpr float kPanel = 420.0f;
 constexpr float kFontSize = 15.0f;
 constexpr float kTitleSize = 21.0f;
 constexpr double kToastSeconds = 6.0;
@@ -66,9 +78,20 @@ constexpr const char* kIcons[] = {
     "tisma_save",       "tisma_slice",     "tisma_send",     "tisma_engineering", "tisma_calibrate", "tisma_vibration",
     "tisma_view",       "tisma_view_back", "tisma_view_front", "tisma_view_left", "tisma_view_right", "tisma_view_top",
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
+    "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
+    "tool_lay_flat",    "tool_arrange",     "tool_paint",
+    "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
+    "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",
 };
 
-const std::vector<std::string> kOpenExtensions = {".stl", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".json"};
+const std::vector<std::string> kModelExtensions = {".stl", ".obj", ".3mf"};
+
+bool is_model(const std::filesystem::path& path) {
+    const std::string ext = lower_extension(path);
+    return std::find(kModelExtensions.begin(), kModelExtensions.end(), ext) != kModelExtensions.end();
+}
 
 ImVec4 rgb(std::uint32_t c, float alpha = 1.0f) {
     return ImVec4(float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f, alpha);
@@ -86,6 +109,7 @@ struct Theme {
     std::uint32_t view_top, view_bottom, plate, model;
     std::uint32_t sky, ground; // the ambient light from above and from below
     std::uint32_t grid_minor, grid_major;
+    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's marks
 };
 
 Theme dark_theme() {
@@ -231,7 +255,10 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
-enum class Purpose { Open, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+enum class Purpose { Open, AddModel, SaveGcode, LoadSettings, SaveSettings, SaveProject, SaveExtruderTest, LoadCase };
+
+// The plate tool in use (docs/UI.md, «Herramientas de la placa»).
+enum class PlateTool { Select, Move, Rotate, Scale, LayFlat, Paint };
 
 class App {
 public:
@@ -254,6 +281,16 @@ private:
     void analysis_panel();
     void calibration_panel();
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
+    void add_model(const std::filesystem::path& path);
+    void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
+    void rebuild_plate();
+    void plate_changed();
+    void arrange_plate();
+    void plate_tools();
+    void paint_card(ImVec2 at);
+    void brush_stroke(std::size_t object);
+    void update_paint_view();
+    Vec3 mouse_ray() const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
@@ -277,6 +314,7 @@ private:
     void show_preview();
     void update_ray_scene();
     void check_rays(const ViewFrame& f);
+    void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
@@ -304,6 +342,8 @@ private:
     void load_profile_lists();
     void profile_row(ProfileKind kind);
     void choose_profile(ProfileKind kind, const Profile& profile);
+    // Speeds the settings lack: a stock Ender-3's, and a word about it.
+    void fill_speeds();
     void save_profile_as(ProfileKind kind, std::string name);
     void refresh_profiles();
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
@@ -315,7 +355,12 @@ private:
     bool button(const char* id, const char* icon_name, const char* label, bool primary, bool selected, bool enabled,
                 const char* tip, float height);
     bool icon_button(const char* id, const char* icon_name, const char* tip, float size);
-    bool section(const char* id, const char* icon_name, T title, bool open_by_default = true);
+    // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
+    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary);
+    bool card_rows(std::string_view id, bool& bed);
+    bool setting_shown(std::string_view key, std::string_view card) const;
+    bool setting_applies(std::string_view key) const;
+    bool card_shown(const SubsectionLayout& sub) const;
 
     AppOptions options_;
     GLFWwindow* window_ = nullptr;
@@ -324,14 +369,53 @@ private:
     float scale_ = 1.0f;
     Theme theme_ = dark_theme();
     ImFont* font_ = nullptr;
-    std::map<std::string, unsigned> icons_;
-    unsigned logo_ = 0;
+    std::map<std::string, ImTextureID> icons_;
+    // The settings panel: its tab, level, the section chosen in each tab, the
+    // cards open (the first of each section at first), each card's height in
+    // the last frame (for its background), Basic's «Show all» until the
+    // section changes, and the settings that differ from the chosen profiles.
+    SettingsTab panel_tab_ = SettingsTab::Print;
+    ViewLevel view_level_ = ViewLevel::Normal;
+    std::array<std::string, 3> panel_section_{"quality", "temperature", "machine"};
+    std::map<std::string, bool> card_open_;
+    std::map<std::string, float> card_heights_;
+    std::set<std::string> show_all_cards_;
+    std::set<std::string> changed_keys_;
+    ImTextureID logo_ = 0;
+    // The window with Vulkan (--graphics; PLAN.md «Vista con Vulkan»): the
+    // panels and the 3D view drawn by it. The view goes first at shutdown.
+    VulkanWindow vk_;
+    VulkanView vk_view_;
+    bool vulkan_ = false;
     ImVec2 view_pos_{0, 0}, view_size_{1, 1};
 
     Tab tab_ = Tab::Prepare;
     Settings settings_ = default_settings();
 
-    // The model, as read and where it sits on the bed.
+    // The plate: each model as read with where it goes (objects_), each as
+    // placed (placed_meshes_), and all of them in one mesh, as the slicer and
+    // the view take them (mesh_, in bed coordinates: offset_ stays zero).
+    std::vector<PlateObject> objects_;
+    std::vector<TriangleMesh> placed_meshes_;
+    std::vector<std::size_t> object_vertices_; // where each model's vertices start in the view's mesh
+    int selected_ = -1;
+    PlateTool tool_ = PlateTool::Select;
+    int pressed_object_ = -1;  // the model the left button went down on
+    Vec3 drag_anchor_{};       // the point on the bed plane the drag holds
+    bool dragged_ = false;
+    Vec3 drag_offset_{};       // how far the dragged model moved since its mesh was made (the view shifts it)
+    std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
+    const std::vector<TriangleIndex>& plate_indexes();
+    bool keep_scale_ = true;   // the Scale tool scales all three axes together
+    // The Paint tool (docs/PAINTING.md): what it paints, with which mark and
+    // how wide; the model a stroke started on; where the brush is now.
+    PaintChannel paint_channel_ = PaintChannel::Support;
+    std::uint8_t paint_mark_ = kPaintEnforce;
+    float brush_radius_ = 2.0f;
+    int painting_object_ = -1;
+    bool painted_ = false;     // the stroke changed something
+    bool paint_dirty_ = true;  // the view's copy of the paint is out of date
+    std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     std::optional<TriangleMesh> mesh_;
     std::filesystem::path model_path_;
     Vec3 offset_{};
@@ -410,6 +494,18 @@ private:
     std::string error_title_, error_message_;
     std::vector<std::string> error_details_;
     bool about_open_ = false;
+    // Help (docs/UI.md, «Ayuda»): the assistant's step on screen (-1: none),
+    // the first-use tip on screen, the tips already seen and whether they show.
+    int tour_step_ = -1;
+    std::string tip_;
+    std::set<std::string> tips_seen_;
+    bool tips_ = true;
+    bool first_run_ = false; // no preferences yet: the assistant opens
+    PlateTool last_tool_ = PlateTool::Select;
+    Tab last_tab_ = Tab::Prepare;
+    bool had_result_ = false;
+    void tip(const std::string& id);
+    void help_windows();
 
     // Calibration: the dimensional test, what was measured on it, the towers'
     // ranges, and the test loaded last (its segments, without the mesh).
@@ -432,6 +528,9 @@ private:
     // ProfileKind), the one chosen, and whether the settings still match it
     // (worked out again when the settings change).
     std::array<std::vector<Profile>, 3> builtin_profiles_, user_profiles_;
+    // Printer profiles without speeds of their own, which took a stock
+    // Ender-3's (fill_missing_speeds).
+    std::set<std::string> speed_fallback_;
     std::array<std::string, 3> chosen_profile_;
     std::array<bool, 3> profile_modified_{};
     std::string profiles_checked_;
@@ -454,11 +553,17 @@ private:
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
     bool failed_ = false; // the screenshot or its export failed
+    bool benched_ = false; // --bench-frames done
+    unsigned view_queries_[3] = {}; // timer queries of the 3D view, in turn
+    bool view_timing_[3] = {};      // a query is out, its result not read yet
+    int view_query_ = 0;
+    double view_ms_ = 0.0; // the 3D view's GPU time per frame, smoothed
+    double preview_ms_ = 0.0; // building the last preview's buffers
 };
 
 ImTextureRef App::icon(const char* name) const {
     const auto it = icons_.find(name);
-    return ImTextureRef(static_cast<ImTextureID>(it == icons_.end() ? 0 : it->second));
+    return ImTextureRef(it == icons_.end() ? ImTextureID(0) : it->second);
 }
 
 // A button with an icon and a label, drawn by hand so it can carry the brand's
@@ -516,22 +621,142 @@ bool App::icon_button(const char* id, const char* icon_name, const char* tip, fl
     return button(id, icon_name, nullptr, false, false, true, tip, size);
 }
 
-// A collapsing section of the settings panel with its icon.
-bool App::section(const char* id, const char* icon_name, T title, bool open_by_default) {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 8.0f * scale_));
-    const std::string label = std::string("        ") + tr(title) + "###" + id;
-    const bool open = ImGui::CollapsingHeader(label.c_str(), open_by_default ? ImGuiTreeNodeFlags_DefaultOpen : 0);
-    ImGui::PopStyleVar();
-    const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-    const float size = ImGui::GetFontSize() * 1.15f;
-    const float x = min.x + ImGui::GetStyle().FramePadding.x + ImGui::GetFontSize() + 4.0f * scale_;
-    const float y = (min.y + max.y - size) * 0.5f;
-    ImGui::GetWindowDrawList()->AddImage(icon(icon_name), ImVec2(x, y), ImVec2(x + size, y + size), ImVec2(0, 0),
-                                         ImVec2(1, 1), ImGui::GetColorU32(rgb(theme_.accent_hover)));
-    return open;
+// What each setting does, from the copy of docs/CONFIG.md the program carries.
+const std::map<std::string, SettingDoc>& setting_docs() {
+    static const std::map<std::string, SettingDoc> docs = parse_setting_docs(embedded("CONFIG.md"));
+    return docs;
 }
 
-// Rows of the settings tables: a label (with a tooltip) and a control.
+// The setting each row of the panel edits, for its info button.
+const char* row_key(T label) {
+    static const std::map<T, const char*> keys = {
+        {T::LayerHeight, "layers.height"}, {T::FirstLayerHeight, "layers.first_height"},
+        {T::LayerHeights, "layers.heights"},
+        {T::DetailHeight, "layers.detail_height"}, {T::DetailTolerance, "layers.detail_tolerance"},
+        {T::DetailMargin, "layers.detail_margin"}, {T::CuspHeight, "layers.cusp_height"},
+        {T::Zaa, "zaa.enabled"}, {T::ZaaMinThickness, "zaa.min_thickness"}, {T::ZaaRaise, "zaa.raise"},
+        {T::Walls, "walls.count"}, {T::LineWidth, "walls.width"}, {T::Seam, "walls.seam"},
+        {T::FuzzySkin, "fuzzy.mode"}, {T::FuzzyThickness, "fuzzy.thickness"},
+        {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
+        {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
+        {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
+        {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
+        {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
+        {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
+        {T::NonplanarWavelength, "infill.nonplanar_wavelength"}, {T::CombineInfill, "infill.combine_layers"},
+        {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
+        {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
+        {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
+        {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
+        {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
+        {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
+        {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
+        {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
+        {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
+        {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
+        {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
+        {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
+        {T::MaxHeight, "machine.max_height"}, {T::Nozzle, "machine.nozzle_diameter"},
+        {T::MinLayerHeight, "machine.min_layer_height"}, {T::MaxLayerHeight, "machine.max_layer_height"},
+        {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
+        {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
+        {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"},
+        {T::ScarfMode, "walls.scarf"}, {T::ScarfLength, "walls.scarf_length"},
+        {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
+        {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
+        {T::ScarfInner, "walls.scarf_inner"}, {T::ScaleXRow, "compensation.scale_x"},
+        {T::ScaleYRow, "compensation.scale_y"}, {T::ScaleZRow, "compensation.scale_z"},
+        {T::HoleCorrection, "compensation.hole_offset"}, {T::XyOffset, "slicing.xy_offset"},
+        {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
+        {T::GapClosing, "slicing.gap_closing_radius"}, {T::SimplifyTolerance, "slicing.simplify_tolerance"},
+        {T::WallOverlap, "infill.wall_overlap"}, {T::CombineMaxHeight, "infill.combine_max_height"},
+        {T::SupportZGap, "support.z_gap"}, {T::SupportXyGap, "support.xy_gap"},
+        {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
+        {T::SupportLineAngle, "support.line_angle"},
+        {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
+        {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
+        {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
+        {T::TreeDoubleWall, "support.tree_double_wall_diameter"},
+        {T::TreeBranchDistance, "support.tree_branch_distance"}, {T::TreeTipDiameter, "support.tree_tip_diameter"},
+        {T::TreeTopRate, "support.tree_top_rate"},
+        {T::SkirtLayers, "adhesion.skirt_layers"}, {T::HeightChanges, "changes"},
+        {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
+        {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
+        {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
+        {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
+        {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
+        {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
+        {T::MaxChamberTemp, "machine.max_chamber_temp"}, {T::HardenedNozzle, "machine.hardened_nozzle"},
+        {T::MachineMaxFlow, "machine.max_flow"}, {T::MaxFeedX, "machine.max_feed_x"},
+        {T::MaxFeedY, "machine.max_feed_y"}, {T::MaxFeedZ, "machine.max_feed_z"},
+        {T::MaxFeedE, "machine.max_feed_e"}, {T::CornerSpeed, "machine.corner_speed"},
+        {T::AccelerationRow, "machine.acceleration"}, {T::TravelAcceleration, "machine.travel_acceleration"},
+        {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
+        {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
+        {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}};
+    const auto it = keys.find(label);
+    return it == keys.end() ? nullptr : it->second;
+}
+
+// The setting whose info card is kept open (--info, for screenshots).
+std::string g_open_info;
+
+// The (i) beside a setting's name: a click opens what the setting does, its
+// key, default and range (docs/UI.md, «Ayuda»).
+void info_button(T label, const char* key) {
+    const float size = ImGui::GetFontSize() * 0.95f;
+    ImGui::SameLine(0.0f, size * 0.35f);
+    ImGui::PushID(key);
+    ImGui::PushID(static_cast<int>(label));
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    const float y = at.y + (ImGui::GetFrameHeight() - size) * 0.5f;
+    ImGui::SetCursorScreenPos(ImVec2(at.x, y));
+    // Asked from the command line, it stays open: the screenshot is taken
+    // some frames later.
+    if (g_open_info == key && !ImGui::IsPopupOpen("##info_card"))
+        ImGui::SetScrollHereY(0.5f); // the row in sight, wherever it is in the panel
+    if (ImGui::InvisibleButton("##info", ImVec2(size, size)) || (g_open_info == key && !ImGui::IsPopupOpen("##info_card")))
+        ImGui::OpenPopup("##info_card");
+    const bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImU32 colour = ImGui::GetColorU32(hovered ? ImGuiCol_CheckMark : ImGuiCol_TextDisabled);
+    const ImVec2 c(at.x + size * 0.5f, y + size * 0.5f);
+    dl->AddCircle(c, size * 0.45f, colour, 16, 1.2f);
+    dl->AddLine(ImVec2(c.x, c.y - size * 0.05f), ImVec2(c.x, c.y + size * 0.25f), colour, 1.6f);
+    dl->AddCircleFilled(ImVec2(c.x, c.y - size * 0.22f), size * 0.07f, colour);
+    if (hovered)
+        ImGui::SetTooltip("%s", tr(T::Info));
+    if (ImGui::BeginPopup("##info_card")) {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
+        ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
+        const auto& docs = setting_docs();
+        const auto doc = docs.find(key);
+        if (label == T::NozzleTemp || label == T::BedTemp)
+            ImGui::TextUnformatted(tr(T::InfoTemperatures));
+        else if (doc != docs.end())
+            ImGui::TextUnformatted(doc->second.meaning.c_str());
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s: %s", tr(T::InfoKey), key);
+        if (doc != docs.end() && !doc->second.default_value.empty())
+            ImGui::TextDisabled("%s: %s", tr(T::InfoDefault), doc->second.default_value.c_str());
+        if (doc != docs.end() && !doc->second.range.empty())
+            ImGui::TextDisabled("%s: %s", tr(T::InfoRange), doc->second.range.c_str());
+        if (language() == Language::English)
+            ImGui::TextDisabled("%s", tr(T::InfoSpanish));
+        ImGui::PopTextWrapPos();
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
+    ImGui::PopID();
+}
+
+// A gray tag after the next row's label: the level of a changed setting that
+// the panel's level would hide (settings_panel.md, rule 12).
+const char* g_row_tag = nullptr;
+
+// Rows of the settings tables: a label (with a tooltip and, for a setting of
+// the engine, its info button) and a control.
 void label_cell(T label, const char* tip = nullptr) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
@@ -539,6 +764,15 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", tip);
+    if (const char* key = row_key(label))
+        info_button(label, key);
+    if (g_row_tag) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", g_row_tag);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::HiddenChanged));
+        g_row_tag = nullptr;
+    }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
@@ -582,8 +816,8 @@ bool row(T label, bool& v, const char* tip = nullptr) {
 }
 
 template <class Enum>
-bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options) {
-    label_cell(label);
+bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options, const char* tip = nullptr) {
+    label_cell(label, tip);
     const char* current = "";
     for (const auto& [value, name] : options)
         if (value == v)
@@ -670,23 +904,59 @@ bool App::init(std::string& error) {
         error = "cannot start GLFW (is there a display?)";
         return false;
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    glfwWindowHint(GLFW_SCALE_TO_MONITOR, options_.screenshot.empty() ? GLFW_TRUE : GLFW_FALSE);
-    window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
-    if (!window_) {
-        error = "cannot open a window with OpenGL 3.3";
-        return false;
+    const auto open_window = [&](bool vulkan) {
+        glfwDefaultWindowHints();
+        if (vulkan) {
+            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        } else {
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+        }
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, options_.screenshot.empty() ? GLFW_TRUE : GLFW_FALSE);
+        window_ = glfwCreateWindow(options_.width, options_.height, "Tisma", nullptr, nullptr);
+    };
+    // Vulkan when this machine has it (found by starting it: the loader, a
+    // Vulkan 1.1 device, a surface for this window, the 3D view's shaders
+    // and targets); else, and as the fallback, OpenGL 3.3. Automatically
+    // only once the Vulkan view does all the OpenGL one does (PLAN.md «Vista
+    // con Vulkan»): until then «auto» is OpenGL.
+    constexpr bool kVulkanViewReady = false;
+    if (options_.graphics == "vulkan" || (options_.graphics == "auto" && kVulkanViewReady)) {
+        std::string why = "cannot open a window for Vulkan";
+        open_window(true);
+        vulkan_ = window_ && vk_.init(window_, true, why) && vk_view_.init(*vk_.device(), why);
+        if (!vulkan_) {
+            vk_view_.shutdown();
+            vk_.shutdown();
+            // Vulkan asked for in the CI, which has a device and sets
+            // TISMA_REQUIRE_GPU=1: there a fallback is a failure.
+            if (const char* require = std::getenv("TISMA_REQUIRE_GPU");
+                options_.graphics == "vulkan" && require && std::string_view(require) == "1") {
+                error = "vulkan: " + why;
+                return false;
+            }
+            std::fprintf(stderr, "vulkan: %s; the window stays with OpenGL\n", why.c_str());
+            if (window_)
+                glfwDestroyWindow(window_);
+            window_ = nullptr;
+        }
     }
-    glfwMakeContextCurrent(window_);
-    glfwSwapInterval(1);
-    if (const char* missing = load_gl(glfwGetProcAddress)) {
-        error = std::string("the OpenGL driver lacks ") + missing;
-        return false;
+    if (!vulkan_) {
+        open_window(false);
+        if (!window_) {
+            error = "cannot open a window with OpenGL 3.3";
+            return false;
+        }
+        glfwMakeContextCurrent(window_);
+        glfwSwapInterval(1);
+        if (const char* missing = load_gl(glfwGetProcAddress)) {
+            error = std::string("the OpenGL driver lacks ") + missing;
+            return false;
+        }
+        gl_loaded_ = true;
     }
-    gl_loaded_ = true;
     glfwSetWindowUserPointer(window_, this);
     glfwSetDropCallback(window_, [](GLFWwindow* w, int count, const char** paths) {
         auto* app = static_cast<App*>(glfwGetWindowUserPointer(w));
@@ -723,11 +993,35 @@ bool App::init(std::string& error) {
     }
     if (!font_)
         font_ = io.Fonts->AddFontDefault();
-    ImGui_ImplGlfw_InitForOpenGL(window_, true);
-    ImGui_ImplOpenGL3_Init("#version 330 core");
-
-    if (!renderer_.init(error))
-        return false;
+    if (vulkan_) {
+        ImGui_ImplGlfw_InitForVulkan(window_, true);
+        if (!vk_.init_imgui(error))
+            return false;
+    } else {
+        ImGui_ImplGlfw_InitForOpenGL(window_, true);
+        ImGui_ImplOpenGL3_Init("#version 330 core");
+        if (!renderer_.init(error))
+            return false;
+    }
+    // A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
+    const auto texture = [&](const Image& image, bool clamp) -> ImTextureID {
+        if (vulkan_)
+            return vk_.add_texture(image.rgba.data(), image.width, image.height);
+        unsigned tex = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        if (clamp) {
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        }
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     image.rgba.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return ImTextureID(tex);
+    };
 
     // Icons drawn white at twice their size; the buttons tint them.
     const int icon_pixels = int(std::lround(48.0f * scale_));
@@ -735,30 +1029,30 @@ bool App::init(std::string& error) {
         const Image image = rasterize_svg(embedded(std::string(name) + ".svg"), icon_pixels, 0xFFFFFF);
         if (image.rgba.empty())
             continue;
-        unsigned tex = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        icons_[name] = tex;
+        icons_[name] = texture(image, true);
     }
     const Image logo = rasterize_svg(embedded("tisma.svg"), int(std::lround(96.0f * scale_)));
-    if (!logo.rgba.empty()) {
-        glGenTextures(1, &logo_);
-        glBindTexture(GL_TEXTURE_2D, logo_);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, logo.width, logo.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, logo.rgba.data());
-    }
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (!logo.rgba.empty())
+        logo_ = texture(logo, false);
 
     if (options_.screenshot.empty())
         load_preferences();
+    // The assistant on the first run; screenshots show help only when asked.
+    if (options_.screenshot.empty() && first_run_)
+        tour_step_ = 0;
+    if (!options_.screenshot.empty())
+        tips_ = options_.tips;
+    if (options_.tour >= 0)
+        tour_step_ = options_.tour;
+    g_open_info = options_.info;
+    if (!options_.level.empty())
+        view_level_ = options_.level == "basic" ? ViewLevel::Basic : options_.level == "advanced" ? ViewLevel::Advanced
+                                                                                                 : ViewLevel::Normal;
+    if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
+        const std::string tab = options_.section.substr(0, slash);
+        panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
+        panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
+    }
     if (options_.light)
         theme_ = light_theme();
     if (options_.language_given)
@@ -793,8 +1087,37 @@ bool App::init(std::string& error) {
     bed_changed();
     camera_.set_view(StandardView::Iso);
     frame_all();
-    for (const std::string& file : options_.files)
-        open_path(from_utf8(file));
+    // The first model opens the plate; the next ones join it.
+    bool first_model = true;
+    for (const std::string& file : options_.files) {
+        const std::filesystem::path path = from_utf8(file);
+        if (is_model(path) && !first_model)
+            add_model(path);
+        else
+            open_path(path);
+        first_model = first_model && !is_model(path);
+    }
+    if (!options_.tool.empty())
+        tool_ = options_.tool == "move" ? PlateTool::Move : options_.tool == "rotate" ? PlateTool::Rotate
+              : options_.tool == "scale" ? PlateTool::Scale : options_.tool == "paint" ? PlateTool::Paint
+                                                                                         : PlateTool::LayFlat;
+    // Brush strokes asked on the command line, for screenshots and tests.
+    for (const AppOptions::Stroke& b : options_.strokes) {
+        const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
+                                     : b.channel == "fuzzy" ? PaintChannel::Fuzzy
+                                                            : PaintChannel::Support;
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+            Brush brush;
+            brush.centre = {b.x, b.y, b.z};
+            brush.radius = b.radius;
+            brush.detail = std::max(0.05, b.radius / 8.0);
+            brush.mark = b.block ? kPaintBlock : kPaintEnforce;
+            paint(objects_[i].painting, channel, placed_meshes_[i], brush);
+        }
+        paint_channel_ = channel;
+        paint_dirty_ = true;
+        ++revision_.model;
+    }
     for (const std::string& choice : options_.profiles) {
         const std::size_t eq = choice.find('=');
         const auto kind = profile_kind_from_name(choice.substr(0, eq));
@@ -833,26 +1156,38 @@ void App::apply_theme() {
     look.major = theme_.grid_major;
     look.outline = 0xFF000000u | theme_.accent_hover;
     renderer_.set_bed(settings_.bed, look);
+    vk_view_.set_bed(settings_.bed, look);
 }
 
 void App::shutdown() {
     slice_job_.wait();
     voxel_job_.wait();
     device_disconnect();
-    if (options_.screenshot.empty() && gl_loaded_)
+    if (options_.screenshot.empty() && (gl_loaded_ || vulkan_))
         save_preferences();
     if (gl_loaded_) {
-        for (const auto& [name, tex] : icons_)
-            glDeleteTextures(1, &tex);
-        if (logo_)
-            glDeleteTextures(1, &logo_);
+        for (const auto& [name, tex] : icons_) {
+            const auto id = unsigned(tex);
+            glDeleteTextures(1, &id);
+        }
+        if (logo_) {
+            const auto id = unsigned(logo_);
+            glDeleteTextures(1, &id);
+        }
+        if (view_queries_[0])
+            glDeleteQueries(3, view_queries_);
         renderer_.shutdown();
     }
+    vk_view_.shutdown(); // its picture is an ImGui texture: before the backend
     if (ImGui::GetCurrentContext()) {
-        ImGui_ImplOpenGL3_Shutdown();
+        if (vulkan_)
+            vk_.shutdown(); // ImGui's Vulkan backend and the textures with it
+        else
+            ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
     }
+    vk_.shutdown();
     if (window_)
         glfwDestroyWindow(window_);
     glfwTerminate();
@@ -861,10 +1196,17 @@ void App::shutdown() {
 void App::load_preferences() {
     const std::filesystem::path path = preferences_path();
     std::ifstream in(path, std::ios::binary);
-    if (!in)
+    if (!in) {
+        first_run_ = true;
         return;
+    }
     try {
         const nlohmann::json j = nlohmann::json::parse(in);
+        tips_ = j.value("tips", true);
+        if (j.contains("tips_seen") && j.at("tips_seen").is_array())
+            for (const auto& t : j.at("tips_seen"))
+                if (t.is_string())
+                    tips_seen_.insert(t.get<std::string>());
         if (j.value("language", "es") == "en")
             set_language(Language::English);
         if (j.value("theme", "dark") == "light")
@@ -880,10 +1222,25 @@ void App::load_preferences() {
         if (j.contains("settings")) {
             try {
                 settings_ = parse_settings(j.at("settings").dump());
+                fill_speeds();
             } catch (const std::exception&) {
                 // The rest still counts; the settings start from the defaults.
                 keep_unreadable(path);
             }
+        }
+        // The settings panel: level, section by tab and the cards open or folded.
+        if (j.contains("ui") && j.at("ui").is_object()) {
+            const nlohmann::json& ui = j.at("ui");
+            const std::string level = ui.value("level", std::string("normal"));
+            view_level_ = level == "basic" ? ViewLevel::Basic : level == "advanced" ? ViewLevel::Advanced : ViewLevel::Normal;
+            if (ui.contains("section") && ui.at("section").is_array())
+                for (std::size_t t = 0; t < std::min<std::size_t>(3, ui.at("section").size()); ++t)
+                    if (ui.at("section")[t].is_string())
+                        panel_section_[t] = ui.at("section")[t].get<std::string>();
+            if (ui.contains("cards") && ui.at("cards").is_object())
+                for (const auto& [card, open] : ui.at("cards").items())
+                    if (open.is_boolean())
+                        card_open_[card] = open.get<bool>();
         }
         if (j.contains("profiles") && j.at("profiles").is_object())
             for (const auto& [kind, name] : j.at("profiles").items())
@@ -911,6 +1268,11 @@ void App::save_preferences() {
         j["device_port"] = device_port_;
         j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
+        j["tips"] = tips_;
+        j["tips_seen"] = tips_seen_;
+        j["ui"]["level"] = view_level_ == ViewLevel::Basic ? "basic" : view_level_ == ViewLevel::Advanced ? "advanced" : "normal";
+        j["ui"]["section"] = panel_section_;
+        j["ui"]["cards"] = card_open_;
         // Without the changes of a calibration tower left on the bed.
         Settings kept = settings_;
         if (calibration_)
@@ -939,7 +1301,7 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
 void App::open_path(const std::filesystem::path& path) {
     const std::string ext = lower_extension(path);
     last_folder_ = path.parent_path();
-    if (ext == ".stl")
+    if (is_model(path))
         load_model(path);
     else if (ext == ".tisma")
         open_project(path);
@@ -948,12 +1310,12 @@ void App::open_path(const std::filesystem::path& path) {
     else if (ext == ".json")
         load_settings_file(path);
     else
-        fail(T::CannotOpen, utf8(path) + ": only .stl, .tisma, .gcode and .json files");
+        fail(T::CannotOpen, utf8(path) + ": only .stl, .obj, .3mf, .tisma, .gcode and .json files");
 }
 
 void App::load_model(const std::filesystem::path& path) {
     try {
-        StlFile stl = read_stl(path);
+        ModelFile stl = read_model(path);
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
@@ -973,11 +1335,15 @@ void App::load_model(const std::filesystem::path& path) {
 
 void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab) {
     ++revision_.model;
-    mesh_ = std::move(mesh);
+    objects_.clear();
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    selected_ = 0;
+    tool_ = PlateTool::Select;
     model_path_ = name;
     viewer_ = false;
     result_.reset();
     renderer_.clear_preview();
+    vk_view_.clear_preview();
     place_model();
     voxels_.reset();
     voxels_stale_ = true;
@@ -999,16 +1365,125 @@ void App::load_calibration(CalibrationPrint print) {
     use_mesh(std::move(mesh), name, Tab::Calibration);
 }
 
+// After the bed changed: one model goes back to its centre; several keep
+// their places.
 void App::place_model() {
-    if (!mesh_)
-        return;
-    offset_ = centre_on_bed(mesh_->bounding_box(), settings_.bed);
-    const BoundingBox box = mesh_->bounding_box();
-    placed_ = box;
-    placed_.min = {box.min.x + offset_.x, box.min.y + offset_.y, box.min.z + offset_.z};
-    placed_.max = {box.max.x + offset_.x, box.max.y + offset_.y, box.max.z + offset_.z};
-    renderer_.set_model(mesh_vertices(*mesh_, offset_));
+    if (objects_.size() == 1) {
+        PlateObject& o = objects_[0];
+        o.place.x = o.place.y = 0.0;
+        const BoundingBox box = placed_mesh(o).bounding_box();
+        const Vec3 at = centre_on_bed(box, settings_.bed);
+        o.place.x = 0.5 * (double(box.min.x) + double(box.max.x)) + at.x;
+        o.place.y = 0.5 * (double(box.min.y) + double(box.max.y)) + at.y;
+    }
+    rebuild_plate();
+}
+
+// The placed meshes, the plate's mesh and the view's copy, from objects_.
+void App::rebuild_plate() {
+    placed_meshes_.clear();
+    object_vertices_.clear();
+    std::size_t vertices = 0;
+    for (const PlateObject& o : objects_) {
+        placed_meshes_.push_back(placed_mesh(o));
+        object_vertices_.push_back(vertices);
+        vertices += 3 * placed_meshes_.back().triangle_count();
+    }
+    object_vertices_.push_back(vertices);
+    paint_dirty_ = true;
+    drag_offset_ = {};
+    indexes_.clear();
+    offset_ = {};
+    if (objects_.empty()) {
+        mesh_.reset();
+        placed_ = {};
+        renderer_.set_model({});
+        vk_view_.set_model({});
+    } else {
+        mesh_ = plate_mesh(placed_meshes_);
+        placed_ = mesh_->bounding_box();
+        const std::vector<float> model = mesh_vertices(*mesh_, offset_);
+        renderer_.set_model(model);
+        vk_view_.set_model(model);
+    }
+    if (selected_ >= int(objects_.size()))
+        selected_ = int(objects_.size()) - 1;
     ++scene_version_;
+}
+
+// A model was moved, turned, scaled, added or removed: the slice and the
+// analysis are out of date.
+void App::plate_changed() {
+    ++revision_.model;
+    if (result_ && !viewer_)
+        stale_ = true;
+    voxels_stale_ = true;
+    rebuild_plate();
+}
+
+void App::add_model(const std::filesystem::path& path) {
+    try {
+        ModelFile stl = read_model(path);
+        if (stl.mesh.empty()) {
+            fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
+            return;
+        }
+        last_folder_ = path.parent_path();
+        add_mesh(std::move(stl.mesh), path);
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// One more model on the plate, and the plate arranged (placement.md, rule 2).
+void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
+    if (objects_.empty() || calibration_ || viewer_) {
+        use_mesh(std::move(mesh), name, Tab::Prepare);
+        return;
+    }
+    objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    selected_ = int(objects_.size()) - 1;
+    arrange_plate();
+    frame_all();
+}
+
+void App::arrange_plate() {
+    if (objects_.empty())
+        return;
+    std::vector<std::array<double, 2>> sizes;
+    for (const PlateObject& o : objects_) {
+        const std::array<double, 3> s = placed_size(o);
+        sizes.push_back({s[0], s[1]});
+    }
+    // The bed's centre (its box), or the origin with no bed.
+    double x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    for (std::size_t i = 0; i < settings_.bed.size(); ++i) {
+        const auto& p = settings_.bed[i];
+        x0 = i == 0 ? p[0] : std::min(x0, p[0]), x1 = i == 0 ? p[0] : std::max(x1, p[0]);
+        y0 = i == 0 ? p[1] : std::min(y0, p[1]), y1 = i == 0 ? p[1] : std::max(y1, p[1]);
+    }
+    const auto at = arrange(sizes, {0.5 * (x0 + x1), 0.5 * (y0 + y1)}, 6.0);
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        objects_[i].place.x = at[i][0], objects_[i].place.y = at[i][1];
+    plate_changed();
+}
+
+const std::vector<TriangleIndex>& App::plate_indexes() {
+    if (indexes_.size() != placed_meshes_.size()) {
+        indexes_.clear();
+        for (const TriangleMesh& m : placed_meshes_)
+            indexes_.emplace_back(m);
+    }
+    return indexes_;
+}
+
+// The ray from the eye through the mouse, in the view.
+Vec3 App::mouse_ray() const {
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
+    const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
+    const float half = std::tan(0.5f * camera_.fov), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
+    return normalize(camera_.forward() + camera_.right() * (nx * half * aspect) + camera_.up() * (ny * half));
 }
 
 void App::load_gcode(const std::filesystem::path& path) {
@@ -1045,6 +1520,7 @@ void App::load_settings_file(const std::filesystem::path& path) {
         bed_changed();
         settings_changed();
         notify(format(tr(T::SettingsLoaded), utf8(path.filename()).c_str()));
+        fill_speeds();
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -1079,13 +1555,22 @@ void App::open_project(const std::filesystem::path& path) {
         return;
     }
     settings_ = std::move(p.settings);
+    fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
     bed_changed();
     settings_changed();
     if (!p.models.empty()) {
-        if (p.models.size() > 1)
-            notify(format(tr(T::ProjectFirstModel), int(p.models.size())));
+        // Each model as the project placed it (its mesh moved by its offset).
+        std::vector<PlateObject> objects;
+        for (ProjectModel& m : p.models) {
+            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
+                          std::move(m.painting)};
+            const BoundingBox box = o.mesh.bounding_box();
+            o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
+            o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
+            objects.push_back(std::move(o));
+        }
         ProjectModel& model = p.models.front();
         if (p.calibration) {
             CalibrationPrint print;
@@ -1102,6 +1587,10 @@ void App::open_project(const std::filesystem::path& path) {
         } else {
             calibration_.reset();
             use_mesh(std::move(model.mesh), from_utf8(model.name), Tab::Prepare);
+            objects_ = std::move(objects);
+            selected_ = objects_.size() == 1 ? 0 : -1;
+            rebuild_plate();
+            frame_all();
         }
     }
     project_path_ = path;
@@ -1128,8 +1617,9 @@ void App::save_project_to(const std::filesystem::path& path) {
     Project p;
     p.settings = settings_;
     p.profiles = chosen_profile_;
-    if (mesh_)
-        p.models.push_back({utf8(model_path_.filename()), *mesh_, {offset_.x, offset_.y, offset_.z}});
+    // Each model as placed on the bed, its turn and scale applied.
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting});
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
     try {
@@ -1156,18 +1646,28 @@ void App::load_profile_lists() {
     // on every machine.
     const std::filesystem::path root = options_.screenshot.empty() ? profiles_root() : std::filesystem::path();
     std::vector<std::string> errors;
+    speed_fallback_.clear();
     for (const ProfileKind kind : kProfileKinds) {
         const std::size_t k = std::size_t(kind);
         builtin_profiles_[k] = builtin_profiles(kind);
+        // The built-in printer is one made from nothing: its speeds are the fallback.
+        if (kind == ProfileKind::Printer)
+            for (const Profile& p : builtin_profiles_[k])
+                speed_fallback_.insert(p.name);
         user_profiles_[k].clear();
         if (root.empty())
             continue;
         for (Profile& p : load_profiles(root, kind, &errors)) {
             bool builtin = false;
-            if (find_profile(kind, p.name, &builtin) && builtin)
+            if (find_profile(kind, p.name, &builtin) && builtin) {
                 errors.push_back(p.name + ": the name of a built-in profile");
-            else
-                user_profiles_[k].push_back(std::move(p));
+                continue;
+            }
+            // A printer saved without speeds (before they were the printer's):
+            // the fallback, said when it is chosen.
+            if (kind == ProfileKind::Printer && !fill_missing_speeds(p.settings).empty())
+                speed_fallback_.insert(p.name);
+            user_profiles_[k].push_back(std::move(p));
         }
     }
     if (!errors.empty())
@@ -1206,6 +1706,23 @@ void App::refresh_profiles() {
             chosen_profile_[k].clear();
         profile_modified_[k] = p && !same_profile(kind, settings_, p->settings);
     }
+    // The settings that differ from the chosen profiles: the cards' «N
+    // changes», and what a level never hides.
+    changed_keys_.clear();
+    try {
+        Settings saved = settings_;
+        for (const ProfileKind kind : kProfileKinds)
+            if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
+                saved = with_profile(saved, kind, p->settings);
+        std::map<std::string, std::string> before;
+        for (auto& [key, value] : describe(saved))
+            before[key] = std::move(value);
+        for (const auto& [key, value] : describe(settings_))
+            if (const auto it = before.find(key); it == before.end() || it->second != value)
+                changed_keys_.insert(key);
+    } catch (const std::exception&) {
+        // A profile that no longer applies: nothing marked.
+    }
 }
 
 void App::choose_profile(ProfileKind kind, const Profile& profile) {
@@ -1217,9 +1734,17 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
     profiles_checked_.clear();
-    if (kind == ProfileKind::Printer)
+    if (kind == ProfileKind::Printer) {
         bed_changed();
+        if (speed_fallback_.contains(profile.name))
+            notify(tr(T::SpeedFallback));
+    }
     settings_changed();
+}
+
+void App::fill_speeds() {
+    if (!fill_missing_speeds(settings_).empty())
+        notify(tr(T::SpeedFallback));
 }
 
 void App::save_profile_as(ProfileKind kind, std::string name) {
@@ -1553,18 +2078,20 @@ void App::add_catalog_profile(const Profile& catalog) {
     load_profile_lists();
     if (const Profile* saved = find_profile(profile.kind, profile.name))
         choose_profile(profile.kind, *saved);
-    notify(format(tr(T::ProfileAdded), profile.name.c_str()));
+    // The catalog's printers have no speeds of their own (printer_profile).
+    notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
+                  profile.name.c_str()));
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
     // The result can go while the dialog is open: say so instead of writing
     // nothing, or an old result, without a word.
-    if (!result_ || !result_->ok || viewer_ || stale_) {
+    if (!result_ || !result_->ok || !result_->model || viewer_ || stale_) {
         fail(T::ExportFailed, tr(T::Stale));
         return;
     }
     std::vector<Warning> warnings;
-    const GcodeExport e = export_gcode(path, result_->model, result_->settings, &warnings);
+    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings);
     if (!e.written) {
         std::vector<std::string> details;
         for (const GcodeProblem& p : e.check.problems)
@@ -1593,12 +2120,19 @@ void App::start_slice() {
         fail(T::CannotSlice, e.what());
         return;
     }
+    // Vase mode prints one object (vase_mode.md, rule 2).
+    if (settings_.vase && objects_.size() > 1) {
+        fail(T::CannotSlice, tr(T::VaseManyObjects));
+        return;
+    }
     TriangleMesh placed = translated(*mesh_, offset_);
     Settings settings = settings_;
+    Painting painting = plate_painting(objects_);
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
-    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_]() {
-        return slicer_.run(placed, settings, load ? &*load : nullptr);
+    slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
+                      painting = std::move(painting)]() {
+        return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting);
     });
 }
 
@@ -1658,13 +2192,16 @@ void App::poll_jobs() {
 }
 
 void App::show_preview() {
+    const auto start = std::chrono::steady_clock::now();
     preview_buffers_ = preview_buffers(result_->preview);
+    preview_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     const PreviewBuffers& buffers = preview_buffers_;
     ++scene_version_;
     feed_range_[0] = buffers.min_feed, feed_range_[1] = buffers.max_feed;
     width_range_[0] = buffers.min_width, width_range_[1] = buffers.max_width;
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
+    vk_view_.set_preview(buffers);
     top_layer_ = int(result_->preview.layers.size()) - 1;
     bottom_layer_ = 0;
 }
@@ -1718,6 +2255,13 @@ void App::frame_now() {
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
+    if (options_.look.size() == 6) {
+        constexpr float kDegrees = 3.14159265f / 180.0f;
+        camera_.target = {options_.look[0], options_.look[1], options_.look[2]};
+        camera_.distance = options_.look[3];
+        camera_.yaw = options_.look[4] * kDegrees;
+        camera_.pitch = options_.look[5] * kDegrees;
+    }
 }
 
 void App::set_tab(Tab tab) {
@@ -1762,7 +2306,7 @@ void App::top_bar() {
     const float logo = height - 16.0f * scale_;
     ImGui::SetCursorPos(ImVec2(12.0f * scale_, (height - logo) * 0.5f));
     if (logo_)
-        ImGui::Image(ImTextureRef(static_cast<ImTextureID>(logo_)), ImVec2(logo, logo));
+        ImGui::Image(ImTextureRef(logo_), ImVec2(logo, logo));
     ImGui::SameLine(0, 10.0f * scale_);
     ImGui::PushFont(nullptr, kTitleSize);
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
@@ -1843,6 +2387,14 @@ void App::top_bar() {
             }
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem(tr(T::Tutorial)))
+            tour_step_ = 0;
+        if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
+            tips_ = !tips_;
+        if (ImGui::MenuItem(tr(T::TipsAgain))) {
+            tips_seen_.clear();
+            tips_ = true;
+        }
         if (ImGui::MenuItem(tr(T::About)))
             about_open_ = true;
         ImGui::Separator();
@@ -1857,6 +2409,114 @@ void App::top_bar() {
     ImGui::PopStyleColor();
 }
 
+// Whether a setting does anything with the others as they are: the ones
+// that hang on a switch hide while it is off (settings_panel.md, rule 6).
+bool App::setting_applies(std::string_view key) const {
+    const Settings& s = settings_;
+    if (key.starts_with("support.tree_"))
+        return s.support && s.support_style == SupportStyle::Organic;
+    if (key.starts_with("support.") && key != "support.enabled")
+        return s.support;
+    if (key.starts_with("zaa.") && key != "zaa.enabled")
+        return s.zaa;
+    if (key == "infill.nonplanar_amplitude" || key == "infill.nonplanar_wavelength")
+        return s.infill_nonplanar;
+    if (key == "infill.dense_density")
+        return s.infill_dense_under_top;
+    if (key == "infill.combine_layers")
+        return !s.infill_combine_auto;
+    if (key.starts_with("walls.scarf_"))
+        return s.scarf != ScarfMode::Nowhere;
+    if (key == "layers.detail_tolerance" || key == "layers.detail_margin")
+        return s.detail_height > 0.0;
+    if (key == "fuzzy.thickness" || key == "fuzzy.point_distance")
+        return s.fuzzy_mode != FuzzyMode::None ||
+               std::any_of(objects_.begin(), objects_.end(),
+                           [](const PlateObject& o) { return !o.painting.empty(PaintChannel::Fuzzy); });
+    return true;
+}
+
+// Whether the panel shows a setting: its level is in the chosen one (or the
+// card's «Show all» was pressed), or it differs from the profile, which no
+// level hides; and it does something (rule 6).
+bool App::setting_shown(std::string_view key, std::string_view card) const {
+    if (!setting_applies(key))
+        return false;
+    const std::optional<SettingPlace> place = setting_place(key);
+    const SettingLevel level = place ? place->level : SettingLevel::Advanced;
+    return level_shows(view_level_, level) || show_all_cards_.contains(std::string(card)) ||
+           changed_keys_.contains(std::string(key));
+}
+
+bool App::card_shown(const SubsectionLayout& sub) const {
+    return std::any_of(sub.settings.begin(), sub.settings.end(),
+                       [&](const SettingEntry& e) { return setting_shown(e.key, sub.id); });
+}
+
+// A card of the panel: its title, «N changes» in violet, and, folded, the
+// line that sums it up; a click on the title folds or opens it. Its
+// background is as tall as the card was in the last frame.
+bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary) {
+    const std::string id(sub.id);
+    const auto known = card_open_.find(id);
+    bool open = known != card_open_.end() ? known->second : first;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 start = ImGui::GetCursorScreenPos();
+    const float width = ImGui::GetContentRegionAvail().x;
+    const float pad = 9.0f * scale_, line = ImGui::GetTextLineHeight();
+    const float header = open ? line : 2.0f * line + 2.0f * scale_;
+    const auto height = card_heights_.find(id);
+    const float tall = height != card_heights_.end() ? height->second : header + 2.0f * pad;
+    dl->AddRectFilled(start, ImVec2(start.x + width, start.y + tall), ImGui::GetColorU32(rgb(theme_.frame, 0.45f)),
+                      7.0f * scale_);
+    ImGui::PushID(id.c_str());
+    ImGui::SetCursorScreenPos(ImVec2(start.x, start.y));
+    if (ImGui::InvisibleButton("##head", ImVec2(width, header + 2.0f * pad * 0.85f))) {
+        open = !open;
+        card_open_[id] = open;
+    }
+    const bool hovered = ImGui::IsItemHovered();
+    // The arrow, the title and the changes.
+    const ImU32 strong = ImGui::GetColorU32(rgb(theme_.text)), dim = ImGui::GetColorU32(rgb(theme_.text_dim));
+    const ImU32 violet = ImGui::GetColorU32(rgb(theme_.accent_hover));
+    const float a = line * 0.32f;
+    const ImVec2 c(start.x + pad + a, start.y + pad + line * 0.5f);
+    if (open)
+        dl->AddTriangleFilled(ImVec2(c.x - a, c.y - a * 0.6f), ImVec2(c.x + a, c.y - a * 0.6f), ImVec2(c.x, c.y + a * 0.7f),
+                              hovered ? violet : dim);
+    else
+        dl->AddTriangleFilled(ImVec2(c.x - a * 0.6f, c.y - a), ImVec2(c.x - a * 0.6f, c.y + a), ImVec2(c.x + a * 0.7f, c.y),
+                              hovered ? violet : dim);
+    const float text_x = start.x + pad + 2.0f * a + 8.0f * scale_;
+    dl->AddText(ImVec2(text_x, start.y + pad), hovered ? violet : strong, tr(sub.title));
+    if (changes > 0) {
+        const std::string count = changes == 1 ? std::string(tr(T::OneChangeCount)) : format(tr(T::ChangesCount), changes);
+        const float w = ImGui::CalcTextSize(count.c_str()).x;
+        dl->AddText(ImVec2(start.x + width - pad - w, start.y + pad), violet, count.c_str());
+    }
+    if (!open) {
+        // The summary, cut to the card's width.
+        std::string text = summary;
+        const float room = width - (text_x - start.x) - pad;
+        while (text.size() > 1 && ImGui::CalcTextSize(text.c_str()).x > room) {
+            do
+                text.pop_back();
+            while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80);
+            if (!text.empty())
+                text.pop_back();
+            text += "…";
+        }
+        dl->AddText(ImVec2(text_x, start.y + pad + line + 2.0f * scale_), dim, text.c_str());
+    }
+    ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad + header + pad * 0.7f));
+    ImGui::PopID();
+    return open;
+}
+
+// The settings panel (docs/spec/features/settings_panel.md): the Print,
+// Material and Printer tabs, each with its profile, its sections in a column
+// of icons and the chosen section's cards; a level (Basic, Normal, Advanced)
+// says how many settings show. The level never changes the G-code.
 void App::settings_panel() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
@@ -1866,158 +2526,184 @@ void App::settings_panel() {
     ImGui::Begin("##settings", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
-    const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
-    ImGui::BeginChild("##settings_scroll", ImVec2(0, -footer));
-    Settings& s = settings_;
-    bool changed = false, bed = false;
-    const ImGuiTableFlags table = ImGuiTableFlags_SizingStretchProp;
-    auto begin_rows = [&](const char* id) {
-        if (!ImGui::BeginTable(id, 2, table))
-            return false;
-        ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.15f);
-        ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-        return true;
-    };
-
     refresh_profiles();
-    const bool print_open = section("print", "tisma_print", T::Print);
-    if (print_open)
-        profile_row(ProfileKind::Print);
-    if (print_open && begin_rows("##print")) {
-        changed |= row(T::LayerHeight, s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
-        changed |= row(T::FirstLayerHeight, s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
-        changed |= row(T::DetailHeight, s.detail_height, 0.0, 1.0, "%.2f mm", 0.002f, tr(T::DetailHeightTip));
-        if (s.detail_height > 0.0) {
-            changed |= row(T::DetailTolerance, s.detail_tolerance, 0.001, 1.0, "%.3f mm", 0.001f, tr(T::DetailToleranceTip));
-            changed |= row(T::DetailMargin, s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
+    bool changed = false, bed = false;
+
+    // A setting asked with --info opens its tab, section and card.
+    if (!g_open_info.empty())
+        if (const std::optional<SettingPlace> place = setting_place(g_open_info)) {
+            panel_tab_ = place->tab;
+            panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
+            card_open_[std::string(place->subsection->id)] = true;
+            view_level_ = ViewLevel::Advanced;
         }
-        changed |= row(T::CuspHeight, s.cusp_height, 0.0, 1.0, "%.3f mm", 0.001f, tr(T::CuspHeightTip));
-        changed |= height_steps_rows(s.layer_heights, s.layer_height);
-        changed |= row(T::Zaa, s.zaa, tr(T::ZaaTip));
-        if (s.zaa) {
-            changed |= row(T::ZaaMinThickness, s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::ZaaMinThicknessTip));
-            changed |= row(T::ZaaRaise, s.zaa_raise, tr(T::ZaaRaiseTip));
+
+    // The tabs, and the level on their right.
+    {
+        const float gap = ImGui::GetStyle().ItemSpacing.x;
+        const float level_width = 118.0f * scale_;
+        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
+        const std::array<std::pair<SettingsTab, T>, 3> tabs = {
+            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Printer}}};
+        for (const auto& [tab, title] : tabs) {
+            const bool chosen = panel_tab_ == tab;
+            ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, chosen ? rgb(theme_.accent_hover) : rgb(theme_.frame_hover));
+            ImGui::PushStyleColor(ImGuiCol_Text, chosen ? rgb(0xFFFFFF) : rgb(theme_.text_dim));
+            if (ImGui::Button(tr(title), ImVec2(tab_width, 0)))
+                panel_tab_ = tab;
+            ImGui::PopStyleColor(3);
+            ImGui::SameLine(0, gap);
         }
-        changed |= row(T::Walls, s.wall_count, 0, 50);
-        changed |= row(T::LineWidth, s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
-        changed |= row(T::Seam, s.seam,
-                       {{SeamMode::Aligned, tr(T::SeamAligned)},
-                        {SeamMode::Nearest, tr(T::SeamNearest)},
-                        {SeamMode::Random, tr(T::SeamRandom)},
-                        {SeamMode::Rear, tr(T::SeamRear)}});
-        changed |= row(T::TopLayers, s.top_layers, 0, 100);
-        changed |= row(T::BottomLayers, s.bottom_layers, 0, 100);
-        changed |= row(T::TopMinThickness, s.top_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
-        changed |= row(T::BottomMinThickness, s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
-        changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
-        changed |= row(T::InfillDensity, s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
-        changed |= row(T::InfillPattern, s.infill_pattern,
-                       {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
-                        {InfillPattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
-                        {InfillPattern::Zigzag, tr(T::Zigzag)},
-                        {InfillPattern::Line, tr(T::LineInfill)},
-                        {InfillPattern::Grid, tr(T::Grid)},
-                        {InfillPattern::Gyroid, tr(T::Gyroid)},
-                        {InfillPattern::Triangles, tr(T::TrianglesInfill)},
-                        {InfillPattern::Stars, tr(T::Stars)},
-                        {InfillPattern::Cubic, tr(T::Cubic)},
-                        {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
-                        {InfillPattern::SupportCubic, tr(T::SupportCubic)},
-                        {InfillPattern::Lightning, tr(T::Lightning)},
-                        {InfillPattern::Honeycomb, tr(T::Honeycomb)},
-                        {InfillPattern::Concentric, tr(T::ConcentricInfill)},
-                        {InfillPattern::Hilbert, tr(T::HilbertInfill)},
-                        {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},
-                        {InfillPattern::Octagram, tr(T::OctagramInfill)}});
-        changed |= row(T::InfillAngle, s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
-        changed |= row(T::SolidEvery, s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
-        changed |= row(T::NonplanarInfill, s.infill_nonplanar, tr(T::NonplanarInfillTip));
-        if (s.infill_nonplanar) {
-            changed |= row(T::NonplanarAmplitude, s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
-            changed |= row(T::NonplanarWavelength, s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm", 0.05f);
-        }
-        changed |= row(T::CombineInfill, s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
-        changed |= row(T::CombineAuto, s.infill_combine_auto, tr(T::CombineInfillTip));
-        changed |= row(T::DenseUnderTop, s.infill_dense_under_top, tr(T::DenseUnderTopTip));
-        if (s.infill_dense_under_top)
-            changed |= row(T::DenseDensity, s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f, tr(T::DenseUnderTopTip));
-        changed |= row(T::StressDensity, s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f, tr(T::StressDensityTip));
-        if (s.infill_stress_density > 0.0) {
-            label_cell(T::LoadCase, tr(T::StressDensityTip));
-            if (ImGui::Button(load_case_ ? load_case_name_.c_str() : tr(T::ChooseCase), ImVec2(-FLT_MIN, 0))) {
-                purpose_ = Purpose::LoadCase;
-                browser_.open(FileBrowser::Mode::Open, tr(T::LoadCase), {".json"}, last_folder_);
+        // The level: a dot of its colour and its name.
+        constexpr std::array<std::tuple<ViewLevel, T, T, std::uint32_t>, 3> levels = {
+            {{ViewLevel::Basic, T::LevelBasic, T::LevelBasicTip, 0x3FBF7Fu},
+             {ViewLevel::Normal, T::LevelNormal, T::LevelNormalTip, 0xE8B83Du},
+             {ViewLevel::Advanced, T::LevelAdvanced, T::LevelAdvancedTip, 0xE5484Du}}};
+        std::uint32_t dot = 0xE8B83D;
+        const char* name = tr(T::LevelNormal);
+        for (const auto& [level, title, tip, colour] : levels)
+            if (level == view_level_)
+                dot = colour, name = tr(title);
+        ImGui::SetNextItemWidth(level_width);
+        const std::string preview = std::string("    ") + name;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        if (ImGui::BeginCombo("##level", preview.c_str())) {
+            for (const auto& [level, title, tip, colour] : levels) {
+                const ImVec2 row = ImGui::GetCursorScreenPos();
+                const std::string item = std::string("    ") + tr(title) + "##" + std::to_string(int(level));
+                if (ImGui::Selectable(item.c_str(), level == view_level_))
+                    view_level_ = level, show_all_cards_.clear();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", tr(tip));
+                ImGui::GetWindowDrawList()->AddCircleFilled(
+                    ImVec2(row.x + 6.0f * scale_, row.y + ImGui::GetTextLineHeight() * 0.5f), 4.0f * scale_,
+                    ImGui::GetColorU32(rgb(colour)));
             }
+            ImGui::EndCombo();
         }
-        changed |= row(T::Supports, s.support);
-        if (s.support)
-            changed |= row(T::SupportAngle, s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
-        changed |= row(T::SkirtLoops, s.skirt_loops, 0, 20);
-        changed |= row(T::SkirtDistance, s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
-        changed |= row(T::BrimWidth, s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
-        ImGui::EndTable();
-        if (ImGui::TreeNode(tr(T::Speeds)) ) {
-            if (begin_rows("##speeds")) {
-                changed |= row(T::SpeedWalls, s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedOuterWall, s.outer_wall_speed.value, 1.0, s.outer_wall_speed.percent ? 100.0 : 1000.0,
-                               s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedInfill, s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedSolid, s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedTop, s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedSupport, s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedTravel, s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedFirstLayer, s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                changed |= row(T::SpeedMax, s.max_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-                ImGui::EndTable();
-            }
-            ImGui::TreePop();
-        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::LevelTip));
+        ImGui::GetWindowDrawList()->AddCircleFilled(
+            ImVec2(at.x + ImGui::GetStyle().FramePadding.x + 4.0f * scale_, at.y + ImGui::GetFrameHeight() * 0.5f),
+            4.0f * scale_, ImGui::GetColorU32(rgb(dot)));
     }
-    const bool filament_open = section("filament", "tisma_filament", T::Filament);
-    if (filament_open)
-        profile_row(ProfileKind::Filament);
-    if (filament_open && begin_rows("##filament")) {
-        changed |= row(T::FilamentDiameter, s.filament_diameter, 1.0, 3.5, "%.2f mm", 0.005f);
-        changed |= variable_row(T::NozzleTemp, s, "temperature", 0, 450, "%d °C", tr(T::TempTip));
-        changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
-        changed |= row(T::FlowRow, s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
-        changed |= row(T::FanMin, s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
-        changed |= row(T::FanMax, s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
-        changed |= row(T::MinLayerTime, s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
-        ImGui::EndTable();
+    // Ctrl+Alt+1, 2 and 3 choose the level (rule 14).
+    if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyAlt) {
+        if (ImGui::IsKeyPressed(ImGuiKey_1))
+            view_level_ = ViewLevel::Basic, show_all_cards_.clear();
+        if (ImGui::IsKeyPressed(ImGuiKey_2))
+            view_level_ = ViewLevel::Normal, show_all_cards_.clear();
+        if (ImGui::IsKeyPressed(ImGuiKey_3))
+            view_level_ = ViewLevel::Advanced, show_all_cards_.clear();
     }
-    const bool printer_open = section("printer", "tisma_printer", T::Printer, false);
-    if (printer_open)
-        profile_row(ProfileKind::Printer);
-    if (printer_open && begin_rows("##printer")) {
-        double width = 0, depth = 0;
-        if (rectangle_bed(s, width, depth)) {
-            bool b = row(T::BedWidth, width, 20.0, 2000.0, "%.0f mm", 0.5f);
-            b |= row(T::BedDepth, depth, 20.0, 2000.0, "%.0f mm", 0.5f);
-            if (b) {
-                s.bed = {{0.0, 0.0}, {width, 0.0}, {width, depth}, {0.0, depth}};
-                bed = changed = true;
-            }
-        } else {
-            label_cell(T::BedWidth);
-            ImGui::TextDisabled("%zu", s.bed.size());
+    const ProfileKind kind = panel_tab_ == SettingsTab::Print      ? ProfileKind::Print
+                             : panel_tab_ == SettingsTab::Material ? ProfileKind::Filament
+                                                                   : ProfileKind::Printer;
+    profile_row(kind);
+    ImGui::Spacing();
+
+    const std::vector<SectionLayout>& layout = settings_layout(panel_tab_);
+    std::string& chosen = panel_section_[std::size_t(panel_tab_)];
+    // The sections with something to show at this level.
+    std::vector<const SectionLayout*> sections;
+    for (const SectionLayout& section : layout)
+        if (std::any_of(section.subsections.begin(), section.subsections.end(),
+                        [&](const SubsectionLayout& sub) { return card_shown(sub); }))
+            sections.push_back(&section);
+    if (!sections.empty() &&
+        std::none_of(sections.begin(), sections.end(), [&](const SectionLayout* x) { return x->id == chosen; }))
+        chosen = std::string(sections.front()->id);
+
+    const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    const float column = 70.0f * scale_;
+    // The column of sections: an icon and its name, the chosen one in violet;
+    // a dot where something differs from the profile.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
+    for (const SectionLayout* section : sections) {
+        const bool selected = section->id == chosen;
+        ImGui::PushID(section->id.data(), section->id.data() + section->id.size());
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const float icon_size = 22.0f * scale_, small = ImGui::GetFontSize() * 0.78f;
+        const float tall = icon_size + small + 16.0f * scale_;
+        if (ImGui::InvisibleButton("##section", ImVec2(column - 6.0f * scale_, tall)) && !selected) {
+            chosen = std::string(section->id);
+            show_all_cards_.clear();
         }
-        changed |= row(T::MaxHeight, s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
-        changed |= row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
-        changed |= row(T::MinLayerHeight, s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
-        changed |= row(T::MaxLayerHeight, s.max_layer_height, 0.0, 2.0, "%.2f mm", 0.002f, tr(T::LayerLimitTip));
-        changed |= row(T::Flavor, s.flavor,
-                       {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
-        changed |= row(T::RelativeE, s.relative_extrusion);
-        changed |= row(T::Retraction, s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
-        changed |= row(T::RetractSpeed, s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
-        changed |= row(T::RetractLift, s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
-        changed |= row(T::GcodeResolution, s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f, tr(T::GcodeResolutionTip));
-        ImGui::EndTable();
-        ImGui::TextUnformatted(tr(T::StartGcode));
-        changed |= ImGui::InputTextMultiline("##start", &s.start_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 7));
-        ImGui::TextUnformatted(tr(T::EndGcode));
-        changed |= ImGui::InputTextMultiline("##end", &s.end_gcode, ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 6));
+        const bool hovered = ImGui::IsItemHovered();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (selected || hovered)
+            dl->AddRectFilled(at, ImVec2(at.x + column - 6.0f * scale_, at.y + tall),
+                              ImGui::GetColorU32(rgb(selected ? theme_.accent : theme_.frame_hover, selected ? 0.28f : 0.6f)),
+                              7.0f * scale_);
+        const ImU32 tint = ImGui::GetColorU32(rgb(selected ? theme_.lavender : theme_.text_dim));
+        const float cx = at.x + (column - 6.0f * scale_) * 0.5f;
+        dl->AddImage(icon(std::string(section->icon.substr(0, section->icon.size() - 4)).c_str()),
+                     ImVec2(cx - icon_size * 0.5f, at.y + 6.0f * scale_),
+                     ImVec2(cx + icon_size * 0.5f, at.y + 6.0f * scale_ + icon_size), ImVec2(0, 0), ImVec2(1, 1), tint);
+        const char* name = tr(section->title);
+        const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(small, FLT_MAX, 0.0f, name);
+        dl->AddText(ImGui::GetFont(), small, ImVec2(cx - text.x * 0.5f, at.y + 10.0f * scale_ + icon_size), tint, name);
+        const bool marked = std::any_of(section->subsections.begin(), section->subsections.end(), [&](const SubsectionLayout& sub) {
+            return std::any_of(sub.settings.begin(), sub.settings.end(),
+                               [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
+        });
+        if (marked)
+            dl->AddCircleFilled(ImVec2(at.x + column - 16.0f * scale_, at.y + 8.0f * scale_), 3.5f * scale_,
+                                ImGui::GetColorU32(rgb(theme_.accent_hover)));
+        if (hovered) {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted(name);
+            for (const SubsectionLayout& sub : section->subsections)
+                if (card_shown(sub))
+                    ImGui::BulletText("%s", tr(sub.title));
+            ImGui::EndTooltip();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+    ImGui::SameLine(0, 4.0f * scale_);
+
+    // The chosen section's cards.
+    ImGui::BeginChild("##cards", ImVec2(0, -footer));
+    for (const SectionLayout* section : sections) {
+        if (section->id != chosen)
+            continue;
+        bool first = true;
+        for (const SubsectionLayout& sub : section->subsections) {
+            if (!card_shown(sub))
+                continue;
+            const int changes = int(std::count_if(sub.settings.begin(), sub.settings.end(), [&](const SettingEntry& e) {
+                return changed_keys_.contains(std::string(e.key));
+            }));
+            const ImVec2 start = ImGui::GetCursorScreenPos();
+            if (settings_card(sub, first, changes, subsection_summary(sub.id, settings_))) {
+                ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
+                changed |= card_rows(sub.id, bed);
+                // Basic tells what it hides (rule 11).
+                int hidden = 0;
+                for (const SettingEntry& e : sub.settings)
+                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
+                if (hidden > 0) {
+                    ImGui::Spacing();
+                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
+                                                                                        : T::MoreSettingsAdvanced),
+                                                     hidden)
+                                                  .c_str());
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::ShowAll)))
+                        show_all_cards_.insert(std::string(sub.id));
+                }
+                ImGui::PopID();
+            }
+            const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
+            card_heights_[std::string(sub.id)] = end - start.y;
+            ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
+            ImGui::Dummy(ImVec2(0, 0));
+            first = false;
+        }
     }
     ImGui::EndChild();
 
@@ -2036,8 +2722,8 @@ void App::settings_panel() {
     ImGui::SameLine();
     if (ImGui::Button(tr(T::ResetSettings), ImVec2(third, 0))) {
         settings_ = default_settings();
-        for (const ProfileKind kind : kProfileKinds)
-            chosen_profile_[std::size_t(kind)] = builtin_profiles_[std::size_t(kind)].front().name;
+        for (const ProfileKind k : kProfileKinds)
+            chosen_profile_[std::size_t(k)] = builtin_profiles_[std::size_t(k)].front().name;
         bed = changed = true;
     }
     ImGui::End();
@@ -2046,6 +2732,339 @@ void App::settings_panel() {
         bed_changed();
     if (changed)
         settings_changed();
+}
+
+// The rows of one card, those the panel shows.
+bool App::card_rows(std::string_view id, bool& bed) {
+    Settings& s = settings_;
+    bool changed = false;
+    // A row shows if the panel shows its setting; one shown only because it
+    // differs from the profile carries its level.
+    const auto shown = [&](const char* key) {
+        if (!setting_shown(key, id))
+            return false;
+        const std::optional<SettingPlace> place = setting_place(key);
+        if (place && !level_shows(view_level_, place->level) && !show_all_cards_.contains(std::string(id)))
+            g_row_tag = tr(place->level == SettingLevel::Normal ? T::LevelNormal : T::LevelAdvanced);
+        return true;
+    };
+    if (!ImGui::BeginTable("##rows", 2, ImGuiTableFlags_SizingStretchProp,
+                           ImVec2(ImGui::GetContentRegionAvail().x - 9.0f * scale_, 0)))
+        return false;
+    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.25f);
+    ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+    const auto mm = [&](T label, const char* key, double& v, double min, double max, const char* fmt, float speed,
+                        const char* tip = nullptr) {
+        if (shown(key))
+            changed |= row(label, v, min, max, fmt, speed, tip);
+    };
+    const auto whole = [&](T label, const char* key, int& v, int min, int max, const char* fmt = "%d",
+                           const char* tip = nullptr) {
+        if (shown(key))
+            changed |= row(label, v, min, max, fmt, tip);
+    };
+    const auto flag = [&](T label, const char* key, bool& v, const char* tip = nullptr) {
+        if (shown(key))
+            changed |= row(label, v, tip);
+    };
+    const auto count = [&](T label, const char* key, std::size_t n) {
+        if (!shown(key))
+            return;
+        label_cell(label, tr(T::ListEditTip));
+        ImGui::TextDisabled("%s", format(tr(T::ListCount), int(n)).c_str());
+    };
+
+    // Print: Quality.
+    if (id == "layer_height") {
+        mm(T::LayerHeight, "layers.height", s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
+        mm(T::FirstLayerHeight, "layers.first_height", s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
+    } else if (id == "variable_height") {
+        if (shown("layers.heights"))
+            changed |= height_steps_rows(s.layer_heights, s.layer_height);
+        mm(T::CuspHeight, "layers.cusp_height", s.cusp_height, 0.0, 1.0, "%.3f mm", 0.001f, tr(T::CuspHeightTip));
+    } else if (id == "fine_detail") {
+        mm(T::DetailHeight, "layers.detail_height", s.detail_height, 0.0, 1.0, "%.2f mm", 0.002f, tr(T::DetailHeightTip));
+        mm(T::DetailTolerance, "layers.detail_tolerance", s.detail_tolerance, 0.001, 1.0, "%.3f mm", 0.001f,
+           tr(T::DetailToleranceTip));
+        mm(T::DetailMargin, "layers.detail_margin", s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
+    } else if (id == "line_width") {
+        mm(T::LineWidth, "walls.width", s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
+    } else if (id == "seam") {
+        if (shown("walls.seam"))
+            changed |= row(T::Seam, s.seam,
+                           {{SeamMode::Aligned, tr(T::SeamAligned)},
+                            {SeamMode::Nearest, tr(T::SeamNearest)},
+                            {SeamMode::Random, tr(T::SeamRandom)},
+                            {SeamMode::Rear, tr(T::SeamRear)}});
+        if (shown("walls.scarf"))
+            changed |= row(T::ScarfMode, s.scarf,
+                           {{ScarfMode::Nowhere, tr(T::ScarfNowhere)},
+                            {ScarfMode::Contours, tr(T::ScarfContours)},
+                            {ScarfMode::Everywhere, tr(T::ScarfEverywhere)}});
+        mm(T::ScarfLength, "walls.scarf_length", s.scarf_length, 0.5, 1000.0, "%.1f mm", 0.1f, tr(T::ScarfTip));
+        flag(T::ScarfEntire, "walls.scarf_entire_loop", s.scarf_entire_loop, tr(T::ScarfTip));
+        mm(T::ScarfStart, "walls.scarf_start_height", s.scarf_start_height, 0.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::ScarfSegment, "walls.scarf_max_segment", s.scarf_max_segment, 0.05, 1000.0, "%.2f mm", 0.01f);
+        flag(T::ScarfSmooth, "walls.scarf_only_smooth", s.scarf_only_smooth);
+        flag(T::ScarfInner, "walls.scarf_inner", s.scarf_inner);
+    } else if (id == "precision") {
+        mm(T::XyOffset, "slicing.xy_offset", s.xy_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+        mm(T::FirstLayerShrink, "slicing.first_layer_shrink", s.first_layer_shrink, 0.0, 2.0, "%.3f mm", 0.001f);
+        mm(T::ScaleXRow, "compensation.scale_x", s.scale_x, 50.0, 150.0, "%.3f %%", 0.01f);
+        mm(T::ScaleYRow, "compensation.scale_y", s.scale_y, 50.0, 150.0, "%.3f %%", 0.01f);
+        mm(T::ScaleZRow, "compensation.scale_z", s.scale_z, 50.0, 150.0, "%.3f %%", 0.01f);
+        mm(T::HoleCorrection, "compensation.hole_offset", s.hole_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+    } else if (id == "slopes") {
+        flag(T::Zaa, "zaa.enabled", s.zaa, tr(T::ZaaTip));
+        mm(T::ZaaMinThickness, "zaa.min_thickness", s.zaa_min_thickness, 1.0, 100.0, "%.0f %%", 0.5f,
+           tr(T::ZaaMinThicknessTip));
+        flag(T::ZaaRaise, "zaa.raise", s.zaa_raise, tr(T::ZaaRaiseTip));
+    }
+    // Print: Strength.
+    else if (id == "walls") {
+        whole(T::Walls, "walls.count", s.wall_count, 0, 50);
+    } else if (id == "top_bottom") {
+        whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 100);
+        whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 100);
+        mm(T::TopMinThickness, "surfaces.top_min_thickness", s.top_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
+        mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
+        if (shown("surfaces.top_pattern"))
+            changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+    } else if (id == "infill") {
+        mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
+        if (shown("infill.pattern"))
+            changed |= row(T::InfillPattern, s.infill_pattern,
+                           {{InfillPattern::Rectilinear, tr(T::Rectilinear)},
+                            {InfillPattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {InfillPattern::Zigzag, tr(T::Zigzag)},
+                            {InfillPattern::Line, tr(T::LineInfill)},
+                            {InfillPattern::Grid, tr(T::Grid)},
+                            {InfillPattern::Gyroid, tr(T::Gyroid)},
+                            {InfillPattern::Triangles, tr(T::TrianglesInfill)},
+                            {InfillPattern::Stars, tr(T::Stars)},
+                            {InfillPattern::Cubic, tr(T::Cubic)},
+                            {InfillPattern::AdaptiveCubic, tr(T::AdaptiveCubic)},
+                            {InfillPattern::SupportCubic, tr(T::SupportCubic)},
+                            {InfillPattern::Lightning, tr(T::Lightning)},
+                            {InfillPattern::Honeycomb, tr(T::Honeycomb)},
+                            {InfillPattern::Concentric, tr(T::ConcentricInfill)},
+                            {InfillPattern::Hilbert, tr(T::HilbertInfill)},
+                            {InfillPattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {InfillPattern::Octagram, tr(T::OctagramInfill)}});
+        mm(T::InfillAngle, "infill.angle", s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
+    } else if (id == "infill_more") {
+        mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
+        whole(T::SolidEvery, "infill.solid_every", s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
+        mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 1000.0, "%.0f mm²", 1.0f,
+           tr(T::SolidBelowAreaTip));
+        flag(T::DenseUnderTop, "infill.dense_under_top", s.infill_dense_under_top, tr(T::DenseUnderTopTip));
+        mm(T::DenseDensity, "infill.dense_density", s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f,
+           tr(T::DenseUnderTopTip));
+        mm(T::StressDensity, "infill.stress_density", s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f,
+           tr(T::StressDensityTip));
+        if (s.infill_stress_density > 0.0 && shown("infill.stress_density")) {
+            label_cell(T::LoadCase, tr(T::StressDensityTip));
+            if (ImGui::Button(load_case_ ? load_case_name_.c_str() : tr(T::ChooseCase), ImVec2(-FLT_MIN, 0))) {
+                purpose_ = Purpose::LoadCase;
+                browser_.open(FileBrowser::Mode::Open, tr(T::LoadCase), {".json"}, last_folder_);
+            }
+        }
+    } else if (id == "combine") {
+        flag(T::CombineAuto, "infill.combine_auto", s.infill_combine_auto, tr(T::CombineInfillTip));
+        whole(T::CombineInfill, "infill.combine_layers", s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
+        if (shown("infill.combine_max_height"))
+            changed |= row(T::CombineMaxHeight, s.infill_combine_max_height.value, 1.0,
+                           s.infill_combine_max_height.percent ? 100.0 : 10.0,
+                           s.infill_combine_max_height.percent ? "%.0f %%" : "%.2f mm", 0.5f);
+    } else if (id == "wavy") {
+        flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
+        mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
+        mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
+           0.05f);
+    }
+    // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
+    else if (id == "first_layer") {
+        mm(T::SpeedFirstLayer, "speed.first_layer", s.first_layer_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+    } else if (id == "walls_surfaces") {
+        mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        if (shown("speed.outer_wall"))
+            changed |= row(T::SpeedOuterWall, s.outer_wall_speed.value, 1.0, s.outer_wall_speed.percent ? 100.0 : 1000.0,
+                           s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
+        mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+    } else if (id == "infill_support") {
+        mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+    } else if (id == "travel") {
+        mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+    } else if (id == "limits") {
+        mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+    }
+    // Print: Supports and Adhesion.
+    else if (id == "support") {
+        flag(T::Supports, "support.enabled", s.support);
+        flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
+        if (shown("support.style"))
+            changed |= row(T::SupportStyle, s.support_style,
+                           {{SupportStyle::Grid, tr(T::SupportGrid)}, {SupportStyle::Organic, tr(T::SupportOrganic)}},
+                           tr(T::SupportStyleTip));
+        mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
+    } else if (id == "tree") {
+        mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
+        mm(T::TreeTipDiameter, "support.tree_tip_diameter", s.tree_tip_diameter, 0.1, 100.0, "%.2f mm", 0.01f);
+        mm(T::TreeTopRate, "support.tree_top_rate", s.tree_top_rate, 1.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::TreeBranchDistance, "support.tree_branch_distance", s.tree_branch_distance, 0.1, 100.0, "%.2f", 0.01f);
+        mm(T::TreeAnglePreferred, "support.tree_angle_preferred", s.tree_angle_preferred, 0.0, 85.0, "%.0f°", 0.5f);
+        mm(T::TreeAngle, "support.tree_angle", s.tree_angle, 0.0, 85.0, "%.0f°", 0.5f);
+        mm(T::TreeBranchAngle, "support.tree_branch_diameter_angle", s.tree_branch_diameter_angle, 0.0, 85.0, "%.1f°",
+           0.1f);
+        mm(T::TreeDoubleWall, "support.tree_double_wall_diameter", s.tree_double_wall_diameter, 0.0, 100.0, "%.1f mm",
+           0.05f, tr(T::TreeDoubleWallTip));
+    } else if (id == "gap") {
+        mm(T::SupportZGap, "support.z_gap", s.support_z_gap, 0.0, 5.0, "%.2f mm", 0.01f);
+        if (shown("support.xy_gap"))
+            changed |= row(T::SupportXyGap, s.support_xy_gap.value, 0.0, s.support_xy_gap.percent ? 1000.0 : 10.0,
+                           s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
+    } else if (id == "interface") {
+        whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
+    } else if (id == "pattern") {
+        mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
+        mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
+    } else if (id == "skirt") {
+        whole(T::SkirtLoops, "adhesion.skirt_loops", s.skirt_loops, 0, 20);
+        mm(T::SkirtDistance, "adhesion.skirt_distance", s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
+        whole(T::SkirtLayers, "adhesion.skirt_layers", s.skirt_layers, 1, 100);
+    } else if (id == "brim") {
+        mm(T::BrimWidth, "adhesion.brim_width", s.brim_width, 0.0, 50.0, "%.1f mm", 0.05f);
+    }
+    // Print: Others.
+    else if (id == "special_modes") {
+        flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
+    } else if (id == "fuzzy") {
+        if (shown("fuzzy.mode"))
+            changed |= row(T::FuzzySkin, s.fuzzy_mode,
+                           {{FuzzyMode::None, tr(T::FuzzyNone)},
+                            {FuzzyMode::External, tr(T::FuzzyExternal)},
+                            {FuzzyMode::All, tr(T::FuzzyAll)}});
+        mm(T::FuzzyThickness, "fuzzy.thickness", s.fuzzy_thickness, 0.0, 2.0, "%.2f mm", 0.005f);
+        mm(T::FuzzyDistance, "fuzzy.point_distance", s.fuzzy_point_distance, 0.1, 5.0, "%.2f mm", 0.01f);
+    } else if (id == "gcode_output") {
+        mm(T::GcodeResolution, "gcode.resolution", s.gcode_resolution, 0.0, 1.0, "%.4f mm", 0.0005f,
+           tr(T::GcodeResolutionTip));
+        count(T::HeightChanges, "changes", s.changes.size());
+    } else if (id == "slicing") {
+        if (shown("slicing.fill_mode"))
+            changed |= row(T::FillModeRow, s.fill_mode,
+                           {{FillMode::Union, tr(T::FillUnion)},
+                            {FillMode::EvenOdd, tr(T::FillEvenOdd)},
+                            {FillMode::FillHoles, tr(T::FillHoles)}});
+        mm(T::GapClosing, "slicing.gap_closing_radius", s.gap_closing_radius, 0.0, 2.0, "%.3f mm", 0.001f);
+        mm(T::SimplifyTolerance, "slicing.simplify_tolerance", s.simplify_tolerance, 0.0, 1.0, "%.3f mm", 0.001f);
+    }
+    // Material.
+    else if (id == "nozzle_temp") {
+        if (shown("machine.variables.temperature"))
+            changed |= variable_row(T::NozzleTemp, s, "temperature", 0, 450, "%d °C", tr(T::TempTip));
+    } else if (id == "bed_temp") {
+        if (shown("machine.variables.bed_temperature"))
+            changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
+    } else if (id == "chamber") {
+        mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 120.0, "%.0f °C", 0.5f);
+    } else if (id == "fan") {
+        mm(T::FanMin, "cooling.fan_min", s.fan_min, 0.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::FanMax, "cooling.fan_max", s.fan_max, 0.0, 100.0, "%.0f %%", 0.5f);
+        mm(T::FanBelowTime, "cooling.fan_below_time", s.fan_below_time, 0.0, 600.0, "%.0f s", 0.5f);
+        flag(T::FanAlways, "cooling.fan_always", s.fan_always);
+        mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
+        whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
+    } else if (id == "short_layers") {
+        mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
+        mm(T::MinSpeed, "cooling.min_speed", s.min_print_speed, 0.0, 100.0, "%.0f mm/s", 0.5f);
+        flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
+    } else if (id == "flow") {
+        mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
+    } else if (id == "pressure") {
+        mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
+    } else if (id == "max_flow") {
+        mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 200.0,
+           s.filament_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+    } else if (id == "retraction") {
+        mm(T::Retraction, "retraction.length", s.retract_length, 0.0, 20.0, "%.2f mm", 0.01f);
+        mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
+    } else if (id == "retract_travel") {
+        mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 5.0, "%.2f mm", 0.01f);
+        mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
+    } else if (id == "needs") {
+        flag(T::Abrasive, "extrusion.abrasive", s.abrasive);
+        flag(T::NeedsEnclosure, "extrusion.needs_enclosure", s.needs_enclosure);
+    }
+    // Printer.
+    else if (id == "bed_volume") {
+        if (shown("machine.bed")) {
+            double width = 0, depth = 0;
+            if (rectangle_bed(s, width, depth)) {
+                bool b = row(T::BedWidth, width, 20.0, 2000.0, "%.0f mm", 0.5f);
+                b |= row(T::BedDepth, depth, 20.0, 2000.0, "%.0f mm", 0.5f);
+                if (b) {
+                    s.bed = {{0.0, 0.0}, {width, 0.0}, {width, depth}, {0.0, depth}};
+                    bed = changed = true;
+                }
+            } else {
+                label_cell(T::BedWidth);
+                ImGui::TextDisabled("%zu", s.bed.size());
+            }
+        }
+        mm(T::MaxHeight, "machine.max_height", s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
+    } else if (id == "enclosure") {
+        flag(T::Enclosed, "machine.enclosed", s.enclosed);
+        mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 120.0, "%.0f °C", 0.5f);
+    } else if (id == "nozzle_size") {
+        mm(T::Nozzle, "machine.nozzle_diameter", s.nozzle_diameter, 0.1, 2.0, "%.2f mm", 0.005f);
+        flag(T::HardenedNozzle, "machine.hardened_nozzle", s.hardened_nozzle);
+        mm(T::MinLayerHeight, "machine.min_layer_height", s.min_layer_height, 0.0, 2.0, "%.2f mm", 0.002f,
+           tr(T::LayerLimitTip));
+        mm(T::MaxLayerHeight, "machine.max_layer_height", s.max_layer_height, 0.0, 2.0, "%.2f mm", 0.002f,
+           tr(T::LayerLimitTip));
+    } else if (id == "extruder") {
+        mm(T::FilamentDiameter, "machine.filament_diameter", s.filament_diameter, 1.0, 3.5, "%.2f mm", 0.005f);
+        mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 200.0,
+           s.machine_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+        flag(T::RelativeE, "machine.relative_extrusion", s.relative_extrusion);
+    } else if (id == "speeds") {
+        mm(T::MaxFeedX, "machine.max_feed_x", s.max_feed_x, 0.0, 2000.0, "%.0f mm/s", 0.5f);
+        mm(T::MaxFeedY, "machine.max_feed_y", s.max_feed_y, 0.0, 2000.0, "%.0f mm/s", 0.5f);
+        mm(T::MaxFeedZ, "machine.max_feed_z", s.max_feed_z, 0.0, 500.0, "%.0f mm/s", 0.5f);
+        mm(T::MaxFeedE, "machine.max_feed_e", s.max_feed_e, 0.0, 500.0, "%.0f mm/s", 0.5f);
+        mm(T::CornerSpeed, "machine.corner_speed", s.corner_speed, 0.0, 100.0, "%.1f mm/s", 0.1f);
+    } else if (id == "accelerations") {
+        mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
+        mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
+           10.0f);
+    } else if (id == "max_temps") {
+        mm(T::MaxNozzleTemp, "machine.max_nozzle_temp", s.max_nozzle_temp, 0.0, 600.0, "%.0f °C", 0.5f);
+        mm(T::MaxBedTemp, "machine.max_bed_temp", s.max_bed_temp, 0.0, 200.0, "%.0f °C", 0.5f);
+    } else if (id == "firmware") {
+        if (shown("machine.flavor"))
+            changed |= row(T::Flavor, s.flavor,
+                           {{GcodeFlavor::Marlin, "Marlin"}, {GcodeFlavor::Klipper, "Klipper"}, {GcodeFlavor::RepRap, "RepRap"}});
+    } else if (id == "variables") {
+        count(T::VariablesRow, "machine.variables", s.variables.size());
+    }
+    ImGui::EndTable();
+    // The start and end G-code below the table, full width.
+    if (id == "start_end") {
+        if (shown("machine.start_gcode")) {
+            ImGui::TextUnformatted(tr(T::StartGcode));
+            changed |= ImGui::InputTextMultiline("##start", &s.start_gcode,
+                                                 ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 7));
+        }
+        if (shown("machine.end_gcode")) {
+            ImGui::TextUnformatted(tr(T::EndGcode));
+            changed |= ImGui::InputTextMultiline("##end", &s.end_gcode,
+                                                 ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 6));
+        }
+    }
+    return changed;
 }
 
 void App::status_bar() {
@@ -2061,7 +3080,9 @@ void App::status_bar() {
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
     if (mesh_) {
         const Vec3f size{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y, placed_.max.z - placed_.min.z};
-        ImGui::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", utf8(model_path_.filename()).c_str(),
+        const std::string name = objects_.size() > 1 ? std::to_string(objects_.size()) + " " + tr(T::Models)
+                                                     : utf8(model_path_.filename());
+        ImGui::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
                     number_text(mesh_->triangle_count()).c_str(), tr(T::Triangles), double(size.x), double(size.y),
                     double(size.z));
     } else {
@@ -2076,7 +3097,7 @@ void App::status_bar() {
         ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::Stale));
     } else if (result_) {
         const double total = result_->slice_seconds + result_->gcode_seconds + result_->check_seconds;
-        ImGui::Text("%s", format(tr(T::SlicedIn), total).c_str());
+        ImGui::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
         ImGui::SameLine(0, 16.0f * scale_);
         if (result_->check.ok())
             ImGui::TextColored(rgb(0x3FBF7F), "%s",
@@ -2101,10 +3122,17 @@ void App::status_bar() {
     } else {
         ImGui::TextDisabled("%s", tr(T::Ready));
     }
-    if (result_ && !viewer_) {
-        const std::string device = result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu;
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(device.c_str()).x - 12.0f * scale_);
-        ImGui::TextDisabled("%s", device.c_str());
+    // On the right: the 3D view's time per frame on the GPU, and what sliced.
+    std::string right;
+    if (view_ms_ > 0.0)
+        right = format(tr(T::ViewTime), view_ms_, 1000.0 / std::max(view_ms_, 0.01));
+    if (result_ && !viewer_)
+        right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
+    if (!right.empty()) {
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
+        ImGui::TextDisabled("%s", right.c_str());
+        if (view_ms_ > 0.0 && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::ViewTimeTip));
     }
     ImGui::End();
     ImGui::PopStyleVar();
@@ -2127,11 +3155,95 @@ void App::viewport() {
                            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
                                ImGuiButtonFlags_MouseButtonMiddle);
     const ImGuiIO& io = ImGui::GetIO();
+    // The plate's models (docs/UI.md, «Herramientas de la placa»): a click
+    // chooses one (or lays it on the face clicked, with that tool); dragging a
+    // model moves it on the bed, dragging elsewhere turns the view.
+    const bool editing = tab_ == Tab::Prepare && !objects_.empty() && !calibration_;
+    const auto bed_point = [&](float z) -> std::optional<Vec3> {
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (std::abs(d.z) < 1e-6f)
+            return std::nullopt;
+        const float t = (z - e.z) / d.z;
+        if (!(t > 0.0f))
+            return std::nullopt;
+        return e + d * t;
+    };
+    // The Paint tool: the brush follows the face under the mouse, and a
+    // stroke paints the model it started on.
+    const bool painting = editing && tool_ == PlateTool::Paint;
+    brush_depth_.reset();
+    if (painting && ImGui::IsItemHovered())
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
+            brush_depth_ = float(hit->distance) * dot(mouse_ray(), camera_.forward());
+    if (painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        painting_object_ = -1;
+        painted_ = false;
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+            selected_ = int(hit->object);
+            painting_object_ = int(hit->object);
+            brush_stroke(hit->object);
+        }
+    } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+               (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
+        brush_stroke(std::size_t(painting_object_));
+    }
+    if (painting && ImGui::IsItemDeactivated()) {
+        if (painted_) { // the slice no longer matches the paint
+            ++revision_.model;
+            if (result_ && !viewer_)
+                stale_ = true;
+        }
+        painting_object_ = -1;
+        painted_ = false;
+    }
+    if (brush_depth_ && view_size_.y > 0.0f) {
+        const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.fov)) * 0.5f * view_size_.y;
+        ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
+    }
+    if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        pressed_object_ = -1;
+        dragged_ = false;
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d)) {
+            selected_ = int(hit->object);
+            if (tool_ == PlateTool::LayFlat) {
+                PlateObject& o = objects_[hit->object];
+                o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));
+                plate_changed();
+            } else if (const auto p = bed_point(e.z + d.z * float(hit->distance))) {
+                pressed_object_ = int(hit->object);
+                drag_anchor_ = *p;
+            }
+        }
+    }
     if (ImGui::IsItemActive()) {
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f))
+        if (pressed_object_ >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+            if (const auto p = bed_point(drag_anchor_.z)) {
+                // The view shifts the model; its mesh is made again once, when
+                // the drag ends (a million triangles took 200 ms a frame).
+                PlateObject& o = objects_[std::size_t(pressed_object_)];
+                o.place.x += double(p->x - drag_anchor_.x);
+                o.place.y += double(p->y - drag_anchor_.y);
+                drag_offset_.x += p->x - drag_anchor_.x;
+                drag_offset_.y += p->y - drag_anchor_.y;
+                drag_anchor_ = *p;
+                dragged_ = true;
+            }
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+        }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
+    }
+    if (ImGui::IsItemDeactivated() && editing) {
+        if (dragged_)
+            plate_changed(); // the move is over: now the slice is out of date
+        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
+                 ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                 std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
+            selected_ = -1; // a click on the empty bed
+        pressed_object_ = -1;
+        dragged_ = false;
     }
     if (ImGui::IsItemHovered()) {
         if (io.MouseWheel != 0.0f)
@@ -2238,6 +3350,396 @@ void App::view_tools() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
+}
+
+// The plate's tools (docs/UI.md, «Herramientas de la placa»): a column at
+// the left of the view, and next to it the chosen tool's numbers.
+void App::plate_tools() {
+    const float size = 34.0f * scale_, margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.88f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##plate_tools", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+    if (button("##add", "tool_add", nullptr, false, false, true, tr(T::ToolAddTip), size)) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+    }
+    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size)) {
+        objects_.erase(objects_.begin() + selected_);
+        selected_ = objects_.empty() ? -1 : std::min(selected_, int(objects_.size()) - 1);
+        if (objects_.empty()) {
+            result_.reset();
+            renderer_.clear_preview();
+            vk_view_.clear_preview();
+        }
+        plate_changed();
+    }
+    if (button("##duplicate", "tool_duplicate", nullptr, false, false, chosen, tr(T::ToolDuplicateTip), size)) {
+        objects_.push_back(objects_[std::size_t(selected_)]);
+        selected_ = int(objects_.size()) - 1;
+        arrange_plate();
+    }
+    ImGui::Separator();
+    const struct {
+        const char* id;
+        const char* icon;
+        T tip;
+        PlateTool tool;
+    } tools[] = {{"##move", "tool_move", T::ToolMoveTip, PlateTool::Move},
+                 {"##rotate", "tool_rotate", T::ToolRotateTip, PlateTool::Rotate},
+                 {"##scale", "tool_scale", T::ToolScaleTip, PlateTool::Scale},
+                 {"##lay", "tool_lay_flat", T::ToolLayFlatTip, PlateTool::LayFlat}};
+    for (const auto& t : tools)
+        if (button(t.id, t.icon, nullptr, false, tool_ == t.tool, true, tr(t.tip), size))
+            tool_ = tool_ == t.tool ? PlateTool::Select : t.tool;
+    ImGui::Separator();
+    if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size)) {
+        arrange_plate();
+        tip("arrange");
+    }
+    ImGui::Separator();
+    if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
+        tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
+    const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+
+    // Shortcuts, when no field takes the keys: M move, R rotate, S scale,
+    // F lay flat, A arrange, Delete removes.
+    if (!ImGui::GetIO().WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_M, false))
+            tool_ = PlateTool::Move;
+        if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Rotate;
+        if (ImGui::IsKeyPressed(ImGuiKey_S, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Scale;
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false))
+            tool_ = PlateTool::LayFlat;
+        if (ImGui::IsKeyPressed(ImGuiKey_P, false) && !ImGui::GetIO().KeyCtrl)
+            tool_ = PlateTool::Paint;
+        if (ImGui::IsKeyPressed(ImGuiKey_A, false) && !ImGui::GetIO().KeyCtrl) {
+            arrange_plate();
+            tip("arrange");
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            tool_ = PlateTool::Select;
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen) {
+            objects_.erase(objects_.begin() + selected_);
+            selected_ = -1;
+            if (objects_.empty()) {
+                result_.reset();
+                renderer_.clear_preview();
+                vk_view_.clear_preview();
+            }
+            plate_changed();
+        }
+    }
+    if (tool_ == PlateTool::Paint) {
+        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+        return;
+    }
+    if (tool_ == PlateTool::Select || !chosen)
+        return;
+
+    // The chosen tool's card.
+    PlateObject& o = objects_[std::size_t(selected_)];
+    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##plate_tool", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
+    const float field = 110.0f * scale_;
+    bool changed = false;
+    const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine(70.0f * scale_);
+        ImGui::SetNextItemWidth(field);
+        const bool edited = ImGui::DragScalar((std::string("##") + label).c_str(), ImGuiDataType_Double, &v, float(speed), &lo,
+                                              &hi, fmt, ImGuiSliderFlags_AlwaysClamp);
+        changed |= edited;
+        return edited;
+    };
+    if (tool_ == PlateTool::Move) {
+        ImGui::TextDisabled("%s", tr(T::ToolMoveHint));
+        number("X", o.place.x, 0.1, -10000.0, 10000.0, "%.2f mm");
+        number("Y", o.place.y, 0.1, -10000.0, 10000.0, "%.2f mm");
+    } else if (tool_ == PlateTool::Rotate) {
+        std::array<double, 3> angles = euler_degrees(o.place.rotation);
+        bool turned = false;
+        const char* axes[3] = {"X", "Y", "Z"};
+        for (int k = 0; k < 3; ++k) {
+            ImGui::PushID(k);
+            turned |= number(axes[k], angles[std::size_t(k)], 0.5, -360.0, 360.0, "%.1f°");
+            ImGui::SameLine();
+            if (ImGui::SmallButton("-90")) {
+                o.place.rotation = rotated(o.place.rotation, k, -90.0);
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::SmallButton("+90")) {
+                o.place.rotation = rotated(o.place.rotation, k, 90.0);
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        if (turned)
+            o.place.rotation = from_euler_degrees(angles);
+        if (ImGui::Button(tr(T::ResetRotation))) {
+            o.place.rotation = kNoRotation;
+            changed = true;
+        }
+    } else if (tool_ == PlateTool::Scale) {
+        const BoundingBox box = o.mesh.bounding_box();
+        const double own[3] = {double(box.max.x - box.min.x), double(box.max.y - box.min.y), double(box.max.z - box.min.z)};
+        double percent[3], mm[3];
+        for (int k = 0; k < 3; ++k)
+            percent[k] = o.place.scale[std::size_t(k)] * 100.0, mm[k] = own[k] * o.place.scale[std::size_t(k)];
+        changed |= ImGui::Checkbox(tr(T::ScaleTogether), &keep_scale_);
+        const char* axes[3] = {"X", "Y", "Z"};
+        for (int k = 0; k < 3; ++k) {
+            ImGui::PushID(k);
+            const double before_percent = percent[k], before_mm = mm[k];
+            number(axes[k], percent[k], 0.5, 0.1, 100000.0, "%.1f %%");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(field);
+            double lo = 0.001, hi = 100000.0;
+            changed |= ImGui::DragScalar("##mm", ImGuiDataType_Double, &mm[k], 0.1f, &lo, &hi, "%.2f mm",
+                                         ImGuiSliderFlags_AlwaysClamp);
+            double factor = 1.0;
+            if (percent[k] != before_percent)
+                factor = percent[k] / before_percent;
+            else if (mm[k] != before_mm && own[k] > 0.0)
+                factor = mm[k] / before_mm;
+            if (factor != 1.0 && std::isfinite(factor) && factor > 0.0) {
+                for (int j = 0; j < 3; ++j)
+                    if (keep_scale_ || j == k)
+                        o.place.scale[std::size_t(j)] = std::max(o.place.scale[std::size_t(j)] * factor, 1e-3);
+                changed = true;
+            }
+            ImGui::PopID();
+        }
+        if (ImGui::Button(tr(T::ResetScale))) {
+            o.place.scale = {1.0, 1.0, 1.0};
+            changed = true;
+        }
+    } else if (tool_ == PlateTool::LayFlat) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+        ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
+        ImGui::PopTextWrapPos();
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (changed)
+        plate_changed();
+}
+
+// The Paint tool's card: what to paint, the mark, the brush's size.
+void App::paint_card(ImVec2 at) {
+    ImGui::SetNextWindowPos(at);
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##paint_tool", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ToolPaint));
+    // Fuzzy skin and colours come with the engine's fuzzy skin and extruders.
+    const struct {
+        T label;
+        PaintChannel channel;
+        bool ready;
+    } channels[] = {{T::PaintSupports, PaintChannel::Support, true},
+                    {T::PaintSeam, PaintChannel::Seam, true},
+                    {T::PaintFuzzy, PaintChannel::Fuzzy, true},
+                    {T::PaintColors, PaintChannel::Color, false}};
+    for (const auto& c : channels) {
+        ImGui::BeginDisabled(!c.ready);
+        if (ImGui::RadioButton(tr(c.label), paint_channel_ == c.channel)) {
+            paint_channel_ = c.channel;
+            paint_dirty_ = true;
+        }
+        ImGui::EndDisabled();
+        if (!c.ready)
+            ImGui::SetItemTooltip("%s", tr(T::PaintLater));
+    }
+    ImGui::Separator();
+    if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
+        if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
+            paint_mark_ = kPaintEnforce;
+        ImGui::SameLine();
+        if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
+            paint_mark_ = kPaintBlock;
+    }
+    ImGui::SetNextItemWidth(170.0f * scale_);
+    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, "%.1f mm", ImGuiSliderFlags_Logarithmic);
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+    ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
+    if (ImGui::Button(tr(T::PaintClear))) {
+        objects_[std::size_t(selected_)].painting.clear(paint_channel_);
+        paint_dirty_ = true;
+        ++revision_.model;
+        if (result_ && !viewer_)
+            stale_ = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+    ImGui::TextDisabled("%s", tr(T::PaintHint));
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// Paints the face under the mouse, on this model only; Shift erases.
+void App::brush_stroke(std::size_t object) {
+    const Vec3 d = mouse_ray(), e = camera_.eye();
+    const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
+    if (!hit || hit->object != object)
+        return;
+    Brush brush;
+    const Vec3 c = e + d * float(hit->distance);
+    brush.centre = {c.x, c.y, c.z};
+    brush.radius = brush_radius_;
+    brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
+    brush.view = {d.x, d.y, d.z};
+    brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
+                 : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
+                                                         : paint_mark_;
+    const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
+    const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
+    const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
+        painted_ = true;
+        paint_dirty_ = true;
+    }
+}
+
+// The view's copy of the painted pieces of the channel in use.
+void App::update_paint_view() {
+    if (!paint_dirty_)
+        return;
+    paint_dirty_ = false;
+    const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
+    std::vector<Renderer::PaintGroup> groups;
+    for (const PaintMesh::Group& g : m.groups)
+        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
+    renderer_.set_paint(m.vertices, groups);
+    vk_view_.set_paint(m.vertices, groups);
+}
+
+namespace {
+
+struct TipText {
+    T title, text;
+};
+
+const std::map<std::string, TipText>& tip_texts() {
+    static const std::map<std::string, TipText> tips = {
+        {"move", {T::TipMoveTitle, T::TipMove}},
+        {"rotate", {T::TipRotateTitle, T::TipRotate}},
+        {"scale", {T::TipScaleTitle, T::TipScale}},
+        {"lay", {T::TipLayTitle, T::TipLay}},
+        {"arrange", {T::TipArrangeTitle, T::TipArrange}},
+        {"paint", {T::TipPaintTitle, T::TipPaint}},
+        {"slice", {T::TipSliceTitle, T::TipSlice}},
+        {"preview", {T::TipPreviewTitle, T::TipPreview}},
+        {"analysis", {T::TipAnalysisTitle, T::TipAnalysis}},
+        {"calibration", {T::TipCalibrationTitle, T::TipCalibration}},
+        {"device", {T::TipDeviceTitle, T::TipDevice}}};
+    return tips;
+}
+
+// The assistant's steps (docs/UI.md, «Ayuda»).
+constexpr std::array<std::pair<T, T>, 7> kTour = {{{T::Tour0Title, T::Tour0},
+                                                   {T::Tour1Title, T::Tour1},
+                                                   {T::Tour2Title, T::Tour2},
+                                                   {T::Tour3Title, T::Tour3},
+                                                   {T::Tour4Title, T::Tour4},
+                                                   {T::Tour5Title, T::Tour5},
+                                                   {T::Tour6Title, T::Tour6}}};
+
+} // namespace
+
+// The tip of a function, the first time it is used (unless tips are off or
+// the assistant is on screen). A tip still on screen counts as seen.
+void App::tip(const std::string& id) {
+    if (!tips_ || tour_step_ >= 0 || tips_seen_.count(id) || !tip_texts().count(id))
+        return;
+    if (!tip_.empty())
+        tips_seen_.insert(tip_);
+    tip_ = id;
+}
+
+// The assistant, or else the tip on screen: a card at the bottom of the view.
+void App::help_windows() {
+    const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
+    if (!tour && tip_.empty())
+        return;
+    const float width = 420.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + view_size_.y - 16.0f * scale_),
+                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.96f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.accent));
+    ImGui::Begin("##help", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const T title = tour ? kTour[std::size_t(tour_step_)].first : tip_texts().at(tip_).title;
+    const T text = tour ? kTour[std::size_t(tour_step_)].second : tip_texts().at(tip_).text;
+    ImGui::PushFont(nullptr, kTitleSize);
+    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(text));
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+    if (tour) {
+        ImGui::TextDisabled("%d / %d", tour_step_ + 1, int(kTour.size()));
+        ImGui::SameLine();
+        const bool last = tour_step_ + 1 == int(kTour.size());
+        const float buttons = (last ? 1.0f : 2.0f) * 100.0f * scale_ + (tour_step_ > 0 ? 100.0f * scale_ : 0.0f);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, ImGui::GetContentRegionAvail().x - buttons));
+        if (tour_step_ > 0 && ImGui::Button(tr(T::Back), ImVec2(92.0f * scale_, 0)))
+            --tour_step_;
+        if (tour_step_ > 0)
+            ImGui::SameLine();
+        if (!last && ImGui::Button(tr(T::SkipTour), ImVec2(92.0f * scale_, 0)))
+            tour_step_ = -1;
+        if (!last)
+            ImGui::SameLine();
+        if (ImGui::Button(tr(last ? T::Finish : T::Next), ImVec2(92.0f * scale_, 0)))
+            tour_step_ = last ? -1 : tour_step_ + 1;
+    } else {
+        if (ImGui::Button(tr(T::GotIt))) {
+            tips_seen_.insert(tip_);
+            tip_.clear();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::NoMoreTips))) {
+            tips_ = false;
+            tip_.clear();
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(2);
 }
 
 void App::empty_hint() {
@@ -2830,6 +4332,7 @@ void App::dialogs() {
     if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover))) {
         switch (purpose_) {
         case Purpose::Open: open_path(chosen); break;
+        case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
         case Purpose::LoadSettings: load_settings_file(chosen); break;
         case Purpose::SaveSettings: save_settings_file(chosen); break;
@@ -2927,7 +4430,7 @@ void App::dialogs() {
     const std::string about = std::string(tr(T::About)) + "###about";
     if (ImGui::BeginPopupModal(about.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         if (logo_)
-            ImGui::Image(ImTextureRef(static_cast<ImTextureID>(logo_)), ImVec2(72.0f * scale_, 72.0f * scale_));
+            ImGui::Image(ImTextureRef(logo_), ImVec2(72.0f * scale_, 72.0f * scale_));
         ImGui::SameLine();
         ImGui::BeginGroup();
         ImGui::PushFont(nullptr, kTitleSize);
@@ -2950,6 +4453,8 @@ void App::layout() {
     settings_panel();
     status_bar();
     view_tools();
+    if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+        plate_tools();
     if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
         empty_hint();
     if (tab_ == Tab::Preview)
@@ -2960,6 +4465,27 @@ void App::layout() {
         calibration_panel();
     if (tab_ == Tab::Device)
         device_panel();
+    // Each function's tip the first time it is used.
+    if (tool_ != last_tool_) {
+        last_tool_ = tool_;
+        static const std::map<PlateTool, const char*> tool_tips = {
+            {PlateTool::Move, "move"}, {PlateTool::Rotate, "rotate"}, {PlateTool::Scale, "scale"},
+            {PlateTool::LayFlat, "lay"}, {PlateTool::Paint, "paint"}};
+        if (const auto it = tool_tips.find(tool_); it != tool_tips.end())
+            tip(it->second);
+    }
+    if (tab_ != last_tab_) {
+        last_tab_ = tab_;
+        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+                                                            {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
+        if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
+            tip(it->second);
+    }
+    if (result_ && !had_result_ && !viewer_) {
+        had_result_ = true;
+        tip("slice");
+    }
+    help_windows();
     toasts();
     dialogs();
 
@@ -3007,10 +4533,30 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.background_bottom = vec(theme_.view_bottom);
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
+    f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
+        std::size_t(selected_) + 1 < object_vertices_.size()) {
+        f.selected_first = object_vertices_[std::size_t(selected_)];
+        f.selected_count = object_vertices_[std::size_t(selected_) + 1] - f.selected_first;
+    } else if (tab_ == Tab::Prepare && objects_.size() == 1 && selected_ == 0 && tool_ != PlateTool::Select) {
+        f.selected_first = 0;
+        f.selected_count = object_vertices_.size() > 1 ? object_vertices_[1] : 0;
+    }
+    if (dragged_ && pressed_object_ >= 0 && std::size_t(pressed_object_) + 1 < object_vertices_.size()) {
+        if (f.selected_count == 0) { // nothing is highlighted: the dragged model keeps its colour
+            f.selected_first = object_vertices_[std::size_t(pressed_object_)];
+            f.selected_count = object_vertices_[std::size_t(pressed_object_) + 1] - f.selected_first;
+            f.model_selected = f.model;
+        }
+        f.selected_offset = drag_offset_;
+    }
     // The calibration tab shows its sliced part, up to the chosen segment.
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
     f.show_model = mesh_.has_value() && !preview;
+    f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
+    if (f.show_paint)
+        update_paint_view();
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);
@@ -3482,6 +5028,31 @@ void App::check_moire(int fb_w, int fb_h) {
     }
 }
 
+// --compare-view: the 3D view against another screenshot's, drawn by the
+// other graphics (OpenGL against Vulkan, PLAN.md «Vista con Vulkan»). The
+// drivers rasterize the edges of lines and triangles a little differently,
+// so a few pixels along them may differ; the surfaces must not.
+void App::compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h) {
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> other;
+    if (!read_png(from_utf8(options_.compare_view), w, h, other) || w != fb_w || h != fb_h) {
+        std::fprintf(stderr, "error: cannot read %s as a %dx%d screenshot\n", options_.compare_view.c_str(), fb_w, fb_h);
+        failed_ = true;
+        return;
+    }
+    const ImGuiIO& io = ImGui::GetIO();
+    const float sx = io.DisplayFramebufferScale.x, sy = io.DisplayFramebufferScale.y;
+    const PictureDifference d =
+        compare_pictures(picture.data(), other.data(), w, h, int(view_pos_.x * sx), int(view_pos_.y * sy),
+                         int(view_size_.x * sx), int(view_size_.y * sy), 24);
+    std::printf("view compare (%s): %zu of %zu pixels differ, %zu by more than 24 levels, at most by %d\n",
+                vulkan_ ? "Vulkan" : "OpenGL", d.differing, d.pixels, d.over, d.largest);
+    if (d.pixels == 0 || d.over * 200 > d.pixels) {
+        std::fprintf(stderr, "error: the 3D view differs from %s\n", options_.compare_view.c_str());
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
@@ -3496,39 +5067,109 @@ void App::frame() {
     // Files dropped while a file dialog is open wait for it to close: opening
     // one would change the model under a pending export.
     if (!browser_.is_open())
-        for (const std::filesystem::path& path : std::exchange(dropped_, {}))
-            open_path(path);
+        for (const std::filesystem::path& path : std::exchange(dropped_, {})) {
+            // A model dropped on a plate joins it, as Add does.
+            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_)
+                add_model(path);
+            else
+                open_path(path);
+        }
     poll_jobs();
     device_poll();
 
-    ImGui_ImplOpenGL3_NewFrame();
+#ifdef TISMA_VULKAN_WINDOW
+    if (vulkan_)
+        ImGui_ImplVulkan_NewFrame();
+    else
+#endif
+        ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     layout();
+    // With Vulkan the 3D view is a picture under the panels, drawn below
+    // (vk_view.*) before them.
+    if (vulkan_ && vk_view_.texture())
+        ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
+                                                 ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     ImGui::Render();
     if (frame_pending_ && view_size_.x > 10.0f && view_size_.y > 10.0f)
         frame_now();
 
     int fb_w = 0, fb_h = 0;
     glfwGetFramebufferSize(window_, &fb_w, &fb_h);
-    glViewport(0, 0, fb_w, fb_h);
     const Vec3 clear = vec(theme_.window);
-    glClearColor(clear.x, clear.y, clear.z, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // The 3D view, under the panels.
-    update_ray_scene();
     ViewFrame f = view_frame(fb_w, fb_h);
-    const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
-                           renderer_.has_ray_scene() && ray_scene_;
-    if (check_now)
-        f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
-    renderer_.draw(f);
-    if (check_now && renderer_.ray_samples() == 1)
-        check_rays(f);
+    if (vulkan_) {
+        // The 3D view first, into its picture, then the window and the panels.
+        const float colour[3] = {clear.x, clear.y, clear.z};
+        vk_.frame(ImGui::GetDrawData(), colour, !options_.screenshot.empty(),
+                  [&](void* commands, int in_flight) { vk_view_.record(commands, in_flight, f); });
+        if (double ms = 0.0; vk_view_.take_time(ms))
+            view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+        if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2) {
+            const double ms = vk_view_.bench(f, options_.bench_frames);
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, Vulkan); preview buffers %.0f ms\n",
+                        ms, options_.bench_frames, vk_view_.drawn_extrusions(), preview_ms_);
+            std::fflush(stdout);
+            benched_ = true;
+        }
+    } else {
+        glViewport(0, 0, fb_w, fb_h);
+        glClearColor(clear.x, clear.y, clear.z, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glViewport(0, 0, fb_w, fb_h);
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // The 3D view, under the panels.
+        update_ray_scene();
+        const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
+                               renderer_.has_ray_scene() && ray_scene_;
+        if (check_now)
+            f.sun_radius = 0.0f; // one exact direction, so the CPU can shoot the same rays
+        // The view's time on the GPU (a timer query), read two frames later so
+        // nothing waits for it; for the status bar.
+        if (!view_queries_[0])
+            glGenQueries(3, view_queries_);
+        const bool timed = !view_timing_[view_query_ % 3];
+        if (timed)
+            glBeginQuery(GL_TIME_ELAPSED, view_queries_[view_query_ % 3]);
+        renderer_.draw(f);
+        if (timed) {
+            glEndQuery(GL_TIME_ELAPSED);
+            view_timing_[view_query_ % 3] = true;
+        }
+        view_query_ = (view_query_ + 1) % 3;
+        for (int q = 0; q < 3; ++q) {
+            GLint ready = 0;
+            if (!view_timing_[q])
+                continue;
+            glGetQueryObjectiv(view_queries_[q], GL_QUERY_RESULT_AVAILABLE, &ready);
+            if (!ready)
+                continue;
+            GLuint64 ns = 0;
+            glGetQueryObjectui64v(view_queries_[q], GL_QUERY_RESULT, &ns);
+            view_timing_[q] = false;
+            const double ms = double(ns) / 1e6;
+            view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
+        }
+        // --bench-frames: the ready view drawn that many times more, timed to the
+        // end of the GPU's work (docs/UI.md, «Modelos grandes»).
+        if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2 && f.mode != RenderMode::RayTraced) {
+            glFinish();
+            const auto start = std::chrono::steady_clock::now();
+            for (int i = 0; i < options_.bench_frames; ++i)
+                renderer_.draw(f);
+            glFinish();
+            const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn); preview buffers %.0f ms\n",
+                        ms / options_.bench_frames, options_.bench_frames, renderer_.drawn_extrusions(), preview_ms_);
+            std::fflush(stdout);
+            benched_ = true;
+        }
+        if (check_now && renderer_.ray_samples() == 1)
+            check_rays(f);
+
+        glViewport(0, 0, fb_w, fb_h);
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
     if (!options_.screenshot.empty()) {
@@ -3579,8 +5220,15 @@ void App::frame() {
             if (!options_.save_project.empty())
                 save_project_to(from_utf8(options_.save_project));
             std::vector<std::uint8_t> pixels(std::size_t(fb_w) * std::size_t(fb_h) * 4);
-            glPixelStorei(GL_PACK_ALIGNMENT, 1);
-            glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            if (vulkan_) {
+                int w = 0, h = 0;
+                std::vector<std::uint8_t> kept = vk_.read_back(w, h);
+                if (w == fb_w && h == fb_h)
+                    pixels = std::move(kept);
+            } else {
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                glReadPixels(0, 0, fb_w, fb_h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+            }
             // OpenGL's rows go up from the bottom; the PNG's go down.
             std::vector<std::uint8_t> flipped(pixels.size());
             const std::size_t row = std::size_t(fb_w) * 4;
@@ -3593,6 +5241,8 @@ void App::frame() {
                 std::fprintf(stderr, "error: cannot write %s\n", options_.screenshot.c_str());
                 failed_ = true;
             }
+            if (!options_.compare_view.empty())
+                compare_view(flipped, fb_w, fb_h);
             if (!error_title_.empty())
                 std::fprintf(stderr, "%s: %s\n", error_title_.c_str(), error_message_.c_str());
             quit_ = true;
@@ -3602,7 +5252,8 @@ void App::frame() {
             failed_ = quit_ = true;
         }
     }
-    glfwSwapBuffers(window_);
+    if (!vulkan_)
+        glfwSwapBuffers(window_);
 }
 
 int App::run() {

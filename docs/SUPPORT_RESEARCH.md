@@ -6,6 +6,9 @@ de remover con mejor resultado de calidad en la parte soportada».
 Este documento junta lo publicado y propone el orden de trabajo. Las fichas mandan cuando dicen qué hace Tisma Slicer:
 `docs/spec/features/arc_overhangs.md`, `supports_more.md` y `supports_skirt.md`. Los artículos dan el método.
 
+**Actualización (2026-10-26):** S3 está hecho (`support.style` `organic`, `src/support/tree.*`). Para S1,
+`docs/ARC_OVERHANGS.md` junta lo publicado sobre los arcos y las ondas, y cómo probarlos.
+
 **Sala limpia:** varios de estos trabajos publicaron código: el guion de Arc Overhang, ConicalSlicer (GPL-3.0) y
 otros. Se usan solo los artículos y las descripciones públicas; el código no se abre.
 

@@ -8,6 +8,12 @@ qué logra cada uno y qué conviene para el motor. Es la base de F7 (no planar e
 **Sala limpia:** varios de estos trabajos publicaron su código (CurviSlicer, S³-Slicer). Se usan solo los artículos;
 el código no se abre.
 
+**Actualización (2026-10-26):** `docs/NONPLANAR_2026.md` suma lo publicado de 2022 a 2026 y cambia la recomendación
+para F7: la base son las superficies de corte en una grilla 2D de Double QuickCurve (Ottonello et al., Eurographics
+2025), que encajan con el corte por conjuntos de nivel y con el multigrid propio, en vez del campo por volumen de
+CurviSlicer. La pendiente útil en una impresora común es de 20 a 27°, y la ganancia de resistencia en 3 ejes no está
+probada. El orden: la base con `wave`, después `surface`, `overhangs`, `automatic`, `conical` y, último, `stress`.
+
 ## Qué se busca
 
 | Objetivo | Por qué importa | Con qué se mide |

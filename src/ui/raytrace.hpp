@@ -17,11 +17,15 @@ namespace tisma::ui {
 
 inline constexpr std::uint32_t kAlwaysVisible = 31; // a kind no mask hides (the plate)
 
-// A triangle (the model, the plate) or an oriented box (an extrusion of the
-// preview, around its prism).
+// A triangle (the model, the plate), an oriented box, or a bead: an
+// extrusion of the preview, the same prism the view draws.
 struct RayPrimitive {
     bool box = false;
+    bool bead = false;
     // Triangle: a, b, c. Box: the centre, then three orthogonal half axes.
+    // Bead: the move's two ends, then (width, height, the mitre's direction
+    // at the start) and (the mitre's direction at the end, 0, 0): angles in
+    // radians of the XY normal of the plane the bead ends on, or kFreeEnd.
     Vec3 p0, p1, p2, p3;
     std::uint32_t layer = 0; // preview layer; 0 for the model
     std::uint32_t kind = kAlwaysVisible; // LineKind of an extrusion (the mask hides it)
@@ -49,6 +53,17 @@ float intersect_triangle(const Ray& ray, Vec3 a, Vec3 e1, Vec3 e2);
 // does not hit it: rays leave a surface from inside its own extrusion's box.
 float intersect_box(const Ray& ray, Vec3 centre, Vec3 half_x, Vec3 half_y, Vec3 half_z);
 
+// A bead's end that does not join another move: the bead grows by half a
+// width past the point, as the view draws it.
+inline constexpr float kFreeEnd = 100.0f;
+
+// The distance at which the ray enters the bead from p0 to p1 (the nozzle's
+// path): a prism of rhombic section as wide and high as the bead, hanging
+// under the path, between its two end planes. Its six planes clip the ray
+// (Haines 1991, "Fast ray-convex polyhedron intersection"). As with boxes, a
+// ray that starts inside does not hit it.
+float intersect_bead(const Ray& ray, Vec3 p0, Vec3 p1, float width, float height, float start, float end);
+
 // A bounding volume hierarchy built with the binned surface area heuristic
 // (Wald 2007, "On fast construction of SAH-based bounding volume
 // hierarchies"); leaves hold up to kLeafSize primitives.
@@ -74,8 +89,8 @@ public:
     // padded with zeros). A node is 3 texels: (min, first child or first
     // primitive), (max, primitive count, 0 for an inner node whose children
     // are next to each other), (first layer, last layer, 0, 0). A primitive is
-    // 4 texels: (p0, layer), (p1, 1 for a box), (p2, kind), (p3, 0); a
-    // triangle stores a, b - a and c - a. Indices and layers are whole numbers
+    // 4 texels: (p0, layer), (p1, 1 for a box, 2 for a bead), (p2, kind),
+    // (p3, 0); a triangle stores a, b - a and c - a. Indices and layers are whole numbers
     // in floats, exact below 2^24.
     std::vector<float> node_texels() const;
     std::vector<float> primitive_texels() const;
@@ -97,8 +112,8 @@ private:
 
 // The primitives of the scenes the view shows: the model's triangles moved by
 // offset, the plate (two triangles per quad of its fan, kAlwaysVisible), and
-// the preview's extrusions as boxes around their prisms (the same prism the
-// view draws: hanging under the path, each end grown by half a width).
+// the preview's extrusions as beads (the prisms the view draws, mitred where
+// one move goes on into the next), so the shadows of a wall are continuous.
 std::vector<RayPrimitive> model_primitives(const TriangleMesh& mesh, Vec3 offset);
 std::vector<RayPrimitive> plate_primitives(const BedPolygon& bed);
 std::vector<RayPrimitive> preview_primitives(const PreviewBuffers& preview);

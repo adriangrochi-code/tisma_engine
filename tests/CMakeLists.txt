@@ -38,11 +38,19 @@ add_executable(tisma_tests
   test_gcode.cpp
   test_resolution.cpp
   test_order.cpp
+  test_scarf.cpp
+  test_settings_layout.cpp
+  test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
   test_print_time.cpp
   test_adhesion.cpp
+  test_fuzzy.cpp
+  test_paint.cpp
   test_support.cpp
+  test_tree_support.cpp
+  test_formats.cpp
+  test_bitgrid.cpp
   test_voronoi.cpp
   test_fea.cpp
   test_analysis.cpp
@@ -60,9 +68,10 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
-  target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets")
+  target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
+                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
@@ -120,6 +129,93 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_project_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode)
+    # A plate of two models (the second one added and the plate arranged),
+    # with the Scale tool open, sliced; its project opens to the same G-code.
+    add_test(NAME ui_plate_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl
+              --lang en --size 900x600 --tool scale
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.gcode
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_plate.tisma
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.png)
+    add_test(NAME ui_plate_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_plate.tisma --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.png)
+    add_test(NAME ui_plate_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_plate_b.gcode)
+    # Help: the assistant's fourth step; the Paint tool's first-use tip with
+    # the seam setting's info card open.
+    add_test(NAME ui_help_tour
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1100x700 --tour 3
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_tour.png)
+    add_test(NAME ui_help_tip_and_info
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1100x700 --tips --tool paint
+              --info walls.seam --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_tip.png)
+    set_tests_properties(ui_help_tour ui_help_tip_and_info PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The window with Vulkan (PLAN.md «Vista con Vulkan», V1): the panels
+    # drawn by Vulkan and read back from its swapchain for the picture.
+    if(TISMA_GPU)
+      add_test(NAME ui_vulkan_window
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
+      set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
+      # the model with a painted seam, close; then the sliced cube's preview.
+      set(TISMA_VIEW_prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
+      set(TISMA_VIEW_preview)
+      foreach(view prepare preview)
+        add_test(NAME ui_view_${view}_opengl
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${TISMA_VIEW_${view}} --render fast --graphics opengl
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
+        add_test(NAME ui_view_${view}_vulkan_same_as_opengl
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${TISMA_VIEW_${view}} --render fast --graphics vulkan
+                  --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)
+        set_tests_properties(ui_view_${view}_opengl PROPERTIES FIXTURES_SETUP ui_view_${view})
+        set_tests_properties(ui_view_${view}_vulkan_same_as_opengl PROPERTIES FIXTURES_REQUIRED ui_view_${view})
+        set_tests_properties(ui_view_${view}_opengl ui_view_${view}_vulkan_same_as_opengl
+                             PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      endforeach()
+    endif()
+    # A seam painted down one side of a cube, sliced; its project keeps the
+    # paint and opens to the same G-code.
+    set(TISMA_PAINT_STROKES)
+    foreach(z 0.5 1.5 2.5 3.5 4.5 5.5 6.5 7.5 8.5 9.5)
+      list(APPEND TISMA_PAINT_STROKES --paint seam,enforce,133,131,${z},1)
+    endforeach()
+    add_test(NAME ui_paint_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool paint
+              ${TISMA_PAINT_STROKES}
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_paint.tisma
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.png)
+    add_test(NAME ui_paint_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_paint.tisma --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.png)
+    add_test(NAME ui_paint_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode)
+    set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
+    set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
+    set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")
+    set_tests_properties(ui_paint_save ui_paint_reopen PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    set_tests_properties(ui_plate_save PROPERTIES FIXTURES_SETUP ui_plate)
+    set_tests_properties(ui_plate_reopen PROPERTIES FIXTURES_REQUIRED ui_plate FIXTURES_SETUP ui_plate_b)
+    set_tests_properties(ui_plate_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_plate;ui_plate_b")
+    set_tests_properties(ui_plate_save ui_plate_reopen PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     set_tests_properties(ui_project_save PROPERTIES FIXTURES_SETUP ui_project)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")

@@ -10,6 +10,183 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.9.0-alpha.1] - 2026-10-27
+
+Cuarta versión publicada. Trae los soportes en árbol, la lectura de OBJ y 3MF con la pieza centrada en la cama, la
+costura en bufanda, el modo vaso, el panel de ajustes por secciones, tarjetas y niveles, las herramientas de la placa,
+pintar soportes, costuras y piel difusa sobre el modelo, la ayuda en la interfaz y la vista 3D con Vulkan. El soporte en
+grilla sigue ahora la ficha (margen, separación y líneas), el ventilador va según el tiempo de capa, la falda y el borde
+como pide la ficha, y las velocidades salen del perfil de la impresora. Laminar y armar el G-code es bastante más rápido
+(capas sólidas de abajo, piezas prismáticas, soportes, costura alineada, G-code en paralelo). Sigue siendo una alfa: los
+formatos de ajustes, perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y cada cambio se anota
+acá.
+
+### Agregado
+
+- **OBJ y 3MF** (ficha `formats.md`): la línea de comandos y la interfaz abren modelos OBJ y 3MF además de STL. Del
+  3MF se toman los objetos de la placa con su ubicación, sus partes, la unidad del archivo (un 3MF en pulgadas sale
+  25,4 veces más grande) y las mallas guardadas en otros archivos del paquete, como los de Bambu Studio y OrcaSlicer;
+  los modificadores de un proyecto de laminador no se imprimen. `info` dice cuántos objetos y partes trae.
+- **La pieza en el centro de la cama** (ficha `placement.md`): con una cama definida, la línea de comandos centra la
+  pieza en ella, o en `placement.center`, venga donde venga en el archivo; `placement.arrange` en `false` la deja
+  donde está.
+- **Soportes en árbol** (pedido del dueño; ficha `supports_more.md`, reglas 15 a 17): `support.style` en `organic`,
+  en Soportes › Soporte del panel, con sus ajustes en la tarjeta Árbol. Bajo lo que cuelga va una interfaz densa
+  entera, y debajo puntas redondas que bajan como ramas, se juntan entre ellas y engordan hasta troncos sobre la cama;
+  esquivan la pieza inclinándose, y donde no pueden se apoyan en ella. Tocan la pieza en menos lugares que la grilla y
+  se sacan más fácil.
+- **Modo vaso** (pedido del dueño de una pared en espiral; ficha `vase_mode.md`): `vase.enabled`, en Otros › Modos
+  especiales del panel. La pieza sale como una sola pared que sube en espiral, sin costura, sobre capas de abajo
+  planas (la última, superficie de arriba). Cada vuelta empieza donde terminó la anterior, sin viaje ni retracción, y
+  sube una capa con el caudal de siempre. No se puede con soportes ni con varios objetos.
+- **Costura en bufanda** (pedido del dueño; ficha `walls_extra.md`, regla 4): `walls.scarf` en `contours` o
+  `everywhere` hace que la pared externa empiece en una rampa que sube desde la capa de abajo, en vez de un escalón,
+  y que al final del lazo pase otra vez sobre la rampa con el cordón cada vez más fino: la costura casi no se ve, con
+  el mismo filamento. Con `walls.scarf_entire_loop`, la rampa da la vuelta entera y la pared sube en espiral. Ajustes
+  del largo, la altura inicial, el tramo máximo, solo en lazos lisos (por defecto) y también en las paredes internas.
+- **Relaminar por etapas:** si después de laminar se cambia solo una velocidad, una temperatura, el ventilador, la
+  retracción u otro ajuste que solo afecta al G-code, el programa no vuelve a cortar la pieza: rehace solo el G-code.
+  En el Benchy, 0,4 s en vez de 1,4 s, con el mismo G-code byte a byte. La barra de estado dice «G-code rehecho».
+- **Sombra de la pieza sobre la cama** en el modo de oclusión ambiental.
+- **Ranuras entre capas en la vista previa** (pedido del dueño): cada capa de una pared se ve como un tubo, con su
+  ranura oscura contra la de arriba, calculada sobre el perfil del cordón; y los colores saturados ya no se lavan hacia
+  el blanco.
+- **Ventana y vista 3D con Vulkan** (decisión del dueño; `PLAN.md`, «Vista con Vulkan»): `--graphics
+  auto|vulkan|opengl` elige qué dibuja la ventana. Con Vulkan, los paneles y la vista 3D (cama, modelo, pintura, vista
+  previa, MSAA y FXAA) los dibuja Vulkan, igual que OpenGL imagen contra imagen, con la luz rápida. La oclusión
+  ambiental y el ray tracing llegan en el paso siguiente, así que por ahora el modo automático (el de siempre) sigue con
+  OpenGL. Si la máquina no tiene Vulkan, o no puede mostrar la ventana con él, la ventana sigue con OpenGL y lo dice.
+- **Tiempo de la vista y FPS** en la barra de estado: lo que tarda la GPU en dibujar la vista 3D en cada cuadro, para
+  medir en cada máquina (`docs/LARGE_MODELS.md`). `--bench-frames N` lo mide para las capturas.
+- **Herramientas de la placa** (pedido del dueño; `docs/UI.md`, «Herramientas de la placa»): varios modelos en la placa
+  y una columna con **Agregar**, **Quitar**, **Duplicar**, **Mover** (también arrastrando el modelo), **Rotar**,
+  **Escalar** (en % o en mm), **Apoyar en una cara** y **Organizar** (grilla compacta centrada, ficha `placement.md`).
+  Atajos M, R, S, F, A y Supr. Soltar un STL sobre la placa lo suma; los proyectos guardan todos los modelos.
+- **Pintar sobre el modelo** (pedido del dueño; `docs/PAINTING.md`): herramienta **Pintar** (P) con un pincel redondo.
+  - **Soportes:** forzar o bloquear (ficha `supports_more.md`, reglas 3 a 5). Sobre una cara forzada lo que cuelga
+    lleva soporte aunque la pendiente no lo pida; sobre una bloqueada, nunca. Ajuste nuevo `support.automatic`: en
+    `false`, solo hay soporte bajo lo forzado.
+  - **Costura:** forzada, la pared empieza en lo pintado (en el medio de una franja, con la costura alineada); bloqueada,
+    afuera.
+  - El pincel corta los triángulos grandes en pedazos chicos sin tocar la malla, y la pintura sigue al modelo cuando se
+    mueve, gira o escala. Los proyectos la guardan (parte `PNT `). Los colores llegan con varios extrusores.
+- **Ayuda en la interfaz** (pedido del dueño; `docs/UI.md`, «Ayuda»):
+  - un asistente de siete pasos la primera vez, y desde **Más > Tutorial**;
+  - un consejo la primera vez que se usa cada función (las herramientas de la placa, Pintar, el laminado y cada
+    pestaña), que se puede apagar;
+  - un botón (i) al lado de cada ajuste: qué hace, su clave, su valor por defecto y su rango, leídos de
+    `docs/CONFIG.md`.
+- **Piel difusa** (ficha `fuzzy_skin.md`; `fuzzy.mode`, `fuzzy.thickness` y `fuzzy.point_distance`, en la interfaz bajo
+  Costura): la pared externa pasa por puntos nuevos cada 0,4 a 1,2 mm, corridos al azar hasta 0,3 mm hacia afuera o
+  hacia adentro, y la superficie queda rugosa. `external` deja lisos los agujeros, `all` también los hace rugosos; las
+  paredes internas no cambian. También se pinta (Pintar > Piel difusa): donde se pintó, se aplica aunque esté apagada.
+- **Zonas de relleno chicas, sólidas** (`infill.solid_below_area`, 70 mm², de la ficha `surfaces_infill.md`; en la
+  interfaz, sección Relleno): una isla del relleno de una capa más chica que eso (una pata fina, un perno) se llena
+  sólida. Cambia las piezas chicas: un cubo de 10 mm con 3 paredes queda sólido entero, y una placa de 12 islas
+  chicas lleva 60 % más de material (35 → 53 min). 0 lo apaga.
+
+### Cambiado
+
+- **Soporte en grilla como pide la ficha `supports_skirt.md`** (segunda prueba de caja negra, QA10 a QA12): la zona
+  llega 1,6 mm más allá de lo que cuelga, así los pedazos chicos de una pieza orgánica se juntan en una zona firme; la
+  separación con la pieza es por defecto la mitad del ancho de las paredes (`support.xy_gap` acepta mm o un
+  porcentaje); la base va en líneas en una sola dirección (`support.line_angle`, nuevo) a `support.spacing` más un
+  cordón, y la interfaz cruzada a 90°, a la separación de los cordones.
+- **Panel de ajustes nuevo** (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
+  los ajustes del motor, también los que no tenían lugar (bufanda, compensación, corte, soportes, ventilador, límites
+  de la máquina), en pestañas Impresión, Material e Impresora; cada una con sus secciones en una columna de íconos
+  (Calidad, Resistencia, Velocidad, Soportes, Adhesión, Otros…) y tarjetas plegables que, cerradas, dicen lo
+  importante en una línea. Tres niveles: Básico, Normal y Avanzado (Ctrl+Alt+1, 2 y 3). Lo cambiado respecto del
+  perfil se marca en violeta y ningún nivel lo esconde. El nivel no cambia el G-code.
+- **Costura alineada más rápida:** en piezas de superficie curva con muchos puntos por pared, armar el G-code con la
+  costura alineada (la de siempre) tardaba tres veces más que con `nearest`; ahora tarda lo mismo. Una gota de 172 080
+  triángulos lamina en 2,7 s en vez de 3,8 s, y el cráneo escaneado en 4,7 s en vez de 4,9 s, con el mismo G-code.
+- **Soportes más rápidos** (pedido del dueño): la columna del soporte se calcula en una grilla de bits, en la CPU o en
+  la GPU con el mismo resultado. Un cráneo escaneado de 546 684 triángulos lamina en 5,8 s en vez de 12,9 s, y el
+  Benchy con soportes en 1,18 s en vez de 1,38 s. El borde de afuera del soporte queda a menos de 0,05 mm de antes,
+  algo más grande, y se simplifica a medio cordón; la separación con la pieza no cambia.
+- **Piezas huecas más rápidas:** sin relleno (`infill.density` 0), las capas sólidas de abajo ya no calculan los
+  cordones de la capa entera para saber si son puentes. Una estrella hueca de 160 mm: el corte de 0,90 s a 0,62 s;
+  el Benchy sin relleno, de 1,30 s a 1,04 s. El mismo G-code.
+- **El G-code se arma y se verifica en paralelo** (V5 del informe de velocidad): mientras se escribe una capa se
+  ordenan las siguientes, y la verificación lee el archivo por bloques. El mismo G-code byte a byte. El Benchy pasa de
+  1,13 s a 1,00 s.
+- **Lo que dejan las paredes se simplifica** como los contornos (V9): el Benchy, de 1,04 s a 0,98 s. El relleno se
+  mueve menos que `slicing.simplify_tolerance` (0,01 mm); las paredes no cambian.
+- **Piezas prismáticas mucho más rápidas** (V10 del informe de velocidad): las capas con la misma sección que la de
+  abajo (un cilindro, una caja, una extrusión) ya no se cortan ni se calculan de nuevo; se copian la región, las
+  paredes, las superficies y el relleno. Un cilindro de 32 768 lados y 40 mm de alto: de 2,7 s a 0,36 s; de 80 mm, de
+  5,3 s a 0,63 s (0,29 s y 0,36 s con lo de arriba). En los cilindros, cada capa repite ahora exactamente la sección de la primera (antes la
+  simplificación elegía otros puntos en cada capa); las paredes se mueven menos de 0,02 mm. El resto de las piezas da
+  el mismo G-code byte a byte.
+- **Vista previa más rápida con modelos grandes** (pedido del dueño; `docs/LARGE_MODELS.md`): con la pieza entera a la
+  vista, las paredes internas y el relleno que la pieza tapa por todos lados ya no se dibujan; la imagen es la misma.
+  En un cilindro de 60 × 80 mm se dibuja un 71 % menos y el cuadro tarda 3,7 veces menos; en una esfera, el peor caso
+  (cada capa es un escalón), 1,5 veces menos. Un corte, una capa sola o un tipo oculto en la leyenda los dibujan.
+- **Solo la capa de arriba de todo es «Top solid infill»** (ficha `surfaces_infill.md`, regla 2): las otras capas
+  sólidas de arriba son relleno sólido, a su velocidad y en líneas comunes. Antes las tres iban a la velocidad de la
+  superficie de arriba.
+- **Ventilador por tiempo de capa** (ficha `cooling.md`; prueba de caja negra del equipo de fichas): el ventilador va
+  al máximo en las capas que tardan `cooling.min_layer_time` o menos y baja en línea recta hasta `cooling.fan_min` en
+  las que tardan `cooling.fan_below_time` (nuevo, 60 s); las más largas van sin ventilador, o con `fan_min` si
+  `cooling.fan_always` (nuevo). Los puentes llevan `cooling.fan_bridges` (nuevo, 100 %) y después vuelve el de la capa.
+  El comando va justo antes del `;LAYER_CHANGE` de su capa. Antes iba fijo en `fan_min`. `cooling.fan_off_layers`
+  pasa de 1 a 3 capas sin ventilador; las que tienen que frenar lo siguen llevando al máximo.
+- **Falda y borde** (ficha `supports_skirt.md`, reglas 8 y 9): la falda rodea la pieza con las esquinas redondeadas y
+  empieza a 6 mm de ella (`adhesion.skirt_distance`, antes 3). Las vueltas del borde van a la separación de los
+  cordones (el ancho menos lo que se encima un cordón de bordes redondos: 0,357 mm con 0,4 × 0,2, antes 0,4) y llegan
+  al ancho pedido: un borde de 5 mm tiene 14 vueltas (antes 12 y 4,8 mm).
+- **Las velocidades son de la impresora** (decisión del dueño): el motor ya no tiene velocidades por defecto. Todas
+  (`speed`, `retraction.speed`, `cooling.min_speed` y las de `machine`) salen del perfil de la impresora elegida, porque
+  dependen de ella; en la interfaz están en **Impresora › Velocidades**. Solo si la impresora no trae una (una creada
+  de cero, una del catálogo, un archivo de ajustes sin ella) se usa la de una Creality Ender-3 de fábrica, con los
+  números que publica Creality (paredes 40, externa 30, relleno 60, arriba 40, soporte 40, viajes 180, primera capa
+  25 y retracción 25 mm/s), y se avisa: la interfaz al elegirla, `slice` con `warning: no speed for…` y el aviso
+  `speed_fallback`. `speed.max` y `machine.max_feed_*` sin valor no topan. En los archivos, una velocidad sin valor se
+  escribe `null`.
+  - **Incompatible:** los perfiles pasan a la versión 2. Un perfil de impresión de la versión 1 se sigue abriendo, pero
+    sin sus velocidades: hay que pasarlas al perfil de la impresora. Lo mismo `cooling.min_speed` de un perfil de
+    filamento.
+  - Un archivo de ajustes para `slice` sin velocidades ya no toma las de banco de antes (60, 80, 130 mm/s…), sino las de
+    respaldo.
+- **Impresoras de pellets** (ficha `pellets.md`): `layers.height` y `layers.first_height` aceptan hasta 10 mm (antes
+  2) y `walls.width` hasta 40 mm (antes 10). Como siempre, nunca más gruesas que la boquilla ni más anchas que cuatro
+  boquillas. Una impresora con boquilla de 8 mm y capas de 4 mm ya lamina.
+- **Modelos grandes más fluidos** (pedido del dueño; `docs/UI.md`, «Modelos grandes»): con un modelo de un millón de
+  triángulos, arrastrarlo ya no rehace la malla en cada cuadro (antes, 5 cuadros por segundo), y el clic y el pincel
+  buscan en un árbol de cajas: un clic pasa de 57 ms a 3 µs.
+- **Brillo parejo** (pedido del dueño; `docs/GLOSS.md`): para llegar al tiempo mínimo de capa, ahora se frena primero
+  todo lo que no es pared externa, y la pared externa sigue a su velocidad (`cooling.keep_outer_speed`, encendido por
+  defecto). Una pared que se frena sale de una boquilla más caliente y brilla distinto: las capas cortas dejaban bandas.
+  Si frenar lo de adentro no alcanza, se frena todo como antes. En el cubo de 10 mm, la pared externa va a 30 mm/s en
+  todas las capas (antes, entre 27,5 y 28,1 según la capa), con el mismo tiempo total.
+- **Vista previa más parecida a la pieza impresa** (pedido del dueño, con una foto de una esquina): los cordones que
+  siguen de un movimiento al siguiente se unen en inglete. En las curvas ya no sobresale el extremo de cada tramo en
+  dientes, y las paredes no titilan donde dos tramos se encimaban. La luz sigue el perfil de un cordón real: plano
+  arriba y redondo a los costados. `--look` acerca la cámara en las capturas.
+- **Ray tracing con el filamento continuo** (pedido del dueño): los rayos chocan con los mismos cordones que dibuja la
+  vista, unidos en inglete, en vez de una caja por tramo. Las sombras y la oclusión de una pared ya no tienen muescas
+  oscuras entre tramos.
+- **Laminar con capas sólidas de abajo es mucho más rápido:** el Benchy pasa de 6,3 s a 1,4 s. La detección de puentes
+  calculaba el área de las paredes de la capa de abajo con un disco por punto; ahora es un trazo por recorrido y solo
+  cerca de la superficie de abajo. El G-code cambia micras en el borde de algunos puentes.
+
+### Corregido
+
+- **Soportes en árbol con ajustes extremos:** puntas muy finas, muy densas y muy juntas bajo un voladizo grande
+  agotaban la memoria y el proceso moría. Ahora las puntas nunca quedan más juntas que dos cordones, y el laminado
+  termina: el caso extremo de una losa de 100 × 100 mm, en 5 s.
+- **G-code con muchos lazos** (los de los soportes en árbol): escribirlo es de 10 a 20 veces más rápido. En una losa de
+  100 × 100 mm con árboles, 0,8 s en vez de 17 s, con el mismo G-code.
+- **Un 3MF dañado que dice tener una parte enorme** se rechaza con un mensaje claro, en vez de un error interno al
+  quedarse sin memoria.
+- Con `machine.min_layer_height` mayor que `machine.max_layer_height`, el error decía que la capa no entraba; ahora
+  dice que los dos límites se contradicen (equipo de fichas).
+- Con la primera capa más gruesa que las demás, faltaba la última capa: un cubo de 10 mm con capas de 0,3 y 0,2 tenía
+  49 capas y terminaba en 9,9 mm; ahora tiene 50 y termina en 10,1 (ficha `slicing.md`, C4).
+- Una pendiente justo en el ángulo límite automático (un escalón de medio cordón por capa, la cuña de 45° con capas de
+  0,2) llevaba soporte; la regla es «más de» (ficha `supports_skirt.md`, S1).
+
 ## [0.8.0-alpha.1] - 2026-10-25
 
 Tercera versión publicada. Trae el catálogo de 144 impresoras y 108 filamentos con sus capacidades, la altura de
@@ -137,6 +314,9 @@ perfiles, proyectos e informes todavía pueden cambiar entre versiones 0.x, y ca
   byte a byte: los números se escriben por un camino propio que da lo mismo que `std::to_chars`.
 - El G-code escribe la aceleración de los ajustes después del G-code de inicio (`M204 P… T…`, o
   `SET_VELOCITY_LIMIT ACCEL=…` en Klipper), así la impresora corre a la aceleración con la que se estima el tiempo.
+- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
+  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
+  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
 
 ### Corregido
 
@@ -235,12 +415,6 @@ negra del equipo de fichas. Cada arreglo tiene su prueba (muchas en `tests/test_
 - **Un cambio por altura (`changes`) a menos de 0,0005 mm del tope de una capa:** se aplicaba en esa capa en el
   verificador y en la siguiente en el escritor, y el G-code se rechazaba. Ahora los dos usan el tope tal como se
   escribe.
-
-### Arreglado
-
-- **Escribir el G-code de rellenos con muchos recorridos cortos** era lento: el orden miraba todos los recorridos para
-  elegir el siguiente. Ahora busca en una grilla, con el mismo G-code: el rayo al 100 % en un cubo de 100 mm pasa de
-  19,6 s a 0,7 s de escritura (y de 63 s a 2,1 s en total, con el índice de ramas del rayo).
 
 ## [0.7.0-alpha.1] - 2026-10-24
 
@@ -445,7 +619,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...HEAD
+[0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
 [0.7.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.6.0-alpha.1...v0.7.0-alpha.1
 [0.6.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.6.0-alpha.1

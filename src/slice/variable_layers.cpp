@@ -138,7 +138,7 @@ LayerStack plan_layer_stack(const IndexedMesh& mesh, double min_z, double max_z,
 
     LayerStack out;
     const auto add = [&](double bottom, double top, double share) {
-        if (0.5 * (bottom + top) >= max_z)
+        if (0.5 * (bottom + top) > max_z + kOnTop) // on the top still slices (slicing.md, rule 3)
             return false;
         out.layers.push_back({bottom, top});
         out.share.push_back(share);

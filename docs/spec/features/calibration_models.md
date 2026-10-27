@@ -22,6 +22,8 @@ cargan de archivos.
    - dígitos de siete segmentos, con trazos de 0,8 mm (dos líneas de una boquilla de 0,4) y 0,6 mm de relieve;
    - cada dígito mide de ancho `max(2,2; 0,55 · alto)` mm, con 0,8 mm entre dígitos.
 
+La pieza de prueba general, con todo junto y mecanismos, es Mabel: `quality_model.md`.
+
 ## Pruebas por franjas (torres)
 
 **Caja hueca:** una caja de paredes con 1 o 2 perímetros, sin relleno, sin tapa, 3 capas abajo y sin paredes finas.

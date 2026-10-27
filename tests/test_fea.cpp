@@ -327,7 +327,8 @@ TEST_CASE("as printed: bars along the lines, across them and across the layers",
 
 TEST_CASE("as printed: line directions of a sliced cube, four voxels per line", "[fea]") {
     const IndexedMesh cube = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
-    const Settings settings;
+    Settings settings;
+    settings.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     const SlicedModel model = slice_model(cube, settings);
     const VoxelGrid g = voxelize(cube, 0.1, 0.1, layer_planes(model.layers, 2));
     REQUIRE(g.nx == 100);

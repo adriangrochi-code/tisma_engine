@@ -1,0 +1,108 @@
+#version 450
+// One step of the support column on its grid of bits (support_areas,
+// src/support/support.cpp), one 32-bit word of a row per invocation: the
+// same bits as BitGrid's dilate, erode and subtract (src/geom/bitgrid.cpp).
+// Own design; see PROVENANCE.md.
+//
+// mode 0: temp = the column with the layer's overhang, dilated by `radius`.
+// mode 1: column = temp eroded by `radius` (outside the grid unset), less the
+//         layer's part; kept = column.
+// mode 2: column = column less the layer's part; kept = column.
+
+layout(local_size_x = 256) in;
+
+layout(std430, set = 0, binding = 0) readonly buffer Parts { uint parts[]; };
+layout(std430, set = 0, binding = 1) readonly buffer Adds { uint adds[]; };
+layout(std430, set = 0, binding = 2) buffer Column { uint column[]; };
+layout(std430, set = 0, binding = 3) buffer Temp { uint temp[]; };
+layout(std430, set = 0, binding = 4) writeonly buffer Kept { uint kept[]; };
+
+layout(push_constant) uniform Params {
+    uint width;  // pixels in a row
+    uint height; // rows
+    uint stride; // words in a row
+    uint radius; // pixels, at most 31
+    uint mode;
+    uint layer; // where the layer's grid starts in parts, adds and kept, in words
+} params;
+
+// The bits of word w that lie inside the width.
+uint inside(int w) {
+    uint first = uint(w) * 32u;
+    if (first >= params.width)
+        return 0u;
+    if (params.width - first >= 32u)
+        return 0xffffffffu;
+    return (1u << (params.width - first)) - 1u;
+}
+
+// The word the dilation spreads: mode 0, the column with the overhang; mode
+// 1, the complement of temp inside the width. Unset outside the grid.
+uint source(int j, int w) {
+    if (j < 0 || j >= int(params.height) || w < 0 || w >= int(params.stride))
+        return 0u;
+    uint i = uint(j) * params.stride + uint(w);
+    if (params.mode == 0u)
+        return column[i] | adds[params.layer + i];
+    return ~temp[i] & inside(w);
+}
+
+// Row j's word w, every set bit spread k bits each way.
+uint spread(int j, int w, int k) {
+    uint here = source(j, w);
+    uint before = source(j, w - 1);
+    uint after = source(j, w + 1);
+    uint result = here;
+    for (int s = 1; s <= k; ++s) {
+        result |= (here << uint(s)) | (before >> uint(32 - s));
+        result |= (here >> uint(s)) | (after << uint(32 - s));
+    }
+    return result;
+}
+
+// The disk's half-width dy rows away: the largest k with k*k + dy*dy <= r*r.
+int half_width(int dy, int r) {
+    int k = int(sqrt(float(r * r - dy * dy)));
+    while ((k + 1) * (k + 1) + dy * dy <= r * r)
+        ++k;
+    while (k > 0 && k * k + dy * dy > r * r)
+        --k;
+    return k;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= params.height * params.stride)
+        return;
+    int j = int(id / params.stride);
+    int w = int(id % params.stride);
+    if (params.mode == 2u) {
+        uint c = column[id] & ~parts[params.layer + id];
+        column[id] = c;
+        kept[params.layer + id] = c;
+        return;
+    }
+    int r = int(params.radius);
+    uint d = 0u;
+    for (int dy = -r; dy <= r; ++dy)
+        d |= spread(j + dy, w, half_width(abs(dy), r));
+    d &= inside(w);
+    if (params.mode == 0u) {
+        temp[id] = d;
+        return;
+    }
+    uint c = ~d & inside(w);
+    // A pixel nearer the grid's edge than the radius has part of its disk outside.
+    if (j < r || j >= int(params.height) - r) {
+        c = 0u;
+    } else {
+        for (int b = 0; b < 32; ++b) {
+            int x = w * 32 + b;
+            if (x < r || x >= int(params.width) - r)
+                c &= ~(1u << uint(b));
+        }
+    }
+    c &= ~parts[params.layer + id];
+    column[id] = c;
+    kept[params.layer + id] = c;
+}

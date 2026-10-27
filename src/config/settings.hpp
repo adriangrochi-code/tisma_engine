@@ -22,6 +22,9 @@ enum class GpuMode { Auto, Off };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 enum class GcodeFlavor { Marlin, Klipper, RepRap };
 enum class SeamMode { Aligned, Nearest, Random, Rear };
+enum class ScarfMode { Nowhere, Contours, Everywhere };
+enum class SupportStyle { Grid, Organic };
+enum class FuzzyMode { None, External, All };
 
 // Values that change from a height up (calibration towers, docs/CONFIG.md,
 // "changes"): each set value takes effect from the first layer whose top is
@@ -46,6 +49,7 @@ struct Speed {
     double value = 0.0;
     bool percent = false;
     double of(double base) const { return percent ? base * value / 100.0 : value; }
+    friend bool operator==(const Speed&, const Speed&) = default;
 };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
@@ -71,6 +75,22 @@ struct Settings {
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
     SeamMode seam = SeamMode::Aligned;
+    // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
+    // on a ramp up from the layer below instead of a step.
+    ScarfMode scarf = ScarfMode::Nowhere;
+    bool scarf_only_smooth = true;    // only loops without sharp corners
+    double scarf_start_height = 0.0;  // percent of the layer the ramp starts at, over the layer below
+    double scarf_length = 20.0;       // mm of ramp before the seam
+    bool scarf_entire_loop = false;   // the ramp the whole way round
+    double scarf_max_segment = 1.0;   // mm, the longest piece of the ramp
+    bool scarf_inner = false;         // the inner walls too
+    // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
+    // spiral, a layer each turn, over flat bottom layers.
+    bool vase = false;
+    // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
+    FuzzyMode fuzzy_mode = FuzzyMode::None;
+    double fuzzy_thickness = 0.3;      // mm off the line, either way
+    double fuzzy_point_distance = 0.8; // mm between points, on average
     int top_layers = 3;      // solid layers under each top surface
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
@@ -81,6 +101,7 @@ struct Settings {
     InfillPattern infill_pattern = InfillPattern::Rectilinear;
     double infill_wall_overlap = 25.0; // percent of a bead that unjoined solid lines reach into the walls
     int infill_solid_every = 0;        // layers N, 2N... all solid infill (0: never)
+    double infill_solid_below_area = 70.0; // mm2: an infill zone smaller than this is solid (0: never)
     // Combining the sparse infill of several layers (docs/INFILL.md).
     int infill_combine_layers = 1;            // 1: each layer its own
     bool infill_combine_auto = false;         // as many as fit in the height below
@@ -110,11 +131,18 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
-    // Motion limits, for the time estimate.
-    double max_feed_x = 200.0, max_feed_y = 200.0, max_feed_z = 12.0, max_feed_e = 120.0; // mm/s
+    // Motion limits, for the time estimate. Like every speed, from the
+    // printer's profile; 0: not known, not applied.
+    double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
     double acceleration = 1000.0;        // mm/s2, moves that extrude
     double travel_acceleration = 1250.0; // mm/s2, travels and retractions
-    double corner_speed = 10.0;          // mm/s through a sharp corner
+    double corner_speed = 0.0;           // mm/s through a sharp corner, from the printer's profile; 0: not set
+    // Where the command line puts the model (docs/spec/features/placement.md,
+    // rules 2 and 4): with a bed, the centre of its box goes to `center`, or
+    // to the centre of the bed's box; without one, it stays where it is. The
+    // interface places objects itself and does not use these.
+    bool placement_arrange = true;
+    std::optional<std::array<double, 2>> placement_center;
     // The bed in XY, mm: a polygon models must lie on; empty: not checked (the
     // engine does not move models, and the bench models are centred on the origin).
     std::vector<std::array<double, 2>> bed;
@@ -133,43 +161,68 @@ struct Settings {
     bool enclosed = false;
     bool hardened_nozzle = false;   // takes abrasive filaments
 
-    // speed, mm/s
-    double wall_speed = 60.0;
-    Speed outer_wall_speed{50.0, true}; // of wall_speed
-    double infill_speed = 80.0;
-    double solid_infill_speed = 80.0;
-    double top_solid_infill_speed = 50.0;
-    double support_speed = 80.0;
-    double travel_speed = 130.0;
-    double first_layer_speed = 30.0;
-    double max_speed = 80.0; // no extrusion goes faster
+    // speed, mm/s. No speed has a value of its own: they come from the
+    // printer's profile (owner's decision, 2026-10-26); 0: not set.
+    double wall_speed = 0.0;
+    Speed outer_wall_speed; // in mm/s, or a share of wall_speed
+    double infill_speed = 0.0;
+    double solid_infill_speed = 0.0;
+    double top_solid_infill_speed = 0.0;
+    double support_speed = 0.0;
+    double travel_speed = 0.0;
+    double first_layer_speed = 0.0;
+    double max_speed = 0.0; // no extrusion goes faster; 0: no cap
 
     // retraction
     double retract_length = 2.0;     // mm of filament
-    double retract_speed = 40.0;     // mm/s
+    double retract_speed = 0.0;      // mm/s, from the printer's profile; 0: not set
     double retract_lift = 0.0;       // mm of Z while travelling
     double retract_min_travel = 2.0; // mm: shorter travels do not retract
 
     // adhesion
     int skirt_loops = 1;
-    double skirt_distance = 3.0; // mm from the part (or its brim)
+    double skirt_distance = 6.0; // mm from the part (or its brim; supports_skirt.md)
     int skirt_layers = 1;
     double brim_width = 0.0; // mm; 0: no brim
 
     // support (docs/spec/BEHAVIOR.md, "Soportes")
     bool support = false;
+    bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
-    double support_xy_gap = 0.6; // mm between the support and the part beside it
-    double support_spacing = 2.5;    // mm between support lines
+    // Between the support and the part beside it: mm, or percent of the
+    // wall width (supports_skirt.md, rule 2: 50 %).
+    Speed support_xy_gap{50.0, true};
+    double support_spacing = 2.5;    // mm of free space between the base's lines (a bead's spacing more between centres)
+    double support_line_angle = 0.0; // degrees, the base's lines; the interface's at 90 to them
+    // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15
+    // to 17): round branches that join on their way down to the bed.
+    SupportStyle support_style = SupportStyle::Grid;
+    double tree_angle = 40.0;               // degrees, the steepest a branch leans to keep off the part
+    double tree_angle_preferred = 25.0;     // degrees, how a branch leans to join another
+    double tree_branch_diameter = 2.0;      // mm, the thinnest branch
+    double tree_branch_diameter_angle = 5.0; // degrees the branches widen by on their way down
+    double tree_double_wall_diameter = 3.0; // mm: a branch wider than this gets two walls; 0: never
+    double tree_branch_distance = 1.0;      // how far apart the tips are, as a factor
+    double tree_tip_diameter = 0.8;         // mm
+    double tree_top_rate = 15.0;            // percent: how close the tips are under the part
     int support_interface_layers = 3; // dense layers right under the part
 
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
-    double min_print_speed = 10.0; // mm/s: the first stage slows extrusions down to this
-    double fan_min = 35.0;         // %: the fan on ordinary layers
-    double fan_max = 100.0;        // %: the fan on layers that had to slow down
-    int fan_off_layers = 1;        // the first layers print with the fan off
+    double min_print_speed = 0.0;  // mm/s, from the printer's profile: the first stage slows extrusions down to this
+    // The fan by layer time (docs/spec/features/cooling.md, rule 3): fan_max
+    // at the minimum layer time or less, down to fan_min at fan_below_time,
+    // and off from there (fan_min with fan_always).
+    double fan_min = 35.0;         // %
+    double fan_max = 100.0;        // %: also every layer that had to slow down
+    double fan_below_time = 60.0;  // s: layers this long or longer print without fan
+    bool fan_always = false;       // the fan never below fan_min
+    double fan_bridges = 100.0;    // %: the fan while bridging
+    int fan_off_layers = 3;        // the first layers print with the fan off
+    // The outer walls keep their speed while the rest slows down for the
+    // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
+    bool keep_outer_speed = true;
 
     // compensation (docs/CALIBRATION.md): the model is scaled around the centre
     // of its footprint and its bottom before slicing; holes grow by hole_offset.
@@ -196,6 +249,26 @@ struct Settings {
     // Groups present in the file that the engine does not use yet.
     std::vector<std::string> ignored_groups;
 };
+
+// The speeds (every setting in mm/s) come only from the printer's profile
+// (owner's decision, 2026-10-26). The keys of those not set, in the order of
+// docs/CONFIG.md.
+std::vector<std::string> missing_speeds(const Settings& settings);
+
+// Only when the printer's profile has none (a printer made from nothing, or
+// one the catalog knows no speeds of): the speeds of a stock Creality Ender-3,
+// the commonest and safest machine (owner's decision, 2026-10-26;
+// docs/CONFIG.md, "Velocidades de respaldo"), into the speeds not set. A
+// speed already set stays. Returns the keys filled.
+std::vector<std::string> fill_missing_speeds(Settings& settings);
+
+// Throws SettingsError naming the speeds not set, if any: the G-code needs
+// all of them.
+void require_speeds(const Settings& settings);
+
+// The fastest an extrusion is asked to go, mm/s: the fastest extrusion speed,
+// capped by speed.max when that is set.
+double fastest_extrusion(const Settings& settings);
 
 // Every setting as "group.key" and its value, for the end of the G-code.
 std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);

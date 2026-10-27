@@ -3,6 +3,7 @@
 #include "calibration/calibration.hpp"
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/paint.hpp"
 
 #include <array>
 #include <filesystem>
@@ -26,6 +27,7 @@ struct ProjectModel {
     std::string name;                // the file it came from, or the calibration's name
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
     std::array<double, 3> offset{};  // where it was on the bed, mm
+    Painting painting;               // its painted faces (docs/PAINTING.md), by triangle of the mesh
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -45,7 +47,8 @@ struct Project {
 // The file: "TISMAPRJ", the format version (32 bits), then chunks, each a
 // four-letter tag, its size (64 bits) and its bytes, all little-endian. The
 // first chunk is "JSON" (the settings, profiles, models and calibration); each
-// model's mesh follows in a "MESH" chunk, as a binary STL. Readers skip tags
+// model's mesh follows in a "MESH" chunk, as a binary STL, then each painted
+// model's painting in a "PNT " chunk (painting_to_bytes). Readers skip tags
 // they do not know.
 std::string write_project(const Project& project);
 // Throws ProjectError on a damaged or newer file, naming what is wrong.

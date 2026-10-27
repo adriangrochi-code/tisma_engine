@@ -6,10 +6,12 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <functional>
@@ -86,7 +88,7 @@ std::string problems_of(const GcodeCheck& c) {
 } // namespace
 
 TEST_CASE("G-code check: the cube is clean, with plausible numbers", "[gcode][check]") {
-    const Settings s;
+    const Settings s = test_printer();
     const Output o = slice_and_write(cube(), s);
     const GcodeCheck c = check_gcode(o.gcode, o.limits);
     INFO(problems_of(c));
@@ -103,7 +105,7 @@ TEST_CASE("G-code check: the cube is clean, with plausible numbers", "[gcode][ch
 }
 
 TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
-    Settings s;
+    Settings s = test_printer();
     s.start_gcode = "M117 Hola, Tisma\nPRINT_START BED=60 EXTRUDER=215\nG28\nG1 X0 Y-5 Z0.3 F3000\nG1 X60 E9 F1000";
     s.end_gcode = "M104 S0\nG91\nG1 Z10\nG90\nM84";
     const Output o = slice_and_write(cube(), s);
@@ -155,6 +157,38 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
     }, "while the filament is retracted");
 }
 
+TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
+    // The check reads the file in chunks of about 256 KiB of whole lines, in
+    // parallel, and takes them in order: lines on both sides of a cut.
+    IndexedMesh box; // posts, for many lines
+    for (int i = 0; i < 5; ++i)
+        for (int j = 0; j < 5; ++j)
+            add_box(box, 8.0f * float(i), 8.0f * float(j), 0, 8.0f * float(i) + 4, 8.0f * float(j) + 4, 12);
+    const Settings s = test_printer();
+    const Output o = slice_and_write(box, s);
+    REQUIRE(o.gcode.size() > 600 * 1024);
+    {
+        const GcodeCheck c = check_gcode(o.gcode, o.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+        CHECK(c.stats.lines == std::size_t(std::count(o.gcode.begin(), o.gcode.end(), '\n')));
+    }
+    for (const std::size_t cut : {std::size_t(256 * 1024), std::size_t(512 * 1024)}) {
+        const std::size_t next = o.gcode.find('\n', cut) + 1; // the first line of the next chunk
+        const std::size_t last = o.gcode.rfind('\n', next - 2) + 1; // the last line of this one
+        for (const std::size_t at : {last, next}) {
+            std::string g = o.gcode;
+            g.insert(at, "M106 S300\n");
+            const std::size_t line = std::size_t(std::count(g.begin(), g.begin() + std::ptrdiff_t(at), '\n')) + 1;
+            const GcodeCheck c = check_gcode(g, o.limits);
+            INFO(problems_of(c));
+            REQUIRE(c.problems.size() == 1);
+            CHECK(c.problems.front().line == line);
+            CHECK_THAT(c.problems.front().message, ContainsSubstring("fan speed"));
+        }
+    }
+}
+
 TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][check]") {
     struct Model {
         const char* name;
@@ -176,6 +210,7 @@ TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][
         {"grid", [](Settings& s) { s.infill_pattern = InfillPattern::Grid; }},
         {"relative E", [](Settings& s) { s.relative_extrusion = true; }},
         {"supports", [](Settings& s) { s.support = true; }},
+        {"organic supports", [](Settings& s) { s.support = true; s.support_style = SupportStyle::Organic; }},
         {"brim, no skirt", [](Settings& s) { s.brim_width = 4.0; s.skirt_loops = 0; }},
         {"thick first layer, thin layers", [](Settings& s) { s.first_layer_height = 0.3; s.layer_height = 0.12; }},
         {"lift on travel", [](Settings& s) { s.retract_lift = 0.4; }},
@@ -189,7 +224,7 @@ TEST_CASE("G-code check: models by settings, every combination clean", "[gcode][
     };
     for (const Model& m : models)
         for (const Variant& v : variants) {
-            Settings s;
+            Settings s = test_printer();
             v.apply(s);
             const Output o = slice_and_write(m.mesh, s);
             const GcodeCheck c = check_gcode(o.gcode, o.limits);
@@ -205,12 +240,12 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
     IndexedMesh m;
     add_box(m, 0, 0, 0, 0.3f, 20, 5);
     add_box(m, 5, 0, 0, 5.3f, 20, 5);
-    Settings s;
+    Settings s = test_printer();
     s.wall_count = 0;
     s.wall_width = 0.8;
     const SlicedModel model = slice_model(m, s);
     CHECK_THAT(unprintable_reason(model, s), ContainsSubstring("nothing would be printed"));
-    CHECK(unprintable_reason(slice_model(cube(), Settings{}), Settings{}).empty());
+    CHECK(unprintable_reason(slice_model(cube(), test_printer()), test_printer()).empty());
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {
@@ -221,7 +256,7 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
     rejected += ".rejected";
     std::filesystem::remove(path);
     std::filesystem::remove(rejected);
-    const Settings s;
+    const Settings s = test_printer();
     SlicedModel model = slice_model(cube(), s);
 
     const GcodeExport good = export_gcode(path, model, s);
@@ -253,7 +288,7 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
 TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {
     // The engine does not move parts in X and Y, but a part can only print
     // resting on the bed: Z in the G-code counts from the part's bottom.
-    Settings s;
+    Settings s = test_printer();
     s.changes.push_back([] {
         HeightChange c;
         c.z = 2.0;

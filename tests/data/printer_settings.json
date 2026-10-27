@@ -1,0 +1,7 @@
+{
+  "machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120, "corner_speed": 10},
+  "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80, "top_solid_infill": 15,
+            "support": 80, "travel": 130, "first_layer": 30, "max": 80},
+  "retraction": {"speed": 40},
+  "cooling": {"min_speed": 10}
+}

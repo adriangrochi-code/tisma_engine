@@ -1,6 +1,8 @@
 #include "cli/cli.hpp"
 
+#include "io/model.hpp"
 #include "io/stl.hpp"
+#include "slice/placement.hpp"
 #include "io/ply.hpp"
 #include "io/vtk.hpp"
 #include "config/analysis_case.hpp"
@@ -35,12 +37,13 @@ namespace {
 
 constexpr std::string_view kUsage =
     "usage:\n"
-    "  tisma-engine slice <model.stl> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
-    "  tisma-engine analyze <model.stl> --config <settings.json> --case <case.json> -o <report.json>\n"
+    "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
-    "  tisma-engine info <model.stl>\n"
-    "  tisma-engine --help | --version\n";
+    "  tisma-engine info <model>\n"
+    "  tisma-engine --help | --version\n"
+    "A model is an STL, OBJ or 3MF file.\n";
 
 // Writes a file in one piece: into "<path>.part" first, renamed over the
 // path once complete, so a process stopped half way never leaves a partial
@@ -137,9 +140,16 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
     return out;
 }
 
-void print_mesh_summary(const StlFile& stl, double seconds, std::ostream& out) {
+void print_mesh_summary(const ModelFile& stl, double seconds, std::ostream& out) {
     const BoundingBox box = stl.mesh.bounding_box();
-    out << "format: " << (stl.format == StlFormat::Binary ? "binary" : "ascii") << "\n";
+    out << "format: "
+        << (stl.format == ModelFormat::StlBinary  ? "binary"
+            : stl.format == ModelFormat::StlAscii ? "ascii"
+            : stl.format == ModelFormat::Obj      ? "obj"
+                                                  : "3mf")
+        << "\n";
+    if (stl.format == ModelFormat::ThreeMf)
+        out << "objects: " << stl.objects << "\nparts: " << stl.parts << "\n";
     out << "triangles: " << stl.mesh.triangle_count() << "\n";
     if (!box.empty) {
         out << "size: " << (box.max.x - box.min.x) << " x " << (box.max.y - box.min.y) << " x "
@@ -151,11 +161,11 @@ void print_mesh_summary(const StlFile& stl, double seconds, std::ostream& out) {
     out << "read_ms: " << seconds * 1000.0 << "\n";
 }
 
-int read_model(const std::string& path, StlFile& stl, double& seconds, std::ostream& err) {
+int load_model(const std::string& path, ModelFile& stl, double& seconds, std::ostream& err) {
     const auto start = std::chrono::steady_clock::now();
     try {
-        stl = read_stl(path);
-    } catch (const StlError& e) {
+        stl = read_model(path);
+    } catch (const ModelError& e) {
         err << "error: " << path << ": " << e.what() << "\n";
         return kExitInput;
     }
@@ -168,9 +178,9 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
         err << "error: info needs exactly one model\n" << kUsage;
         return kExitUsage;
     }
-    StlFile stl;
+    ModelFile stl;
     double seconds = 0.0;
-    if (int rc = read_model(std::string(args[0]), stl, seconds, err); rc != kExitOk)
+    if (int rc = load_model(std::string(args[0]), stl, seconds, err); rc != kExitOk)
         return rc;
     print_mesh_summary(stl, seconds, out);
     const auto start = std::chrono::steady_clock::now();
@@ -257,12 +267,20 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    // The speeds come from the printer's profile; those the file does not give
+    // are a stock Ender-3's (docs/CONFIG.md, "Velocidades de respaldo").
+    std::string fallback;
+    for (const std::string& key : fill_missing_speeds(settings))
+        fallback += (fallback.empty() ? "" : ", ") + key;
+    if (!fallback.empty())
+        err << "warning: no speed for " << fallback << ": using a stock Ender-3's\n";
 
-    StlFile stl;
+    ModelFile stl;
     double seconds = 0.0;
-    if (int rc = read_model(parsed->model, stl, seconds, err); rc != kExitOk)
+    if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    place_on_bed(stl.mesh, settings);
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
@@ -304,6 +322,9 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     SlicedModel sliced;
     std::vector<Warning> warnings;
+    if (!fallback.empty())
+        warnings.push_back({"speed_fallback", -1, 0.0,
+                            "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
         sliced = slice_model(mesh, settings, gpu.get(), &stress);
     } catch (const std::runtime_error& e) {
@@ -395,11 +416,12 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
         return kExitInput;
     }
-    StlFile stl;
+    ModelFile stl;
     double seconds = 0.0;
-    if (int rc = read_model(parsed->model, stl, seconds, err); rc != kExitOk)
+    if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    place_on_bed(stl.mesh, settings);
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
         err << "error: " << reason << "\n";

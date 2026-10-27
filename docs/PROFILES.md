@@ -16,9 +16,9 @@ Cada ajuste de `docs/CONFIG.md` pertenece a un solo tipo de perfil (`setting_kin
 
 | Perfil | Grupos y ajustes | Por qué |
 |---|---|---|
-| **Impresora** | `machine` (menos `filament_diameter` y las variables de temperatura), `retraction`, `gcode` | Lo que es de la máquina: la cama, la boquilla, el dialecto, el G-code de inicio y fin, los límites de movimiento. La retracción depende sobre todo del extrusor (directo o Bowden). La resolución del G-code, de cuántas líneas por segundo digiere el firmware |
-| **Filamento** | `machine.filament_diameter`, las variables con `temperature` en el nombre (`temperature`, `bed_temperature`, `first_layer_temperature`…), `cooling`, `extrusion`, `compensation` | Lo que es del material. La compensación va acá porque cada material se contrae distinto (`docs/CALIBRATION.md`, «Contracción por material») |
-| **Impresión** | `layers`, `slicing`, `walls`, `surfaces`, `infill`, `speed`, `adhesion`, `support`, `compute`, `zaa` | Cómo se lamina la pieza |
+| **Impresora** | `machine` (menos `filament_diameter` y las variables de temperatura), `retraction`, `gcode`, `speed`, `cooling.min_speed` | Lo que es de la máquina: la cama, la boquilla, el dialecto, el G-code de inicio y fin, los límites de movimiento. La retracción depende sobre todo del extrusor (directo o Bowden). La resolución del G-code, de cuántas líneas por segundo digiere el firmware. Todas las velocidades, porque dependen de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades») |
+| **Filamento** | `machine.filament_diameter`, las variables con `temperature` en el nombre (`temperature`, `bed_temperature`, `first_layer_temperature`…), `cooling` (menos `min_speed`), `extrusion`, `compensation` | Lo que es del material. La compensación va acá porque cada material se contrae distinto (`docs/CALIBRATION.md`, «Contracción por material») |
+| **Impresión** | `layers`, `slicing`, `walls`, `surfaces`, `infill`, `adhesion`, `support`, `compute`, `zaa`, `fuzzy`, `vase` | Cómo se lamina la pieza |
 | (ninguno) | `changes` | Los cambios por altura son de una torre de calibración: se guardan en el proyecto, no en un perfil |
 
 **Elegir un perfil** cambia solo sus ajustes (`with_profile`) y deja los demás como estaban. Las variables del G-code
@@ -29,12 +29,12 @@ se separan por nombre: un perfil de impresora reemplaza las variables de la impr
 ```json
 {
   "format": "tisma-profile",
-  "version": 1,
+  "version": 2,
   "kind": "filament",
   "name": "PETG negro",
   "settings": {
     "machine": { "filament_diameter": 1.75, "variables": { "bed_temperature": "80", "temperature": "240" } },
-    "cooling": { "min_layer_time": 5, "min_speed": 10, "fan_min": 20, "fan_max": 50, "fan_off_layers": 1 },
+    "cooling": { "min_layer_time": 5, "fan_min": 20, "fan_max": 50, "fan_off_layers": 3 },
     "compensation": { "scale_x": 100, "scale_y": 100, "scale_z": 100, "hole_offset": 0 },
     "extrusion": { "flow": 100 }
   }
@@ -42,7 +42,11 @@ se separan por nombre: un perfil de impresora reemplaza las variables de la impr
 ```
 
 - `settings` tiene el formato de `docs/CONFIG.md`, solo con los ajustes de su tipo. Los que falten toman su valor por
-  defecto.
+  defecto; las velocidades no tienen: una impresora sin velocidades toma las de respaldo (`docs/CONFIG.md`,
+  «Velocidades de respaldo») y la interfaz lo dice al elegirla.
+- `version` 2 (2026-10-26): las velocidades pasaron del perfil de impresión al de impresora, y `cooling.min_speed`
+  del de filamento al de impresora. Un perfil de versión 1 se sigue abriendo: las velocidades que tenga un perfil de
+  impresión o de filamento se dejan afuera (hay que pasarlas a la impresora).
 - Un ajuste de otro tipo es un error que nombra la clave («`layers.height`: a print setting, not a filament one»).
 - Una versión mayor que la que el programa conoce es un error.
 

@@ -4,6 +4,7 @@
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -192,7 +193,7 @@ TEST_CASE("adaptive cubic: a 60 mm cube sliced to checked G-code, less infill th
     // Cubes twice the finest fit in the middle third, four times in a 20 mm
     // core: about 16 % less infill.
     const IndexedMesh m = cube(60.0f);
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.layer_height = 0.2;
@@ -237,7 +238,7 @@ TEST_CASE("support cubic: fine under what it holds up, not over the solid layers
 
 TEST_CASE("support cubic: the spec's 20 mm cube, the same as adaptive cubic (P6)", "[adaptive]") {
     const IndexedMesh m = cube(20.0f);
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.wall_count = 2;
     s.infill_density = 20.0;

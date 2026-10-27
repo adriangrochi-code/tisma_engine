@@ -24,8 +24,10 @@ El laminado entero es una llamada, `slice_model` (`src/slice/pipeline.hpp`). Tom
 un `SlicedModel` con todo lo que se va a imprimir, capa por capa. Después, `export_gcode` lo escribe y lo verifica.
 
 ```
-archivo .stl
-  │ read_stl                          io/stl            binario o ASCII, detectado por el contenido
+archivo .stl, .obj o .3mf
+  │ read_model                        io/model          STL binario o ASCII, OBJ o 3MF (io/threemf sobre io/zip
+  │                                                     e io/xml), detectado por el contenido y la extensión
+  │ place_on_bed                      slice/placement   la línea de comandos centra la pieza en la cama
   ▼
 TriangleMesh ─ weld_exact ─────────▶ IndexedMesh       mesh/            vértices compartidos por igualdad exacta
   │
@@ -47,6 +49,7 @@ regiones por capa ── en paralelo por capa (oneTBB) ────────�
 classify_surfaces, find_bridges       surfaces/         superiores, inferiores, ralas y puentes (necesita ver   │
   │                                                     las capas vecinas, por eso va fuera del paso paralelo) │
   │ support_areas                     support/          voladizos y su proyección hacia abajo                  │
+  │ tree_nodes, tree_support_areas    support/tree      o las ramas del soporte en árbol, de arriba abajo       │
   │ brim_loops, skirt_loops           adhesion/         borde y falda alrededor de la primera capa             │
   ▼                                                                                                        │
 fill_layer ── en paralelo por capa ───────────────────────────────────────────────────────────────────────┘
@@ -100,8 +103,13 @@ radianes. Las fuerzas del análisis van en N y las tensiones en MPa.
 
 ### `io/`, `mesh/`: entrada
 
-`read_stl` acepta STL binario y ASCII. Un binario cuya cabecera empieza con `solid` sigue siendo binario. Rechaza
-archivos truncados y números no finitos. `stl_binary` escribe una malla como STL binario (para los proyectos).
+`read_model` lee STL, OBJ y 3MF (`docs/spec/features/formats.md`): un ZIP es un 3MF; si no, la extensión `.obj`
+dice OBJ; si no, STL. `read_stl` acepta STL binario y ASCII. Un binario cuya cabecera empieza con `solid` sigue
+siendo binario. Rechaza archivos truncados y números no finitos. `stl_binary` escribe una malla como STL binario
+(para los proyectos). El 3MF se lee con piezas propias: `zip.*` (el directorio central de PKWARE, ZIP64 incluido, y
+un inflado DEFLATE de la RFC 1951 con tabla de 10 bits), `xml.*` (etiquetas y atributos, sin árbol) y `threemf.*`
+(objetos de la placa con sus transformaciones, componentes anidados o en otros archivos del paquete, unidades, y los
+volúmenes que un proyecto marca como modificadores, fuera).
 `weld_exact` une los vértices iguales bit a bit con una tabla hash abierta.
 
 ### `slice/`: capas y contornos
@@ -111,6 +119,11 @@ archivos truncados y números no finitos. `stl_binary` escribe una malla como ST
   en el futuro: cualquier campo escalar sirve.
 - `slice_levels` saca los segmentos de cada nivel visitando cada triángulo solo para los niveles que cruza, y
   `join_segments` los une en contornos por la clave de arista.
+- Los niveles sin vértices entre uno y otro cruzan las mismas aristas (`same_crossings`): solo se corta el primero de
+  la tanda, y los demás calculan sus puntos con `edge_crossing` sobre esas aristas. Si la sección en x e y es la misma
+  (`same_sections`, los lados de un prisma), el corte deja el nivel vacío y `pipeline.cpp` copia la región y las
+  paredes de la capa de abajo. Las superficies, el relleno y los planes de viaje del G-code se reusan igual cuando
+  sus entradas son iguales a las de otra capa.
 - `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir.
 
 ### `geom/`: geometría
@@ -145,14 +158,26 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
   - relleno de huecos;
   - soportes con su interfaz.
 - **`support_areas`:** proyecta los voladizos hacia abajo.
+- **`tree_nodes`, `tree_support_areas`, `tree_fill` (`support/tree.*`):** el soporte en árbol. Una simulación de
+  arriba hacia abajo, en orden (cada capa depende de la de arriba): las puntas bajo la interfaz, y por capa cada rama
+  se inclina hacia su vecina, se junta con las que toca, engorda y se aparta de la pieza. Las áreas (unión de discos
+  más la interfaz) y sus trayectorias (paredes por rama y relleno adentro) van en paralelo por capa.
 - **`skirt_loops` y `brim_loops`:** la falda y el borde.
 
 ### `gcode/`: escritura y verificación
 
 - **`writer.*`:** recorre las capas, ordena islas y recorridos (`order.*`), planifica los viajes por dentro
   (`travel.*`), aplica el tiempo mínimo de capa (`cooling.*`) y estima el tiempo con aceleraciones (`print_time.*`).
-  Cada capa se arma en un búfer, con los números formateados por `std::to_chars`.
-- **`check.*`:** relee y verifica el G-code.
+  Cada capa se arma en un búfer, con los números formateados por `std::to_chars`. Las capas pasan por un pipeline de
+  oneTBB: primero, en paralelo, los candidatos de la costura alineada de cada pared (`seam_candidates`);
+  `plan_layer` ordena y elige las costuras, en orden, porque sigue desde donde terminó la capa de abajo; los
+  recorridos se simplifican, toman la costura en bufanda (`scarf.*`) y se planean sus viajes en paralelo;
+  `write_layer` escribe el texto, en orden. Mientras se escribe una capa se planean las siguientes, y una capa que se
+  frena por el tiempo mínimo se vuelve a escribir desde el mismo plan.
+- **`scarf.*`:** la costura en bufanda (`walls_extra.md`, regla 4): el lazo empieza en una rampa desde la capa de
+  abajo y termina pasando otra vez sobre ella, con el alto de cada cordón en sus puntos (como el relleno ondulado).
+- **`check.*`:** relee y verifica el G-code. Lee el texto en bloques de unos 256 KiB de líneas enteras, en paralelo,
+  y sigue el estado en orden.
 - **`export.*`:** junta escribir y verificar en una exportación que nunca deja un archivo malo con el nombre pedido.
 - **`preview.*`:** lee G-code (el propio o cualquier otro) en movimientos con su tipo, ancho, alto, avance y capa,
   para la vista previa de la interfaz.
@@ -161,7 +186,8 @@ El método de Kuipers et al. 2020, desde el artículo, en este orden:
 
 Vulkan a través de volk, cargado en tiempo de ejecución: sin GPU, el motor sigue en la CPU. Los shaders están en
 `src/gpu/shaders/*.comp` y se compilan a SPIR-V con `tools/compile_shaders.py`; el SPIR-V generado se guarda en el
-repositorio. Hoy corren en la GPU el rango de capas por triángulo y los segmentos de cada capa.
+repositorio. Hoy corren en la GPU el rango de capas por triángulo, los segmentos de cada capa y la columna del
+soporte en su grilla de bits (`support_column.comp`, con los mismos bits que `support_column` de la CPU).
 
 ### `fea/`: análisis estructural
 

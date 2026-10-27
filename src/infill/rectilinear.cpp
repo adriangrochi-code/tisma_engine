@@ -193,15 +193,52 @@ std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpat
     return layer_walls(left, beads).toolpaths;
 }
 
+std::size_t fill_period(const FillParams& params) {
+    // The solid lines take turns every other layer.
+    if (params.density <= 0.0)
+        return 2;
+    switch (params.pattern) {
+    case InfillPattern::Gyroid:
+    case InfillPattern::Cubic:
+    case InfillPattern::AdaptiveCubic:
+    case InfillPattern::SupportCubic:
+        return 0;
+    case InfillPattern::Honeycomb:
+        return 6;
+    case InfillPattern::Rectilinear:
+    case InfillPattern::Grid:
+    case InfillPattern::Triangles:
+    case InfillPattern::Lightning: // none here: lightning_layers draws it
+    case InfillPattern::Stars:
+    case InfillPattern::AlignedRectilinear:
+    case InfillPattern::Zigzag:
+    case InfillPattern::Line:
+    case InfillPattern::Concentric:
+    case InfillPattern::Hilbert:
+    case InfillPattern::Archimedean:
+    case InfillPattern::Octagram:
+        return 2;
+    }
+    return 0;
+}
+
 LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const FillParams& params, double z) {
     LayerFill out;
     const double angle = params.angle + (layer % 2 == 1 ? 90.0 : 0.0);
+    // The top surface itself, and under it the rest of the top layers, solid
+    // like the bottom ones (surfaces_infill.md, rule 2).
+    const Polygons surface = surfaces.top_under.empty()
+                                 ? surfaces.top
+                                 : Clipper2Lib::Difference(surfaces.top, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+    const Polygons solid = surfaces.top_under.empty()
+                               ? surfaces.bottom
+                               : Clipper2Lib::Union(surfaces.bottom, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
     if (params.monotonic_top)
-        out.top = rectilinear_fill(surfaces.top, params.width, angle, params.width, false, true, true,
+        out.top = rectilinear_fill(surface, params.width, angle, params.width, false, true, true,
                                    params.wall_overlap * params.width);
     else
-        out.top = rectilinear_fill(surfaces.top, params.width, angle, params.width, true, true);
-    out.solid = rectilinear_fill(surfaces.bottom, params.width, angle, params.width, true, true);
+        out.top = rectilinear_fill(surface, params.width, angle, params.width, true, true);
+    out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;
         lines.insert(lines.end(), out.solid.begin(), out.solid.end());

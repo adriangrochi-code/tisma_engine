@@ -29,7 +29,7 @@ Estas etiquetas van en una línea propia, exactamente así:
 | `;Z:<z>` | Justo después de `;LAYER_CHANGE`: la Z de la capa en mm |
 | `;HEIGHT:<h>` | Altura de la capa en mm |
 | `;TYPE:<tipo>` | Antes de la primera extrusión de un tipo nuevo |
-| `;WIDTH:<w>` | Ancho de la extrusión en mm, cuando cambia |
+| `;WIDTH:<w>` | Ancho de la extrusión en mm, cuando cambia más de 0,005 mm (ver «Ancho variable») |
 
 Valores posibles de `<tipo>`, con estas palabras exactas:
 - `Perimeter`, `External perimeter`, `Overhang perimeter`;
@@ -38,6 +38,20 @@ Valores posibles de `<tipo>`, con estas palabras exactas:
 - `Support material`, `Support material interface`;
 - `Wipe tower`;
 - `Custom`: para el G-code de inicio y fin.
+
+## Ancho variable
+
+Decisión del 26-10-2026 (V3 y V4 del informe `qa/2026-10-26-velocidad.md`):
+
+- Un movimiento de extrusión (`G1 … E…`) puede juntar tramos cuyo ancho difiere hasta 0,005 mm: en un cordón de
+  0,4 mm es 1,25 % de flujo.
+- La E del movimiento es el volumen de los tramos que junta (ancho por alto por largo de cada uno, sumados): el
+  volumen total no cambia, solo se reparte a lo largo del movimiento.
+- `;WIDTH` se escribe cuando el ancho del movimiento difiere en más de 0,005 mm del último `;WIDTH` escrito, y con
+  cada `;TYPE` nuevo.
+- Referencia, medida en Tisma Slicer como caja negra (Benchy, capas de 0,2 mm): 18 976 líneas `;WIDTH`, un cambio
+  mediano de 0,031 mm entre una y la siguiente, y el 10 % de los cambios de 0,003 mm o menos. El motor en `1ffbdeb`
+  escribía 123 725, con un cambio mediano de 0,006 mm.
 
 ## Cabecera y pie
 

@@ -10,6 +10,9 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
 
 namespace tisma {
 namespace {
@@ -17,6 +20,47 @@ namespace {
 using nlohmann::json;
 
 const std::vector<std::string> kPlannedGroups = {"material"};
+
+// The speeds a G-code needs, in the order of docs/CONFIG.md, and what a stock
+// Creality Ender-3 prints at, for a printer whose profile has none (owner's
+// decision, 2026-10-26; the numbers and their sources in docs/CONFIG.md,
+// "Velocidades de respaldo").
+struct NeededSpeed {
+    const char* key;
+    double fallback; // mm/s
+};
+constexpr NeededSpeed kNeededSpeeds[] = {
+    {"machine.corner_speed", 10.0}, {"speed.walls", 40.0},       {"speed.outer_wall", 30.0},
+    {"speed.infill", 60.0},         {"speed.solid_infill", 60.0}, {"speed.top_solid_infill", 40.0},
+    {"speed.support", 40.0},        {"speed.travel", 180.0},      {"speed.first_layer", 25.0},
+    {"retraction.speed", 25.0},     {"cooling.min_speed", 10.0},
+};
+
+// The setting a speed key names (not speed.outer_wall, which may be a share).
+template <typename S>
+auto speed_of(S& s, std::string_view key) -> decltype(&s.wall_speed) {
+    const std::pair<std::string_view, decltype(&s.wall_speed)> speeds[] = {
+        {"machine.corner_speed", &s.corner_speed},
+        {"speed.walls", &s.wall_speed},
+        {"speed.infill", &s.infill_speed},
+        {"speed.solid_infill", &s.solid_infill_speed},
+        {"speed.top_solid_infill", &s.top_solid_infill_speed},
+        {"speed.support", &s.support_speed},
+        {"speed.travel", &s.travel_speed},
+        {"speed.first_layer", &s.first_layer_speed},
+        {"speed.max", &s.max_speed},
+        {"retraction.speed", &s.retract_speed},
+        {"cooling.min_speed", &s.min_print_speed},
+    };
+    for (const auto& [name, target] : speeds)
+        if (name == key)
+            return target;
+    throw std::logic_error("no speed " + std::string(key));
+}
+
+const char* fuzzy_mode_name(FuzzyMode m) {
+    return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
+}
 
 [[noreturn]] void fail(const std::string& key, const std::string& message) {
     throw SettingsError("settings: " + key + ": " + message);
@@ -145,7 +189,8 @@ Settings parse_checked(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode")
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
+            group == "fuzzy" || group == "vase" || group == "placement")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -193,9 +238,10 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         // Below 0.01 mm the layers run to the hundreds of thousands; the
-        // nozzle limits them from above (check_settings).
-        if (!(v >= 0.01 && v <= 2.0))
-            fail(k, "must be from 0.01 to 2 mm");
+        // nozzle limits them from above (check_settings): pellet printers
+        // with 5 to 8 mm nozzles lay 2.5 to 4 mm layers (pellets.md).
+        if (!(v >= 0.01 && v <= 10.0))
+            fail(k, "must be from 0.01 to 10 mm");
         (n == "height" ? s.layer_height : s.first_layer_height) = v;
     });
     read_group(root, "slicing", {"fill_mode", "gap_closing_radius", "xy_offset", "first_layer_shrink", "simplify_tolerance"},
@@ -227,11 +273,42 @@ Settings parse_checked(std::string_view text) {
                    else
                        s.simplify_tolerance = v;
                });
-    read_group(root, "walls", {"count", "width", "seam"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "walls",
+               {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
+                "scarf_entire_loop", "scarf_max_segment", "scarf_inner"},
+               [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "seam") {
             s.seam = choice<SeamMode>(g, n, k,
                                       {{"aligned", SeamMode::Aligned}, {"nearest", SeamMode::Nearest},
                                        {"random", SeamMode::Random}, {"rear", SeamMode::Rear}});
+            return;
+        }
+        if (n == "scarf") {
+            s.scarf = choice<ScarfMode>(g, n, k,
+                                        {{"nowhere", ScarfMode::Nowhere}, {"contours", ScarfMode::Contours},
+                                         {"everywhere", ScarfMode::Everywhere}});
+            return;
+        }
+        if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            (n == "scarf_only_smooth"   ? s.scarf_only_smooth
+             : n == "scarf_entire_loop" ? s.scarf_entire_loop
+                                        : s.scarf_inner) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "scarf_start_height") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 100.0))
+                fail(k, "must be from 0 to 100 %");
+            s.scarf_start_height = v;
+            return;
+        }
+        if (n == "scarf_length" || n == "scarf_max_segment") {
+            const double v = number(g, n, k);
+            if (!(v > 0.0 && v <= 1000.0))
+                fail(k, "must be more than 0 and at most 1000 mm");
+            (n == "scarf_length" ? s.scarf_length : s.scarf_max_segment) = v;
             return;
         }
         if (n == "count") {
@@ -242,9 +319,30 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
-        if (!(v >= 0.05 && v <= 10.0))
-            fail(k, "must be from 0.05 to 10 mm");
+        if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
+            fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
+    });
+    read_group(root, "placement", {"arrange", "center"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const json& v = g.at(n);
+        if (n == "arrange") {
+            if (!v.is_boolean())
+                fail(k, "must be true or false");
+            s.placement_arrange = v.get<bool>();
+            return;
+        }
+        if (v.is_null()) {
+            s.placement_center.reset();
+            return;
+        }
+        if (!v.is_array() || v.size() != 2 || !v[0].is_number() || !v[1].is_number())
+            fail(k, "must be null (the centre of the bed) or [x, y] in mm");
+        s.placement_center = std::array<double, 2>{v[0].get<double>(), v[1].get<double>()};
+    });
+    read_group(root, "vase", {"enabled"}, [&](const json& g, const std::string& n, const std::string& k) {
+        if (!g.at(n).is_boolean())
+            fail(k, "must be true or false");
+        s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness"},
@@ -267,7 +365,8 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
-                                "solid_every", "nonplanar", "nonplanar_amplitude", "nonplanar_wavelength"},
+                                "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
+                                "nonplanar_wavelength"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar") {
             if (!g.at(n).is_boolean())
@@ -303,6 +402,13 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                 fail(k, "must be a whole number from 0 to 1000");
             s.infill_solid_every = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "solid_below_area") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10000.0)
+                fail(k, "must be from 0 to 10000 mm2");
+            s.infill_solid_below_area = v;
             return;
         }
         if (n == "stress_density") {
@@ -356,6 +462,15 @@ Settings parse_checked(std::string_view text) {
                 "hardened_nozzle", "min_layer_height", "max_layer_height"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (v.is_null() && (n.starts_with("max_feed_") || n == "corner_speed")) {
+                       // Not set: the printer's profile gives it, or nothing does (docs/CONFIG.md).
+                       (n == "max_feed_x"   ? s.max_feed_x
+                        : n == "max_feed_y" ? s.max_feed_y
+                        : n == "max_feed_z" ? s.max_feed_z
+                        : n == "max_feed_e" ? s.max_feed_e
+                                            : s.corner_speed) = 0.0;
+                       return;
+                   }
                    if (n == "relative_extrusion" || n == "enclosed" || n == "hardened_nozzle") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -439,6 +554,13 @@ Settings parse_checked(std::string_view text) {
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (v.is_null()) { // not set: from the printer's profile
+                       if (n == "outer_wall")
+                           s.outer_wall_speed = {};
+                       else
+                           *speed_of(s, "speed." + n) = 0.0;
+                       return;
+                   }
                    if (n == "outer_wall" && v.is_string()) {
                        const std::string t = v.get<std::string>();
                        char* end = nullptr;
@@ -474,6 +596,10 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction", {"length", "speed", "lift", "min_travel"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "speed" && g.at(n).is_null()) { // not set: from the printer's profile
+                       s.retract_speed = 0.0;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (n == "speed") {
                        if (!(d > 0.0))
@@ -505,12 +631,36 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    (n == "skirt_distance" ? s.skirt_distance : s.brim_width) = d;
                });
-    read_group(root, "support", {"enabled", "threshold_angle", "z_gap", "xy_gap", "spacing", "interface_layers"},
+    read_group(root, "support",
+               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "spacing", "line_angle", "interface_layers", "style",
+                "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
+                "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "enabled") {
+                   if (n == "style") {
+                       s.support_style = choice<SupportStyle>(g, n, k, {{"grid", SupportStyle::Grid}, {"organic", SupportStyle::Organic}});
+                       return;
+                   }
+                   if (n.starts_with("tree_")) {
+                       const double d = number(g, n, k);
+                       const bool angle = n == "tree_angle" || n == "tree_angle_preferred" || n == "tree_branch_diameter_angle";
+                       if (angle ? !(d >= 0.0 && d <= 85.0) : n == "tree_top_rate" ? !(d > 0.0 && d <= 100.0)
+                                   : n == "tree_double_wall_diameter" ? !(d >= 0.0 && d <= 100.0) : !(d > 0.0 && d <= 100.0))
+                           fail(k, angle ? "must be from 0 to 85 degrees" : n == "tree_top_rate" ? "must be more than 0 and at most 100 %"
+                                                                                                 : "must be more than 0 and at most 100");
+                       (n == "tree_angle"                   ? s.tree_angle
+                        : n == "tree_angle_preferred"       ? s.tree_angle_preferred
+                        : n == "tree_branch_diameter"       ? s.tree_branch_diameter
+                        : n == "tree_branch_diameter_angle" ? s.tree_branch_diameter_angle
+                        : n == "tree_double_wall_diameter"  ? s.tree_double_wall_diameter
+                        : n == "tree_branch_distance"       ? s.tree_branch_distance
+                        : n == "tree_tip_diameter"          ? s.tree_tip_diameter
+                                                            : s.tree_top_rate) = d;
+                       return;
+                   }
+                   if (n == "enabled" || n == "automatic") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       s.support = g.at(n).get<bool>();
+                       (n == "enabled" ? s.support : s.support_automatic) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "interface_layers") {
@@ -520,7 +670,22 @@ Settings parse_checked(std::string_view text) {
                        s.support_interface_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
+                   if (n == "xy_gap" && g.at(n).is_string()) {
+                       const std::string t = g.at(n).get<std::string>();
+                       char* end = nullptr;
+                       const double p = std::strtod(t.c_str(), &end);
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                           fail(k, "must be a number of mm or a percentage of the wall width like \"50%\"");
+                       s.support_xy_gap = {p, true};
+                       return;
+                   }
                    const double d = number(g, n, k);
+                   if (n == "line_angle") {
+                       if (!(d >= -360.0 && d <= 360.0))
+                           fail(k, "must be from -360 to 360 degrees");
+                       s.support_line_angle = d;
+                       return;
+                   }
                    if (n == "spacing") {
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
@@ -535,10 +700,21 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (d < 0.0)
                        fail(k, "must not be negative");
-                   (n == "z_gap" ? s.support_z_gap : s.support_xy_gap) = d;
+                   if (n == "z_gap")
+                       s.support_z_gap = d;
+                   else
+                       s.support_xy_gap = {d, false};
                });
-    read_group(root, "cooling", {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_off_layers"},
+    read_group(root, "cooling",
+               {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
+                "fan_off_layers", "keep_outer_speed"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "keep_outer_speed" || n == "fan_always") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       (n == "fan_always" ? s.fan_always : s.keep_outer_speed) = g.at(n).get<bool>();
+                       return;
+                   }
                    if (n == "fan_off_layers") {
                        const json& v = g.at(n);
                        if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
@@ -546,19 +722,23 @@ Settings parse_checked(std::string_view text) {
                        s.fan_off_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
+                   if (n == "min_speed" && g.at(n).is_null()) { // not set: from the printer's profile
+                       s.min_print_speed = 0.0;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (n == "min_speed") {
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
                        s.min_print_speed = d;
-                   } else if (n == "min_layer_time") {
+                   } else if (n == "min_layer_time" || n == "fan_below_time") {
                        if (d < 0.0)
                            fail(k, "must not be negative");
-                       s.min_layer_time = d;
+                       (n == "fan_below_time" ? s.fan_below_time : s.min_layer_time) = d;
                    } else {
                        if (d < 0.0 || d > 100.0)
                            fail(k, "must be a percentage from 0 to 100");
-                       (n == "fan_min" ? s.fan_min : s.fan_max) = d;
+                       (n == "fan_min" ? s.fan_min : n == "fan_max" ? s.fan_max : s.fan_bridges) = d;
                    }
                });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
@@ -576,6 +756,24 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be true or false");
         (n == "enabled" ? s.zaa : s.zaa_raise) = g.at(n).get<bool>();
     });
+    read_group(root, "fuzzy", {"mode", "thickness", "point_distance"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "mode") {
+                       s.fuzzy_mode = choice<FuzzyMode>(
+                           g, n, k, {{"none", FuzzyMode::None}, {"external", FuzzyMode::External}, {"all", FuzzyMode::All}});
+                       return;
+                   }
+                   const double v = number(g, n, k);
+                   if (n == "thickness") {
+                       if (v < 0.0 || v > 5.0)
+                           fail(k, "must be from 0 to 5 mm");
+                       s.fuzzy_thickness = v;
+                       return;
+                   }
+                   if (v < 0.1 || v > 20.0)
+                       fail(k, "must be from 0.1 to 20 mm");
+                   s.fuzzy_point_distance = v;
+               });
     read_group(root, "gcode", {"resolution"}, [&](const json& g, const std::string& n, const std::string& k) {
         const double v = number(g, n, k);
         if (v < 0.0 || v > 1.0)
@@ -700,8 +898,52 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
 
 } // namespace
 
+std::vector<std::string> missing_speeds(const Settings& s) {
+    std::vector<std::string> out;
+    for (const NeededSpeed& n : kNeededSpeeds) {
+        const double v = std::string_view(n.key) == "speed.outer_wall" ? s.outer_wall_speed.value : *speed_of(s, n.key);
+        if (!(v > 0.0))
+            out.emplace_back(n.key);
+    }
+    return out;
+}
+
+std::vector<std::string> fill_missing_speeds(Settings& s) {
+    std::vector<std::string> out = missing_speeds(s);
+    for (const std::string& key : out) {
+        double fallback = 0.0;
+        for (const NeededSpeed& n : kNeededSpeeds)
+            if (key == n.key)
+                fallback = n.fallback;
+        if (key == "speed.outer_wall")
+            s.outer_wall_speed = {fallback, false};
+        else
+            *speed_of(s, key) = fallback;
+    }
+    return out;
+}
+
+void require_speeds(const Settings& settings) {
+    const std::vector<std::string> missing = missing_speeds(settings);
+    if (missing.empty())
+        return;
+    std::string list;
+    for (const std::string& key : missing)
+        list += (list.empty() ? "" : ", ") + key;
+    throw SettingsError("settings: no speed for " + list +
+                        ": speeds come from the printer's profile (docs/CONFIG.md, \"Velocidades\")");
+}
+
+double fastest_extrusion(const Settings& s) {
+    const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
+                                     s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
+                                     s.first_layer_speed});
+    return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
+}
+
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
+    auto speed = [](double v) { return v > 0.0 ? json(v).dump() : std::string("null"); }; // 0: not set
     auto flag = [](bool b) { return std::string(b ? "true" : "false"); };
     auto text = [](const std::string& t) { return json(t).dump(); };
     const char* fill_mode = s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even_odd" : "fill_holes";
@@ -724,6 +966,19 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.width", num(s.wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
+        {"walls.scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
+        {"walls.scarf_only_smooth", flag(s.scarf_only_smooth)},
+        {"walls.scarf_start_height", num(s.scarf_start_height)},
+        {"walls.scarf_length", num(s.scarf_length)},
+        {"walls.scarf_entire_loop", flag(s.scarf_entire_loop)},
+        {"walls.scarf_max_segment", num(s.scarf_max_segment)},
+        {"walls.scarf_inner", flag(s.scarf_inner)},
+        {"vase.enabled", flag(s.vase)},
+        {"placement.arrange", flag(s.placement_arrange)},
+        {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
+        {"fuzzy.mode", fuzzy_mode_name(s.fuzzy_mode)},
+        {"fuzzy.thickness", num(s.fuzzy_thickness)},
+        {"fuzzy.point_distance", num(s.fuzzy_point_distance)},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
@@ -739,6 +994,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.dense_density", num(s.infill_dense_density)},
         {"infill.stress_density", num(s.infill_stress_density)},
         {"infill.solid_every", std::to_string(s.infill_solid_every)},
+        {"infill.solid_below_area", num(s.infill_solid_below_area)},
         {"infill.nonplanar", flag(s.infill_nonplanar)},
         {"infill.nonplanar_amplitude", num(s.infill_nonplanar_amplitude)},
         {"infill.nonplanar_wavelength", num(s.infill_nonplanar_wavelength)},
@@ -750,28 +1006,30 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.flavor", flavor},
         {"machine.start_gcode", text(s.start_gcode)},
         {"machine.end_gcode", text(s.end_gcode)},
-        {"machine.max_feed_x", num(s.max_feed_x)},
-        {"machine.max_feed_y", num(s.max_feed_y)},
-        {"machine.max_feed_z", num(s.max_feed_z)},
-        {"machine.max_feed_e", num(s.max_feed_e)},
+        {"machine.max_feed_x", speed(s.max_feed_x)},
+        {"machine.max_feed_y", speed(s.max_feed_y)},
+        {"machine.max_feed_z", speed(s.max_feed_z)},
+        {"machine.max_feed_e", speed(s.max_feed_e)},
         {"machine.acceleration", num(s.acceleration)},
         {"machine.travel_acceleration", num(s.travel_acceleration)},
-        {"machine.corner_speed", num(s.corner_speed)},
+        {"machine.corner_speed", speed(s.corner_speed)},
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
         {"machine.min_layer_height", num(s.min_layer_height)},
         {"machine.max_layer_height", num(s.max_layer_height)},
-        {"speed.walls", num(s.wall_speed)},
-        {"speed.outer_wall", s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%" : num(s.outer_wall_speed.value)},
-        {"speed.infill", num(s.infill_speed)},
-        {"speed.solid_infill", num(s.solid_infill_speed)},
-        {"speed.top_solid_infill", num(s.top_solid_infill_speed)},
-        {"speed.support", num(s.support_speed)},
-        {"speed.travel", num(s.travel_speed)},
-        {"speed.first_layer", num(s.first_layer_speed)},
-        {"speed.max", num(s.max_speed)},
+        {"speed.walls", speed(s.wall_speed)},
+        {"speed.outer_wall", s.outer_wall_speed.value <= 0.0 ? std::string("null")
+                             : s.outer_wall_speed.percent ? num(s.outer_wall_speed.value) + "%"
+                                                          : num(s.outer_wall_speed.value)},
+        {"speed.infill", speed(s.infill_speed)},
+        {"speed.solid_infill", speed(s.solid_infill_speed)},
+        {"speed.top_solid_infill", speed(s.top_solid_infill_speed)},
+        {"speed.support", speed(s.support_speed)},
+        {"speed.travel", speed(s.travel_speed)},
+        {"speed.first_layer", speed(s.first_layer_speed)},
+        {"speed.max", speed(s.max_speed)},
         {"retraction.length", num(s.retract_length)},
-        {"retraction.speed", num(s.retract_speed)},
+        {"retraction.speed", speed(s.retract_speed)},
         {"retraction.lift", num(s.retract_lift)},
         {"retraction.min_travel", num(s.retract_min_travel)},
         {"adhesion.skirt_loops", std::to_string(s.skirt_loops)},
@@ -779,16 +1037,31 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.skirt_layers", std::to_string(s.skirt_layers)},
         {"adhesion.brim_width", num(s.brim_width)},
         {"support.enabled", flag(s.support)},
+        {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
-        {"support.xy_gap", num(s.support_xy_gap)},
+        {"support.xy_gap", s.support_xy_gap.percent ? num(s.support_xy_gap.value) + "%" : num(s.support_xy_gap.value)},
+        {"support.line_angle", num(s.support_line_angle)},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
+        {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+        {"support.tree_angle", num(s.tree_angle)},
+        {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
+        {"support.tree_branch_diameter", num(s.tree_branch_diameter)},
+        {"support.tree_branch_diameter_angle", num(s.tree_branch_diameter_angle)},
+        {"support.tree_double_wall_diameter", num(s.tree_double_wall_diameter)},
+        {"support.tree_branch_distance", num(s.tree_branch_distance)},
+        {"support.tree_tip_diameter", num(s.tree_tip_diameter)},
+        {"support.tree_top_rate", num(s.tree_top_rate)},
         {"cooling.min_layer_time", num(s.min_layer_time)},
-        {"cooling.min_speed", num(s.min_print_speed)},
+        {"cooling.min_speed", speed(s.min_print_speed)},
         {"cooling.fan_min", num(s.fan_min)},
         {"cooling.fan_max", num(s.fan_max)},
+        {"cooling.fan_below_time", num(s.fan_below_time)},
+        {"cooling.fan_always", s.fan_always ? "true" : "false"},
+        {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
+        {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
         {"zaa.enabled", s.zaa ? "true" : "false"},
         {"zaa.min_thickness", num(s.zaa_min_thickness)},
@@ -842,8 +1115,11 @@ std::string settings_json(const Settings& s) {
     ordered_json layer_heights = ordered_json::array();
     for (const auto& p : s.layer_heights)
         layer_heights.push_back({p[0], p[1]});
-    const ordered_json outer_wall = s.outer_wall_speed.percent ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
-                                                               : ordered_json(s.outer_wall_speed.value);
+    const ordered_json outer_wall = s.outer_wall_speed.value <= 0.0 ? ordered_json(nullptr)
+                                    : s.outer_wall_speed.percent    ? ordered_json(json(s.outer_wall_speed.value).dump() + "%")
+                                                                    : ordered_json(s.outer_wall_speed.value);
+    // A speed not set is null: the printer's profile gives it (docs/CONFIG.md).
+    const auto speed = [](double v) { return v > 0.0 ? ordered_json(v) : ordered_json(nullptr); };
     const ordered_json root = {
         {"layers",
          {{"height", s.layer_height},
@@ -859,7 +1135,20 @@ std::string settings_json(const Settings& s) {
           {"xy_offset", s.xy_offset},
           {"first_layer_shrink", s.first_layer_shrink},
           {"simplify_tolerance", s.simplify_tolerance}}},
-        {"walls", {{"count", s.wall_count}, {"width", s.wall_width}, {"seam", seam}}},
+        {"walls",
+         {{"count", s.wall_count},
+          {"width", s.wall_width},
+          {"seam", seam},
+          {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
+          {"scarf_only_smooth", s.scarf_only_smooth},
+          {"scarf_start_height", s.scarf_start_height},
+          {"scarf_length", s.scarf_length},
+          {"scarf_entire_loop", s.scarf_entire_loop},
+          {"scarf_max_segment", s.scarf_max_segment},
+          {"scarf_inner", s.scarf_inner}}},
+        {"vase", {{"enabled", s.vase}}},
+        {"placement",
+         {{"arrange", s.placement_arrange}, {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)}}},
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
@@ -877,6 +1166,7 @@ std::string settings_json(const Settings& s) {
           {"dense_density", s.infill_dense_density},
           {"stress_density", s.infill_stress_density},
           {"solid_every", s.infill_solid_every},
+          {"solid_below_area", s.infill_solid_below_area},
           {"nonplanar", s.infill_nonplanar},
           {"nonplanar_amplitude", s.infill_nonplanar_amplitude},
           {"nonplanar_wavelength", s.infill_nonplanar_wavelength},
@@ -891,13 +1181,13 @@ std::string settings_json(const Settings& s) {
           {"start_gcode", s.start_gcode},
           {"end_gcode", s.end_gcode},
           {"variables", variables},
-          {"max_feed_x", s.max_feed_x},
-          {"max_feed_y", s.max_feed_y},
-          {"max_feed_z", s.max_feed_z},
-          {"max_feed_e", s.max_feed_e},
+          {"max_feed_x", speed(s.max_feed_x)},
+          {"max_feed_y", speed(s.max_feed_y)},
+          {"max_feed_z", speed(s.max_feed_z)},
+          {"max_feed_e", speed(s.max_feed_e)},
           {"acceleration", s.acceleration},
           {"travel_acceleration", s.travel_acceleration},
-          {"corner_speed", s.corner_speed},
+          {"corner_speed", speed(s.corner_speed)},
           {"bed", bed},
           {"max_height", s.max_height},
           {"min_layer_height", s.min_layer_height},
@@ -909,18 +1199,18 @@ std::string settings_json(const Settings& s) {
           {"enclosed", s.enclosed},
           {"hardened_nozzle", s.hardened_nozzle}}},
         {"speed",
-         {{"walls", s.wall_speed},
+         {{"walls", speed(s.wall_speed)},
           {"outer_wall", outer_wall},
-          {"infill", s.infill_speed},
-          {"solid_infill", s.solid_infill_speed},
-          {"top_solid_infill", s.top_solid_infill_speed},
-          {"support", s.support_speed},
-          {"travel", s.travel_speed},
-          {"first_layer", s.first_layer_speed},
-          {"max", s.max_speed}}},
+          {"infill", speed(s.infill_speed)},
+          {"solid_infill", speed(s.solid_infill_speed)},
+          {"top_solid_infill", speed(s.top_solid_infill_speed)},
+          {"support", speed(s.support_speed)},
+          {"travel", speed(s.travel_speed)},
+          {"first_layer", speed(s.first_layer_speed)},
+          {"max", speed(s.max_speed)}}},
         {"retraction",
          {{"length", s.retract_length},
-          {"speed", s.retract_speed},
+          {"speed", speed(s.retract_speed)},
           {"lift", s.retract_lift},
           {"min_travel", s.retract_min_travel}}},
         {"adhesion",
@@ -930,19 +1220,39 @@ std::string settings_json(const Settings& s) {
           {"brim_width", s.brim_width}}},
         {"support",
          {{"enabled", s.support},
+          {"automatic", s.support_automatic},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
-          {"xy_gap", s.support_xy_gap},
+          {"xy_gap", s.support_xy_gap.percent ? ordered_json(json(s.support_xy_gap.value).dump() + "%")
+                                              : ordered_json(s.support_xy_gap.value)},
+          {"line_angle", s.support_line_angle},
           {"spacing", s.support_spacing},
-          {"interface_layers", s.support_interface_layers}}},
+          {"interface_layers", s.support_interface_layers},
+          {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+          {"tree_angle", s.tree_angle},
+          {"tree_angle_preferred", s.tree_angle_preferred},
+          {"tree_branch_diameter", s.tree_branch_diameter},
+          {"tree_branch_diameter_angle", s.tree_branch_diameter_angle},
+          {"tree_double_wall_diameter", s.tree_double_wall_diameter},
+          {"tree_branch_distance", s.tree_branch_distance},
+          {"tree_tip_diameter", s.tree_tip_diameter},
+          {"tree_top_rate", s.tree_top_rate}}},
         {"cooling",
          {{"min_layer_time", s.min_layer_time},
-          {"min_speed", s.min_print_speed},
+          {"min_speed", speed(s.min_print_speed)},
           {"fan_min", s.fan_min},
           {"fan_max", s.fan_max},
-          {"fan_off_layers", s.fan_off_layers}}},
+          {"fan_below_time", s.fan_below_time},
+          {"fan_always", s.fan_always},
+          {"fan_bridges", s.fan_bridges},
+          {"fan_off_layers", s.fan_off_layers},
+          {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
+        {"fuzzy",
+         {{"mode", fuzzy_mode_name(s.fuzzy_mode)},
+          {"thickness", s.fuzzy_thickness},
+          {"point_distance", s.fuzzy_point_distance}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"extrusion",
@@ -971,6 +1281,13 @@ Settings load_settings(const std::filesystem::path& path) {
 
 void check_settings(const Settings& s) {
     char text[200];
+    if (s.min_layer_height > 0.0 && s.max_layer_height > 0.0 && s.min_layer_height > s.max_layer_height + 1e-9) {
+        std::snprintf(text, sizeof text,
+                      "machine.min_layer_height: %.3g mm is above machine.max_layer_height (%.3g mm): no layer fits "
+                      "between them",
+                      s.min_layer_height, s.max_layer_height);
+        throw SettingsError(text);
+    }
     const double nozzle = s.nozzle_diameter;
     const double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
     for (const auto& [key, h] : {std::pair{"layers.height", s.layer_height}, {"layers.first_height", s.first_layer_height}}) {
@@ -987,6 +1304,10 @@ void check_settings(const Settings& s) {
             throw SettingsError(text);
         }
     }
+    // Vase mode lays one wall in a spiral: nothing can stand under it
+    // (vase_mode.md, rule 2).
+    if (s.vase && s.support)
+        throw SettingsError("vase.enabled: vase mode is not compatible with supports (support.enabled)");
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);

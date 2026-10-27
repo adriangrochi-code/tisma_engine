@@ -6,8 +6,12 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
+#include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
 #include "infill/nonplanar.hpp"
+
+#include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/parallel_pipeline.h>
 
 #include <algorithm>
 #include <charconv>
@@ -25,6 +29,7 @@
 #include <numbers>
 #include <optional>
 #include <string_view>
+#include <thread>
 
 namespace tisma {
 namespace {
@@ -258,6 +263,8 @@ public:
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
         feed_limit_ = std::max(s.max_feed_x, s.max_feed_y);
+        if (!(feed_limit_ > 0.0)) // not known: no cap
+            feed_limit_ = std::numeric_limits<double>::infinity();
     }
 
     // Plans the time of the moves since the last call (they end at rest).
@@ -267,6 +274,7 @@ public:
     void flush(std::ostream& out) {
         out.write(text_.data(), std::streamsize(text_.size()));
         text_.clear();
+        fan_marks_.clear(); // past the last layer: its fan stays
     }
 
     // Extrusion speeds of the layer being written go through this.
@@ -276,28 +284,48 @@ public:
     // everything else (travels, retractions, lifts).
     void reset_times() {
         extruded_.clear();
+        outer_extruded_.clear();
         other_time_ = 0.0;
     }
     const std::map<double, double>& extruded() const { return extruded_; }
+    const std::map<double, double>& outer_extruded() const { return outer_extruded_; } // the outer walls' part
     double other_time() const { return other_time_; }
 
-    // The part-cooling fan in percent: M106 S0-255, or M107 when off.
-    void fan(double percent) {
-        long value = std::lround(std::clamp(percent, 0.0, 100.0) * 2.55);
-        // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
-        // there. S2 is the same breeze (0.8 %) on every firmware.
-        if (value == 1)
-            value = 2;
-        if (value == fan_)
+    // The part-cooling fan (docs/spec/features/cooling.md, rules 3 and 4). A
+    // layer's fan hangs on its time, known only once the layer is built: the
+    // layer opens with a mark where its fan goes, before its ;LAYER_CHANGE,
+    // each bridge with a mark for the bridge fan and its end with a mark for
+    // the layer's again. settle_fan() writes the commands at the marks.
+    void open_layer_fan() {
+        fan_marks_.clear();
+        fan_marks_.push_back({text_.size(), false});
+        marked_bridge_ = false;
+    }
+    void settle_fan(double layer, double bridge) {
+        if (fan_marks_.empty())
             return;
-        if (value == 0) {
-            text_ += "M107\n";
-        } else {
-            text_ += "M106 S";
-            append_integer(text_, value);
-            text_ += '\n';
+        const long values[2] = {fan_value(layer), fan_value(bridge)};
+        std::string out;
+        out.reserve(text_.size() + 12 * fan_marks_.size());
+        std::size_t from = 0;
+        for (const auto& [at, on_bridge] : fan_marks_) {
+            out.append(text_, from, at - from);
+            from = at;
+            const long value = values[on_bridge];
+            if (value == fan_)
+                continue;
+            if (value == 0) {
+                out += "M107\n";
+            } else {
+                out += "M106 S";
+                append_integer(out, value);
+                out += '\n';
+            }
+            fan_ = value;
         }
-        fan_ = value;
+        out.append(text_, from);
+        text_ = std::move(out);
+        fan_marks_.clear();
     }
 
     // Values a height change sets (docs/CONFIG.md, "changes").
@@ -371,7 +399,9 @@ public:
         }
     }
 
-    void new_layer(double z, double height, double travel_feed) {
+    // keep_z: a vase's turn goes on from where the turn below ended, at its
+    // height (vase_mode.md, rule 4): no move up to the layer's Z.
+    void new_layer(double z, double height, double travel_feed, bool keep_z = false) {
         text_ += ";LAYER_CHANGE\n;Z:" + fixed(z, 3) + "\n;HEIGHT:" + fixed(height, 3) + "\n";
         if (!relative_) {
             // A retraction carries over the layer change: E restarts at minus its length.
@@ -380,10 +410,12 @@ public:
             position_[3] = e_;
             e_text_.clear();
         }
-        move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
+        if (!keep_z)
+            move("G1", std::nullopt, std::nullopt, z, std::nullopt, travel_feed);
         height_ = height;
         z_value_ = z;
-        z_now_ = written(z);
+        if (!keep_z)
+            z_now_ = written(z);
         clearance_ = 0.0;
     }
 
@@ -393,12 +425,17 @@ public:
             text_ += t;
             text_ += '\n';
             type_ = t;
+            outer_ = std::strcmp(t, "External perimeter") == 0;
+            bridge_ = std::strcmp(t, "Bridge infill") == 0;
         }
     }
 
     // A travel along the planner's route. It retracts first (and lifts Z by
-    // lift) when it leaves the part or is longer than min_travel.
-    void travel(const Point2d& p, double feed, const TravelPlanner& planner) {
+    // lift) when it leaves the part or is longer than min_travel. A route
+    // planned beforehand from exactly where the head is stands for the
+    // planner's.
+    void travel(const Point2d& p, double feed, const TravelPlanner& planner, const TravelPlan* planned = nullptr,
+                const Point2d* planned_from = nullptr) {
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
             // the cruise height, then straight over, every axis written.
@@ -424,7 +461,9 @@ public:
             x_value_ = p.x, y_value_ = p.y, known_ = true;
             return;
         }
-        const TravelPlan plan = planner.plan({x_value_, y_value_}, p);
+        const bool ready = planned && planned_from && planned_from->x == x_value_ && planned_from->y == y_value_;
+        const TravelPlan own = ready ? TravelPlan{} : planner.plan({x_value_, y_value_}, p);
+        const TravelPlan& plan = ready ? *planned : own;
         const bool retract = plan.leaves_part || plan.length > min_travel_;
         if (retract && retract_ > 0.0 && !retracted_) {
             e_ = relative_ ? -retract_ : e_ - retract_;
@@ -452,6 +491,10 @@ public:
     }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
+        if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
+            fan_marks_.push_back({text_.size(), bridge_});
+            marked_bridge_ = bridge_;
+        }
         if (retracted_) { // unretract: back to where E was (a length changed since stays the old one)
             e_ = relative_ ? retracted_amount_ : e_ + retracted_amount_;
             move("G1", std::nullopt, std::nullopt, std::nullopt, e_, retract_feed_);
@@ -459,13 +502,16 @@ public:
             other_time_ += retracted_amount_ / retract_feed_;
         }
         const double width = (from.width + to.width) / 2.0;
-        char w[kNumberCapacity];
-        const std::string_view width_text(w, format_fixed(w, width, 3));
-        if (width_text != width_) {
-            text_ += ";WIDTH:";
-            text_ += width_text;
-            text_ += '\n';
-            width_.assign(width_text);
+        if (width != width_value_) { // the same width writes the same text
+            width_value_ = width;
+            char w[kNumberCapacity];
+            const std::string_view width_text(w, format_fixed(w, width, 3));
+            if (width_text != width_) {
+                text_ += ";WIDTH:";
+                text_ += width_text;
+                text_ += '\n';
+                width_.assign(width_text);
+            }
         }
         const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
@@ -477,8 +523,9 @@ public:
         }
         double height = height_ + ((z_from - z_layer) + (z_to - z_layer)) / 2.0;
         if (nonplanar_) {
-            // On the wavy bead below, not on the layer below's top.
-            height -= (from.below + to.below) / 2.0;
+            // On the wavy bead below, not on the layer below's top; a scarf
+            // ramp's foot, as the Z written rounds it, may come to nothing.
+            height = std::max(0.0, height - (from.below + to.below) / 2.0);
             const std::string shown = fixed(height, 3);
             if (shown != shown_height_) {
                 text_ += ";HEIGHT:" + shown + "\n";
@@ -498,20 +545,24 @@ public:
                 feed = std::max(1.0, std::floor(cap * 60.0)) / 60.0;
         }
         extruded_[feed] += length;
+        if (outer_)
+            outer_extruded_[feed] += length;
         total_e_ += e;
         pending_ += e;
         // A piece that rounds to no move at 3 decimals is not written; its E
         // (next to nothing) goes with the next piece.
         char tx[kNumberCapacity], ty[kNumberCapacity];
-        if (std::string_view(tx, format_fixed(tx, to.p.x, 3)) == x_ &&
-            std::string_view(ty, format_fixed(ty, to.p.y, 3)) == y_)
+        const std::string_view x_text(tx, format_fixed(tx, to.p.x, 3)), y_text(ty, format_fixed(ty, to.p.y, 3));
+        if (x_text == x_ && y_text == y_)
             return;
         e_ = relative_ ? pending_ : e_ + pending_;
         pending_ = 0.0;
         // A slowed-down feed is rounded down to whole mm/min (as F is written), so
         // the layer lasts at least the minimum time.
-        const double paced = pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed) * 60.0)) / 60.0;
-        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced);
+        const double paced =
+            pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
+        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, e_, paced, x_text,
+             y_text);
         x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
         z_now_ = z_to;
     }
@@ -522,16 +573,25 @@ private:
     // A Z as the G-code writes it (three decimals), to compare and to measure with.
     static double written(double z) { return std::round(z * 1000.0) / 1000.0; }
 
+    // A fan in percent as M106 writes it, S0-255.
+    static long fan_value(double percent) {
+        const long value = std::lround(std::clamp(percent, 0.0, 100.0) * 255.0 / 100.0); // 50 % is S128
+        // RepRapFirmware reads S up to 1 as a fraction: S1 is a full fan
+        // there. S2 is the same breeze (0.8 %) on every firmware.
+        return value == 1 ? 2 : value;
+    }
+
+    // x_text and y_text, when given, are x and y as format_fixed writes them.
     void move(const char* g, std::optional<double> x, std::optional<double> y, std::optional<double> z,
-              std::optional<double> e, double feed) {
+              std::optional<double> e, double feed, std::string_view x_text = {}, std::string_view y_text = {}) {
         const std::size_t start = text_.size();
         text_ += g;
         const std::size_t bare = text_.size();
-        auto axis = [&](char name, std::optional<double> v, int decimals, std::string& last) {
+        auto axis = [&](char name, std::optional<double> v, int decimals, std::string& last, std::string_view given) {
             if (!v)
                 return;
             char buffer[kNumberCapacity];
-            const std::string_view t(buffer, format_fixed(buffer, *v, decimals));
+            const std::string_view t = given.empty() ? std::string_view(buffer, format_fixed(buffer, *v, decimals)) : given;
             if (t != last || name == 'E') {
                 text_ += ' ';
                 text_ += name;
@@ -539,10 +599,10 @@ private:
                 last.assign(t);
             }
         };
-        axis('X', x, 3, x_);
-        axis('Y', y, 3, y_);
-        axis('Z', z, 3, z_);
-        axis('E', e, 5, e_text_);
+        axis('X', x, 3, x_, x_text);
+        axis('Y', y, 3, y_, y_text);
+        axis('Z', z, 3, z_, {});
+        axis('E', e, 5, e_text_, {});
         const long f = std::lround(feed * 60.0);
         if (f != f_) {
             text_ += " F";
@@ -568,12 +628,15 @@ private:
     PrintTime time_;
     double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
-    std::map<double, double> extruded_;
+    std::map<double, double> extruded_, outer_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;
     long fan_ = -1; // not set yet
+    std::vector<std::pair<std::size_t, bool>> fan_marks_; // where the layer's fan commands go: (offset, a bridge's)
+    bool marked_bridge_ = false; // the last mark is a bridge's
+    bool bridge_ = false;        // the current type is a bridge
     double filament_area_ = 1.0;
     double retract_, retract_feed_, lift_, min_travel_;
     double retracted_amount_ = 0.0;
@@ -589,8 +652,10 @@ private:
     bool resync_ = false;    // after a change's own G-code: the next travel writes everything
     bool retracted_ = false;
     std::string x_, y_, z_, e_text_, width_;
+    double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
+    bool outer_ = false; // the current type is the outer wall
 };
 
 } // namespace
@@ -724,6 +789,7 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
 }
 
 void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s, std::vector<Warning>* warnings) {
+    require_speeds(s); // from the printer's profile: the writer has none of its own
     out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
     Emitter g(s);
     g.set_flow(s.flow / 100.0);
@@ -764,33 +830,141 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
     // in the G-code (and of the height changes) count from its bottom.
     const double base = model.layers.empty() ? 0.0 : model.layers.front().bottom;
 
-    auto emit_layer = [&](std::size_t l, double fan, const Active& a) {
+    // No extrusion faster than speed.max, when it is set.
+    const auto capped = [&](double v) { return s.max_speed > 0.0 ? std::min(v, s.max_speed) : v; };
+
+    // Every layer's travel planner and islands first, in parallel: they
+    // depend on the layer's region alone, and the layers are written one after
+    // another. A layer with the region of the layer below shares them
+    // (prismatic parts; the speed report's V10).
+    struct RegionPlan {
+        std::optional<TravelPlanner> planner;
+        std::vector<Polygons> pieces;
+        std::vector<std::array<std::int64_t, 4>> boxes; // each piece's box
+    };
+    std::vector<std::size_t> plan_of(model.layers.size(), 0);
+    {
+        std::vector<char> same(model.layers.size(), 0);
+        tbb::parallel_for(std::size_t(1), std::min(model.layers.size(), model.regions.size()),
+                          [&](std::size_t l) { same[l] = model.regions[l] == model.regions[l - 1]; });
+        for (std::size_t l = 0; l < plan_of.size(); ++l)
+            plan_of[l] = same[l] ? plan_of[l - 1] : l;
+    }
+    std::vector<RegionPlan> plans(model.layers.size());
+    const Polygons none;
+    tbb::parallel_for(std::size_t(0), plans.size(), [&](std::size_t l) {
+        if (plan_of[l] != l)
+            return;
+        const Polygons& region = l < model.regions.size() ? model.regions[l] : none;
+        RegionPlan& p = plans[l];
+        p.planner.emplace(region, s.wall_width);
+        p.pieces = split_islands(region);
+        // The point-in-polygon tests run only where a box holds the point
+        // (hundreds of islands made every path test them all).
+        p.boxes.assign(p.pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
+        for (std::size_t k = 0; k < p.pieces.size(); ++k)
+            for (const auto& q : p.pieces[k].front()) {
+                auto& b = p.boxes[k];
+                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
+            }
+    });
+
+    // What a layer lays, in order: its paths with their line types and
+    // feeds, and the thick zone's changes of height (no type).
+    struct Step {
+        Toolpath path;
+        const char* type = nullptr;
+        double feed = 0.0;
+        double height = 0.0;
+        // Where the head comes from, when the plan knows it, and the travel
+        // from there, planned with the paths across layers; the emitter takes
+        // it when the head is exactly there (a route around the walls costs
+        // hundreds of tests, and the layers are written one after another).
+        std::optional<Point2d> from;
+        TravelPlan travel;
+    };
+    // The aligned seam's candidates of each wall loop of a layer (by its
+    // place in the layer's walls), found for many layers at once ahead of
+    // the plans, which only pick among them (perimeters.md, rule 8).
+    std::vector<std::vector<std::vector<std::size_t>>> loop_candidates(model.layers.size());
+    // Where the last plan ended (simplifying keeps a path's ends).
+    std::optional<Point2d> last_end;
+    // Vase mode (vase_mode.md, rule 4): from the layer over the bottom ones
+    // (the second, without any), a layer whose only path is its outer wall's
+    // loop is one turn of a spiral: it starts at the point nearest to where
+    // the layer below ended, going on from there when that was a turn too,
+    // and rises a layer along its length, every bead a layer thick (on the
+    // turn below). Another layer is laid flat, and the next turn starts anew.
+    std::vector<char> continues(model.layers.size(), 0);
+    bool after_turn = false;
+    const std::size_t spiral_from = std::max<std::size_t>(std::size_t(std::max(s.bottom_layers, 0)), 1);
+    const auto spiral_turn = [&](std::vector<Step>& steps, std::size_t l) {
+        Step* only = nullptr;
+        for (Step& step : steps) {
+            if (!step.type || only) // a thick zone's height, or a second path
+                return false;
+            only = &step;
+        }
+        if (!only || std::strcmp(only->type, "External perimeter") != 0 || !only->path.closed ||
+            only->path.points.size() < 3)
+            return false;
+        Toolpath& loop = only->path;
+        for (const ToolpathPoint& p : loop.points)
+            if (p.dz != 0.0 || p.below != 0.0)
+                return false;
+        if (last_end) {
+            std::size_t nearest = 0;
+            double best = std::numeric_limits<double>::infinity();
+            for (std::size_t i = 0; i < loop.points.size(); ++i) {
+                const double d = std::hypot(loop.points[i].p.x - last_end->x, loop.points[i].p.y - last_end->y);
+                if (d < best)
+                    best = d, nearest = i;
+            }
+            std::rotate(loop.points.begin(), loop.points.begin() + std::ptrdiff_t(nearest), loop.points.end());
+        }
+        std::vector<ToolpathPoint> points;
+        if (after_turn && last_end) {
+            points.push_back(loop.points.front());
+            points.back().p = *last_end;
+        }
+        points.insert(points.end(), loop.points.begin(), loop.points.end());
+        points.push_back(loop.points.front()); // round to where it started
+        double total = 0.0;
+        for (std::size_t i = 1; i < points.size(); ++i)
+            total += std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+        if (!(total > 0.0))
+            return false;
+        const double h = model.layers[l].top - model.layers[l].bottom;
+        double along = 0.0;
+        for (std::size_t i = 0; i < points.size(); ++i) {
+            if (i > 0)
+                along += std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+            points[i].dz = -h * (1.0 - along / total);
+            points[i].below = points[i].dz;
+        }
+        points.back().dz = points.back().below = 0.0;
+        loop.points = std::move(points);
+        loop.closed = false;
+        loop.wavy = true;
+        return true;
+    };
+    // The order of a layer's paths and their seams. It goes on from where the
+    // layer below ended and from its seams, so the layers are planned one
+    // after another; the G-code is written apart (write_layer), so a layer is
+    // written while the next ones are planned (the speed report's V5).
+    auto plan_layer = [&](std::size_t l, const Active& a) {
         const Layer& layer = model.layers[l];
-        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed);
-        g.custom(a.lines, a.user);
-        g.set_retraction(a.retract_length, a.retract_speed);
-        g.set_flow(a.flow);
-        g.set_forced_flow(a.volumetric_flow);
-        g.fan(fan);
+        std::vector<Step> steps;
         seams.next_layer();
-        const TravelPlanner planner(l < model.regions.size() ? model.regions[l] : Polygons{}, s.wall_width);
+        const RegionPlan& plan = plans[plan_of[l]];
         const bool first = l == 0;
         // A speed change scales every extrusion, past the usual caps (a speed tower).
         auto speed = [&](double v) {
-            return std::min(first ? std::min(v, s.first_layer_speed) : v, s.max_speed) * a.speed;
+            return capped(first ? std::min(v, s.first_layer_speed) : v) * a.speed;
         };
-        auto lay = [&](const Toolpath& path, const char* type, double feed) {
-            if (path.points.empty())
-                return;
-            const Toolpath t = simplify_toolpath(path, s.gcode_resolution);
-            g.travel(t.points.front().p, s.travel_speed, planner);
-            g.type(type);
-            g.nonplanar(t.wavy);
-            for (std::size_t i = 1; i < t.points.size(); ++i)
-                g.extrude(t.points[i - 1], t.points[i], feed);
-            if (t.closed && t.points.size() > 2)
-                g.extrude(t.points.back(), t.points.front(), feed);
-            g.nonplanar(false);
+        auto lay = [&](Toolpath path, const char* type, double feed) {
+            if (!path.points.empty())
+                steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
         };
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
         // Z anti-aliasing (docs/ZAA.md): of the paths off the layer's top, the
@@ -812,8 +986,16 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         };
         std::vector<Pending> pending;
         bool deferring = false;
-        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam) {
-            std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams);
+        // The seams painted on this layer, for its walls.
+        SeamPaint painted;
+        if (l < model.seam_enforce.size())
+            painted.enforce = &model.seam_enforce[l];
+        if (l < model.seam_block.size())
+            painted.block = &model.seam_block[l];
+        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam,
+                         bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {}) {
+            std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams,
+                                                        walls && !painted.empty() ? &painted : nullptr, candidates);
             if (deferring) {
                 for (const Toolpath& t : ordered) {
                     if (t.wavy) { // its waves are its own: not cut by height
@@ -825,8 +1007,8 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 }
                 return;
             }
-            for (const Toolpath& t : ordered)
-                lay(t, type, feed);
+            for (Toolpath& t : ordered)
+                lay(std::move(t), type, feed);
         };
         auto off_top = [](std::initializer_list<const std::vector<Toolpath>*> lists) {
             for (const std::vector<Toolpath>* list : lists)
@@ -848,59 +1030,27 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (const Pending& p : pending)
                 paths.push_back(&p.path);
             for (const std::size_t k : height_order(paths, reach))
-                lay(pending[k].path, pending[k].type, pending[k].feed);
+                lay(std::move(pending[k].path), pending[k].type, pending[k].feed);
             pending.clear();
             deferring = false;
         };
-        if (s.zaa && s.zaa_raise) {
-            // Travels keep above the highest raised bead of the layer.
-            double highest = 0.0;
-            auto scan = [&](const std::vector<Toolpath>& paths) {
-                for (const Toolpath& t : paths)
-                    for (const ToolpathPoint& p : t.points)
-                        highest = std::max(highest, p.dz);
-            };
-            if (l < model.walls.size())
-                scan(model.walls[l].toolpaths);
-            if (l < model.fills.size())
-                scan(model.fills[l].top), scan(model.fills[l].gaps);
-            if (l < model.thick.size())
-                scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
-            g.set_clearance(highest);
-        }
-        if (l < model.fills.size()) {
-            // Wavy infill: travels keep above its crests.
-            double highest = 0.0;
-            for (const Toolpath& t : model.fills[l].sparse)
-                if (t.wavy)
-                    for (const ToolpathPoint& p : t.points)
-                        highest = std::max(highest, p.dz);
-            if (highest > 0.0)
-                g.set_clearance(std::max(g.clearance(), highest));
-        }
         // Skirt, then brim, before the part, at the first layer's speed.
         if (l < std::size_t(std::max(s.skirt_layers, 0)))
-            group(model.skirt, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed) * a.speed, SeamMode::Nearest);
+            group(model.skirt, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         if (l == 0)
-            group(model.brim, "Skirt/Brim", std::min(s.first_layer_speed, s.max_speed) * a.speed, SeamMode::Nearest);
+            group(model.brim, "Skirt/Brim", capped(s.first_layer_speed) * a.speed, SeamMode::Nearest);
         // Every island is finished before the next, the nearest one first. In an
         // island: walls from the inside out, the outer wall (bead 0) last, each
         // bead index in nearest order; then the fills, one kind after the other.
         struct Island {
             std::map<int, std::vector<Toolpath>, std::greater<int>> walls;
+            std::map<int, std::vector<const std::vector<std::size_t>*>> candidates; // each wall's seam candidates
             std::array<std::vector<Toolpath>, 7> fills; // solid, top, bridge, gaps, sparse, support, support interface
             std::vector<Point2d> ends;                  // where its paths start or end
         };
-        const std::vector<Polygons> pieces = l < model.regions.size() ? split_islands(model.regions[l]) : std::vector<Polygons>{};
+        const std::vector<Polygons>& pieces = plan.pieces;
         std::vector<Island> islands(pieces.size() + 1); // the last one takes paths in no island
-        // Each island's box: the point-in-polygon tests run only where the box
-        // holds the point (hundreds of islands made every path test them all).
-        std::vector<std::array<std::int64_t, 4>> piece_box(pieces.size(), {INT64_MAX, INT64_MAX, INT64_MIN, INT64_MIN});
-        for (std::size_t k = 0; k < pieces.size(); ++k)
-            for (const auto& q : pieces[k].front()) {
-                auto& b = piece_box[k];
-                b[0] = std::min(b[0], q.x), b[1] = std::min(b[1], q.y), b[2] = std::max(b[2], q.x), b[3] = std::max(b[3], q.y);
-            }
+        const std::vector<std::array<std::int64_t, 4>>& piece_box = plan.boxes;
         auto island = [&](const Toolpath& t) -> Island& {
             if (pieces.size() <= 1)
                 return islands.front();
@@ -928,10 +1078,11 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 i.ends.push_back(t.points.back().p);
         };
         if (l < model.walls.size())
-            for (const Toolpath& t : model.walls[l].toolpaths)
-                if (!t.points.empty()) {
+            for (std::size_t k = 0; k < model.walls[l].toolpaths.size(); ++k)
+                if (const Toolpath& t = model.walls[l].toolpaths[k]; !t.points.empty()) {
                     Island& i = island(t);
                     i.walls[t.index].push_back(t);
+                    i.candidates[t.index].push_back(k < loop_candidates[l].size() ? &loop_candidates[l][k] : nullptr);
                     add(i, t);
                 }
         if (l < model.fills.size()) {
@@ -1000,8 +1151,10 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             const Island& i = islands[next];
             auto walls = [&](int index, const std::vector<Toolpath>& paths) {
                 const bool outer = index == 0;
+                const auto found = i.candidates.find(index);
                 group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
+                      found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
             };
             if (s.zaa) {
                 for (const auto& [index, paths] : i.walls)
@@ -1018,7 +1171,7 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
         // once, the nozzle at its top (docs/LOCAL_LAYERS.md).
         if (l < model.thick.size() && !model.thick[l].empty()) {
             const ThickLayer& t = model.thick[l];
-            g.set_height(t.height);
+            steps.push_back({{}, nullptr, 0.0, t.height, {}, {}});
             deferring = s.zaa && off_top({&t.walls, &t.fill.top, &t.fill.gaps});
             std::map<int, std::vector<Toolpath>, std::greater<int>> by_index;
             for (const Toolpath& w : t.walls)
@@ -1026,26 +1179,78 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             for (const auto& [index, paths] : by_index) {
                 const bool outer = index == 0;
                 group(paths, outer ? "External perimeter" : "Perimeter",
-                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam);
+                      speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true);
             }
             const std::vector<Toolpath>* kinds[5] = {&t.fill.solid, &t.fill.top, &t.fill.bridge, &t.fill.gaps,
                                                      &t.fill.sparse};
             for (std::size_t k = 0; k < 5; ++k)
                 group(*kinds[k], fill_type[k], speed(fill_speed[k]), SeamMode::Nearest);
             flush();
-            g.set_height(layer.top - layer.bottom);
+            steps.push_back({{}, nullptr, 0.0, layer.top - layer.bottom, {}, {}});
+        }
+        return steps;
+    };
+
+    // A layer's G-code from its plan, the paths already simplified.
+    auto write_layer = [&](std::size_t l, const Active& a, const std::vector<Step>& steps) {
+        const Layer& layer = model.layers[l];
+        g.open_layer_fan();
+        const bool turn = l < continues.size() && continues[l];
+        g.new_layer(layer.top - base, layer.top - layer.bottom, s.travel_speed, turn);
+        g.custom(a.lines, a.user);
+        g.set_retraction(a.retract_length, a.retract_speed);
+        g.set_flow(a.flow);
+        g.set_forced_flow(a.volumetric_flow);
+        const TravelPlanner& planner = *plans[plan_of[l]].planner;
+        if (s.zaa && s.zaa_raise) {
+            // Travels keep above the highest raised bead of the layer.
+            double highest = 0.0;
+            auto scan = [&](const std::vector<Toolpath>& paths) {
+                for (const Toolpath& t : paths)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            };
+            if (l < model.walls.size())
+                scan(model.walls[l].toolpaths);
+            if (l < model.fills.size())
+                scan(model.fills[l].top), scan(model.fills[l].gaps);
+            if (l < model.thick.size())
+                scan(model.thick[l].walls), scan(model.thick[l].fill.top), scan(model.thick[l].fill.gaps);
+            g.set_clearance(highest);
+        }
+        if (l < model.fills.size()) {
+            // Wavy infill: travels keep above its crests.
+            double highest = 0.0;
+            for (const Toolpath& t : model.fills[l].sparse)
+                if (t.wavy)
+                    for (const ToolpathPoint& p : t.points)
+                        highest = std::max(highest, p.dz);
+            if (highest > 0.0)
+                g.set_clearance(std::max(g.clearance(), highest));
+        }
+        for (const Step& step : steps) {
+            if (!step.type) {
+                g.set_height(step.height);
+                continue;
+            }
+            const Toolpath& t = step.path;
+            // A vase's turn starts where the one below ended: no travel.
+            if (!turn)
+                g.travel(t.points.front().p, s.travel_speed, planner, &step.travel, step.from ? &*step.from : nullptr);
+            g.type(step.type);
+            g.nonplanar(t.wavy);
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                g.extrude(t.points[i - 1], t.points[i], step.feed);
+            if (t.closed && t.points.size() > 2)
+                g.extrude(t.points.back(), t.points.front(), step.feed);
+            g.nonplanar(false);
         }
     };
 
+    // The height changes of every layer first: the plans take their speeds.
+    std::vector<Active> actives;
+    actives.reserve(model.layers.size());
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
-        // Each layer is built in the emitter's buffer first. One faster than the
-        // minimum layer time is built again from the same state with its
-        // extrusions slowed down and the fan at its maximum
-        // (docs/spec/BEHAVIOR.md, "Enfriamiento").
-        const Emitter emitter_before = g;
-        const Point2d cursor_before = cursor;
-        const SeamMemory seams_before = seams;
-        g.reset_times();
         // Changes below this layer's top take effect now: its top as ;Z: writes
         // it, so a reader of the G-code (the check) takes them at the same layer.
         active.lines.clear();
@@ -1078,20 +1283,31 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
             if (c.fan)
                 active.fan = *c.fan;
         }
-        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0));
-        emit_layer(l, active.fan ? *active.fan : fan_off ? 0.0 : s.fan_min, active);
+        actives.push_back(active);
+    }
+
+    // Each layer is built in the emitter's buffer first. One faster than the
+    // minimum layer time is built again from the same state with its
+    // extrusions slowed down and the fan at its maximum
+    // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
+    const auto write = [&](std::size_t l, const std::vector<Step>& steps) {
+        const Active& a = actives[l];
+        const Emitter emitter_before = g;
+        g.reset_times();
+        write_layer(l, a, steps);
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
-        const Slowdown slowdown = active.volumetric_flow > 0.0
+        const Slowdown slowdown = a.volumetric_flow > 0.0
                                       ? Slowdown{}
+                                      : s.keep_outer_speed
+                                      ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
+                                                      s.min_print_speed)
                                       : plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
         if (slowdown.stage != 0) {
             g = emitter_before;
-            cursor = cursor_before;
-            seams = seams_before;
             g.pace(slowdown);
-            emit_layer(l, active.fan ? *active.fan : s.fan_max, active); // fan_max also on the first layers (owner's decision, 2026-10-24)
+            write_layer(l, a, steps);
             g.pace(Slowdown{});
-            const double reached = layer_time(g.extruded(), g.other_time(), slowdown);
+            const double reached = layer_time(g.extruded(), g.outer_extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {
                 char text[160];
                 std::snprintf(text, sizeof text, "the layer takes %.1f s even at 1 mm/min, less than the minimum of %.1f s",
@@ -1099,9 +1315,130 @@ void write_gcode(std::ostream& out, const SlicedModel& model, const Settings& s,
                 warnings->push_back({"layer_time", int(l), model.layers[l].top - base, text, reached});
             }
         }
+        // The fan: a height change's, else by the layer's time; a slowed layer
+        // at fan_max, even among the first layers, which otherwise print
+        // without fan (owner's decision, 2026-10-24). Bridges get their own.
+        const bool fan_off = l < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
+        const double fan = a.fan            ? *a.fan
+                           : fan_off        ? 0.0
+                           : slowdown.stage ? s.fan_max
+                                            : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
+                                                        s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
+                                                        s.fan_always);
+        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
         g.end_layer();
         g.flush(out);
-    }
+    };
+
+    // The scarf seam (docs/spec/features/walls_extra.md, rule 4): which wall
+    // loops start on a ramp. Not on the first layer, with nothing under the
+    // ramp but the bed, nor on a loop already off the layer's top (Z
+    // anti-aliasing) or laid over a wavy bead. A hole's loop runs with the
+    // hole on its left (every loop runs counter-clockwise): a bead to its
+    // left is out of the part.
+    const auto scarfed = [&](std::size_t l, const Step& step) {
+        if (s.scarf == ScarfMode::Nowhere || l == 0)
+            return false;
+        const Toolpath& t = step.path;
+        const bool outer = std::strcmp(step.type, "External perimeter") == 0;
+        if (!t.closed || t.wavy || t.points.size() < 3 || (!outer && (std::strcmp(step.type, "Perimeter") != 0 || !s.scarf_inner)))
+            return false;
+        for (const ToolpathPoint& p : t.points)
+            if (p.dz != 0.0 || p.below != 0.0)
+                return false;
+        if (s.scarf == ScarfMode::Contours && l < model.regions.size()) {
+            const Point2d& a = t.points[0].p;
+            const Point2d& b = t.points[1].p;
+            const double length = std::hypot(b.x - a.x, b.y - a.y);
+            if (length > 0.0) {
+                const double side = s.wall_width / length;
+                const double x = (a.x + b.x) / 2.0 - (b.y - a.y) * side, y = (a.y + b.y) / 2.0 + (b.x - a.x) * side;
+                if (!region_contains(model.regions[l], x, y))
+                    return false;
+            }
+        }
+        return !s.scarf_only_smooth || !has_sharp_corner(t);
+    };
+    // Where a path leaves the head: a closed one back at its start.
+    const auto end_of = [](const Toolpath& t) {
+        return t.closed && t.points.size() > 2 ? t.points.front().p : t.points.back().p;
+    };
+    // Planned in order, simplified and their travels planned in parallel, and
+    // written in order: the stages overlap across layers, and a slowed layer
+    // is written again from the same plan. Simplifying keeps a path's ends,
+    // so the last plan's end is where the next layer starts from.
+    std::vector<std::vector<Step>> planned(model.layers.size());
+    std::size_t next_layer = 0;
+    const std::size_t in_flight = 4 * std::max<std::size_t>(1, std::thread::hardware_concurrency());
+    tbb::parallel_pipeline(
+        in_flight,
+        tbb::make_filter<void, std::size_t>(tbb::filter_mode::serial_in_order,
+                                            [&](tbb::flow_control& control) -> std::size_t {
+                                                if (next_layer == model.layers.size()) {
+                                                    control.stop();
+                                                    return 0;
+                                                }
+                                                return next_layer++;
+                                            }) &
+            tbb::make_filter<std::size_t, std::size_t>(tbb::filter_mode::parallel,
+                                                       [&](std::size_t l) {
+                                                           if (s.seam != SeamMode::Aligned || l >= model.walls.size())
+                                                               return l;
+                                                           const std::vector<Toolpath>& walls = model.walls[l].toolpaths;
+                                                           loop_candidates[l].resize(walls.size());
+                                                           for (std::size_t k = 0; k < walls.size(); ++k)
+                                                               if (walls[k].closed && !walls[k].points.empty())
+                                                                   loop_candidates[l][k] = seam_candidates(walls[k]);
+                                                           return l;
+                                                       }) &
+            tbb::make_filter<std::size_t, std::size_t>(tbb::filter_mode::serial_in_order,
+                                                       [&](std::size_t l) {
+                                                           planned[l] = plan_layer(l, actives[l]);
+                                                           std::vector<std::vector<std::size_t>>().swap(loop_candidates[l]);
+                                                           if (s.vase) {
+                                                               const bool turn = l >= spiral_from && spiral_turn(planned[l], l);
+                                                               continues[l] = turn && after_turn;
+                                                               after_turn = turn;
+                                                           }
+                                                           for (Step& step : planned[l])
+                                                               if (step.type) {
+                                                                   step.from = last_end;
+                                                                   break;
+                                                               }
+                                                           for (const Step& step : planned[l])
+                                                               if (step.type)
+                                                                   last_end = end_of(step.path);
+                                                           return l;
+                                                       }) &
+            tbb::make_filter<std::size_t, std::size_t>(
+                tbb::filter_mode::parallel,
+                [&](std::size_t l) {
+                    const TravelPlanner& planner = *plans[plan_of[l]].planner;
+                    std::optional<Point2d> from;
+                    double height = model.layers[l].top - model.layers[l].bottom;
+                    for (Step& step : planned[l]) {
+                        if (!step.type) {
+                            height = step.height;
+                            continue;
+                        }
+                        step.path = simplify_toolpath(step.path, s.gcode_resolution);
+                        if (scarfed(l, step))
+                            step.path = scarf_loop(step.path, height, s.scarf_start_height / 100.0,
+                                                   s.scarf_entire_loop ? std::numeric_limits<double>::infinity()
+                                                                       : s.scarf_length,
+                                                   s.scarf_max_segment);
+                        if (from)
+                            step.from = from;
+                        if (step.from)
+                            step.travel = planner.plan(*step.from, step.path.points.front().p);
+                        from = end_of(step.path);
+                    }
+                    return l;
+                }) &
+            tbb::make_filter<std::size_t, void>(tbb::filter_mode::serial_in_order, [&](std::size_t l) {
+                write(l, planned[l]);
+                std::vector<Step>().swap(planned[l]);
+            }));
 
     g.type("Custom");
     g.flush(out);

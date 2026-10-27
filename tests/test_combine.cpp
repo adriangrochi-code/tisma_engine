@@ -9,6 +9,7 @@
 #include "gcode/writer.hpp"
 #include "perimeters/coverage.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -27,10 +28,9 @@ using Runs = std::vector<std::array<std::size_t, 2>>;
 
 namespace {
 
-IndexedMesh cube(float side) {
+IndexedMesh block(float x, float y, float z) {
     IndexedMesh m;
-    m.vertices = {{0, 0, 0}, {side, 0, 0}, {side, side, 0}, {0, side, 0},
-                  {0, 0, side}, {side, 0, side}, {side, side, side}, {0, side, side}};
+    m.vertices = {{0, 0, 0}, {x, 0, 0}, {x, y, 0}, {0, y, 0}, {0, 0, z}, {x, 0, z}, {x, y, z}, {0, y, z}};
     auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
         m.triangles.push_back({a, b, c});
         m.triangles.push_back({a, c, d});
@@ -42,10 +42,12 @@ IndexedMesh cube(float side) {
     return m;
 }
 
+IndexedMesh cube(float side) { return block(side, side, side); }
+
 // The spec's base settings (infill_patterns.md): 0.4 nozzle, 0.2 layers, two
 // walls, three solid layers up and down, rectilinear 20 %, no skirt or brim.
 Settings base() {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.layer_height = 0.2;
@@ -432,6 +434,39 @@ TEST_CASE("a solid layer every N layers, printed as a bridge (P12)", "[combine]"
     CHECK(!sliced.fills[6].sparse.empty());
     CHECK(sliced.fills[6].bridge.empty());
     CHECK(out.str().find(";TYPE:Bridge infill") != std::string::npos);
+}
+
+TEST_CASE("small infill zones are solid (surfaces_infill.md, rule 9, test I6)", "[combine]") {
+    // A leg of the spec's table, 5 x 20 x 5 mm: inside two walls, an infill
+    // zone of 3.4 x 18.4 = 62.6 mm2, under the 70 mm2 of the default.
+    const IndexedMesh leg = block(5.0f, 20.0f, 5.0f);
+    Settings s = base();
+    const SlicedModel sliced = slice_model(leg, s);
+    std::ostringstream out;
+    write_gcode(out, sliced, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(sliced, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    REQUIRE(sliced.surfaces.size() == 25);
+    for (std::size_t l = 0; l < sliced.surfaces.size(); ++l) {
+        INFO("layer " << l);
+        CHECK(sliced.surfaces[l].sparse.empty());
+        CHECK(sliced.fills[l].sparse.empty());
+    }
+    CHECK_THAT(area_mm2(sliced.surfaces[12].bottom), WithinAbs(62.6, 0.5));
+    CHECK(!sliced.fills[12].solid.empty());
+    // Off, or with no infill asked for: the middle layers keep their sparse zone.
+    Settings off = s;
+    off.infill_solid_below_area = 0.0;
+    CHECK(!slice_model(leg, off).surfaces[12].sparse.empty());
+    Settings hollow = s;
+    hollow.infill_density = 0.0;
+    CHECK(!slice_model(leg, hollow).surfaces[12].sparse.empty());
+    // A zone just over the limit stays sparse: the 20 mm cube's is 335 mm2.
+    CHECK(!slice_model(cube(20.0f), s).surfaces[50].sparse.empty());
+    Settings big = s;
+    big.infill_solid_below_area = 340.0;
+    CHECK(slice_model(cube(20.0f), big).surfaces[50].sparse.empty());
 }
 
 TEST_CASE("the minimum shell thickness adds solid layers (P13)", "[combine]") {

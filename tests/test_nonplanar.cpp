@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -36,7 +37,7 @@ IndexedMesh cube(float side) {
 }
 
 Settings wavy(InfillPattern pattern) {
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.wall_width = 0.4;

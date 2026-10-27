@@ -6,13 +6,14 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <sstream>
 #include <string>
 #include <string_view>
 
 namespace {
 
 constexpr const char* kUsage =
-    "usage: tisma [model.stl | project.tisma | file.gcode | settings.json]...\n"
+    "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
     "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
@@ -20,10 +21,16 @@ constexpr const char* kUsage =
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
-    "                                   [--layer N]\n"
+    "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
+    "                                   [--tool move|rotate|scale|lay|paint]\n"
+    "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
+    "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
+    "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check] [--moire-check]]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
+    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl]\n"
+    "                                   [--compare-view other.png]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -32,7 +39,14 @@ constexpr const char* kUsage =
     "the picture. --browse shows the file browser. --profile chooses a profile.\n"
     "--render picks the lighting: fast, ambient occlusion or ray tracing (which the\n"
     "screenshot waits --ray-samples frames for; --ray-check compares the GPU's\n"
-    "shadow rays with the CPU's and exits with 1 if they differ).\n";
+    "shadow rays with the CPU's and exits with 1 if they differ). --bench-frames\n"
+    "draws the ready 3D view N more times and prints the time per frame.\n"
+    "--graphics chooses what draws the window: auto (the default) finds whether\n"
+    "this machine has Vulkan and takes OpenGL if not; vulkan asks for it (in\n"
+    "progress: the view without its ambient occlusion and ray tracing yet, so auto\n"
+    "takes OpenGL for now). --compare-view compares the 3D view with the one in\n"
+    "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
+    "than 0.5% of its pixels differ by more than 24 levels.\n";
 
 } // namespace
 
@@ -73,6 +87,60 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--layer") {
             options.layer = std::atoi(value());
+        } else if (arg == "--tool") {
+            options.tool = value();
+            if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
+                options.tool != "paint") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
+                return 2;
+            }
+        } else if (arg == "--info") {
+            options.info = value();
+        } else if (arg == "--level") {
+            options.level = value();
+            if (options.level != "basic" && options.level != "normal" && options.level != "advanced") {
+                std::fprintf(stderr, "error: --level must be basic, normal or advanced\n");
+                return 2;
+            }
+        } else if (arg == "--section") {
+            options.section = value(); // print/quality, material/cooling, printer/machine...
+        } else if (arg == "--tips") {
+            options.tips = true;
+        } else if (arg == "--tour") {
+            const std::string text = value();
+            options.tour = text.size() == 1 && text[0] >= '0' && text[0] <= '6' ? text[0] - '0' : -2;
+            if (options.tour < 0) {
+                std::fprintf(stderr, "error: --tour must be a step from 0 to 6\n");
+                return 2;
+            }
+        } else if (arg == "--paint") {
+            // channel,mark,x,y,z,radius: support or seam, enforce or block, mm.
+            std::string text = value();
+            for (char& c : text)
+                c = c == ',' ? ' ' : c;
+            std::istringstream in(text);
+            tisma::ui::AppOptions::Stroke stroke;
+            std::string mark;
+            if (!(in >> stroke.channel >> mark >> stroke.x >> stroke.y >> stroke.z >> stroke.radius) ||
+                (stroke.channel != "support" && stroke.channel != "seam" && stroke.channel != "fuzzy") ||
+                (mark != "enforce" && mark != "block") ||
+                !(stroke.radius > 0.0f)) {
+                std::fprintf(stderr, "error: --paint must be support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS\n");
+                return 2;
+            }
+            stroke.block = mark == "block";
+            options.strokes.push_back(stroke);
+        } else if (arg == "--look") {
+            std::string text = value();
+            for (char& c : text)
+                c = c == ',' ? ' ' : c;
+            std::istringstream in(text);
+            for (float v; in >> v;)
+                options.look.push_back(v);
+            if (options.look.size() != 6 || !(options.look[3] > 0.0f)) {
+                std::fprintf(stderr, "error: --look must read X,Y,Z,DISTANCE,YAW,PITCH (mm and degrees)\n");
+                return 2;
+            }
         } else if (arg == "--export") {
             options.export_path = value();
         } else if (arg == "--catalog") {
@@ -124,6 +192,16 @@ int main(int argc, char** argv) {
             options.moire = on == "on" ? 1 : 0;
         } else if (arg == "--ray-samples") {
             options.ray_samples = std::max(1, std::atoi(value()));
+        } else if (arg == "--graphics") {
+            options.graphics = value();
+            if (options.graphics != "auto" && options.graphics != "vulkan" && options.graphics != "opengl") {
+                std::fprintf(stderr, "error: --graphics must be auto, vulkan or opengl\n");
+                return 2;
+            }
+        } else if (arg == "--bench-frames") {
+            options.bench_frames = std::max(1, std::atoi(value()));
+        } else if (arg == "--compare-view") {
+            options.compare_view = value();
         } else if (arg == "--ray-check") {
             options.ray_check = true;
         } else if (arg == "--moire-check") {
@@ -165,9 +243,10 @@ int main(int argc, char** argv) {
         }
     }
     if ((!options.export_path.empty() || !options.save_project.empty() || !options.browse.empty() || options.ray_check ||
-         options.moire_check) &&
+         options.moire_check || !options.compare_view.empty()) &&
         options.screenshot.empty()) {
-        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check and --moire-check go with --screenshot\n");
+        std::fprintf(stderr, "error: --export, --save-project, --browse, --ray-check, --moire-check and --compare-view go "
+                             "with --screenshot\n");
         return 2;
     }
     if (options.device_print && (options.device.empty() || options.screenshot.empty())) {

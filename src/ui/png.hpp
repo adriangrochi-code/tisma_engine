@@ -1,5 +1,7 @@
 #pragma once
 
+#include "io/checksum.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -16,8 +18,28 @@ std::vector<std::uint8_t> encode_png(int width, int height, const std::uint8_t* 
 // Writes it; false if the file cannot be written.
 bool write_png(const std::filesystem::path& path, int width, int height, const std::uint8_t* rgba);
 
-// CRC-32 of the PNG specification (ISO 3309), and Adler-32 of RFC 1950.
-std::uint32_t crc32(const std::uint8_t* data, std::size_t size, std::uint32_t crc = 0);
-std::uint32_t adler32(const std::uint8_t* data, std::size_t size, std::uint32_t adler = 1);
+// Reads back a PNG as encode_png writes it (8-bit RGBA, stored blocks,
+// filter type 0): the screenshots, for comparing them. False for any other
+// PNG, or a damaged one.
+bool decode_png(const std::vector<std::uint8_t>& png, int& width, int& height, std::vector<std::uint8_t>& rgba);
+bool read_png(const std::filesystem::path& path, int& width, int& height, std::vector<std::uint8_t>& rgba);
+
+// How two pictures of the same size differ inside a rectangle (x, y, w, h
+// in pixels from the top left): the pixels that differ at all, those that
+// differ by more than `tolerance` in some channel (0 to 255) and the largest
+// difference. Alpha is not compared.
+struct PictureDifference {
+    std::size_t pixels = 0;
+    std::size_t differing = 0;
+    std::size_t over = 0;
+    int largest = 0;
+};
+PictureDifference compare_pictures(const std::uint8_t* a, const std::uint8_t* b, int width, int height, int x, int y,
+                                   int w, int h, int tolerance);
+
+// CRC-32 of the PNG specification (ISO 3309), and Adler-32 of RFC 1950
+// (io/checksum.hpp).
+using tisma::adler32;
+using tisma::crc32;
 
 } // namespace tisma::ui

@@ -34,7 +34,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Lugar | Qué tiene |
 |---|---|
 | Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (guardar el proyecto, idioma, tema claro u oscuro, acerca de, salir). |
-| Panel izquierdo | Los ajustes, en tres secciones con sus íconos, cada una con su fila de perfil arriba (ver «Perfiles y proyectos»): **Impresión** (capas —con la altura por zona, la altura variable por Z (escalón en pendientes y alturas por Z, `docs/VARIABLE_LAYERS.md`) y Z anti-aliasing (espesor mínimo y subida, `docs/ZAA.md`)—, paredes, superficies, relleno (con combinar capas, denso bajo el techo y guiado por tensiones con su caso de carga, `docs/INFILL.md`), soportes, falda y borde, velocidades), **Filamento** (diámetro, temperaturas, flujo, ventilador) e **Impresora** (cama, altura, boquilla, capa mínima y máxima, dialecto, retracción, G-code de inicio y fin). Abajo: cargar, guardar y restablecer todos los ajustes como JSON. |
+| Panel izquierdo | Los ajustes por secciones y tarjetas (ficha `settings_panel.md`, reglas 1 a 14; `src/ui/settings_layout.*`). Arriba, las pestañas **Impresión**, **Material** e **Impresora**, cada una con su fila de perfil (ver «Perfiles y proyectos»), y a la derecha el **nivel**: Básico (lo que casi toda impresión necesita), Normal (más ajustes para afinar) o Avanzado (todos), con Ctrl+Alt+1, 2 y 3. A la izquierda, la columna de secciones con su ícono (Impresión: Calidad, Resistencia, Velocidad, Soportes, Adhesión, Otros; Material: Temperaturas, Enfriamiento, Flujo, Retracción, Necesidades; Impresora: Máquina, Boquilla y extrusor, Límites, G-code); un punto violeta marca la que tiene cambios, y al pasar el puntero se ven sus apartados. A la derecha, los apartados de la sección elegida en **tarjetas plegables**: cerrada, una línea con lo más importante («0,2 mm · primera 0,2 mm», «40 % · Rectilínea»); con cambios respecto del perfil, «2 cambios» en violeta. Los ajustes que cuelgan de un interruptor se ven solo con él encendido (soportes, Z anti-aliasing, relleno ondulado, denso bajo el techo, bufanda; la tarjeta Árbol de Soportes, con el estilo en árbol). Un nivel nunca esconde un ajuste cambiado: se ve con la etiqueta gris de su nivel; al pie de cada tarjeta, «N ajustes más…» con **Mostrar todos**. El nivel, la sección de cada pestaña y las tarjetas abiertas se recuerdan. El nivel no cambia el G-code. Abajo: cargar, guardar y restablecer todos los ajustes como JSON. Las velocidades son de la impresora, y una que no trae las suyas toma las de respaldo de una Ender-3, con un aviso (`docs/CONFIG.md`, «Velocidades»). |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
 
@@ -51,13 +51,62 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Laminar | Ctrl+R |
 | Exportar | Ctrl+E |
 | Capas de la vista previa | Flechas arriba y abajo, Re Pág y Av Pág, Inicio y Fin, o la rueda sobre la barra de capas |
+| Elegir un modelo de la placa | Clic sobre él; clic en la cama vacía: ninguno |
+| Mover un modelo | Arrastrarlo con el botón izquierdo |
+| Herramientas de la placa | M mover, R rotar, S escalar, F apoyar en una cara, A organizar, P pintar, Supr quitar, Esc ninguna |
 
 ### Preparar
 
 Al abrir un STL, el modelo queda centrado en la cama y apoyado en ella (Z = 0). Cambiar el tamaño de la cama lo vuelve
 a centrar. **Laminar** corre el motor en segundo plano y la ventana sigue respondiendo.
 
-El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos:
+#### Herramientas de la placa
+
+La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
+izquierda de la vista 3D, una columna con:
+
+| Herramienta | Qué hace |
+|---|---|
+| **Agregar** | Suma un modelo (STL, OBJ o 3MF) a la placa y la ordena. Soltar uno sobre una placa con modelos también lo suma; **Abrir** empieza una placa nueva |
+| **Quitar**, **Duplicar** | El modelo elegido |
+| **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta |
+| **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
+| **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original** |
+| **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
+| **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
+| **Pintar** (P) | Soportes, costura (Forzar o Bloquear) o piel difusa, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Colores aparece apagado hasta que el motor tenga varios extrusores |
+
+Cada modelo queda siempre apoyado en la cama. El elegido se ve más claro. La lógica está en `src/ui/plate.*`, sin
+OpenGL, con sus pruebas (`tests/test_plate.cpp`). Un proyecto guarda cada modelo ya ubicado (con su giro y su escala
+aplicados) y su pintura, así se abre igual; ya no se queda solo con el primero.
+
+#### Modelos grandes
+
+Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
+- **Arrastrar:** antes, cada cuadro rehacía la malla ubicada, la de la placa y la copia de la vista (unos 200 ms sin contar
+  la subida a la GPU: 5 cuadros por segundo). Ahora la vista corre el modelo con un desplazamiento en el shader y la malla se rehace una vez,
+  al soltarlo.
+- **Clic y pincel:** cada modelo ubicado tiene un árbol de cajas (`TriangleIndex`, `src/ui/plate.*`), armado la primera
+  vez que hace falta después de un cambio (250 ms). Un clic pasa de 57 ms a 3 µs, y un paso del pincel, de 13–18 ms
+  a 2 ms.
+- **El motor**, para comparar: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificarlo 0,04 s y la vista previa 0,06 s.
+- **Vulkan** (2026-10-26, `PLAN.md`, «Vista con Vulkan»): `--graphics auto|vulkan|opengl` elige qué dibuja la
+  ventana. El programa detecta si la máquina tiene Vulkan al intentar arrancarlo (el cargador, un dispositivo Vulkan
+  1.1, una superficie para la ventana y los shaders de la vista); si no puede, avisa y sigue con OpenGL. Vulkan dibuja
+  los paneles y la vista 3D (cama, modelo, pintura, vista previa, MSAA y FXAA) con la luz rápida; la oclusión ambiental
+  y el ray tracing todavía no, así que `auto` usa OpenGL hasta que estén. `--compare-view otra.png` compara la vista
+  con la de otra captura (la de OpenGL): las pruebas `ui_view_*` piden que menos del 0,5 % de sus píxeles difiera en
+  más de 24 niveles, porque cada driver rasteriza un poco distinto los bordes.
+- **Vista previa** (2026-10-26, `docs/LARGE_MODELS.md`): con la pieza entera a la vista, las paredes internas y el
+  relleno que la pieza tapa por todos lados no se dibujan; la imagen es la misma. En un cilindro de 60 × 80 mm se
+  dibujan 52 499 cordones de 181 384, y el cuadro pasa de 2 330 a 633 ms en la GPU por software del contenedor. La
+  barra de estado muestra lo que tarda la GPU en dibujar la vista y los FPS que permite; `--bench-frames N` lo mide
+  para las capturas.
+
+El laminado hace lo mismo que `tisma-engine slice`, sin escribir archivos. Va por etapas (2026-10-26): si desde el
+último laminado cambiaron solo ajustes que lee el G-code (velocidades, límites de movimiento, enfriamiento y
+ventilador, retracción, temperaturas, flujo, el G-code de la impresora), se rehace solo el G-code, su verificación y la
+vista previa, con el mismo resultado byte a byte; la barra de estado dice «G-code rehecho». Pasos:
 - las comprobaciones de la malla y de la pieza laminada;
 - el G-code en memoria;
 - su verificación (`docs/GCODE_CHECK.md`).
@@ -164,10 +213,28 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   normales de todo el perfil de la línea, cada una pesada por cuánto mira al ojo (lo que ese píxel vería de verdad),
   y ensancha el brillo lo que se abren esas normales (Toksvig 2005). De cerca no cambia nada. En la grilla de la cama, cada línea se desvanece cuando la siguiente de su clase queda a
   menos de unos píxeles (las mayores aguantan más, porque están más separadas); el contorno de la cama no cambia.
+- **Ranuras entre capas** (pedido del dueño, 2026-10-26: mejorar la oclusión y el color «como Prusa 3.0», con las
+  imágenes del lanzamiento como referencia de caja negra): en los modos rápido y de oclusión, cada cordón de la vista
+  previa calcula cuánto cielo y cuánta luz principal le tapan el cordón de la capa de arriba y el de la de abajo, sobre
+  el perfil, con la fórmula de horizontes de la oclusión ambiental (Bavoil, Sainz y Dimitrov 2008) resuelta exacta para
+  dos cordones que se tocan. Así cada capa se ve como un tubo con su ranura oscura, como en una pieza impresa. Se
+  aplica solo entre los tipos que suelen apilarse (paredes, relleno, soporte), dentro de las capas mostradas: la
+  superficie de arriba, el borde y la última capa mostrada no tienen nada encima. La luz principal es suave (unos 35°),
+  así la sombra del cordón de arriba entra con penumbra. De lejos la ranura se promedia con el resto del perfil, como
+  las normales del filtro de moiré. Con ray tracing no se aplica: los rayos ya ven a los vecinos.
+- **Sombra sobre la cama** (modo de oclusión ambiental, mismo pedido): un mapa de profundidad desde la luz principal
+  (Williams 1978), rehecho solo cuando cambia la imagen, como la oclusión, y leído con filtrado de porcentaje cercano
+  (Reeves, Salesin y Cook 1987), así el borde sale suave. Por ahora solo la cama recibe la sombra: sobre la pieza, los
+  escalones entre capas (del tamaño de un texel del mapa) se sombreaban entre sí en anillos. La oclusión en pantalla
+  ya no cuenta lo que está a menos de unas dos capas: eso lo hacen las ranuras.
+- **Color:** la curva de tono se aplica al canal más brillante y los otros se escalan con él, así un color saturado
+  brillante no se lava hacia el blanco; los grises quedan como antes.
 - **Intensidad de la oclusión:** se elige entre 0 y 1,5.
 - **El ray tracing usa la GPU con OpenGL 3.3, sin hardware especial.** La escena se arma en otro hilo como una
   jerarquía de volúmenes (BVH) y viaja a la GPU como texturas.
   - El recorrido de la GPU es una copia del de la CPU (`src/ui/raytrace.*`), que es la referencia.
+  - Los cordones de la vista previa son los mismos prismas que dibuja la vista, unidos en inglete: las sombras y la
+    oclusión de una pared son continuas, sin muescas entre tramos.
   - La prueba `ui_raytrace_matches_cpu` dispara en la GPU los rayos de sombra del primer cuadro, repite los mismos
     rayos en la CPU y exige que coincidan.
 - **Modelos muy grandes:** si la escena no entra en las texturas de la GPU (más de 4 millones de primitivas, o
@@ -185,6 +252,23 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   usuario, en la carpeta `profiles` de al lado.
 - **Idiomas:** español (por defecto) e inglés. Se elige en **Más** o con `--lang en`.
 
+### Ayuda
+
+Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
+información al lado de cada ajuste.
+
+- **Asistente:** se abre solo la primera vez (sin preferencias guardadas), y desde **Más > Tutorial**. Siete pasos
+  abajo de la vista: abrir un modelo, elegir impresora, filamento y perfil, los ajustes, las herramientas de la placa,
+  laminar y revisar, imprimir. **Atrás**, **Siguiente** y **Saltar**.
+- **Consejos:** la primera vez que se usa Mover, Rotar, Escalar, Apoyar en una cara, Organizar, Pintar, el laminado,
+  la Vista previa, Análisis, Calibración o Impresora, una tarjeta abajo de la vista explica cómo se usa. **Entendido**
+  no la muestra más; **No mostrar más consejos** los apaga. En **Más**: **Consejos al usar cada función** (prenderlos o
+  apagarlos) y **Ver los consejos de nuevo**. Lo visto se guarda en las preferencias (`tips`, `tips_seen`).
+- **Botón (i):** al lado del nombre de cada ajuste del motor. Un clic abre qué hace, su clave, su valor por defecto y
+  su rango. El texto sale de `docs/CONFIG.md`, que el programa lleva adentro (`src/ui/help.*`): la ayuda dice siempre
+  lo mismo que la documentación. En inglés, el texto sigue en español y lo avisa. La prueba «help: every setting the
+  engine writes has its explanation in docs/CONFIG.md» falla si un ajuste nuevo no tiene su fila.
+
 ## Capturas y pruebas automáticas
 
 `tisma` puede dibujarse sin nadie frente a la pantalla, para las pruebas y para mostrar cambios:
@@ -197,6 +281,11 @@ tisma modelo.stl --screenshot vista.png --ray-check
 tisma --screenshot explorador.png --browse /una/carpeta
 tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot vista.png --save-project p.tisma
 ```
+
+Varios STL en la línea de comandos arman una placa: el primero la abre y los demás se suman. `--tool
+move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
+`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). Las capturas no muestran la ayuda salvo que se pida:
+`--tips` (los consejos), `--tour PASO` (el asistente, de 0 a 6) y `--info grupo.clave` (la tarjeta de un ajuste).
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
@@ -220,7 +309,13 @@ sombras en lugar de la luz, para revisarlas.
   - `ui_device_prints_to_simulator`: el cubo laminado e impreso en la impresora simulada desde la pestaña Impresora
     (`docs/DEVICE.md`);
   - `ui_project_save`, `ui_project_reopen` y `ui_project_same_gcode`: el cubo con los perfiles PETG y 0.28 mm se
-    exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos.
+    exporta y se guarda como proyecto; el proyecto se abre de nuevo y se exporta; los dos G-code son idénticos;
+  - `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: lo mismo con una placa de dos cubos, ordenada, con la
+    herramienta Escalar abierta.
+  - `ui_help_tour` y `ui_help_tip_and_info`: el cuarto paso del asistente; el consejo de Pintar con la tarjeta de
+    `walls.seam` abierta;
+  - `ui_paint_save`, `ui_paint_reopen` y `ui_paint_same_gcode`: una costura pintada en un cubo (`--paint`), exportada,
+    guardada en el proyecto y vuelta a abrir, da el mismo G-code.
 
 ## Cómo está hecha
 
@@ -230,9 +325,15 @@ sombras en lugar de la luz, para revisarlas.
 | Programa | `apps/tisma/` | Ventana (GLFW), paneles (Dear ImGui), cargador propio de OpenGL 3.3 (`gl.hpp`), dibujo 3D (`renderer.*`), explorador de archivos propio, recursos incrustados. |
 | Recursos | `assets/brand/`, `cmake/embed.cmake` | Los íconos de Tisma y la fuente Roboto Medium van dentro del programa, que corre desde cualquier carpeta. |
 
-- **Dibujo de la vista previa:** cada extrusión es una instancia de 40 bytes (extremos, ancho, alto, avance, tipo y
-  capa). El shader de vértices arma un prisma de sección rómbica con normales de elipse. Los datos son contiguos y
-  quedan en la GPU; mostrar otra capa no los vuelve a subir.
+- **Dibujo de la vista previa:** cada extrusión es una instancia de 56 bytes (extremos, ancho, alto, avance, tipo,
+  capa y las uniones). El shader de vértices arma un prisma de sección rómbica:
+  - donde el cordón sigue en el movimiento siguiente, los dos terminan en el plano de la bisectriz (inglete) y
+    comparten las esquinas, sin puntas que sobresalgan ni caras encimadas que titilen;
+  - un extremo libre (la costura, un giro de más de 120°) crece medio ancho, como el cordón después de la boquilla;
+  - la luz sigue el perfil de un cordón impreso, calculado por píxel: plano arriba y abajo, redondo a los costados.
+
+  Los datos son contiguos y quedan en la GPU; mostrar otra capa no los vuelve a subir. `--look X,Y,Z,DISTANCIA,GIRO,
+  INCLINACIÓN` pone la cámara de la captura cerca de las líneas.
 - **Un cuadro de la vista 3D, todo fuera de pantalla y del tamaño de la vista:**
   1. normales y profundidad de la escena;
   2. cuánta luz principal y cuánta luz ambiente llega a cada píxel: oclusión en pantalla o rayos;

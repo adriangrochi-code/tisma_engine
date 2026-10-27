@@ -55,6 +55,11 @@ void level_segments_by_triangle(const IndexedMesh& mesh, std::span<const float> 
                                 std::span<const std::uint32_t> first, std::span<const std::uint32_t> end,
                                 std::vector<std::uint32_t>& offsets, std::vector<LevelSegment>& out);
 
+// Where the level iso crosses the mesh edge `edge`: the same point, to the
+// bit, as level_set_segments gives on it. One end's value must be >= iso and
+// the other's below it.
+Vec3f edge_crossing(const IndexedMesh& mesh, std::span<const float> values, float iso, EdgeKey edge);
+
 // The planar field: the z coordinate of each vertex.
 std::vector<float> height_field(const IndexedMesh& mesh);
 

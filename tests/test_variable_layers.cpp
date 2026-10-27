@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -88,7 +89,7 @@ double extruded_volume(const std::string& gcode, double filament_diameter) {
 } // namespace
 
 TEST_CASE("variable layers: the list of (z, height) steps", "[variable_layers]") {
-    Settings s;
+    Settings s = test_printer();
     s.layer_height = 0.2;
     s.first_layer_height = 0.2;
     const IndexedMesh m = box(10, 10, 5);
@@ -162,7 +163,7 @@ TEST_CASE("variable layers: the list of (z, height) steps", "[variable_layers]")
 }
 
 TEST_CASE("variable layers: adaptive by slope", "[variable_layers]") {
-    Settings s;
+    Settings s = test_printer();
     s.layer_height = 0.3;
     s.first_layer_height = 0.2;
     s.cusp_height = 0.05;
@@ -225,7 +226,7 @@ TEST_CASE("variable layers: the skins count in thick layers", "[variable_layers]
 
 TEST_CASE("variable layers: one complex part sliced to checked G-code", "[variable_layers]") {
     const IndexedMesh m = dome_on_column(10.0f, 6.0f);
-    Settings base;
+    Settings base = test_printer();
     base.gpu = GpuMode::Off;
     base.relative_extrusion = true;
     base.layer_height = 0.3;

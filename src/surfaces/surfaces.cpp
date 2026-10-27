@@ -50,18 +50,43 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
 std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& regions, const std::vector<Polygons>& infill,
                                              const std::vector<int>& top_counts, const std::vector<int>& bottom_counts,
                                              double min_width) {
-    std::vector<LayerSurfaces> out(infill.size());
-    tbb::parallel_for(std::size_t(0), infill.size(), [&](std::size_t i) {
+    const std::size_t n = infill.size();
+    std::vector<LayerSurfaces> out(n);
+    const auto top_at = [&](std::size_t i) { return i < top_counts.size() ? top_counts[i] : 0; };
+    const auto bottom_at = [&](std::size_t i) { return i < bottom_counts.size() ? bottom_counts[i] : 0; };
+    // A layer whose infill region, counts and every region they reach are the
+    // layer below's has its surfaces too (prismatic parts; the speed
+    // report's V10): only the first of such a run is worked out.
+    std::vector<char> same_region(regions.size(), 0), same(n, 0);
+    tbb::parallel_for(std::size_t(1), regions.size(), [&](std::size_t j) { same_region[j] = regions[j] == regions[j - 1]; });
+    tbb::parallel_for(std::size_t(1), n, [&](std::size_t i) {
+        const int top = top_at(i), bottom = bottom_at(i);
+        if (top != top_at(i - 1) || bottom != bottom_at(i - 1) || i < std::size_t(bottom) + 1 ||
+            i + std::size_t(top) >= regions.size() || !(infill[i] == infill[i - 1]))
+            return;
+        for (std::size_t j = i - std::size_t(bottom); j <= i + std::size_t(top); ++j)
+            if (j != i && !same_region[j])
+                return;
+        same[i] = 1;
+    });
+    tbb::parallel_for(std::size_t(0), n, [&](std::size_t i) {
         LayerSurfaces& s = out[i];
-        if (infill[i].empty())
+        if (same[i] || infill[i].empty())
             return;
         Polygons rest = infill[i];
-        const int top_layers = i < top_counts.size() ? top_counts[i] : 0;
-        const int bottom_layers = i < bottom_counts.size() ? bottom_counts[i] : 0;
+        const int top_layers = top_at(i);
+        const int bottom_layers = bottom_at(i);
         if (top_layers > 0) {
             s.top = Clipper2Lib::Difference(rest, covered_by_all(regions, i, top_layers, +1), FillRule::NonZero);
             s.top = widen_thin(s.top, rest, min_width);
             rest = Clipper2Lib::Difference(rest, s.top, FillRule::NonZero);
+            if (top_layers > 1) {
+                // Right under the air: what the next layer does not cover.
+                Polygons exposed =
+                    Clipper2Lib::Difference(s.top, covered_by_all(regions, i, 1, +1), FillRule::NonZero);
+                exposed = widen_thin(exposed, s.top, min_width);
+                s.top_under = Clipper2Lib::Difference(s.top, exposed, FillRule::NonZero);
+            }
         }
         if (bottom_layers > 0) {
             s.bottom = Clipper2Lib::Difference(rest, covered_by_all(regions, i, bottom_layers, -1), FillRule::NonZero);
@@ -70,6 +95,9 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
         }
         s.sparse = std::move(rest);
     });
+    for (std::size_t i = 1; i < n; ++i)
+        if (same[i])
+            out[i] = out[i - 1];
     return out;
 }
 

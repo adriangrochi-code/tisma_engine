@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <map>
+#include <span>
 #include <vector>
 
 namespace tisma {
@@ -48,11 +49,39 @@ inline constexpr double kSeamSpan = 0.1;    // mm: a corner's turn is measured t
 std::size_t seam_point(const Toolpath& loop, SeamMode mode, const Point2d& from, std::uint64_t seed,
                        const SeamMemory& memory);
 
+// The points of a loop an aligned seam picks among: its concave corners, or
+// all its points if it has none. They depend on the loop alone, so they are
+// found apart, for many loops and layers at once, and only the pick follows
+// the layer below (docs/spec/features/perimeters.md, rule 8).
+std::vector<std::size_t> seam_candidates(const Toolpath& loop);
+
+// Whether a loop turns sharply anywhere, either way: more than kSeamCorner,
+// measured to the points kSeamSpan away on each side, as the aligned seam
+// measures its corners. A cube's walls do, a cylinder's do not (the scarf
+// seam's walls.scarf_only_smooth).
+bool has_sharp_corner(const Toolpath& loop);
+
+// The seams painted on a layer (docs/PAINTING.md): a loop that crosses an
+// enforced area starts in it, in the aligned and rear modes at the middle of
+// the longest stretch of the loop inside (a painted line keeps the seam on
+// it), in the others where the mode chooses among the points inside; one that
+// crosses a blocked area starts outside it if any of the loop is. Points every
+// kSeamPaintStep along the loop count, so a spot between two corners is found.
+struct SeamPaint {
+    const Polygons* enforce = nullptr;
+    const Polygons* block = nullptr;
+    bool empty() const { return (!enforce || enforce->empty()) && (!block || block->empty()); }
+};
+inline constexpr double kSeamPaintStep = 0.25; // mm
+
 // Orders paths greedily: from `cursor`, the path whose start is nearest next.
 // An open path may run either way; a closed loop starts at its seam (rotated
-// so). Moves `cursor` to the end of the last path and records the seams.
+// so). Moves `cursor` to the end of the last path and records the seams. A
+// seam painted between two points of a loop is added to it. `candidates`, if
+// given, holds each path's seam_candidates (or null), found beforehand.
 std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, SeamMode mode, std::uint64_t seed,
-                                  SeamMemory& memory);
+                                  SeamMemory& memory, const SeamPaint* paint = nullptr,
+                                  std::span<const std::vector<std::size_t>* const> candidates = {});
 
 // The islands of a layer region: its connected pieces, each an outer contour
 // (counter-clockwise) with its holes (clockwise). An island inside another's

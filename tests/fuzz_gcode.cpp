@@ -12,6 +12,7 @@
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "test_printer.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -99,7 +100,7 @@ int main(int argc, char** argv) {
     shapes.push_back({"cylinder", revolve(128, 8, 5.0f, 7.0f, false, 0, 0)});
     int failures = 0, rejected = 0;
     for (int run = 0; run < runs; ++run) {
-        Settings s;
+        Settings s = test_printer();
         s.layer_height = uni(0.08, 0.32);
         s.first_layer_height = uni(0.1, 0.4);
         s.wall_count = pick(7);
@@ -118,6 +119,17 @@ int main(int argc, char** argv) {
         s.monotonic_top = pick(2) == 0;
         s.support = pick(3) == 0;
         s.support_angle = pick(2) == 0 ? 0.0 : uni(20, 70);
+        if (pick(2) == 0) { // organic supports
+            s.support_style = SupportStyle::Organic;
+            s.tree_angle = uni(0, 85);
+            s.tree_angle_preferred = uni(0, 85);
+            s.tree_branch_diameter = uni(0.5, 8);
+            s.tree_branch_diameter_angle = uni(0, 15);
+            s.tree_double_wall_diameter = pick(3) == 0 ? 0.0 : uni(1, 10);
+            s.tree_branch_distance = uni(0.3, 4);
+            s.tree_tip_diameter = uni(0.2, 3);
+            s.tree_top_rate = uni(1, 100);
+        }
         s.brim_width = pick(3) == 0 ? uni(0, 8) : 0.0;
         s.skirt_loops = pick(4);
         s.skirt_distance = uni(1, 6);
@@ -125,6 +137,17 @@ int main(int argc, char** argv) {
         s.retract_lift = pick(3) == 0 ? uni(0, 1) : 0.0;
         s.relative_extrusion = pick(2) == 0;
         s.seam = std::array{SeamMode::Aligned, SeamMode::Nearest, SeamMode::Random, SeamMode::Rear}[std::size_t(pick(4))];
+        if (pick(8) == 0 && !s.support) // vase mode, never with supports
+            s.vase = true;
+        if (pick(3) == 0) { // the scarf seam
+            s.scarf = pick(2) == 0 ? ScarfMode::Contours : ScarfMode::Everywhere;
+            s.scarf_only_smooth = pick(2) == 0;
+            s.scarf_start_height = pick(2) == 0 ? 0.0 : uni(0, 90);
+            s.scarf_length = uni(0.5, 30);
+            s.scarf_entire_loop = pick(4) == 0;
+            s.scarf_max_segment = uni(0.2, 3);
+            s.scarf_inner = pick(3) == 0;
+        }
         s.min_layer_time = uni(0, 30);
         s.filament_diameter = pick(4) == 0 ? 2.85 : 1.75;
         s.xy_offset = pick(4) == 0 ? uni(-0.2, 0.2) : 0.0;
@@ -229,6 +252,9 @@ int main(int argc, char** argv) {
                 for (const auto& step : s.layer_heights)
                     std::printf(" %.3f:%.3f", step[0], step[1]);
                 std::printf("\n");
+                std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d\n", int(s.vase), int(s.scarf),
+                            int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length, int(s.scarf_entire_loop),
+                            s.scarf_max_segment, int(s.scarf_inner));
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);

@@ -123,11 +123,35 @@ TEST_CASE("info prints the mesh summary", "[cli]") {
     CHECK_THAT(r.out, ContainsSubstring("sliced_volume: 1000"));
 }
 
+TEST_CASE("info and slice read OBJ and 3MF models (formats.md, FM2, FM3, FM9)", "[cli]") {
+    const Run obj = run({"info", kData + "/formats/box.obj"});
+    CHECK(obj.code == kExitOk);
+    CHECK_THAT(obj.out, ContainsSubstring("format: obj"));
+    CHECK_THAT(obj.out, ContainsSubstring("size: 20 x 20 x 10"));
+    const Run parts = run({"info", kData + "/formats/box_parts.3mf"});
+    CHECK(parts.code == kExitOk);
+    CHECK_THAT(parts.out, ContainsSubstring("format: 3mf\nobjects: 1\nparts: 2\ntriangles: 24"));
+    const Run inch = run({"info", kData + "/formats/box_inch.3mf"});
+    CHECK_THAT(inch.out, ContainsSubstring("size: 508 x 508 x 254"));
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "tisma_box_3mf.gcode";
+    const Run sliced = run({"slice", kData + "/formats/box.3mf", "--config", kData + "/settings.json", "-o", out.string()});
+    CHECK(sliced.code == kExitOk);
+    CHECK_THAT(sliced.out, ContainsSubstring("read 12 triangles"));
+    CHECK(std::filesystem::exists(out));
+    std::filesystem::remove(out);
+    const std::filesystem::path bad = std::filesystem::temp_directory_path() / "tisma_broken.3mf";
+    std::ofstream(bad, std::ios::binary) << "PK\x03\x04 not really";
+    const Run broken = run({"info", bad.string()});
+    std::filesystem::remove(bad);
+    CHECK(broken.code == kExitInput);
+    CHECK_THAT(broken.err, ContainsSubstring("3MF"));
+}
+
 TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     const auto gcode = std::filesystem::temp_directory_path() / "tisma_test_warn.gcode";
     const auto json = std::filesystem::temp_directory_path() / "tisma_test_warn.json";
-    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode.string(),
-                       "--warnings", json.string()});
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o",
+                       gcode.string(), "--warnings", json.string()});
     CHECK(r.code == kExitOk);
     CHECK_THAT(r.out, ContainsSubstring("warnings: 0"));
     std::ifstream f(json);
@@ -136,6 +160,23 @@ TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     CHECK_THAT(text.str(), ContainsSubstring("\"version\": 1"));
     CHECK_THAT(text.str(), ContainsSubstring("\"warnings\": []"));
     f.close();
+    // Settings without the printer's speeds: a stock Ender-3's, and a warning
+    // that says so (owner's decision, 2026-10-26).
+    const Run bare = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o",
+                          gcode.string(), "--warnings", json.string()});
+    CHECK(bare.code == kExitOk);
+    CHECK_THAT(bare.err, ContainsSubstring("warning: no speed for machine.corner_speed, speed.walls"));
+    std::ifstream g(json);
+    std::stringstream bare_text;
+    bare_text << g.rdbuf();
+    CHECK_THAT(bare_text.str(), ContainsSubstring("\"kind\": \"speed_fallback\""));
+    g.close();
+    std::ifstream written(gcode);
+    std::stringstream gcode_text;
+    gcode_text << written.rdbuf();
+    CHECK_THAT(gcode_text.str(), ContainsSubstring("; speed.walls = 40.0\n"));
+    CHECK_THAT(gcode_text.str(), ContainsSubstring("; speed.travel = 180.0\n"));
+    written.close();
     std::filesystem::remove(gcode);
     std::filesystem::remove(json);
     CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", "x", "--warnings"}).code ==
@@ -157,13 +198,34 @@ TEST_CASE("models that cannot be printed end with a clear error and no G-code", 
     CHECK(empty.code == kExitModel);
     CHECK_THAT(empty.err, ContainsSubstring("no triangles"));
     CHECK_FALSE(std::filesystem::exists(out));
-    // The 10 mm cube on a bed far from it, and on a bed exactly its size (the edge counts as inside).
+    // The 10 mm cube on a bed far from it, left where it is (placement.md,
+    // PL3), and on a bed exactly its size (the edge counts as inside).
     const Run outside = run({"slice", kData + "/cube_ascii.stl", "--config",
-                             write("tisma_far_bed.json", R"({"machine": {"bed": [[100, 100], [150, 100], [150, 150], [100, 150]]}})"),
+                             write("tisma_far_bed.json", R"({"machine": {"bed": [[100, 100], [150, 100], [150, 150], [100, 150]]},
+                                                            "placement": {"arrange": false}})"),
                              "-o", out.string()});
     CHECK(outside.code == kExitModel);
     CHECK_THAT(outside.err, ContainsSubstring("outside the bed"));
     CHECK_FALSE(std::filesystem::exists(out));
+    // Arranged (the default), it goes to the middle of that bed and prints there (PL2).
+    const Run moved = run({"slice", kData + "/cube_ascii.stl", "--config",
+                           write("tisma_far_bed_arranged.json",
+                                 R"({"machine": {"bed": [[100, 100], [150, 100], [150, 150], [100, 150]]}, "adhesion": {"skirt_loops": 0}})"),
+                           "-o", out.string()});
+    CHECK(moved.code == kExitOk);
+    {
+        std::ifstream g(out);
+        std::string line;
+        double lo = 1e9, hi = -1e9;
+        while (std::getline(g, line))
+            if (line.rfind("G1 X", 0) == 0) {
+                const double x = std::stod(line.substr(4));
+                lo = std::min(lo, x), hi = std::max(hi, x);
+            }
+        CHECK(lo > 119.9);
+        CHECK(hi < 130.1);
+    }
+    std::filesystem::remove(out);
     // On a bed exactly its size the cube fits, but its skirt does not; without
     // the skirt it prints.
     const Run edge = run({"slice", kData + "/cube_ascii.stl", "--config",

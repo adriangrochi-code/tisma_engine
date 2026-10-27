@@ -26,6 +26,7 @@ using GLubyte = unsigned char;
 using GLvoid = void;
 using GLsizeiptr = std::ptrdiff_t;
 using GLintptr = std::ptrdiff_t;
+using GLuint64 = unsigned long long;
 
 // Versions this loader provides (Dear ImGui's backend checks for them).
 #define GL_VERSION_3_1 1
@@ -38,6 +39,9 @@ using GLintptr = std::ptrdiff_t;
 #define GL_ONE 1
 #define GL_LINES 0x0001
 #define GL_TRIANGLES 0x0004
+#define GL_QUERY_RESULT 0x8866
+#define GL_QUERY_RESULT_AVAILABLE 0x8867
+#define GL_TIME_ELAPSED 0x88BF
 #define GL_DEPTH_BUFFER_BIT 0x00000100
 #define GL_COLOR_BUFFER_BIT 0x00004000
 #define GL_LESS 0x0201
@@ -123,7 +127,9 @@ using GLintptr = std::ptrdiff_t;
 #define GL_RED 0x1903
 #define GL_RGBA8 0x8058
 #define GL_DEPTH_COMPONENT24 0x81A6
+#define GL_NONE 0
 #define GL_RG 0x8227
+#define GL_RG8 0x822B
 #define GL_R8 0x8229
 #define GL_RG16F 0x822F
 #define GL_RGBA32F 0x8814
@@ -189,6 +195,8 @@ using GLintptr = std::ptrdiff_t;
     X(void, glDepthMask, (GLboolean flag))                                                                           \
     X(void, glDetachShader, (GLuint program, GLuint shader))                                                         \
     X(void, glDisable, (GLenum capability))                                                                          \
+    X(void, glDrawBuffer, (GLenum buffer))                                                                           \
+    X(void, glReadBuffer, (GLenum buffer))                                                                           \
     X(void, glDisableVertexAttribArray, (GLuint index))                                                              \
     X(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))                                                 \
     X(void, glDrawArraysInstanced, (GLenum mode, GLint first, GLsizei count, GLsizei instances))                    \
@@ -198,6 +206,12 @@ using GLintptr = std::ptrdiff_t;
     X(void, glEnable, (GLenum capability))                                                                           \
     X(void, glEnableVertexAttribArray, (GLuint index))                                                               \
     X(void, glFinish, (void))                                                                                        \
+    X(void, glGenQueries, (GLsizei n, GLuint* ids))                                                                  \
+    X(void, glDeleteQueries, (GLsizei n, const GLuint* ids))                                                         \
+    X(void, glBeginQuery, (GLenum target, GLuint id))                                                                \
+    X(void, glEndQuery, (GLenum target))                                                                             \
+    X(void, glGetQueryObjectiv, (GLuint id, GLenum name, GLint* value))                                              \
+    X(void, glGetQueryObjectui64v, (GLuint id, GLenum name, GLuint64* value))                                        \
     X(void, glGenBuffers, (GLsizei n, GLuint* buffers))                                                              \
     X(void, glGenSamplers, (GLsizei n, GLuint* samplers))                                                            \
     X(void, glGenTextures, (GLsizei n, GLuint* textures))                                                            \
@@ -232,6 +246,7 @@ using GLintptr = std::ptrdiff_t;
     X(void, glUniform1i, (GLint location, GLint v0))                                                                 \
     X(void, glUniform1ui, (GLint location, GLuint v0))                                                               \
     X(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1))                                                   \
+    X(void, glUniform2ui, (GLint location, GLuint v0, GLuint v1))                                                    \
     X(void, glUniform3f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2))                                       \
     X(void, glUniform3fv, (GLint location, GLsizei count, const GLfloat* value))                                     \
     X(void, glUniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3))                           \
@@ -291,6 +306,8 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glDepthFunc tisma_glDepthFunc
 #define glDepthMask tisma_glDepthMask
 #define glDetachShader tisma_glDetachShader
+#define glDrawBuffer tisma_glDrawBuffer
+#define glReadBuffer tisma_glReadBuffer
 #define glDisable tisma_glDisable
 #define glDisableVertexAttribArray tisma_glDisableVertexAttribArray
 #define glDrawArrays tisma_glDrawArrays
@@ -300,6 +317,12 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glEnable tisma_glEnable
 #define glEnableVertexAttribArray tisma_glEnableVertexAttribArray
 #define glFinish tisma_glFinish
+#define glGenQueries tisma_glGenQueries
+#define glDeleteQueries tisma_glDeleteQueries
+#define glBeginQuery tisma_glBeginQuery
+#define glEndQuery tisma_glEndQuery
+#define glGetQueryObjectiv tisma_glGetQueryObjectiv
+#define glGetQueryObjectui64v tisma_glGetQueryObjectui64v
 #define glGenBuffers tisma_glGenBuffers
 #define glGenSamplers tisma_glGenSamplers
 #define glGenTextures tisma_glGenTextures
@@ -331,6 +354,7 @@ TISMA_GL_FUNCTIONS(TISMA_GL_DECLARE)
 #define glUniform1i tisma_glUniform1i
 #define glUniform1ui tisma_glUniform1ui
 #define glUniform2f tisma_glUniform2f
+#define glUniform2ui tisma_glUniform2ui
 #define glUniform3f tisma_glUniform3f
 #define glUniform3fv tisma_glUniform3fv
 #define glUniform4f tisma_glUniform4f

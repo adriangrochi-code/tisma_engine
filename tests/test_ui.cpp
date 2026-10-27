@@ -15,9 +15,12 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <numbers>
 #include <string>
@@ -211,6 +214,121 @@ TEST_CASE("ui: preview buffers keep the layers and kinds", "[ui]") {
         CHECK(kind_colour(LineKind(k)) <= 0xFFFFFF);
 }
 
+namespace {
+
+// G-code of layers of square walls: per layer, the outer wall's square
+// {x0, y0, side}, an inner wall 0.45 mm in and a line of infill across. An
+// open wall leaves its last side out.
+std::string squares_gcode(const std::vector<std::array<float, 3>>& layers, bool open = false) {
+    std::string g;
+    double e = 0.0;
+    char line[128];
+    const auto move = [&](float x, float y, bool extrude) {
+        if (extrude)
+            std::snprintf(line, sizeof line, "G1 X%.3f Y%.3f E%.4f F1800\n", double(x), double(y), e += 1.0);
+        else
+            std::snprintf(line, sizeof line, "G1 X%.3f Y%.3f F6000\n", double(x), double(y));
+        g += line;
+    };
+    const auto square = [&](float x0, float y0, float side, int sides) {
+        move(x0, y0, false);
+        const float xs[] = {x0 + side, x0 + side, x0, x0}, ys[] = {y0, y0 + side, y0 + side, y0};
+        for (int k = 0; k < sides; ++k)
+            move(xs[k], ys[k], true);
+    };
+    for (std::size_t l = 0; l < layers.size(); ++l) {
+        const auto [x0, y0, side] = layers[l];
+        std::snprintf(line, sizeof line, ";LAYER_CHANGE\n;Z:%.1f\n;HEIGHT:0.2\nG1 Z%.1f F600\n;WIDTH:0.45\n",
+                      0.2 * double(l + 1), 0.2 * double(l + 1));
+        g += line;
+        g += ";TYPE:Perimeter\n";
+        square(x0 + 0.45f, y0 + 0.45f, side - 0.9f, 4);
+        g += ";TYPE:External perimeter\n";
+        square(x0, y0, side, open ? 3 : 4);
+        g += ";TYPE:Internal infill\n";
+        move(x0 + 1.0f, y0 + side / 2, false);
+        move(x0 + side - 1.0f, y0 + side / 2, true);
+    }
+    return g;
+}
+
+// Whether every extrusion of `kind` in layer l is hidden (1), none is (0), or some are (-1).
+int hidden_of(const PreviewBuffers& b, std::size_t l, LineKind kind) {
+    int seen = 0, hidden = 0;
+    for (std::size_t i = b.layer_extrusions[l]; i < b.layer_extrusions[l + 1]; ++i)
+        if ((b.extrusions[i].kind_layer & 0xFFu) == std::uint32_t(kind))
+            ++seen, hidden += b.hidden[i];
+    return hidden == 0 ? 0 : hidden == seen ? 1 : -1;
+}
+
+} // namespace
+
+TEST_CASE("ui: the preview leaves out what the part hides when all of it shows", "[ui]") {
+    // Six equal layers of a 20 mm square: inside the layers between the
+    // first and the last, the inner wall and the infill are covered from
+    // under, over and the sides.
+    const PreviewBuffers equal = preview_buffers(read_gcode_preview(squares_gcode(std::vector<std::array<float, 3>>(6, {0, 0, 20}))));
+    REQUIRE(equal.hidden.size() == equal.extrusions.size());
+    for (std::size_t l = 0; l < 6; ++l) {
+        INFO("layer " << l);
+        const int inside = l == 0 || l == 5 ? 0 : 1;
+        CHECK(hidden_of(equal, l, LineKind::InnerWall) == inside);
+        CHECK(hidden_of(equal, l, LineKind::SparseInfill) == inside);
+        CHECK(hidden_of(equal, l, LineKind::OuterWall) == 0);
+    }
+
+    // A step: three layers of 20 mm, then three of 10 mm in the middle. The
+    // big part's last layer is under the air around the small one; the small
+    // part's first layer stands back from the big one's wall, and the groove
+    // between them shows its inner wall.
+    std::vector<std::array<float, 3>> step(3, {0, 0, 20});
+    step.insert(step.end(), 3, {5, 5, 10});
+    const PreviewBuffers stepped = preview_buffers(read_gcode_preview(squares_gcode(step)));
+    CHECK(hidden_of(stepped, 1, LineKind::InnerWall) == 1);
+    CHECK(hidden_of(stepped, 2, LineKind::InnerWall) == 0);  // under the air
+    CHECK(hidden_of(stepped, 2, LineKind::SparseInfill) == 0); // one line, its ends under the air
+    CHECK(hidden_of(stepped, 3, LineKind::InnerWall) == 0);  // by the step
+    CHECK(hidden_of(stepped, 4, LineKind::InnerWall) == 1);
+
+    // Walls that do not close: nothing is known to be inside.
+    const PreviewBuffers open =
+        preview_buffers(read_gcode_preview(squares_gcode(std::vector<std::array<float, 3>>(6, {0, 0, 20}), true)));
+    for (const std::uint8_t h : open.hidden)
+        CHECK(h == 0);
+}
+
+TEST_CASE("ui: preview beads join where they go on into the next move", "[ui]") {
+    // A square of four moves, a travel, then a line out and back (a 180 degree
+    // turn) and a slight bend.
+    const GcodePreview p = read_gcode_preview(
+        ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 Z0.2 F600\n;TYPE:External perimeter\n;WIDTH:0.45\n"
+        "G1 X10 E1 F1200\nG1 Y10 E2\nG1 X0 E3\nG1 Y0 E4\n"
+        "G1 X20 Y20 F6000\n;TYPE:Internal infill\nG1 X30 E5\nG1 X20 E6\nG1 X10 Y21 E7\n");
+    const PreviewBuffers b = preview_buffers(p);
+    REQUIRE(b.extrusions.size() == 7);
+    const auto joined = [](float x, float y) { return x * x + y * y > 0.25f; };
+    const PreviewInstance* e = b.extrusions.data();
+    // The square: free at its start and end (the seam), mitred at its three
+    // corners, both moves on the same plane.
+    CHECK_FALSE(joined(e[0].join0_x, e[0].join0_y));
+    for (int k = 0; k < 3; ++k) {
+        INFO("corner " << k);
+        REQUIRE(joined(e[k].join1_x, e[k].join1_y));
+        CHECK(e[k].join1_x == e[k + 1].join0_x);
+        CHECK(e[k].join1_y == e[k + 1].join0_y);
+        CHECK_THAT(std::hypot(e[k].join1_x, e[k].join1_y), Catch::Matchers::WithinAbs(1.0, 1e-6));
+    }
+    CHECK_THAT(e[0].join1_x, Catch::Matchers::WithinAbs(std::sqrt(0.5), 1e-6)); // halfway between +X and +Y
+    CHECK_THAT(e[0].join1_y, Catch::Matchers::WithinAbs(std::sqrt(0.5), 1e-6));
+    CHECK_FALSE(joined(e[3].join1_x, e[3].join1_y));
+    // After the travel: free; the turn back is too sharp to join; the bend joins.
+    CHECK_FALSE(joined(e[4].join0_x, e[4].join0_y));
+    CHECK_FALSE(joined(e[4].join1_x, e[4].join1_y));
+    CHECK_FALSE(joined(e[5].join0_x, e[5].join0_y));
+    CHECK(joined(e[5].join1_x, e[5].join1_y));
+    CHECK(joined(e[6].join0_x, e[6].join0_y));
+}
+
 TEST_CASE("ui: PNG files are valid", "[ui]") {
     const std::uint8_t check[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
     CHECK(crc32(check, 9) == 0xCBF43926u); // the CRC-32 check value
@@ -263,6 +381,62 @@ TEST_CASE("ui: PNG files are valid", "[ui]") {
             CHECK(std::memcmp(&raw[row + 1], &rgba[std::size_t(y) * 4 * std::size_t(size)], 4 * std::size_t(size)) == 0);
         }
     }
+}
+
+TEST_CASE("ui: the shadow map's camera holds the box, nearest the light at -1", "[ui]") {
+    const Vec3 lo{10, 20, 0}, hi{50, 40, 30};
+    for (Vec3 towards : {normalize(Vec3{-0.45f, 0.45f, 0.8f}), Vec3{0, 0, 1}, normalize(Vec3{1, 0, 0.2f})}) {
+        const Mat4 m = shadow_view_projection(towards, lo, hi);
+        float zmin = 2, zmax = -2;
+        for (int k = 0; k < 8; ++k) {
+            const Vec3 p{(k & 1) ? hi.x : lo.x, (k & 2) ? hi.y : lo.y, (k & 4) ? hi.z : lo.z};
+            const Vec3 q = transform_point(m, p);
+            CHECK(std::fabs(q.x) <= 1.0001f);
+            CHECK(std::fabs(q.y) <= 1.0001f);
+            CHECK(std::fabs(q.z) <= 1.0001f);
+            zmin = std::min(zmin, q.z), zmax = std::max(zmax, q.z);
+        }
+        CHECK_THAT(zmin, WithinAbs(-1.0, 1e-4));
+        CHECK_THAT(zmax, WithinAbs(1.0, 1e-4));
+        // A point further towards the light is nearer.
+        const Vec3 c = (lo + hi) * 0.5f;
+        CHECK(transform_point(m, c + towards * 5.0f).z < transform_point(m, c).z);
+    }
+}
+
+TEST_CASE("ui: screenshots read back and compare", "[ui]") {
+    // A 300 x 300 picture (several stored blocks) reads back as it was.
+    const int size = 300;
+    std::vector<std::uint8_t> rgba(std::size_t(size) * std::size_t(size) * 4);
+    for (std::size_t i = 0; i < rgba.size(); ++i)
+        rgba[i] = std::uint8_t(i * 13 + 5);
+    std::vector<std::uint8_t> png = encode_png(size, size, rgba.data());
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> back;
+    REQUIRE(decode_png(png, w, h, back));
+    CHECK(w == size);
+    CHECK(h == size);
+    CHECK(back == rgba);
+    // A damaged one does not.
+    png[png.size() / 2] ^= 0x40;
+    CHECK_FALSE(decode_png(png, w, h, back));
+    CHECK_FALSE(decode_png({}, w, h, back));
+
+    // Two pixels changed, one by more than the tolerance; one more outside
+    // the rectangle; alpha does not count.
+    std::vector<std::uint8_t> other = rgba;
+    const auto at = [&](int x, int y) { return (std::size_t(y) * std::size_t(size) + std::size_t(x)) * 4; };
+    other[at(10, 20) + 1] = std::uint8_t(other[at(10, 20) + 1] + 5);
+    other[at(50, 60) + 2] = std::uint8_t(other[at(50, 60) + 2] ^ 0x80);
+    other[at(250, 250)] = std::uint8_t(other[at(250, 250)] + 90);
+    other[at(30, 30) + 3] = std::uint8_t(other[at(30, 30) + 3] + 90);
+    const PictureDifference d = compare_pictures(rgba.data(), other.data(), size, size, 0, 0, 100, 100, 24);
+    CHECK(d.pixels == 100 * 100);
+    CHECK(d.differing == 2);
+    CHECK(d.over == 1);
+    CHECK(d.largest == 128);
+    CHECK(compare_pictures(rgba.data(), rgba.data(), size, size, -10, -10, 1000, 1000, 0).pixels ==
+          std::size_t(size) * std::size_t(size));
 }
 
 TEST_CASE("ui: SVG icons rasterize and take the theme's colour", "[ui]") {
@@ -344,6 +518,100 @@ TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the same bytes", "[ui]") {
+    // Two posts and a plate over them: walls, solid and sparse infill, a
+    // bridge, travels, slow short layers and the fan all show.
+    const auto box = [](TriangleMesh& m, float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto p = [&](int i, int j, int k) { return Vec3f{i ? x1 : x0, j ? y1 : y0, k ? z1 : z0}; };
+        const int faces[12][3][3] = {
+            {{0, 0, 0}, {0, 1, 0}, {1, 1, 0}}, {{0, 0, 0}, {1, 1, 0}, {1, 0, 0}}, {{0, 0, 1}, {1, 0, 1}, {1, 1, 1}},
+            {{0, 0, 1}, {1, 1, 1}, {0, 1, 1}}, {{0, 0, 0}, {1, 0, 0}, {1, 0, 1}}, {{0, 0, 0}, {1, 0, 1}, {0, 0, 1}},
+            {{0, 1, 0}, {0, 1, 1}, {1, 1, 1}}, {{0, 1, 0}, {1, 1, 1}, {1, 1, 0}}, {{0, 0, 0}, {0, 0, 1}, {0, 1, 1}},
+            {{0, 0, 0}, {0, 1, 1}, {0, 1, 0}}, {{1, 0, 0}, {1, 1, 0}, {1, 1, 1}}, {{1, 0, 0}, {1, 1, 1}, {1, 0, 1}}};
+        for (const auto& f : faces)
+            m.add_triangle(p(f[0][0], f[0][1], f[0][2]), p(f[1][0], f[1][1], f[1][2]), p(f[2][0], f[2][1], f[2][2]));
+    };
+    TriangleMesh table;
+    box(table, 0, 0, 0, 4, 6, 4);
+    box(table, 12, 0, 0, 16, 6, 4);
+    box(table, 0, 0, 4, 16, 6, 5.6f);
+    Settings base = default_settings();
+    base.gpu = GpuMode::Off;
+    const TriangleMesh placed = translated(table, centre_on_bed(table.bounding_box(), base.bed));
+
+    Slicer staged;
+    const SliceResult first = staged.run(placed, base);
+    REQUIRE(first.ok);
+    CHECK_FALSE(first.staged);
+    CHECK_THAT(first.gcode, ContainsSubstring(";TYPE:Bridge infill"));
+    const SliceResult same = staged.run(placed, base);
+    CHECK(same.staged);
+    CHECK(same.model == first.model);
+    CHECK(same.gcode == first.gcode);
+
+    const std::vector<std::pair<const char*, std::function<void(Settings&)>>> changes = {
+        {"speed.walls", [](Settings& s) { s.wall_speed *= 1.5; }},
+        {"speed.outer_wall", [](Settings& s) { s.outer_wall_speed = Speed{50.0, true}; }},
+        {"speed.infill", [](Settings& s) { s.infill_speed *= 1.5; }},
+        {"speed.solid_infill", [](Settings& s) { s.solid_infill_speed *= 0.7; }},
+        {"speed.top_solid_infill", [](Settings& s) { s.top_solid_infill_speed *= 0.7; }},
+        {"speed.support", [](Settings& s) { s.support_speed *= 0.7; }},
+        {"speed.travel", [](Settings& s) { s.travel_speed *= 0.5; }},
+        {"speed.first_layer", [](Settings& s) { s.first_layer_speed *= 0.5; }},
+        {"speed.max", [](Settings& s) { s.max_speed = 35.0; }},
+        {"machine.corner_speed", [](Settings& s) { s.corner_speed = 4.0; }},
+        {"machine.acceleration", [](Settings& s) { s.acceleration = 3000.0, s.travel_acceleration = 4000.0; }},
+        {"machine.max_feed", [](Settings& s) { s.max_feed_x = s.max_feed_y = 150.0, s.max_feed_z = 4.0, s.max_feed_e = 30.0; }},
+        {"retraction.length", [](Settings& s) { s.retract_length = 0.8; }},
+        {"retraction.speed", [](Settings& s) { s.retract_speed = 45.0; }},
+        {"retraction.lift", [](Settings& s) { s.retract_lift = 0.4; }},
+        {"retraction.min_travel", [](Settings& s) { s.retract_min_travel = 0.5; }},
+        {"cooling.min_layer_time", [](Settings& s) { s.min_layer_time = 15.0; }},
+        {"cooling.min_speed", [](Settings& s) { s.min_print_speed = 15.0; }},
+        {"cooling.keep_outer_speed", [](Settings& s) { s.keep_outer_speed = !s.keep_outer_speed; }},
+        {"cooling.fan", [](Settings& s) { s.fan_min = 20.0, s.fan_max = 80.0, s.fan_below_time = 30.0; }},
+        {"cooling.fan_always", [](Settings& s) { s.fan_always = !s.fan_always; }},
+        {"cooling.fan_bridges", [](Settings& s) { s.fan_bridges = 60.0; }},
+        {"cooling.fan_off_layers", [](Settings& s) { s.fan_off_layers = 1; }},
+        {"machine.start_gcode", [](Settings& s) { s.start_gcode += "; staged\n"; }},
+        {"machine.end_gcode", [](Settings& s) { s.end_gcode += "; staged\n"; }},
+        {"temperature", [](Settings& s) { s.variables["temperature"] = {"215"}, s.variables["bed_temperature"] = {"55"}; }},
+        {"extrusion.flow", [](Settings& s) { s.flow = 95.0; }},
+        {"extrusion.pressure_advance", [](Settings& s) { s.pressure_advance = 0.05; }},
+        {"extrusion.max_flow", [](Settings& s) { s.filament_max_flow = 2.0, s.machine_max_flow = 3.0; }},
+        {"machine.max_temps", [](Settings& s) { s.max_nozzle_temp = 300.0, s.max_bed_temp = 110.0; }},
+        {"extrusion.chamber_temperature", [](Settings& s) { s.chamber_temperature = 40.0, s.max_chamber_temp = 60.0; }},
+        {"gcode.resolution", [](Settings& s) { s.gcode_resolution = 0.05; }},
+        {"machine.relative_extrusion", [](Settings& s) { s.relative_extrusion = !s.relative_extrusion; }},
+        {"machine.flavor", [](Settings& s) { s.flavor = GcodeFlavor::Klipper; }},
+        {"walls.scarf", [](Settings& s) { s.scarf = ScarfMode::Everywhere, s.scarf_only_smooth = false, s.scarf_length = 5.0; }},
+    };
+    for (const auto& [name, change] : changes) {
+        INFO(name);
+        Settings changed = base;
+        change(changed);
+        CHECK(without_gcode_settings(changed).wall_speed == without_gcode_settings(base).wall_speed);
+        const SliceResult again = staged.run(placed, changed);
+        Slicer fresh;
+        const SliceResult whole = fresh.run(placed, changed);
+        REQUIRE(again.ok == whole.ok);
+        CHECK(again.staged);
+        CHECK(again.gcode == whole.gcode);
+        CHECK(again.check.ok() == whole.check.ok());
+        CHECK(again.preview.estimated_seconds == whole.preview.estimated_seconds);
+    }
+
+    // A setting of the cut, another mesh or another painting: cut anew.
+    Settings thinner = base;
+    thinner.layer_height = 0.15;
+    CHECK_FALSE(staged.run(placed, thinner).staged);
+    CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner).staged);
+    Painting seam;
+    seam.set_tree(PaintChannel::Seam, 0, {kPaintEnforce});
+    CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+    CHECK(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+}
+
 TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     Settings settings = default_settings();
     settings.gpu = GpuMode::Off;
@@ -359,14 +627,14 @@ TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
     CHECK(r.error.empty());
     CHECK(r.check.ok());
     CHECK(r.gpu.empty());
-    CHECK(r.preview.layers.size() == r.model.layers.size());
+    CHECK(r.preview.layers.size() == r.model->layers.size());
     CHECK(r.preview.estimated_seconds > 0.0);
     // The start G-code's variables are filled in.
     CHECK_THAT(r.gcode, ContainsSubstring("M104 S210"));
     CHECK_THAT(r.gcode, ContainsSubstring("M140 S60"));
     // The same G-code export_gcode would write.
     std::ostringstream again;
-    write_gcode(again, r.model, settings);
+    write_gcode(again, *r.model, settings);
     CHECK(again.str() == r.gcode);
 
     // Off the bed: refused, with the engine's reason.
@@ -458,7 +726,7 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
             "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
     auto held_over_free = [](const SliceResult& r) {
         double held = 0.0, free = 0.0;
-        for (const LayerFill& f : r.model.fills)
+        for (const LayerFill& f : r.model->fills)
             for (const Toolpath& t : f.sparse)
                 for (std::size_t i = 1; i < t.points.size(); ++i) {
                     const double mx = 0.5 * (t.points[i].p.x + t.points[i - 1].p.x);
@@ -479,6 +747,7 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
     // Without a case the infill stays even; with one that holds nothing, too, with a warning.
     const SliceResult even = slicer.run(bar, s);
     REQUIRE(even.ok);
+    CHECK_FALSE(even.staged); // the guided cut does not serve a run without its case
     CHECK_THAT(held_over_free(even), Catch::Matchers::WithinAbs(1.0, 0.15));
     const AnalysisCase loose = parse_analysis_case(R"({"model": "solid", "loads": [{"face": "x_max", "force": [0, 0, -20]}]})");
     const SliceResult unheld = slicer.run(bar, s, &loose);

@@ -4,6 +4,7 @@
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -68,9 +69,9 @@ IndexedMesh tube_mesh() {
 }
 
 // Adds a box from (x0, y0, 0) to (x1, y1, h), facing out.
-void add_box(IndexedMesh& m, float x0, float y0, float x1, float y1, float h) {
+void add_box(IndexedMesh& m, float x0, float y0, float x1, float y1, float h, float bottom = 0.0f) {
     const auto base = std::uint32_t(m.vertices.size());
-    for (float z : {0.0f, h})
+    for (float z : {bottom, h})
         for (const auto& p : {std::array<float, 2>{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}})
             m.vertices.push_back({p[0], p[1], z});
     auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
@@ -95,7 +96,8 @@ TEST_CASE("start and end G-code variables", "[gcode]") {
 }
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
-    Settings s;
+    Settings s = test_printer();
+    s.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     s.start_gcode = "M104 S[temp]";
     s.end_gcode = "M84 ; [temp]";
     s.variables["temp"] = {"210"};
@@ -155,7 +157,7 @@ TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]
 }
 
 TEST_CASE("relative extrusion: M83, no G92, every move carries its own E", "[gcode]") {
-    Settings s;
+    Settings s = test_printer();
     s.relative_extrusion = true;
     const std::string g = cube_gcode(s);
     CHECK_THAT(g, ContainsSubstring("\nM83\n"));
@@ -178,7 +180,7 @@ TEST_CASE("relative extrusion: M83, no G92, every move carries its own E", "[gco
 }
 
 TEST_CASE("retraction: around long travels only, and E comes back to where it was", "[gcode]") {
-    Settings s; // 2 mm at 40 mm/s, travels over 2 mm, absolute E
+    Settings s = test_printer(); // 2 mm at 40 mm/s, travels over 2 mm, absolute E
     s.retract_lift = 0.3;
     const std::vector<std::string> lines = lines_of(cube_gcode(s));
     double e = 0.0, before = 0.0, x = 0.0, y = 0.0, z = 0.0;
@@ -227,7 +229,7 @@ TEST_CASE("retraction: around long travels only, and E comes back to where it wa
 }
 
 TEST_CASE("travels go round the hole of a tube instead of across it", "[gcode]") {
-    Settings s;
+    Settings s = test_printer();
     std::ostringstream out;
     write_gcode(out, slice_model(tube_mesh(), s), s);
     // No travel crosses the hole (x and y in (10, 30)), clipped as a segment against the square.
@@ -280,7 +282,7 @@ TEST_CASE("islands: each one is finished before going to the next", "[gcode]") {
     IndexedMesh m;
     add_box(m, 0, 0, 10, 10, 2);
     add_box(m, 14, 0, 24, 10, 2);
-    Settings s;
+    Settings s = test_printer();
     s.skirt_loops = 0; // the skirt goes round both cubes
     std::ostringstream out;
     write_gcode(out, slice_model(m, s), s);
@@ -308,20 +310,27 @@ TEST_CASE("islands: each one is finished before going to the next", "[gcode]") {
 
 TEST_CASE("cooling: short layers slow down to the minimum layer time with the fan at its maximum", "[gcode]") {
     // The time of every layer, from its G1 moves: distance over feed, E alone for retractions.
+    // A layer's fan comes right before its ;LAYER_CHANGE (cooling.md, rule 4).
     auto layer_times = [](const std::string& text, std::vector<std::vector<std::string>>& fans) {
         std::vector<double> times;
+        std::vector<std::string> loose; // fan lines since the last move
         double x = 0.0, y = 0.0, z = 0.0, e = 0.0, f = 1.0;
         const std::regex axis("([XYZEF])(-?[0-9.]+)");
         for (const std::string& line : lines_of(text)) {
             if (line == ";LAYER_CHANGE") {
                 times.push_back(0.0);
-                fans.emplace_back();
+                fans.push_back(loose);
+                loose.clear();
                 continue;
             }
-            if (!times.empty() && (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0))
-                fans.back().push_back(line);
+            if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+                loose.push_back(line);
             if (line.rfind("G1 ", 0) != 0 && line.rfind("G92 ", 0) != 0)
                 continue;
+            if (!fans.empty() && line.rfind("G1 ", 0) == 0) {
+                fans.back().insert(fans.back().end(), loose.begin(), loose.end());
+                loose.clear();
+            }
             double nx = x, ny = y, nz = z, ne = e;
             for (std::sregex_iterator it(line.begin(), line.end(), axis), end; it != end; ++it) {
                 const double v = std::stod((*it)[2].str());
@@ -341,14 +350,21 @@ TEST_CASE("cooling: short layers slow down to the minimum layer time with the fa
         }
         return times;
     };
-    Settings s;
+    Settings s = test_printer();
     s.min_layer_time = 0.0;
     std::vector<std::vector<std::string>> fans;
-    const std::vector<double> fast = layer_times(cube_gcode(s), fans);
-    REQUIRE(fast.size() > 3);
-    CHECK(fans[0] == std::vector<std::string>{"M107"}); // the first layer without fan
-    CHECK(fans[1] == std::vector<std::string>{"M106 S89"}); // then 35 %
-    CHECK(fans[2].empty());                                 // only when it changes
+    const std::string fast_gcode = cube_gcode(s);
+    const std::vector<double> fast = layer_times(fast_gcode, fans);
+    REQUIRE(fast.size() > 5);
+    CHECK(fans[0] == std::vector<std::string>{"M107"}); // the first 3 layers without fan
+    CHECK(fans[1].empty());                             // only when it changes
+    CHECK(fans[2].empty());
+    // Then by the layer's time, from fan_max at the minimum time (0 s here)
+    // down to fan_min at fan_below_time (60 s).
+    REQUIRE(fans[3].size() == 1);
+    const long expected = std::lround((100.0 - 65.0 * fast[3] / 60.0) * 2.55);
+    CHECK(std::abs(std::stol(fans[3][0].substr(6)) - expected) <= 1); // the layer change is not in the engine's time
+    CHECK(fast_gcode.find(fans[3][0] + "\n;LAYER_CHANGE\n") != std::string::npos);
     const double fastest = *std::max_element(fast.begin(), fast.end());
 
     s.min_layer_time = fastest * 2.0;
@@ -384,11 +400,51 @@ TEST_CASE("cooling: short layers slow down to the minimum layer time with the fa
     CHECK(slowest_text.find(" F1\n") != std::string::npos);
 }
 
+TEST_CASE("cooling: bridges get their own fan, and the layer's comes back after (cooling.md, rule 3)", "[gcode]") {
+    // A plate on two pillars (as in tests/test_surfaces.cpp): its first layer bridges the gap.
+    IndexedMesh m;
+    add_box(m, 0, 0, 5, 10, 5);
+    add_box(m, 15, 0, 20, 10, 5);
+    add_box(m, 0, 0, 20, 10, 7, 5);
+    Settings s = test_printer();
+    s.fan_min = s.fan_max = 50.0; // S128 by the layer's time, or off
+    s.fan_bridges = 90.0;         // S230
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    std::string fan, type;
+    int layer = -1, bridge_moves = 0, other_moves = 0;
+    std::set<int> bridge_layers;
+    for (const std::string& line : lines_of(out.str())) {
+        if (line == ";LAYER_CHANGE")
+            ++layer;
+        else if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+            fan = line;
+        else if (line.rfind(";TYPE:", 0) == 0)
+            type = line.substr(6);
+        else if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos) {
+            INFO("layer " << layer << ", " << type << ", " << fan);
+            if (type == "Bridge infill") {
+                CHECK(fan == "M106 S230");
+                ++bridge_moves;
+                bridge_layers.insert(layer);
+            } else if (layer >= s.fan_off_layers) {
+                CHECK((fan == "M106 S128" || fan == "M107"));
+                ++other_moves;
+            } else {
+                CHECK(fan == "M107");
+            }
+        }
+    }
+    CHECK(bridge_layers == std::set<int>{25});
+    CHECK(bridge_moves > 0);
+    CHECK(other_moves > 0);
+}
+
 TEST_CASE("warnings: details thinner than a bead, layers that cannot reach the minimum time", "[gcode][warnings]") {
     IndexedMesh m;
     add_box(m, 0, 0, 10, 10, 1);
     add_box(m, 12, 0, 12.1f, 5, 1); // a fin 0.1 mm thin: no bead fits
-    Settings s;
+    Settings s = test_printer();
     const SlicedModel model = slice_model(m, s);
     const std::vector<Warning> thin = model_warnings(model);
     REQUIRE(thin.size() == model.layers.size());
@@ -451,7 +507,7 @@ double highest_flow(const std::string& gcode, double filament_diameter) {
 
 TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, and what does not fit is warned",
           "[gcode][warnings]") {
-    Settings s;
+    Settings s = test_printer();
     s.relative_extrusion = true;
     const double free_flow = highest_flow(cube_gcode(s), s.filament_diameter);
     REQUIRE(free_flow > 4.0); // the limits below cut into it
@@ -485,7 +541,7 @@ TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, an
     CHECK_THAT(cube_gcode(s), ContainsSubstring("M141 S60"));
 
     // Warnings: one per thing the filament asks and the printer does not give.
-    Settings fits;
+    Settings fits = test_printer();
     fits.variables["temperature"] = {"250"};
     fits.variables["bed_temperature"] = {"100"};
     fits.max_nozzle_temp = 300.0;
@@ -495,7 +551,7 @@ TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, an
     fits.needs_enclosure = fits.enclosed = true;
     fits.abrasive = fits.hardened_nozzle = true;
     CHECK(capability_warnings(fits).empty());
-    CHECK(capability_warnings(Settings{}).empty()); // nothing known, nothing warned
+    CHECK(capability_warnings(test_printer()).empty()); // nothing known, nothing warned
 
     Settings asks = fits;
     asks.variables["temperature"] = {"320"};
@@ -521,7 +577,7 @@ TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, an
 }
 
 TEST_CASE("skirt and brim come first on their layers as Skirt/Brim", "[gcode]") {
-    Settings s;
+    Settings s = test_printer();
     s.skirt_layers = 2;
     s.brim_width = 1.2;
     std::vector<std::string> types_of_layer;
@@ -562,7 +618,7 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
     add_box(m, 0, 0, 10, 10, 1); // cap, moved up to z 2-3 (layers 10-14)
     for (std::size_t v = base; v < m.vertices.size(); ++v)
         m.vertices[v].z += 2.0f;
-    Settings s;
+    Settings s = test_printer();
     s.skirt_loops = 0;
     {
         const SlicedModel off = slice_model(m, s);
@@ -573,11 +629,19 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
     s.support = true;
     const SlicedModel model = slice_model(m, s);
     REQUIRE(model.layers.size() == 15);
-    // Base on layers 0-5, interface on 6-8 (3 layers under the 1-layer gap), nothing from 9 up.
+    // Base on layers 0-5, interface on 6-8 (3 layers under the 1-layer gap),
+    // with the base's margin round it, nothing from 9 up.
     for (std::size_t l = 0; l < 15; ++l) {
-        CHECK(model.fills[l].support.empty() == (l > 5));
+        CHECK(model.fills[l].support.empty() == (l > 8));
         CHECK(model.fills[l].support_interface.empty() == (l < 6 || l > 8));
     }
+    // The zone: the cap's overhang and 1.6 mm round it (supports_skirt.md,
+    // rule 2), half a bead off the stem.
+    CHECK(region_contains(model.support_areas[0], -1.5, 5.0));
+    CHECK(region_contains(model.support_areas[0], 11.5, 5.0));
+    CHECK_FALSE(region_contains(model.support_areas[0], -1.7, 5.0));
+    CHECK(region_contains(model.support_areas[0], 3.75, 5.0));
+    CHECK_FALSE(region_contains(model.support_areas[0], 3.85, 5.0));
     auto length = [](const std::vector<Toolpath>& paths) {
         double sum = 0.0;
         for (const Toolpath& t : paths)
@@ -585,17 +649,32 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
                 sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
         return sum;
     };
-    // Lines 2.5 mm apart on layer 0 (along X): rows at multiples of 2.5 in Y.
-    std::set<long> rows;
-    for (const Toolpath& t : model.fills[0].support)
-        for (const ToolpathPoint& p : t.points)
-            rows.insert(std::lround(p.p.y * 100.0));
-    for (long y : rows)
-        CHECK(y % 250 == 0);
-    // Material per area: about 1 / spacing for the base, 1 / bead for the interface.
+    // Lines along X on every layer (support.line_angle 0), 2.5 mm of free
+    // space apart: rows at multiples of 2.5 plus a bead's spacing in Y (rule 6).
+    const double row = 2.5 + (s.wall_width - (1.0 - std::numbers::pi / 4.0) * 0.2);
+    for (const std::size_t l : {std::size_t(0), std::size_t(3)}) {
+        std::set<long> rows;
+        for (const Toolpath& t : model.fills[l].support)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                if (std::fabs(t.points[i].p.y - t.points[i - 1].p.y) < 1e-6) // along a line, not a zigzag joint
+                    rows.insert(std::lround(t.points[i].p.y / row * 1000.0));
+        CHECK(rows.size() >= 3);
+        for (long y : rows)
+            CHECK(y % 1000 == 0);
+    }
+    // The interface across them (along Y), a bead's spacing apart (rule 5).
+    double along_y = 0.0, along_x = 0.0;
+    for (const Toolpath& t : model.fills[7].support_interface)
+        for (std::size_t i = 1; i < t.points.size(); ++i) {
+            along_y += std::fabs(t.points[i].p.y - t.points[i - 1].p.y);
+            along_x += std::fabs(t.points[i].p.x - t.points[i - 1].p.x);
+        }
+    CHECK(along_y > 5.0 * along_x);
+    // Material per area: about 1 / spacing for the base, 1 / bead's spacing for the interface.
     const double area = area_mm2(model.support_areas[0]);
     CHECK(length(model.fills[0].support) / area < 0.7);
-    CHECK(length(model.fills[7].support_interface) / area_mm2(model.support_areas[7]) > 1.8);
+    const double under = area_mm2(Clipper2Lib::Intersect(model.support_areas[7], model.regions[12], Clipper2Lib::FillRule::NonZero));
+    CHECK(length(model.fills[7].support_interface) / under > 2.3);
     std::ostringstream out;
     write_gcode(out, model, s);
     CHECK(out.str().find(";TYPE:Support material\n") != std::string::npos);

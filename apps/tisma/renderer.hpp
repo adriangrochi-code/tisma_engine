@@ -28,7 +28,11 @@ struct ViewFrame {
     Vec3 background_top{0.17f, 0.17f, 0.19f}, background_bottom{0.10f, 0.10f, 0.12f};
     Vec3 plate{0.20f, 0.20f, 0.23f};
     Vec3 model{0.62f, 0.37f, 0.86f};
+    Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
+    std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
+    Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
     bool show_model = true;
+    bool show_paint = false; // the painted faces (set_paint) over the model
     bool show_preview = false;
     bool show_travels = false;
     std::size_t first_layer = 0, last_layer = 0; // the preview's layers drawn, inclusive
@@ -62,12 +66,20 @@ struct RayReadback {
 class Renderer {
 public:
     // Compiles the shaders and makes the buffers; false with a message if the
-    // driver refuses them.
+    // driver refuses them. Before it, or after it fails, the other methods do
+    // nothing (the window may be Vulkan's, PLAN.md «Vista con Vulkan»).
     bool init(std::string& error);
     void shutdown();
 
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices); // mesh_vertices
+    // The painted pieces over the model (PaintMesh::vertices), drawn in groups
+    // of `count` corners from `first`, each in its colour.
+    struct PaintGroup {
+        std::size_t first = 0, count = 0;
+        Vec3 colour;
+    };
+    void set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups);
     void set_preview(const PreviewBuffers& preview);
     void clear_preview();
 
@@ -87,6 +99,9 @@ public:
     // After a frame: the lit scene before FXAA, RGBA rows from the bottom.
     std::vector<std::uint8_t> read_colour();
 
+    // The preview's extrusions the last frame drew (lit pass).
+    std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;
@@ -98,19 +113,25 @@ private:
     };
     void resize(int width, int height, int samples);
     void release_targets();
-    void draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
+    // casters: only what casts a shadow (not the bed), for the shadow map.
+    void draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility, bool casters = false);
     void lit_uniforms(unsigned program, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
     void draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility);
     unsigned ambient_pass(const ViewFrame& f);
+    void shadow_pass(const ViewFrame& f);
     unsigned ray_pass(const ViewFrame& f);
 
+    bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
-    Buffer plate_, grid_, model_, extrusions_, travels_;
+    Buffer plate_, grid_, model_, paint_, extrusions_, travels_;
+    std::vector<PaintGroup> paint_groups_;
     int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
+    PreviewDrawOrder order_; // the extrusions in drawing order (docs/LARGE_MODELS.md); its instances moved to the GPU
+    std::size_t drawn_extrusions_ = 0;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;
 
@@ -121,6 +142,19 @@ private:
     unsigned ray_fbo_[2] = {}, ray_tex_[2] = {};                // ray traced visibility, ping-pong
     unsigned msaa_fbo_ = 0, msaa_colour_ = 0, msaa_depth_ = 0;  // the lit scene, multisampled
     unsigned colour_fbo_ = 0, colour_ = 0, colour_depth_ = 0;   // the lit scene, resolved
+
+    // The key light's shadow map (the ambient occlusion mode): the depth of
+    // the model and the preview seen from the light, drawn when the occlusion
+    // is; the box they fill, for the light's camera.
+    static constexpr int kShadowMapSize = 2048;
+    unsigned shadow_fbo_ = 0, shadow_depth_ = 0;
+    int shadow_size_ = 0;
+    Mat4 shadow_vp_ = identity();
+    float shadow_texel_ = 0.0f; // mm a texel of the map covers
+    float shadow_bias_ = 0.0f;  // 0.6 mm in the map's depth
+    bool shadowed_ = false;
+    Vec3 model_lo_, model_hi_, preview_lo_, preview_hi_;
+    bool model_box_ = false, preview_box_ = false;
 
     unsigned ray_nodes_ = 0, ray_prims_ = 0;
     int ray_samples_ = 0, ray_current_ = 0;

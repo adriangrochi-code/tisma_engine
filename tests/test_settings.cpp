@@ -1,6 +1,7 @@
 #include "config/settings.hpp"
 #include "geom/polygons.hpp"
 #include "io/stl.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -24,6 +25,49 @@ TEST_CASE("empty settings give the defaults", "[settings]") {
     CHECK(s.first_layer_shrink == 0.0);
     CHECK(s.simplify_tolerance == 0.01);
     CHECK(s.gpu == GpuMode::Auto);
+}
+
+TEST_CASE("speeds come only from the printer's profile, a stock Ender-3's when it has none", "[settings]") {
+    // No speed of the engine's own (owner's decision, 2026-10-26).
+    const Settings none = parse_settings("{}");
+    CHECK(missing_speeds(none) ==
+          std::vector<std::string>{"machine.corner_speed", "speed.walls", "speed.outer_wall", "speed.infill",
+                                   "speed.solid_infill", "speed.top_solid_infill", "speed.support", "speed.travel",
+                                   "speed.first_layer", "retraction.speed", "cooling.min_speed"});
+    CHECK_THROWS_WITH(require_speeds(none), ContainsSubstring("no speed for machine.corner_speed, speed.walls"));
+    CHECK(none.max_speed == 0.0); // no cap
+    CHECK(none.max_feed_x == 0.0); // not known
+    // Not set is null in the JSON, and comes back not set.
+    CHECK_THAT(settings_json(none), ContainsSubstring("\"walls\": null"));
+    CHECK(missing_speeds(parse_settings(settings_json(none))) == missing_speeds(none));
+    CHECK(parse_settings(R"({"speed": {"walls": null, "outer_wall": null}, "retraction": {"speed": null},
+                             "cooling": {"min_speed": null}, "machine": {"corner_speed": null, "max_feed_x": null}})")
+              .wall_speed == 0.0);
+
+    // The fallback fills only what is missing, with Creality's numbers.
+    Settings some = parse_settings(R"({"speed": {"walls": 120, "outer_wall": "50%"}})");
+    const std::vector<std::string> filled = fill_missing_speeds(some);
+    CHECK(filled.size() == 9);
+    CHECK(some.wall_speed == 120.0);           // the printer's stays
+    CHECK(some.outer_wall_speed.of(120.0) == 60.0);
+    CHECK(some.infill_speed == 60.0);
+    CHECK(some.solid_infill_speed == 60.0);
+    CHECK(some.top_solid_infill_speed == 40.0);
+    CHECK(some.support_speed == 40.0);
+    CHECK(some.travel_speed == 180.0);
+    CHECK(some.first_layer_speed == 25.0);
+    CHECK(some.retract_speed == 25.0);
+    CHECK(some.min_print_speed == 10.0);
+    CHECK(some.corner_speed == 10.0);
+    CHECK(some.max_speed == 0.0); // limits are not filled
+    CHECK(some.max_feed_x == 0.0);
+    CHECK(missing_speeds(some).empty());
+    CHECK_NOTHROW(require_speeds(some));
+    CHECK(fill_missing_speeds(some).empty());
+    Settings outer;
+    fill_missing_speeds(outer);
+    CHECK_FALSE(outer.outer_wall_speed.percent);
+    CHECK(outer.outer_wall_speed.value == 30.0);
 }
 
 TEST_CASE("settings are read by group", "[settings]") {
@@ -67,7 +111,7 @@ TEST_CASE("settings are read by group", "[settings]") {
     CHECK(s.outer_wall_speed.of(s.wall_speed) == 20.0);
     CHECK(s.travel_speed == 150.0);
     CHECK(s.max_speed == 100.0);
-    CHECK(s.infill_speed == 80.0); // default
+    CHECK(s.infill_speed == 0.0); // not set: the printer's profile gives it
     CHECK(s.ignored_groups == std::vector<std::string>{"material"});
 }
 
@@ -77,13 +121,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"layer": {}})"), ContainsSubstring("layer: unknown group"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"hieght": 0.2}})"), ContainsSubstring("layers.hieght: unknown setting"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"height": "0.2"}})"), ContainsSubstring("layers.height: must be a number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"layers": {"first_height": 0}})"), ContainsSubstring("from 0.01 to 2 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"layers": {"first_height": 0}})"), ContainsSubstring("from 0.01 to 10 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"first_layer_shrink": -1}})"), ContainsSubstring("not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"slicing": {"fill_mode": "xor"}})"), ContainsSubstring("must be one of"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": 3})"), ContainsSubstring("must be an object"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 10 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 40 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
@@ -106,7 +150,7 @@ TEST_CASE("bad settings name the key", "[settings]") {
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
                                                       "travel_acceleration": 3000, "corner_speed": 0}})");
     CHECK(m.max_feed_x == 300.0);
-    CHECK(m.max_feed_y == 200.0);
+    CHECK(m.max_feed_y == 0.0); // not known
     CHECK(m.max_feed_z == 8.0);
     CHECK(m.acceleration == 2000.0);
     CHECK(m.travel_acceleration == 3000.0);
@@ -135,8 +179,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(sup.support);
     CHECK(sup.support_angle == 50.0);
     CHECK(sup.support_z_gap == 0.3);
-    CHECK(sup.support_xy_gap == 1.0);
+    CHECK(sup.support_xy_gap == Speed{1.0, false});
     CHECK_FALSE(Settings{}.support);
+    // The XY gap is half the wall width by default (supports_skirt.md, rule 2).
+    CHECK(Settings{}.support_xy_gap == Speed{50.0, true});
+    CHECK(parse_settings(R"({"support": {"xy_gap": "75%"}})").support_xy_gap == Speed{75.0, true});
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"xy_gap": "75"}})"), ContainsSubstring("support.xy_gap: must be"));
+    CHECK(parse_settings(R"({"support": {"line_angle": 45}})").support_line_angle == 45.0);
     const Settings sl = parse_settings(R"({"support": {"spacing": 3, "interface_layers": 2}, "speed": {"support": 60}})");
     CHECK(sl.support_spacing == 3.0);
     CHECK(sl.support_interface_layers == 2);
@@ -291,4 +340,34 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("changes[0].acceleration"));
     CHECK_THROWS_WITH(parse_settings(R"({"changes": [{"z": 1, "volumetric_flow": 0}]})"),
                       ContainsSubstring("changes[0].volumetric_flow"));
+}
+
+TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker than it", "[settings]") {
+    // An 8 mm nozzle laying 4 mm layers 9 mm wide (pellets.md: the profile pack's pellet printers).
+    const Settings s = parse_settings(
+        R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 4, "first_height": 4}, "walls": {"width": 9, "count": 2}})");
+    CHECK(s.layer_height == 4.0);
+    CHECK(s.wall_width == 9.0);
+    CHECK_NOTHROW(check_settings(s));
+    // A 100 x 100 x 40 mm box: ten layers, each with its walls.
+    TriangleMesh m;
+    const Vec3f v[8] = {{0, 0, 0}, {100, 0, 0}, {100, 100, 0}, {0, 100, 0}, {0, 0, 40}, {100, 0, 40}, {100, 100, 40}, {0, 100, 40}};
+    const auto quad = [&](int a, int b, int c, int d) {
+        m.add_triangle(v[a], v[b], v[c]);
+        m.add_triangle(v[a], v[c], v[d]);
+    };
+    quad(0, 3, 2, 1);
+    quad(4, 5, 6, 7);
+    for (int i = 0; i < 4; ++i)
+        quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    Settings cpu = s;
+    cpu.gpu = GpuMode::Off;
+    const SlicedModel sliced = slice_model(weld_exact(m), cpu);
+    REQUIRE(sliced.layers.size() == 10);
+    for (const LayerWalls& w : sliced.walls)
+        CHECK_FALSE(w.toolpaths.empty());
+    // Thicker than the nozzle is refused when the whole set is checked.
+    CHECK_THROWS_WITH(
+        check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
+        ContainsSubstring("thicker than 8 mm"));
 }

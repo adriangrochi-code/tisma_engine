@@ -167,19 +167,23 @@ add_custom_command(
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
+  src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
   src/slice/layers.cpp
   src/slice/local_layers.cpp
   src/slice/variable_layers.cpp
   src/slice/zaa.cpp
+  src/geom/bitgrid.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
+  src/slice/painted.cpp
   src/slice/pipeline.cpp
   src/geom/medial_axis.cpp
   src/geom/voronoi.cpp
   src/perimeters/beading.cpp
+  src/perimeters/fuzzy.cpp
   src/perimeters/transitions.cpp
   src/perimeters/sites.cpp
   src/perimeters/walls.cpp
@@ -197,6 +201,7 @@ add_library(tisma_core
   src/infill/stress_density.cpp
   src/gcode/writer.cpp
   src/gcode/resolution.cpp
+  src/gcode/scarf.cpp
   src/gcode/check.cpp
   src/gcode/export.cpp
   src/gcode/preview.cpp
@@ -206,8 +211,10 @@ add_library(tisma_core
   src/gcode/print_time.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
+  src/slice/placement.cpp
   src/adhesion/adhesion.cpp
   src/support/support.cpp
+  src/support/tree.cpp
   src/fea/voxels.cpp
   src/fea/hex8.cpp
   src/fea/elasticity.cpp
@@ -222,6 +229,11 @@ add_library(tisma_core
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/io/checksum.cpp
+  src/io/zip.cpp
+  src/io/xml.cpp
+  src/io/model.cpp
+  src/io/threemf.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
@@ -262,7 +274,10 @@ if(TISMA_BUILD_UI)
     src/ui/files.cpp
     src/ui/slicing.cpp
     src/ui/presets.cpp
+    src/ui/settings_layout.cpp
     src/ui/raytrace.cpp
+    src/ui/plate.cpp
+    src/ui/help.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE tisma_warnings)

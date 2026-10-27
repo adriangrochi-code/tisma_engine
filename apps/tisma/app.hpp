@@ -26,9 +26,31 @@ struct AppOptions {
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
     int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
+    // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
+    // (mm and degrees); empty: the framing's own (a close look at the lines).
+    std::vector<float> look;
+    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay or paint (for screenshots)
+    // Brush strokes painted at start on every model (for screenshots and tests).
+    struct Stroke {
+        std::string channel; // support, seam or fuzzy
+        bool block = false;  // the mark: block, else enforce
+        float x = 0, y = 0, z = 0, radius = 1;
+    };
+    std::vector<Stroke> strokes;
+    bool tips = false; // with screenshot: show the first-use tips (docs/UI.md, «Ayuda»)
+    int tour = -1;     // the assistant's step to show at start (0 to 6); -1: none, or the first run's
+    std::string info;  // with screenshot: the setting ("group.key") whose info card opens
+    std::string level;   // the settings panel's level: basic, normal or advanced; empty: the remembered one
+    std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    // What draws the window: "auto" (Vulkan when this machine has it and the
+    // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)
+    // or "opengl" (PLAN.md «Vista con Vulkan»).
+    std::string graphics = "auto";
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    std::string compare_view;       // with screenshot: compare the 3D view with this screenshot's (the other graphics')
     std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
     bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish
     bool language_given = false;

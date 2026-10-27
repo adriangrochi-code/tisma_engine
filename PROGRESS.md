@@ -3885,3 +3885,1007 @@ El G-code sale idéntico byte a byte. La elección de islas con cajas también d
 **No medido:** una impresión real con la resolución; el efecto en placas con poca memoria de planificación.
 
 **Sigue:** la release 0.8.0-alpha.1 con estos arreglos, después lo que queda de la revisión en `PLAN.md`.
+
+## 2026-10-25 — release 0.8.0-alpha.1 y zonas chicas sólidas
+
+**Hecho:**
+- Release 0.8.0-alpha.1: `VERSION`, su sección del CHANGELOG y la fila de `docs/VERSIONING.md`; la CI de Linux pasó
+  entera en la sesión y la de Windows con el commit anterior.
+- `infill.solid_below_area` (70 mm², ficha `surfaces_infill.md`, regla 9): la parte dispersa de cada isla del relleno
+  más chica que eso pasa a sólida. Prueba nueva con la pata de la mesa de la prueba I6 (zona de 62,6 mm², sólida en
+  todas las capas) y el cubo de 20 mm (335 mm², disperso). Cinco pruebas con el cubo de 10 mm (57,8 mm² de relleno)
+  lo apagan para seguir probando lo suyo.
+- `check_settings` nombra primero un alto mínimo de capa mayor que el máximo (equipo de fichas).
+
+**Medido:** la placa de 12 islas pasa de 69 750 a 111 570 mm extruidos (+60 %) y de 34 min 50 s a 52 min 49 s; la
+esfera de 50 mm, +0,07 % (sus casquetes). El cilindro de 20 mm de diámetro no cambia.
+
+**Medido por el equipo de fichas** (caja negra sobre 7f745d8, Release):
+- ThreadSanitizer: 0 avisos en 14 laminados y 3 análisis.
+- 400 cilindros: de 44,8 a 38,6 s en total; la verificación, de 6,96 a 3,77 s; la memoria, de 2283 a 2016 MB; el
+  G-code, de 386 a 229 MB.
+- Ningún tramo que extruye mide menos de 0,0125 mm, y ninguno mide cero.
+- La verificación sigue creciendo más que lineal (×32 de 25 a 400 cilindros).
+
+**Sigue:** lo que queda de la revisión en `PLAN.md` (verificación con muchas islas, `info`, gyroid por franjas,
+streaming del G-code).
+
+## 2026-10-25 — vista previa realista, ray tracing continuo, herramientas de la placa y brillo
+
+Pedidos del dueño, con una foto de una esquina de la vista previa.
+
+**Hecho:**
+- **Vista previa:** los tramos seguidos se unen en inglete. Ya no sobresalen dientes en las curvas, y las caras
+  encimadas no titilan. La luz sigue el perfil de un cordón impreso (`docs/UI.md`). `--look` acerca la cámara de las
+  capturas.
+- **Ray tracing:** el cordón es un poliedro convexo de seis planos, igual en la CPU y en la GPU (Haines 1991). Las
+  sombras de una pared son continuas. `--ray-check`: la GPU y la CPU coinciden en el 99,999 % de los píxeles.
+- **Herramientas de la placa:** varios modelos; Agregar, Quitar, Duplicar, Mover (y arrastrar), Rotar, Escalar, Apoyar
+  en una cara y Organizar (ficha `placement.md`); íconos propios en `assets/icons/`; los proyectos guardan todos los
+  modelos. `src/ui/plate.*` con 5 pruebas; `ui_plate_save`, `ui_plate_reopen` y `ui_plate_same_gcode`: dos cubos
+  ordenados, exportados, guardados y vueltos a abrir dan el mismo G-code.
+- **Brillo parejo:** `docs/GLOSS.md` con lo que se sabe (la temperatura de salida baja con el flujo; las capas que se
+  frenan salen más brillantes) y lo que el motor puede hacer (G1 a G7). No hay mediciones públicas del brillo de piezas
+  FFF sin pintar: hace falta una pieza de prueba y un medidor.
+
+**Medido:** placa de 2 cubos de 10 mm, ordenada: centros a 6 mm entre caras, G-code idéntico al reabrir el proyecto.
+
+**No probado:** las herramientas con una persona usando el mouse (solo capturas y pruebas automáticas); el
+arrastre con modelos de más de un millón de triángulos (se recalcula la malla en cada cuadro).
+
+**Sigue:** pintar (soportes y costura, con el motor), G1 y G2 del brillo, el rendimiento con modelos grandes y la
+decisión del dueño sobre los perfiles abiertos.
+
+## 2026-10-26 — brillo parejo: la pared externa no se frena (G1 y G2)
+
+**Hecho:** para llegar al tiempo mínimo de capa, el escritor frena primero todo lo que no es pared externa (paredes
+internas, relleno, soporte), sin bajar de la velocidad mínima. La pared externa sigue a su velocidad. Si eso no
+alcanza, se frena todo como antes. `cooling.keep_outer_speed` (encendido por defecto) lo apaga. `src/gcode/cooling.*`
+con una prueba nueva en `test_cooling.cpp`; fila en la interfaz.
+
+**Medido:** cubo de 10 mm: la pared externa a 1800 mm/min en todas las capas (antes, 1651 a 1687 según la capa), con
+el mismo tiempo total (6 min).
+
+**No probado:** el brillo de una pieza impresa (hace falta la pieza de prueba de `docs/GLOSS.md` y un medidor).
+
+**Sigue:** pintar (soportes y costura, con el motor), esperar lejos de la pieza cuando frenar lo de adentro no
+alcanza.
+
+## 2026-10-26 — pintar sobre el modelo: soportes y costura
+
+Pedido del dueño: las herramientas de todos los slicers, también pintar.
+
+**Hecho:**
+- **Motor** (`docs/PAINTING.md`):
+  - `src/mesh/paint.*`: un árbol de marcas por triángulo y canal (soportes, costura, piel difusa, colores). Un
+    triángulo se corta en cuatro donde pasa el borde del pincel, sin tocar la malla. Pincel esférico que no pinta las
+    caras de atrás.
+  - `src/slice/painted.*`: lo pintado de cada capa, proyectado y agrandado.
+  - Soportes forzados y bloqueados (ficha `supports_more.md`, reglas 3 a 5) y el ajuste `support.automatic`.
+  - Costura forzada (en el medio del tramo pintado con la costura alineada o atrás) y bloqueada.
+  - Parte `PNT ` en el proyecto; un número de triángulo fuera de la malla se rechaza antes de reservar memoria.
+- **Interfaz:** herramienta Pintar (P): canal, Forzar o Bloquear, tamaño del pincel y Borrar todo. Las marcas se ven
+  sobre el modelo (verde y rojo). `--paint` pinta al abrir, para capturas y pruebas.
+- **Pruebas:** `tests/test_paint.cpp` (7 casos: pincel, bytes, capas, soportes, costura en los cuatro modos, un cubo
+  con estante y un G-code real), una de la placa, una del proyecto, una hostil y `ui_paint_save`, `ui_paint_reopen`,
+  `ui_paint_same_gcode`.
+
+**Medido:** cubo de 10 mm con una franja de costura pintada en una cara: las 50 paredes externas empiezan en la franja
+(sin pintar, en la esquina de atrás); el proyecto guardado y vuelto a abrir da el mismo G-code. El pincel en una
+esfera de 1 002 528 triángulos (Release, un hilo): 13 a 18 ms por paso, porque mira todos los triángulos; recorrer lo
+pintado para dibujarlo, 6 ms.
+
+**No probado:** pintar con el mouse una persona (solo capturas y pruebas automáticas); el clic que busca la cara bajo
+el mouse en esa esfera (también mira todos los triángulos).
+
+**Sigue:** la piel difusa del motor y su pincel; colores con varios extrusores; volúmenes bloqueadores; el rendimiento
+con modelos grandes; la decisión del dueño sobre los perfiles abiertos.
+
+## 2026-10-26 — modelos grandes en la interfaz
+
+Pedido del dueño: mejorar el rendimiento con modelos grandes.
+
+**Medido** con una esfera de 1 002 528 triángulos (Release):
+- el motor no es el problema: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificar 0,04 s, vista previa 0,06 s;
+- en la interfaz, arrastrar el modelo rehacía en cada cuadro la malla ubicada (75–89 ms), la de la placa (69–75 ms) y
+  la copia de la vista (45 ms): 5 cuadros por segundo;
+- cada clic y cada cuadro del pincel miraban todos los triángulos: 57 ms.
+
+**Hecho:**
+- Arrastrar corre el modelo con un desplazamiento en el shader; la malla se rehace una vez, al soltarlo.
+- `TriangleIndex` (`src/ui/plate.*`): un árbol de cajas por modelo, armado cuando hace falta (250 ms). Un clic pasa de
+  57 ms a 3 µs; un paso del pincel, de 13–18 ms a 2 ms (`paint` recibe los triángulos cercanos). Prueba nueva: el árbol
+  da el mismo triángulo y la misma distancia que mirarlos todos, en 400 rayos.
+
+**No probado:** cuadros por segundo reales con una GPU (en la sesión solo hay llvmpipe, donde dibujar la vista previa
+de esa esfera con MSAA 4 tarda más que todo lo anterior).
+
+**Sigue:** armar el árbol y la malla de la placa en segundo plano; los campos de giro y escala sin rehacer toda la
+placa.
+
+## 2026-10-26 — piel difusa
+
+Para que el pincel de Pintar tenga su tercer canal, y la ficha `fuzzy_skin.md`.
+
+**Hecho:**
+- `src/perimeters/fuzzy.*`: la pared externa pasa por puntos nuevos cada 0,5 a 1,5 veces `fuzzy.point_distance`,
+  corridos al azar hasta `fuzzy.thickness` hacia afuera o hacia adentro (splitmix64: el mismo G-code en todos los
+  compiladores). `external` deja lisos los agujeros, `all` no. Las paredes internas no cambian.
+- Pintada: donde se pintó, aunque `fuzzy.mode` sea `none` (regla 4); el resto del lazo queda con sus puntos.
+- Ajustes `fuzzy.mode`, `fuzzy.thickness`, `fuzzy.point_distance` (perfil de impresión), filas en la interfaz bajo
+  Costura, y el canal Piel difusa de Pintar habilitado (`--paint fuzzy,...`).
+- `region_contains` en `src/geom/polygons.*`, que ahora comparten la costura pintada y la piel difusa.
+- Pruebas (`tests/test_fuzzy.cpp`): F1 en un cilindro, F2 en un tubo, y la pintada en una mancha.
+
+**Medido:** cilindro de 20 mm, capa 10, `external`, 0,3 y 0,8: la pared externa de 9,51 a 10,08 mm del centro (la
+línea a 9,8; F1 de la ficha: de 9,49 a 10,08), tramos de 0,92 mm en promedio y 1,92 como máximo (F1: 0,85 y 1,8); las
+internas siguen a 9,0 y 9,4. G-code verificado sin problemas.
+
+**No probado:** la regla 3 (lo que sale de la capa de abajo como voladizo: falta el voladizo de `walls_extra.md`) y las
+paredes de las zonas gruesas de `docs/LOCAL_LAYERS.md`, que todavía no se hacen rugosas.
+
+**Sigue:** el tutorial de cada función la primera vez que se usa y el botón de información al lado de cada ajuste
+(pedido del dueño).
+
+## 2026-10-26 — ayuda en la interfaz y mantenimiento
+
+**Ayuda** (pedido del dueño: un asistente, un tutorial de cada función la primera vez y un botón de información al
+lado de cada ajuste; `docs/UI.md`, «Ayuda»):
+- asistente de siete pasos la primera vez (sin preferencias guardadas) y desde **Más > Tutorial**;
+- consejos la primera vez que se usa cada herramienta de la placa, Pintar, el laminado y cada pestaña; se apagan, y
+  lo visto se guarda (`tips`, `tips_seen`);
+- botón (i) al lado de cada ajuste: qué hace, clave, valor por defecto y rango, leídos de `docs/CONFIG.md`, que el
+  programa lleva adentro (`src/ui/help.*`). La prueba nueva falla si un ajuste del motor no tiene su fila.
+- `--tips`, `--tour` e `--info` para las capturas; `ui_help_tour` y `ui_help_tip_and_info`.
+
+Llegó la ficha `assistant.md` (con el PR #22): pide además un panel de ayuda con datos del paquete libre. Lo hecho es
+el primer paso; lo que falta está en `PLAN.md`, «Fichas nuevas».
+
+**Mantenimiento** (bloque de las 8 horas):
+- fusionado `origin/dev` (PR #22, fichas nuevas) sin rebase;
+- `tisma_fuzz_gcode 2000` con la semilla 20261026: 2000 corridas, 2 rechazadas por no imprimibles, ninguna falla
+  (194 s);
+- encontrado por el equipo de fichas (2317 impresoras del paquete libre): las impresoras de pellets fallaban porque
+  `layers.height` no pasaba de 2 mm. Arreglado según `pellets.md`: capas hasta 10 mm y cordones hasta 40 mm, con los
+  topes de la boquilla de siempre; prueba nueva con boquilla de 8 mm y capas de 4 mm;
+- la CI de Linux corre más de 30 minutos con ASan (las dos pruebas del relleno por esfuerzos tardan 18 min cada una
+  con ASan): el aviso de tiempo cortó una corrida; esas dos se corrieron aparte y pasaron.
+
+**Sigue:** el resto de `assistant.md` (panel de ayuda con los datos del paquete), `settings_levels.md` y
+`settings_panel.md`, y el tiempo de impresión (`print_time.md`).
+
+## 2026-10-26 — prueba de caja negra del equipo de fichas: QA1 a QA7
+
+El equipo de fichas corrió el motor como caja negra contra las fichas (`docs/spec/qa/2026-10-26.md`, llegó con el PR
+#23). Arreglado:
+- **QA1, QA2 (falda):** `adhesion.skirt_distance` 6 mm por defecto (antes 3), y la pieza se agranda con uniones
+  redondeadas (`InflatePaths` con `JoinType::Round`). S7: 118,5 mm; S8: 287,0 mm por capa.
+- **QA3 (borde):** las vueltas van a la separación de los cordones, el ancho menos (1 − π/4) por la altura de la
+  primera capa (0,357 mm con 0,4 × 0,2), y son tantas como entran en el ancho pedido. S9: 14 vueltas, la de afuera
+  con el eje a 4,82 mm, 1340,4 mm.
+- **QA4 (soporte en el límite):** lo que sale justo medio cordón (o justo el ángulo pedido) ya no es voladizo: la
+  ficha dice «más de». S1: la cuña de 45° queda sin soporte; las de 20°, 30° y 40° lo llevan.
+- **QA5 (ventilador):** la regla 3 de `cooling.md`. Ajustes nuevos `cooling.fan_below_time` (60 s),
+  `cooling.fan_always` y `cooling.fan_bridges` (100 %); `cooling.fan_off_layers` pasa a 3. El escritor deja marcas en
+  cada capa (su comienzo y el comienzo y el fin de cada puente) y, cuando sabe el tiempo de la capa, escribe ahí los
+  comandos: el de la capa queda justo antes de su `;LAYER_CHANGE` (regla 4). Las capas que frenan llevan
+  `fan_max`, también entre las primeras (decisión del dueño del 24-10, que la ficha no contradice de forma explícita).
+  Los porcentajes se pasan a S con 255/100 (50 % es S128; con 2,55 daba S127).
+- **QA6:** `speed.top_solid_infill` 15 mm/s (antes 50). Queda reemplazado por la decisión del dueño de esta tarde:
+  ninguna velocidad tiene valor por defecto (ver la entrada siguiente).
+- **QA7 (C4):** con la primera capa de 0,3 y las demás de 0,2, un cubo de 10 mm tiene 50 capas hasta 10,1 mm (antes
+  49 hasta 9,9): una capa se agrega mientras su plano de corte no pase el techo de la pieza.
+
+**Medido** (cubo de 20 × 20 × 10 mm, como K1, con los ajustes del motor): capas 1 a 3 sin ventilador; capa 4 (8,1 s)
+S246 (96 %); capas 5 a 47 (7,7 s) S247; capas 48 a 50 (56 s) S100 (39 %). La fórmula da lo mismo que K1 (98, 93, 86,
+50 % para 6,6, 10,3, 16,8 y 46,7 s; prueba nueva en `tests/test_cooling.cpp`); los tiempos de capa son otros porque
+las velocidades y las capas de arriba son otras (ver abajo). Un puente sobre dos pilares lleva `fan_bridges` solo
+mientras se tiende, y vuelve el de la capa (prueba nueva en `tests/test_gcode.cpp`).
+
+**Encontrado al medir:** el motor marca como «Top solid infill» las tres capas sólidas de arriba; la ficha
+`surfaces_infill.md` (regla 2 e I1) marca así solo la de arriba de todo, y la primera sólida sobre el relleno es un
+puente (regla 6, la capa 48 de K1). Quedan en `PLAN.md`.
+
+**Falta:** QA8 (revisión de estabilidad) y QA9 (paredes finas con `walls.min_line_width`), y `cooling.enabled`.
+
+**Probado:** `tools/ci_linux.sh` (gcc, clang y ASan+UBSan).
+
+## 2026-10-26 — las velocidades son de la impresora (decisión del dueño)
+
+**Pedido del dueño:** «velocidades de todas las variables deben ser exclusivamente por los perfiles de impresora, no
+debe darse por defecto ninguna, ya que dependen exclusivamente de la impresora que se haya elegido». Y después: solo en
+el caso extremo de una impresora creada de cero o sin ningún valor, y solo para lo que falte, un valor por defecto que
+sea el de una Ender 3, lo más estándar y seguro para cualquier máquina.
+
+**Hecho:**
+- `Settings` ya no tiene velocidades: todas valen 0 («sin valor») y en el JSON se escriben `null`. Son las de
+  `speed`, `retraction.speed`, `cooling.min_speed` y `machine.corner_speed`, que el G-code necesita, y los topes
+  `speed.max` y `machine.max_feed_*`, que sin valor no topan.
+- `write_gcode` se niega sin ellas (`require_speeds`, nombra las que faltan). `fill_missing_speeds` pone las de
+  respaldo solo en las que faltan, y dice cuáles.
+- Respaldo «Ender-3 de fábrica», de las guías públicas de Creality: paredes 40, externa 30, relleno y sólido 60, arriba
+  40, soporte 40, viajes 180, primera capa 25, retracción 25 mm/s; `cooling.min_speed` y `machine.corner_speed` 10,
+  propios. Tabla y enlaces en `docs/CONFIG.md`, «Velocidades de respaldo».
+- Perfiles (versión 2): `speed` y `cooling.min_speed` pasan al perfil de impresora. Un perfil de impresión de la
+  versión 1 se abre sin sus velocidades.
+- Quién usa el respaldo: la impresora genérica de la interfaz (creada de cero); las del catálogo, que no saben más
+  que su velocidad máxima (ninguna velocidad de respaldo la pasa; la retracción de 35 o 40 mm/s que inventaba el
+  catálogo ya no está); un perfil de impresora guardado sin velocidades; `slice` con un archivo sin ellas (aviso
+  `speed_fallback`). La interfaz lo dice al elegir la impresora, y las velocidades están ahora en **Impresora ›
+  Velocidades**.
+- Pruebas: la impresora de las pruebas (`tests/test_printer.hpp`) tiene las velocidades con que se midieron; prueba
+  nueva de las reglas (sin valor, `null`, el respaldo solo en lo que falta, sus números); perfiles de versión 1 y 2;
+  `slice` sin velocidades avisa y usa las de respaldo; `tests/data/printer_settings.json` para la prueba sin avisos.
+
+**Cambia para quien usa el motor:** un archivo de ajustes sin velocidades ya no lamina con las de banco (60, 80,
+130 mm/s…) sino con las de respaldo, más lentas: el cubo de 10 mm de `tests/data` con `{}` lleva paredes a 40 y viajes
+a 180 mm/s.
+
+**Para el equipo de fichas:** la ficha `gcode_motion.md` y otras dan velocidades por defecto medidas en Tisma Slicer;
+con esta decisión el motor no tiene velocidades por defecto. QA6 (`speed.top_solid_infill` 15 mm/s) queda sin efecto:
+esa velocidad es la que dé el perfil de la impresora.
+
+## 2026-10-26 — vista previa de modelos grandes, primer paso
+
+**Pedido del dueño:** técnicas como LOD y otras formas de dibujar para más FPS con modelos grandes, «tipo raycaster»;
+se traba según cuántas capas se muestran; llegar por lo menos a 60 FPS; y «la idea es que el motor funcione en
+Vulkan».
+
+**Hecho** (`docs/LARGE_MODELS.md`):
+- Estudio de técnicas con sus fuentes (recorte, LOD, simplificación por cuádricas, rayos primarios contra el BVH,
+  oclusión jerárquica) y un plan; el paso a Vulkan queda en `PLAN.md`, «Vista con Vulkan».
+- Medir: `--bench-frames N` para las capturas, y el tiempo de la vista en la barra de estado («Vista 8,3 ms · 120
+  FPS», consulta de tiempo de la GPU) para muestrear en cada máquina.
+- No dibujar lo que la pieza tapa (`hidden_inside`): paredes internas y relleno cubiertos por la capa de abajo, la de
+  arriba y la pared externa, lejos de los escalones. La primera versión, sin lo de los escalones, dejaba puntitos en
+  la cúpula de una esfera (vistos al comparar las imágenes); ahora la imagen es la misma píxel por píxel.
+- Regla 2 de `surfaces_infill.md` (de la prueba de caja negra): solo la capa de arriba de todo es la superficie de
+  arriba; las otras capas sólidas de arriba van como relleno sólido.
+
+**Medido** (GPU por software del contenedor, 1200 × 800, pieza entera; sirve para comparar, no son FPS reales):
+cilindro de 60 × 80 mm, 181 384 cordones → 52 499 dibujados, 2 330 → 633 ms por cuadro con oclusión ambiental;
+esfera de 80 mm (peor caso), 188 664 → 157 196, 3 400 → 2 231 ms. Armar los datos: 121 y 181 ms.
+
+**No probado:** FPS en una placa de video real (no hay en el contenedor): para eso está el número de la barra de
+estado.
+
+**Sigue:** V1 de «Vista con Vulkan».
+
+## 2026-10-26 — vista con Vulkan, paso V1
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan», y «que detecte automáticamente si soporta Vulkan;
+si no lo hace, que vaya a OpenGL».
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_window.*`: la ventana con Vulkan, desde la especificación (instancia, dispositivo, swapchain, un render
+  pass que limpia y dibuja Dear ImGui, dos cuadros en vuelo, texturas para los íconos y el logo, y la imagen copiada
+  a memoria para las capturas). Vulkan con volk y la superficie con GLFW, como el cómputo del motor; los paneles con
+  el backend de Vulkan de Dear ImGui (MIT, anotado en `THIRD_PARTY.md`).
+- `--graphics auto|vulkan|opengl`. La detección es arrancar Vulkan: sin cargador, sin dispositivo 1.1 o sin superficie
+  para la ventana, avisa y sigue con OpenGL. Probado con lavapipe (Vulkan) y sin controlador (vuelve a OpenGL).
+- El renderizador de OpenGL no hace nada si no se inició (ventana de Vulkan).
+- Prueba `ui_vulkan_window`: la ventana con Vulkan y su captura; en la CI (`TISMA_REQUIRE_GPU=1`), volver a OpenGL
+  es una falla.
+
+**Falta:** la vista 3D en Vulkan (V2). Hasta entonces el modo automático usa OpenGL, para no perder la vista 3D.
+
+## 2026-10-26 — vista con Vulkan, paso V2
+
+**Pedido del dueño:** «la idea es que el motor funcione en Vulkan». En el camino pidió también greedy meshing para los
+cordones y mejorar la oclusión ambiental y el color «como lo hace Prusa 3.0», con los videos del lanzamiento de
+referencia (quedan en `PLAN.md`).
+
+**Hecho** (`PLAN.md`, «Vista con Vulkan»):
+- `apps/tisma/vk_view.*`: la vista 3D con Vulkan. Dibuja la cama, la grilla, el modelo con el elegido y su
+  desplazamiento, la pintura y la vista previa instanciada (con lo tapado afuera, como en OpenGL), con MSAA y luego
+  FXAA en una textura que ImGui muestra bajo los paneles. Los shaders son los de OpenGL en GLSL 450
+  (`apps/tisma/shaders/`, compilados a SPIR-V por `tools/compile_shaders.py`).
+- El orden de dibujo de la vista previa (lo que se ve y lo tapado, por capa) pasó a `src/ui/scene.*`, compartido por
+  las dos vistas.
+- El tiempo de la GPU con marcas de tiempo de Vulkan (la barra de estado) y `--bench-frames` con Vulkan.
+- `--compare-view otra.png` y las pruebas `ui_view_prepare_*` y `ui_view_preview_*`: la misma escena con OpenGL y con
+  Vulkan, imagen contra imagen; pasa si menos del 0,5 % de los píxeles de la vista difiere en más de 24 niveles.
+- `src/ui/png.*` lee las capturas que escribe y compara dos imágenes (con su prueba).
+
+**Errores encontrados y corregidos:**
+- El cómputo del motor cargaba sus funciones en los punteros globales de volk, los mismos de la ventana: después de
+  laminar, la ventana Vulkan llamaba funciones del otro dispositivo y se caía al cerrar (`vkDestroySurfaceKHR` nulo).
+  Ahora el cómputo tiene su propia tabla de funciones y el cargador se arranca una sola vez (`load_vulkan`).
+- La validación de sincronización de Khronos encontró dos carreras, ya corregidas:
+  - el cuadro siguiente reescribía la profundidad y el color sin esperar al anterior;
+  - la copia de la captura escribía el mismo buffer en dos cuadros en vuelo.
+  Con la capa de validación, ahora no hay errores.
+- lavapipe dibuja cortadas y gruesas las líneas que salen muy lejos de la pantalla o pasan detrás del ojo: la grilla
+  de Vulkan va en tramos de 5 mm.
+
+**Medido** (CPU del contenedor: llvmpipe para OpenGL, lavapipe para Vulkan; 1200 × 800, luz rápida; sirve para
+comparar, no son FPS reales):
+
+| Pieza | Cordones dibujados | OpenGL | Vulkan |
+|---|---|---|---|
+| Cilindro de 60 × 80 mm | 52 499 | 657 ms | 672 ms |
+| Esfera de 80 mm | 241 612 | 3 838 ms | 3 787 ms |
+
+Iguales, porque las dos usan el mismo rasterizador de Mesa por CPU. Lo que gana Vulkan viene con V4 (el recorte en la
+GPU y los dibujos indirectos) y en una placa de video real.
+
+**No probado:** una placa de video real y Windows con Vulkan.
+
+**Sigue:**
+- mejorar la oclusión y el color, con las imágenes del lanzamiento de PrusaSlicer 3.0 como referencia de caja negra;
+- V3 (la oclusión y los rayos en Vulkan), y entonces el modo automático pasa a Vulkan;
+- greedy meshing en V4.
+
+## 2026-10-26 — oclusión y color de la vista previa; velocidad de las capas de abajo
+
+**Pedidos:**
+- **Del dueño:** mejorar la oclusión ambiental y el color «como lo hace Prusa 3.0», con los videos y las imágenes
+  del lanzamiento como referencia. Los miré como caja negra: miniaturas de los videos e imágenes del blog, nunca
+  código.
+- **Del equipo de specs, medición de caja negra** (`docs/spec/qa/2026-10-26-velocidad.md`, metas RV1 a RV6 en
+  `docs/spec/BENCHMARKS.md`, aprobadas por el dueño): las capas de abajo se llevaban unos 5 de los 6 s del Benchy.
+
+**Lo que muestra la referencia (caja negra):**
+- cada capa de una pared se ve como un tubo, con una ranura oscura y fina contra la de arriba;
+- colores saturados;
+- la sombra suave de la pieza sobre la cama;
+- oscuro donde la pared toca la cama.
+
+**Hecho, la vista** (OpenGL y Vulkan, siguen iguales imagen contra imagen):
+- **Ranuras entre capas.** Cada cordón calcula, en su sección, cuánto cielo y cuánta luz principal le dejan el
+  cordón de arriba y el de abajo: la oclusión por horizontes (Bavoil, Sainz y Dimitrov 2008) resuelta exacta para dos
+  cordones que se tocan, con la luz principal de unos 35° de ancho, para que entre con penumbra. Solo entre los tipos
+  que se apilan y dentro de las capas mostradas; de lejos se promedia como las normales del filtro de moiré. Con ray
+  tracing no se aplica.
+  - La primera versión ponía la cara de arriba del rombo como «techo plano», tapado por el cordón de arriba, y las
+    paredes salían casi negras. Ahora la ranura sube por el costado según la altura en la sección: lo que se ve de
+    costado.
+- **Curva de tono sobre el canal más brillante:** los colores saturados no se lavan; los grises, igual que antes.
+- **Falta, el paso siguiente:** la sombra de la pieza sobre la cama (un mapa de sombras desde la luz principal, en
+  la pasada de oclusión).
+
+**Hecho, la velocidad** (`PLAN.md`, «Velocidad del laminado»):
+- Era la detección de puentes: el área de los cordones de la capa de abajo unía un disco de 64 lados por punto. Las
+  paredes del Benchy cambian de ancho casi en todos lados, así que la primera mejora (un offset por tramo de un mismo
+  ancho) no alcanzaba. Ahora:
+  - cada recorrido es un offset variable de Clipper2 (el medio ancho de cada punto);
+  - lo impreso abajo se calcula solo en una ventana tres anchos más grande que la superficie inferior, simplificado
+    a 1 µm;
+  - el apoyo de los anclajes se calcula solo alrededor del puente.
+
+**Medido** (contenedor de 4 núcleos, mediana de 5 corridas, Benchy, antes 1ffbdeb y después):
+
+| Meta | Caso | Antes | Ahora | Meta |
+|---|---|---|---|---|
+| RV1 | Benchy con los ajustes por defecto | 6,3 s | 1,39 s | 1,5 s |
+| RV2 | Lo que suman las capas de abajo, tolerancia 0 | 7,5 → 200 s | 8,2 → 8,9 s (8 %) | 25 % |
+| RV2 | Ídem, tolerancia 0,005 | 8,4 s más | 1,34 → 1,65 s (22 %) | 25 % |
+| RV3 | Ídem, de 1 a 6 paredes | 1,7 a 6,7 s | 0,17 a 0,25 s | 0,3 s |
+
+La parte de RV2 con tolerancia 0 es una sola corrida.
+
+**RV6, el G-code:**
+- Sin capas de abajo, el Benchy da el mismo G-code byte a byte.
+- Con capas de abajo cambia una sola capa (Z 0,6, la del puente del casco sobre la primera): 767 líneas de 336 538.
+  Hay la misma cantidad de puentes, de zonas sólidas y de relleno, 4 movimientos menos y el filamento casi igual.
+  El borde de lo impreso abajo se movió a lo sumo 1 µm (la simplificación y los arcos del offset, que ahora empiezan
+  en la normal de cada unión). Así cambian unas micras los bordes de esa zona sólida y del puente, y con eso el
+  orden de sus líneas.
+
+**No probado:** RV4 (V10, reusar capas iguales) y RV5 (V11, relaminar por etapas) siguen pendientes.
+
+**Sigue:**
+- la sombra sobre la cama;
+- greedy meshing;
+- V3/V4 del informe (`;WIDTH` solo cuando cambia y menos movimientos).
+
+**Agregado después, mismo día:** la sombra de la pieza sobre la cama (mapa de sombras desde la luz principal, en la
+pasada de oclusión; `docs/UI.md`). Probé que la pieza también la recibiera, pero los escalones entre capas, del
+tamaño de un texel del mapa, se sombreaban entre sí y dibujaban anillos en una esfera. Por ahora solo la recibe la
+cama. El dueño pidió dejar la vista para después y priorizar V7 a V11 de velocidad.
+
+## 2026-10-26 — velocidad: V11, relaminar por etapas
+
+**Pedido del dueño:** dejar la vista para después y priorizar las optimizaciones V7 a V11 del informe de velocidad
+(`docs/spec/qa/2026-10-26-velocidad.md`, metas en `docs/spec/BENCHMARKS.md`).
+
+**Estado de V7 a V11:**
+- **V7:** hecho en el bloque anterior; RV1 a RV3 se cumplen.
+- **V8:** no hace falta; las fichas piden el resultado y ya se cumple.
+- **V11:** hecho ahora.
+- **V10 y V9:** siguen.
+
+**Hecho:**
+- **El `Slicer` de la interfaz guarda el último corte** (`src/ui/slicing.*`). Si la malla, la pintura y los ajustes
+  del corte son los mismos, rehace solo el G-code, su verificación y la vista previa. Los ajustes del corte son todos
+  menos los que solo lee el G-code (`without_gcode_settings`):
+  - velocidades, límites de movimiento y aceleraciones;
+  - enfriamiento y ventilador, retracción;
+  - temperaturas y las variables de la impresora, flujo y avance de presión;
+  - los topes de flujo y de temperatura, la resolución del G-code, el sabor y la extrusión relativa;
+  - el G-code de inicio y de fin.
+- **La lista se armó buscando qué ajustes lee el laminado,** y una prueba la confirma de punta a punta. Una pieza con
+  un puente: para cada ajuste de la lista, el G-code por etapas es igual byte a byte al de un laminado entero. Un
+  ajuste del corte, otra malla u otra pintura cortan de nuevo.
+- **Un corte con el caso de carga del relleno guiado por esfuerzos no sirve a otra corrida.** Lo encontró una prueba
+  vieja.
+- **Los planificadores de viajes de cada capa se arman antes, en paralelo,** y la verificación y la vista previa a la
+  vez. El G-code no cambia.
+- **La barra de estado dice «G-code rehecho en X s»** cuando fue por etapas.
+
+**Medido** (Benchy, 4 núcleos):
+- **RV5:** relaminar después de cambiar `speed.infill` tarda de 0,41 a 0,46 s, con mediana 0,41 s (meta 0,5 s).
+  Un laminado entero tarda 1,35 s; el G-code es el mismo byte a byte.
+- **Con los planificadores en paralelo:** el Benchy con capas de abajo tarda 1,34 s (antes 1,39 s) y sin ellas
+  1,05 s, con el mismo G-code.
+
+**Sigue:** V10 (reusar capas iguales, RV4) y medir V9.
+
+## 2026-10-26 — velocidad: V10, capas repetidas
+
+**Pedido del dueño:** priorizar V7 a V11 del informe de velocidad. Queda V10 (RV4: el cilindro de 80 mm debe tardar
+como mucho un 25 % más que el de 40 mm) y medir V9.
+
+**Hecho:**
+- **El corte por tandas** (`src/slice/layers.*`). Un nivel sin ningún vértice entre él y el de abajo cruza las mismas
+  aristas, unidas en el mismo orden (`same_crossings`). Solo se corta el primero de cada tanda; los demás calculan sus
+  puntos sobre las aristas de ese, iguales bit a bit a un corte nuevo (lo prueba un test en una pirámide y un prisma).
+  Sirve también para conos, pirámides y campos curvos.
+- **La misma sección.** Si además toda arista cruzada es vertical, o está solo en triángulos verticales (los lados de
+  un prisma partidos por diagonales), la sección en x e y es la misma (`same_sections`). El corte deja esos niveles
+  vacíos y el laminado copia la región y las paredes de la capa de abajo; no los de la primera capa con su achique,
+  ni con piel difusa (cada capa la dibuja de nuevo). Con un borde abierto en la malla corta todo, porque el extremo de
+  un contorno abierto se movería.
+- **Copias que dan el mismo resultado byte a byte:**
+  - las superficies de una capa, si su región de relleno y las regiones que miran son las de la capa de abajo;
+  - el relleno, si las superficies son las de la capa a un período del patrón (`fill_period`: 2, o 6 en panal; nada
+    en giroide, cúbico y adaptativos, que se mueven con la altura); una prueba lo confirma para cada patrón;
+  - el planificador de viajes y las islas del G-code, si la región es la de la capa de abajo.
+- **El G-code en serie, más liviano:** la costura alineada y la simplificación de los recorridos comparan distancias
+  al cuadrado y solo sacan la raíz cuando quedan a un pelo del límite (`hypot` era 9 millones de llamadas en el
+  cilindro de 80 mm). La respuesta es la misma.
+
+**Medido** (4 núcleos, mediana de 3, ajustes por defecto):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 2,69 s | 0,36 s |
+| Cilindro de 32 768 lados, 80 mm | 5,33 s | 0,63 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,98 | 1,75 |
+| Benchy | 1,35 s | 1,35 s |
+
+- **RV4 no se cumple todavía.** Lo que crece con las capas es la parte en serie del G-code. Por cada 200 capas del
+  cilindro: el orden y las costuras unos 50 ms, la simplificación 22 ms, el texto unos 35 ms y su verificación 35 ms.
+  El corte y el laminado ya casi no crecen (+10 ms). Hace falta V5: armar el texto de cada capa en paralelo y
+  verificar en paralelo.
+- **RV6:** el G-code del Benchy (con y sin giroide), la esfera, la esfera con soportes, el tubo, las islas, las cajas,
+  el cubo con piel difusa y la pieza torcida sale igual byte a byte. En los cilindros (128 y 32 768 lados) cambia:
+  antes cada capa simplificaba otros puntos de las diagonales de los lados, y ahora todas repiten la sección de la
+  primera. Las paredes nuevas quedan a menos de 0,018 mm de las de antes (dos simplificaciones del mismo círculo,
+  cada una dentro de `slicing.simplify_tolerance` y `gcode.resolution`).
+- **Pruebas:** 395 de 395 pasan en Release. Nuevas: los niveles con las mismas aristas, la misma sección del prisma
+  (con un lado abierto y con una pirámide como contraejemplo), un prisma laminado que repite región, paredes y
+  relleno, el escalón de superficies y el período de cada patrón.
+
+**Sigue:** V5 (el G-code en paralelo) para llegar a RV4; después medir V9.
+
+## 2026-10-26 — velocidad: V5 y V9; RV4 se cumple
+
+**Pedido del dueño:** V7 a V11 primero. V10 había quedado sin llegar a RV4 por la parte en serie del G-code, y V9
+estaba sin medir.
+
+**Hecho:**
+- **V5, el G-code en un pipeline** (`src/gcode/writer.*`). Cada capa se planea (`plan_layer`: el orden de las islas
+  y los recorridos y las costuras, que siguen de donde terminó la capa de abajo) y se escribe (`write_layer`) por
+  separado. Un pipeline de oneTBB planea en orden, simplifica los recorridos en paralelo y escribe en orden, así que
+  mientras se escribe una capa se planean las siguientes. Una capa que se frena por el tiempo mínimo se vuelve a
+  escribir desde el mismo plan, sin planearla de nuevo.
+- **La verificación por bloques** (`src/gcode/check.*`): lee bloques de unos 256 KiB de líneas enteras en paralelo
+  y sigue el estado en orden. Una prueba nueva pone un error a cada lado del corte entre bloques y espera su número de
+  línea exacto.
+- **Menos trabajo en serie, con el mismo texto:**
+  - la costura alineada calcula la distancia solo para los candidatos a un pelo del cuadrado más chico;
+  - sin módulos en los recorridos de la costura;
+  - el emisor formatea X, Y y el ancho una sola vez;
+  - la exportación relee el archivo de una vez (carácter por carácter era un décimo de la exportación).
+- **V9:** lo que dejan las paredes se simplifica con `slicing.simplify_tolerance`, como los contornos.
+
+**Medido** (4 núcleos, sin otra carga, mediana de 9):
+
+| Pieza | V10 | V5 | V5 y V9 |
+|---|---|---|---|
+| Cilindro de 32 768 lados, 40 mm | 0,365 s | 0,282 s | 0,291 s |
+| Cilindro de 32 768 lados, 80 mm | 0,561 s | 0,343 s | 0,360 s |
+| Relación 80/40 (RV4, meta 1,25) | 1,54 | 1,22 | 1,24 |
+| Benchy (RV1, meta 1,5 s) | 1,133 s | 0,997 s | 0,975 s |
+| Benchy sin capas de abajo | — | 0,758 s | 0,748 s |
+
+- **RV4 se cumple, pero justo:** el ruido de la máquina mueve unos 0,02 s. Las corridas sueltas del cilindro van de
+  0,26 a 0,40 s. Lo que crece con las capas es el texto del G-code, que va en serie (unos 55 ms por cada 200 capas),
+  y la verificación (unos 10 ms).
+- **RV6, V5:** el mismo G-code byte a byte en el Benchy (con y sin giroide), la esfera (con soportes, con la tabla de
+  ventilador, con relleno ondulado y con ZAA), los cilindros, el tubo, las islas, las cajas, el cubo con piel difusa,
+  la pieza torcida, las capas por zona y una torre de cambios por altura (temperatura, ventilador, velocidad,
+  retracción, G-code propio y flujo forzado).
+- **RV6, V9:** cambia el relleno del Benchy (29 234 de 336 533 líneas). Por tipo, el largo total cambia: relleno
+  interno −0,2 %, sólido +0,1 %, superior −0,05 %, puentes +0,8 % (7,6 mm). Las paredes y el contorno quedan iguales.
+  La esfera, el cilindro de 128 lados, el tubo y las islas no cambian.
+- **Pruebas:** 396 de 396 en Release; el fuzzer de G-code, 150 casos sin fallas.
+
+**No medido:** RV2 y RV3 con V9 (V9 solo saca vértices; ya se cumplían). RV5 no cambia: el relaminado por etapas
+usa el mismo escritor, ahora más rápido.
+
+**Sigue:** V3 (`;WIDTH` solo cuando cambia, hoy 21 % del archivo) y V4 (juntar tramos cortos). Ninguna de las dos
+cambia el tiempo de corte, pero sí el tamaño del G-code y el tiempo de escribirlo. Después, la vista (pedido del
+dueño: oclusión y color como Prusa 3.0, mallado codicioso).
+
+## 2026-10-26 — mantenimiento (18:30)
+
+El bloque de mantenimiento de las 16:40 se disparó mientras se terminaba V10; se hizo al terminar V5 y V9. Ninguna
+otra sesión del motor estaba trabajando.
+
+**Revisado:**
+- `origin/main` no trae nada nuevo. Las fichas nuevas están en `spec/next` (PR #27, sin unir): RV7 a RV10 en
+  `BENCHMARKS.md` y la regla 8 de `perimeters.md` (la costura alineada en la GPU). `check_spec` pasa en las tres.
+- **Fuzzer de G-code:** 2000 casos con la semilla 20261026, 0 fallas (2 rechazados como no imprimibles, como
+  corresponde), en 86 s.
+- **CI de Linux** (gcc, clang, ASan) en verde sobre `2e4ff17`; Windows en verde sobre `1b2e782`.
+
+**Encontrado y arreglado:**
+- **Piezas huecas** (`infill.density` 0, la meta RV7). Con relleno impreso, una superficie inferior que queda toda
+  sobre la región de abajo se descarta sin calcular cordones; sin relleno, ese atajo no corría. Las capas sólidas de
+  abajo calculaban los cordones de toda la capa de abajo para descubrir que apoyan sobre la primera, que es sólida.
+  Ahora el mismo atajo mira la región de abajo menos su relleno disperso, que no se imprime.
+  - Estrella hueca de 160 mm (800 capas): corte de 0,90 a 0,62 s.
+  - Benchy sin relleno: de 1,30 a 1,04 s; sin relleno y con 1 pared, de 1,41 a 1,13 s.
+  - G-code igual byte a byte en las 9 piezas probadas (estrella y elipsoide huecos, esfera, Benchy con 1 pared, islas,
+    esfera grande).
+  - Prueba nueva: con relleno 0, el puente de la placa sobre dos pilares sigue igual y la estrella hueca no tiene
+    puentes.
+
+**Medido:**
+- **RV3** (Benchy, lo que suman las capas de abajo, mediana de 5): 1 pared 0,21 s, 3 paredes 0,33 s, 6 paredes
+  0,29 s. La meta es 0,3 s: queda en el límite con 3 paredes.
+- **RV2 con `simplify_tolerance` 0** (mediana de 3): 5,12 s contra 3,74 s sin capas de abajo, un 37 % más (meta
+  25 %). Sigue sin cumplirse: con tolerancia 0, el resto del laminado también es más lento.
+- **La costura alineada (RV10) no se reproduce sin el conejo**, que sale de los recursos de Tisma Slicer y no se
+  puede abrir. En piezas propias, `aligned` y `nearest` tardan casi lo mismo después de V5: Benchy 143 contra
+  141 ms de `write_ms`; esfera 66 contra 74; una estrella de 7 puntas 308 contra 377; un elipsoide de pocas caras 74
+  contra 57. Se pide al equipo de fichas que mida el conejo en `dev`.
+- **Un modelo del dueño** (cráneo de triceratops, 3MF de 546 684 triángulos, ajustes de una MK3S con soportes): 13,2 s
+  de laminado, 8 s de ellos en los soportes. Los soportes van en serie de arriba abajo, y lo caro es cerrar la
+  columna con dos offsets en cada capa con voladizo arriba. Calcular antes, en paralelo, el offset de la pieza por
+  `support.xy_gap` no se nota (12,1 contra 11,9 s), y se descartó. El cierre depende de la capa de arriba: va con
+  RV9.
+
+**Sigue:** RV9 (los soportes y lo demás que va en serie), RV2 con tolerancia 0, las mediciones del conejo (RV7, RV8 y
+RV10) y la decisión del dueño sobre el ancho en V3 y V4.
+
+## 2026-10-26 — soportes más rápidos, en la CPU y en la GPU
+
+**Pedido del dueño:** mejorar la velocidad de laminado de los soportes, y buscar acelerarlos también con la GPU. Salió
+de su cráneo de triceratops (3MF de una MK3S, 546 684 triángulos): 13,2 s de laminado, 8 s en los soportes.
+
+**Por qué era lento:** la columna del soporte baja capa por capa y se cierra por un cordón (agrandar y achicar) en cada
+capa con un voladizo arriba. En una pieza escaneada, cada capa trae de 26 a 51 voladizos diminutos (ruido). La columna
+junta unos 250 anillos, y el offset de Clipper2 calcula todas sus intersecciones: 5,6 s en 307 cierres, 33 G
+instrucciones. Calcular antes, en paralelo, el offset por `support.xy_gap` no cambió nada.
+
+**Hecho:**
+- **Una grilla de bits** (`src/geom/bitgrid.*`):
+  - relleno por línea de barrido en los centros de los píxeles;
+  - dilatación y erosión con un disco, con desplazamientos de palabras de 64 bits;
+  - contornos por los bordes de los píxeles.
+  - Pruebas propias: relleno, disco, cierre de huecos, borde de la grilla, contornos con agujeros y diagonales, y
+    volver a rellenar el contorno da los mismos bits.
+- **La columna del soporte en la grilla** (`support_areas`). Píxeles de un octavo de cordón (0,05 mm con cordón de
+  0,4), y el cierre es un disco de un cordón. Los voladizos se agrandan tres cuartos de píxel antes de rasterizar: un
+  anillo más fino que un píxel (una pendiente apenas pasada del límite) no se pierde; sin eso, el cráneo perdía un
+  19 % de soporte. La grilla cubre solo los voladizos, y las capas de arriba del último no la usan. El contorno se
+  simplifica a medio cordón (con un píxel, las uniones en zigzag sumaban un 40 % de movimientos) y la separación XY se
+  resta exacta. Las grillas de cada tanda de 32 capas se llenan en paralelo y los contornos se sacan en paralelo; la
+  columna va en orden.
+- **La GPU:** `support_column.comp` hace los mismos pasos, una invocación por palabra de 32 bits, una tanda de capas en
+  un solo envío (`run_steps`, con barreras entre pasos). `SupportParams::gpu` lo elige cuando hay contexto. Una prueba
+  compara los bits con la CPU con radios 1, 8 y 31 y una grilla que no es múltiplo de la palabra; otra, los soportes
+  enteros de una T con tapa en pendiente.
+
+**Medido** (4 núcleos, mediana de 3, `slice_ms`):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Cráneo, ajustes del 3MF (MK3S, soportes a 35°) | 12,9 s | 5,8 s |
+| Benchy con soportes | 1,38 s | 1,18 s |
+| Esfera grande con soportes | 2,10 s | 2,08 s |
+| Esfera de 50 mm con soportes | 0,58 s | 0,58 s |
+
+- **El paso de los soportes del cráneo, solo:** de 7,6 s a 1,4 s (rasterizar 81 ms, columna 529 ms, contornos y
+  separación 773 ms).
+- **La GPU acá es lavapipe**, que emula en la CPU: el cráneo tarda 8,95 s con ella contra 6,13 s sin ella, con el
+  mismo G-code byte a byte. Falta medir en una placa real; por eso la línea de comandos sigue sin usar lavapipe.
+- **RV6:** el soporte cambia. Área: cráneo +9 %, Benchy +5 %, esferas +1 % (el borde de afuera queda a menos de
+  0,05 mm, del lado seguro). Movimientos de soporte: Benchy 8475 → 7925, esfera grande 40 432 → 40 510. Tiempo de
+  impresión: cráneo 4 h 58 min → 4 h 50 min; Benchy 1 h 26 min 33 s → 1 h 27 min 28 s.
+- **Pruebas:** 402 de 402 en Release, 600 casos del fuzzer sin fallas. La prueba del soporte de la T ya no pide el
+  área exacta: la pide dentro de un píxel y medio por lado, y la separación de 0,6 mm del tallo, exacta.
+
+**Sigue:** medir la GPU en una placa real; si rinde, pasar también el relleno de las grillas a la GPU. Los contornos
+y la resta de la separación (0,77 s en el cráneo) son lo que más queda en la CPU.
+
+
+## 2026-10-26 — costura alineada tan rápida como `nearest` (RV10)
+
+**Por qué:** la sexta medición del equipo de fichas (`qa/2026-10-26-velocidad.md`, en `dev` `5b0bdbd`) dejó RV10 sin
+cumplir: el conejo con costura `aligned` tardaba 1,61 veces lo de `nearest` (meta 1,2). Sin el conejo (no se puede
+usar), se midió con una gota con bultos de 172 080 triángulos y 450 capas, generada por un script propio.
+
+**Lo que costaba:** un perfil (callgrind) en la gota mostró que no eran los viajes sino la búsqueda de esquinas:
+- las paredes de esta pieza tienen hasta 11 000 puntos por lazo, amontonados en las esquinas redondeadas del offset;
+- para medir el giro de cada punto se caminaba, punto por punto, hasta el primero a 0,1 mm de cada lado: decenas de
+  pasos por punto, 76 millones en 60 capas.
+
+**Hecho** (`src/gcode/order.*`, `src/gcode/writer.cpp`):
+- **Esquinas en tiempo lineal:** una cuerda nunca es más larga que el camino por el lazo, así que los puntos a menos
+  de 0,1 mm por el lazo (con un margen mucho más grande que el redondeo de las sumas) no pueden estar a 0,1 mm en línea
+  recta. Un puntero sobre el largo acumulado, que solo avanza, los saltea; los demás se miden como antes. Las esquinas
+  son las mismas.
+- **Candidatos aparte, elección en orden** (`perimeters.md`, regla 8, el camino sin GPU): `seam_candidates` depende solo
+  del lazo, así que una etapa nueva del pipeline los busca en paralelo para todas las paredes de cada capa, antes del
+  plan. El plan, que sigue a la capa de abajo, solo elige entre ellos.
+- **Viajes en paralelo:** el viaje hasta cada recorrido se planea en la etapa paralela, desde donde termina el
+  anterior (simplificar conserva las puntas). El escritor lo usa solo si la boquilla está exactamente ahí; si no, lo
+  planea él, como antes.
+- **Pruebas:** las esquinas contra la caminata punto por punto en 300 lazos al azar (estrellas con puntas redondeadas
+  de hasta 40 puntos amontonados, puntos repetidos, lazos más chicos que 0,1 mm, en los dos sentidos); y los candidatos
+  dados de antemano eligen las mismas costuras que sin ellos.
+
+**Medido** (4 núcleos, mediana de 5, tiempo total del comando):
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Gota, costura `aligned` | 3,81 s (`write_ms` 1524) | 2,68 s (`write_ms` 463) |
+| Gota, costura `nearest` | 2,69 s (`write_ms` 478) | 2,79 s (`write_ms` 466) |
+| Alineada contra `nearest` (RV10, meta 1,2) | 1,41 veces | 0,96 veces |
+| Cráneo de triceratops sin soportes | 4,93 s (`write_ms` 861) | 4,72 s (`write_ms` 566) |
+| Benchy | 0,96 s | 0,97 s |
+
+- Los viajes en paralelo solos (prueba A/B): cráneo `write_ms` 883 → 568, Benchy 158 → 130; en la gota, nada.
+- **RV6:** el G-code es el mismo byte a byte en 21 casos: Benchy (por defecto, gyroid, alineada, una pared), cajas,
+  cubo con piel difusa, cilindros, esferas (soportes, ZAA, torre, no planar), islas, placa, tubo, torcido, estrella
+  hueca, gota y cráneo con dos juegos de ajustes.
+- **Pruebas:** los 376 casos de la suite pasan en Release.
+
+**La GPU no rinde acá** (regla 8 pide la GPU cuando hay una): para dar las mismas esquinas bit a bit, el cálculo tiene
+que ser en doble precisión, que en las placas de consumo corre de 32 a 64 veces más lento que en simple. Y habría que
+copiar a la GPU todos los puntos de todas las paredes (en la gota, unos 15 millones, unos 240 MB, estimado). Con el
+cambio, la costura alineada ya cuesta lo mismo que `nearest`: no queda nada para ganar. Se avisa al equipo de fichas.
+
+**Sigue:** la pared exterior en espiral (pedido del dueño, ficha `walls_extra.md`, regla 4, costura en bufanda con la
+vuelta entera), V3 y V4 con la regla de 0,005 mm, RV7 con una pared y RV9.
+
+## 2026-10-26 — costura en bufanda
+
+**Pedido del dueño:** una forma de imprimir la pared de afuera como en el modo vaso, en espiral, para que la calidad
+sea alta y casi no haga falta costura. La ficha `walls_extra.md` ya lo tenía como «costura en bufanda» (regla 4), con la
+opción de la vuelta entera.
+
+**Hecho:**
+- **`scarf_loop`** (`src/gcode/scarf.*`): el lazo, desde su costura, se vuelve un camino abierto:
+  - una rampa de `walls.scarf_length` antes de la costura, la boquilla subiendo desde la capa de abajo (más
+    `walls.scarf_start_height`) hasta la capa, con el cordón tan alto como la boquilla;
+  - el lazo entero a la altura de la capa, y sus últimos milímetros otra vez sobre la rampa con el cordón cada vez más
+    fino: el filamento de un lazo común;
+  - con `walls.scarf_entire_loop`, la rampa y su segunda pasada dan la vuelta entera;
+  - la rampa y su segunda pasada en tramos de `walls.scarf_max_segment` como mucho.
+- **El escritor** la aplica en la etapa en paralelo, después de simplificar (así la simplificación no junta los tramos
+  de la rampa): la pared externa de los contornos (`contours`) o también la de los agujeros (`everywhere`), las
+  internas con `walls.scarf_inner`, nunca en la primera capa ni sobre recorridos que ya salen de la capa (ZAA,
+  relleno ondulado), y con `walls.scarf_only_smooth` (por defecto) solo en lazos sin giros de más de 30°. El alto de
+  cada cordón va en los puntos (`dz` y `below`), como en el relleno ondulado.
+- **El verificador** acepta esos bloques hasta la capa de abajo, un cordón no planar que termina en nada (el pie de la
+  rampa) y, en todo cordón, el medio milésimo que puede esconder un `;HEIGHT` de 3 decimales (los primeros cordones
+  de la rampa miden milésimas). El fuzzer, con la bufanda al azar, encontró además un caso viejo de ZAA que fallaba
+  por eso mismo: un cordón de 0,009 mm en una capa de 0,046 mm.
+- Los ajustes `walls.scarf*` solo los lee el G-code: cambiarlos rehace solo el G-code (V11).
+
+**Medido** (cilindro de 128 lados, 10 mm de radio, capas de 0,2; capa 10, como la prueba W1 de la ficha):
+
+| | Pared externa | Z | Filamento |
+|---|---|---|---|
+| Sin bufanda | 61,55 mm | 2,2 | 2,0472 mm |
+| `everywhere` | 81,55 mm (lazo + 20) | de 2,0 a 2,2; termina en la costura de siempre | 2,0473 mm |
+| Vuelta entera | 123,10 mm (dos vueltas) | de 2,0 a 2,2 | 2,0472 mm |
+
+- El filamento de toda la pieza es el mismo con y sin bufanda (357,65 mm).
+- **RV6:** con la bufanda apagada (por defecto), el G-code de los 21 casos de medición es el mismo; solo se suman las
+  líneas de los ajustes nuevos al pie.
+- **Pruebas:** rampa, largo, vuelta entera, altura inicial, filamento igual y tramos de 1 mm en un cuadrado;
+  esquinas marcadas; en el G-code de un tubo, `contours` contra `everywhere` y la primera capa sin rampa; un cubo con y
+  sin `walls.scarf_only_smooth`; todo verificado. 381 casos pasan. Fuzzer de G-code con la bufanda al azar en un
+  tercio de las corridas: 3000 corridas (semillas 26 y 27), 0 fallas.
+- **Sin probar:** una impresión real. La ficha mide la regla en Tisma Slicer como caja negra; las cifras exactas de W1
+  dependen de su cilindro, así que las pruebas comparan la forma (lazo + rampa, desde la capa de abajo, mismo
+  filamento), no los números.
+
+**Sigue:** el panel de ajustes con todo lo agregado (pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de
+información). Más adelante, si el dueño quiere, una pared externa en espiral continua entre capas (como el modo vaso,
+pero con paredes internas y relleno): la pared externa primero en cada capa, subiendo una capa por vuelta.
+
+## 2026-10-26 — panel de ajustes por secciones y niveles
+
+**Pedido del dueño:** poner en la interfaz todo lo agregado (perfiles, modos especiales, los ajustes nuevos), ordenado
+como el menú de ajustes de Cura y con el estilo de OrcaSlicer, «un híbrido», simple, fácil e intuitivo, sin cargar de
+información. La ficha `settings_panel.md` ya lo describe: de OrcaSlicer, pocas secciones grandes con apartados finos;
+de Cura, los apartados plegables y los ajustes dependientes debajo de su interruptor (comparación de caja negra de la
+ficha; el motor no miró el código de ninguno).
+
+**Hecho:**
+- **`src/ui/settings_layout.*`:** dónde va cada ajuste (pestaña, sección, apartado) y su nivel, y el resumen de cada
+  apartado. Pruebas: toda clave que escribe el motor tiene lugar (salvo `compute.*`, una preferencia), ningún apartado
+  pasa de 8 ajustes, cada clave aparece una vez, Básico es exactamente la lista de la regla 10, y los resúmenes en
+  castellano y en inglés.
+- **El panel** (`apps/tisma/app.cpp`): pestañas Impresión, Material e Impresora con su perfil; el nivel a la derecha;
+  la columna de secciones con íconos propios (`assets/icons/section_*.svg`); las tarjetas plegables con su resumen y
+  «N cambios»; los dependientes ocultos con su interruptor apagado; un ajuste cambiado se ve en cualquier nivel con su
+  etiqueta gris; «N ajustes más…» con **Mostrar todos**; nivel, secciones y tarjetas recordados en `interface.json`.
+- **Todos los ajustes tienen fila**, también los que no la tenían: la bufanda, la compensación, el corte, la
+  separación, interfaz y patrón de los soportes, las capas de falda, el ventilador entero, la velocidad mínima, el
+  avance de presión, el flujo máximo, el viaje mínimo para retraer, las necesidades del material y los límites de la
+  máquina. Las listas (`changes`, `machine.variables`) muestran cuántas hay; se editan en el perfil.
+- `--level` y `--section` en la línea de comandos de la interfaz, para las capturas.
+
+**Capturas** (cubo de 20 mm, Xvfb 1600 × 1000): Calidad en Normal; Resistencia; Material › Enfriamiento en Avanzado;
+Básico, que esconde Velocidad y Otros; y un perfil con relleno al 40 % y costura atrás en bufanda: «1 cambio» en
+Relleno, «2 cambios» en Costura, el punto en las secciones.
+
+**Falta** (de la ficha): Personalizado y su diálogo, «Ver todo junto», la búsqueda que abre la tarjeta, Restablecer por
+tarjeta, la tarjeta de la impresora (boquilla, cama, cámara, conexión) y su configuración aparte; hoy la impresora es
+una pestaña más. Los modos especiales (`vase_mode.md`) llegan con el modo vaso, que el motor todavía no tiene: la tarjeta
+aparece cuando haya algo que mostrar (regla 7).
+
+## 2026-10-26 — modo vaso
+
+**Por qué:** el pedido del dueño de una pared en espiral, «como el Spiral Vase», y la tarjeta Modos especiales del
+panel nuevo (ficha `vase_mode.md`).
+
+**Hecho:**
+- `vase.enabled` (perfil de impresión). El corte se rehace con una pared, sin relleno ni capas de arriba (regla 1), y
+  deja relleno solo en las capas de abajo; la última de ellas es la superficie de arriba (regla 3).
+- **Las vueltas** (regla 4): desde la capa sobre las de abajo (la segunda, sin ninguna: regla 5), una capa cuya única
+  trayectoria es el lazo de su pared externa es una vuelta. Empieza en el punto más cercano a donde terminó la capa de
+  abajo, y si esa fue una vuelta, exactamente ahí: el cambio de capa no sube Z y no hay viaje ni retracción. La
+  boquilla sube una capa a lo largo del largo recorrido; cada cordón tiene la vuelta de abajo a la misma distancia,
+  así que el caudal es el de siempre, también en la primera y la última vuelta. El tiempo mínimo de capa vale por
+  vuelta (regla 6). Una capa con dos contornos (dos islas, un agujero) se imprime plana y la vuelta siguiente empieza
+  de nuevo.
+- **Lo que no se puede** (regla 2): con soportes, los ajustes se rechazan; con varios objetos en la placa, la interfaz
+  no lamina (el motor recibe una sola malla).
+- **Verificador:** acepta las vueltas hasta la capa de abajo. El fuzzer, con el vaso al azar, encontró además que
+  una torre de flujo (caudal forzado) con bufanda acelera los cordones finísimos de la rampa hasta el tope de la
+  máquina, más de lo que el verificador esperaba: con bufanda o ZAA, el tope es el de la máquina.
+
+**Medido** (cilindro de 10 mm de radio y 5 de alto, 128 lados, capas de 0,2, como VA1 y VA2 de la ficha): capas 0 y 1,
+pared y relleno sólido; capa 2, pared y superficie de arriba; desde la 3, una vuelta: la capa 10 va de Z 2,0 a 2,2,
+mide 61,55 mm y empieza y termina en el mismo punto; desde la capa 4, ningún viaje ni retracción.
+
+**Pruebas:** VA1 a VA4 (cilindro y cubo de la ficha: tipos por capa, Z de cada vuelta, la vuelta que sigue desde donde
+terminó la anterior, caudal constante, cubo sin capas de abajo y con dos, rechazo con soportes). RV6: con el vaso
+apagado, el G-code de los 21 casos es el mismo salvo la línea del ajuste nuevo al pie. Fuzzer: 3000 corridas (semillas
+31 y 32) con vaso y bufanda al azar, 0 fallas.
+
+**Pregunta para el equipo de fichas:** `settings_panel.md` pone las velocidades en Impresión y la retracción en
+Material, pero dice que la pestaña la decide el perfil de la clave; en el motor, las velocidades y la retracción son
+del perfil de la impresora (decisión del dueño). Hoy el panel sigue las tablas de la ficha.
+
+**Sigue:** una pared externa en espiral continua en piezas con relleno (la idea del dueño, más allá del modo vaso:
+la pared externa primero en cada capa, subiendo una capa por vuelta, y las internas y el relleno planos), si el dueño
+la quiere después de ver el modo vaso y la bufanda.
+
+## 2026-10-26 — caza de errores
+
+**Por qué:** pedido del dueño, buscar errores de impresión y del sistema mientras se armaba el panel.
+
+**Hecho y medido:**
+- **Fuzzer con ASan:** 400 corridas, 0 fallas. **Sin ASan:** tandas de 3000 corridas, limpias después de los
+  arreglos de la bufanda y el vaso (el redondeo de `;HEIGHT`, la altura 0 en bloques no planares, el caudal forzado con
+  bufanda; están en sus entradas).
+- **La interfaz con ASan:** 36 estados de la interfaz, ningún error de memoria; las únicas fugas son 112 bytes dentro
+  del controlador GL de Mesa.
+- **Calidad del G-code** (script propio sobre el Benchy y la calavera): ninguna extrusión repetida en la misma Z,
+  ningún viaje por debajo de la capa. Viajes sin retracción
+  que cruzan una pared externa: 18 en el Benchy y 6 en la calavera; quedan para RT1 a RT5 (`toolpath_time.md`, reglas
+  4 y 5, y «los viajes no cruzan perímetros si pueden ir por dentro» de `BEHAVIOR.md`).
+- Las primeras capas de la calavera a 1,1 mm/s son correctas: 22 mm de recorrido por capa con 20 s de tiempo mínimo.
+
+**Sigue:** los viajes que cruzan paredes, con RT1 a RT5.
+
+## 2026-10-26 — soportes en árbol
+
+**Por qué:** pedido del dueño («hay que agregar tree support»); ficha `supports_more.md`, reglas 15 a 17 y prueba SM13.
+Ítem S3 de `PLAN.md`.
+
+**Hecho:**
+- `support.style` (`grid` u `organic`) y los ocho `support.tree_*` de la ficha, con sus límites, en el perfil de
+  impresión y en `docs/CONFIG.md`.
+- **`src/support/tree.*`** (diseño propio sobre la idea de Vanek et al. 2014; `PROVENANCE.md`):
+  - bajo lo que cuelga, la interfaz entera, `support.interface_layers` capas sin el margen de la grilla, con líneas a
+    45° y 135° en capas alternas y sin pared (regla 17);
+  - debajo, las puntas, repartidas sobre el contorno y adentro, a la separación que dan la tasa, el diámetro de punta
+    y la distancia entre ramas (ajustada a las cantidades de SM13);
+  - al bajar, cada rama se inclina hacia su vecina más cercana hasta `tree_angle_preferred`, se junta con la que toca
+    (con el área de las dos), engorda (la punta a 45° hasta el diámetro de rama, después según
+    `tree_branch_diameter_angle`) y se aparta de la pieza hasta `tree_angle`; donde no puede, se apoya en la pieza
+    con la separación en Z;
+  - cada rama lleva una pared, dos donde cabe un disco de `tree_double_wall_diameter`, y el relleno del soporte
+    adentro.
+- `supported_overhangs` en `src/support/support.*`: lo que necesita soporte (automático, forzado y bloqueado), igual
+  para los dos estilos, así que lo pintado vale también con árboles.
+- **Panel:** el estilo en Soportes › Soporte (Normal); la tarjeta Árbol con los ocho ajustes, visible con el estilo en
+  árbol, resumen «Ramas de 2 mm · puntas de 0,8 mm».
+- **Verificador:** la zona permitida incluye el soporte (las ramas se apartan de la pieza más allá de su caja; el
+  fuzzer lo encontró).
+
+**Medido** (SM13: columna de 10 × 20 × 10 con una losa de 20 × 20 × 2 de Z 8 a 10; capas de 0,2):
+
+| | Ficha (Tisma Slicer) | Motor |
+|---|---|---|
+| Puntas en Z 7,2 | 22, de 0,92 mm | 21, de 0,8 mm |
+| `tree_tip_diameter` 1,5 | 18 | 18 |
+| `tree_top_rate` 30 % | 32 | 33 |
+| Interfaz | Z 7,4 a 7,8, a 45°, 135° y 45°; 524,5 mm por capa, X 99,4 a 109,8 | Igual en Z y ángulos; 465 mm, X 100,6 a 110 (el borde de los cordones) |
+| Piezas en Z 7,0 / 6,2 / 5,2 / 4,2 / 2,2 / 0,4 | 13 / 11 / 9 / 7 / 4 / 1 | 21 / 19 / 15 / 8 / 7 / 3 |
+
+Las ramas del motor se juntan más abajo que en la ficha (allá, una capa bajo las puntas ya se tocan muchas: engordan
+más rápido). La interfaz de la ficha empieza 0,6 mm dentro de la columna (X 99,4 con la columna hasta X 100); el motor
+la deja a `support.xy_gap` de ella. Pregunta para el equipo de fichas.
+
+Benchy (filamento, mm; sin soportes 4049): con grilla 4576, con árboles 5396. Los árboles sostienen el ala del casco
+que la grilla casi no toca (la separación XY se come su columna) y bajan troncos hasta la cama: en los primeros 10 mm,
+20 m de recorrido contra 1 m. Esfera de 50 mm: sin soportes 8153, grilla 8502, árboles 8719. El G-code verificado en
+los tres.
+
+Tiempo de laminado (4 núcleos, mediana de 3): Benchy sin soportes 743 ms, grilla 1103, árboles 1155; esfera, grilla
+540, árboles 716. La simulación de las ramas va en orden, capa por capa (cada una depende de la de arriba); las áreas y
+las trayectorias, en paralelo.
+
+**Pruebas:** `test_tree_support.cpp` (separación de las puntas; SM13: puntas bajo la interfaz, cantidad y distancia
+entre ellas, menos y más gruesas hacia la cama, siempre a la separación de la pieza, interfaz y hueco; menos puntas con
+punta de 1,5 y más con 30 %; el estante: ramas apoyadas en la base con la capa de separación vacía; las trayectorias de
+una rama, de un tronco y de la interfaz). La matriz de G-code con «organic supports». Fuzzer: árboles al azar con sus
+ocho ajustes.
+
+**Sigue:** que las ramas engorden y se junten antes, como en la ficha (y con menos material); la base del soporte que
+apoya en la pieza (`support.bottom_*`); después, RT1 a RT5.
+
+## 2026-10-26 — investigación: no planar, arcos en voladizos y calidad en general
+
+**Por qué:** pedidos del dueño: papers de impresión no planar «para sacar la opción más óptima», sobre arc overhangs,
+y sobre impresión 3D en general para mejorar calidad y funciones.
+
+**Hecho** (solo artículos, resúmenes, registros de patentes y documentación de usuario; ningún código):
+- `docs/NONPLANAR_2026.md`: lo publicado de 2022 a 2026. F7 cambia de base: las dos superficies de corte en grilla 2D
+  de Double QuickCurve (Eurographics 2025), resueltas como una ecuación tipo Poisson con el multigrid propio, en vez
+  del campo por volumen de CurviSlicer (de 2 a 46 veces más lento, y falla en varias piezas). La pendiente útil en una
+  impresora común es de 20 a 27° (la cara plana de la boquilla raya más arriba); contra plano, la rugosidad baja 34 a
+  76 %, pero contra el Z anti-aliasing con subida lo que se gana es sobre todo una piel continua, sin medir; en 3 ejes
+  la ganancia de resistencia no está probada. Orden en `PLAN.md`.
+- `docs/ARC_OVERHANGS.md`: no hay un artículo revisado que mida los arcos solos; el único estudio con números
+  (Andersons et al. 2026) encuentra que los arcos se hunden en sus centros y que los frentes en ondas se hunden
+  bastante menos. S1 sigue la ficha, con la geometría que la ficha no fija como diseño propio, y después un modo de
+  frentes por distancia. Seis preguntas de comportamiento para el equipo de fichas.
+- `docs/QUALITY_2026.md`: diez pasos por ganancia contra esfuerzo (Q13 a Q18 en `PLAN.md` y en el mapa). Lo más
+  importante: el planchado (Ra −60 a −83 %), que el motor no genera; el volumen de los cordones sueltos, que el
+  rectángulo sobrestima entre 11 y 27 % y explicaría P11; y una patente de WARF (US 10,353,378 B2, hasta cerca de
+  2036) que toca el análisis «como impresa» que ya existe. Las patentes nuevas, en la sección 6 de
+  `docs/RESEARCH_MAP.md`.
+- Del equipo de fichas (`dev`, PR #28): la segunda prueba de caja negra (QA10 a QA13, el soporte en grilla del
+  estante: margen, separación XY, líneas y primera capa sobre el soporte), la cobertura contra Tisma Slicer con el
+  orden aprobado por el dueño, y su propia lista de papers. Anotados en `PLAN.md`.
+
+**Sin leer completo:** varios números salen de resúmenes o de notas de prensa (cada informe lo marca); los de las
+ondas hay que confirmarlos en el artículo, que es de acceso abierto.
+
+**Sigue:** según el orden aprobado por el dueño (`docs/spec/qa/2026-10-26-cobertura.md`): formatos de entrada (3MF y
+OBJ en la línea de comandos) y centrar la pieza en la cama; después QA10 a QA13 del soporte en grilla.
+
+## 2026-10-26 — OBJ, 3MF y la pieza en el centro de la cama
+
+**Por qué:** el primer punto del orden aprobado por el dueño (`docs/spec/qa/2026-10-26-cobertura.md`): el motor leía
+solo STL («binary STL is truncated» con el 3MF del cráneo) y no centraba una pieza que viene fuera del centro.
+
+**Hecho** (todo propio, desde las especificaciones públicas; ninguna biblioteca nueva):
+- `src/io/zip.*`: el ZIP de PKWARE (directorio central, ZIP64) y DEFLATE de la RFC 1951, con el CRC de cada entrada.
+- `src/io/xml.*`: un lector de XML de a una etiqueta.
+- `src/io/model.*` y `src/io/threemf.*`: OBJ (caras de cualquier cantidad de vértices, índices negativos) y 3MF
+  (objetos de la placa con sus transformaciones, componentes anidados, mallas en otros archivos del paquete, unidades,
+  espejos con las caras hacia afuera, sin objetos de soporte ni ítems no imprimibles, sin los modificadores de un
+  proyecto de laminador). `read_model` elige por el contenido y la extensión.
+- `src/io/checksum.*`: el CRC-32 y el Adler-32 que estaban en la interfaz, ahora en el núcleo.
+- `placement.arrange` y `placement.center` (`src/slice/placement.*`): con cama, la línea de comandos centra la pieza.
+- La interfaz abre, suma y recibe soltados OBJ y 3MF.
+
+**Medido:** el 3MF del cráneo del dueño (9,4 MB, 45,9 MB de XML, 546 684 triángulos) se lee en 0,62 a 0,68 s; antes
+fallaba. Laminado con una cama de 250 × 210: sin soportes 5,07 s, con grilla 7,53 s, con árboles 7,91 s (G-code
+verificado en los tres; filamento 5943, 8357 y 10 231 mm).
+
+**Pruebas:** `test_formats.cpp`: los flujos DEFLATE de cada tipo de bloque (dinámico, fijo, guardado, por tramos, una
+copia 23 000 bytes atrás, vacío) contra los datos que el test arma otra vez, cortados y con un tope menor; OBJ (FM2) y
+sus errores; los 3MF de la caja (FM3 en pulgadas, FM9 en dos partes, guardado, con un soporte, con un modificador, con
+la malla en otro archivo y en espejo); 400 paquetes con bytes cambiados al azar, que se leen o se rechazan sin
+romperse; el XML; y la ubicación (PL1, PL2, PL3, PL6). En la línea de comandos: `info` y `slice` con OBJ y 3MF, y el
+cubo en una cama lejana, centrado (y con `placement.arrange` en `false`, el error de antes). Los archivos los arma un
+guion propio, `tests/data/formats/make.py`.
+
+**No probado:** ZIP64 (sin un archivo de más de 4 GB ni de más de 65 535 entradas a mano); proyectos reales de Bambu
+Studio y OrcaSlicer (la ficha pide muestras con permiso).
+
+**Sigue:** QA10 a QA13 del soporte en grilla; después, del mismo orden, velocidades y aceleraciones por tipo, relleno
+de huecos, planchado, balsa y los extras de G-code.
+
+## 2026-10-26 — soporte en grilla según la ficha (QA10 a QA12)
+
+**Por qué:** la segunda prueba de caja negra del equipo de fichas (`docs/spec/qa/2026-10-26-segunda-prueba.md`): el
+soporte no tenía el margen de la regla 2 y en el cráneo salía en 96 pedazos sueltos; la separación XY, las líneas y la
+interfaz no seguían las reglas 2, 5 y 6.
+
+**Hecho:**
+- **QA10:** cada voladizo se agranda 1,6 mm antes de sumarse a la columna (`SupportParams::margin`; la grilla de bits
+  crece lo mismo).
+- **QA11:** `support.xy_gap` acepta mm o un porcentaje del ancho de las paredes; por defecto, 50 %.
+- **QA12:** `support.line_angle` (nuevo, 0°): la base en líneas en esa dirección en todas las capas, a
+  `support.spacing` más la separación de un cordón (2,857 mm); la interfaz a 90°, a la separación de los cordones
+  (0,357 mm). Los árboles siguen con la interfaz a 45° y 135° (`supports_more.md`, regla 17).
+
+**Medido** (la pieza de S4, capas de 0,2, cordones de 0,4): la zona de Y 88,4 a 111,6 y hasta X 111,6 (la ficha: 1,6
+mm más allá de la tabla en +X, +Y y −Y); filas de la base cada 2,857 mm en las capas 10, 11 y 37; interfaz en columnas
+cada 0,357 mm, 516,4 mm por capa (la ficha: 524,5); el borde de las líneas junto a la columna a 0,4 mm de su cara (la
+ficha, 0,425 con un perímetro de 0,45: la separación es la mitad del ancho).
+
+**Pruebas:** la del soporte bajo la «T» (zona con el margen, separación de la columna, filas en una dirección cada
+`spacing` más un cordón, interfaz cruzada y densa), la de la pintura (el forzador más el margen), y la lectura de
+`support.xy_gap` y `support.line_angle`.
+
+**Falta:** QA13, la primera capa de la pieza sobre el soporte con la altura de una capa más la separación y sus
+perímetros como `;TYPE:Overhang perimeter`: necesita alturas y tipos por tramo en el escritor. Y el ancho del soporte
+(`supports_more.md`, regla 18: el diámetro de la boquilla, no el de las paredes).
+
+## 2026-10-27 — mantenimiento (00:40)
+
+**Revisado:** `origin/dev` y `origin/main` sin cambios nuevos; fuzzer con semillas nuevas (1201, 1202 y 1301: 2400
+corridas, 0 fallas); casos borde de lo agregado hoy (3MF dañados, árboles con ajustes extremos, orden de recorridos).
+
+**Encontrado y arreglado:**
+- **Árboles con ajustes extremos** (puntas de 0,2 mm, `tree_top_rate` 100 %, `tree_branch_distance` 0,3) bajo una
+  losa de 100 × 100 mm sobre una pared: el laminado agotó la memoria (unas 180 000 puntas) y el sistema lo mató; el
+  contenedor de trabajo se reinició. Las puntas ahora nunca quedan más juntas que su ancho ni que dos cordones, y las
+  búsquedas de vecinas (cobertura de puntas, la vecina más cercana, las ramas que se tocan) van en una grilla de
+  celdas: antes eran cuadráticas en la cantidad de ramas. SM13 da el mismo G-code byte a byte; en la esfera y el
+  cráneo los árboles cambian un poco (una rama que crece al juntarse vuelve a buscar), con el G-code verificado.
+- **Escribir G-code con muchos lazos** (los de las ramas): `order_paths`, con costura `nearest` (la de los rellenos),
+  buscaba en cada paso el punto más cercano de todos los lazos que quedaban. Ahora mira las cajas de los lazos, de la
+  más cercana con un montículo, y corta cuando una caja queda más lejos que el mejor inicio; los tramos abiertos van
+  en la grilla aunque haya lazos. Mismo G-code byte a byte (Benchy y esfera con relleno concéntrico y soportes; los
+  modelos del banco con y sin soporte).
+- **Un 3MF que dice inflar a 4 GB** pedía toda esa memoria y terminaba en «error: internal: std::bad_alloc»; ahora se
+  rechaza antes, porque DEFLATE no infla más de unas 1032 veces.
+
+**Medido** (4 núcleos):
+
+| | Antes | Ahora |
+|---|---|---|
+| Losa de 100 × 100 mm con árboles (por defecto): laminar / escribir | 3,8 s / 17,1 s | 4,1 s / 0,83 s |
+| La misma, ajustes extremos | se queda sin memoria | 2,6 s / 2,9 s |
+| Benchy, escribir | 90 ms | 79 ms |
+| Esfera de 1 millón de triángulos, laminar | 1,16 s | 1,08 s |
+| Análisis del cubo | 12,9 s | 12,6 s |
+
+**Pruebas nuevas:** el orden con costura `nearest` entre 150 lazos y 150 tramos contra mirar cada punto; árboles con
+ajustes extremos (cantidad acotada de puntas, ninguna a menos de dos cordones); el 3MF de 4 GB.
+
+**Release 0.9.0-alpha.1:** `VERSION`, su sección del CHANGELOG (lo de los bloques desde la 0.8.0, en una sola lista
+por tipo) y la fila de `docs/VERSIONING.md`; `tools/release_notes.py --check` pasa; la CI de Linux pasó en el commit
+anterior y las pruebas de nuevo con la versión nueva.
+
+**Sigue:** QA13; las ramas de los árboles que engordan y se juntan antes, con las mediciones nuevas del equipo de fichas
+(a la altura de las puntas, pares que se tocan; cada rama pasa de 0,9 a 1,2 mm en una capa).
+

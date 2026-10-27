@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -104,7 +105,7 @@ TEST_CASE("lightning: holds up the ceiling and grows in from the walls, drawing 
 
 TEST_CASE("lightning: the spec's 20 mm cube grows upwards (P7) and slices to checked G-code", "[lightning]") {
     const IndexedMesh m = cube(20.0f);
-    Settings s;
+    Settings s = test_printer();
     s.gpu = GpuMode::Off;
     s.nozzle_diameter = 0.4;
     s.layer_height = 0.2;

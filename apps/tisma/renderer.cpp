@@ -143,12 +143,14 @@ bool gbuffer(vec3 n) {
     return true;
 }
 
-vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+// seen: how much of the ambient (x) and of the key light (y) the surface's
+// own neighbours leave (the bead's grooves); 1 elsewhere.
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen) {
     vec4 vis = texture(u_visibility, gl_FragCoord.xy / u_target);
     if (u_debug != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
-    float direct = vis.r;
-    float ambient = mix(1.0, vis.g, u_ao_strength);
+    float direct = vis.r * seen.y;
+    float ambient = mix(1.0, vis.g, u_ao_strength) * seen.x;
     vec3 v = normalize(u_eye - p);
     if (dot(n, v) < 0.0)
         n = -n;
@@ -161,8 +163,17 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
            + (base * 0.95 + vec3(highlight)) * ndl * direct
            + base * max(dot(n, u_fill), 0.0) * 0.18 * ambient
            + to_linear(u_sky) * pow(1.0 - max(dot(n, v), 0.0), 4.0) * 0.06 * ambient;
-    c = vec3(1.0) - exp(-c * 1.25);
+    // The exponential tone curve on the brightest channel, the others scaled
+    // with it: a bright saturated colour keeps its hue and saturation instead
+    // of washing out towards white; greys come out as before.
+    float m = max(max(c.r, c.g), c.b);
+    if (m > 0.0)
+        c *= (1.0 - exp(-m * 1.25)) / m;
     return pow(c, vec3(1.0 / 2.2));
+}
+
+vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular) {
+    return shade(base, n, p, shininess, specular, vec2(1.0));
 }
 )";
 
@@ -191,12 +202,13 @@ const std::string kMeshVertex = kVersion + R"(
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 uniform mat4 u_view_projection;
+uniform vec3 u_offset;
 out vec3 v_position;
 out vec3 v_normal;
 void main() {
-    v_position = a_position;
+    v_position = a_position + u_offset;
     v_normal = a_normal;
-    gl_Position = u_view_projection * vec4(a_position, 1.0);
+    gl_Position = u_view_projection * vec4(v_position, 1.0);
 }
 )";
 const std::string kMeshFragment = kVersion + kLighting + R"(
@@ -213,20 +225,76 @@ void main() {
 
 // One extrusion per instance, expanded into a prism around the move: the
 // cross-section is a rhombus as wide as the line and as high as the layer,
-// hanging under the nozzle's path, with normals of an ellipse so it shades
-// round; each end grows by half a width so corners close. 36 vertices: four
-// sides of two triangles and two ends of two triangles.
+// hanging under the nozzle's path. Where the bead goes on into the next move
+// (a join, PreviewInstance), the end lies on the plane halfway between the two
+// directions and both moves share its corners (a mitre); a free end grows by
+// half a width, as the bead does past the nozzle, and gets its cap. 36
+// vertices: four sides of two triangles and two ends of two triangles.
+//
+// The rhombus only gives the depth (two neighbours meet along a line, never on
+// a shared face, so nothing flickers); the light follows the profile of a
+// printed bead, found per pixel from where in the cross-section it lies: flat
+// on top and bottom where the bead is pressed, round at the sides with the
+// radius of half its height (the shape of a bead laid at its height, Comminal
+// et al. 2018).
+const std::string kBeadProfile = R"(
+// The bead's normal at a point of the rhombus' outline, c (-1 to 1 across and
+// up), as (across, up), for a bead of size (width, height).
+vec2 bead_normal(vec2 c, vec2 size) {
+    float r = 0.5 * size.y, flat_half = max(0.5 * size.x - r, 0.0);
+    float x = abs(c.x) * 0.5 * size.x;
+    float s = r > 0.0 ? clamp((x - flat_half) / r, 0.0, 1.0) : 1.0;
+    return vec2(sign(c.x) * s, (c.y >= 0.0 ? 1.0 : -1.0) * sqrt(max(1.0 - s * s, 0.0)));
+}
+
+// How much of the sky (x) and of the key light (y) a point of the bead sees
+// past the beads of the layers above and below it, where there are
+// (neighbours: x above, y below): in the cross-section, the horizons to the
+// touching neighbours of the same profile, the beads taken as endless along
+// the move; the sky cosine-weighted between them, as horizon-based ambient
+// occlusion does (Bavoil, Sainz and Dimitrov 2008), here exact for this
+// shape. It darkens the grooves between the layers of a wall, as on a
+// printed part.
+vec2 bead_seen(vec2 c, vec2 size, vec3 side, vec3 up, vec3 key, vec2 neighbours) {
+    float r = 0.5 * size.y, flat_half = max(0.5 * size.x - r, 0.0);
+    if (r <= 0.0 || neighbours.x + neighbours.y < 0.5)
+        return vec2(1.0);
+    // Up the round side by the height in the section: what a wall shows from
+    // the side. (Its flat top is under the bead above, never seen.)
+    float phi = asin(clamp(c.y, -1.0, 1.0));       // the normal's angle
+    vec2 p = vec2(flat_half + r * cos(phi), r * sin(phi)); // from the bead's middle, outwards and up
+    float hi = phi + 1.5707963, lo = phi - 1.5707963;
+    if (neighbours.x > 0.5) {                      // the bead above: its round side's centre
+        vec2 d = vec2(flat_half, 2.0 * r) - p;
+        hi = min(hi, atan(d.y, d.x) - asin(clamp(r / max(length(d), 1e-9), 0.0, 1.0)));
+    }
+    if (neighbours.y > 0.5) {                      // and the one below
+        vec2 d = vec2(flat_half, -2.0 * r) - p;
+        lo = max(lo, atan(d.y, d.x) + asin(clamp(r / max(length(d), 1e-9), 0.0, 1.0)));
+    }
+    float sky = hi > lo ? clamp(0.5 * (sin(hi - phi) - sin(lo - phi)), 0.0, 1.0) : 0.0;
+    // The key light, in the cross-section: a soft light some 35 degrees
+    // across, so a neighbour's shadow comes in over a penumbra.
+    vec3 outwards = side * (c.x >= 0.0 ? 1.0 : -1.0);
+    float a = atan(dot(key, up), dot(key, outwards));
+    float light = smoothstep(lo - 0.3, lo + 0.3, a) * (1.0 - smoothstep(hi - 0.3, hi + 0.3, a));
+    return vec2(sky, light);
+}
+)";
 const std::string kPreviewVertex = kVersion + R"(
 layout(location = 0) in vec3 a_p0;
 layout(location = 1) in vec3 a_p1;
 layout(location = 2) in vec2 a_size;
 layout(location = 3) in float a_feed;
 layout(location = 4) in uint a_kind_layer;
+layout(location = 5) in vec4 a_join; // the mitre planes' normals at p0 (xy) and p1 (zw); zero at a free end
 uniform mat4 u_view_projection;
 uniform vec3 u_colours[16];
 uniform uint u_kind_mask;
 uniform int u_colour_mode;
 uniform vec2 u_range;
+uniform uvec2 u_layers; // the first and the last layer shown
+uniform int u_grooves;  // the beads' grooves (not with ray tracing, whose rays see the neighbours)
 out vec3 v_base;
 out vec3 v_normal;
 out vec3 v_position;
@@ -234,6 +302,14 @@ out vec2 v_section;    // where in the cross-section: -1 to 1 across (side), -1 
 flat out vec3 v_side;
 flat out vec3 v_up;
 flat out vec2 v_size;  // the line's width and height
+flat out float v_cap;  // 1 on the end caps, 0 on the sides
+flat out vec2 v_neighbours; // 1 where a bead of the layer above (x) and below (y) touches this one
+
+// The kinds that usually have a bead of the layer above on them, and those
+// that lie on one of the layer below (not the top surface, a bridge or an
+// overhang): the grooves come only between them, inside the layers shown.
+const uint kAbove = 0x39BEu; // walls, overhang walls, infill, bridges, gap fill, support, its interface, wipe tower
+const uint kBelow = 0x3F76u; // walls, infill, top surface, gap fill, ironing, skirt, support, its interface, wipe tower
 
 const vec2 kCorner[4] = vec2[4](vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0), vec2(0.0, -1.0));
 const ivec2 kQuad[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));
@@ -260,7 +336,14 @@ void main() {
     v_side = vec3(1.0, 0.0, 0.0);
     v_up = vec3(0.0, 0.0, 1.0);
     v_size = a_size;
-    if ((u_kind_mask & (1u << kind)) == 0u || len <= 0.0) {
+    v_cap = 0.0;
+    bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
+    int id = gl_VertexID;
+    bool hidden = (u_kind_mask & (1u << kind)) == 0u || len <= 0.0;
+    // A joined end has no cap: the next move's side goes on from it.
+    if (id >= 24 && ((id - 24) / 6 == 0 ? joined0 : joined1))
+        hidden = true;
+    if (hidden) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
     }
@@ -269,23 +352,35 @@ void main() {
     side = dot(side, side) > 1e-8 ? normalize(side) : vec3(1.0, 0.0, 0.0);
     vec3 up = cross(side, dir);
     float w = a_size.x, h = a_size.y;
-    vec3 a = a_p0 - dir * (0.5 * w) - up * (0.5 * h);
-    vec3 b = a_p1 + dir * (0.5 * w) - up * (0.5 * h);
 
-    vec3 position, normal;
     vec2 c;
-    int id = gl_VertexID;
+    int end;
+    vec3 normal;
     if (id < 24) {
         ivec2 q = kQuad[id % 6];
         c = kCorner[(id / 6 + q.y) % 4];
-        position = (q.x == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
+        end = q.x;
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
-        int end = (id - 24) / 6;
+        end = (id - 24) / 6;
         c = kCorner[kCap[(id - 24) % 6]];
-        position = (end == 0 ? a : b) + side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h);
         normal = end == 0 ? -dir : dir;
+        v_cap = 1.0;
     }
+    // The corner around the end's point, then along the move to its end plane:
+    // the mitre plane at a join, half a width past the point at a free end.
+    vec3 offset = side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h - 0.5 * h);
+    vec3 point = end == 0 ? a_p0 : a_p1;
+    bool joined = end == 0 ? joined0 : joined1;
+    float t;
+    if (joined) {
+        vec3 n = vec3(end == 0 ? a_join.xy : a_join.zw, 0.0);
+        t = -dot(offset, n) / max(dot(dir, n), 1e-3);
+    } else {
+        t = (end == 0 ? -0.5 : 0.5) * w;
+    }
+    vec3 position = point + offset + dir * t;
+
     v_section = c;
     v_side = side;
     v_up = up;
@@ -302,6 +397,10 @@ void main() {
     v_base = pow(base, vec3(2.2));
     v_normal = normal;
     v_position = position;
+    uint layer = a_kind_layer >> 8;
+    bool grooves = u_grooves != 0 && v_cap < 0.5;
+    v_neighbours = vec2(grooves && layer < u_layers.y && (kAbove & (1u << kind)) != 0u ? 1.0 : 0.0,
+                        grooves && layer > u_layers.x && (kBelow & (1u << kind)) != 0u ? 1.0 : 0.0);
     gl_Position = u_view_projection * vec4(position, 1.0);
 }
 )";
@@ -310,11 +409,11 @@ void main() {
 // a line covers less than two pixels and its facets can no longer be told
 // apart (Nyquist): the lines of a wall or a surface alias into bands. What a
 // pixel then shows is the average of the line's profile as seen from the eye:
-// the normals around the rhombus (the ellipse's), each weighted by how much
-// of it faces the eye, summed. The normal fades to that mean, and the
-// highlight widens as the normals it stands for spread (Toksvig 2005: the
-// exponent from the mean normal's length).
-const std::string kPreviewFragment = kVersion + kLighting + R"(
+// the bead's normals around the outline, each weighted by how much of it
+// faces the eye, summed. The normal fades to that mean, and the highlight
+// widens as the normals it stands for spread (Toksvig 2005: the exponent from
+// the mean normal's length).
+const std::string kPreviewFragment = kVersion + kLighting + kBeadProfile + R"(
 in vec3 v_base;
 in vec3 v_normal;
 in vec3 v_position;
@@ -322,26 +421,42 @@ in vec2 v_section;
 flat in vec3 v_side;
 flat in vec3 v_up;
 flat in vec2 v_size;
+flat in float v_cap;
+flat in vec2 v_neighbours;
 uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
+    vec2 seen = vec2(1.0);
+    if (v_cap < 0.5) {
+        vec2 b = bead_normal(v_section, v_size);
+        n = normalize(v_side * b.x + v_up * b.y);
+        seen = bead_seen(v_section, v_size, v_side, v_up, u_key, v_neighbours);
+    }
     float shininess = 40.0, specular = 0.35;
     if (u_moire != 0) {
         vec2 footprint = fwidth(v_section);
         float k = smoothstep(0.3, 0.8, max(footprint.x, footprint.y));
-        if (k > 0.0) {
+        // The grooves are a thin part of the bead: they average sooner, by
+        // some five pixels a bead.
+        float kg = smoothstep(0.1, 0.4, max(footprint.x, footprint.y));
+        if (kg > 0.0) {
             vec3 v = normalize(u_eye - v_position);
             vec3 sum = vec3(0.0);
+            vec2 seen_sum = vec2(0.0);
             float weight = 0.0;
             for (int i = 0; i < 16; ++i) {
                 float a = (float(i) + 0.5) / 16.0 * 6.2831853;
                 vec2 c = vec2(cos(a), sin(a));
                 c /= abs(c.x) + abs(c.y); // on the rhombus
-                vec3 m = normalize(v_side * (c.x * v_size.y) + v_up * (c.y * v_size.x));
+                vec2 b = bead_normal(c, v_size);
+                vec3 m = normalize(v_side * b.x + v_up * b.y);
                 float facing = max(dot(m, v), 0.0);
                 sum += m * facing;
+                seen_sum += bead_seen(c, v_size, v_side, v_up, u_key, v_neighbours) * facing;
                 weight += facing;
             }
+            if (weight > 0.0)
+                seen = mix(seen, seen_sum / weight, kg); // the grooves, averaged as the normals
             if (weight > 0.0 && dot(sum, sum) > 1e-8) {
                 float mean_length = mix(1.0, length(sum) / weight, k);
                 n = normalize(mix(n, sum / length(sum), k));
@@ -353,7 +468,7 @@ void main() {
     }
     if (gbuffer(n))
         return;
-    colour = vec4(shade(v_base, n, v_position, shininess, specular), 1.0);
+    colour = vec4(shade(v_base, n, v_position, shininess, specular, seen), 1.0);
 }
 )";
 
@@ -379,8 +494,39 @@ vec3 view_position(ivec2 p) {
 const std::string kAmbientFragment = kVersion + kViewPosition + R"(
 uniform sampler2D u_normal;
 uniform float u_radius;
+uniform sampler2D u_shadow; // the key light's depth map
+uniform mat4 u_light;       // world to the light's clip space
+uniform mat4 u_world;       // view to world
+uniform int u_shadowed;
+uniform float u_texel;      // mm a texel of the map covers
+uniform float u_bias;       // the map's depth of 0.6 mm: no shadow of a layer's step on the next
 out vec4 colour;
 const int kSamples = 16;
+// The key light at a surface point: its shadow map compared over a disc of a
+// few texels around the point (percentage-closer filtering, Reeves, Salesin
+// and Cook 1987), so the shadow's edge comes soft; the point moved out along
+// its normal by two texels, and compared 0.6 mm nearer the light: the steps
+// between layers (a fraction of a millimetre, about a texel of the map) would
+// shadow each other and alias into rings, and the beads' grooves are worked
+// out exactly where they are drawn. The part's shadow on the bed, and under
+// overhangs, stays.
+const vec2 kDisc[12] = vec2[12](vec2(0.0, 0.0), vec2(0.53, 0.0), vec2(-0.27, 0.46), vec2(-0.27, -0.46),
+                                vec2(1.0, 0.0), vec2(0.5, 0.87), vec2(-0.5, 0.87), vec2(-1.0, 0.0),
+                                vec2(-0.5, -0.87), vec2(0.5, -0.87), vec2(0.0, 0.76), vec2(0.0, -0.76));
+float key_light(vec3 c, vec3 n) {
+    vec3 p = (u_world * vec4(c, 1.0)).xyz;
+    if (u_shadowed == 0 || p.z > 0.05)
+        return 1.0; // only the bed takes it, for now: the part's steps shadowed each other into rings
+    p += normalize(mat3(u_world) * n) * u_texel * 2.0;
+    vec3 s = (u_light * vec4(p, 1.0)).xyz * 0.5 + 0.5;
+    if (s.x <= 0.0 || s.y <= 0.0 || s.x >= 1.0 || s.y >= 1.0 || s.z >= 1.0)
+        return 1.0;
+    vec2 texel = 1.0 / vec2(textureSize(u_shadow, 0));
+    float lit = 0.0;
+    for (int i = 0; i < 12; ++i)
+        lit += s.z - u_bias <= texture(u_shadow, s.xy + kDisc[i] * 2.5 * texel).r ? 1.0 : 0.0;
+    return lit / 12.0;
+}
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     if (texelFetch(u_depth, p, 0).r >= 1.0) {
@@ -389,9 +535,10 @@ void main() {
     }
     vec3 c = view_position(p);
     vec3 n = normalize(texelFetch(u_normal, p, 0).xyz * 2.0 - 1.0);
+    float key = key_light(c, n);
     float pixels = min(u_radius * u_projection.y * 0.5 * u_size.y / -c.z, 80.0);
     if (pixels < 1.5) {
-        colour = vec4(1.0);
+        colour = vec4(1.0, key, 0.0, 1.0);
         return;
     }
     float turn = fract(sin(dot(vec2(p), vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
@@ -408,14 +555,19 @@ void main() {
         if (vv > r2 || vv < 1e-8)
             continue;
         float rise = dot(v, n) * inversesqrt(vv) - 0.05;
-        sum += max(rise, 0.0) * (1.0 - vv / r2);
+        // Nothing nearer than a couple of layers: the steps between printed
+        // layers would alias into rings, and the beads' own grooves are
+        // worked out exactly where they are drawn.
+        float near = smoothstep(0.15, 0.45, sqrt(vv));
+        sum += max(rise, 0.0) * (1.0 - vv / r2) * near;
     }
-    colour = vec4(vec3(clamp(1.0 - 2.0 * sum / float(kSamples), 0.0, 1.0)), 1.0);
+    colour = vec4(clamp(1.0 - 2.0 * sum / float(kSamples), 0.0, 1.0), key, 0.0, 1.0);
 }
 )";
 
-// A bilateral blur of the occlusion along one axis: neighbours at another
-// depth (across an edge) do not count.
+// A bilateral blur of the occlusion (r) and the key light (g) along one axis:
+// neighbours at another depth (across an edge) do not count. The last pass
+// writes the visibility: r the key light, g the ambient.
 const std::string kBlurFragment = kVersion + kViewPosition + R"(
 uniform sampler2D u_source;
 uniform ivec2 u_step;
@@ -424,16 +576,17 @@ out vec4 colour;
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
     float z = view_position(p).z;
-    float sum = 0.0, weight = 0.0;
+    vec2 sum = vec2(0.0);
+    float weight = 0.0;
     for (int i = -4; i <= 4; ++i) {
         ivec2 q = clamp(p + u_step * i, ivec2(0), ivec2(u_size) - 1);
         float zq = view_position(q).z;
         float w = exp(-float(i * i) / 8.0) * max(0.0, 1.0 - abs(zq - z) / (0.02 * abs(z) + 0.01));
-        sum += texelFetch(u_source, q, 0).r * w;
+        sum += texelFetch(u_source, q, 0).rg * w;
         weight += w;
     }
-    float ao = weight > 0.0 ? sum / weight : 1.0;
-    colour = u_final != 0 ? vec4(1.0, ao, 0.0, 1.0) : vec4(vec3(ao), 1.0);
+    vec2 v = weight > 0.0 ? sum / weight : vec2(1.0);
+    colour = u_final != 0 ? vec4(v.g, v.r, 0.0, 1.0) : vec4(v, 0.0, 1.0);
 }
 )";
 
@@ -504,6 +657,61 @@ float hit_box(vec3 o, vec3 d, vec3 centre, vec3 hx, vec3 hy, vec3 hz) {
     return near > 0.0 ? near : -1.0;
 }
 
+// The bead of the move p0 to p1 (src/ui/raytrace.cpp, intersect_bead): six
+// planes clip the ray, all from p0.
+float hit_bead(vec3 o, vec3 d, vec3 p0, vec3 p1, vec3 size, float end_angle) {
+    vec3 along = p1 - p0;
+    float len = length(along), w = size.x, h = size.y;
+    if (len <= 0.0 || w <= 0.0 || h <= 0.0)
+        return -1.0;
+    vec3 dir = along / len;
+    vec3 side = cross(dir, vec3(0.0, 0.0, 1.0));
+    side = dot(side, side) > 1e-8 ? normalize(side) : vec3(1.0, 0.0, 0.0);
+    vec3 up = cross(side, dir);
+    vec3 q = o - p0;
+    float near = -1e30, far = 1e30;
+    vec3 n[6];
+    float k[6];
+    vec3 c = up * (-0.5 * h);
+    for (int i = 0; i < 4; ++i) {
+        float s = (i & 1) == 0 ? -1.0 : 1.0, u = (i & 2) == 0 ? -1.0 : 1.0;
+        n[i] = side * (s * 2.0 / w) + up * (u * 2.0 / h);
+        k[i] = dot(c, n[i]) + 1.0;
+    }
+    if (size.z < 50.0) {
+        n[4] = -vec3(cos(size.z), sin(size.z), 0.0);
+        k[4] = 0.0;
+    } else {
+        n[4] = -dir;
+        k[4] = 0.5 * w;
+    }
+    if (end_angle < 50.0) {
+        n[5] = vec3(cos(end_angle), sin(end_angle), 0.0);
+        k[5] = dot(along, n[5]);
+    } else {
+        n[5] = dir;
+        k[5] = dot(along, dir) + 0.5 * w;
+    }
+    for (int i = 0; i < 6; ++i) {
+        float denom = dot(d, n[i]), num = k[i] - dot(q, n[i]);
+        if (abs(denom) < 1e-12) {
+            if (num < 0.0)
+                return -1.0;
+            continue;
+        }
+        float t = num / denom;
+        if (denom > 0.0)
+            far = min(far, t);
+        else
+            near = max(near, t);
+        if (near > far)
+            return -1.0;
+    }
+    if (far < 0.0)
+        return -1.0;
+    return near > 0.0 ? near : -1.0;
+}
+
 bool occluded(vec3 o, vec3 d, float tmax) {
     vec3 safe = mix(d, sign(d) * 1e-12 + vec3(equal(d, vec3(0.0))) * 1e-12, lessThan(abs(d), vec3(1e-12)));
     vec3 inv = 1.0 / safe;
@@ -530,8 +738,9 @@ bool occluded(vec3 o, vec3 d, float tmax) {
                     uint kind = uint(p2.w);
                     if (kind != 31u && ((u_kind_mask >> kind) & 1u) == 0u)
                         continue;
-                    float t = p1.w > 0.5 ? hit_box(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).xyz)
-                                         : hit_triangle(o, d, p0.xyz, p1.xyz, p2.xyz);
+                    float t = p1.w > 1.5   ? hit_bead(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).x)
+                              : p1.w > 0.5 ? hit_box(o, d, p0.xyz, p1.xyz, p2.xyz, primitive(base + 3).xyz)
+                                           : hit_triangle(o, d, p0.xyz, p1.xyz, p2.xyz);
                     if (t >= 0.0 && t < tmax)
                         return true;
                 }
@@ -826,6 +1035,14 @@ bool Renderer::init(std::string& error) {
     glGetIntegerv(GL_MAX_SAMPLES, &max_samples_);
     max_samples_ = std::max(max_samples_, 1);
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_);
+    shadow_size_ = std::min(kShadowMapSize, max_texture_);
+    shadow_depth_ =
+        make_texture(GL_DEPTH_COMPONENT24, shadow_size_, shadow_size_, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
+    shadow_fbo_ = make_framebuffer(0, shadow_depth_);
+    glDrawBuffer(GL_NONE); // depth only
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    ready_ = true;
     return true;
 }
 
@@ -863,7 +1080,7 @@ void Renderer::resize(int width, int height, int samples) {
     g_depth_ = make_texture(GL_DEPTH_COMPONENT24, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
     g_fbo_ = make_framebuffer(g_normal_, g_depth_);
     for (int i = 0; i < 3; ++i) {
-        ao_tex_[i] = i < 2 ? make_texture(GL_R8, width, height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST)
+        ao_tex_[i] = i < 2 ? make_texture(GL_RG8, width, height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST)
                            : make_texture(GL_RGBA8, width, height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST);
         ao_fbo_[i] = make_framebuffer(ao_tex_[i]);
     }
@@ -889,6 +1106,8 @@ void Renderer::resize(int width, int height, int samples) {
 }
 
 void Renderer::shutdown() {
+    if (!ready_)
+        return;
     release_targets();
     clear_ray_scene();
     for (unsigned* p : {&p_.background, &p_.line, &p_.grid, &p_.plate, &p_.mesh, &p_.preview, &p_.ao, &p_.blur,
@@ -897,7 +1116,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &paint_, &extrusions_, &travels_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -908,10 +1127,17 @@ void Renderer::shutdown() {
         glDeleteVertexArrays(1, &empty_vao_);
     if (white_)
         glDeleteTextures(1, &white_);
-    empty_vao_ = white_ = 0;
+    if (shadow_depth_)
+        glDeleteTextures(1, &shadow_depth_);
+    if (shadow_fbo_)
+        glDeleteFramebuffers(1, &shadow_fbo_);
+    empty_vao_ = white_ = shadow_depth_ = shadow_fbo_ = 0;
+    ready_ = false;
 }
 
 void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
+    if (!ready_)
+        return;
     const std::vector<float> plate = bed_triangles(bed);
     upload(plate_.vao, plate_.vbo, plate.data(), plate.size() * sizeof(float));
     glEnableVertexAttribArray(0);
@@ -932,18 +1158,56 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
 }
 
 void Renderer::set_model(const std::vector<float>& vertices) {
+    if (!ready_)
+        return;
     upload(model_.vao, model_.vbo, vertices.data(), vertices.size() * sizeof(float));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     model_.count = static_cast<int>(vertices.size() / 6);
+    model_box_ = model_.count > 0;
+    model_lo_ = Vec3{1e30f, 1e30f, 1e30f}, model_hi_ = Vec3{-1e30f, -1e30f, -1e30f};
+    for (std::size_t i = 0; i + 5 < vertices.size(); i += 6) {
+        model_lo_ = Vec3{std::min(model_lo_.x, vertices[i]), std::min(model_lo_.y, vertices[i + 1]),
+                         std::min(model_lo_.z, vertices[i + 2])};
+        model_hi_ = Vec3{std::max(model_hi_.x, vertices[i]), std::max(model_hi_.y, vertices[i + 1]),
+                         std::max(model_hi_.z, vertices[i + 2])};
+    }
     ray_signature_.clear();
 }
 
+void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups) {
+    if (!ready_)
+        return;
+    upload(paint_.vao, paint_.vbo, vertices.data(), vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    paint_.count = static_cast<int>(vertices.size() / 6);
+    paint_groups_ = groups;
+}
+
 void Renderer::set_preview(const PreviewBuffers& p) {
-    upload(extrusions_.vao, extrusions_.vbo, p.extrusions.data(), p.extrusions.size() * sizeof(PreviewInstance));
-    extrusions_.count = static_cast<int>(p.extrusions.size());
+    if (!ready_)
+        return;
+    // Drawing order (docs/LARGE_MODELS.md): what can show, then what the
+    // part hides when all of it is drawn.
+    order_ = preview_draw_order(p);
+    std::vector<PreviewInstance>& ordered = order_.instances;
+    preview_box_ = !ordered.empty();
+    preview_lo_ = Vec3{1e30f, 1e30f, 1e30f}, preview_hi_ = Vec3{-1e30f, -1e30f, -1e30f};
+    for (const PreviewInstance& e : ordered) {
+        const float r = std::max(e.width, e.height);
+        preview_lo_ = Vec3{std::min({preview_lo_.x, e.x0 - r, e.x1 - r}), std::min({preview_lo_.y, e.y0 - r, e.y1 - r}),
+                           std::min({preview_lo_.z, e.z0 - r, e.z1 - r})};
+        preview_hi_ = Vec3{std::max({preview_hi_.x, e.x0 + r, e.x1 + r}), std::max({preview_hi_.y, e.y0 + r, e.y1 + r}),
+                           std::max({preview_hi_.z, e.z0 + r, e.z1 + r})};
+    }
+    upload(extrusions_.vao, extrusions_.vbo, ordered.data(), ordered.size() * sizeof(PreviewInstance));
+    extrusions_.count = static_cast<int>(ordered.size());
+    ordered = {}; // on the GPU now
     upload(travels_.vao, travels_.vbo, p.travels.data(), p.travels.size() * sizeof(LineVertex));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex), offset(0));
@@ -961,11 +1225,14 @@ void Renderer::set_preview(const PreviewBuffers& p) {
 void Renderer::clear_preview() {
     extrusions_.count = travels_.count = 0;
     layer_extrusions_.clear();
+    order_ = {};
     layer_travels_.clear();
     ray_signature_.clear();
 }
 
 bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<float>& primitives) {
+    if (!ready_)
+        return false;
     clear_ray_scene();
     const std::size_t row = std::size_t(RayScene::kTextureWidth) * 4;
     const int node_rows = int(nodes.size() / row), primitive_rows = int(primitives.size() / row);
@@ -1006,11 +1273,11 @@ void Renderer::lit_uniforms(unsigned p, const ViewFrame& f, const Mat4& vp, bool
     bind_texture(kVisibilityUnit, visibility);
 }
 
-void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
+void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility, bool casters) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
-    if (plate_.count > 0) {
+    if (plate_.count > 0 && !casters) {
         // Pushed back a little so the grid, and the first layer, draw over it.
         glEnable(GL_POLYGON_OFFSET_FILL);
         glPolygonOffset(1.0f, 1.0f);
@@ -1043,27 +1310,63 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     }
     if (f.show_model && model_.count > 0) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
-        uniform(p_.mesh, "u_colour", f.model);
         glBindVertexArray(model_.vao);
-        glDrawArrays(GL_TRIANGLES, 0, model_.count);
+        // The chosen model in its own colour, the rest before and after it.
+        const GLint count = model_.count;
+        const GLint first = GLint(std::min<std::size_t>(f.selected_first, std::size_t(count)));
+        const GLint chosen = GLint(std::min<std::size_t>(f.selected_count, std::size_t(count - first)));
+        uniform(p_.mesh, "u_colour", f.model);
+        uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+        if (first > 0)
+            glDrawArrays(GL_TRIANGLES, 0, first);
+        if (first + chosen < count)
+            glDrawArrays(GL_TRIANGLES, first + chosen, count - first - chosen);
+        if (chosen > 0) {
+            uniform(p_.mesh, "u_colour", f.model_selected);
+            uniform(p_.mesh, "u_offset", f.selected_offset);
+            glDrawArrays(GL_TRIANGLES, first, chosen);
+            uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+        }
+        // The paint on the same faces, pulled towards the eye in depth so it
+        // wins over them.
+        if (f.show_paint && paint_.count > 0) {
+            glBindVertexArray(paint_.vao);
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -4.0f);
+            for (const PaintGroup& g : paint_groups_) {
+                if (g.first + g.count > std::size_t(paint_.count))
+                    continue;
+                uniform(p_.mesh, "u_colour", g.colour);
+                glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
+            }
+            glDisable(GL_POLYGON_OFFSET_FILL);
+        }
     }
     if (f.show_preview)
         draw_preview(f, vp, gbuffer, visibility);
 }
 
 void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
+    if (!gbuffer)
+        drawn_extrusions_ = 0;
     if (layer_extrusions_.size() < 2)
         return;
     const std::size_t layers = layer_extrusions_.size() - 1;
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
-    const std::size_t first = layer_extrusions_[lo], count = layer_extrusions_[hi + 1] - first;
-    if (count > 0) {
+    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md).
+    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask);
+    for (const PreviewRange& range : ranges) {
+        const std::size_t first = range.first, count = range.count;
+        if (count == 0)
+            continue;
         const unsigned p = p_.preview;
         lit_uniforms(p, f, vp, gbuffer, visibility);
         glUniform3fv(at(p, "u_colours"), static_cast<GLsizei>(kLineKinds), &f.kind_colours[0].x);
         glUniform1ui(at(p, "u_kind_mask"), f.kind_mask);
         uniform(p, "u_colour_mode", static_cast<int>(f.color_mode));
         uniform(p, "u_moire", f.moire_filter ? 1 : 0);
+        uniform(p, "u_grooves", f.mode == RenderMode::RayTraced ? 0 : 1);
+        glUniform2ui(at(p, "u_layers"), static_cast<GLuint>(lo), static_cast<GLuint>(hi));
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
         else if (f.color_mode == ColorMode::Height)
@@ -1085,9 +1388,13 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, feed)));
         glEnableVertexAttribArray(4);
         glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, stride, offset(base + offsetof(PreviewInstance, kind_layer)));
-        for (GLuint a = 0; a < 5; ++a)
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, join0_x)));
+        for (GLuint a = 0; a < 6; ++a)
             glVertexAttribDivisor(a, 1);
         glDrawArraysInstanced(GL_TRIANGLES, 0, 36, static_cast<GLsizei>(count));
+        if (!gbuffer)
+            drawn_extrusions_ += count;
     }
     if (!gbuffer && f.show_travels && travels_.count > 0 && layer_travels_.size() > hi + 1) {
         const std::size_t t0 = layer_travels_[lo], tn = layer_travels_[hi + 1] - t0;
@@ -1098,6 +1405,33 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
             glDrawArrays(GL_LINES, static_cast<GLint>(t0), static_cast<GLsizei>(tn));
         }
     }
+}
+
+// The key light's shadow map (Williams 1978): the model and the preview seen
+// from the light, an orthographic camera around what is shown down to the bed.
+void Renderer::shadow_pass(const ViewFrame& f) {
+    shadowed_ = false;
+    const bool model = f.show_model && model_box_, preview = f.show_preview && preview_box_;
+    if (!shadow_fbo_ || (!model && !preview))
+        return;
+    Vec3 lo = model ? model_lo_ : preview_lo_, hi = model ? model_hi_ : preview_hi_;
+    if (model && preview) {
+        lo = Vec3{std::min(lo.x, preview_lo_.x), std::min(lo.y, preview_lo_.y), std::min(lo.z, preview_lo_.z)};
+        hi = Vec3{std::max(hi.x, preview_hi_.x), std::max(hi.y, preview_hi_.y), std::max(hi.z, preview_hi_.z)};
+    }
+    lo.z = std::min(lo.z, 0.0f); // down to the bed, which takes the shadow
+    // A margin around the box, so the soft edges' samples stay in the map.
+    const float margin = 0.05f * std::max({hi.x - lo.x, hi.y - lo.y, hi.z - lo.z, 1.0f});
+    lo = lo - Vec3{margin, margin, margin}, hi = hi + Vec3{margin, margin, margin};
+    shadow_vp_ = shadow_view_projection(f.key, lo, hi);
+    shadow_texel_ = 2.0f * length(hi - lo) / float(std::max(shadow_size_, 1));
+    shadow_bias_ = 0.6f / std::max(length(hi - lo), 1.0f); // the box's depth is at most its diagonal
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
+    glViewport(0, 0, shadow_size_, shadow_size_);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    draw_scene(f, shadow_vp_, true, white_, true);
+    glViewport(0, 0, width_, height_);
+    shadowed_ = true;
 }
 
 unsigned Renderer::ambient_pass(const ViewFrame& f) {
@@ -1115,6 +1449,13 @@ unsigned Renderer::ambient_pass(const ViewFrame& f) {
     common(p_.ao);
     uniform(p_.ao, "u_normal", 1);
     uniform(p_.ao, "u_radius", f.ao_radius);
+    bind_texture(3, shadow_depth_);
+    uniform(p_.ao, "u_shadow", 3);
+    uniform(p_.ao, "u_shadowed", shadowed_ ? 1 : 0);
+    uniform(p_.ao, "u_light", shadow_vp_);
+    uniform(p_.ao, "u_world", rigid_inverse(f.view));
+    uniform(p_.ao, "u_texel", shadow_texel_);
+    uniform(p_.ao, "u_bias", shadow_bias_);
     screen_pass(empty_vao_);
     for (int pass = 0; pass < 2; ++pass) {
         glBindFramebuffer(GL_FRAMEBUFFER, ao_fbo_[pass + 1]);
@@ -1163,6 +1504,8 @@ unsigned Renderer::ray_pass(const ViewFrame& f) {
 }
 
 void Renderer::draw(const ViewFrame& f) {
+    if (!ready_)
+        return;
     const int samples = std::clamp(f.samples, 1, max_samples_);
     resize(f.width, f.height, samples);
     const Mat4 vp = f.projection * f.view;
@@ -1197,10 +1540,13 @@ void Renderer::draw(const ViewFrame& f) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         draw_scene(f, vp, true, white_);
     }
-    if (ray)
+    if (ray) {
         visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
-    else if (ambient)
+    } else if (ambient) {
+        if (refresh)
+            shadow_pass(f);
         visibility = refresh ? ambient_pass(f) : ao_tex_[2];
+    }
 
     // The lit scene.
     glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);
@@ -1242,6 +1588,8 @@ void Renderer::draw(const ViewFrame& f) {
 }
 
 std::vector<std::uint8_t> Renderer::read_colour() {
+    if (!ready_)
+        return {};
     std::vector<std::uint8_t> out(std::size_t(width_) * std::size_t(height_) * 4);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glBindFramebuffer(GL_FRAMEBUFFER, colour_fbo_);
@@ -1251,6 +1599,8 @@ std::vector<std::uint8_t> Renderer::read_colour() {
 }
 
 RayReadback Renderer::read_back() {
+    if (!ready_)
+        return {};
     RayReadback r;
     r.width = width_, r.height = height_;
     const std::size_t n = std::size_t(width_) * std::size_t(height_);
