@@ -250,6 +250,7 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
     Settings s = test_printer();
     s.wall_count = 0;
     s.wall_width = 0.8;
+    s.infill_width = s.solid_width = s.top_width = 0.8;
     const SlicedModel model = slice_model(m, s);
     CHECK_THAT(unprintable_reason(model, s), ContainsSubstring("nothing would be printed"));
     CHECK(unprintable_reason(slice_model(cube(), test_printer()), test_printer()).empty());

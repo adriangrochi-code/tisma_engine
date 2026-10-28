@@ -6706,5 +6706,15 @@ boquilla (arriba) y 1,125 × la boquilla (los otros). La pregunta va al equipo d
 siempre. Prueba: una caja de 30 × 30 × 5 con 0,5, 0,42 y 0,55 mm, cada relleno con su ancho, `;WIDTH:0.500` y
 `0.550` en el G-code, y el verificador conforme. 175 casos, todos pasan.
 
+**Anchos en 0 desde la boquilla (I9).** El equipo de fichas respondió: con 0, la capa de arriba de todo lleva el ancho
+de la boquilla y el resto del relleno sólido y el poco denso 1,125 boquillas, sin seguir a `walls.width`. Ahora es
+así (con boquillas distintas, 1,125 de la del relleno: 0,675 mm con 0,6). **Cambia el G-code de siempre**: con 0,4,
+los rellenos pasan de 0,4 a 0,45 mm (arriba sigue en 0,4). Cinco pruebas suponían el ancho de las paredes y se
+ajustaron: el relleno denso bajo la tapa fija `infill.width` 0,4 para comparar separaciones de 4 y 1 mm; la J de las
+capas curvas se mide con 0,45; el puente sobre el soporte, con `surfaces.solid_width` igual al de las paredes; el
+modelo sin nada para extruir fija también los rellenos en 0,8; el relleno de la boquilla gruesa es de 0,675 mm.
+Prueba nueva: con `walls.width` 0,5 y los anchos en 0, arriba 0,4 y lo demás 0,45. Toda la lista: 692 casos, todos
+pasan.
+
 **Sigue:** `walls.outer_width` y `layers.first_line_width` (tocan el generador de paredes), y el resto de `walls`.
 

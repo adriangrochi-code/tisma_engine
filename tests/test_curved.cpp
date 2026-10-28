@@ -175,6 +175,7 @@ TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved
     // Layer 11 (Z 2.2, in the ramp): filament per mm over the flat amount
     // by J, on the infill.
     const double area = std::numbers::pi * 0.25 * s.filament_diameter * s.filament_diameter;
+    const double width = 1.125 * s.nozzle_diameter; // the sparse infill's (I9)
     std::vector<double> ratio;
     double j_lo = 10.0, j_hi = 0.0;
     for (const Move& m : layer_moves(text, "2.200")) {
@@ -185,7 +186,7 @@ TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved
             continue;
         const double j = f->thickness(0.5 * (m.x0 + m.x1), 0.5 * (m.y0 + m.y1), 0.5 * (m.z0 + m.z1));
         j_lo = std::min(j_lo, j), j_hi = std::max(j_hi, j);
-        ratio.push_back(m.e / length / (s.wall_width * s.layer_height / area * j));
+        ratio.push_back(m.e / length / (width * s.layer_height / area * j));
     }
     REQUIRE(ratio.size() > 100);
     std::sort(ratio.begin(), ratio.end());

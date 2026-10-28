@@ -1276,7 +1276,7 @@ Settings parse_checked(std::string_view text) {
         if (n == "top_width" || n == "solid_width") {
             const double v = number(g, n, k);
             if (v < 0.0 || v > 10.0)
-                fail(k, "must be from 0 (walls.width) to 10 mm");
+                fail(k, "must be from 0 (from the nozzle) to 10 mm");
             (n == "top_width" ? s.top_width : s.solid_width) = v;
             return;
         }
@@ -1310,7 +1310,7 @@ Settings parse_checked(std::string_view text) {
         if (n == "width") {
             const double v = number(g, n, k);
             if (v < 0.0 || v > 10.0)
-                fail(k, "must be from 0 (walls.width) to 10 mm");
+                fail(k, "must be from 0 (from the nozzle) to 10 mm");
             s.infill_width = v;
             return;
         }

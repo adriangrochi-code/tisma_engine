@@ -141,17 +141,17 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `top_min_thickness` | mm | 0 | 0 a 100 | Si las capas sólidas de arriba suman menos, se agregan capas del alto nominal hasta llegar (`docs/INFILL.md`) |
 | `bottom_min_thickness` | mm | 0 | 0 a 100 | Lo mismo con las de abajo |
 | `interface_shells` | booleano | `false` | | Con varios extrusores, donde la parte de uno apoya sobre la de otro, cada una lleva sus capas sólidas de arriba y de abajo como si fueran piezas separadas; sin esto, lo de los otros materiales tapa como si fuera la misma pieza (ficha `multi_extruder.md`, regla 16, ME10) |
-| `top_width` | número | 0 | 0 a 10 | Ancho de los cordones de la capa de arriba de todo, en mm; 0: `walls.width` (ficha `surfaces_infill.md`) |
-| `solid_width` | número | 0 | 0 a 10 | Ancho de los cordones del resto del relleno sólido, en mm; 0: `walls.width` |
+| `top_width` | número | 0 | 0 a 10 | Ancho de los cordones de la capa de arriba de todo, en mm; 0: el diámetro de la boquilla, sin seguir a `walls.width` (ficha `surfaces_infill.md`, I9) |
+| `solid_width` | número | 0 | 0 a 10 | Ancho de los cordones del resto del relleno sólido, en mm; 0: 1,125 × la boquilla (I9) |
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores |
 
 ### `infill`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `walls.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
+| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `infill.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
 | `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
-| `width` | número | 0 | 0 a 10 | Ancho de los cordones del relleno poco denso, en mm (su separación sigue a la densidad); 0: `walls.width` (ficha `surfaces_infill.md`). Con boquillas distintas, en proporción a la del relleno |
+| `width` | número | 0 | 0 a 10 | Ancho de los cordones del relleno poco denso, en mm (su separación sigue a la densidad); 0: 1,125 × la boquilla (ficha `surfaces_infill.md`, I9). Con boquillas distintas, en proporción a la del relleno |
 | `wall_overlap` | número | 25 | 0 a 100 | Cuánto entran en la pared interna, en % del ancho de cordón, las líneas sólidas que no se unen en zigzag (superficies superiores monotónicas). Con 25 %, el material depositado queda entre −0,5 % y +1,5 % del área |
 | `nonplanar` | sí/no | no | — | Relleno ondulado: sube y baja en Z, igual en todas las capas, solo con patrones que se repiten capa a capa (`docs/NONPLANAR_INFILL.md`) |
 | `nonplanar_amplitude` | % | 250 | 0 a 500 | Altura de la onda, de valle a cresta, en % de la altura de capa |

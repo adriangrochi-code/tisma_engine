@@ -257,6 +257,7 @@ TEST_CASE("dense infill under the top surfaces (D1), sliced to checked G-code", 
     Settings s = base();
     s.infill_density = 10.0;
     s.infill_dense_under_top = true;
+    s.infill_width = 0.4; // sparse lines 4 mm apart
     const SlicedModel sliced = slice_model(m, s);
     std::ostringstream g;
     write_gcode(g, sliced, s);

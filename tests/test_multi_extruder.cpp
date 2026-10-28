@@ -745,12 +745,12 @@ TEST_CASE("nozzles: fine walls, coarse sparse infill combined (MM1)", "[extruder
     CHECK(sparse_2 > 0.0);
     CHECK(sparse_1 == 0.0);
     CHECK(other_2 == 0.0);
-    // The coarse nozzle's infill: 0.72 mm wide (0.3 by 0.6 / 0.25), combined
+    // The coarse nozzle's infill: 0.675 mm wide (1.125 nozzles, I9), combined
     // three layers at a time (0.45 mm, 75 % of 0.6), a layer in three.
     const Shown lines = shown(text);
     REQUIRE(lines.widths.count("Internal infill"));
     for (const double w : lines.widths.at("Internal infill"))
-        CHECK_THAT(w, WithinAbs(0.72, 0.005));
+        CHECK_THAT(w, WithinAbs(0.675, 0.005));
     for (const char* walls : {"External perimeter", "Perimeter"})
         if (lines.widths.count(walls))
             for (const double w : lines.widths.at(walls))

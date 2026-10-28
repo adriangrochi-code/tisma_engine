@@ -465,7 +465,9 @@ struct PartNozzles {
     double infill_nozzle; // mm
 };
 PartNozzles part_nozzles(const Settings& s, int tool) {
-    PartNozzles p{s, s.infill_width > 0.0 ? s.infill_width : s.wall_width, s.nozzle_diameter};
+    // The sparse infill's width: its own, or 1.125 nozzles (surfaces_infill.md, I9).
+    const double sparse = s.infill_width > 0.0 ? s.infill_width : 1.125 * s.nozzle_diameter;
+    PartNozzles p{s, sparse, s.nozzle_diameter};
     if (s.extruders < 2 || s.nozzle_diameters.empty() || s.single_extruder_mmu)
         return p;
     const KindExtruders kinds = kind_extruders(s);
@@ -473,7 +475,7 @@ PartNozzles part_nozzles(const Settings& s, int tool) {
     const double infill = nozzle_of(s, kinds.infill > 0 ? kinds.infill : tool);
     p.settings.wall_width = s.wall_width * walls / s.nozzle_diameter;
     p.settings.nozzle_diameter = walls;
-    p.sparse_width = (s.infill_width > 0.0 ? s.infill_width : s.wall_width) * infill / s.nozzle_diameter;
+    p.sparse_width = sparse * infill / s.nozzle_diameter;
     p.infill_nozzle = infill;
     if (s.fine_walls_coarse_infill && infill != walls) {
         p.settings.infill_combine_auto = true;
@@ -1611,8 +1613,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     settings.monotonic_top};
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
-    fill.top_width = settings.top_width;
-    fill.solid_width = settings.solid_width;
+    // At 0 from the nozzle, not the walls (surfaces_infill.md, I9): the top
+    // surface one nozzle wide, the other solid infill 1.125.
+    fill.top_width = settings.top_width > 0.0 ? settings.top_width : settings.nozzle_diameter;
+    fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};

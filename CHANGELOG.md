@@ -52,6 +52,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Los anchos de los rellenos en 0 salen de la boquilla** (`surfaces_infill.md`, I9): la capa de arriba de todo, una
+  boquilla; el resto del relleno sólido y el poco denso, 1,125 boquillas (0,45 mm con 0,4). Antes seguían a
+  `walls.width`. **Cambia el G-code de siempre** en los rellenos.
 - **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con
   un caudal máximo conocido, de la mitad a una vez y media, también en franjas de 2 mm.
 - **Una clave desconocida en `material` es un error**, como en los demás grupos (antes el grupo entero se ignoraba

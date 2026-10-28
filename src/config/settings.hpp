@@ -202,10 +202,11 @@ struct Settings {
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
-    // Line widths of their own, mm; 0: walls.width (surfaces_infill.md).
-    double top_width = 0.0;    // the top surface
-    double solid_width = 0.0;  // the other solid infill
-    double infill_width = 0.0; // the sparse infill
+    // Line widths of their own, mm; 0: from the nozzle, not the walls
+    // (surfaces_infill.md, I9).
+    double top_width = 0.0;    // the top surface; 0: one nozzle
+    double solid_width = 0.0;  // the other solid infill; 0: 1.125 nozzles
+    double infill_width = 0.0; // the sparse infill; 0: 1.125 nozzles
     // Where one extruder's part rests on another's, each keeps its own top
     // and bottom solid layers, as if apart (multi_extruder.md, rule 16).
     bool interface_shells = false;
