@@ -6511,3 +6511,52 @@ el filamento baja de 415 a 333 mm.
 
 **Falta:** la lista de objetos con sus filas hijas, modificadores con la forma de un archivo, y que los volúmenes
 sigan a la pieza al girarla o escalarla (hoy solo al moverla).
+
+
+## 2026-10-28 — mantenimiento (03:00)
+
+**Revisado:** `origin/dev` y `origin/main` sin cambios nuevos; fuzzer con semillas nuevas (20261028 y 7741028: 4000
+corridas); casos borde de lo agregado ayer (volúmenes negativos, modificadores, rangos de alturas); los «No probado»
+recientes (el clic de Medir en mallas grandes); el banco contra la 0.9.0-alpha.1, compilada aparte.
+
+**Encontrado y arreglado:**
+- **Capas curvas (fuzzer, semilla 20261028, corridas 196 y 667):** con la rampa pareja de las caras de arriba, J
+  salta donde la rampa termina. Dos trozos unidos sobre una cresta tenían la cuerda un poco debajo de la superficie,
+  y un trozo podía cruzar el salto al redondear sus números: el filamento salía de J de un lado y el verificador leía
+  el del otro (un 8 a 15 % de diferencia), así que el G-code se rechazaba. J se toma ahora en las coordenadas que el
+  G-code escribe, redondeadas, y dos trozos se unen solo si J en el medio de la cuerda unida también coincide.
+  Prueba nueva en `[curved]`; las dos semillas, 0 fallas.
+- **Rangos de alturas que se pisan:** con un rango de 3 a 8 mm a 0,25 y después otro de 0 a 5 a 0,1, de 5 a 8 mm
+  volvía la altura del perfil (0,2) en lugar de 0,25. Pasado un rango vuelve la altura que había ahí antes de él.
+- **Mensajes:** un volumen negativo que se lleva toda la pieza decía «¿la malla es plana o abierta?»; ahora dice que
+  los volúmenes negativos se la llevan (`SlicedModel::cut_away`). Un rango cuyos ajustes no son JSON daba el error
+  crudo del lector; ahora nombra el objeto y el rango («box 2-4.5 mm: its settings are not valid JSON»), y el
+  modificador de un rango se llama así en lugar de «box 2.000000-4.500000».
+- **Escribir con `walls.detect_overhangs`** (encendido por defecto desde QA13) tardaba el doble en la esfera: para
+  cada tramo de cada pared cerca de lo que cuelga, mirar si su medio cuelga recorría todas las aristas de esa zona,
+  un anillo fino alrededor de cada capa de la mitad de abajo. Ahora un rayo cruza solo las aristas de las celdas de
+  su fila. Mismo G-code byte a byte en 8 casos (esfera, esfera de un millón de triángulos, Benchy y el cráneo, con y
+  sin soportes).
+- **El clic de Medir** sobre una superficie curva ponía todas las aristas de la malla en un `std::map`: 0,87 s con
+  un millón de triángulos. Ahora los triángulos de cada vértice van seguidos en un arreglo: 0,18 s (0,15 s es soldar
+  la malla). Los mismos triángulos, en el mismo orden.
+
+**Medido** (4 núcleos; la máquina de hoy es más lenta que la de ayer: la 0.9.0-alpha.1 compilada hoy lamina la
+esfera en 1,30 a 1,51 s, contra 1,08 s anotados ayer):
+
+| | 0.9.0-alpha.1 | Antes de hoy | Ahora |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos, laminar | 1,30 a 1,51 s | 1,40 a 1,47 s | 1,40 a 1,49 s |
+| La misma, escribir | 137 a 142 ms | 243 a 300 ms | 177 ms |
+| Esfera de 50 mm, escribir | — | 74 ms | 56 ms |
+| Benchy, laminar / escribir | — | 645 a 659 ms / 108 a 118 ms | igual |
+| Clic de Medir, un millón de triángulos | — | 0,87 s | 0,18 s |
+| Análisis del cubo (`analyze`, comando completo / solución) | — | 0,29 a 0,37 s / 0,19 s | igual |
+
+La escritura de la esfera sigue por encima de la 0.9.0 (177 contra 140 ms): lo que queda es partir las paredes en
+voladizo (`cut_at`), que la 0.9.0 no hacía.
+
+**Pruebas nuevas:** J a lo largo de un techo con el salto de la rampa (`[curved]`); rangos que se pisan, y los
+mensajes del negativo y de un rango con ajustes rotos (`[transform]`).
+
+**Sigue:** la lista de objetos con sus filas hijas y que los volúmenes sigan a la pieza al girarla o escalarla (P1).

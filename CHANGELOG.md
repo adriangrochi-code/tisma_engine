@@ -54,6 +54,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
 
+### Corregido
+
+- **Capas curvas:** donde la rampa de las caras de arriba termina, un tramo podía llevar el filamento del espesor de
+  un lado y el verificador leer el del otro, y el G-code se rechazaba. El espesor se toma ahora donde el G-code pone
+  la boquilla, con sus números redondeados.
+- **Rangos de alturas que se pisan:** pasado el de después, el de antes vuelve a su altura de capa (antes volvía la
+  del perfil).
+- **Mensajes:** un volumen negativo que se lleva toda la pieza lo dice (antes: «¿la malla es plana o abierta?»); un
+  rango con ajustes que no son JSON nombra el objeto y el rango («box 2-4.5 mm»).
+- **Más rápido:** escribir el G-code con `walls.detect_overhangs` en piezas con voladizos todo alrededor (una
+  esfera de un millón de triángulos: de 300 a 177 ms), y el clic de Medir sobre una superficie curva en mallas
+  grandes (de 0,87 a 0,18 s con un millón de triángulos).
+
 ## [0.10.0-alpha.2] - 2026-10-27
 
 ### Agregado
