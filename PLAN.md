@@ -911,7 +911,7 @@ Con el PR #23 (2026-10-26):
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
   queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
-- [ ] **`walls.staggered`** (`staggered_perimeters.md`, ST1): los lazos internos impares media capa más arriba; el
+- [x] **`walls.staggered`** (`staggered_perimeters.md`, ST1; hecho 2026-10-28): los lazos internos impares media capa más arriba; el
   material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
   material de los bloques no planares también sea lineal en el espesor
 - [x] **Modelo del cordón de las fichas** (hecho 2026-10-28; queda la corrida 48 del fuzzer, `PROGRESS.md`) (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;

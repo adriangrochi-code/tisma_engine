@@ -731,7 +731,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
-                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
+                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
                 "spread_count", "transition_length"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -745,12 +745,13 @@ Settings parse_checked(std::string_view text) {
                 g, n, k, {{"none", TopOneWall::None}, {"top", TopOneWall::Top}, {"topmost", TopOneWall::Topmost}});
             return;
         }
-        if (n == "staggered_inner_seams" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
+        if (n == "staggered_inner_seams" || n == "staggered" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
             n == "avoid_curled_overhangs" || n == "extra_on_overhangs") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "extra_on_overhangs"     ? s.extra_on_overhangs
              : n == "staggered_inner_seams" ? s.staggered_inner_seams
+             : n == "staggered"             ? s.walls_staggered
              : n == "first_layer_one_wall" ? s.first_layer_one_wall
              : n == "extra_if_needed"      ? s.extra_if_needed
                                            : s.avoid_curled_overhangs) = g.at(n).get<bool>();
@@ -2857,6 +2858,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.clockwise", flag(s.walls_clockwise)},
         {"walls.outer_first", flag(s.walls_outer_first)},
         {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
+        {"walls.staggered", flag(s.walls_staggered)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
         {"walls.extra_if_needed", flag(s.extra_if_needed)},
@@ -3049,6 +3051,7 @@ std::string settings_json(const Settings& s) {
           {"clockwise", s.walls_clockwise},
           {"outer_first", s.walls_outer_first},
           {"staggered_inner_seams", s.staggered_inner_seams},
+          {"staggered", s.walls_staggered},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
           {"first_layer_one_wall", s.first_layer_one_wall},
           {"extra_if_needed", s.extra_if_needed},

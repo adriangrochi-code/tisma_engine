@@ -28,7 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
   `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
-  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `walls.staggered` (perímetros escalonados: los internos impares media capa más arriba), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
   `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
@@ -51,6 +51,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **Cordones fuera de la Z de la capa:** en el relleno ondulado y en las costuras en rampa, el material es el del
+  cordón de la capa por la parte de su altura que ocupa (lineal en el espesor), como en el Z anti-aliasing. Antes
+  salía de la sección de un cordón de ese espesor.
+- **Tarjeta «Paredes finas»** en Resistencia: `walls.min_line_width`, `walls.min_detail`, `walls.spread_count` y
+  `walls.transition_length`.
 
 - **Paredes finas de tres cordones o más:** solo los del medio cambian de ancho; los demás quedan nominales
   (`walls.spread_count` 1, `perimeters.md` P2). Antes todos se repartían la diferencia.

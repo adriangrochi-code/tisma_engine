@@ -168,6 +168,8 @@ struct Settings {
     // avoid_curled_overhangs (rule 9) are read and kept: Tisma Slicer added no
     // wall on the spec's parts, and the second was not measured.
     bool staggered_inner_seams = false;
+    // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
+    bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;

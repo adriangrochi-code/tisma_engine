@@ -456,3 +456,69 @@ TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[
         }
     }
 }
+
+TEST_CASE("walls: staggered perimeters, the odd inner loops half a layer up (staggered_perimeters.md, ST1)", "[walls]") {
+    // The 20 mm cube, 3 walls, 0.2 mm layers: the first inner loop half a
+    // layer up with the normal material, 1.5 times on the first layer and
+    // half on the top layer, back at the layer's Z; the others at the layer's Z.
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.walls_staggered = true;
+    s.relative_extrusion = true;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 10}});
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    REQUIRE(check.ok());
+    // Per layer, by bead (outer 0, first inner 1, second inner 2, by their
+    // distance from X 90 along the left side): the Z and the filament per mm.
+    struct Seen {
+        double z = 0.0, e = 0.0, length = 0.0;
+    };
+    std::map<std::pair<int, int>, Seen> seen;
+    std::istringstream in(out.str());
+    int layer = -1;
+    double x = 0.0, y = 0.0, z = 0.0;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";LAYER_CHANGE", 0) == 0)
+            ++layer;
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        const double length = std::hypot(nx - x, ny - y);
+        if (e > 0.0 && length > 5.0 && std::abs(nx - x) < 1e-6 && nx < 92.0) {
+            const int bead = nx - 90.0 < 0.4 ? 0 : nx - 90.0 < 0.8 ? 1 : 2;
+            Seen& k = seen[{layer, bead}];
+            k.z = nz, k.e += e, k.length += length;
+        }
+        x = nx, y = ny, z = nz;
+    }
+    const double normal = 0.033849; // 0.45 x 0.2 on 1.75 mm filament (gcode_motion.md, M1)
+    const auto per_mm = [&](int l, int b) { return seen.at({l, b}).e / seen.at({l, b}).length; };
+    REQUIRE(seen.count({0, 1}));
+    REQUIRE(seen.count({25, 1}));
+    REQUIRE(seen.count({49, 1}));
+    CHECK_THAT(seen.at({0, 1}).z, WithinAbs(0.3, 1e-6));
+    CHECK_THAT(per_mm(0, 1) / per_mm(0, 0), WithinAbs(1.5, 0.02));
+    CHECK_THAT(seen.at({25, 1}).z, WithinAbs(5.3, 1e-6));
+    CHECK_THAT(per_mm(25, 1), WithinAbs(normal, 0.0003));
+    CHECK_THAT(seen.at({25, 0}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({25, 2}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({49, 1}).z, WithinAbs(10.0, 1e-6));
+    CHECK_THAT(per_mm(49, 1), WithinAbs(normal / 2.0, 0.0003));
+}

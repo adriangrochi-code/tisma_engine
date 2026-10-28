@@ -1439,6 +1439,7 @@
     X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
     X(WallsOuterFirst, "Pared externa primero", "Outer wall first") \
     X(SubWallsMore, "Más opciones de paredes", "More wall options") \
+    X(SubWallsThin, "Paredes finas", "Thin walls") \
     X(StaggeredSeams, "Costuras internas escalonadas", "Staggered inner seams") \
     X(TopOneWallRow, "Un solo perímetro arriba", "One wall on top") \
     X(TopOneWallNone, "No", "No") \
@@ -1448,7 +1449,9 @@
     X(ExtraIfNeeded, "Perímetros extra si hacen falta", "Extra walls if needed") \
     X(AvoidCurledOverhangs, "Esquivar voladizos levantados", "Avoid curled overhangs") \
     X(ExtraOnOverhangs, "Perímetros extra en voladizos", "Extra perimeters on overhangs") \
-    X(SumWallsMore, "%d de 6 activas", "%d of 6 on") \
+    X(SumWallsMore, "%d de 7 activas", "%d of 7 on") \
+    X(SumWallsThin, "%d cordones absorben la diferencia", "%d beads take the difference") \
+    X(WallsStaggered, "Perímetros escalonados", "Staggered perimeters") \
     X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
     X(SumPrinterValues, "Los de la impresora", "The printer's") \
     X(SumMaterialValues, "%d del material", "%d of the material's") \

@@ -998,7 +998,7 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
-        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
+        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
         {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
@@ -5750,26 +5750,28 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "walls") {
         whole(T::Walls, "walls.count", s.wall_count, 0, 50);
         flag(T::DetectOverhangs, "walls.detect_overhangs", s.detect_overhangs);
-        if (shown("walls.min_line_width"))
-            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
-                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
-        if (shown("walls.min_detail"))
-            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
-                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
         if (shown("walls.generator"))
             changed |= row(T::WallGeneratorRow, s.wall_generator,
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
         flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
-    } else if (id == "walls_more") {
-        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+    } else if (id == "walls_thin") {
+        if (shown("walls.min_line_width"))
+            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
+                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
+        if (shown("walls.min_detail"))
+            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
+                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
         whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 20);
         if (shown("walls.transition_length"))
             changed |= row(T::TransitionLength, s.wall_transition_length.value, 0.0,
                            s.wall_transition_length.percent ? 1000.0 : 40.0,
                            s.wall_transition_length.percent ? "%.0f %%" : "%.2f mm",
                            s.wall_transition_length.percent ? 0.5f : 0.01f);
+    } else if (id == "walls_more") {
+        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        flag(T::WallsStaggered, "walls.staggered", s.walls_staggered);
         if (shown("walls.top_one_wall"))
             changed |= row(T::TopOneWallRow, s.top_one_wall,
                            {{TopOneWall::None, tr(T::TopOneWallNone)},

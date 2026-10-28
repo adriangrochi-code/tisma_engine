@@ -6821,3 +6821,28 @@ casos, todos pasan.
 del modelo del cordón) lamina en 1,60 a 1,64 s y escribe en 190 a 209 ms; ahora, 1,61 a 1,77 s y 183 a 194 ms.
 Sin cambio medible. Las fichas P13 y P14 (`transition_margin`, `transition_angle`) llegaron de `spec/next` y quedan
 en `PLAN.md`.
+
+## 2026-10-28 (mañana): perímetros escalonados
+
+**`walls.staggered`** (`staggered_perimeters.md`): los lazos internos impares (el 1.º interno, el 3.º…) media capa
+más arriba donde la capa siguiente sigue encima. Van como los cordones del relleno ondulado (un bloque `;NONPLANAR`
+con su `;HEIGHT`): suben `dz` y se apoyan `below` en el subido de abajo. Su material es el del cordón de la capa por
+la parte de su altura que ocupan: 1,5 veces en la primera capa, el normal en el medio, la mitad bajo una superficie
+de arriba, donde vuelven a la Z de la capa. Con altura variable la subida es la mitad de la menor de las dos capas.
+No en modo vaso, con capas curvas ni en impresoras de cinta. En el panel, en «Más opciones de paredes». La ficha
+anota que la técnica se parece a una patentada en EE. UU.; antes de un uso comercial lo confirma un abogado.
+
+**Cambia también** el material de los bloques no planares que ya había (relleno ondulado, costuras en rampa): ahora
+es lineal en el espesor, como el Z anti-aliasing (antes, la sección de un cordón de ese espesor). El verificador
+usa la misma cuenta, con la altura de la capa de afuera del bloque.
+
+**Panel:** tarjeta nueva «Paredes finas» (ancho mínimo, detalle mínimo, `spread_count`, `transition_length`); las
+de paredes estaban en el tope de 8.
+
+**Prueba:** ST1 (cubo de 20 mm, 3 paredes de 0,45 en capas de 0,2): el 1.er interno a Z 0,3 con 1,5 veces el
+material del externo en la primera capa, a Z + 0,1 con 0,033849 mm/mm en la capa 26, a Z 10,0 con la mitad en la
+última; el externo y el 2.º interno a la Z de la capa. **Fuzzer:** el escalonado entra en 1 de cada 4 corridas.
+Encontró, ya arreglado: los pedazos de un lazo subido (partido por voladizo o por apoyo) perdían la marca y quedaban
+subidos fuera del bloque no planar; con capas curvas la copia plana escalonaba; con altura variable un lazo subido
+pasaba el tope de la capa siguiente. 600 corridas (semilla 20261030), 0 fallas. Toda la lista: 700 casos, todos
+pasan.

@@ -611,6 +611,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         Settings flat = settings;
         flat.belt_enabled = false;
         flat.skirt_loops = 0;
+        flat.walls_staggered = false; // not on a belt (staggered_perimeters.md, rule 5)
         if (modifiers)
             throw std::invalid_argument("belt printers do not take modifiers yet");
         if (negative) {
@@ -633,6 +634,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
             Settings flat = settings;
             flat.curved_mode = CurvedMode::Disabled;
+            flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
             return slice_model(input, flat, gpu, stress, painting, given, mixes, negative);
         }
         const double longest =
@@ -657,6 +659,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         Settings flat = settings;
         flat.curved_mode = CurvedMode::Disabled;
+        flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
         out = slice_model(bent, flat, gpu, stress, nullptr, given ? &pieces : nullptr, mixes);
         out.curved = std::move(field);
         return out;
@@ -1676,6 +1679,34 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The stress bands and the dense infill hold up loads and skins all
     // through: with lightning, they are cubic.
     const InfillPattern banded_pattern = lightning ? InfillPattern::Cubic : settings.infill_pattern;
+    // Staggered walls (staggered_perimeters.md): the odd inner loops half a
+    // layer up where the next layer goes on over them (rule 1), as wavy beads
+    // whose thickness runs from the raised loop below (half of its layer up)
+    // to their own top: 1.5 layers on the first layer (rule 2), half a layer
+    // under the top (rule 3), the real heights with variable layers (rule 4).
+    // Not in vase mode nor with curved layers (rule 5).
+    // Half the thinner of the layer and the next one, so a raised loop never
+    // passes the next layer's top; the loop above rests on that much.
+    if (settings.walls_staggered && !settings.vase && settings.curved_mode == CurvedMode::Disabled) {
+        const auto raise = [&](std::size_t l) {
+            return l + 1 < out.layers.size()
+                       ? 0.5 * std::min(out.layers[l].top - out.layers[l].bottom, out.layers[l + 1].top - out.layers[l + 1].bottom)
+                       : 0.0;
+        };
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            const double up = raise(l), below = l > 0 ? raise(l - 1) : 0.0;
+            const Polygons* above = l + 1 < out.regions.size() ? &out.regions[l + 1] : nullptr;
+            for (Toolpath& t : out.walls[l].toolpaths) {
+                if (!t.closed || t.index % 2 == 0 || t.points.size() < 3)
+                    continue;
+                for (ToolpathPoint& p : t.points) {
+                    p.dz = above && region_contains(*above, p.p.x, p.p.y) ? up : 0.0;
+                    p.below = below;
+                }
+                t.wavy = true;
+            }
+        });
+    }
     // The outer wall lies half a bead inside the surface: a painted strip of
     // the surface, grown by a bead, holds it.
     if (!painted[2].empty())

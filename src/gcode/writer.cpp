@@ -381,6 +381,7 @@ std::vector<WallPiece> wall_pieces(const Toolpath& wall, AreaIndex& hanging, con
     const auto piece_of = [&](unsigned char k) {
         WallPiece piece;
         piece.path.index = t.index;
+        piece.path.wavy = t.wavy; // a raised loop's pieces stay raised (staggered walls)
         piece.path.gap = k == 2 ? gap : k == 1 && round ? round->gap : 0.0;
         piece.overhang = detect && k != 0;
         piece.air = k == 1;
@@ -449,6 +450,7 @@ std::vector<std::pair<Toolpath, double>> by_support(const Toolpath& wall, const 
     Toolpath run; // the stretch being joined, at run_feed
     run.index = wall.index;
     run.gap = wall.gap;
+    run.wavy = wall.wavy;
     double run_feed = 0.0, run_length = 0.0;
     constexpr double kJoin = 0.01; // of the run's feed
     for (std::size_t i = 0; i < segments; ++i) {
@@ -544,6 +546,7 @@ std::vector<Toolpath> split_by_height(const Toolpath& t) {
     std::vector<Toolpath> out;
     Toolpath piece;
     piece.index = t.index;
+    piece.wavy = t.wavy;
     piece.points.push_back(run.front());
     for (std::size_t i = 1; i < run.size(); ++i) {
         if (side(run[i]) != side(run[i - 1]) && piece.points.size() > 1) {
@@ -1430,11 +1433,10 @@ public:
                 shown_height_ = shown;
             }
         }
-        // Off the layer's Z (Z anti-aliasing, a scarf ramp), the layer's bead
-        // by the share of its height that is left (z_antialiasing.md, rule 3);
-        // a wavy bead is a bead of its own thickness.
-        const double section = nonplanar_ || !(height_ > 0.0) ? bead_area(width, height)
-                                                             : bead_area(width, height_) * height / height_;
+        // Off the layer's Z (Z anti-aliasing, a scarf ramp, a wavy or raised
+        // bead), the layer's bead by the share of its height that is there
+        // (z_antialiasing.md rule 3, staggered_perimeters.md ST1).
+        const double section = !(height_ > 0.0) ? bead_area(width, height) : bead_area(width, height_) * height / height_;
         const double e = section * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height);
         extruded_[feed] += length;

@@ -47,16 +47,18 @@ const std::vector<SectionLayout>& print_layout() {
          {{"walls", T::SubWalls,
            {{"walls.count", B},
             {"walls.detect_overhangs", A},
-            {"walls.min_line_width", A},
-            {"walls.min_detail", A},
             {"walls.generator", A},
             {"walls.gap_fill", A},
             {"walls.clockwise", A},
             {"walls.outer_first", A}}},
+          {"walls_thin", T::SubWallsThin,
+           {{"walls.min_line_width", A},
+            {"walls.min_detail", A},
+            {"walls.spread_count", A},
+            {"walls.transition_length", A}}},
           {"walls_more", T::SubWallsMore,
            {{"walls.staggered_inner_seams", A},
-            {"walls.spread_count", A},
-            {"walls.transition_length", A},
+            {"walls.staggered", A},
             {"walls.top_one_wall", A},
             {"walls.first_layer_one_wall", A},
             {"walls.extra_if_needed", A},
@@ -585,8 +587,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.zaa ? format(T::SumZaaOn, number(s.zaa_min_thickness, 0).c_str()) : tr(T::SumZaaOff);
     if (id == "walls")
         return s.wall_count == 0 ? tr(T::SumNoWalls) : s.wall_count == 1 ? tr(T::SumOneWall) : format(T::SumWalls, s.wall_count);
+    if (id == "walls_thin")
+        return format(T::SumWallsThin, s.wall_spread_count);
     if (id == "walls_more")
-        return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.top_one_wall != TopOneWall::None) +
+        return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
                                            int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs));
     if (id == "top_bottom")
