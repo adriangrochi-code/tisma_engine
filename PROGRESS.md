@@ -6674,3 +6674,10 @@ losa con dos capas de separación empieza en la capa 5.
 **Sigue:** `support.buildplate_only` (quitar entera una zona que toca la pieza: componentes conexos en 3D) y
 `support.bottom_interface_layers`; después el grupo `walls`.
 
+**Después: `support.bottom_interface_layers`** (`supports_more.md`, regla 7): sobre la pieza, el soporte de grilla que
+tiene la pieza debajo en las capas siguientes a la separación de abajo va como interfaz; −1 (por defecto) es tantas
+capas como `support.interface_layers`, así que **también cambia lo de siempre**: el soporte sobre la pieza empieza
+con tres capas de interfaz. Prueba con una losa, un poste y un estante: separación de una capa, tres de interfaz y
+después base; con dos de separación y una de interfaz, la capa 7 es interfaz y la 8 base; con 0, ninguna. Los
+árboles no la llevan todavía. 164 casos de `[support]`, `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
+

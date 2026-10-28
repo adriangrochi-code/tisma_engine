@@ -1833,7 +1833,7 @@ Settings parse_checked(std::string_view text) {
                                                     : s.raft_first_layer_expansion) = d;
                });
     read_group(root, "support",
-               {"enabled", "automatic", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
+               {"enabled", "automatic", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "bottom_interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
                 "synchronize_layers"},
@@ -1876,6 +1876,13 @@ Settings parse_checked(std::string_view text) {
                        if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                            fail(k, "must be a whole number from 0 to 1000");
                        s.support_interface_layers = static_cast<int>(v.get<long long>());
+                       return;
+                   }
+                   if (n == "bottom_interface_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < -1 || v.get<long long>() > 1000)
+                           fail(k, "must be a whole number from -1 (as interface_layers) to 1000");
+                       s.support_bottom_interface_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
                    if (n == "width") {
@@ -2814,6 +2821,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.line_angle", num(s.support_line_angle)},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
+        {"support.bottom_interface_layers", std::to_string(s.support_bottom_interface_layers)},
         {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
         {"support.tree_angle", num(s.tree_angle)},
         {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
@@ -3259,6 +3267,7 @@ std::string settings_json(const Settings& s) {
           {"line_angle", s.support_line_angle},
           {"spacing", s.support_spacing},
           {"interface_layers", s.support_interface_layers},
+          {"bottom_interface_layers", s.support_bottom_interface_layers},
           {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
           {"tree_angle", s.tree_angle},
           {"tree_angle_preferred", s.tree_angle_preferred},

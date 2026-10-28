@@ -582,6 +582,7 @@ struct Settings {
     double tree_tip_diameter = 0.8;         // mm
     double tree_top_rate = 15.0;            // percent: how close the tips are under the part
     int support_interface_layers = 3; // dense layers right under the part
+    int support_bottom_interface_layers = -1; // dense layers right over the part it stands on; -1: interface_layers
 
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")

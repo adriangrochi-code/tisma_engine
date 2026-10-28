@@ -963,6 +963,7 @@ const std::map<T, const char*>& row_keys() {
         {T::WallOverlap, "infill.wall_overlap"}, {T::CombineMaxHeight, "infill.combine_max_height"},
         {T::SupportZGap, "support.z_gap"}, {T::SupportBottomZGap, "support.bottom_z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
+        {T::SupportBottomInterface, "support.bottom_interface_layers"},
         {T::SupportLineAngle, "support.line_angle"},
         {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
@@ -5915,6 +5916,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
+        whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
+              s.support_bottom_interface_layers < 0 ? "—" : "%d");
         flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);

@@ -62,7 +62,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
 
 - **El soporte de grilla que apoya sobre la pieza deja una separación** (`support.bottom_z_gap`; sin valor, la de
-  `support.z_gap`), como pide `supports_more.md` (regla 6). Antes empezaba pegado a la pieza.
+  `support.z_gap`), como pide `supports_more.md` (regla 6). Antes empezaba pegado a la pieza. Sus primeras capas son
+  de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
 

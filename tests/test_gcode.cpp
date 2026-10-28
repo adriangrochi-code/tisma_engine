@@ -1720,3 +1720,54 @@ TEST_CASE("cooling: with cooling.enabled off, no slowing down and no fan by laye
     CHECK(fans[4] == "M106 S89");
     CHECK(fans[6] == "M106 S89");
 }
+
+TEST_CASE("support: a gap and interface layers over the part it stands on (supports_more.md, rules 6 and 7)", "[gcode][support]") {
+    // A slab 1 mm thick, a post at one corner, a shelf from Z 3 to 4: the
+    // support under the shelf stands on the slab.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 1);
+    auto lifted = [&](float x0, float y0, float x1, float y1, float z0, float z1) {
+        const auto base = std::uint32_t(m.vertices.size());
+        add_box(m, x0, y0, x1, y1, z1 - z0);
+        for (std::size_t v = base; v < m.vertices.size(); ++v)
+            m.vertices[v].z += z0;
+    };
+    lifted(0, 0, 3, 3, 1, 3);
+    lifted(0, 0, 20, 20, 3, 4);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.layer_height = s.first_layer_height = 0.2; // the slab: layers 0 to 4
+    const auto at = [](const SlicedModel& model, std::size_t l) {
+        // Over the slab only: the support's margin round it stands on the bed.
+        const auto over = [](const std::vector<Toolpath>& paths) {
+            std::size_t n = 0;
+            for (const Toolpath& t : paths)
+                for (const ToolpathPoint& p : t.points)
+                    n += p.p.x > 0.5 && p.p.x < 19.5 && p.p.y > 0.5 && p.p.y < 19.5 ? 1 : 0;
+            return n;
+        };
+        return std::pair{over(model.fills[l].support_interface), over(model.fills[l].support)};
+    };
+    const auto on_slab = [](const SlicedModel& model, std::size_t l) {
+        return area_mm2(Clipper2Lib::Intersect(model.support_areas[l], model.regions[0], Clipper2Lib::FillRule::NonZero));
+    };
+    // Default: one layer of gap (support.z_gap 0.2), three of interface, then base.
+    SlicedModel model = slice_model(m, s);
+    CHECK(on_slab(model, 5) < 1.0);
+    CHECK(at(model, 6).first > 0);
+    CHECK(at(model, 8).first > 0);
+    CHECK(at(model, 10).first == 0);
+    CHECK(at(model, 10).second > 0);
+    // Two layers of gap; one layer of interface; none.
+    s.support_bottom_z_gap = 0.4;
+    s.support_bottom_interface_layers = 1;
+    model = slice_model(m, s);
+    CHECK(on_slab(model, 6) < 1.0);
+    CHECK(at(model, 7).first > 0);
+    CHECK(at(model, 8).first == 0);
+    s.support_bottom_interface_layers = 0;
+    model = slice_model(m, s);
+    CHECK(at(model, 7).first == 0);
+    CHECK(at(model, 7).second > 0);
+}

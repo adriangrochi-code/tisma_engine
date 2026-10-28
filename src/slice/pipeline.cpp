@@ -1719,6 +1719,21 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           for (int k = 1; k <= settings.support_interface_layers; ++k)
                               if (const std::size_t a = l + gap + std::size_t(k); a < out.regions.size())
                                   above = Clipper2Lib::Union(above, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                          // And the support with the part below it within the next
+                          // bottom_interface_layers layers under the bottom Z gap
+                          // (supports_more.md, rule 7; grid support).
+                          if (settings.support_style != SupportStyle::Organic) {
+                              const std::size_t bottom_gap =
+                                  settings.support_bottom_z_gap > 0.0
+                                      ? std::size_t(std::max(0L, std::lround(settings.support_bottom_z_gap / stack_height)))
+                                      : gap;
+                              const int below_layers = settings.support_bottom_interface_layers < 0
+                                                           ? settings.support_interface_layers
+                                                           : settings.support_bottom_interface_layers;
+                              for (int k = 1; k <= below_layers; ++k)
+                                  if (const std::size_t b = bottom_gap + std::size_t(k); b <= l)
+                                      above = Clipper2Lib::Union(above, out.regions[l - b], Clipper2Lib::FillRule::NonZero);
+                          }
                           const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           // Its own bead width (supports_more.md, rule 18): a
