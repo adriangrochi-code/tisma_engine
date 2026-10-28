@@ -40,6 +40,12 @@ pruebas se midieron con una versión de Tisma Slicer que ya lo tiene.
    - durante los puentes, `cooling.fan_bridges`, y al terminar vuelve el valor de la capa.
 4. **Cuándo se escribe:** el comando del ventilador de una capa va justo antes de su `;LAYER_CHANGE` (ver
    `gcode_motion.md`).
+5. **Con `cooling.enabled` en no** (pruebas K6 a K8):
+   - no hay frenado: las capas cortas van a su velocidad;
+   - no hay ventilador por tiempo de capa: apagado, o `cooling.fan_min` si `cooling.fan_always`;
+   - las primeras `cooling.fan_off_layers` capas siguen apagadas, también con `cooling.fan_always`;
+   - los puentes siguen con `cooling.fan_bridges`, y al terminar vuelve el valor de la capa (apagado o
+     `cooling.fan_min`).
 
 ## Pruebas
 
@@ -54,3 +60,6 @@ Medidas en Tisma Slicer con el enfriamiento acordado (24-10-2026), como caja neg
 | K3 | El prisma de K2 | `cooling.min_layer_time` 30 | Todas las extrusiones a 5,4 mm/s (F324), por debajo de `cooling.min_speed`. Tiempo: 30,0 s; ventilador al 100 % |
 | K4 | Prisma de 3 × 3 × 5 mm | `cooling.min_layer_time` 20 | Todas las extrusiones a 1,15 mm/s (F69). Tiempo: 20,0 s; ventilador al 100 % |
 | K5 | «Mesa» de `surfaces_infill.md`, prueba I6 | `cooling.min_layer_time` 60, y después 300 | Capa 26 (el puente): con 60 s, perímetros y relleno a 4,1 mm/s (F247); con 300 s, a 0,72 mm/s (F43). En los dos casos, el puente y los perímetros sobre el aire siguen a 60 mm/s (F3600) |
+| K6 | Cubo de 4 × 4 × 5 mm, capas de 0,3 (primera 0,35), `cooling.min_layer_time` 5 | `cooling.enabled` sí, y después no | Con sí: 1 min 33 s, la capa 10 frenada a 8,4 mm/s (F502), ventilador al 100 % desde la capa 4. Con no: 57 s, sin frenado (F900 a F2400) y el ventilador apagado en toda la pieza |
+| K7 | Cubo de 20 × 20 × 10 mm con las capas de K6 | `cooling.enabled` no | Ventilador apagado salvo durante el puente de la capa 31: 100 % y después apagado |
+| K8 | K7 | `cooling.fan_always` sí, `cooling.fan_min` 35 | Capas 1 a 3 apagado; desde la 4, 35 % (S89); en el puente de la capa 31, 100 % y vuelve a 35 % |
