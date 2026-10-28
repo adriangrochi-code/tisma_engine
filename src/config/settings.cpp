@@ -1833,7 +1833,7 @@ Settings parse_checked(std::string_view text) {
                                                     : s.raft_first_layer_expansion) = d;
                });
     read_group(root, "support",
-               {"enabled", "automatic", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "bottom_interface_layers", "style",
+               {"enabled", "automatic", "buildplate_only", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "bottom_interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
                 "synchronize_layers"},
@@ -1863,6 +1863,12 @@ Settings parse_checked(std::string_view text) {
                         : n == "tree_branch_distance"       ? s.tree_branch_distance
                         : n == "tree_tip_diameter"          ? s.tree_tip_diameter
                                                             : s.tree_top_rate) = d;
+                       return;
+                   }
+                   if (n == "buildplate_only") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.support_buildplate_only = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "enabled" || n == "automatic") {
@@ -2813,6 +2819,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.enabled", flag(s.support)},
         {"support.synchronize_layers", flag(s.support_synchronize_layers)},
         {"support.automatic", flag(s.support_automatic)},
+        {"support.buildplate_only", flag(s.support_buildplate_only)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
         {"support.bottom_z_gap", num(s.support_bottom_z_gap)},
@@ -3257,6 +3264,7 @@ std::string settings_json(const Settings& s) {
          {{"enabled", s.support},
           {"synchronize_layers", s.support_synchronize_layers},
           {"automatic", s.support_automatic},
+          {"buildplate_only", s.support_buildplate_only},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
           {"bottom_z_gap", s.support_bottom_z_gap},

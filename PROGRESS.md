@@ -6681,3 +6681,9 @@ con tres capas de interfaz. Prueba con una losa, un poste y un estante: separaci
 después base; con dos de separación y una de interfaz, la capa 7 es interfaz y la 8 base; con 0, ninguna. Los
 árboles no la llevan todavía. 164 casos de `[support]`, `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
 
+**Después: `support.buildplate_only`** (`supports_more.md`, regla 2): las islas del soporte de grilla de cada capa,
+unidas con las de la capa de abajo que tocan, forman zonas; una zona con alguna isla justo sobre la pieza (dentro de la
+separación de abajo) se quita entera, también lo que tiene sobre la cama (`keep_from_bed`). Prueba: el estante sobre
+la losa queda sin soporte (SM2: «ningún soporte»), una T sobre la cama lo conserva. Los árboles no lo llevan todavía.
+165 casos, todos pasan.
+

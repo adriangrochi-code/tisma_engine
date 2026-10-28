@@ -1427,6 +1427,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         sp.bottom_gap_layers = settings.support_bottom_z_gap > 0.0
                                    ? int(std::lround(settings.support_bottom_z_gap / stack_height))
                                    : sp.z_gap_layers;
+        sp.buildplate_only = settings.support_buildplate_only;
         sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
         sp.margin = kSupportMargin;
         sp.bead = settings.wall_width;

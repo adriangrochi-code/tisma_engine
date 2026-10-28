@@ -1771,3 +1771,34 @@ TEST_CASE("support: a gap and interface layers over the part it stands on (suppo
     CHECK(at(model, 7).first == 0);
     CHECK(at(model, 7).second > 0);
 }
+
+TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support]") {
+    const auto lifted = [](IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, float z1) {
+        const auto base = std::uint32_t(m.vertices.size());
+        add_box(m, x0, y0, x1, y1, z1 - z0);
+        for (std::size_t v = base; v < m.vertices.size(); ++v)
+            m.vertices[v].z += z0;
+    };
+    const auto support_layers = [](const SlicedModel& model) {
+        std::size_t n = 0;
+        for (const Polygons& p : model.support_areas)
+            n += p.empty() ? 0 : 1;
+        return n;
+    };
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    // A shelf over a slab: its support stands on the slab, its margin ring on the bed.
+    IndexedMesh shelf;
+    add_box(shelf, 0, 0, 20, 20, 1);
+    lifted(shelf, 0, 0, 3, 3, 1, 3);
+    lifted(shelf, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(shelf, s)) > 5);
+    s.support_buildplate_only = true;
+    CHECK(support_layers(slice_model(shelf, s)) == 0);
+    // A T on the bed: its support stands on the bed, and stays.
+    IndexedMesh t;
+    add_box(t, 8, 8, 12, 12, 3);
+    lifted(t, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(t, s)) > 5);
+}

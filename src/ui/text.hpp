@@ -1025,6 +1025,7 @@
     X(CombineMaxHeight, "Alto máximo combinado", "Thickest combined") \
     X(SupportZGap, "Separación en Z", "Z gap") \
     X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
+    X(SupportBuildplateOnly, "Solo desde la cama", "From the bed only") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \

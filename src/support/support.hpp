@@ -16,6 +16,9 @@ struct SupportParams {
     double threshold_angle = 0.0; // degrees from the horizontal; 0: automatic (half a bead per layer)
     int z_gap_layers = 1;         // empty layers between the support and the part above it
     int bottom_gap_layers = 0;    // empty layers between the part and the support standing on it
+    // Only support that stands on the bed (supports_more.md, rule 2): a zone
+    // that rests on the part anywhere goes whole.
+    bool buildplate_only = false;
     double xy_gap = 0.6;          // mm between the support and the part beside it
     double bead = 0.4;            // mm, the wall bead width
     double margin = 0.0;          // mm the column reaches past what overhangs (supports_skirt.md, rule 2: about 1.6)
