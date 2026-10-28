@@ -201,6 +201,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
       set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      # The moiré filter's check with Vulkan drawing the view.
+      add_test(NAME ui_moire_filter_smooths_fine_lines_vulkan
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview --moire-check
+                --graphics vulkan --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_moire_vulkan.png)
+      set_tests_properties(ui_moire_filter_smooths_fine_lines_vulkan
+                           PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
       # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
       # the model with a painted seam, close; then the sliced cube's preview.
       # Then the preview from above, where the layers lie over each other
@@ -210,15 +217,32 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       set(TISMA_VIEW_preview --view preview)
       set(TISMA_VIEW_preview_top --view preview --look 128,128,5,70,30,85)
       set(TISMA_VIEW_preview_far --view preview --look 128,128,5,600,30,35)
-      foreach(view prepare preview preview_top preview_far)
+      # And each of the preview's colour views (preview.md, rule 1).
+      set(TISMA_VIEWS prepare preview preview_top preview_far)
+      foreach(colour height width speed actual_speed fan temperature flow actual_flow layer_time layer_time_log tool
+                     color_print)
+        set(TISMA_VIEW_preview_${colour} --view preview --color ${colour})
+        list(APPEND TISMA_VIEWS preview_${colour})
+      endforeach()
+      # A curved part too (tools/make_test_sphere.py), close and from above.
+      foreach(view prepare preview preview_top)
+        set(TISMA_VIEW_sphere_${view} ${TISMA_VIEW_${view}})
+        set(TISMA_MODEL_sphere_${view} sphere.stl)
+        list(APPEND TISMA_VIEWS sphere_${view})
+      endforeach()
+      set(TISMA_VIEW_sphere_prepare --view prepare --look 128,128,10,60,30,35)
+      foreach(view ${TISMA_VIEWS})
+        if(NOT TISMA_MODEL_${view})
+          set(TISMA_MODEL_${view} cube_ascii.stl)
+        endif()
         add_test(NAME ui_view_${view}_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics opengl
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
         add_test(NAME ui_view_${view}_vulkan_same_as_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics vulkan
                   --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)

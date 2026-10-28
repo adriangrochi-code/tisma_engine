@@ -1150,6 +1150,19 @@ std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
     return out;
 }
 
+std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame& f, int& width, int& height) {
+    Impl& v = *impl_;
+    width = height = 0;
+    if (!v.ready)
+        return {};
+    const bool drawn = v.guard([&] {
+        v.record_ready(f);
+        vkDeviceWaitIdle(v.d.device);
+        v.one_time([&](VkCommandBuffer c) { v.record(c, 0, f, false); });
+    });
+    return drawn ? read_picture(width, height) : std::vector<std::uint8_t>{};
+}
+
 ImTextureID VulkanView::texture() const { return ImTextureID(impl_->picture_set); }
 
 std::size_t VulkanView::drawn_extrusions() const { return impl_->drawn; }
@@ -1176,6 +1189,10 @@ void VulkanView::set_preview(const PreviewBuffers&) {}
 void VulkanView::clear_preview() {}
 void VulkanView::record(void*, int, const ViewFrame&) {}
 std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
+    width = height = 0;
+    return {};
+}
+std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame&, int& width, int& height) {
     width = height = 0;
     return {};
 }

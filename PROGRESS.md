@@ -7337,12 +7337,18 @@ rendimiento y aparecen efectos de luz. Pidió además chequeos de errores y de l
 - Pruebas nuevas: la vista previa de Vulkan contra la de OpenGL también desde arriba y de lejos (líneas de un píxel);
   la oclusión y los rayos a la fuerza máxima (1,5) en Preparar y Vista previa, con `--ao-strength`.
 - Una prueba del orden de dibujo (desde arriba, desde abajo, desde el medio y con el corte del deslizador).
+- El control del moiré también con Vulkan (`VulkanView::draw_picture`). Con Vulkan, `--moire-check` leía la vista
+  OpenGL, que no existe en ese modo: una imagen vacía recorrida con el tamaño de la vista (comportamiento indefinido).
+- Las 13 vistas de color de la vista previa, cada una Vulkan contra OpenGL y con el chequeo de la vista.
+- Una esfera de 20 mm (`tests/data/sphere.stl`, 2 208 triángulos, hecha por `tools/make_test_sphere.py`) en Preparar,
+  Vista previa y desde arriba, Vulkan contra OpenGL: las diferencias quedan en las líneas de los viajes (cada driver
+  rasteriza distinto las líneas finas), no en las superficies.
 
 **Probado:** toda la lista en `build-next`; las pruebas de la interfaz con el chequeo, en OpenGL y Vulkan (lavapipe).
 
 **No probado:** en una GPU real; el dueño tiene que confirmar si el efecto que veía se fue. El chequeo de destellos no
 mira la vista mientras se mueve (titileo entre cuadros).
 
-**Sigue:** confirmar con el dueño; el control del moiré con Vulkan; recorrer cada pestaña y vista de color con el
-chequeo; bajar el costo del filtro de moiré; armar la malla de la placa en otro hilo; las claves `orient.*` y las de
-pellets.
+**Sigue:** confirmar con el dueño; bajar el costo del filtro de moiré; armar la malla de la placa en otro hilo; las
+fichas nuevas del PR #39 (lazos de contacto en dos capas, lector STEP, margen de la transición de paredes); las claves
+`orient.*` y las de pellets.

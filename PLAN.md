@@ -693,8 +693,10 @@ Va antes que lo demás de P1:
 - [x] Chequeos más estrictos de la interfaz (pedido del dueño, 2026-10-28): cada captura de Preparar y Vista previa
   revisa la imagen propia de la vista 3D (ningún píxel negro, a lo sumo uno de cada mil que destella); la vista previa
   de Vulkan comparada con la de OpenGL también desde arriba y de lejos; la oclusión y los rayos a la fuerza máxima
-- [ ] Chequeos que siguen: la vista Vulkan en el control del moiré; recorrer cada pestaña y cada vista de color con
-  el chequeo; un modelo curvo (no solo el cubo) en las comparaciones; el costo del filtro de moiré por fragmento
+- [x] Chequeos que siguen (2026-10-28): el control del moiré también con Vulkan (antes leía la vista OpenGL, que con
+  Vulkan no existe); las 13 vistas de color de la vista previa, Vulkan contra OpenGL y con el chequeo; una esfera
+  (`tests/data/sphere.stl`, de `tools/make_test_sphere.py`) en Preparar, Vista previa y desde arriba
+- [ ] Bajar el costo del filtro de moiré por fragmento (unos 2,2 de 7,1 s por cuadro en lavapipe con la esfera de 80 mm)
 - [x] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
   pese; anotar los números (2026-10-28: `TISMA_TIMING`; de 0,75 a 0,57 s con 2 millones de triángulos; los cuadros,
   en el rasterizador por software de este contenedor, no se pueden medir acá; después, 0,50 s con la lectura, el giro

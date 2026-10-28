@@ -10174,17 +10174,28 @@ void App::check_moire(int fb_w, int fb_h) {
         ViewFrame f = view_frame(fb_w, fb_h);
         f.samples = 1;
         f.moire_filter = pass == 1;
-        renderer_.draw(f);
-        picture[pass] = renderer_.read_colour();
-        w = f.width, h = f.height;
+        if (vulkan_) {
+            picture[pass] = vk_view_.draw_picture(f, w, h);
+        } else {
+            renderer_.draw(f);
+            picture[pass] = renderer_.read_colour();
+            w = f.width, h = f.height;
+        }
+        if (w < 2 || h < 2 || picture[pass].size() != std::size_t(w) * std::size_t(h) * 4) {
+            camera_.distance = distance;
+            std::fprintf(stderr, "error: the moire check cannot read the 3D view back\n");
+            failed_ = true;
+            return;
+        }
     }
     camera_.distance = distance;
-    // Both pictures next to the screenshot, as evidence.
+    // Both pictures next to the screenshot, as evidence (OpenGL's rows go up
+    // from the bottom, Vulkan's down from the top).
     for (int pass = 0; pass < 2; ++pass) {
         std::vector<std::uint8_t> flipped(picture[pass].size());
         const std::size_t row = std::size_t(w) * 4;
         for (int yy = 0; yy < h; ++yy)
-            std::copy_n(picture[pass].begin() + std::ptrdiff_t(std::size_t(h - 1 - yy) * row), row,
+            std::copy_n(picture[pass].begin() + std::ptrdiff_t(std::size_t(vulkan_ ? yy : h - 1 - yy) * row), row,
                         flipped.begin() + std::ptrdiff_t(std::size_t(yy) * row));
         for (std::size_t i = 3; i < flipped.size(); i += 4)
             flipped[i] = 255;

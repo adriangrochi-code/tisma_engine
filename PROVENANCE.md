@@ -195,6 +195,7 @@ Cada módulo del motor anota de dónde sale: el artículo y la sección, la espe
 | Lectura del STL binario, giro y apoyo de las piezas en paralelo (2026-10-28) en `src/io/stl.cpp` y `src/ui/plate.cpp` | Diseño propio sobre oneTBB: cada faceta se lee en su lugar; el error de una coordenada no finita nombra la primera faceta mala, como la lectura en serie. |
 | `preview_draws` en `src/ui/scene.cpp` — la vista previa dibujada de las capas cercanas al ojo hacia afuera (2026-10-28), y su uso en `apps/tisma/renderer.cpp` y `apps/tisma/vk_view.cpp` | Diseño propio sobre la prueba de profundidad temprana de las GPU (lo cercano primero, para que lo tapado no se sombree), documentada en las especificaciones de OpenGL y Vulkan. |
 | `picture_health` en `src/ui/png.cpp` y el chequeo de la vista en `apps/tisma/app.cpp` (`check_view`), con `VulkanView::read_picture` | Diseño propio: píxeles negros y píxeles que se apartan de sus ocho vecinos en la luma (los pesos de la luma, de la recomendación ITU-R BT.601). |
+| `tools/make_test_sphere.py` y `tests/data/sphere.stl` — esfera de prueba de la interfaz (2026-10-28) | Diseño propio: una esfera por paralelos y meridianos, escrita como STL binario según la descripción pública del formato; los datos los genera el script, sin licencia ajena. |
 
 Lo que sale de una ficha se anota así: «ficha `docs/spec/features/<nombre>.md`», más las fuentes públicas que cite.
 
