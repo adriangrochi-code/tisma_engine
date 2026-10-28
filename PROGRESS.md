@@ -7430,8 +7430,11 @@ ajustes). `label_cell` anota el rectángulo del campo de cada fila. Dos pruebas:
 máxima y ancho de la cama) y la altura de capa escrita «0,16». Sin los arreglos, las dos fallan (256 en vez de 250;
 0,2 en vez de 0,16).
 
-**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; el nombre del
-objeto en la barra de estado después de borrar otro; las marcas de costura grandes en la vista previa; los consejos
+**Después:** la barra de estado nombra el objeto que queda (no el primer archivo abierto), y las marcas de costura de
+la vista previa miden lo que el cordón en pantalla, de 1 a 3,5 px (antes, 7 px fijos: una línea blanca gruesa de
+lejos; comparado con capturas de antes y después). Sin prueba automática para estos dos.
+
+**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; los consejos
 que tapan controles; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
 `--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
 dos columnas, menú para guardar después de laminar).

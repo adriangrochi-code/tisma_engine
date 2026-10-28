@@ -153,6 +153,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **La barra de estado nombraba un objeto borrado:** con un solo objeto en la placa, ahora dice el suyo.
+- **Las marcas de costura de la vista previa eran muy grandes:** puntos de 7 px fijos, que de lejos hacían una línea
+  blanca gruesa sobre la pieza. Ahora miden lo que el cordón en pantalla (de 1 a 3,5 px).
+
 - **Los campos de la página de la impresora no respondían al mouse** (informe del dueño): la ventana de la vista 3D,
   transparente, quedaba encima de la página y se llevaba los clics. Ahora la página se edita con el mouse.
 - **Escribir en un campo numérico no hacía nada:** un clic empezaba a arrastrar el valor en vez de dejar escribir.

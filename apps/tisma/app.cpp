@@ -6819,8 +6819,11 @@ void App::status_bar() {
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
     if (mesh_) {
         const Vec3f size{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y, placed_.max.z - placed_.min.z};
-        const std::string name = objects_.size() > 1 ? std::to_string(objects_.size()) + " " + tr(T::Models)
-                                                     : utf8(model_path_.filename());
+        // The one left on the plate by its own name: after a delete, the file
+        // opened first may be gone (QA, 2026-10-28).
+        const std::string name = objects_.size() > 1                              ? std::to_string(objects_.size()) + " " + tr(T::Models)
+                                 : objects_.size() == 1 && !objects_.front().name.empty() ? objects_.front().name
+                                                                                           : utf8(model_path_.filename());
         loc::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
                     number_text(mesh_->triangle_count()).c_str(), tr(T::Triangles), double(size.x), double(size.y),
                     double(size.z));
@@ -8469,13 +8472,16 @@ void App::empty_hint() {
 void App::preview_overlay(const GcodePreview& p) {
     if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
         return;
-    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const Mat4 proj = camera_.projection(view_size_.x / view_size_.y);
+    const Mat4 vp = proj * camera_.view();
+    float depth = 1.0f; // the last point's clip w
     const auto project = [&](float x, float y, float z, ImVec2& out) {
         const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
         const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
         const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
         if (!(w > 1e-6f))
             return false;
+        depth = w;
         out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
         return true;
     };
@@ -8491,8 +8497,14 @@ void App::preview_overlay(const GcodePreview& p) {
                     dl->AddLine(a, b, ImGui::GetColorU32(rgb(kWipeColour)), 2.0f * scale_);
     if (std::any_of(show_marks_.begin(), show_marks_.end(), [](bool on) { return on; }))
         for (const PreviewMark& m : p.marks)
-            if (m.layer >= lo && m.layer <= hi && show_marks_[std::size_t(m.kind)] && project(m.x, m.y, m.z, a))
-                dl->AddCircleFilled(a, 3.5f * scale_, ImGui::GetColorU32(rgb(kMarkColours[std::size_t(m.kind)])));
+            if (m.layer >= lo && m.layer <= hi && show_marks_[std::size_t(m.kind)] && project(m.x, m.y, m.z, a)) {
+                // As wide as the bead where it is, at most 3.5 px: a fixed
+                // size made the seams of a whole part a thick white line
+                // from afar (owner's report, 2026-10-28).
+                const float bead = float(settings_.nozzle_diameter) * 0.5f * view_size_.y * proj[5] / depth;
+                dl->AddCircleFilled(a, std::clamp(0.5f * bead, 1.0f * scale_, 3.5f * scale_),
+                                    ImGui::GetColorU32(rgb(kMarkColours[std::size_t(m.kind)])));
+            }
     if (show_gravity_) {
         // Each extrusion's middle, by its volume.
         double sum = 0.0, cx = 0.0, cy = 0.0, cz = 0.0;
