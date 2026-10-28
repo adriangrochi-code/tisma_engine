@@ -36,6 +36,18 @@ struct MeshObject {
     // merged by whoever made the list; empty: the plate's. Where two parts
     // with different settings meet, the later in the list wins (MT11).
     std::string settings{};
+    // The part's own keys alone (in `settings` too), for the object's height
+    // ranges to sit between the object's and the part's (rule 5).
+    std::string part_settings{};
+    // Its height ranges (model_tools.md, rule 6): from and to in mm over the
+    // object's bottom, with settings of their own, the layer height among
+    // them. A part's own settings win over a range's (rule 5).
+    struct HeightRange {
+        double from = 0.0, to = 0.0;
+        std::string settings{};
+        friend bool operator==(const HeightRange&, const HeightRange&) = default;
+    };
+    std::vector<HeightRange> ranges{};
     friend bool operator==(const MeshObject&, const MeshObject&) = default;
 };
 
@@ -48,6 +60,7 @@ struct MeshModifier {
     std::size_t object = 0;
     TriangleMesh mesh; // in the plate's coordinates
     std::string settings{};
+    bool under_parts = false; // a height range's: the parts' own settings win over it (rule 5)
 };
 
 // Arrange (placement.md, rule 2): the centres for boxes of these sizes (x,

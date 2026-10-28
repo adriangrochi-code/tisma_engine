@@ -498,6 +498,72 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // Height ranges (model_tools.md, rule 6): their layer heights as tramos
+    // of layers.heights, each starting a layer, and their other settings as a
+    // modifier as wide as the object between their heights, under the parts'
+    // own settings and the modifiers.
+    std::vector<MeshModifier> with_ranges;
+    std::optional<Settings> ranged;
+    if (given)
+        for (const MeshObject& o : *given) {
+            if (o.ranges.empty())
+                continue;
+            const IndexedMesh piece = object_mesh(input, o);
+            if (piece.vertices.empty())
+                continue;
+            float x0 = piece.vertices.front().x, x1 = x0, y0 = piece.vertices.front().y, y1 = y0, z0 = piece.vertices.front().z;
+            for (const Vec3f& v : piece.vertices)
+                x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y),
+                z0 = std::min(z0, v.z);
+            for (const MeshObject::HeightRange& r : o.ranges) {
+                if (!(r.to > r.from))
+                    continue;
+                bool layers = false;
+                const std::string rest = own_without(r.settings, "layers", &layers);
+                if (layers) {
+                    const Settings own = own_settings(settings, r.settings, o.name, true);
+                    if (!ranged)
+                        ranged = settings;
+                    if (!settings.layer_heights.empty()) {
+                        out.notices.push_back(o.name + ": layers.heights is given, so the height ranges' layer heights are left out");
+                    } else {
+                        auto& h = ranged->layer_heights;
+                        h.erase(std::remove_if(h.begin(), h.end(), [&](const auto& t) {
+                                    return t[0] >= z0 + r.from - 1e-9 && t[0] < z0 + r.to - 1e-9;
+                                }),
+                                h.end());
+                        h.push_back({double(z0) + r.from, own.layer_height});
+                        if (std::none_of(h.begin(), h.end(), [&](const auto& t) { return std::abs(t[0] - (z0 + r.to)) < 1e-9; }))
+                            h.push_back({double(z0) + r.to, settings.layer_height});
+                        std::sort(h.begin(), h.end());
+                    }
+                }
+                if (rest.empty())
+                    continue;
+                MeshModifier m{o.name + " " + std::to_string(r.from) + "-" + std::to_string(r.to), o.object, {}, rest, true};
+                const Vec3f lo{x0 - 1.0f, y0 - 1.0f, float(double(z0) + r.from)}, hi{x1 + 1.0f, y1 + 1.0f, float(double(z0) + r.to)};
+                const Vec3f c[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                                    {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+                static constexpr int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                                 {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+                for (const auto& t : f)
+                    m.mesh.add_triangle(c[t[0]], c[t[1]], c[t[2]]);
+                with_ranges.push_back(std::move(m));
+            }
+        }
+    if (!with_ranges.empty() && given_modifiers)
+        with_ranges.insert(with_ranges.end(), given_modifiers->begin(), given_modifiers->end());
+    if (ranged || !with_ranges.empty()) {
+        // The ranges' layers, the ranges as modifiers (first in the list: the
+        // modifiers, later, win), and the objects without their ranges.
+        std::vector<MeshObject> plain = *given;
+        for (MeshObject& o : plain)
+            o.ranges.clear();
+        SlicedModel ranged_out = slice_model(input, ranged ? *ranged : settings, gpu, stress, painting, &plain, mixes,
+                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges);
+        ranged_out.notices.insert(ranged_out.notices.begin(), out.notices.begin(), out.notices.end());
+        return ranged_out;
+    }
     const std::vector<MeshModifier>* modifiers =
         given_modifiers && !given_modifiers->empty() ? given_modifiers : nullptr;
     // Modifiers change parts of objects: without a list, the plate is object 0.
@@ -801,17 +867,17 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     // (MT11).
     struct Group {
         int tool = 1;
-        std::string settings;
+        std::string settings, part; // the merged settings, and the part's own (for the ranges)
         std::size_t last = 0;
     };
     std::vector<Group> groups;
     for (std::size_t i = 0; i < objects.size(); ++i) {
         const int tool = object_tool(objects[i], settings);
         const auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& x) {
-            return x.tool == tool && x.settings == objects[i].settings;
+            return x.tool == tool && x.settings == objects[i].settings && x.part == objects[i].part_settings;
         });
         if (g == groups.end())
-            groups.push_back({tool, objects[i].settings, i});
+            groups.push_back({tool, objects[i].settings, objects[i].part_settings, i});
         else
             g->last = i;
     }
@@ -862,7 +928,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     std::vector<Painting> part_paints(tools.size());
     for (std::size_t p = 0; p < tools.size(); ++p)
         for (const MeshObject& o : objects) {
-            if (object_tool(o, settings) != tools[p] || o.settings != groups[p].settings)
+            if (object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
+                o.part_settings != groups[p].part)
                 continue;
             const IndexedMesh piece = object_mesh(mesh, o);
             if (painting)
@@ -878,6 +945,11 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     // modifier first, so that they keep their zone (MT12).
     std::vector<std::vector<Polygons>> zone(tools.size());
     std::vector<std::vector<InfillZone>> infill_zones(tools.size()); // by the parts' groups
+    // A zone's settings (rule 5): a modifier's over the part's, a height
+    // range's between the object's and the part's own.
+    const auto zone_own = [](const Group& g, const MeshModifier& m) {
+        return m.under_parts ? merged_own(merged_own(g.settings, m.settings), g.part) : merged_own(g.settings, m.settings);
+    };
     if (modifiers && uncompensated) {
         Settings bare = settings; // the modifier's outline as it is, no offsets
         bare.xy_offset = 0.0, bare.hole_offset = 0.0, bare.first_layer_shrink = 0.0;
@@ -903,17 +975,18 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
                 for (std::size_t p = 0; p < groups.size(); ++p)
                     if (std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
                             return o.object == m.object && object_tool(o, settings) == tools[p] &&
-                                   o.settings == groups[p].settings;
+                                   o.settings == groups[p].settings && o.part_settings == groups[p].part;
                         }))
                         infill_zones[p].push_back(
-                            {reach, own_settings(part_settings, merged_own(groups[p].settings, m.settings), m.name)});
+                            {reach, own_settings(part_settings, zone_own(groups[p], m), m.name)});
                 continue;
             }
             for (std::size_t p = 0; p < groups.size(); ++p) {
                 // This group's parts of the modifier's object.
                 IndexedMesh parts;
                 for (const MeshObject& o : objects) {
-                    if (o.object != m.object || object_tool(o, settings) != tools[p] || o.settings != groups[p].settings)
+                    if (o.object != m.object || object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
+                        o.part_settings != groups[p].part)
                         continue;
                     const IndexedMesh piece = object_mesh(mesh, o);
                     const auto base = std::uint32_t(parts.vertices.size());
@@ -934,7 +1007,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
                 if (!any)
                     continue;
                 zone_tools.push_back(tools[p]);
-                zone_settings.push_back(own_settings(part_settings, merged_own(groups[p].settings, m.settings), m.name));
+                zone_settings.push_back(own_settings(part_settings, zone_own(groups[p], m), m.name));
                 zone_settings.back().infill_combine_max_height = group_settings[p].infill_combine_max_height;
                 zone_meshes.push_back(std::move(parts));
                 zones.push_back(std::move(shared));

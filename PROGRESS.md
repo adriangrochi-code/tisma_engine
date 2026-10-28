@@ -6490,4 +6490,14 @@ grupos de su objeto como zona de relleno, que se saca del relleno ralo y se llen
 como el relleno denso bajo las tapas. MT4: una sola vuelta de paredes, la mitad −X en grilla (dos direcciones) y la +X
 en una dirección, 535 mm en la capa 25 (Tisma Slicer, 541). 674 de 674 en el árbol de trabajo.
 
-**Falta:** agregar modificadores desde la interfaz y los rangos de alturas (MT7b, MT13).
+**Después: rangos de alturas (regla 6).** `MeshObject::ranges` (desde, hasta y ajustes). La altura de capa de un
+rango entra como tramos de `layers.heights` (desde el rango, esa altura; desde su fin, la del perfil): cada tramo
+empieza una capa, así que con un rango de 4 a 6 mm a 0,1 las capas van 4,0 → 4,1 … 6,0 → 6,2 (MT7b). Sus otros
+ajustes son un modificador del ancho del objeto entre esas alturas, con la precedencia de la regla 5: sobre los del
+objeto, debajo de los de la parte (`MeshObject::part_settings`) y de los modificadores. MT7b, MT9 (el rango no cambia
+nada) y MT13 en `[transform]`; 675 de 675 en el árbol de trabajo.
+
+**Límite:** la pila de capas es de toda la placa: con varios objetos, la altura de capa de un rango vale para todos
+(salvo imprimiendo objeto por objeto). Si ya hay `layers.heights`, la de los rangos se deja de lado con un aviso.
+
+**Sigue:** agregar modificadores y rangos desde la interfaz.

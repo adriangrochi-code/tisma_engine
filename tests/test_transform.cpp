@@ -591,3 +591,52 @@ TEST_CASE("model tools: modifiers give the zone they share their settings (MT4, 
         CHECK_FALSE(in_hole);
     }
 }
+
+TEST_CASE("model tools: height ranges (MT7b, MT9, MT13)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    const TriangleMesh part = box({0, 0, 0}, {20, 20, 10});
+    const auto object = [&](std::string own, std::vector<MeshObject::HeightRange> ranges) {
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        objects.front().settings = std::move(own);
+        objects.front().ranges = std::move(ranges);
+        return objects;
+    };
+    // MT13: the object's 3 walls; from 6 to 10 mm, 5.
+    std::vector<MeshObject> objects = object(R"({"walls": {"count": 3}})", {{6.0, 10.0, R"({"walls": {"count": 5}})"}});
+    SlicedModel m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    REQUIRE(m.layers.size() == 50);
+    CHECK(walls_between(m, 10, -1, 21) == 3);
+    CHECK(walls_between(m, 29, -1, 21) == 3); // Z 5.8 to 6.0: its top on the edge, the range below's
+    CHECK(walls_between(m, 30, -1, 21) == 5); // Z 6.0 to 6.2
+    CHECK(walls_between(m, 40, -1, 21) == 5);
+    // MT7b: 4 to 6 mm at 0.1 mm layers; 6 to 10 with 4 walls and 50 % infill.
+    objects = object("", {{4.0, 6.0, R"({"layers": {"height": 0.1}})"},
+                          {6.0, 10.0, R"({"walls": {"count": 4}, "infill": {"density": 50}})"}});
+    m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    REQUIRE(m.layers.size() == 60);
+    CHECK_THAT(m.layers[19].top, WithinAbs(4.0, 1e-6));
+    CHECK_THAT(m.layers[20].top, WithinAbs(4.1, 1e-6));
+    CHECK_THAT(m.layers[39].top, WithinAbs(6.0, 1e-6));
+    CHECK_THAT(m.layers[40].top, WithinAbs(6.2, 1e-6));
+    CHECK(walls_between(m, 35, -1, 21) == 2);
+    CHECK(m.fills[35].sparse.empty());
+    CHECK(walls_between(m, 45, -1, 21) == 4);
+    CHECK_FALSE(m.fills[45].sparse.empty());
+    // MT9: the part's 4 walls win over the range's 6.
+    const TriangleMesh wide = box({0, 0, 0}, {40, 20, 10});
+    std::vector<MeshObject> nine{{"box", 0, wide.triangle_count(), 0, 0}};
+    nine.front().settings = R"({"walls": {"count": 4}})";
+    nine.front().part_settings = R"({"walls": {"count": 4}})";
+    nine.front().ranges = {{6.0, 10.0, R"({"walls": {"count": 6}})"}};
+    const std::vector<MeshModifier> plus_x{
+        {"modifier", 0, box({20, -5, -5}, {45, 25, 15}), R"({"walls": {"count": 5}})"}};
+    m = slice_model(weld_exact(wide), s, nullptr, nullptr, nullptr, &nine, nullptr, nullptr, &plus_x);
+    for (const std::size_t l : {std::size_t(10), std::size_t(40)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 20.1) == 4);
+        CHECK(walls_between(m, l, 19.9, 41) == 5);
+    }
+}

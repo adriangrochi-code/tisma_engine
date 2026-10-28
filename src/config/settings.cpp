@@ -376,7 +376,7 @@ bool json_depth_ok(std::string_view text, int max_depth) {
     return true;
 }
 
-Settings own_settings(const Settings& base, std::string_view own, std::string_view where) {
+Settings own_settings(const Settings& base, std::string_view own, std::string_view where, bool layers) {
     if (own.empty())
         return base;
     json given;
@@ -393,7 +393,7 @@ Settings own_settings(const Settings& base, std::string_view own, std::string_vi
         if (!keys.is_object())
             throw SettingsError(std::string(where) + ": " + group + " must be an object");
         for (const auto& [key, value] : keys.items()) {
-            if (!regional.contains(group))
+            if (!regional.contains(group) && !(layers && group == "layers" && key == "height"))
                 throw SettingsError(std::string(where) + ": " + group + "." + key +
                                     " cannot change for one object or part yet (walls, infill and surfaces can)");
             root[group][key] = value;
