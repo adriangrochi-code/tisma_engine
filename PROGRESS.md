@@ -6867,3 +6867,20 @@ lista: 701 casos, todos pasan; fuzzer 400 corridas (semilla 20261101), 0 fallas.
 **`walls.transition_margin` (P13) queda abierto:** con el umbral nuevo el salto 2→3 cae en 1,18 mm, cerca de lo que
 muestran las tiras de P13 sin margen, pero las filas con margen no siguen ni un largo mínimo ni una histéresis del
 tamaño del margen (lo dice la ficha). Hace falta otra medición para encontrar la regla.
+
+**`cooling.dynamic_overhang_fan`** y **`cooling.overhang_fan_0` a `_3`** (`cooling_more.md`, reglas 2 a 4): el
+reparto de las paredes por apoyo, que ya daba la velocidad, da también el ventilador de cada tramo: `overhang_fan_k`
+con 0, 25, 50 y 75 % apoyado, en línea recta entre ellos, y de `_3` a 0 entre 75 y 100 %. Vale el mayor con el de la
+capa; donde la capa va sin ventilador, lo apoyado más del 75 % no lo enciende (como Tisma Slicer en C2). Los puentes
+y los perímetros en voladizo siguen con `fan_bridges`, y las capas sin ventilador siguen sin él. El ventilador se
+escribe en las marcas de la capa, como el de los puentes. En el panel, tarjeta «Ventilador en voladizos» en
+Enfriamiento.
+
+**Prueba C2** (embudos con 100, 80, 60 y 40 %, capa de Z 6,2, paredes de 0,45): pared externa con el de la capa
+apagado a 82, 71, 56, 45 y 40 % en los de 60°, 55°, 45°, 35° y 30° (Tisma Slicer: 81, 70, 53–55, 43–44 y 37–40); 27° y
+20°, apagado; con el de la capa al 1 %, 27° a 35 (Tisma: 32–36); con el de la capa al 60 %, el de la capa; las
+internas, el de la capa. El motor queda 1 a 3 puntos arriba de lo medido: la regla es el contrato, y la diferencia
+coincide con un apoyo medido algo mayor que `1 − d/w`. **Fuzzer:** el ajuste entra en 1 de cada 4 corridas, con
+valores al azar; 600 corridas (semilla 20261102), 0 fallas.
+
+**Sigue:** `cooling.slowdown_logic` `consistent_surface` (C3) y `cooling.transition_distance` (C4).

@@ -987,6 +987,9 @@ const std::map<T, const char*>& row_keys() {
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
         {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
+        {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
+        {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
+        {T::OverhangFan3, "cooling.overhang_fan_3"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
@@ -6171,6 +6174,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
         whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
+    } else if (id == "overhang_fan") {
+        flag(T::DynamicOverhangFan, "cooling.dynamic_overhang_fan", s.dynamic_overhang_fan);
+        const T labels[4] = {T::OverhangFan0, T::OverhangFan1, T::OverhangFan2, T::OverhangFan3};
+        const char* keys[4] = {"cooling.overhang_fan_0", "cooling.overhang_fan_1", "cooling.overhang_fan_2",
+                               "cooling.overhang_fan_3"};
+        for (std::size_t k = 0; k < 4; ++k)
+            mm(labels[k], keys[k], s.overhang_fans[k], 0.0, 100.0, "%.0f %%", 0.5f);
     } else if (id == "short_layers") {
         flag(T::CoolingEnabled, "cooling.enabled", s.cooling_enabled);
         mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);

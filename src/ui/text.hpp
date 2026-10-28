@@ -1085,6 +1085,12 @@
     X(Overhang2, "Apoyado la mitad", "Half supported") \
     X(Overhang3, "Apoyado tres cuartos", "Three quarters supported") \
     X(SumBySupport, "Según el apoyo", "By support") \
+    X(SubOverhangFan, "Ventilador en voladizos", "Overhang fan") \
+    X(DynamicOverhangFan, "Ventilador según el apoyo", "Fan by support") \
+    X(OverhangFan0, "Ventilador sin apoyo", "Fan unsupported") \
+    X(OverhangFan1, "Ventilador apoyado un cuarto", "Fan a quarter supported") \
+    X(OverhangFan2, "Ventilador apoyado la mitad", "Fan half supported") \
+    X(OverhangFan3, "Ventilador apoyado tres cuartos", "Fan three quarters supported") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \

@@ -624,6 +624,12 @@ struct Settings {
     // The fan up step by step until this layer (counted from 1) after the
     // ones without fan (cooling_more.md, rule 1); 0: at once.
     int full_fan_layer = 0;
+    // The fan of the walls by how much of their bead rests on the layer below
+    // (cooling_more.md, rules 3 and 4): overhang_fans[k] with 0, 25, 50 and
+    // 75 % held, in a straight line between, down to 0 with all of it; never
+    // below the layer's.
+    bool dynamic_overhang_fan = false;
+    std::array<double, 4> overhang_fans = {0.0, 0.0, 0.0, 0.0}; // %
     // Off: no slowing down for the minimum layer time and no fan by layer
     // time (cooling.md); the bridges' fan and the height changes' stay.
     bool cooling_enabled = true;

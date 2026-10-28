@@ -916,6 +916,11 @@ Con el PR #23 (2026-10-26):
   relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
   sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
   que en el ajuste
+- [x] **`cooling.dynamic_overhang_fan`** y `cooling.overhang_fan_0` a `_3` (`cooling_more.md`, reglas 2 a 4, C2;
+  hecho 2026-10-28): el ventilador de cada tramo de pared según su apoyo, el mayor con el de la capa
+- [ ] **`cooling.slowdown_logic`** `consistent_surface` (`cooling_more.md`, regla 5, C3: el externo y el que lo toca
+  se frenan al final) y **`cooling.transition_distance`** (regla 6, C4: los últimos mm de la capa a su velocidad);
+  cerca de `cooling.keep_outer_speed`, que hoy deja quieto solo el externo
 - [x] **`walls.staggered`** (`staggered_perimeters.md`, ST1; hecho 2026-10-28): los lazos internos impares media capa más arriba; el
   material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
   material de los bloques no planares también sea lineal en el espesor

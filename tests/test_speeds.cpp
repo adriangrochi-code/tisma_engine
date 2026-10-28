@@ -509,6 +509,72 @@ TEST_CASE("speeds: walls slower the less of their bead rests on the layer below 
     CHECK(outer == std::set<double>{30.0});
 }
 
+TEST_CASE("cooling: the walls' fan by how much of their bead rests on the layer below (cooling_more.md, rules 3 and 4; "
+          "C2)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.dynamic_overhang_fan = true;
+    s.overhang_fans = {100.0, 80.0, 60.0, 40.0};
+    s.detect_overhangs = false;
+    s.wall_width = 0.45; // as measured
+    s.min_layer_time = 0.0; // no slowing down by time
+    // The fans (%) the walls of layer 31 (Z 6.2) are laid at, by type.
+    const auto fans = [&](double angle) {
+        std::istringstream in(gcode_of(funnel(angle), s));
+        std::map<std::string, std::set<long>> by_type;
+        std::string type;
+        long fan = 0;
+        int layer = 0;
+        for (std::string line; std::getline(in, line);) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            else if (line.rfind("M106 S", 0) == 0)
+                fan = std::lround(std::stod(line.substr(6)) * 100.0 / 255.0);
+            else if (line.rfind("M107", 0) == 0)
+                fan = 0;
+            else if (layer == 31 && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos)
+                by_type[type].insert(fan);
+        }
+        return by_type;
+    };
+    // Rule 3 with w = 0.45 and d = 0.2 tan(angle), the layer's fan off (C2:
+    // Tisma Slicer gives 81, 70, 53 to 55, 43 to 44 and 37 to 40, up to
+    // three points below the rule; the rule is the contract).
+    s.fan_min = s.fan_max = 0.0;
+    for (const auto& [angle, expected] : {std::pair{60.0, 81L}, {55.0, 71L}, {45.0, 56L}, {35.0, 45L}, {30.0, 41L},
+                                          {27.0, 0L}, {20.0, 0L}}) {
+        INFO(angle << " degrees");
+        const auto by_type = fans(angle);
+        REQUIRE(by_type.count("External perimeter"));
+        const std::set<long>& outer = by_type.at("External perimeter");
+        CHECK(*outer.begin() >= expected - 2);
+        CHECK(*outer.rbegin() <= expected + 2);
+        // The inner wall rests on the inner wall below: the layer's.
+        CHECK(by_type.at("Perimeter") == std::set<long>{0});
+    }
+    // Over 75 % held the fan only where the layer has one (rule 4): from
+    // fan_3 at 75 % down to 0 at 100 % (C2 with the layer's at 1 %: 32 to
+    // 36, 29 to 30 and 22 to 23).
+    s.fan_always = true;
+    s.fan_min = s.fan_max = 1.0;
+    for (const auto& [angle, expected] : {std::pair{27.0, 36L}, {25.0, 33L}, {20.0, 26L}}) {
+        INFO(angle << " degrees, the layer's at 1 %");
+        const std::set<long>& outer = fans(angle).at("External perimeter");
+        CHECK(*outer.begin() >= expected - 2);
+        CHECK(*outer.rbegin() <= expected + 2);
+    }
+    // The layer's when it is higher.
+    s.fan_min = s.fan_max = 60.0;
+    CHECK(fans(45.0).at("External perimeter") == std::set<long>{60});
+    // Without it, the layer's.
+    s.dynamic_overhang_fan = false;
+    s.fan_min = s.fan_max = 0.0;
+    s.fan_always = false;
+    CHECK(fans(60.0).at("External perimeter") == std::set<long>{0});
+}
+
 TEST_CASE("flow equalizer: the flow changes at most speed.flow_slope_down or _up per second (speeds_accels.md, rules "
           "8 and 9; V7)",
           "[gcode][speeds]") {

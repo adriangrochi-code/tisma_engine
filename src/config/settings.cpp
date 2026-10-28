@@ -2004,13 +2004,16 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
-                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer"},
+                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer", "dynamic_overhang_fan",
+                "overhang_fan_0", "overhang_fan_1", "overhang_fan_2", "overhang_fan_3"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "keep_outer_speed" || n == "fan_always" || n == "enabled") {
+                   if (n == "keep_outer_speed" || n == "fan_always" || n == "enabled" || n == "dynamic_overhang_fan") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "fan_always" ? s.fan_always : n == "enabled" ? s.cooling_enabled : s.keep_outer_speed) =
-                           g.at(n).get<bool>();
+                       (n == "fan_always"             ? s.fan_always
+                        : n == "enabled"              ? s.cooling_enabled
+                        : n == "dynamic_overhang_fan" ? s.dynamic_overhang_fan
+                                                      : s.keep_outer_speed) = g.at(n).get<bool>();
                        return;
                    }
                    if (n == "fan_off_layers" || n == "full_fan_layer") {
@@ -2036,7 +2039,10 @@ Settings parse_checked(std::string_view text) {
                    } else {
                        if (d < 0.0 || d > 100.0)
                            fail(k, "must be a percentage from 0 to 100");
-                       (n == "fan_min" ? s.fan_min : n == "fan_max" ? s.fan_max : s.fan_bridges) = d;
+                       if (n.starts_with("overhang_fan_"))
+                           s.overhang_fans[std::size_t(n.back() - '0')] = d;
+                       else
+                           (n == "fan_min" ? s.fan_min : n == "fan_max" ? s.fan_max : s.fan_bridges) = d;
                    }
                });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
@@ -2917,6 +2923,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"cooling.full_fan_layer", std::to_string(s.full_fan_layer)},
+        {"cooling.dynamic_overhang_fan", s.dynamic_overhang_fan ? "true" : "false"},
+        {"cooling.overhang_fan_0", num(s.overhang_fans[0])},
+        {"cooling.overhang_fan_1", num(s.overhang_fans[1])},
+        {"cooling.overhang_fan_2", num(s.overhang_fans[2])},
+        {"cooling.overhang_fan_3", num(s.overhang_fans[3])},
         {"cooling.enabled", s.cooling_enabled ? "true" : "false"},
         {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
@@ -3380,6 +3391,11 @@ std::string settings_json(const Settings& s) {
           {"fan_bridges", s.fan_bridges},
           {"fan_off_layers", s.fan_off_layers},
           {"full_fan_layer", s.full_fan_layer},
+          {"dynamic_overhang_fan", s.dynamic_overhang_fan},
+          {"overhang_fan_0", s.overhang_fans[0]},
+          {"overhang_fan_1", s.overhang_fans[1]},
+          {"overhang_fan_2", s.overhang_fans[2]},
+          {"overhang_fan_3", s.overhang_fans[3]},
           {"enabled", s.cooling_enabled},
           {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},

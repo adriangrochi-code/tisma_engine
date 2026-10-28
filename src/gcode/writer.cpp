@@ -432,27 +432,34 @@ ToolpathPoint between(const ToolpathPoint& a, const ToolpathPoint& b, double u) 
 // region; speeds_accels.md, rules 6 and 7): every stretch's share, from 0 (in
 // the air) to 1, from how far its middle lies inside or out of that region
 // against its width; the wall cut every 0.5 mm near the region's outline, and
-// the stretches whose feeds (feed_of the share) are within 1 % of their run's
-// joined, at the run's mean by length (an organic surface would otherwise
-// change speed every half millimetre). Away from the outline a stretch rests
-// all or nothing: `in_air` says which. A wall at one feed all along stays
-// whole.
-template <typename InAir, typename FeedOf>
-std::vector<std::pair<Toolpath, double>> by_support(const Toolpath& wall, const AreaIndex& below, InAir in_air,
-                                                    FeedOf feed_of) {
+// the stretches whose feeds (of_share's) are within 1 % of their run's and
+// whose fans within one point joined, at the run's means by length (an
+// organic surface would otherwise change speed every half millimetre). Away
+// from the outline a stretch rests all or nothing: `in_air` says which. A wall
+// at one feed and fan all along stays whole.
+struct ByShare {
+    double feed = 0.0;
+    double fan = -1.0; // % (cooling_more.md, rules 3 and 4); -1: the layer's
+    bool weak = false; // more than 75 % held: no fan where the layer has none
+};
+template <typename InAir, typename OfShare>
+std::vector<std::pair<Toolpath, ByShare>> by_support(const Toolpath& wall, const AreaIndex& below, InAir in_air,
+                                                     OfShare of_share) {
     const std::size_t n = wall.points.size();
     if (n < 2)
-        return {{wall, feed_of(1.0)}};
+        return {{wall, of_share(1.0)}};
     const std::size_t segments = wall.closed && n > 2 ? n : n - 1;
     constexpr double kPiece = 0.5; // mm
     constexpr double kChunk = 4.0; // mm looked at for the outline at once
-    std::vector<std::pair<Toolpath, double>> out;
-    Toolpath run; // the stretch being joined, at run_feed
+    std::vector<std::pair<Toolpath, ByShare>> out;
+    Toolpath run; // the stretch being joined, at run_at
     run.index = wall.index;
     run.gap = wall.gap;
     run.wavy = wall.wavy;
-    double run_feed = 0.0, run_length = 0.0;
-    constexpr double kJoin = 0.01; // of the run's feed
+    ByShare run_at;
+    double run_length = 0.0;
+    constexpr double kJoin = 0.01;  // of the run's feed
+    constexpr double kJoinFan = 1.0; // %
     for (std::size_t i = 0; i < segments; ++i) {
         const ToolpathPoint& a = wall.points[i];
         const ToolpathPoint& b = wall.points[(i + 1) % n];
@@ -475,25 +482,29 @@ std::vector<std::pair<Toolpath, double>> by_support(const Toolpath& wall, const 
                     share = std::clamp((w / 2.0 + (hit->inside ? hit->distance : -hit->distance)) / w, 0.0, 1.0);
                 else
                     share = in_air(c) ? 0.0 : 1.0;
-                const double feed = feed_of(share);
+                const ByShare here = of_share(share);
                 const double piece = (u1 - u0) * length;
-                if (run.points.empty() || std::abs(feed - run_feed) > kJoin * run_feed) {
+                if (run.points.empty() || std::abs(here.feed - run_at.feed) > kJoin * run_at.feed ||
+                    std::abs(here.fan - run_at.fan) > kJoinFan || here.weak != run_at.weak) {
                     if (run.points.size() > 1)
-                        out.push_back({run, run_feed});
+                        out.push_back({run, run_at});
                     run.points.assign(1, between(a, b, u0));
-                    run_feed = feed, run_length = 0.0;
+                    run_at = here, run_length = 0.0;
                 }
-                if (run_length + piece > 0.0)
-                    run_feed = (run_feed * run_length + feed * piece) / (run_length + piece);
+                if (run_length + piece > 0.0) {
+                    const double whole = run_length + piece;
+                    run_at.feed = (run_at.feed * run_length + here.feed * piece) / whole;
+                    run_at.fan = (run_at.fan * run_length + here.fan * piece) / whole;
+                }
                 run_length += piece;
                 run.points.push_back(between(a, b, u1));
             }
         }
     }
     if (out.empty())
-        return {{wall, run_feed}};
+        return {{wall, run_at}};
     if (run.points.size() > 1)
-        out.push_back({std::move(run), run_feed});
+        out.push_back({std::move(run), run_at});
     return out;
 }
 
@@ -1029,27 +1040,35 @@ public:
     // layer's fan hangs on its time, known only once the layer is built: the
     // layer opens with a mark where its fan goes, before its ;LAYER_CHANGE,
     // each bridge with a mark for the bridge fan and its end with a mark for
-    // the layer's again. settle_fan() writes the commands at the marks.
+    // the layer's again, and so each wall stretch with its own fan by its
+    // support (cooling_more.md, rules 3 and 4). settle_fan() writes the
+    // commands at the marks: a stretch's fan the larger of its own and the
+    // layer's, none where the layer has none and it rests more than 75 %
+    // (Tisma Slicer's measured C2), and none with `overhangs` false (the
+    // layers without fan).
     void open_layer_fan() {
         fan_marks_.clear();
-        fan_marks_.push_back({text_.size(), false});
-        marked_bridge_ = false;
+        fan_marks_.push_back({text_.size(), false, -1.0, false});
+        marked_ = FanMark{};
     }
-    void settle_fan(double layer, double bridge) {
+    void settle_fan(double layer, double bridge, bool overhangs = true) {
         if (fan_marks_.empty())
             return;
-        const double percents[2] = {layer, bridge};
-        const long values[2] = {fan_key(layer), fan_key(bridge)};
         std::string out;
         out.reserve(text_.size() + 12 * fan_marks_.size());
         std::size_t from = 0;
-        for (const auto& [at, on_bridge] : fan_marks_) {
-            out.append(text_, from, at - from);
-            from = at;
-            const long value = values[on_bridge];
+        for (const FanMark& mark : fan_marks_) {
+            out.append(text_, from, mark.at - from);
+            from = mark.at;
+            double percent = layer;
+            if (mark.bridge)
+                percent = bridge;
+            else if (overhangs && mark.overhang >= 0.0 && !(mark.weak && !(layer > 0.0)))
+                percent = std::max(layer, std::min(mark.overhang, 100.0));
+            const long value = fan_key(percent);
             if (value == fan_)
                 continue;
-            append_fan(out, percents[on_bridge], value);
+            append_fan(out, percent, value);
             fan_ = value;
         }
         out.append(text_, from);
@@ -1288,6 +1307,11 @@ public:
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
             bridge_ = std::strcmp(t, "Bridge infill") == 0 || std::strcmp(t, "Overhang perimeter") == 0;
         }
+    }
+    // The fan of the paths that follow by their support (cooling_more.md,
+    // rules 3 and 4): -1, the layer's.
+    void overhang_fan(double percent, bool weak) {
+        overhang_ = percent, weak_ = weak;
     }
 
     // A travel along the planner's route. It retracts first (and lifts Z by
@@ -1559,9 +1583,12 @@ private:
     // Before an extrusion: a bridge's fan mark, MakerWare's M101, and the
     // retraction undone (back to where E was; a length changed since stays the old one).
     void start_extrusion() {
-        if (bridge_ != marked_bridge_ && !fan_marks_.empty()) { // a bridge starts or ends: its fan
-            fan_marks_.push_back({text_.size(), bridge_});
-            marked_bridge_ = bridge_;
+        if (!fan_marks_.empty()) { // a bridge or a stretch with its own fan starts or ends: its fan
+            FanMark now{text_.size(), bridge_, bridge_ ? -1.0 : overhang_, !bridge_ && weak_};
+            if (now.bridge != marked_.bridge || now.overhang != marked_.overhang || now.weak != marked_.weak) {
+                fan_marks_.push_back(now);
+                marked_ = now;
+            }
         }
         if (dialect_.extruder_on_off && !extruder_on_) {
             text_ += "M101 ; extruder on\n";
@@ -1885,9 +1912,17 @@ private:
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;
     long fan_ = -1; // not set yet
-    std::vector<std::pair<std::size_t, bool>> fan_marks_; // where the layer's fan commands go: (offset, a bridge's)
-    bool marked_bridge_ = false; // the last mark is a bridge's
-    bool bridge_ = false;        // the current type is a bridge
+    struct FanMark {
+        std::size_t at = 0;    // offset in text_
+        bool bridge = false;   // the bridges' fan
+        double overhang = -1;  // %: a wall stretch's own (-1: the layer's)
+        bool weak = false;     // the stretch rests more than 75 %
+    };
+    std::vector<FanMark> fan_marks_; // where the layer's fan commands go
+    FanMark marked_;                 // the last mark's fan
+    bool bridge_ = false;            // the current type is a bridge
+    double overhang_ = -1.0;         // the current paths' own fan
+    bool weak_ = false;
     double filament_area_ = 1.0;
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
@@ -2681,6 +2716,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         int tool = 0;
         // How far under the layer's top it lies (the wipe tower's, rule 11).
         double drop = 0.0;
+        // A wall stretch's own fan by its support (cooling_more.md, rules 3
+        // and 4); -1: the layer's.
+        double fan = -1.0;
+        bool weak_fan = false;
     };
     // The aligned seam's candidates of each wall loop of a layer (by its
     // place in the layer's walls), found for many layers at once ahead of
@@ -2784,7 +2823,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const double layer_height = layer.top - layer.bottom;
         double base_height = layer_height, laid_height = layer_height;
         int laying_tool = 0; // the extruder of the paths laid now
-        auto lay = [&](Toolpath path, const char* type, double feed) {
+        auto lay = [&](Toolpath path, const char* type, double feed, ByShare fan = {}) {
             if (path.points.empty())
                 return;
             if (const double h = base_height + path.gap; h != laid_height) {
@@ -2793,6 +2832,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             }
             steps.push_back({std::move(path), type, feed, 0.0, {}, {}});
             steps.back().tool = laying_tool;
+            steps.back().fan = fan.fan, steps.back().weak_fan = fan.weak;
         };
         // Where this layer's walls hang (walls_extra.md, rule 8) and rest on
         // the support (supports_skirt.md, rule 4).
@@ -2815,7 +2855,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The walls by how much of their bead rests on the layer below
         // (speeds_accels.md, rules 6 and 7); a vase's wall stays one turn.
         std::optional<AreaIndex> below_outline, air;
-        if (s.dynamic_overhangs && !s.vase && local(l) > 0 && l - 1 < model.regions.size() && !model.regions[l - 1].empty()) {
+        if ((s.dynamic_overhangs || s.dynamic_overhang_fan) && !s.vase && local(l) > 0 && l - 1 < model.regions.size() && !model.regions[l - 1].empty()) {
             below_outline.emplace(model.regions[l - 1]);
             if (hanging_area)
                 air.emplace(*hanging_area);
@@ -2825,6 +2865,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // overhang speeds at 0, 25, 50 and 75 %, in a straight line between,
         // never faster than its own.
         const auto dynamic_feed = [&](double share, double normal) {
+            if (!s.dynamic_overhangs)
+                return normal;
             const double outer = s.outer_wall_speed.of(s.wall_speed);
             std::array<double, 5> at{};
             for (std::size_t k = 0; k < 4; ++k)
@@ -2833,6 +2875,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const double x = std::clamp(share, 0.0, 1.0) * 4.0;
             const std::size_t k = std::min<std::size_t>(3, std::size_t(x));
             return std::min(normal, at[k] + (x - double(k)) * (at[k + 1] - at[k]));
+        };
+        // A wall's feed and fan with `share` of its bead held: the overhang
+        // fans at 0, 25, 50 and 75 %, in a straight line between, down to 0
+        // at 100 % (cooling_more.md, rules 3 and 4).
+        const auto by_share = [&](double share, double normal) {
+            ByShare out{dynamic_feed(share, normal)};
+            if (s.dynamic_overhang_fan) {
+                const double x = std::clamp(share, 0.0, 1.0) * 4.0;
+                const std::size_t k = std::min<std::size_t>(3, std::size_t(x));
+                const double next = k < 3 ? s.overhang_fans[k + 1] : 0.0;
+                out.fan = s.overhang_fans[k] + (x - double(k)) * (next - s.overhang_fans[k]);
+                out.weak = share > 0.75;
+            }
+            return out;
         };
         bool in_thick = false;
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
@@ -2852,6 +2908,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             Toolpath path;
             const char* type;
             double feed;
+            ByShare fan = {};
         };
         std::vector<Pending> pending;
         bool deferring = false;
@@ -2892,12 +2949,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     }
                     // By how much rests on the layer below: in the air, overhang_0.
                     if (piece.air) {
-                        typed.push_back({std::move(piece.path), kind, dynamic_feed(0.0, feed)});
+                        const ByShare air_at = by_share(0.0, feed);
+                        typed.push_back({std::move(piece.path), kind, air_at.feed, air_at});
                         continue;
                     }
-                    for (auto& [path, f] : by_support(piece.path, *below_outline, in_air,
-                                                      [&](double share) { return dynamic_feed(share, feed); }))
-                        typed.push_back({std::move(path), kind, f});
+                    for (auto& [path, at] : by_support(piece.path, *below_outline, in_air,
+                                                       [&](double share) { return by_share(share, feed); }))
+                        typed.push_back({std::move(path), kind, at.feed, at});
                 }
             }
             if (deferring) {
@@ -2908,13 +2966,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     }
                     for (Toolpath& piece : split_by_height(p.path)) {
                         piece.gap = p.path.gap;
-                        pending.push_back({std::move(piece), p.type, p.feed});
+                        pending.push_back({std::move(piece), p.type, p.feed, p.fan});
                     }
                 }
                 return;
             }
             for (Pending& p : typed)
-                lay(std::move(p.path), p.type, p.feed);
+                lay(std::move(p.path), p.type, p.feed, p.fan);
         };
         auto off_top = [](std::initializer_list<const std::vector<Toolpath>*> lists) {
             for (const std::vector<Toolpath>* list : lists)
@@ -2936,7 +2994,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (const Pending& p : pending)
                 paths.push_back(&p.path);
             for (const std::size_t k : height_order(paths, reach))
-                lay(std::move(pending[k].path), pending[k].type, pending[k].feed);
+                lay(std::move(pending[k].path), pending[k].type, pending[k].feed, pending[k].fan);
             pending.clear();
             deferring = false;
         };
@@ -3593,6 +3651,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     g.travel(t.points.front().p, s.travel_speed, planner, nullptr, nullptr, false, step.type);
             }
             g.type(step.type);
+            g.overhang_fan(step.fan, step.weak_fan);
             g.print_acceleration(acceleration_of(step.type, local(l) == 0, raft_of(l) > 0 && local(l) == raft_of(l)));
             g.nonplanar(t.wavy);
             if (s.gcode_arcs && !t.wavy && t.points.size() > kArcMinSegments) {
@@ -3733,7 +3792,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);
             !a.fan && full > off && n > off && n < full)
             fan *= (n - off) / (full - off);
-        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
+        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges, !a.fan && !fan_off);
         const double seconds = g.end_layer();
         if (l == 0)
             first_layer = {seconds, g.last_silent_layer()};

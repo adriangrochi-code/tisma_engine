@@ -10,6 +10,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <numbers>
 
@@ -232,6 +233,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(c.fan_min == 20.0);
     CHECK(c.fan_max == 90.0);
     CHECK(c.fan_off_layers == 3);
+    CHECK_FALSE(c.dynamic_overhang_fan);
+    const Settings o = parse_settings(R"({"cooling": {"dynamic_overhang_fan": true, "overhang_fan_0": 100,
+                                                      "overhang_fan_3": 40}})");
+    CHECK(o.dynamic_overhang_fan);
+    CHECK(o.overhang_fans == std::array<double, 4>{100.0, 0.0, 0.0, 40.0});
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"overhang_fan_2": 101}})"),
+                      ContainsSubstring("cooling.overhang_fan_2: must be a percentage"));
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
                                                       "travel_acceleration": 3000, "corner_speed": 0}})");
     CHECK(m.max_feed_x == 300.0);

@@ -269,6 +269,12 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.fan_bridges", N},
             {"cooling.fan_off_layers", N},
             {"cooling.full_fan_layer", A}}},
+          {"overhang_fan", T::SubOverhangFan,
+           {{"cooling.dynamic_overhang_fan", A},
+            {"cooling.overhang_fan_0", A},
+            {"cooling.overhang_fan_1", A},
+            {"cooling.overhang_fan_2", A},
+            {"cooling.overhang_fan_3", A}}},
           {"short_layers", T::SubShortLayers,
            {{"cooling.enabled", A}, {"cooling.min_layer_time", N}, {"cooling.min_speed", N}, {"cooling.keep_outer_speed", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
@@ -710,6 +716,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.chamber_temperature > 0.0 ? format(T::SumTemp, int(std::lround(s.chamber_temperature))) : tr(T::SumNoChamber);
     if (id == "fan")
         return format(T::SumFan, number(s.fan_min, 0).c_str(), number(s.fan_max, 0).c_str());
+    if (id == "overhang_fan")
+        return s.dynamic_overhang_fan ? tr(T::SumBySupport) : tr(T::SumOff);
     if (id == "short_layers")
         return format(T::SumMinLayer, number(s.min_layer_time, 1).c_str());
     if (id == "flow")
