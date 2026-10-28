@@ -1825,3 +1825,38 @@ TEST_CASE("walls: walls.outer_first prints each island's walls from the outer on
     s.walls_outer_first = true;
     CHECK(order(s) == std::vector<std::string>{"External perimeter", "Perimeter"});
 }
+
+TEST_CASE("walls: a closed loop ends walls.seam_gap before its start (perimeters.md, rule 5, P1)", "[gcode]") {
+    Settings s = test_printer();
+    // The outer loop's extruded length in the cube's layer 10.
+    const auto outer = [&](const Settings& settings) {
+        double length = 0.0, x = 0.0, y = 0.0;
+        int layer = -1;
+        std::string type;
+        const std::regex rx(" X([-0-9.]+)"), ry(" Y([-0-9.]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(cube_gcode(settings))) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            else if (line.rfind("G1", 0) == 0) {
+                double nx = x, ny = y;
+                if (std::regex_search(line, hit, rx))
+                    nx = std::stod(hit[1].str());
+                if (std::regex_search(line, hit, ry))
+                    ny = std::stod(hit[1].str());
+                if (layer == 10 && type == "External perimeter" && line.find(" E") != std::string::npos)
+                    length += std::hypot(nx - x, ny - y);
+                x = nx, y = ny;
+            }
+        }
+        return length;
+    };
+    Settings closed = s;
+    closed.wall_seam_gap = {0.0, false};
+    const double whole = outer(closed), gapped = outer(s);
+    CHECK_THAT(whole - gapped, Catch::Matchers::WithinAbs(0.15 * s.nozzle_diameter, 0.002)); // 15 % of the nozzle: 0.06 mm
+    closed.wall_seam_gap = {1.0, false};
+    CHECK_THAT(whole - outer(closed), Catch::Matchers::WithinAbs(1.0, 0.002));
+}

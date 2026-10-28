@@ -943,6 +943,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
+        {T::SeamGap, "walls.seam_gap"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
         {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
@@ -5692,6 +5693,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::DetailMargin, "layers.detail_margin", s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
     } else if (id == "line_width") {
         mm(T::LineWidth, "walls.width", s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
+        if (shown("walls.seam_gap"))
+            changed |= row(T::SeamGap, s.wall_seam_gap.value, 0.0, s.wall_seam_gap.percent ? 1000.0 : 40.0,
+                           s.wall_seam_gap.percent ? "%.0f %%" : "%.2f mm", s.wall_seam_gap.percent ? 0.5f : 0.01f);
     } else if (id == "seam") {
         if (shown("walls.seam"))
             changed |= row(T::Seam, s.seam,

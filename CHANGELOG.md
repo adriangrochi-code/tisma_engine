@@ -62,6 +62,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
 
+- **Cada lazo de pared termina un poco antes de su inicio** (`walls.seam_gap`, 15 % de la boquilla: 0,06 mm con 0,4;
+  `perimeters.md`, regla 5), para que la costura no se engrose. Antes cada lazo volvía a su inicio.
 - **El soporte de grilla que apoya sobre la pieza deja una separación** (`support.bottom_z_gap`; sin valor, la de
   `support.z_gap`), como pide `supports_more.md` (regla 6). Antes empezaba pegado a la pieza. Sus primeras capas son
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).

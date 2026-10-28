@@ -167,6 +167,9 @@ struct Settings {
     // machine.nozzle_diameter: a wall thinner than min_line_width is printed
     // with a bead that wide, centred; thinner than min_detail, not at all.
     Speed wall_min_line_width{85.0, true};
+    // A closed wall loop ends this much before its start, mm or % of the
+    // nozzle (perimeters.md, rule 5): 0.06 mm with a 0.4 nozzle.
+    Speed wall_seam_gap{15.0, true};
     Speed wall_min_detail{25.0, true};
     // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
     // spiral, a layer each turn, over flat bottom layers.

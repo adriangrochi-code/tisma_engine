@@ -18,7 +18,7 @@ const std::vector<SectionLayout>& print_layout() {
           {"variable_height", T::SubVariableHeight, {{"layers.heights", N}, {"layers.cusp_height", A}}},
           {"fine_detail", T::SubFineDetail,
            {{"layers.detail_height", A}, {"layers.detail_tolerance", A}, {"layers.detail_margin", A}}},
-          {"line_width", T::SubLineWidth, {{"walls.width", N}}},
+          {"line_width", T::SubLineWidth, {{"walls.width", N}, {"walls.seam_gap", A}}},
           {"seam", T::SubSeam,
            {{"walls.seam", B},
             {"walls.scarf", N},

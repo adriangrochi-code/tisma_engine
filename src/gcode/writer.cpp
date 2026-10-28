@@ -703,6 +703,36 @@ const KindNotes& notes_of(const char* type) {
     return kOtherNotes;
 }
 
+// A closed loop as an open path that stops `gap` mm before its start, back
+// along its last stretch (perimeters.md, rule 5); one shorter than twice the
+// gap stays as it is.
+Toolpath seam_gapped(Toolpath t, double gap) {
+    if (!t.closed || t.points.size() < 3 || !(gap > 0.0))
+        return t;
+    double length = 0.0;
+    for (std::size_t i = 0; i < t.points.size(); ++i)
+        length += std::hypot(t.points[(i + 1) % t.points.size()].p.x - t.points[i].p.x,
+                             t.points[(i + 1) % t.points.size()].p.y - t.points[i].p.y);
+    if (!(length > 2.0 * gap))
+        return t;
+    t.points.push_back(t.points.front());
+    t.closed = false;
+    double left = gap;
+    while (left > 0.0 && t.points.size() > 2) {
+        const ToolpathPoint& a = t.points[t.points.size() - 2];
+        const ToolpathPoint& b = t.points.back();
+        const double d = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        if (d <= left) {
+            left -= d;
+            t.points.pop_back();
+            continue;
+        }
+        t.points.back() = between(a, b, 1.0 - left / d);
+        left = 0.0;
+    }
+    return t;
+}
+
 // A closed loop that starts `back` mm earlier along its own way round, at a
 // point put there (walls_extra.md, rule 3: the inner walls' staggered seams).
 Toolpath start_earlier(Toolpath loop, double back) {
@@ -3810,6 +3840,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                    s.scarf_entire_loop ? std::numeric_limits<double>::infinity()
                                                                        : s.scarf_length,
                                                    s.scarf_max_segment);
+                        else if (!s.vase && step.path.points.size() > 2 &&
+                                 (std::strcmp(step.type, "External perimeter") == 0 || std::strcmp(step.type, "Perimeter") == 0))
+                            step.path = seam_gapped(std::move(step.path), s.wall_seam_gap.of(s.nozzle_diameter));
                         if (from)
                             step.from = from;
                         if (step.from)

@@ -6691,3 +6691,10 @@ la losa queda sin soporte (SM2: «ningún soporte»), una T sobre la cama lo con
 adentro. Prueba: en la capa 10 del cubo de 3 paredes, `Perimeter` y después `External perimeter`; con el ajuste, al
 revés. 156 casos de `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
 
+**Después: `walls.seam_gap`** (`perimeters.md`, regla 5, P1): un lazo cerrado de pared (externo o interno) termina
+esa distancia antes de su inicio, por defecto 15 % de la boquilla (0,06 mm con 0,4), recortado sobre su último tramo
+(`seam_gapped`). **Cambia el G-code de siempre**: antes cada lazo volvía a su inicio. No en las costuras en rampa ni en
+el modo vaso. Prueba: en el cubo, la vuelta externa mide 0,06 mm menos que cerrada, y 1 mm menos con 1 mm; las pruebas
+de la costura en rampa cuentan el hueco de los lazos sin rampa. En el panel va en «Ancho de línea» (la tarjeta de
+paredes ya tiene 8). Toda la lista: 646 casos, todos pasan; fuzzer 600 corridas (semilla 5281028), 0 fallas.
+
