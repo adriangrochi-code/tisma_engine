@@ -6816,3 +6816,8 @@ más». `walls.transition_angle` y `walls.transition_margin` esperan la respuest
 qué ángulo y qué margen son, con una prueba de caja negra). `walls.staggered` (ST1) es lo próximo de `walls`: pide
 que el material de un cordón subido sea lineal en su espesor también en los bloques no planares. Toda la lista: 699
 casos, todos pasan.
+
+**Medido** (mantenimiento, máquina libre, esfera de un millón de triángulos, 3 corridas cada una): `f1e167a` (antes
+del modelo del cordón) lamina en 1,60 a 1,64 s y escribe en 190 a 209 ms; ahora, 1,61 a 1,77 s y 183 a 194 ms.
+Sin cambio medible. Las fichas P13 y P14 (`transition_margin`, `transition_angle`) llegaron de `spec/next` y quedan
+en `PLAN.md`.
