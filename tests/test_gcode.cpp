@@ -1,3 +1,4 @@
+#include "adhesion/adhesion.hpp"
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
@@ -20,6 +21,7 @@
 #include <filesystem>
 #include <map>
 #include <numbers>
+#include <numeric>
 #include <random>
 #include <regex>
 #include <set>
@@ -657,12 +659,16 @@ TEST_CASE("support: lines on a grid below a T's cap, dense right under it", "[gc
         return sum;
     };
     // Lines along X on every layer (support.line_angle 0), 2.5 mm of free
-    // space apart: rows at multiples of 2.5 plus a bead's spacing in Y (rule 6).
+    // space apart: rows at multiples of 2.5 plus a bead's spacing in Y (rule
+    // 6), inside the sheath's loop (supports_more.md, rule 10).
     const double row = 2.5 + (s.wall_width - (1.0 - std::numbers::pi / 4.0) * 0.2);
     for (const std::size_t l : {std::size_t(0), std::size_t(3)}) {
         std::set<long> rows;
+        // The sheath: round the zone and round the stem it surrounds.
+        CHECK(std::count_if(model.fills[l].support.begin(), model.fills[l].support.end(),
+                            [](const Toolpath& t) { return t.closed; }) == 2);
         for (const Toolpath& t : model.fills[l].support)
-            for (std::size_t i = 1; i < t.points.size(); ++i)
+            for (std::size_t i = 1; i < t.points.size() && !t.closed; ++i)
                 if (std::fabs(t.points[i].p.y - t.points[i - 1].p.y) < 1e-6) // along a line, not a zigzag joint
                     rows.insert(std::lround(t.points[i].p.y / row * 1000.0));
         CHECK(rows.size() >= 3);
@@ -939,6 +945,193 @@ TEST_CASE("support: its own line width, in mm or of the layer height (supports_m
     CHECK(widths(s) == std::set<long>{300});
     s.support_style = SupportStyle::Organic;
     CHECK(widths(s) == std::set<long>{300});
+}
+
+TEST_CASE("support: under whatever hangs in the first support.enforce_layers layers (supports_more.md, rule 1; SM1)",
+          "[gcode][support]") {
+    // The 70 degree wedge of supports_skirt.md: 10 mm in X at the bottom, 20 in
+    // Y, 10 high, its +X face hanging out at 70 degrees from the horizontal.
+    IndexedMesh wedge;
+    add_box(wedge, 0, 0, 10, 20, 10);
+    const float lean = float(10.0 / std::tan(70.0 * std::numbers::pi / 180.0));
+    for (std::size_t v = 4; v < 8; ++v)
+        if (wedge.vertices[v].x > 5.0f)
+            wedge.vertices[v].x += lean;
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    const auto layers = [&](const IndexedMesh& m) {
+        const SlicedModel model = slice_model(m, s);
+        std::vector<std::size_t> out; // the layers with support
+        bool interface = false;
+        for (std::size_t l = 0; l < model.fills.size(); ++l) {
+            if (!model.fills[l].support.empty())
+                out.push_back(l);
+            interface |= !model.fills[l].support_interface.empty();
+        }
+        CHECK_FALSE(interface); // base only
+        return out;
+    };
+    CHECK(layers(wedge).empty()); // without it, nothing
+    s.support_enforce_layers = 10; // layers 0 to 6
+    std::vector<std::size_t> expected(7);
+    std::iota(expected.begin(), expected.end(), std::size_t(0));
+    CHECK(layers(wedge) == expected);
+    s.support = true; // the same with support on: the wedge needs none of its own
+    CHECK(layers(wedge) == expected);
+    s.support = false;
+    s.support_enforce_layers = 20; // layers 0 to 16
+    expected.resize(17);
+    std::iota(expected.begin(), expected.end(), std::size_t(0));
+    CHECK(layers(wedge) == expected);
+    IndexedMesh cube;
+    add_box(cube, 0, 0, 20, 20, 20);
+    s.support_enforce_layers = 10;
+    CHECK(layers(cube).empty()); // nothing hangs
+}
+
+TEST_CASE("support: snug, fitted to what hangs, its gaps closed by support.closing_radius (supports_more.md, rule "
+          "14; SM8, SM9)",
+          "[gcode][support]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    const auto right = [](const Polygons& area) { // the zone's +X edge
+        double x = -1e9;
+        for (const Polygon& p : area)
+            for (const auto& q : p)
+                x = std::max(x, to_mm(q.x));
+        return x;
+    };
+    // grid: 1.6 mm past the slab's edge (X 20); snug: within it (SM8).
+    SlicedModel model = slice_model(shelf(), s);
+    CHECK(right(model.support_areas[12]) > 21.4);
+    s.support_style = SupportStyle::Snug;
+    model = slice_model(shelf(), s);
+    CHECK(right(model.support_areas[12]) <= 20.1); // within the column grid's pixel
+    CHECK(right(model.support_areas[12]) > 19.5);
+    // The fork: two arms 9.25 mm wide, 1.5 mm apart (SM9).
+    IndexedMesh fork;
+    add_box(fork, 0, 0, 10, 20, 8);
+    add_box(fork, 0, 0, 20, 9.25f, 10, 8);
+    add_box(fork, 0, 10.75f, 20, 20, 10, 8);
+    const auto zones = [&] {
+        std::size_t outer = 0;
+        const SlicedModel sliced = slice_model(fork, s);
+        for (const Polygon& p : sliced.support_areas[12])
+            outer += Clipper2Lib::Area(p) > 0.0;
+        return outer;
+    };
+    s.support_closing_radius = 0.5;
+    CHECK(zones() == 2);
+    s.support_closing_radius = 2.0;
+    CHECK(zones() == 1);
+    s.support_style = SupportStyle::Grid;
+    CHECK(zones() == 1);
+}
+
+TEST_CASE("support: the base's pattern and sheath, the interface's pattern, spacing and contact loops "
+          "(supports_more.md, rules 9 to 12; SM6, SM7, SM10)",
+          "[gcode][support]") {
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    const IndexedMesh m = shelf();
+    const auto length = [](const Toolpath& t) {
+        double sum = t.closed && t.points.size() > 2
+                         ? std::hypot(t.points.front().p.x - t.points.back().p.x, t.points.front().p.y - t.points.back().p.y)
+                         : 0.0;
+        for (std::size_t i = 1; i < t.points.size(); ++i)
+            sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        return sum;
+    };
+    // Length along X and along Y, and of the closed loops, of a layer's paths.
+    struct Lengths {
+        double x = 0.0, y = 0.0, other = 0.0, loops = 0.0;
+        int closed = 0, open = 0;
+    };
+    const auto measure = [&](const std::vector<Toolpath>& paths) {
+        Lengths out;
+        for (const Toolpath& t : paths) {
+            if (t.closed) {
+                ++out.closed, out.loops += length(t);
+                continue;
+            }
+            ++out.open;
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const double dx = std::fabs(t.points[i].p.x - t.points[i - 1].p.x),
+                             dy = std::fabs(t.points[i].p.y - t.points[i - 1].p.y);
+                (dy < 1e-6 ? out.x : dx < 1e-6 ? out.y : out.other) += std::hypot(dx, dy);
+            }
+        }
+        return out;
+    };
+    SlicedModel model = slice_model(m, s);
+    // The sheath: one loop round the zone, the lines inside it (SM7).
+    const Lengths sheath = measure(model.fills[2].support);
+    CHECK(sheath.closed == 1);
+    CHECK(sheath.x > 3.0 * sheath.y);
+    const double zone = std::fabs(Clipper2Lib::Length(offset(model.support_areas[2], -s.wall_width / 2.0).front(), true)) /
+                        kUnitsPerMm;
+    CHECK_THAT(sheath.loops, Catch::Matchers::WithinRel(zone, 0.01));
+    s.support_sheath = false; // one zigzag, no loop
+    model = slice_model(m, s);
+    const Lengths bare = measure(model.fills[2].support);
+    CHECK(bare.closed == 0);
+    CHECK(bare.x > sheath.x);
+    // grid: the lines turned 90 degrees on every other layer (SM6).
+    s.support_sheath = true;
+    s.support_pattern = SupportPattern::Grid;
+    model = slice_model(m, s);
+    CHECK(measure(model.fills[2].support).x > 3.0 * measure(model.fills[2].support).y);
+    CHECK(measure(model.fills[3].support).y > 3.0 * measure(model.fills[3].support).x);
+    // honeycomb: lines at 60 and 120 degrees too, about a third more (Tisma
+    // Slicer: 206 to 211 mm against 158.8).
+    s.support_pattern = SupportPattern::Honeycomb;
+    model = slice_model(m, s);
+    const Lengths honey = measure(model.fills[2].support);
+    CHECK(honey.other > honey.x);
+    const double lines_total = sheath.x + sheath.y + sheath.other + sheath.loops;
+    const double honey_total = honey.x + honey.y + honey.other + honey.loops;
+    CHECK(honey_total > 1.1 * lines_total);
+    CHECK(honey_total < 1.6 * lines_total);
+    s.support_pattern = SupportPattern::Lines;
+    // The interface: lines across the base's, solid (SM10).
+    model = slice_model(m, s);
+    const Lengths solid = measure(model.fills[37].support_interface);
+    CHECK(solid.closed == 0);
+    CHECK(solid.y > 5.0 * solid.x);
+    // 1 mm of free space between them: about a third (Tisma Slicer: 240.9
+    // against 743.0 mm).
+    s.support_interface_spacing = 1.0;
+    model = slice_model(m, s);
+    const Lengths sparse = measure(model.fills[37].support_interface);
+    CHECK(sparse.y < 0.45 * solid.y);
+    CHECK(sparse.y > 0.2 * solid.y);
+    s.support_interface_spacing = 0.0;
+    // concentric: loops a bead's spacing apart, each 8 spacings longer than
+    // the one inside it (Tisma Slicer: 2.856 mm).
+    s.support_interface_pattern = SupportInterfacePattern::Concentric;
+    model = slice_model(m, s);
+    std::vector<double> loops;
+    for (const Toolpath& t : model.fills[37].support_interface) {
+        CHECK(t.closed);
+        loops.push_back(length(t));
+    }
+    std::sort(loops.begin(), loops.end());
+    REQUIRE(loops.size() >= 5);
+    CHECK_THAT(loops.back() - loops[loops.size() - 2], Catch::Matchers::WithinAbs(8.0 * loop_spacing(s.wall_width, 0.2), 0.05));
+    // Contact loops: the top interface starts with a loop round its zone; the
+    // ones below it do not.
+    s.support_interface_pattern = SupportInterfacePattern::Lines;
+    s.support_contact_loops = true;
+    model = slice_model(m, s);
+    std::size_t top = 0;
+    for (std::size_t l = 0; l < model.fills.size(); ++l)
+        if (!model.fills[l].support_interface.empty())
+            top = l;
+    CHECK(measure(model.fills[top].support_interface).closed >= 1);
+    CHECK(measure(model.fills[top].support_interface).open >= 1);
+    CHECK(measure(model.fills[top - 1].support_interface).closed == 0);
 }
 
 TEST_CASE("walls: the stretches over the air are overhang perimeters at the bridges' speed (walls_extra.md, rule 8; "

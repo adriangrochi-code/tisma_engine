@@ -245,6 +245,21 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(cs.slowdown_logic == SlowdownLogic::ConsistentSurface);
     CHECK(cs.transition_distance == 5.0);
     CHECK_THROWS(parse_settings(R"({"cooling": {"slowdown_logic": "even"}})"));
+    const Settings sp = parse_settings(R"({"support": {"pattern": "honeycomb", "sheath": false,
+                                                       "interface_pattern": "concentric", "interface_spacing": 1,
+                                                       "interface_contact_loops": true}})");
+    CHECK(sp.support_pattern == SupportPattern::Honeycomb);
+    CHECK_FALSE(sp.support_sheath);
+    CHECK(sp.support_interface_pattern == SupportInterfacePattern::Concentric);
+    CHECK(sp.support_interface_spacing == 1.0);
+    CHECK(sp.support_contact_loops);
+    CHECK(Settings{}.support_sheath);
+    CHECK_THROWS(parse_settings(R"({"support": {"pattern": "gyroid"}})"));
+    CHECK(parse_settings(R"({"support": {"enforce_layers": 10}})").support_enforce_layers == 10);
+    const Settings snug = parse_settings(R"({"support": {"style": "snug", "closing_radius": 0.5}})");
+    CHECK(snug.support_style == SupportStyle::Snug);
+    CHECK(snug.support_closing_radius == 0.5);
+    CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),
                       ContainsSubstring("cooling.transition_distance: must not be negative"));
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,

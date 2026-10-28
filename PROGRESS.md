@@ -6923,3 +6923,65 @@ tiempo junto al de los viajes. De paso, la segunda pasada de una capa frenada su
 
 **Sigue:** el resto de las claves de las fichas (`fragment`, `machine`, `calibration`, …), y `walls.transition_margin`
 cuando llegue la medición.
+
+**Claves de las fichas que faltan, otra vez medido** (2026-10-28): repetí la prueba del equipo de fichas con el motor
+de este bloque (cada clave de la tabla de `2026-10-28-ajustes.md`, con valores de prueba, sobre el cubo de las
+pruebas): faltaban 47. El grupo `cooling` quedó completo. `fins` (20) y `waam` (10) son de después de la primera
+versión, como dicen sus fichas; sigo con `support`.
+
+**Relleno del soporte en grilla** (`supports_more.md`, reglas 9 a 12):
+- `support.pattern`:
+  - `lines`: lo de antes;
+  - `grid`: las mismas líneas giradas 90° en capas alternas;
+  - `honeycomb`: panales con la densidad de las líneas.
+- `support.sheath`, sí por defecto como en la ficha: un lazo por el borde de cada zona de la base y el patrón adentro, a
+  un cordón. Antes la base era solo el zigzag. Con un hueco en la zona (la columna de una T), el lazo da la vuelta
+  también al hueco.
+- `support.interface_pattern`: `lines` (y `automatic`, mientras no haya material soluble) o `concentric`, con lazos
+  hacia adentro a la separación de un cordón.
+- `support.interface_spacing`: el espacio libre entre las líneas de la interfaz.
+- `support.interface_contact_loops`: la capa de interfaz de arriba empieza con un lazo por el borde de cada zona.
+
+**Medido en el voladizo de la ficha, comparado con Tisma Slicer:**
+
+| Prueba | Motor | Tisma Slicer |
+|---|---|---|
+| Base con vaina (capa 2): lazo | 74,5 mm | 68,9 mm |
+| Base con vaina (capa 2): líneas | 99,8 mm | 90,0 mm |
+| Base sin vaina | 105,6 mm | 123,1 mm |
+| Panal | 198,7 mm | 206 a 211 mm |
+| Interfaz sólida | 516 mm | 743 mm |
+| Interfaz con 1 mm libre | 144 mm (28 %) | 240,9 mm (32 %) |
+| Lazos concéntricos | 8 separaciones más largo cada uno, como la ficha (2,856 mm) | 2,856 mm |
+| Lazos de contacto | un lazo de 58 mm | dos lazos |
+
+Las diferencias de largo salen del tamaño de la zona: la del motor es más grande en la base y más chica en la
+interfaz que la de Tisma Slicer. No es del patrón. SM8 lo mide aparte, con el estilo `snug`, que el motor todavía no
+tiene.
+
+**Pregunta para el equipo de fichas:** en SM10 aparece también un lazo en la segunda capa de interfaz (Z 7,6), pero
+la regla 12 habla solo de la de arriba. El motor sigue la regla.
+
+**Pruebas:**
+- SM6, SM7 y SM10 en `test_gcode.cpp`;
+- la prueba de la T ahora cuenta los dos lazos de la vaina;
+- fuzzer: patrón, vaina e interfaz al azar.
+
+**`support.enforce_layers`** (regla 1): soporte bajo todo lo que cuelga en las primeras N capas, sin importar el
+ángulo y aunque el soporte esté apagado. El área se calcula aparte, con todo lo que se sale de la capa de abajo en
+esas capas como forzador. Se suma al soporte de siempre, solo como base, en las capas 0 a N − 4. SM1, cuña de 70°:
+con 10, soporte en las capas 0 a 6; con 20, de 0 a 16, como Tisma Slicer; igual con el soporte encendido; el cubo,
+nada.
+
+**`support.style` `snug` y `support.closing_radius`** (regla 14): la columna del soporte sin el margen de la grilla y
+con los huecos cerrados por `closing_radius` (antes, siempre por un cordón).
+- SM8 (voladizo, capa 12): con `grid` la zona pasa 1,6 mm el borde de la losa; con `snug` termina en el borde, a
+  menos de un píxel de la grilla de la columna (0,05 mm).
+- SM9 (horquilla de dos brazos a 1,5 mm): con radio 0,5, dos zonas; con 2, una; con `grid`, una.
+
+**Encontrado de paso, en mis pruebas nuevas, no en el motor:**
+- un `for` sobre un miembro de un `SlicedModel` temporal (se destruye antes del lazo);
+- antes, la referencia a un mapa temporal en C2.
+
+**Sigue:** `support.under_bridges` (S6) y `support.free_bridge_length` (R5, R6); después `fragment`, `machine`,
+`calibration`, ….

@@ -908,7 +908,8 @@ const std::map<T, const char*>& row_keys() {
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
         {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
-        {T::SupportBuildplateOnly, "support.buildplate_only"},
+        {T::SupportBuildplateOnly, "support.buildplate_only"}, {T::SupportEnforceLayers, "support.enforce_layers"},
+        {T::SupportClosingRadius, "support.closing_radius"},
         {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
         {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
         {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
@@ -967,7 +968,10 @@ const std::map<T, const char*>& row_keys() {
         {T::SupportZGap, "support.z_gap"}, {T::SupportBottomZGap, "support.bottom_z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
         {T::SupportBottomInterface, "support.bottom_interface_layers"},
-        {T::SupportLineAngle, "support.line_angle"},
+        {T::SupportLineAngle, "support.line_angle"}, {T::SupportPatternRow, "support.pattern"},
+        {T::SupportSheath, "support.sheath"}, {T::SupportInterfacePatternRow, "support.interface_pattern"},
+        {T::SupportInterfaceSpacing, "support.interface_spacing"},
+        {T::SupportContactLoops, "support.interface_contact_loops"},
         {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
         {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
@@ -5921,10 +5925,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::Supports, "support.enabled", s.support);
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
+        whole(T::SupportEnforceLayers, "support.enforce_layers", s.support_enforce_layers, 0, 1000);
         if (shown("support.style"))
             changed |= row(T::SupportStyle, s.support_style,
-                           {{SupportStyle::Grid, tr(T::SupportGrid)}, {SupportStyle::Organic, tr(T::SupportOrganic)}},
+                           {{SupportStyle::Grid, tr(T::SupportGrid)},
+                            {SupportStyle::Snug, tr(T::SupportSnug)},
+                            {SupportStyle::Organic, tr(T::SupportOrganic)}},
                            tr(T::SupportStyleTip));
+        if (s.support_style == SupportStyle::Snug)
+            mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
         mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
     } else if (id == "tree") {
         mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
@@ -5949,8 +5958,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
               s.support_bottom_interface_layers < 0 ? "—" : "%d");
         flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
+        if (shown("support.interface_pattern"))
+            changed |= row(T::SupportInterfacePatternRow, s.support_interface_pattern,
+                           {{SupportInterfacePattern::Lines, tr(T::PatternLines)},
+                            {SupportInterfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)}});
+        mm(T::SupportInterfaceSpacing, "support.interface_spacing", s.support_interface_spacing, 0.0, 100.0,
+           s.support_interface_spacing > 0.0 ? "%.2f mm" : "—", 0.01f);
+        flag(T::SupportContactLoops, "support.interface_contact_loops", s.support_contact_loops);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
+        if (shown("support.pattern"))
+            changed |= row(T::SupportPatternRow, s.support_pattern,
+                           {{SupportPattern::Lines, tr(T::PatternLines)},
+                            {SupportPattern::Grid, tr(T::PatternGrid)},
+                            {SupportPattern::Honeycomb, tr(T::Honeycomb)}});
+        flag(T::SupportSheath, "support.sheath", s.support_sheath);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
         if (shown("support.width"))
             changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,

@@ -96,6 +96,20 @@ constexpr const char* kAccelerationNames[] = {"default",          "walls",      
                                               "bridges",          "first_layer",  "first_layer_over_raft",
                                               "travel",           "short_travel", "wipe_tower"};
 
+const char* support_style_name(SupportStyle s) {
+    return s == SupportStyle::Organic ? "organic" : s == SupportStyle::Snug ? "snug" : "grid";
+}
+
+const char* support_pattern_name(SupportPattern p) {
+    return p == SupportPattern::Grid ? "grid" : p == SupportPattern::Honeycomb ? "honeycomb" : "lines";
+}
+
+const char* support_interface_pattern_name(SupportInterfacePattern p) {
+    return p == SupportInterfacePattern::Concentric ? "concentric"
+           : p == SupportInterfacePattern::Automatic ? "automatic"
+                                                     : "lines";
+}
+
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
 }
@@ -1894,16 +1908,54 @@ Settings parse_checked(std::string_view text) {
                {"enabled", "automatic", "buildplate_only", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "bottom_interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
-                "synchronize_layers"},
+                "synchronize_layers", "pattern", "sheath", "interface_pattern", "interface_spacing",
+                "interface_contact_loops", "enforce_layers", "closing_radius"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "synchronize_layers") {
+                   if (n == "synchronize_layers" || n == "sheath" || n == "interface_contact_loops") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       s.support_synchronize_layers = g.at(n).get<bool>();
+                       (n == "sheath"                    ? s.support_sheath
+                        : n == "interface_contact_loops" ? s.support_contact_loops
+                                                         : s.support_synchronize_layers) = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "pattern") {
+                       s.support_pattern = choice<SupportPattern>(g, n, k, {{"lines", SupportPattern::Lines},
+                                                                           {"grid", SupportPattern::Grid},
+                                                                           {"honeycomb", SupportPattern::Honeycomb}});
+                       return;
+                   }
+                   if (n == "interface_pattern") {
+                       s.support_interface_pattern = choice<SupportInterfacePattern>(
+                           g, n, k, {{"lines", SupportInterfacePattern::Lines},
+                                     {"concentric", SupportInterfacePattern::Concentric},
+                                     {"automatic", SupportInterfacePattern::Automatic}});
+                       return;
+                   }
+                   if (n == "enforce_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 100000)
+                           fail(k, "must be a whole number from 0 to 100000");
+                       s.support_enforce_layers = static_cast<int>(v.get<long long>());
+                       return;
+                   }
+                   if (n == "closing_radius") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 100.0))
+                           fail(k, "must be from 0 to 100 mm");
+                       s.support_closing_radius = d;
+                       return;
+                   }
+                   if (n == "interface_spacing") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 100.0))
+                           fail(k, "must be from 0 to 100 mm");
+                       s.support_interface_spacing = d;
                        return;
                    }
                    if (n == "style") {
-                       s.support_style = choice<SupportStyle>(g, n, k, {{"grid", SupportStyle::Grid}, {"organic", SupportStyle::Organic}});
+                       s.support_style = choice<SupportStyle>(
+                           g, n, k, {{"grid", SupportStyle::Grid}, {"snug", SupportStyle::Snug}, {"organic", SupportStyle::Organic}});
                        return;
                    }
                    if (n.starts_with("tree_")) {
@@ -2910,10 +2962,17 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.xy_gap", s.support_xy_gap.percent ? num(s.support_xy_gap.value) + "%" : num(s.support_xy_gap.value)},
         {"support.width", s.support_width.percent ? num(s.support_width.value) + "%" : num(s.support_width.value)},
         {"support.line_angle", num(s.support_line_angle)},
+        {"support.pattern", support_pattern_name(s.support_pattern)},
+        {"support.enforce_layers", std::to_string(s.support_enforce_layers)},
+        {"support.sheath", s.support_sheath ? "true" : "false"},
+        {"support.interface_pattern", support_interface_pattern_name(s.support_interface_pattern)},
+        {"support.interface_spacing", num(s.support_interface_spacing)},
+        {"support.interface_contact_loops", s.support_contact_loops ? "true" : "false"},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
         {"support.bottom_interface_layers", std::to_string(s.support_bottom_interface_layers)},
-        {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+        {"support.style", support_style_name(s.support_style)},
+        {"support.closing_radius", num(s.support_closing_radius)},
         {"support.tree_angle", num(s.tree_angle)},
         {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
         {"support.tree_branch_diameter", num(s.tree_branch_diameter)},
@@ -3379,10 +3438,17 @@ std::string settings_json(const Settings& s) {
           {"width", s.support_width.percent ? ordered_json(json(s.support_width.value).dump() + "%")
                                             : ordered_json(s.support_width.value)},
           {"line_angle", s.support_line_angle},
+          {"pattern", support_pattern_name(s.support_pattern)},
+          {"enforce_layers", s.support_enforce_layers},
+          {"sheath", s.support_sheath},
+          {"interface_pattern", support_interface_pattern_name(s.support_interface_pattern)},
+          {"interface_spacing", s.support_interface_spacing},
+          {"interface_contact_loops", s.support_contact_loops},
           {"spacing", s.support_spacing},
           {"interface_layers", s.support_interface_layers},
           {"bottom_interface_layers", s.support_bottom_interface_layers},
-          {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
+          {"style", support_style_name(s.support_style)},
+          {"closing_radius", s.support_closing_radius},
           {"tree_angle", s.tree_angle},
           {"tree_angle_preferred", s.tree_angle_preferred},
           {"tree_branch_diameter", s.tree_branch_diameter},

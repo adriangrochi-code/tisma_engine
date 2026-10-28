@@ -1039,9 +1039,20 @@
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
+    X(SupportPatternRow, "Patrón de la base", "Base pattern") \
+    X(SupportEnforceLayers, "Soporte forzado en las primeras capas", "Enforce support for the first layers") \
+    X(SupportSheath, "Vaina", "Sheath") \
+    X(SupportInterfacePatternRow, "Patrón de la interfaz", "Interface pattern") \
+    X(SupportInterfaceSpacing, "Separación de la interfaz", "Interface spacing") \
+    X(SupportContactLoops, "Lazos de contacto", "Contact loops") \
+    X(PatternLines, "Líneas", "Lines") \
+    X(PatternGrid, "Grilla", "Grid") \
+    X(PatternAutomatic, "Automático", "Automatic") \
     X(SupportInterface, "Capas de interfaz", "Interface layers") \
     X(SupportStyle, "Estilo", "Style") \
     X(SupportGrid, "Grilla", "Grid") \
+    X(SupportSnug, "Ajustado", "Snug") \
+    X(SupportClosingRadius, "Radio de cierre", "Closing radius") \
     X(SupportOrganic, "Árbol (orgánico)", "Tree (organic)") \
     X(SupportStyleTip, "Árbol: ramas redondas que se juntan hacia la cama; menos marcas en la pieza y se quitan fácil", \
       "Tree: round branches that join on their way to the bed; fewer marks on the part, easy to remove") \

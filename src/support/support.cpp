@@ -95,7 +95,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     if (bounds.left > bounds.right)
         return out;
     const std::int64_t pixel = std::max<std::int64_t>(to_units(params.bead / double(kPixelsPerBead)), 1);
-    const int radius = kPixelsPerBead; // the closing: one bead
+    // The closing: one bead, or params.closing.
+    const int radius = params.closing > 0.0 ? std::max(1, int(std::lround(params.closing / to_mm(pixel)))) : kPixelsPerBead;
     // The overhangs grow by the support's margin and a pixel, then the closing.
     const int margin = 2 * radius + 2 + int(std::ceil(params.margin / to_mm(pixel)));
     const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;

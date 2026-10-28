@@ -46,7 +46,12 @@ enum class DraftShield { Disabled, Limited, Enabled };
 // the start and used for the time, used for the time only, or neither.
 enum class LimitsUsage { TimeOnly, Emit, Ignore };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
-enum class SupportStyle { Grid, Organic };
+// grid: on a grid round what hangs; snug: fitted to it (supports_more.md,
+// rule 14); organic: branches.
+enum class SupportStyle { Grid, Organic, Snug };
+// The support base's and interface's patterns (supports_more.md, rules 9 and 11).
+enum class SupportPattern { Lines, Grid, Honeycomb };
+enum class SupportInterfacePattern { Lines, Concentric, Automatic };
 enum class FuzzyMode { None, External, All };
 // How a short layer slows down (cooling_more.md, rule 5): everything alike,
 // or the outer wall and the one that touches it last.
@@ -598,6 +603,19 @@ struct Settings {
     Speed support_width{0.0, false};
     double support_spacing = 2.5;    // mm of free space between the base's lines (a bead's spacing more between centres)
     double support_line_angle = 0.0; // degrees, the base's lines; the interface's at 90 to them
+    // The base's pattern, a loop around each zone of it (the sheath), the
+    // interface's pattern and free space between its lines, and loops around
+    // the top interface's zones (supports_more.md, rules 9 to 12).
+    SupportPattern support_pattern = SupportPattern::Lines;
+    // Support under whatever hangs in the first layers, however steep and
+    // with support off too (supports_more.md, rule 1); 0: none.
+    int support_enforce_layers = 0;
+    // mm: with snug, gaps narrower than twice this between support zones close.
+    double support_closing_radius = 2.0;
+    bool support_sheath = true;
+    SupportInterfacePattern support_interface_pattern = SupportInterfacePattern::Lines;
+    double support_interface_spacing = 0.0; // mm; 0: solid
+    bool support_contact_loops = false;
     // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15
     // to 17): round branches that join on their way down to the bed.
     SupportStyle support_style = SupportStyle::Grid;

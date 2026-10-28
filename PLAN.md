@@ -916,6 +916,11 @@ Con el PR #23 (2026-10-26):
   relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
   sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
   que en el ajuste
+- [ ] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
+  2026-10-28 `pattern`, `sheath`, `interface_pattern`, `interface_spacing` e `interface_contact_loops` (SM6, SM7,
+  SM10), `enforce_layers` (SM1) y el estilo `snug` con `closing_radius` (SM8, SM9); faltan `under_bridges` (S6) y
+  `free_bridge_length` (R5, R6). `fins` (`support_fins.md`) y `waam` son de después de la primera versión, como dicen
+  sus fichas
 - [x] **`cooling.dynamic_overhang_fan`** y `cooling.overhang_fan_0` a `_3` (`cooling_more.md`, reglas 2 a 4, C2;
   hecho 2026-10-28): el ventilador de cada tramo de pared según su apoyo, el mayor con el de la capa
 - [x] **`cooling.slowdown_logic`** `consistent_surface` (`cooling_more.md`, regla 5, C3) y
