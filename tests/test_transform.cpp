@@ -480,3 +480,74 @@ TEST_CASE("model tools: settings of an object and of a part (MT7, MT8, MT11)", "
     CHECK_THROWS_AS(own_settings(s, R"({"walls": {"count": -1}})", "box"), SettingsError);
     CHECK(own_settings(s, "", "box").wall_count == 2);
 }
+
+TEST_CASE("model tools: modifiers give the zone they share their settings (MT5, MT6, MT9, MT10, MT12)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    const auto modifier = [](Vec3f lo, Vec3f hi, std::string own) {
+        MeshModifier m{"modifier", 0, box(lo, hi), std::move(own)};
+        return m;
+    };
+    const auto run = [&](Vec3f hi, const std::string& part_own, const std::vector<MeshModifier>& modifiers) {
+        const TriangleMesh part = box({0, 0, 0}, hi);
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        objects.front().settings = part_own;
+        return slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, nullptr, &modifiers);
+    };
+    // MT5: Z 5 to 20 and X 10 to 30 (out of the part) with 5 walls: no more
+    // layers; below Z 5, 2 walls; above, the -X half 2 and the +X half 5,
+    // each with its own outline.
+    SlicedModel m = run({20, 20, 10}, "", {modifier({10, -5, 5}, {30, 25, 20}, R"({"walls": {"count": 5}})")});
+    REQUIRE(m.layers.size() == 50);
+    CHECK(walls_between(m, 10, -1, 21) == 2);
+    CHECK(walls_between(m, 10, 9.9, 21) == 0); // no zone there: the box's walls go round it all
+    CHECK(walls_between(m, 40, -1, 10.1) == 2);
+    CHECK(walls_between(m, 40, 9.9, 21) == 5);
+    // MT9: the object's 3 walls, its part's 4, a modifier on +X with 5: -X
+    // with 4, +X with 5, on every layer.
+    m = run({40, 20, 10}, R"({"walls": {"count": 4}})",
+            {modifier({20, -5, -5}, {45, 25, 15}, R"({"walls": {"count": 5}})")});
+    for (const std::size_t l : {std::size_t(5), std::size_t(25), std::size_t(45)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 20.1) == 4);
+        CHECK(walls_between(m, l, 19.9, 41) == 5);
+    }
+    // MT12: X 10 to 30 with 3 walls and, later, X 20 to 41 with 5: X 0 to 10
+    // with 2, 10 to 20 with 3, 20 to 40 with 5.
+    m = run({40, 20, 10}, "",
+            {modifier({10, -5, -5}, {30, 25, 15}, R"({"walls": {"count": 3}})"),
+             modifier({20, -5, -5}, {41, 25, 15}, R"({"walls": {"count": 5}})")});
+    CHECK(walls_between(m, 25, -1, 10.1) == 2);
+    CHECK(walls_between(m, 25, 9.9, 20.1) == 3);
+    CHECK(walls_between(m, 25, 19.9, 41) == 5);
+    // The same volume printed: a modifier adds no material.
+    const SlicedModel plain = run({40, 20, 10}, "", {});
+    CHECK(m.layers.size() == plain.layers.size());
+    // MT6: a modifier's layer height changes nothing, and says so.
+    m = run({40, 20, 10}, "", {modifier({20, -5, -5}, {45, 25, 15}, R"({"layers": {"height": 0.1}})")});
+    CHECK(m.layers.size() == 50);
+    REQUIRE(m.notices.size() == 1);
+    CHECK(m.notices.front().find("layer height") != std::string::npos);
+    // MT10: a modifier on +X with 4 walls and a 10 x 10 mm negative volume
+    // across the edge of the two zones: the hole in both, each zone with its
+    // walls, nothing printed in the hole.
+    {
+        const TriangleMesh part = box({0, 0, 0}, {40, 20, 10});
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        const std::vector<MeshModifier> modifiers{modifier({20, -5, -5}, {45, 25, 15}, R"({"walls": {"count": 4}})")};
+        const IndexedMesh hole = weld_exact(box({15, 5, -5}, {25, 15, 15}));
+        m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, &hole, &modifiers);
+        REQUIRE(m.layers.size() == 50);
+        CHECK(m.regions[25].size() == 2); // the outline and the hole
+        CHECK(walls_between(m, 25, 19.9, 41) == 4);
+        CHECK(walls_between(m, 25, -1, 20.1) == 2);
+        bool in_hole = false;
+        for (const std::vector<Toolpath>* paths : {&m.walls[25].toolpaths, &m.fills[25].sparse, &m.fills[25].solid})
+            for (const Toolpath& t : *paths)
+                for (const ToolpathPoint& p : t.points)
+                    in_hole = in_hole || (p.p.x > 15.3 && p.p.x < 24.7 && p.p.y > 5.3 && p.p.y < 14.7);
+        CHECK_FALSE(in_hole);
+    }
+}

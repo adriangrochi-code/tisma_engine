@@ -782,6 +782,11 @@ Settings parse_settings(std::string_view json);
 // surfaces); another throws SettingsError naming the key and `where` (rule 9:
 // refused, not ignored). Empty `own`: `base`.
 Settings own_settings(const Settings& base, std::string_view own, std::string_view where);
+// Two such JSON objects in one, `over`'s keys winning (a modifier's over its
+// part's, model_tools.md rule 5).
+std::string merged_own(std::string_view under, std::string_view over);
+// Such a JSON object without one group; `had` says whether it had it.
+std::string own_without(std::string_view own, std::string_view group, bool* had = nullptr);
 
 // The engine's key for a key of the specs' `material` group
 // ("material.nozzle_temp" → "machine.variables.temperature",

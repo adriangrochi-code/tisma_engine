@@ -27,6 +27,9 @@ std::vector<Warning> model_warnings(const SlicedModel& model) {
             out.push_back({"thin_detail", int(l), z, text, model.thin_area[l]});
         }
     }
+    // Settings of a part left out (model_tools.md, rules 4 and 9).
+    for (const std::string& notice : model.notices)
+        out.push_back({"part_settings", -1, 0.0, notice, 0.0, "information"});
     return out;
 }
 

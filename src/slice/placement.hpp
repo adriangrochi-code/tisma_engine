@@ -39,6 +39,17 @@ struct MeshObject {
     friend bool operator==(const MeshObject&, const MeshObject&) = default;
 };
 
+// A modifier (model_tools.md, rule 3): a mesh that prints nothing. Where it
+// meets the parts of its object (the MeshObject::object they share), they
+// take its settings over theirs; the later modifier wins where two meet
+// (MT12). Its settings are its own keys only, a JSON object of groups.
+struct MeshModifier {
+    std::string name;
+    std::size_t object = 0;
+    TriangleMesh mesh; // in the plate's coordinates
+    std::string settings{};
+};
+
 // Arrange (placement.md, rule 2): the centres for boxes of these sizes (x,
 // y) in a compact grid, `spacing` mm between boxes, the whole set centred on
 // `centre`. Rows of about the square root of the count, filled with the
