@@ -703,6 +703,24 @@ Va antes que lo demás de P1:
   y el apoyo en paralelo, y V6: 159 en vez de 672 ms por cuadro al mover la vista)
 - [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
 
+### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)
+
+El dueño probó la aplicación en Windows. Los errores que informó están arreglados (ver `PROGRESS.md`); quedan sus
+pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene que el equipo de fichas actualice
+`settings_panel.md` antes de los que la contradicen):
+- [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
+  abrir y cerrar (como OrcaSlicer), y más juntas
+- [ ] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
+  impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
+- [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
+  a la impresora conectada
+- [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
+  agregar modelos y formas
+- [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
+- [ ] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles)
+- [ ] La columna de valores corrida en Windows con escala de pantalla (no reproducido al 100 %)
+- [ ] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas
+
 ## Fichas nuevas (2026-10-26)
 
 Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pasa sobre ella.
