@@ -981,6 +981,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
+        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
@@ -6135,7 +6136,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::FanAlways, "cooling.fan_always", s.fan_always);
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
+        whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
     } else if (id == "short_layers") {
+        flag(T::CoolingEnabled, "cooling.enabled", s.cooling_enabled);
         mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
         mm(T::MinSpeed, "cooling.min_speed", s.min_print_speed, 0.0, 100.0, "%.0f mm/s", 0.5f);
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));

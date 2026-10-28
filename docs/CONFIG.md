@@ -396,6 +396,8 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 | `fan_always` | booleano | false | | El ventilador nunca baja de `fan_min`, ni en las capas largas (sí en las primeras, `fan_off_layers`) |
 | `fan_bridges` | número | 100 | 0–100 | Ventilador mientras se imprime un puente, en %; al terminar el puente vuelve el de la capa |
 | `fan_off_layers` | entero | 3 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
+| `full_fan_layer` | entero | 0 | 0–100000 | Capa, contada desde 1, en la que el ventilador llega a su valor: desde la primera con ventilador (después de `fan_off_layers`) sube en línea recta, la capa n con `(n − fan_off_layers) / (full_fan_layer − fan_off_layers)` de lo que le toca. 0, o no mayor que `fan_off_layers`: el valor completo desde la primera (ficha `cooling_more.md`, regla 1, C1) |
+| `enabled` | booleano | true | | El enfriamiento automático (ficha `cooling.md`): apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa (con `fan_always`, `fan_min`); el de los puentes y los cambios por altura siguen |
 | `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (como la primera etapa, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, se frena todo como en las dos etapas. `false`: las dos etapas de siempre, como Tisma Slicer |
 
 ### `placement`

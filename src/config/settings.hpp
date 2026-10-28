@@ -592,6 +592,12 @@ struct Settings {
     bool fan_always = false;       // the fan never below fan_min
     double fan_bridges = 100.0;    // %: the fan while bridging
     int fan_off_layers = 3;        // the first layers print with the fan off
+    // The fan up step by step until this layer (counted from 1) after the
+    // ones without fan (cooling_more.md, rule 1); 0: at once.
+    int full_fan_layer = 0;
+    // Off: no slowing down for the minimum layer time and no fan by layer
+    // time (cooling.md); the bridges' fan and the height changes' stay.
+    bool cooling_enabled = true;
     // The outer walls keep their speed while the rest slows down for the
     // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
     bool keep_outer_speed = true;

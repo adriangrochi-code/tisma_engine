@@ -1577,3 +1577,55 @@ TEST_CASE("extras: the old firmwares' dialects (gcode_extras.md, rule 6, X5)", "
     };
     CHECK(xy(none) == xy(reprap));
 }
+
+TEST_CASE("cooling: the fan up step by step to cooling.full_fan_layer (cooling_more.md, C1), and cooling off", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.fan_off_layers = 3;
+    s.fan_always = true;
+    s.full_fan_layer = 8;
+    // Each layer's fan, from its last M106 or M107 before its first extrusion.
+    const auto fans = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::vector<std::string> by_layer;
+        std::string fan = "M107";
+        bool counted = true;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line == ";LAYER_CHANGE")
+                counted = false;
+            else if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+                fan = line;
+            else if (!counted && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos)
+                by_layer.push_back(fan), counted = true;
+        }
+        return by_layer;
+    };
+    s.fan_min = s.fan_max = 100.0;
+    std::vector<std::string> f = fans(s);
+    REQUIRE(f.size() > 10);
+    CHECK(f[0] == "M107");
+    CHECK(f[2] == "M107");
+    CHECK(f[3] == "M106 S51"); // layer 4: 20 %
+    CHECK(f[4] == "M106 S102");
+    CHECK(f[5] == "M106 S153");
+    CHECK(f[6] == "M106 S204");
+    CHECK(f[7] == "M106 S255"); // layer 8 on: 100 %
+    CHECK(f[10] == "M106 S255");
+    s.fan_min = s.fan_max = 40.0; // 8, 16, 24, 32 and 40 %
+    f = fans(s);
+    CHECK(f[3] == "M106 S20");
+    CHECK(f[7] == "M106 S102");
+    s.full_fan_layer = 0; // without it: the whole value from layer 4
+    f = fans(s);
+    CHECK(f[3] == "M106 S102");
+    // Cooling off: no fan by the layer's time and no slowing down.
+    s.cooling_enabled = false;
+    s.fan_always = false;
+    s.min_layer_time = 1000.0;
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    CHECK(out.str().find("M106 S") == std::string::npos);
+    CHECK(out.str().find(" F1\n") == std::string::npos);
+}

@@ -3644,7 +3644,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         g.reset_times();
         write_layer(l, a, steps);
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
-        const Slowdown slowdown = a.volumetric_flow > 0.0
+        const Slowdown slowdown = a.volumetric_flow > 0.0 || !s.cooling_enabled
                                       ? Slowdown{}
                                       : s.keep_outer_speed
                                       ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
@@ -3666,13 +3666,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The fan: a height change's, else by the layer's time; a slowed layer
         // at fan_max, even among the first layers, which otherwise print
         // without fan (owner's decision, 2026-10-24). Bridges get their own.
+        // Without cooling, no fan by the layer's time (fan_min with fan_always).
+        // Up step by step from the first layer with fan to full_fan_layer
+        // (cooling_more.md, rule 1).
         const bool fan_off = local(l) < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
-        const double fan = a.fan            ? *a.fan
-                           : fan_off        ? 0.0
-                           : slowdown.stage ? s.fan_max
-                                            : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
-                                                        s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
-                                                        s.fan_always);
+        double fan = a.fan               ? *a.fan
+                     : fan_off           ? 0.0
+                     : !s.cooling_enabled ? (s.fan_always ? s.fan_min : 0.0)
+                     : slowdown.stage     ? s.fan_max
+                                          : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
+                                                      s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
+                                                      s.fan_always);
+        if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);
+            !a.fan && full > off && n > off && n < full)
+            fan *= (n - off) / (full - off);
         g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
         const double seconds = g.end_layer();
         if (l == 0)

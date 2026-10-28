@@ -1928,19 +1928,20 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
-                "fan_off_layers", "keep_outer_speed"},
+                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "keep_outer_speed" || n == "fan_always") {
+                   if (n == "keep_outer_speed" || n == "fan_always" || n == "enabled") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "fan_always" ? s.fan_always : s.keep_outer_speed) = g.at(n).get<bool>();
+                       (n == "fan_always" ? s.fan_always : n == "enabled" ? s.cooling_enabled : s.keep_outer_speed) =
+                           g.at(n).get<bool>();
                        return;
                    }
-                   if (n == "fan_off_layers") {
+                   if (n == "fan_off_layers" || n == "full_fan_layer") {
                        const json& v = g.at(n);
-                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
-                           fail(k, "must be a whole number from 0 to 1000");
-                       s.fan_off_layers = static_cast<int>(v.get<long long>());
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 100000)
+                           fail(k, "must be a whole number from 0 to 100000");
+                       (n == "fan_off_layers" ? s.fan_off_layers : s.full_fan_layer) = static_cast<int>(v.get<long long>());
                        return;
                    }
                    if (n == "min_speed" && g.at(n).is_null()) { // not set: from the printer's profile
@@ -2822,6 +2823,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_always", s.fan_always ? "true" : "false"},
         {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
+        {"cooling.full_fan_layer", std::to_string(s.full_fan_layer)},
+        {"cooling.enabled", s.cooling_enabled ? "true" : "false"},
         {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
         {"zaa.enabled", s.zaa ? "true" : "false"},
@@ -3264,6 +3267,8 @@ std::string settings_json(const Settings& s) {
           {"fan_always", s.fan_always},
           {"fan_bridges", s.fan_bridges},
           {"fan_off_layers", s.fan_off_layers},
+          {"full_fan_layer", s.full_fan_layer},
+          {"enabled", s.cooling_enabled},
           {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
