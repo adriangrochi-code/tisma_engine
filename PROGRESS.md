@@ -6718,3 +6718,16 @@ pasan.
 
 **Sigue:** `walls.outer_width` y `layers.first_line_width` (tocan el generador de paredes), y el resto de `walls`.
 
+**`walls.outer_width`** (`perimeters.md`): el cordón de la pared externa con su ancho; los demás siguen en
+`walls.width`, cada uno desde donde termina el anterior, y el relleno empieza donde termina la última pared. En el
+generador variable va en la cáscara (los dos cordones de afuera tienden a su ancho y la rampa empieza más tarde si
+hace falta, para que quede medio cordón libre en el medio); en el de ancho fijo, el primer lazo. Con boquillas
+distintas, en proporción a la de las paredes. En el panel, en «Ancho de línea». **Diferencia con la ficha:** con 0
+vale `walls.width`; la ficha da 0 = 1,125 × la boquilla para los dos, pero no dice qué pasa con `walls.width` fijo y
+la externa en 0 (pregunta enviada al equipo de fichas). Prueba: cubo de 20 mm, 3 paredes de 0,45 con la externa de
+0,6, los dos generadores: anchos 0,6 / 0,45 / 0,45, centros a 0,3, 0,825 y 1,275 mm del borde y el relleno desde
+1,5 mm; con 0, todas de 0,45. Toda la lista: 692 casos, todos pasan.
+
+**Sigue:** `layers.first_line_width` (200 % de la primera capa; toca paredes, rellenos, falda y borde de la primera
+capa) y el resto de `walls`.
+
