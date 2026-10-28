@@ -29,6 +29,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Ajustes de una pieza** (`model_tools.md`, reglas 5, 7 y 8; `settings_levels.md`, reglas 10 y 11): clic derecho
   sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
   la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.
+- **Modificadores en el motor** (`model_tools.md`, reglas 3 a 5): donde un modificador toca las partes de su objeto,
+  esa zona toma sus ajustes (paredes, relleno, capas sólidas) con paredes propias; el de después gana donde dos se
+  pisan, y una altura de capa en un modificador se deja de lado con un aviso. Todavía no se agregan desde la interfaz.
 - **Volúmenes negativos:** un proyecto 3MF con volúmenes negativos los resta de la pieza en cada capa que cruzan, sin
   agregar capas ni mover la pieza (`model_tools.md`, regla 2). Todavía no con corte, separar o copias.
 - **El grupo `material` de las fichas:** `material.nozzle_temp`, `material.bed_temp`, `material.flow_factor`,

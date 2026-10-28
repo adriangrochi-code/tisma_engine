@@ -6477,4 +6477,13 @@ filas del panel sobre una copia de los ajustes con los de la pieza, con una cruz
 
 **Falta:** la lista de objetos con sus filas hijas, leer los ajustes de un 3MF de proyecto, y los demás grupos por pieza.
 
-**Sigue:** modificadores (regla 3; MT4, MT5, MT9, MT10, MT12).
+**Después: modificadores en el motor (reglas 3 a 5).** `slice_model` recibe una lista de `MeshModifier` (malla,
+objeto y ajustes propios). En `slice_tools`, donde un modificador toca las partes de su objeto en un grupo, esa zona
+(la intersección de sus regiones) se lamina como un grupo más, con los ajustes del modificador sobre los de la parte,
+antes que los grupos de las partes, el modificador de después primero. Su altura de capa se deja de lado con un aviso
+(`notices`, aviso `part_settings`). De paso: el negativo y el modificador se compensan (`compensation.scale_*`,
+contracción) alrededor del centro de la pieza, no del suyo. MT5, MT6, MT9, MT10 y MT12 en `[transform]`; 674 de 674 en
+el árbol de trabajo.
+
+**Falta:** MT4 (un modificador que cambia solo el relleno no lleva paredes en su borde), agregarlos desde la
+interfaz, y los rangos de alturas (MT7b, MT13).

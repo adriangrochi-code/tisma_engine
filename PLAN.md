@@ -746,11 +746,14 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   objeto o una parte en el motor (2026-10-27, reglas 5, 7 y 8; MT7, MT8 y MT11): `MeshObject::settings`, paredes,
   relleno y superficies, laminado aparte sobre las capas de la placa; donde dos partes se pisan gana la de después; lo
   que todavía no puede cambiar por parte se rechaza (regla 9). En la interfaz (2026-10-28, `settings_levels.md`,
-  reglas 10 y 11): el menú del clic derecho y la ventana de ajustes de la pieza, guardados en el proyecto. Falta:
-  leerlos del 3MF, la lista de objetos con sus filas hijas (regla 11 de `settings_levels.md`), los demás grupos por
-  objeto (velocidades, temperaturas, altura de capa), los negativos con corte, separar o copias, el
-  plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), modificadores y rangos de alturas (reglas
-  3, 4, 6 y 10), las copias en grilla (regla 15), y el
+  reglas 10 y 11): el menú del clic derecho y la ventana de ajustes de la pieza, guardados en el proyecto.
+  Modificadores en el motor (2026-10-28, reglas 3 a 5; MT5, MT6, MT9, MT10, MT12): `MeshModifier`, la zona que comparte
+  con las partes de su objeto como un grupo propio con sus ajustes sobre los de la parte, el modificador de después
+  primero, y su altura de capa dejada de lado con un aviso. Falta: leer los ajustes del 3MF, la lista de objetos con sus
+  filas hijas (regla 11 de `settings_levels.md`), los demás grupos por objeto (velocidades, temperaturas, altura de
+  capa), los negativos con corte, separar o copias, el plano libre y los conectores del corte, Separar en partes
+  (reglas 18 y 19), los modificadores que cambian solo el relleno sin paredes en su borde (regla 3, MT4), agregar
+  modificadores desde la interfaz, los rangos de alturas (regla 6, MT7b y MT13), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
