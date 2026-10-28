@@ -203,6 +203,19 @@ void apply_style(const Theme& t, float scale) {
 // Thousands as the language groups them: 297 412, or 297,412 in English (TR2).
 std::string number_text(std::size_t n) { return grouped(n); }
 
+// With TISMA_TIMING set, how long each step took since the last one, on
+// stderr: opening a large model, step by step (the owner's priority item,
+// 2026-10-28).
+void timing(const char* step) {
+    static const bool on = std::getenv("TISMA_TIMING") != nullptr;
+    static auto last = std::chrono::steady_clock::now();
+    if (!on)
+        return;
+    const auto now = std::chrono::steady_clock::now();
+    std::fprintf(stderr, "timing: %-24s %8.1f ms\n", step, std::chrono::duration<double, std::milli>(now - last).count());
+    last = now;
+}
+
 // A default or a range as docs/CONFIG.md writes it, in Spanish ("0,1 a 2"),
 // in the interface's language: in English the decimal point and "to"
 // (the spec team's TR3).
@@ -2670,7 +2683,9 @@ void App::open_path(const std::filesystem::path& path) {
 
 void App::load_model(const std::filesystem::path& path) {
     try {
+        timing("before reading");
         ModelFile stl = read_model(path);
+        timing("read the file");
         if (stl.mesh.empty()) {
             fail(T::CannotOpen, utf8(path) + ": the file has no triangles");
             return;
@@ -2727,7 +2742,13 @@ void App::place_model() {
     if (objects_.size() == 1) {
         PlateObject& o = objects_[0];
         o.place.x = o.place.y = 0.0;
-        const BoundingBox box = placed_mesh(o).bounding_box();
+        // Its box set down at the origin, as placed_mesh puts it, without
+        // building the placed mesh twice.
+        const std::array<double, 3> size = placed_size(o);
+        BoundingBox box;
+        box.min = {float(-0.5 * size[0]), float(-0.5 * size[1]), 0.0f};
+        box.max = {float(0.5 * size[0]), float(0.5 * size[1]), float(size[2])};
+        box.empty = o.mesh.empty();
         const Vec3 at = centre_on_bed(box, settings_.bed);
         o.place.x = 0.5 * (double(box.min.x) + double(box.max.x)) + at.x;
         o.place.y = 0.5 * (double(box.min.y) + double(box.max.y)) + at.y;
@@ -2737,6 +2758,7 @@ void App::place_model() {
 
 // The placed meshes, the plate's mesh and the view's copy, from objects_.
 void App::rebuild_plate() {
+    timing("before the plate");
     placed_meshes_.clear();
     object_vertices_.clear();
     std::size_t vertices = 0;
@@ -2745,6 +2767,7 @@ void App::rebuild_plate() {
         object_vertices_.push_back(vertices);
         vertices += 3 * placed_meshes_.back().triangle_count();
     }
+    timing("placed meshes");
     object_vertices_.push_back(vertices);
     paint_dirty_ = true;
     drag_offset_ = {};
@@ -2758,9 +2781,12 @@ void App::rebuild_plate() {
     } else {
         mesh_ = plate_mesh(placed_meshes_);
         placed_ = mesh_->bounding_box();
+        timing("plate mesh");
         const std::vector<float> model = mesh_vertices(*mesh_, offset_);
+        timing("view's vertices");
         renderer_.set_model(model);
         vk_view_.set_model(model);
+        timing("sent to the view");
     }
     if (selected_ >= int(objects_.size()))
         selected_ = int(objects_.size()) - 1;
@@ -10156,6 +10182,11 @@ void App::compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int f
 }
 
 void App::frame() {
+    if (frames_ < 8) {
+        static char step[32];
+        std::snprintf(step, sizeof step, "frame %d", frames_);
+        timing(step);
+    }
     // With nothing moving, sleep until an event (or a tenth of a second)
     // instead of drawing at the screen's rate.
     const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||

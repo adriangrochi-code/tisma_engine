@@ -2,6 +2,7 @@
 
 #include "ui/scene.hpp"
 
+#include <oneapi/tbb/blocked_range.h>
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
@@ -97,18 +98,25 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset) {
 }
 
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
-    std::vector<float> out;
-    out.reserve(mesh.triangle_count() * 18);
-    for (std::size_t t = 0; t < mesh.triangle_count(); ++t) {
-        Vec3 p[3];
-        for (int k = 0; k < 3; ++k) {
-            const Vec3f& c = mesh.corner(t, k);
-            p[k] = Vec3{c.x, c.y, c.z} + offset;
-        }
-        const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
-        for (const Vec3& v : p)
-            out.insert(out.end(), {v.x, v.y, v.z, n.x, n.y, n.z});
-    }
+    // Each triangle's 18 floats in their own place, the triangles in
+    // parallel: a model of millions of triangles (the owner's large-model item).
+    std::vector<float> out(mesh.triangle_count() * 18);
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, mesh.triangle_count(), 4096),
+                      [&](const tbb::blocked_range<std::size_t>& range) {
+                          for (std::size_t t = range.begin(); t != range.end(); ++t) {
+                              Vec3 p[3];
+                              for (int k = 0; k < 3; ++k) {
+                                  const Vec3f& c = mesh.corner(t, k);
+                                  p[k] = Vec3{c.x, c.y, c.z} + offset;
+                              }
+                              const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
+                              float* at = out.data() + 18 * t;
+                              for (const Vec3& v : p) {
+                                  const float row[6] = {v.x, v.y, v.z, n.x, n.y, n.z};
+                                  at = std::copy(row, row + 6, at);
+                              }
+                          }
+                      });
     return out;
 }
 

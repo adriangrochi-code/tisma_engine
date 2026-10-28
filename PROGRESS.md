@@ -7245,3 +7245,21 @@ millones de primitivas.
 
 **Sigue:** medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo
 que más pese.
+
+**Medido, abrir la cúpula en la interfaz** (2 003 996 triángulos, `TISMA_TIMING=1`, GL por software, 4 núcleos
+compartidos con el CI): leer el archivo 149 a 166 ms; antes de la placa 179 ms; mallas puestas en la placa 147 ms;
+malla de la placa 58 ms; vértices de la vista 95 a 102 ms; subirlos a la vista 112 ms; después, cada cuadro tarda 0,9
+a 1,9 s, todo dentro del rasterizador por software (muestreado con gdb: `libgallium`), igual con luz rápida que con
+oclusión. En una GPU real el dibujo no pesa eso; acá no se puede medir.
+
+**Hecho:**
+- `place_model` armaba la malla puesta entera solo para saber su caja; ahora la caja sale de `placed_size`, que
+  recorre las esquinas giradas sin copiarlas (`each_turned`): «antes de la placa» baja de 179 a 55 ms;
+- `placed_mesh` gira las esquinas una sola vez y las usa como la malla (sin una segunda copia): de 147 a 121 ms;
+- `mesh_vertices` arma los vértices en paralelo, cada triángulo en su lugar: de 102 a 94 ms acá (4 núcleos ocupados
+  por el CI; más en una máquina con más núcleos);
+- `TISMA_TIMING=1` escribe en stderr cuánto tarda cada paso al abrir un modelo y los primeros cuadros.
+En total, de unos 0,75 s a unos 0,57 s antes del primer cuadro con 2 millones de triángulos.
+
+**Sigue:** armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo (lo de «Modelos grandes, lo que
+sigue»), y V6 (malla simplificada mientras se mueve) para los cuadros en una GPU real.

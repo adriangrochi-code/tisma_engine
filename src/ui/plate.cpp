@@ -46,21 +46,27 @@ Rotation about(double ax, double ay, double az, double angle) {
             t * ax * az - s * ay, t * ay * az + s * ax, t * az * az + c};
 }
 
-// The corners of the mesh scaled about the box centre and turned, before
-// they are set on the bed.
-std::vector<Vec3f> turned(const PlateObject& o) {
+// Each corner of the mesh scaled about the box centre and turned, before it
+// is set on the bed, to f(corner): no copy of a mesh of millions of
+// triangles just to measure it (the owner's large-model item, 2026-10-28).
+template <class F>
+void each_turned(const PlateObject& o, F&& f) {
     const BoundingBox box = o.mesh.bounding_box();
     const double cx = 0.5 * (double(box.min.x) + double(box.max.x)), cy = 0.5 * (double(box.min.y) + double(box.max.y)),
                  cz = 0.5 * (double(box.min.z) + double(box.max.z));
     const Rotation& r = o.place.rotation;
     const auto& s = o.place.scale;
-    std::vector<Vec3f> out;
-    out.reserve(o.mesh.corners().size());
     for (const Vec3f& v : o.mesh.corners()) {
         const double x = (double(v.x) - cx) * s[0], y = (double(v.y) - cy) * s[1], z = (double(v.z) - cz) * s[2];
-        out.push_back({float(r[0] * x + r[1] * y + r[2] * z), float(r[3] * x + r[4] * y + r[5] * z),
-                       float(r[6] * x + r[7] * y + r[8] * z)});
+        f(Vec3f{float(r[0] * x + r[1] * y + r[2] * z), float(r[3] * x + r[4] * y + r[5] * z),
+                float(r[6] * x + r[7] * y + r[8] * z)});
     }
+}
+
+std::vector<Vec3f> turned(const PlateObject& o) {
+    std::vector<Vec3f> out;
+    out.reserve(o.mesh.corners().size());
+    each_turned(o, [&](const Vec3f& v) { out.push_back(v); });
     return out;
 }
 
@@ -113,11 +119,9 @@ TriangleMesh placed_mesh(const PlateObject& object) {
         x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y),
         z0 = std::min(z0, v.z);
     const double dx = object.place.x - 0.5 * (double(x0) + double(x1)), dy = object.place.y - 0.5 * (double(y0) + double(y1));
-    out.reserve(p.size() / 3);
-    const auto at = [&](const Vec3f& v) { return Vec3f{float(v.x + dx), float(v.y + dy), v.z - z0}; };
-    for (std::size_t i = 0; i + 2 < p.size(); i += 3)
-        out.add_triangle(at(p[i]), at(p[i + 1]), at(p[i + 2]));
-    return out;
+    for (Vec3f& v : p) // set down where it goes, in place: the turned corners become the mesh
+        v = Vec3f{float(v.x + dx), float(v.y + dy), v.z - z0};
+    return TriangleMesh(std::move(p));
 }
 
 TriangleMesh plate_mesh(const std::vector<TriangleMesh>& placed) {
@@ -173,13 +177,16 @@ PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<
 }
 
 std::array<double, 3> placed_size(const PlateObject& object) {
-    const std::vector<Vec3f> p = turned(object);
-    if (p.empty())
+    if (object.mesh.empty())
         return {0.0, 0.0, 0.0};
-    Vec3f lo = p[0], hi = p[0];
-    for (const Vec3f& v : p)
-        lo = {std::min(lo.x, v.x), std::min(lo.y, v.y), std::min(lo.z, v.z)},
+    bool first = true;
+    Vec3f lo{}, hi{};
+    each_turned(object, [&](const Vec3f& v) {
+        if (first)
+            lo = hi = v, first = false;
+        lo = {std::min(lo.x, v.x), std::min(lo.y, v.y), std::min(lo.z, v.z)};
         hi = {std::max(hi.x, v.x), std::max(hi.y, v.y), std::max(hi.z, v.z)};
+    });
     return {double(hi.x - lo.x), double(hi.y - lo.y), double(hi.z - lo.z)};
 }
 

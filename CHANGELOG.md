@@ -68,6 +68,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Abrir modelos grandes:** con 2 millones de triángulos, de unos 0,75 s a unos 0,57 s antes del primer cuadro
+  (la caja de la pieza sin armar la malla dos veces, una copia menos y los vértices de la vista en paralelo).
+  `TISMA_TIMING=1` muestra cuánto tarda cada paso.
+
 - **Las superficies de abajo van en líneas monótonas** (`surfaces.bottom_pattern`, `monotonic` por defecto, como la
   ficha): sin unirlas en zigzag. Las capas sólidas bajo una superficie de arriba siguen en zigzag.
 - **El relleno poco denso une sus líneas por tramos de hasta 50 mm** siguiendo el borde (`infill.max_link`); antes, solo

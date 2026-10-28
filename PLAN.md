@@ -686,8 +686,9 @@ Va antes que lo demás de P1:
   `--look 100,100,20,260,30,85`): con oclusión ambiental, cuadrados oscuros en la cara de arriba y el borde en
   escalones; a 30° se ve bien. Parece que la oclusión o el mapa de sombras se quedan sin resolución cuando la pieza
   llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una
-- [ ] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
-  pese; anotar los números
+- [x] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
+  pese; anotar los números (2026-10-28: `TISMA_TIMING`; de 0,75 a 0,57 s con 2 millones de triángulos; los cuadros,
+  en el rasterizador por software de este contenedor, no se pueden medir acá)
 - [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
 
 ## Fichas nuevas (2026-10-26)
