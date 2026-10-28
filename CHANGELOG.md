@@ -52,6 +52,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **El cordón del medio llega más tarde:** una pared pasa a 3 o 5 cordones recién cuando el del medio tendría unos
+  0,8 cordones de ancho (`perimeters.md`, tabla P2: 2 cordones en 1,1 mm y 3 en 1,2; 4 en 1,9 y 5 en 2,0). Antes
+  aparecía medio cordón antes.
+
 - **Cordón del medio solo en esquinas cerradas:** una pared pasa por cantidades impares de cordones solo en las
   esquinas del contorno de 10° o menos (`walls.transition_angle`, `perimeters.md` P14); antes, hasta 45°.
 

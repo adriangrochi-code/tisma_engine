@@ -6855,3 +6855,15 @@ bisectriz es 180° − θ. Antes el motor usaba α_max = 135° fijo (esquinas de
 de 5° y 10° y solo pares en la de 20°; con 30°, todas). El fuzzer con el escalonado: 1500 corridas (semilla
 20261031), 0 fallas. Toda la lista: 701 casos, todos pasan. **Sigue:** `walls.transition_margin` (P13) y
 `walls.vertical_shell` (W4).
+
+**El cordón del medio, contra P2.** Al mirar P13 apareció que la pared de 1,1 mm daba 3 cordones en el motor y 2 en
+Tisma Slicer. En P2 y P11 los saltos a una cantidad par (1→2, 3→4, 5→6) caen medio cordón después del anterior,
+como en la ecuación 5 de Kuipers et al., pero los saltos a una impar (2→3, 4→5), que agregan el cordón del medio,
+llegan cuando ese cordón tendría unos 0,8 cordones de ancho. El reparto toma ahora ese umbral (parámetro
+`odd_centre`, 0,8 en el corte; 0 deja la ecuación tal cual para las pruebas del artículo). Las filas de 1,1 (dos
+de 0,571 a ±0,264), 1,2, 1,9 (0,450 / 0,564 / 0,564 / 0,450) y 2,0 mm de P2 dan los números de la ficha. Toda la
+lista: 701 casos, todos pasan; fuzzer 400 corridas (semilla 20261101), 0 fallas.
+
+**`walls.transition_margin` (P13) queda abierto:** con el umbral nuevo el salto 2→3 cae en 1,18 mm, cerca de lo que
+muestran las tiras de P13 sin margen, pero las filas con margen no siguen ni un largo mínimo ni una histéresis del
+tamaño del margen (lo dice la ficha). Hace falta otra medición para encontrar la regla.
