@@ -851,8 +851,9 @@ public:
         // plastic, retractions too; the engine counts filament as ever.
         if (s.volumetric_e)
             e_scale_ = filament_area_;
-        // The melt limit: the lower of the hot end's and the filament's (0: none).
-        for (const double limit : {s.machine_max_flow, s.filament_max_flow})
+        // The melt limit: the lowest of the hot end's, the filament's and the
+        // print's own (speed.max_flow, gcode_motion.md, rule 4); 0: none.
+        for (const double limit : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
         feed_limit_ = std::max(s.max_feed_x, s.max_feed_y);

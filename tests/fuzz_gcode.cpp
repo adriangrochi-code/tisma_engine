@@ -332,6 +332,7 @@ int main(int argc, char** argv) {
         }
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
         s.filament_max_flow = pick(4) == 0 ? uni(2, 30) : 0.0;
+        s.speed_max_flow = pick(5) == 0 ? uni(2, 30) : 0.0;
         s.pressure_advance = pick(4) == 0 ? uni(0, 0.1) : 0.0;
         s.acceleration = uni(300, 10000);
         s.travel_acceleration = uni(300, 10000);

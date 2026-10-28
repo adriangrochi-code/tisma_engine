@@ -108,7 +108,7 @@ const std::vector<SectionLayout>& print_layout() {
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}, {"speed.support_interface", A}}},
           {"travel", T::SubTravelSpeed,
            {{"speed.travel", N}, {"speed.travel_z", A}, {"travel.avoid_crossing_walls", N}, {"travel.max_detour", A}}},
-          {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
+          {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.max_flow", A}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
           {"overhang_speeds", T::SubOverhangSpeeds,
            {{"speed.dynamic_overhangs", N},
             {"speed.overhang_0", A},

@@ -145,6 +145,7 @@
     X(SpeedSupport, "Soporte", "Support")                                                                             \
     X(SpeedTravel, "Viajes", "Travel")                                                                                \
     X(SpeedFirstLayer, "Primera capa", "First layer")                                                                 \
+    X(SpeedMaxFlow, "Caudal máximo", "Maximum flow")                                                                  \
     X(SpeedMax, "Máxima", "Maximum")                                                                                  \
     X(LoadSettings, "Cargar…", "Load…")                                                                               \
     X(SaveSettings, "Guardar…", "Save…")                                                                              \

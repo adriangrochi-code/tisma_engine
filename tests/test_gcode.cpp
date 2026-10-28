@@ -557,6 +557,15 @@ TEST_CASE("capabilities: the flow limit caps the feed, the chamber is heated, an
     s.machine_max_flow = 0.0;
     CHECK(highest_flow(cube_gcode(s), s.filament_diameter) <= 3.0 * 1.02);
     s.filament_max_flow = 0.0;
+    // The print's own cap, speed.max_flow (gcode_motion.md, rule 4), the lowest of the three.
+    s.speed_max_flow = 2.5;
+    const std::string own = cube_gcode(s);
+    CHECK(highest_flow(own, s.filament_diameter) <= 2.5 * 1.02);
+    CHECK(highest_flow(own, s.filament_diameter) > 2.5 * 0.8);
+    s.machine_max_flow = 2.0;
+    CHECK(highest_flow(cube_gcode(s), s.filament_diameter) <= 2.0 * 1.02);
+    s.machine_max_flow = 0.0;
+    s.speed_max_flow = 0.0;
 
     // The chamber: heated at the start and turned off at the end, no hotter than the machine heats it.
     CHECK(chamber_gcode(GcodeFlavor::Marlin, 45.0) == "M141 S45 ; the chamber");

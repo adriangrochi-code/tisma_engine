@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`speed.max_flow`** (ficha `gcode_motion.md`, regla 4): un tope de caudal propio del perfil de impresión, en mm³/s;
+  vale el menor entre él, `machine.max_flow` y `extrusion.max_flow`.
+
 - **`speed.small_loops`** (ficha `gcode_motion.md`, regla 3): los perímetros cerrados de menos de 40,84 mm, también el
   externo, van a esa velocidad, en mm/s o un porcentaje de `speed.walls`. Sin valor, cada pared a la suya.
 

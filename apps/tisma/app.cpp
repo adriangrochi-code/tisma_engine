@@ -918,6 +918,7 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
         {T::SpeedSmallLoops, "speed.small_loops"},
         {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
@@ -5901,6 +5902,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.max_detour.value <= 0.0 ? "—" : s.max_detour.percent ? "%.0f %%" : "%.1f mm", 0.1f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::SpeedMaxFlow, "speed.max_flow", s.speed_max_flow, 0.0, 200.0,
+           s.speed_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
         mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
            s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
         mm(T::FlowSlopeDown, "speed.flow_slope_down", s.flow_slope_down, 0.0, 1000.0,

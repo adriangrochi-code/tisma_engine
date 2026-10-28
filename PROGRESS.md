@@ -7131,3 +7131,17 @@ esperan a que sus fichas lleguen a `main`.
   fichas, no un error).
 
 **Probado:** toda la lista, 720 casos, pasan; el fuzzer, 400 corridas con la semilla 20261028, 0 fallas.
+
+## 2026-10-28 (tarde): `speed.max_flow`
+
+**Hecho:** `speed.max_flow` (`gcode_motion.md`, regla 4): el tope de caudal del perfil de impresión, en mm³/s (0, sin
+tope). Ninguna extrusión pasa el menor entre él, `machine.max_flow` y `extrusion.max_flow`; la velocidad baja como
+con los otros dos. En el panel, en «Topes de velocidad», nivel Avanzado; es de las que cambian solo el G-code (la
+prueba de laminado por etapas la incluye, y también `speed.small_loops`); el fuzzer la sortea.
+
+**Probado:** en el cubo, con 2,5 mm³/s ningún tramo pasa 2,55 y alguno pasa 2; con `machine.max_flow` en 2, manda
+el de la máquina.
+
+**Sigue:** `machine.high_flow_nozzle`, `object`, `extrusion` (pellets), `filament.transmission_distance`, `orient`,
+y los sueltos (`layers.first_line_width` ya leído; `mixing.purge_infill_max`, `placement.drop_to_bed`,
+`retraction.coast`).

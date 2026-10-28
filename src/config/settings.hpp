@@ -529,6 +529,7 @@ struct Settings {
     double travel_speed = 0.0;
     double first_layer_speed = 0.0;
     double max_speed = 0.0; // no extrusion goes faster; 0: no cap
+    double speed_max_flow = 0.0; // mm3/s the print's own flow cap (speed.max_flow); 0: none
     // Speeds of their own (gcode_motion.md; speeds_accels.md, rules 1 to 4),
     // also from the printer's profile; 0: the one in brackets.
     double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)

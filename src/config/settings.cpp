@@ -1868,7 +1868,7 @@ Settings parse_checked(std::string_view text) {
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
                 "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft",
-                "support_interface", "small_loops"},
+                "support_interface", "small_loops", "max_flow"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -1876,6 +1876,13 @@ Settings parse_checked(std::string_view text) {
                        if (!(d >= 0.0 && d <= 1000.0))
                            fail(k, "must be from 0 to 1000 mm3/s2");
                        (n == "flow_slope_up" ? s.flow_slope_up : s.flow_slope_down) = d;
+                       return;
+                   }
+                   if (n == "max_flow") { // mm3/s, not a speed: 0 is no cap (gcode_motion.md, rule 4)
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 1000.0))
+                           fail(k, "must be from 0 (no cap) to 1000 mm3/s");
+                       s.speed_max_flow = d;
                        return;
                    }
                    if (n == "dynamic_overhangs") {
@@ -3095,6 +3102,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.travel", speed(s.travel_speed)},
         {"speed.first_layer", speed(s.first_layer_speed)},
         {"speed.max", speed(s.max_speed)},
+        {"speed.max_flow", num(s.speed_max_flow)},
         {"speed.bridges", speed(s.bridge_speed)},
         {"speed.gap_fill", speed(s.gap_fill_speed)},
         {"speed.over_bridges", share(s.over_bridges_speed)},
@@ -3593,6 +3601,7 @@ std::string settings_json(const Settings& s) {
           {"travel", speed(s.travel_speed)},
           {"first_layer", speed(s.first_layer_speed)},
           {"max", speed(s.max_speed)},
+          {"max_flow", s.speed_max_flow},
           {"bridges", speed(s.bridge_speed)},
           {"gap_fill", speed(s.gap_fill_speed)},
           {"over_bridges", share(s.over_bridges_speed)},
