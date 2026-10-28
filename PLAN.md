@@ -745,8 +745,10 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Ajustes propios de un
   objeto o una parte en el motor (2026-10-27, reglas 5, 7 y 8; MT7, MT8 y MT11): `MeshObject::settings`, paredes,
   relleno y superficies, laminado aparte sobre las capas de la placa; donde dos partes se pisan gana la de después; lo
-  que todavía no puede cambiar por parte se rechaza (regla 9). Falta: ponerlos desde la interfaz y leerlos del 3MF, los
-  demás grupos por objeto (velocidades, temperaturas, altura de capa), los negativos con corte, separar o copias, el
+  que todavía no puede cambiar por parte se rechaza (regla 9). En la interfaz (2026-10-28, `settings_levels.md`,
+  reglas 10 y 11): el menú del clic derecho y la ventana de ajustes de la pieza, guardados en el proyecto. Falta:
+  leerlos del 3MF, la lista de objetos con sus filas hijas (regla 11 de `settings_levels.md`), los demás grupos por
+  objeto (velocidades, temperaturas, altura de capa), los negativos con corte, separar o copias, el
   plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), modificadores y rangos de alturas (reglas
   3, 4, 6 y 10), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)

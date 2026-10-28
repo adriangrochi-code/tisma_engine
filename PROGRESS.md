@@ -6465,3 +6465,16 @@ en el árbol de trabajo.
 
 **Sigue:** poner esos ajustes desde la interfaz (`settings_levels.md`, reglas 10 y 11), después modificadores y rangos
 de alturas (P4).
+
+## 2026-10-28 — Ajustes de una pieza en la interfaz
+
+**Hecho:** clic derecho sobre una pieza abre su menú (`settings_levels.md`, regla 10): en Básico solo el aviso de que
+esto está en Normal y Avanzado; en los demás, «Relleno», «Capas y perímetros», «Capas sólidas» y «Agregar ajuste ▸».
+Cada uno agrega los ajustes con el valor del perfil y abre la ventana «Ajustes de …» (regla 11), que dibuja las mismas
+filas del panel sobre una copia de los ajustes con los de la pieza, con una cruz por ajuste. Se guardan en el proyecto
+(`models[i].settings`, revisados al abrir) y pasan a las piezas de un corte o de separar. Funciones puras en
+`src/ui/plate.*` con su prueba; captura `ui_object_settings`.
+
+**Falta:** la lista de objetos con sus filas hijas, leer los ajustes de un 3MF de proyecto, y los demás grupos por pieza.
+
+**Sigue:** modificadores (regla 3; MT4, MT5, MT9, MT10, MT12).

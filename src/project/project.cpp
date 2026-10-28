@@ -83,6 +83,8 @@ std::string write_project(const Project& project) {
             models.back()["wipe_into_infill"] = true;
         if (m.wipe_into_object)
             models.back()["wipe_into_object"] = true;
+        if (!m.settings.empty())
+            models.back()["settings"] = ordered_json::parse(m.settings);
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -236,6 +238,16 @@ static Project read_project_checked(std::string_view data) {
                         fail(what + "." + key + ": must be true or false");
                     *flag = m.at(key).get<bool>();
                 }
+            if (m.contains("settings")) {
+                if (!m.at("settings").is_object())
+                    fail(what + ".settings: must be an object of groups");
+                model.settings = m.at("settings").dump();
+                try {
+                    own_settings(p.settings, model.settings, model.name);
+                } catch (const SettingsError& e) {
+                    fail(what + ".settings: " + e.what());
+                }
+            }
             p.models.push_back(std::move(model));
         }
     }

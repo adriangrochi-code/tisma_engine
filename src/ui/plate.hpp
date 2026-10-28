@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
 #include "ui/math.hpp"
@@ -40,6 +41,9 @@ struct PlateObject {
     // (multi_extruder.md, rules 1 and 13).
     int extruder = 1;
     bool wipe_into_infill = false, wipe_into_object = false;
+    // Its own settings (model_tools.md, rule 7; settings_levels.md, rules 10
+    // and 11): a JSON object of groups over the profile's; empty: none.
+    std::string settings{};
 };
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
@@ -126,5 +130,17 @@ std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std:
 
 // The unit normal of a triangle of a mesh (from its winding).
 Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t triangle);
+
+// An object's own settings (settings_levels.md, rules 10 and 11), as the
+// JSON text PlateObject::settings holds: the keys it sets ("infill.density"),
+// in order; a key added with the profile's value now; a key taken away; and
+// its keys' values taken from settings edited in the panel.
+std::vector<std::string> own_keys(const std::string& own);
+std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key);
+std::string without_own_key(const std::string& own, std::string_view key);
+std::string own_values(const std::string& own, const Settings& edited);
+// The keys an object may set today (walls, infill and surfaces; own_settings
+// refuses the rest), in the panel's order.
+std::vector<std::string> own_setting_keys(const Settings& profile);
 
 } // namespace tisma::ui

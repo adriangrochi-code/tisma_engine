@@ -444,6 +444,11 @@ private:
     // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
     bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset);
     bool card_rows(std::string_view id, bool& bed);
+    // An object's menu and the window with its own settings (settings_levels.md, rules 10 and 11).
+    void object_menu();
+    void object_settings_window();
+    int object_settings_ = -1;       // the object whose settings window is open
+    std::set<std::string> row_only_; // while drawing an object's settings: the rows to show
     bool setting_shown(std::string_view key, std::string_view card) const;
     bool setting_applies(std::string_view key) const;
     bool card_shown(const SubsectionLayout& sub) const;
@@ -2238,6 +2243,15 @@ bool App::init(std::string& error) {
         cut_height_ = options_.cut;
         cut_selected();
     }
+    if (!options_.object_settings.empty() && !objects_.empty()) {
+        try {
+            own_settings(settings_, options_.object_settings, objects_.front().name);
+            objects_.front().settings = options_.object_settings;
+            selected_ = object_settings_ = 0;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, e.what());
+        }
+    }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
     if (options_.tool == "mixing") {
         mixing_open_ = true;
@@ -2809,6 +2823,7 @@ void App::open_project(const std::filesystem::path& path) {
             o.extruder = m.extruder;
             o.wipe_into_infill = m.wipe_into_infill;
             o.wipe_into_object = m.wipe_into_object;
+            o.settings = m.settings;
             const BoundingBox box = o.mesh.bounding_box();
             o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
             o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
@@ -2863,7 +2878,8 @@ void App::save_project_to(const std::filesystem::path& path) {
     // Each model as placed on the bed, its turn and scale applied.
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
         p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
-                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
+                            objects_[i].settings});
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
     if (calibration_)
@@ -3417,12 +3433,13 @@ void App::start_slice() {
     std::vector<MeshObject> objects;
     for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
-                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object, objects_[i].settings});
         first += placed_meshes_[i].triangle_count();
     }
     // The objects go to the slicer when there are several, or when each may
     // print with its own extruder or a mixed colour.
-    const bool by_object = objects.size() > 1 || settings.extruders > 1;
+    const bool by_object = objects.size() > 1 || settings.extruders > 1 ||
+                           std::any_of(objects_.begin(), objects_.end(), [](const PlateObject& o) { return !o.settings.empty(); });
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
@@ -5515,6 +5532,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // A row shows if the panel shows its setting; one shown only because it
     // differs from the profile carries its level.
     const auto shown = [&](const char* key) {
+        // An object's window shows its own settings' rows, whatever the level.
+        if (!row_only_.empty()) {
+            if (!row_only_.contains(key))
+                return false;
+            g_row_key = key;
+            return true;
+        }
         if (!setting_shown(key, id))
             return false;
         const std::optional<SettingPlace> place = setting_place(key);
@@ -6623,6 +6647,14 @@ void App::viewport() {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
     }
+    // A right click on a model, not a drag: its menu (settings_levels.md, rule 10).
+    if (editing && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f)
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+            selected_ = int(hit->object);
+            ImGui::OpenPopup("##object_menu");
+        }
+    object_menu();
     ImGui::End();
     ImGui::PopStyleVar();
 }
@@ -6726,6 +6758,124 @@ void App::view_tools() {
 
 // The plate's tools (docs/UI.md, «Herramientas de la placa»): a column at
 // the left of the view, and next to it the chosen tool's numbers.
+// A model's menu (settings_levels.md, rule 10): at the Normal and Advanced
+// levels, shortcuts that give it settings of its own, starting from the
+// profile's values, and any other setting it may have.
+void App::object_menu() {
+    if (!ImGui::BeginPopup("##object_menu"))
+        return;
+    if (selected_ < 0 || std::size_t(selected_) >= objects_.size()) {
+        ImGui::EndPopup();
+        return;
+    }
+    PlateObject& o = objects_[std::size_t(selected_)];
+    ImGui::TextDisabled("%s", o.name.c_str());
+    ImGui::Separator();
+    if (view_level_ == ViewLevel::Basic) {
+        ImGui::TextDisabled("%s", tr(T::ObjectSettingsBasic));
+        ImGui::EndPopup();
+        return;
+    }
+    const auto add = [&](const std::vector<std::string_view>& keys) {
+        for (const std::string_view key : keys)
+            o.settings = with_own_key(o.settings, settings_, key);
+        object_settings_ = selected_;
+        plate_changed();
+    };
+    if (ImGui::MenuItem(tr(T::ObjectInfill)))
+        add({"infill.density", "infill.pattern"});
+    if (ImGui::MenuItem(tr(T::ObjectWalls)))
+        add({"walls.count"});
+    if (ImGui::MenuItem(tr(T::ObjectSurfaces)))
+        add({"surfaces.top_layers", "surfaces.bottom_layers"});
+    if (ImGui::BeginMenu(tr(T::ObjectAddSetting))) {
+        const std::vector<std::string> mine = own_keys(o.settings);
+        for (const std::string& key : own_setting_keys(settings_))
+            if (setting_place(key) && std::find(mine.begin(), mine.end(), key) == mine.end() &&
+                ImGui::MenuItem((key_label(key) + "##" + key).c_str()))
+                add({key});
+        ImGui::EndMenu();
+    }
+    if (!o.settings.empty() && ImGui::MenuItem(tr(T::ObjectSettingsOpen)))
+        object_settings_ = selected_;
+    ImGui::EndPopup();
+}
+
+// The window with a model's own settings (rule 11): the panel's rows for its
+// keys, on its values, each with a cross to give it back to the profile.
+void App::object_settings_window() {
+    if (object_settings_ < 0 || std::size_t(object_settings_) >= objects_.size()) {
+        object_settings_ = -1;
+        return;
+    }
+    PlateObject& o = objects_[std::size_t(object_settings_)];
+    bool open = true;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 400.0f * scale_, vp->Pos.y + 120.0f * scale_),
+                            ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(380.0f * scale_, 0.0f), ImGuiCond_Appearing);
+    const std::string title = format(tr(T::ObjectSettingsTitle), o.name.c_str()) + "###object_settings";
+    if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", tr(T::ObjectSettingsHint));
+        ImGui::PopTextWrapPos();
+        const std::vector<std::string> keys = own_keys(o.settings);
+        if (keys.empty())
+            ImGui::TextDisabled("%s", tr(T::ObjectSettingsNone));
+        // Its cards, each once, in the order of its keys.
+        std::vector<const SubsectionLayout*> cards;
+        for (const std::string& key : keys)
+            if (const std::optional<SettingPlace> place = setting_place(key))
+                if (std::find(cards.begin(), cards.end(), place->subsection) == cards.end())
+                    cards.push_back(place->subsection);
+        Settings mine = settings_;
+        try {
+            mine = own_settings(settings_, o.settings, o.name);
+        } catch (const std::exception&) {
+        }
+        bool changed = false, bed = false;
+        row_only_ = std::set<std::string>(keys.begin(), keys.end());
+        std::swap(settings_, mine);
+        for (const SubsectionLayout* card : cards) {
+            ImGui::SeparatorText(tr(card->title));
+            ImGui::PushID(card->id.data(), card->id.data() + card->id.size());
+            changed |= card_rows(card->id, bed);
+            ImGui::PopID();
+        }
+        std::swap(settings_, mine);
+        row_only_.clear();
+        if (changed) {
+            o.settings = own_values(o.settings, mine);
+            plate_changed();
+        }
+        ImGui::Spacing();
+        for (const std::string& key : keys) {
+            ImGui::PushID(key.c_str());
+            if (ImGui::SmallButton(("× " + key_label(key)).c_str())) {
+                o.settings = without_own_key(o.settings, key);
+                plate_changed();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", tr(T::ObjectSettingsRemove));
+            ImGui::PopID();
+        }
+        if (ImGui::Button(tr(T::ObjectAddSetting)))
+            ImGui::OpenPopup("##add_own");
+        if (ImGui::BeginPopup("##add_own")) {
+            for (const std::string& key : own_setting_keys(settings_))
+                if (setting_place(key) && std::find(keys.begin(), keys.end(), key) == keys.end() &&
+                    ImGui::Selectable((key_label(key) + "##" + key).c_str())) {
+                    o.settings = with_own_key(o.settings, settings_, key);
+                    plate_changed();
+                }
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::End();
+    if (!open)
+        object_settings_ = -1;
+}
+
 void App::plate_tools() {
     const float size = 34.0f * scale_, margin = 12.0f * scale_;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
@@ -7095,6 +7245,7 @@ void App::split_selected() {
         PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
         p.extruder = o.extruder;
         p.wipe_into_infill = o.wipe_into_infill, p.wipe_into_object = o.wipe_into_object;
+        p.settings = o.settings;
         parts.push_back(std::move(p));
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
@@ -7135,6 +7286,7 @@ void App::cut_selected() {
     for (PlateObject* half : {&below, &above}) {
         half->extruder = o.extruder;
         half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
+        half->settings = o.settings;
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
     objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
@@ -8809,8 +8961,10 @@ void App::layout() {
             help_panel();
         status_bar();
         view_tools();
-        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_) {
             plate_tools();
+            object_settings_window();
+        }
         mixing_dialog();
         if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
             empty_hint();

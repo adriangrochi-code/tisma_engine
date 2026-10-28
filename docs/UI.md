@@ -62,6 +62,14 @@ a centrar. **Laminar** corre el motor en segundo plano y la ventana sigue respon
 
 #### Herramientas de la placa
 
+**Ajustes de una pieza** (fichas `settings_levels.md`, reglas 10 y 11, y `model_tools.md`, regla 7): clic derecho
+sobre una pieza abre su menú. En el nivel Básico solo dice que esto está en Normal y Avanzado; en los demás ofrece
+«Relleno», «Capas y perímetros», «Capas sólidas» y «Agregar ajuste ▸» (paredes, relleno y capas sólidas). Cada uno
+agrega a la pieza esos ajustes con el valor del perfil y abre la ventana «Ajustes de …», con las mismas filas del
+panel, una cruz por ajuste para devolverlo al perfil y «Agregar ajuste». Se guardan en el proyecto
+(`models[i].settings`) y pasan a las piezas que salen de un corte o de separar. `--object-settings JSON` le pone esos
+ajustes a la primera pieza al abrir, para las capturas.
+
 La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
 izquierda de la vista 3D, una columna con:
 

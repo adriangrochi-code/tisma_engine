@@ -26,8 +26,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
-- **Ajustes de un objeto o de una parte en el motor** (`model_tools.md`, reglas 5, 7 y 8): paredes, relleno y
-  superficies propios, con la parte de después ganando donde dos se pisan. Todavía no se ponen desde la interfaz.
+- **Ajustes de una pieza** (`model_tools.md`, reglas 5, 7 y 8; `settings_levels.md`, reglas 10 y 11): clic derecho
+  sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
+  la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.
 - **Volúmenes negativos:** un proyecto 3MF con volúmenes negativos los resta de la pieza en cada capa que cruzan, sin
   agregar capas ni mover la pieza (`model_tools.md`, regla 2). Todavía no con corte, separar o copias.
 - **El grupo `material` de las fichas:** `material.nozzle_temp`, `material.bed_temp`, `material.flow_factor`,

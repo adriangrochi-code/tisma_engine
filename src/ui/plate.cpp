@@ -6,6 +6,8 @@
 
 #include "slice/placement.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -373,6 +375,75 @@ std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std:
             best = PlateHit{o, h->first, h->second};
     }
     return best;
+}
+
+namespace {
+
+nlohmann::ordered_json own_json(const std::string& own) {
+    if (own.empty())
+        return nlohmann::ordered_json::object();
+    nlohmann::ordered_json j = nlohmann::ordered_json::parse(own);
+    return j.is_object() ? j : nlohmann::ordered_json::object();
+}
+
+std::pair<std::string, std::string> split_key(std::string_view key) {
+    const std::size_t dot = key.find('.');
+    if (dot == std::string_view::npos)
+        return {std::string(key), {}};
+    return {std::string(key.substr(0, dot)), std::string(key.substr(dot + 1))};
+}
+
+} // namespace
+
+std::vector<std::string> own_keys(const std::string& own) {
+    std::vector<std::string> out;
+    const nlohmann::ordered_json j = own_json(own);
+    for (const auto& [group, keys] : j.items())
+        if (keys.is_object())
+            for (const auto& [key, value] : keys.items())
+                out.push_back(group + "." + key);
+    return out;
+}
+
+std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key) {
+    nlohmann::ordered_json j = own_json(own);
+    const auto [group, name] = split_key(key);
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(profile));
+    if (!all.contains(group) || !all.at(group).contains(name))
+        return own;
+    j[group][name] = all.at(group).at(name);
+    return j.dump();
+}
+
+std::string without_own_key(const std::string& own, std::string_view key) {
+    nlohmann::ordered_json j = own_json(own);
+    const auto [group, name] = split_key(key);
+    if (j.contains(group)) {
+        j[group].erase(name);
+        if (j[group].empty())
+            j.erase(group);
+    }
+    return j.empty() ? std::string() : j.dump();
+}
+
+std::string own_values(const std::string& own, const Settings& edited) {
+    nlohmann::ordered_json j = own_json(own);
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(edited));
+    for (auto& [group, keys] : j.items())
+        for (auto& [key, value] : keys.items())
+            if (all.contains(group) && all.at(group).contains(key))
+                value = all.at(group).at(key);
+    return j.empty() ? std::string() : j.dump();
+}
+
+std::vector<std::string> own_setting_keys(const Settings& profile) {
+    std::vector<std::string> out;
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(profile));
+    for (const char* group : {"walls", "infill", "surfaces"})
+        if (all.contains(group))
+            for (const auto& [key, value] : all.at(group).items())
+                out.push_back(std::string(group) + "." + key);
+    return out;
 }
 
 } // namespace tisma::ui

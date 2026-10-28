@@ -313,3 +313,40 @@ TEST_CASE("measure: a hole's diameter, a cylinder's and a cone's angle", "[ui][m
     other.point[0] += 30.0;
     CHECK(std::abs(*measure(c, other).distance - 30.0) < 1e-9);
 }
+
+TEST_CASE("plate: an object's own settings, added, edited and taken away (settings_levels.md, rules 10 and 11)", "[ui][plate]") {
+    Settings profile;
+    profile.infill_density = 15.0;
+    std::string own;
+    CHECK(own_keys(own).empty());
+    // Added with the profile's value (rule 11).
+    own = with_own_key(own, profile, "infill.density");
+    own = with_own_key(own, profile, "walls.count");
+    CHECK(own_keys(own) == std::vector<std::string>{"infill.density", "walls.count"});
+    CHECK(own_settings(profile, own, "box").infill_density == 15.0);
+    // Edited in the panel: only its keys are taken.
+    Settings edited = own_settings(profile, own, "box");
+    edited.infill_density = 40.0;
+    edited.top_layers = 9; // not one of its keys
+    own = own_values(own, edited);
+    const Settings merged = own_settings(profile, own, "box");
+    CHECK(merged.infill_density == 40.0);
+    CHECK(merged.top_layers == profile.top_layers);
+    // Taken away: back to the profile's; none left, no settings.
+    own = without_own_key(own, "infill.density");
+    CHECK(own_keys(own) == std::vector<std::string>{"walls.count"});
+    own = without_own_key(own, "walls.count");
+    CHECK(own.empty());
+    // A key the engine does not have is not added.
+    CHECK(with_own_key("", profile, "infill.no_such_key").empty());
+    // The keys an object may set: walls, infill and surfaces only.
+    const std::vector<std::string> keys = own_setting_keys(profile);
+    CHECK(std::find(keys.begin(), keys.end(), "infill.pattern") != keys.end());
+    CHECK(std::all_of(keys.begin(), keys.end(), [](const std::string& k) {
+        return k.starts_with("walls.") || k.starts_with("infill.") || k.starts_with("surfaces.");
+    }));
+    for (const std::string& k : keys) {
+        INFO(k);
+        CHECK_NOTHROW(own_settings(profile, with_own_key("", profile, k), "box"));
+    }
+}

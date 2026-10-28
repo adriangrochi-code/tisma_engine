@@ -34,6 +34,9 @@ struct ProjectModel {
     // (multi_extruder.md, rules 1 and 13).
     int extruder = 1;
     bool wipe_into_infill = false, wipe_into_object = false;
+    // Its own settings (model_tools.md, rule 7): a JSON object of groups
+    // over the profile's; empty: none.
+    std::string settings{};
 };
 
 // The calibration being printed: which one, and the value of each segment.

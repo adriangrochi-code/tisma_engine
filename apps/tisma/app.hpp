@@ -32,6 +32,9 @@ struct AppOptions {
     std::string tool; // the plate tool chosen at start: move, rotate, scale, lay, cut, measure, paint, material, or mixing (its dialog)
     int measure[2] = {-1, -1}; // with --tool measure: two triangles of the first model picked as faces
     double cut = 0.0; // above 0: the first object cut at this height over the bed (model_tools.md, rule 13)
+    // The first object's own settings at start, a JSON object of groups, with
+    // their window open (settings_levels.md, rule 11).
+    std::string object_settings;
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy

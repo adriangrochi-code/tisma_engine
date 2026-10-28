@@ -56,6 +56,9 @@ El JSON:
 - `models[i].extruder` (solo si no es 1) es el extrusor de la pieza, desde 1, o el número de una mezcla de colores;
   `models[i].wipe_into_infill` y `wipe_into_object` (solo si son `true`) dejan que un cambio de filamento purgue en su
   relleno o en toda la pieza (ficha `multi_extruder.md`, reglas 1 y 13).
+- `models[i].settings` (solo si tiene) son los ajustes propios de la pieza: un objeto de grupos con las claves del
+  perfil (`{"infill": {"density": 40}}`), que valen solo para ella (`model_tools.md`, regla 7). Hoy pueden ser de
+  `walls`, `infill` y `surfaces`; otro grupo es un error al abrir.
 - `color_mixing` (solo si hay mezclas o colores de filamento) tiene las mezclas del proyecto en el formato de la ficha
   `color_mixing.md` (regla 15): `physical_extruders` con el color de cada filamento y `virtual_extruders` con cada
   mezcla, su número, `kind` (`fullspectrum` o `gradient`), su color, sus componentes (`extruder` y `ratio`, o
