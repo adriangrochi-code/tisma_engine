@@ -1674,3 +1674,49 @@ TEST_CASE("support: the interface's own speed (supports_more.md, SM11) and the w
     CHECK(back.support_interface_speed == Speed{50.0, true});
     CHECK(parse_settings(settings_json(back)).accel_wipe_tower == 800.0);
 }
+
+TEST_CASE("cooling: with cooling.enabled off, no slowing down and no fan by layer time (cooling.md, rule 5, K6 and K8)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 4, 4, 5);
+    Settings s = test_printer();
+    s.layer_height = 0.3, s.first_layer_height = 0.35;
+    s.min_layer_time = 5.0;
+    s.skirt_loops = 0;
+    const auto text = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        return out.str();
+    };
+    // K6: on, the small layers slow down with the fan at full; off, neither.
+    const std::string on = text(s);
+    CHECK(on.find("M106 S255") != std::string::npos);
+    s.cooling_enabled = false;
+    const std::string off = text(s);
+    CHECK(off.find("M106 S") == std::string::npos);
+    const auto slowest = [](const std::string& g) {
+        int least = 1 << 30;
+        const std::regex f(" F([0-9]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(g))
+            if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos && std::regex_search(line, hit, f))
+                least = std::min(least, std::stoi(hit[1].str()));
+        return least;
+    };
+    CHECK(slowest(off) > slowest(on));
+    // K8: fan_always at 35 %: off on layers 1 to 3, S89 from layer 4.
+    s.fan_always = true;
+    s.fan_min = 35.0;
+    std::vector<std::string> fans;
+    std::string fan = "M107";
+    for (const std::string& line : lines_of(text(s))) {
+        if (line == ";LAYER_CHANGE")
+            fans.push_back(fan);
+        else if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+            fan = line;
+    }
+    REQUIRE(fans.size() > 6);
+    // The fan command of a layer comes just before its ;LAYER_CHANGE (rule 4).
+    CHECK(fans[2] != "M106 S89");
+    CHECK(fans[4] == "M106 S89");
+    CHECK(fans[6] == "M106 S89");
+}

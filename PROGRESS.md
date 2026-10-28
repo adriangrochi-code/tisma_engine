@@ -6641,8 +6641,9 @@ limpio):
   (regla 1). Va sobre lo que le toca a la capa, incluido `fan_always` y el máximo de una capa frenada; no sobre un
   ventilador puesto por un cambio de altura.
 - `cooling.enabled`: apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa
-  (con `fan_always`, `fan_min`); el de los puentes y los cambios de altura siguen. **Interpretación propia**: la ficha
-  dice solo «activa el frenado y el ventilador automático»; la pregunta va al equipo de fichas.
+  (con `fan_always`, `fan_min`); el de los puentes y los cambios de altura siguen. Primero fue una interpretación
+  propia; el equipo de fichas lo midió en Tisma Slicer y coincide en todo: `cooling.md`, regla 5 y pruebas K6 a K8
+  (`spec/next` 2dfa2d4, fusionada en `dev` con `tools/check_spec.py` limpio). K6 y K8 quedan como prueba (`[gcode]`).
 - Las dos en el panel (nivel Avanzado: Ventilador y Capas cortas), en `docs/CONFIG.md` y en el laminado por etapas de
   la interfaz (`slicing.cpp`).
 
