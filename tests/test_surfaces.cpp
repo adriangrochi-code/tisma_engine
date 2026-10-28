@@ -72,6 +72,7 @@ TEST_CASE("classify_surfaces on a step: the repeated layers end where the region
 TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfaces]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings settings; // 3 walls, 3 top and 3 bottom layers
+    settings.outer_wall_width = settings.wall_width; // the outer wall as the others
     settings.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     const SlicedModel sliced = slice_model(m, settings);
     REQUIRE(sliced.surfaces.size() == 50);
@@ -99,6 +100,7 @@ TEST_CASE("a step: the lower box's top around the upper box is solid, the upper 
     add_box(mesh, 0, 0, 0, 20, 20, 5);
     add_box(mesh, 5, 5, 5, 15, 15, 10);
     Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.infill_solid_below_area = 0.0; // the upper box's 57.8 mm2 of infill would be all solid
     const SlicedModel sliced = slice_model(weld_exact(mesh), s);
     REQUIRE(sliced.surfaces.size() == 50);
@@ -152,7 +154,9 @@ TEST_CASE("bridges: a plate on two pillars bridges the gap, with lines from pill
     add_box(mesh, 0, 0, 0, 5, 10, 5);
     add_box(mesh, 15, 0, 0, 20, 10, 5);
     add_box(mesh, 0, 0, 5, 20, 10, 7);
-    const SlicedModel sliced = slice_model(weld_exact(mesh), Settings{});
+    Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    const SlicedModel sliced = slice_model(weld_exact(mesh), s);
     REQUIRE(sliced.surfaces.size() == 35);
     // The plate's first layer: its infill (1.2 mm in) between the pillars is a bridge.
     const LayerSurfaces& first = sliced.surfaces[25];
@@ -182,6 +186,7 @@ TEST_CASE("bridges: with no infill, the same bridge, and none from a narrowing h
     add_box(plate, 15, 0, 0, 20, 10, 5);
     add_box(plate, 0, 0, 5, 20, 10, 7);
     Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.infill_density = 0.0;
     const SlicedModel sliced = slice_model(weld_exact(plate), s);
     REQUIRE(sliced.surfaces.size() == 35);

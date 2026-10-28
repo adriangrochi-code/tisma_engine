@@ -442,6 +442,7 @@ TEST_CASE("small infill zones are solid (surfaces_infill.md, rule 9, test I6)", 
     // zone of 3.4 x 18.4 = 62.6 mm2, under the 70 mm2 of the default.
     const IndexedMesh leg = block(5.0f, 20.0f, 5.0f);
     Settings s = base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const SlicedModel sliced = slice_model(leg, s);
     std::ostringstream out;
     write_gcode(out, sliced, s);

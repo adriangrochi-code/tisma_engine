@@ -333,6 +333,7 @@ TEST_CASE("slice_model applies XY offset and the first-layer shrink", "[settings
 TEST_CASE("slice_model builds the walls of every layer and leaves the middle for infill", "[settings]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings s; // 3 walls of 0.4 mm
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(sliced.walls.size() == sliced.layers.size());
     for (const LayerWalls& w : sliced.walls) {

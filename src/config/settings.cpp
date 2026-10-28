@@ -821,7 +821,7 @@ Settings parse_checked(std::string_view text) {
         const double v = number(g, n, k);
         if (n == "outer_width") {
             if (!(v == 0.0 || (v >= 0.05 && v <= 40.0)))
-                fail(k, "must be 0 (walls.width) or from 0.05 to 40 mm");
+                fail(k, "must be 0 (from the nozzle) or from 0.05 to 40 mm");
             s.outer_wall_width = v;
             return;
         }

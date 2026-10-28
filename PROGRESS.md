@@ -6739,5 +6739,17 @@ capa entera de 0,4 (paredes, rellenos, falda) y la segunda con la externa de 0,6
 0,5 mm, 0,5; con 0, 0,45 y 0,6 como las demás. Una prueba de boquillas (MM2) con primera capa de 0,15 fija 0. Toda la
 lista: 694 casos, todos pasan.
 
-**Sigue:** el resto de `walls` (`staggered`, `transition_*`, `spread_count`, `vertical_shell`).
+**P12: la pared externa en 0 sale de la boquilla.** El equipo de fichas midió en Tisma Slicer (`perimeters.md`,
+regla 1 y P12, traída de `spec/next`): con `walls.outer_width` 0 la externa mide 1,125 × la boquilla aunque
+`walls.width` valga otra cosa. Ahora es así. **Cambia el G-code de siempre**: con los valores por defecto del motor
+(`walls.width` 0,4) la pared externa pasa a 0,45 mm. Catorce pruebas que suponían todas las paredes de 0,4 fijan la
+externa igual a las demás; la de `walls.outer_width` comprueba 0,45 con `walls.width` 0,5. Toda la lista pasa.
+
+**Falta de P12: el paso entre cordones.** En Tisma Slicer los cordones vecinos se solapan: el paso es el promedio de
+sus anchos menos `h·(1 − π/4)` (0,0644 mm con capas de 0,3); el motor los pone borde con borde. Toca el generador de
+paredes entero (las posiciones, el relleno y las transiciones) y lo que se ve en las pruebas P1, P2 y P11: es el
+próximo paso, en un bloque propio.
+
+**Sigue:** el paso de P12; después el resto de `walls` (`staggered`, `transition_*`, `spread_count`,
+`vertical_shell`).
 

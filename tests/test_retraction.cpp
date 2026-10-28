@@ -559,6 +559,7 @@ TEST_CASE("retraction: the filament's lift, even 0, replaces the printer's (R10)
 
 TEST_CASE("retraction: the filament's minimum travel and wipe (R11)", "[retraction]") {
     Settings s = base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const int printer = count(read(gcode_of(cube(), s)), standing_retraction);
     s.filament_retraction = parse_settings(R"({"extrusion": {"retraction": {"min_travel": 20}}})").filament_retraction;
     const int filament = count(read(gcode_of(cube(), s)), standing_retraction);

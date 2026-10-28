@@ -905,6 +905,9 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
+- [ ] **Paso entre cordones con solape** (`perimeters.md`, regla 1, P1 y P12; pedido del equipo de fichas,
+  2026-10-28): dos cordones vecinos a `(w₁ + w₂)/2 − h·(1 − π/4)`, no borde con borde. Toca el reparto de cordones
+  (`src/perimeters/beading.*`), las paredes fijas, dónde empieza el relleno y las pruebas P1, P2 y P11
 - [ ] Medición del equipo de fichas (2026-10-26, `dev` d3e814a contra Tisma Slicer, caja negra, cada uno con sus
   ajustes): en las piezas grandes el motor tarda 2 a 3 veces más (Benchy 7,0 s contra 3,3 s; Benchy al doble con
   gyroid 17,8 contra 5,8 s) y su G-code pesa hasta 3,3 veces más (Benchy 7,57 MB contra 2,29 MB). Cuenta para el

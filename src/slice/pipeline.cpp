@@ -167,10 +167,16 @@ double bridge_bead(const Settings& settings) {
     return settings.nozzle_diameter * std::sqrt(std::max(settings.bridge_flow_ratio, 0.0));
 }
 
+// The outer wall's bead: walls.outer_width, or 1.125 nozzles, whatever
+// walls.width is (perimeters.md, rule 1, P12).
+double outer_bead(const Settings& settings) {
+    return settings.outer_wall_width > 0.0 ? settings.outer_wall_width : 1.125 * settings.nozzle_diameter;
+}
+
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
-        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, settings.outer_wall_width);
+        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width);
     beading.wall_count = count;
     return layer_walls(region, beading);
 }
@@ -1189,7 +1195,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     out.walls.resize(out.layers.size());
     BeadingParams beading;
     beading.preferred_width = settings.wall_width;
-    beading.outer_width = settings.outer_wall_width;
+    beading.outer_width = outer_bead(settings);
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
@@ -1200,7 +1206,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     BeadingParams first_beading = beading;
     if (first_own) {
         first_settings.wall_width = first_beading.preferred_width = first_bead(settings);
-        first_settings.outer_wall_width = first_beading.outer_width = 0.0;
+        first_settings.outer_wall_width = first_beading.outer_width = first_settings.wall_width;
     }
     std::vector<std::size_t> open(out.layers.size(), 0);
     std::vector<char> cut_away(out.layers.size(), 0);

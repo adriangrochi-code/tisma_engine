@@ -363,6 +363,7 @@ TEST_CASE("curved layers: top faces, a flat top stays flat (CO1)", "[curved][sur
 
 TEST_CASE("curved layers: top faces follow a sloping roof (SU1 to SU3, SU5)", "[curved][surface]") {
     Settings s = surface_base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     Settings flat = s;
     flat.curved_mode = CurvedMode::Disabled;
     const std::string plain = gcode_of(slice_model(roof_block(20, 24), flat), flat);
@@ -552,7 +553,9 @@ TEST_CASE("curved layers: automatic is the overhangs' and the top faces' togethe
         CHECK_THAT(a->offset(x, 100.0, 34.0), WithinAbs(o->offset(x, 100.0, 34.0), 1e-9));
     // AU2: the roof block has no overhang: as surface.
     Settings top = overhang_base(CurvedMode::Automatic, false);
+    top.outer_wall_width = top.wall_width; // the outer wall as the others
     Settings surface = overhang_base(CurvedMode::Surface, false);
+    surface.outer_wall_width = surface.wall_width;
     const std::optional<CurvedField> b = curved_field(top, roof_block(20, 24));
     const std::optional<CurvedField> c = curved_field(surface, roof_block(20, 24));
     REQUIRE(b);

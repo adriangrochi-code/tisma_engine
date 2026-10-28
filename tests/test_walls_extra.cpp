@@ -298,14 +298,15 @@ TEST_CASE("walls: the outer wall with a width of its own (perimeters.md, walls.o
                 min_x = std::min(min_x, to_mm(q.x));
         CHECK_THAT(min_x - 90.0, WithinAbs(1.5, 0.002));
     }
-    // At 0 the outer wall is as wide as the others.
+    // At 0 from the nozzle, 1.125 of it, whatever walls.width is (P12).
     s.outer_wall_width = 0.0;
+    s.wall_width = 0.5;
     s.wall_generator = WallGenerator::Variable;
     const SlicedModel same = slice_model(m, s);
     for (const Toolpath& t : same.walls[10].toolpaths)
         for (const ToolpathPoint& p : t.points)
             if (p.p.y > 95.0 && p.p.y < 105.0)
-                CHECK_THAT(p.width, WithinAbs(0.45, 1e-6));
+                CHECK_THAT(p.width, WithinAbs(t.index == 0 ? 1.125 * s.nozzle_diameter : 0.5, 1e-6));
 }
 
 TEST_CASE("first layer: every bead layers.first_line_width wide (perimeters.md, rule 7)", "[walls]") {

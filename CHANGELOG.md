@@ -55,6 +55,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Los anchos de los rellenos en 0 salen de la boquilla** (`surfaces_infill.md`, I9): la capa de arriba de todo, una
   boquilla; el resto del relleno sólido y el poco denso, 1,125 boquillas (0,45 mm con 0,4). Antes seguían a
   `walls.width`. **Cambia el G-code de siempre** en los rellenos.
+- **La pared externa en 0 sale de la boquilla** (`walls.outer_width`, `perimeters.md` P12): 1,125 × la boquilla
+  (0,45 mm con 0,4), aunque `walls.width` tenga otro valor.
 - **La primera capa lleva su ancho** (`layers.first_line_width`, 200 % de su altura: 0,4 mm con 0,2): paredes,
   rellenos, falda, borde y soporte. Antes, el de las paredes.
 - **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con

@@ -744,6 +744,7 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
           "rule 4; QA13)",
           "[gcode][support]") {
     Settings s = test_printer();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.skirt_loops = 0;
     s.support = true;
     s.relative_extrusion = true;
