@@ -994,6 +994,7 @@ const std::map<T, const char*>& row_keys() {
         {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
         {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
+        {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
@@ -5747,6 +5748,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
         flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
+        flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
         if (shown("walls.top_one_wall"))

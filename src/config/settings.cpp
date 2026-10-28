@@ -713,7 +713,7 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
-                "min_detail", "generator", "gap_fill", "clockwise", "staggered_inner_seams", "top_one_wall",
+                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
@@ -750,10 +750,11 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs" ||
-            n == "gap_fill" || n == "clockwise") {
+            n == "gap_fill" || n == "clockwise" || n == "outer_first") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "clockwise"           ? s.walls_clockwise
+             : n == "outer_first"       ? s.walls_outer_first
              : n == "scarf_only_smooth" ? s.scarf_only_smooth
              : n == "scarf_entire_loop" ? s.scarf_entire_loop
              : n == "scarf_inner"       ? s.scarf_inner
@@ -2796,6 +2797,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"travel.avoid_crossing_walls", flag(s.avoid_crossing_walls)},
         {"travel.max_detour", num(s.max_detour.value) == "0" ? "0" : share(s.max_detour)},
         {"walls.clockwise", flag(s.walls_clockwise)},
+        {"walls.outer_first", flag(s.walls_outer_first)},
         {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
@@ -2983,6 +2985,7 @@ std::string settings_json(const Settings& s) {
           {"generator", s.wall_generator == WallGenerator::Fixed ? "fixed" : "variable"},
           {"gap_fill", s.wall_gap_fill},
           {"clockwise", s.walls_clockwise},
+          {"outer_first", s.walls_outer_first},
           {"staggered_inner_seams", s.staggered_inner_seams},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
           {"first_layer_one_wall", s.first_layer_one_wall},

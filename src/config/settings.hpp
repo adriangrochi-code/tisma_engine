@@ -528,6 +528,7 @@ struct Settings {
     bool avoid_crossing_walls = true;  // travels run inside, round holes (docs/spec/BEHAVIOR.md)
     Speed max_detour;                  // mm or % of the straight travel a route may add; 0: no limit
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
+    bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
     // printer's, 0 included. with_filament_retraction applies them.

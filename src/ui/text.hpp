@@ -1429,6 +1429,7 @@
     X(AvoidCrossingWalls, "Viajes sin cruzar paredes", "Avoid crossing walls") \
     X(MaxDetour, "Desvío máximo", "Maximum detour") \
     X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
+    X(WallsOuterFirst, "Pared externa primero", "Outer wall first") \
     X(SubWallsMore, "Más opciones de paredes", "More wall options") \
     X(StaggeredSeams, "Costuras internas escalonadas", "Staggered inner seams") \
     X(TopOneWallRow, "Un solo perímetro arriba", "One wall on top") \

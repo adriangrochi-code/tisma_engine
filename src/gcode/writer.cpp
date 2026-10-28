@@ -3196,8 +3196,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // (arc_overhangs.md, rule 4).
                 for (Toolpath t : i.arcs)
                     lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
-                for (const auto& [index, paths] : i.walls)
-                    walls(index, paths);
+                // From the inside out, or with walls.outer_first from the outer
+                // wall in (perimeters.md, rule 4).
+                if (s.walls_outer_first)
+                    for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
+                        walls(w->first, w->second);
+                else
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths);
                 // The loops over an overhang, from its outline in, after the walls
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)

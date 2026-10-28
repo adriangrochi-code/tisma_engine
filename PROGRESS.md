@@ -6687,3 +6687,7 @@ separación de abajo) se quita entera, también lo que tiene sobre la cama (`kee
 la losa queda sin soporte (SM2: «ningún soporte»), una T sobre la cama lo conserva. Los árboles no lo llevan todavía.
 165 casos, todos pasan.
 
+**Después: `walls.outer_first`** (`perimeters.md`, regla 4, P10): en cada isla, las paredes de la externa hacia
+adentro. Prueba: en la capa 10 del cubo de 3 paredes, `Perimeter` y después `External perimeter`; con el ajuste, al
+revés. 156 casos de `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
+

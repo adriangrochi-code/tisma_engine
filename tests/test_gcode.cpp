@@ -1802,3 +1802,26 @@ TEST_CASE("support: from the bed only, a zone that stands on the part goes whole
     lifted(t, 0, 0, 20, 20, 3, 4);
     CHECK(support_layers(slice_model(t, s)) > 5);
 }
+
+TEST_CASE("walls: walls.outer_first prints each island's walls from the outer one in (perimeters.md, P10)", "[gcode]") {
+    Settings s = test_printer();
+    s.wall_count = 3;
+    // The order of the wall kinds in the cube's layer 10.
+    const auto order = [&](const Settings& settings) {
+        const std::vector<std::string> lines = lines_of(cube_gcode(settings));
+        std::vector<std::string> kinds;
+        int layer = -1;
+        for (const std::string& line : lines) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (layer == 10 && line.rfind(";TYPE:", 0) == 0 &&
+                     (line == ";TYPE:External perimeter" || line == ";TYPE:Perimeter") &&
+                     (kinds.empty() || kinds.back() != line))
+                kinds.push_back(line.substr(6));
+        }
+        return kinds;
+    };
+    CHECK(order(s) == std::vector<std::string>{"Perimeter", "External perimeter"});
+    s.walls_outer_first = true;
+    CHECK(order(s) == std::vector<std::string>{"External perimeter", "Perimeter"});
+}
