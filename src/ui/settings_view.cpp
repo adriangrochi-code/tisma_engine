@@ -112,10 +112,30 @@ std::vector<SettingHit> search_settings(std::string_view query,
             score += 4;
         hits.push_back({key, *place, score});
     }
-    std::stable_sort(hits.begin(), hits.end(), [](const SettingHit& a, const SettingHit& b) { return a.score > b.score; });
-    if (hits.size() > limit)
-        hits.resize(limit);
-    return hits;
+    const auto better = [](const SettingHit& a, const SettingHit& b) { return a.score > b.score; };
+    std::stable_sort(hits.begin(), hits.end(), better);
+    if (hits.size() <= limit)
+        return hits;
+    // Cut to the limit, but with each tab's best match: the printer's
+    // settings come last in the panel's order, and a word as common as
+    // "ancho" filled the list with the print's widths (2026-10-28).
+    std::vector<SettingHit> out(hits.begin(), hits.begin() + std::ptrdiff_t(limit));
+    for (const SettingsTab tab : {SettingsTab::Print, SettingsTab::Material, SettingsTab::Printer}) {
+        const auto of_tab = [&](const SettingHit& h) { return h.place.tab == tab; };
+        if (std::any_of(out.begin(), out.end(), of_tab))
+            continue;
+        const auto best = std::find_if(hits.begin() + std::ptrdiff_t(limit), hits.end(), of_tab);
+        if (best == hits.end())
+            continue;
+        // In place of the last match of a tab that has more than one.
+        for (auto it = out.rbegin(); it != out.rend(); ++it)
+            if (std::count_if(out.begin(), out.end(), [&](const SettingHit& h) { return h.place.tab == it->place.tab; }) > 1) {
+                *it = *best;
+                break;
+            }
+    }
+    std::stable_sort(out.begin(), out.end(), better);
+    return out;
 }
 
 CustomView custom_view_from(ViewLevel level) {

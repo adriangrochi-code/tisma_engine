@@ -7405,3 +7405,34 @@ memoria liberada. Lo mismo pasaba en la fila de perfil al guardar o borrar.
 responden al mouse; los campos numéricos que no toman lo escrito; las boquillas del fabricante al agregar una
 impresora; el ícono de la sección elegida en el tema claro; los textos y unidades de la revisión.
 
+## 2026-10-28 (noche): la interfaz, informes del dueño y del equipo de fichas
+
+El equipo de fichas probó la aplicación con clics y teclas de verdad (xdotool sobre Xvfb) y pasó lo que el dueño ve en
+Windows. Arreglado, cada uno con su prueba:
+- **Los campos de la página de la impresora no tomaban clics.** ImGui deja detrás de todo a las ventanas que nunca
+  pasan al frente (`NoBringToFrontOnFocus`), y la página es una; la ventana de la vista 3D, transparente y del mismo
+  tamaño, quedaba encima con su lienzo invisible y se llevaba cada clic. Con la página abierta, la vista no pone su
+  lienzo.
+- **Escribir en un campo numérico no hacía nada:** en ImGui un clic sobre un campo de arrastre empieza a arrastrar;
+  para escribir hacía falta doble clic. Ahora un clic sin arrastrar abre la escritura
+  (`ConfigDragClickToInputText`); la coma se lee como punto (ya lo hacía ImGui en los campos numéricos).
+- **Laminar con la página de la impresora abierta:** cambiar de pestaña la cierra.
+- **La búsqueda y los ajustes de la impresora:** al cortar la lista a 10, entra la mejor coincidencia de cada pestaña.
+- **Tema claro:** la sección elegida en violeta oscuro (antes lavanda sobre violeta claro); las listas opacas.
+- **Ceros que no son datos:** «Sin dato», «Automático» y «Sin límite» donde 0 quiere decir que falta el dato, en los
+  campos y en los resúmenes. El motor ya trataba esos 0 como «sin tope».
+- **Nombres de perfiles** con coma decimal en español, solo al mostrarlos.
+
+**Prueba nueva de la interfaz: `--ui-script`.** Pasos de entrada que el programa le da a ImGui como si fueran del mouse
+y del teclado: `click CLAVE` (lleva el campo a la vista como la búsqueda y hace clic en su medio), `select-all`,
+`type`, `key`, `printer-page`, `wait`, `expect` y `expect-contains` (el valor guardado, como lo escribe el archivo de
+ajustes). `label_cell` anota el rectángulo del campo de cada fila. Dos pruebas: la página de la impresora (altura
+máxima y ancho de la cama) y la altura de capa escrita «0,16». Sin los arreglos, las dos fallan (256 en vez de 250;
+0,2 en vez de 0,16).
+
+**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; el nombre del
+objeto en la barra de estado después de borrar otro; las marcas de costura grandes en la vista previa; los consejos
+que tapan controles; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
+`--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
+dos columnas, menú para guardar después de laminar).
+

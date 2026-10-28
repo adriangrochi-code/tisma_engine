@@ -1038,6 +1038,9 @@
     X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
     X(SupportBuildplateOnly, "Solo desde la cama", "From the bed only") \
     X(SupportUnderBridges, "Soporte bajo los puentes", "Support under bridges") \
+    X(NotSet, "Sin dato", "Not set") \
+    X(AutoValue, "Automático", "Automatic") \
+    X(NoLimit, "Sin límite", "No limit") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \

@@ -69,6 +69,7 @@ struct AppOptions {
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
     std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
+    std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the

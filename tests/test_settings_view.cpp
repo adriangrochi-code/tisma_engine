@@ -56,6 +56,20 @@ TEST_CASE("settings view: the search finds a setting by its card, name or key (S
     CHECK(search_settings("belt.angle", no_text, [](std::string_view k) { return !k.starts_with("belt."); }).empty());
     CHECK(search_settings("   ", no_text).empty());
     CHECK(search_settings("relleno", no_text, {}, 3).size() == 3);
+    // A word in many print settings still lists the printer's: its best
+    // match takes the place of the print's last (QA, 2026-10-28: «ancho»
+    // did not find the bed's width).
+    const auto widths = [](std::string_view key) {
+        return SettingText{key == "machine.bed"           ? "Ancho de la cama"
+                           : key.ends_with("width")       ? "Ancho de línea"
+                           : key.ends_with("line_width") ? "Ancho de línea"
+                                                          : "",
+                           ""};
+    };
+    const std::vector<SettingHit> wide = search_settings("ancho", widths, {}, 4);
+    REQUIRE(wide.size() == 4);
+    CHECK(std::any_of(wide.begin(), wide.end(), [](const SettingHit& h) { return h.key == "machine.bed"; }));
+    CHECK(std::any_of(wide.begin(), wide.end(), [](const SettingHit& h) { return h.place.tab == SettingsTab::Print; }));
     set_language(before);
 }
 

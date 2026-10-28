@@ -33,7 +33,8 @@ constexpr const char* kUsage =
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
     "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
-    "                                   [--compare-view other.png] [--no-view-check]]\n"
+    "                                   [--compare-view other.png] [--no-view-check]\n"
+    "                                   [--ui-script steps.txt] [--pick-catalog-printer NAME]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -55,7 +56,13 @@ constexpr const char* kUsage =
     "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
     "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
     "skips that. --pick-catalog-printer \"Vendor Model\" picks that printer in the\n"
-    "printer card's list, as a click on its row would (a test of that path).\n";
+    "printer card's list, as a click on its row would (a test of that path).\n"
+    "--ui-script steps.txt plays input into the window before the screenshot, one\n"
+    "step a line: click KEY (a setting's field, brought into sight as the search\n"
+    "does; KEY#2 for its second field), select-all, type TEXT, key NAME (enter,\n"
+    "escape, tab, backspace), printer-page [SECTION], wait FRAMES, expect KEY VALUE\n"
+    "and expect-contains KEY TEXT (the setting as the settings file writes it); it\n"
+    "exits with 1 if a step fails.\n";
 
 } // namespace
 
@@ -262,6 +269,8 @@ int main(int argc, char** argv) {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--coarse") {
             options.coarse = true;
+        } else if (arg == "--ui-script") {
+            options.ui_script = value();
         } else if (arg == "--pick-catalog-printer") {
             options.pick_catalog_printer = value();
         } else if (arg == "--no-view-check") {

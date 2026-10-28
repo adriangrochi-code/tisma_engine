@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`tisma --ui-script pasos.txt`:** pruebas de la interfaz con mouse y teclado de verdad: clic en el campo de un
+  ajuste, escribir, teclas, y `expect` con el valor guardado; sale con 1 si un paso falla. Pruebas nuevas de la página
+  de la impresora y de un número de impresión escrito con coma.
+
 - **`support.under_bridges`** (ficha `supports_skirt.md`, regla 1, S6 y S10): soporte también bajo los puentes. Sin
   él (por defecto), lo que cuelga sostenido en dos extremos, o todo alrededor como una tapa, no lleva soporte, sea
   cual sea su largo; un voladizo sostenido de un solo lado sí. En el panel, en Soportes.
@@ -148,6 +152,21 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
+
+- **Los campos de la página de la impresora no respondían al mouse** (informe del dueño): la ventana de la vista 3D,
+  transparente, quedaba encima de la página y se llevaba los clics. Ahora la página se edita con el mouse.
+- **Escribir en un campo numérico no hacía nada:** un clic empezaba a arrastrar el valor en vez de dejar escribir.
+  Ahora un clic (sin arrastrar) deja escribir el número, y la coma decimal se lee como punto.
+- **Laminar con la página de la impresora abierta** pasaba a Vista previa detrás de la página; ahora la cierra.
+- **La búsqueda no encontraba los ajustes de la impresora** con palabras comunes («ancho»): la lista de 10 se llenaba
+  con los de impresión. Ahora siempre entra la mejor coincidencia de cada pestaña.
+- **Tema claro:** el ícono y el nombre de la sección elegida casi no se veían sobre el violeta; las listas
+  desplegables eran apenas transparentes y dejaban ver el texto de atrás.
+- **Datos que faltan, mostrados como ceros:** las velocidades, aceleraciones y tirones máximos sin dato de la
+  impresora dicen «Sin dato» (el motor ya no los usaba como tope); la capa mínima y la máxima sin valor dicen
+  «Automático» (salen de la boquilla); los resúmenes con «—» dicen «Sin dato» o «Sin límite».
+- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»); el archivo guarda el nombre
+  como siempre.
 
 - **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
   Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía

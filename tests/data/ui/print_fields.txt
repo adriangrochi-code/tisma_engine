@@ -1,0 +1,7 @@
+# A number field of the print settings: a click types into it, and a decimal
+# comma is read as the point (owner's report, 2026-10-28).
+click layers.height
+select-all
+type 0,16
+key enter
+expect layers.height 0.16
