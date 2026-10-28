@@ -26,6 +26,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
+- **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
+  y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
+  elegida muestra sus ajustes debajo de la lista.
 - **Ajustes de una pieza** (`model_tools.md`, reglas 5, 7 y 8; `settings_levels.md`, reglas 10 y 11): clic derecho
   sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
   la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.

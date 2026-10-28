@@ -752,8 +752,8 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   primero, y su altura de capa dejada de lado con un aviso; el que cambia solo el relleno cambia el relleno ralo en su
   zona sin paredes en el borde (MT4). Rangos de alturas en el motor (2026-10-28, regla 6; MT7b, MT9, MT13):
   `MeshObject::ranges`, su altura de capa como tramos de `layers.heights` y sus otros ajustes como un modificador del
-  ancho del objeto entre el objeto y la parte. Falta: leer los ajustes del 3MF, la lista de objetos con sus
-  filas hijas (regla 11 de `settings_levels.md`), los demás grupos por objeto (velocidades, temperaturas, altura de
+  ancho del objeto entre el objeto y la parte. La lista de objetos con sus filas hijas, en la pestaña Objetos
+  (2026-10-28, reglas 11 y 13 de `settings_levels.md`). Falta: leer los ajustes del 3MF, los demás grupos por objeto (velocidades, temperaturas, altura de
   capa), los negativos con corte, separar o copias, el plano libre y los conectores del corte, Separar en partes
   (reglas 18 y 19), los modificadores y negativos con la forma de un archivo (hoy caja o cilindro, agregados en la interfaz el
   2026-10-28; siguen a la pieza al moverla, girarla, escalarla y espejarla), la altura de capa de un rango cuando hay varios objetos con

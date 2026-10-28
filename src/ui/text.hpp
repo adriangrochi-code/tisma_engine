@@ -1175,6 +1175,10 @@
     X(ObjectInfill, "Relleno", "Infill") \
     X(ObjectWalls, "Capas y perímetros", "Layers and perimeters") \
     X(ObjectSurfaces, "Capas sólidas", "Solid layers") \
+    X(Objects, "Objetos", "Objects") \
+    X(ObjectsEmpty, "La placa no tiene piezas.", "The plate has no objects.") \
+    X(ObjectsHint, "Clic derecho sobre una pieza para darle ajustes propios, modificadores, volúmenes negativos o rangos de alturas.", "Right-click an object to give it settings of its own, modifiers, negative volumes or height ranges.") \
+    X(ObjectsPicked, "Ajustes de la pieza a cambiar", "Object settings to modify") \
     X(ObjectAddSetting, "Agregar ajuste", "Add setting") \
     X(ObjectSettingsOpen, "Ajustes de la pieza…", "Object settings…") \
     X(ObjectSettingsTitle, "Ajustes de %s", "Settings of %s") \

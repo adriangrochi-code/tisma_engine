@@ -80,6 +80,13 @@ moverla, girarla, escalarla y espejarla (crecen con ella). Al cortar o separar, 
 `--object-add modifier,negative,range` los agrega a la primera pieza al abrir, y `--object-turn X,Y,Z` la gira esos
 grados después, para las capturas.
 
+La pestaña **Objetos**, junto a Impresión y Material (`settings_levels.md`, reglas 11 y 13), lista las piezas de la
+placa y, debajo de cada una, una fila por grupo de sus ajustes propios (Capas y perímetros, Relleno, Capas sólidas),
+por modificador o volumen negativo y por rango de alturas (`object_rows`, `src/ui/plate.*`). Elegir la pieza la elige
+en la placa; elegir una fila muestra abajo «Ajustes de la pieza a cambiar» con sus valores, cada ajuste con una cruz
+para quitarlo de la pieza (el mismo editor que la ventana «Ajustes de …»). `--section objects/infill` (o `walls`,
+`surfaces`, `volume1`, `range1`…) abre la pestaña con esa fila de la primera pieza elegida.
+
 La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
 izquierda de la vista 3D, una columna con:
 

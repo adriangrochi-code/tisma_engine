@@ -405,6 +405,25 @@ std::vector<std::string> own_keys(const std::string& own) {
     return out;
 }
 
+std::vector<ObjectRow> object_rows(const PlateObject& object) {
+    std::vector<ObjectRow> out;
+    std::vector<std::string> groups;
+    for (const std::string& key : own_keys(object.settings)) {
+        const std::string group = key.substr(0, key.find('.'));
+        if (std::find(groups.begin(), groups.end(), group) == groups.end())
+            groups.push_back(group);
+    }
+    const auto rank = [](const std::string& g) { return g == "walls" ? 0 : g == "infill" ? 1 : g == "surfaces" ? 2 : 3; };
+    std::stable_sort(groups.begin(), groups.end(), [&](const std::string& a, const std::string& b) { return rank(a) < rank(b); });
+    for (std::string& g : groups)
+        out.push_back({ObjectRow::Kind::Settings, std::move(g), 0});
+    for (std::size_t k = 0; k < object.volumes.size(); ++k)
+        out.push_back({ObjectRow::Kind::Volume, {}, k});
+    for (std::size_t k = 0; k < object.ranges.size(); ++k)
+        out.push_back({ObjectRow::Kind::Range, {}, k});
+    return out;
+}
+
 std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key) {
     nlohmann::ordered_json j = own_json(own);
     const auto [group, name] = split_key(key);

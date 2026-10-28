@@ -448,6 +448,9 @@ private:
     void object_menu();
     void object_settings_window();
     bool own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where);
+    bool volume_editor(PlateObject& o, std::size_t k, bool& removed);
+    bool range_editor(PlateObject& o, std::size_t k, bool& removed);
+    void objects_list();
     void volumes_overlay();
     int object_settings_ = -1;       // the object whose settings window is open
     std::set<std::string> row_only_; // while drawing an object's settings: the rows to show
@@ -515,6 +518,11 @@ private:
     // the last frame (for its background), Basic's «Show all» until the
     // section changes, and the settings that differ from the chosen profiles.
     SettingsTab panel_tab_ = SettingsTab::Print;
+    // The Objects tab instead of the settings (settings_levels.md, rule 13):
+    // the object chosen in its list, and the row under it.
+    bool objects_tab_ = false;
+    int list_object_ = -1;
+    std::optional<ObjectRow> list_row_;
     ViewLevel view_level_ = ViewLevel::Normal;
     std::array<std::string, 3> panel_section_{"quality", "temperature", "machine"};
     std::map<std::string, bool> card_open_;
@@ -2137,6 +2145,7 @@ bool App::init(std::string& error) {
         show_labels_ = true;
     if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
         const std::string tab = options_.section.substr(0, slash);
+        objects_tab_ = tab == "objects"; // objects/<row>: the list, its row chosen below (after --object-add)
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
         // The printer's settings are on its page (settings_panel.md, rule 37).
@@ -2273,6 +2282,18 @@ bool App::init(std::string& error) {
         } catch (const std::exception& e) {
             fail(T::CannotOpen, e.what());
         }
+    }
+    // --section objects/<row>: the first object's row in the Objects tab
+    // (infill, walls, surfaces, volume1, range1...), its window closed.
+    if (objects_tab_ && !objects_.empty()) {
+        list_object_ = selected_ = 0;
+        object_settings_ = -1;
+        const std::string row = options_.section.substr(options_.section.find('/') + 1);
+        for (const ObjectRow& r : object_rows(objects_.front()))
+            if ((r.kind == ObjectRow::Kind::Settings && r.group == row) ||
+                (r.kind == ObjectRow::Kind::Volume && row == "volume" + std::to_string(r.index + 1)) ||
+                (r.kind == ObjectRow::Kind::Range && row == "range" + std::to_string(r.index + 1)))
+                list_row_ = r;
     }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
     if (options_.tool == "mixing") {
@@ -5407,16 +5428,21 @@ void App::settings_panel() {
         for (const T name : {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom})
             level_width = std::max(level_width, ImGui::CalcTextSize((std::string("    ") + tr(name)).c_str()).x);
         level_width += ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().FramePadding.x;
-        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 2.0f * gap) / 2.0f;
-        const std::array<std::pair<SettingsTab, T>, 2> tabs = {
-            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}}};
+        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
+        // Print, Material and the plate's Objects (settings_levels.md, rule 13).
+        const std::array<std::pair<SettingsTab, T>, 3> tabs = {
+            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Objects}}};
         for (const auto& [tab, title] : tabs) {
-            const bool chosen = panel_tab_ == tab;
+            const bool objects = title == T::Objects;
+            const bool chosen = objects ? objects_tab_ : !objects_tab_ && panel_tab_ == tab;
             ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame, 0.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, chosen ? rgb(theme_.accent_hover) : rgb(theme_.frame_hover));
             ImGui::PushStyleColor(ImGuiCol_Text, chosen ? rgb(0xFFFFFF) : rgb(theme_.text_dim));
-            if (ImGui::Button(tr(title), ImVec2(tab_width, 0)))
-                panel_tab_ = tab;
+            if (ImGui::Button(tr(title), ImVec2(tab_width, 0))) {
+                objects_tab_ = objects;
+                if (!objects)
+                    panel_tab_ = tab;
+            }
             ImGui::PopStyleColor(3);
             ImGui::SameLine(0, gap);
         }
@@ -5470,6 +5496,12 @@ void App::settings_panel() {
             choose_level(ViewLevel::Advanced);
         if (ImGui::IsKeyPressed(ImGuiKey_4))
             choose_level(ViewLevel::Custom);
+    }
+    if (objects_tab_) {
+        objects_list();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     if (panel_tab_ == SettingsTab::Material)
@@ -6975,68 +7007,28 @@ void App::object_settings_window() {
         ImGui::PushID("own");
         changed |= own_settings_editor(o.settings, {}, false, o.name);
         ImGui::PopID();
-        const float field = 70.0f * scale_;
-        const auto three = [&](const char* id, T label, std::array<double, 3>& v, double lo) {
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(tr(label));
-            for (int k = 0; k < 3; ++k) {
-                ImGui::SameLine(110.0f * scale_ + float(k) * (field + 4.0f * scale_));
-                ImGui::SetNextItemWidth(field);
-                ImGui::PushID(k);
-                changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &v[std::size_t(k)], 0.1f, &lo, nullptr, "%.1f");
-                ImGui::PopID();
-            }
-        };
         // Its modifiers and negative volumes (rules 2 and 3).
         for (std::size_t k = 0; k < o.volumes.size(); ++k) {
-            PlateVolume& v = o.volumes[k];
             ImGui::PushID(int(k) + 1000);
-            const bool negative = v.kind == PlateVolume::Kind::Negative;
+            const bool negative = o.volumes[k].kind == PlateVolume::Kind::Negative;
             const std::string head = format(tr(negative ? T::NegativeVolumeItem : T::ModifierItem), int(k) + 1);
-            if (ImGui::CollapsingHeader(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                int shape = int(v.shape);
-                const char* shapes[] = {tr(T::ShapeBox), tr(T::ShapeCylinder)};
-                ImGui::SetNextItemWidth(140.0f * scale_);
-                if (ImGui::Combo("##shape", &shape, shapes, 2)) {
-                    v.shape = PlateVolume::Shape(shape);
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
-                    o.volumes.erase(o.volumes.begin() + std::ptrdiff_t(k));
-                    changed = true;
-                    ImGui::PopID();
-                    break;
-                }
-                three("##offset", T::VolumeOffset, v.offset, -1000.0);
-                three("##size", T::VolumeSize, v.size, 0.1);
-                if (!negative)
-                    changed |= own_settings_editor(v.settings, o.settings, false, head);
-            }
+            bool removed = false;
+            if (ImGui::CollapsingHeader(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                changed |= volume_editor(o, k, removed);
             ImGui::PopID();
+            if (removed)
+                break;
         }
         // Its height ranges (rule 6).
         for (std::size_t k = 0; k < o.ranges.size(); ++k) {
-            PlateRange& r = o.ranges[k];
             ImGui::PushID(int(k) + 2000);
-            const std::string head = format(tr(T::RangeItem), r.from, r.to);
-            if (ImGui::CollapsingHeader((head + "###range").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                const double lo = 0.0;
-                ImGui::SetNextItemWidth(field);
-                changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(field);
-                changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
-                ImGui::SameLine();
-                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
-                    o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
-                    changed = true;
-                    ImGui::PopID();
-                    break;
-                }
-                changed |= own_settings_editor(r.settings, o.settings, true, head);
-            }
+            const std::string head = format(tr(T::RangeItem), o.ranges[k].from, o.ranges[k].to);
+            bool removed = false;
+            if (ImGui::CollapsingHeader((head + "###range").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                changed |= range_editor(o, k, removed);
             ImGui::PopID();
+            if (removed)
+                break;
         }
     }
     ImGui::End();
@@ -7044,6 +7036,143 @@ void App::object_settings_window() {
         plate_changed();
     if (!open)
         object_settings_ = -1;
+}
+
+// A modifier's or negative volume's shape, place, size and settings; true
+// when something changed (`removed`: the volume was taken away).
+bool App::volume_editor(PlateObject& o, std::size_t k, bool& removed) {
+    PlateVolume& v = o.volumes[k];
+    bool changed = false;
+    const bool negative = v.kind == PlateVolume::Kind::Negative;
+    int shape = int(v.shape);
+    const char* shapes[] = {tr(T::ShapeBox), tr(T::ShapeCylinder)};
+    ImGui::SetNextItemWidth(140.0f * scale_);
+    if (ImGui::Combo("##shape", &shape, shapes, 2)) {
+        v.shape = PlateVolume::Shape(shape);
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+        o.volumes.erase(o.volumes.begin() + std::ptrdiff_t(k));
+        removed = true;
+        return true;
+    }
+    const float field = 70.0f * scale_;
+    const auto three = [&](const char* id, T label, std::array<double, 3>& values, double lo) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(label));
+        for (int c = 0; c < 3; ++c) {
+            ImGui::SameLine(110.0f * scale_ + float(c) * (field + 4.0f * scale_));
+            ImGui::SetNextItemWidth(field);
+            ImGui::PushID(c);
+            changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &values[std::size_t(c)], 0.1f, &lo, nullptr, "%.1f");
+            ImGui::PopID();
+        }
+    };
+    three("##offset", T::VolumeOffset, v.offset, -1000.0);
+    three("##size", T::VolumeSize, v.size, 0.1);
+    if (!negative)
+        changed |= own_settings_editor(v.settings, o.settings, false,
+                                       format(tr(T::ModifierItem), int(k) + 1));
+    return changed;
+}
+
+// A height range's heights and settings; true when something changed.
+bool App::range_editor(PlateObject& o, std::size_t k, bool& removed) {
+    PlateRange& r = o.ranges[k];
+    bool changed = false;
+    const float field = 70.0f * scale_;
+    const double lo = 0.0;
+    ImGui::SetNextItemWidth(field);
+    changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(field);
+    changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+        o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
+        removed = true;
+        return true;
+    }
+    changed |= own_settings_editor(r.settings, o.settings, true, format(tr(T::RangeItem), r.from, r.to));
+    return changed;
+}
+
+// The plate's objects (settings_levels.md, rules 11 and 13): each with a row
+// below it for each group of its own settings, each modifier or negative
+// volume and each height range. The row chosen shows its settings under the
+// list, from the profile's values.
+void App::objects_list() {
+    if (objects_.empty()) {
+        ImGui::TextDisabled("%s", tr(T::ObjectsEmpty));
+        return;
+    }
+    if (list_object_ >= int(objects_.size()))
+        list_object_ = -1;
+    bool changed = false;
+    const float list_height = std::min(ImGui::GetContentRegionAvail().y * 0.4f,
+                                       ImGui::GetFrameHeightWithSpacing() * float(4 + 3 * objects_.size()));
+    ImGui::BeginChild("##object_list", ImVec2(0, list_height), ImGuiChildFlags_Borders);
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        const PlateObject& o = objects_[i];
+        ImGui::PushID(int(i));
+        const bool here = list_object_ == int(i);
+        if (ImGui::Selectable(o.name.c_str(), selected_ == int(i) && (!here || !list_row_))) {
+            selected_ = list_object_ = int(i);
+            list_row_.reset();
+        }
+        ImGui::Indent();
+        for (const ObjectRow& row : object_rows(o)) {
+            std::string label;
+            if (row.kind == ObjectRow::Kind::Settings)
+                label = row.group == "walls"    ? tr(T::ObjectWalls)
+                        : row.group == "infill" ? tr(T::ObjectInfill)
+                        : row.group == "surfaces" ? tr(T::ObjectSurfaces)
+                                                  : row.group;
+            else if (row.kind == ObjectRow::Kind::Volume)
+                label = format(tr(o.volumes[row.index].kind == PlateVolume::Kind::Negative ? T::NegativeVolumeItem
+                                                                                            : T::ModifierItem),
+                               int(row.index) + 1);
+            else
+                label = format(tr(T::RangeItem), o.ranges[row.index].from, o.ranges[row.index].to);
+            const bool chosen = here && list_row_ == row;
+            if (ImGui::Selectable((label + "##" + std::to_string(int(row.kind)) + row.group + std::to_string(row.index)).c_str(),
+                                  chosen)) {
+                selected_ = list_object_ = int(i);
+                list_row_ = row;
+            }
+        }
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", tr(T::ObjectsHint));
+    ImGui::PopTextWrapPos();
+    if (list_object_ < 0)
+        return;
+    PlateObject& o = objects_[std::size_t(list_object_)];
+    // The row may be gone (removed in the object's window).
+    if (const std::vector<ObjectRow> rows = object_rows(o);
+        list_row_ && std::find(rows.begin(), rows.end(), *list_row_) == rows.end())
+        list_row_.reset();
+    ImGui::Separator();
+    ImGui::TextColored(rgb(theme_.lavender), "%s", tr(T::ObjectsPicked));
+    ImGui::BeginChild("##object_pick", ImVec2(0, 0));
+    ImGui::PushID("pick");
+    bool removed = false;
+    if (!list_row_ || list_row_->kind == ObjectRow::Kind::Settings)
+        changed |= own_settings_editor(o.settings, {}, false, o.name);
+    else if (list_row_->kind == ObjectRow::Kind::Volume)
+        changed |= volume_editor(o, list_row_->index, removed);
+    else
+        changed |= range_editor(o, list_row_->index, removed);
+    if (removed)
+        list_row_.reset();
+    ImGui::PopID();
+    ImGui::EndChild();
+    if (changed)
+        plate_changed();
 }
 
 void App::plate_tools() {

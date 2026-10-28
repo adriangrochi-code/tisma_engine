@@ -182,6 +182,18 @@ Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t triangle);
 // in order; a key added with the profile's value now; a key taken away; and
 // its keys' values taken from settings edited in the panel.
 std::vector<std::string> own_keys(const std::string& own);
+
+// The rows under an object in the list of the plate's objects
+// (settings_levels.md, rules 11 and 13): one per group of its own settings
+// (walls, infill and surfaces, in that order, then any other), one per
+// modifier or negative volume, one per height range.
+struct ObjectRow {
+    enum class Kind { Settings, Volume, Range } kind = Kind::Settings;
+    std::string group{};   // Settings: its group
+    std::size_t index = 0; // Volume and Range: which one
+    friend bool operator==(const ObjectRow&, const ObjectRow&) = default;
+};
+std::vector<ObjectRow> object_rows(const PlateObject& object);
 std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key);
 std::string without_own_key(const std::string& own, std::string_view key);
 std::string own_values(const std::string& own, const Settings& edited);

@@ -393,3 +393,20 @@ TEST_CASE("plate: modifiers and negative volumes follow their model's turn, scal
     CHECK(near({mirrored.offset[0], mirrored.offset[1], mirrored.offset[2]}, {-5.0, 0.0, 3.0}));
     CHECK(mirrored.turn == kNoRotation);
 }
+
+TEST_CASE("plate: the rows under an object in the list (settings_levels.md, rules 11 and 13)", "[plate]") {
+    PlateObject o;
+    o.mesh = box(0, 0, 0, 10, 10, 10);
+    CHECK(object_rows(o).empty());
+    o.settings = R"({"infill": {"density": 15, "pattern": "grid"}, "walls": {"count": 3}})";
+    o.volumes.push_back({});
+    o.volumes.push_back({PlateVolume::Kind::Negative});
+    o.ranges.push_back({});
+    const std::vector<ObjectRow> rows = object_rows(o);
+    REQUIRE(rows.size() == 5);
+    CHECK(rows[0] == ObjectRow{ObjectRow::Kind::Settings, "walls", 0});
+    CHECK(rows[1] == ObjectRow{ObjectRow::Kind::Settings, "infill", 0});
+    CHECK(rows[2] == ObjectRow{ObjectRow::Kind::Volume, {}, 0});
+    CHECK(rows[3] == ObjectRow{ObjectRow::Kind::Volume, {}, 1});
+    CHECK(rows[4] == ObjectRow{ObjectRow::Kind::Range, {}, 0});
+}

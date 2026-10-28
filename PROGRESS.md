@@ -6591,3 +6591,26 @@ volumen en la ventana (hoy solo cambia al guardar o espejar).
 
 **No medido:** el dibujo de los volúmenes calcula en cada cuadro la caja del modelo (una pasada por sus vértices) por
 cada volumen; con mallas de millones de triángulos puede notarse.
+
+
+## 2026-10-28 — La pestaña Objetos: las piezas con sus filas hijas
+
+**Por qué:** lo siguiente de P1 (`settings_levels.md`, reglas 11 y 13; `tools/check_spec.py` limpio): el panel de la
+izquierda con Impresión, Material y Objetos, y en Objetos cada pieza con sus ajustes propios, partes y modificadores
+debajo.
+
+**Hecho:**
+- `object_rows` (`src/ui/plate.*`): las filas bajo una pieza, un grupo de ajustes propios por fila (paredes, relleno y
+  superficies en ese orden, después cualquier otro), cada modificador o negativo y cada rango.
+- La pestaña **Objetos** al lado de Impresión y Material: la lista de piezas con esas filas; elegir la pieza la elige en
+  la placa y elegir una fila muestra abajo «Ajustes de la pieza a cambiar» (regla 11), con el mismo editor que la
+  ventana «Ajustes de …»: los ajustes de la pieza con su cruz, o la forma, el lugar, el tamaño y los ajustes de un
+  volumen, o las alturas y los ajustes de un rango (`volume_editor` y `range_editor`, sacados de la ventana).
+- `--section objects/<fila>` abre la pestaña con esa fila elegida, y la prueba `ui_objects_list`.
+
+**Medido:** `[plate]`: las filas de un cubo con relleno y paredes propios (paredes primero), dos volúmenes y un rango.
+La captura en inglés muestra la fila Infill elegida con «Infill density» 15 % y «Infill pattern» Grid, cada uno con su
+cruz, como la imagen de la regla 11.
+
+**Falta:** los íconos de las filas; elegir una fila desde la vista 3D (un clic en un modificador); arrastrar filas.
+
