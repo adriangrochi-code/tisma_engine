@@ -85,4 +85,4 @@ mismos para comparar.
 | `support.interface_layers` | — | Capas densas bajo la pieza | 3 |
 | `support.spacing` | mm | Separación de las líneas del soporte | 2,5 |
 | `support.xy_gap` | mm o % | Separación horizontal pieza–soporte | — |
-| `support.free_bridge_length` | mm | Los puentes más cortos que esto no llevan soporte (es la capacidad de la impresora) | 16 |
+| `support.free_bridge_length` | mm | Puente más largo que la impresora puede tender: más largo, la revisión antes de imprimir avisa. No cambia el soporte (`supports_skirt.md`, S10) | 16 |
