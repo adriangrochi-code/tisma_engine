@@ -7100,3 +7100,19 @@ No se midió la esfera: la máquina no estuvo libre en este bloque (el CI corrí
 los lazos de contacto van en las dos capas de interfaz de arriba (`supports_more.md`, regla 12): el motor los pone
 solo en la de arriba, se cambia cuando la ficha llegue a `main`; el lector STEP propio (`step_reader.md`, decisión
 del dueño) entra en `PLAN.md` cuando llegue a `main`.
+
+## 2026-10-28 (tarde): `speed.small_loops`
+
+**Hecho:** `speed.small_loops` (`gcode_motion.md`, regla 3): un perímetro cerrado de menos de 40,84 mm (la
+circunferencia de 6,5 mm de radio de la ficha; 40,6 mm sí, 42,2 mm no) va a esa velocidad, también el externo, en
+mm/s o un porcentaje de `speed.walls`. Sin valor, como antes. El largo se mide sobre el lazo entero; si tiene tramos
+en voladizo, estos siguen yendo más lentos que la velocidad del lazo chico. En el panel, en «Velocidad de paredes y
+superficies», nivel Avanzado; el fuzzer la sortea.
+
+**Probado:** M4 con cubos: en uno de 10 mm (lazos de 38,2 mm a lo sumo) todas las paredes a 15 mm/s, o al 25 % de
+60; en uno de 20 mm, ninguna.
+
+**Sigue:** `speed.max_flow`, `machine.high_flow_nozzle`, `object`, `extrusion` (pellets),
+`filament.transmission_distance`, `orient`, y los sueltos (`layers.first_line_width`, `mixing.purge_infill_max`,
+`placement.drop_to_bed`, `retraction.coast`). Los lazos de contacto en las dos capas de arriba y el lector STEP
+esperan a que sus fichas lleguen a `main`.

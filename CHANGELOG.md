@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`speed.small_loops`** (ficha `gcode_motion.md`, regla 3): los perímetros cerrados de menos de 40,84 mm, también el
+  externo, van a esa velocidad, en mm/s o un porcentaje de `speed.walls`. Sin valor, cada pared a la suya.
+
 - **Guías de calibración en la ayuda** (ficha `assistant.md`): la pestaña Calibraciones con las guías del paquete en
   orden, del filamento y de la impresora; cada guía dice para qué sirve, cuándo repetirla, qué prueba conviene hacer
   antes, sus pasos, cómo leer la impresión, el resultado y sus fuentes («Basado en»). Con lo medido (la altura en

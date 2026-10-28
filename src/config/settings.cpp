@@ -1868,7 +1868,7 @@ Settings parse_checked(std::string_view text) {
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
                 "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft",
-                "support_interface"},
+                "support_interface", "small_loops"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -1887,6 +1887,7 @@ Settings parse_checked(std::string_view text) {
                    // The speeds that may be a share of another.
                    Speed* const share = n == "outer_wall"           ? &s.outer_wall_speed
                                         : n == "over_bridges"       ? &s.over_bridges_speed
+                                        : n == "small_loops"        ? &s.small_loop_speed
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
                                         : n == "first_layer_over_raft" ? &s.first_layer_over_raft
                                         : n == "support_interface" ? &s.support_interface_speed
@@ -2796,7 +2797,7 @@ double fastest_extrusion(const Settings& s) {
     const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
                                      s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
                                      s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
-                                     s.over_bridges_speed.of(s.solid_infill_speed),
+                                     s.over_bridges_speed.of(s.solid_infill_speed), s.small_loop_speed.of(s.wall_speed),
                                      s.first_layer_infill_speed.of(s.solid_infill_speed)});
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
 }
@@ -3097,6 +3098,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.bridges", speed(s.bridge_speed)},
         {"speed.gap_fill", speed(s.gap_fill_speed)},
         {"speed.over_bridges", share(s.over_bridges_speed)},
+        {"speed.small_loops", share(s.small_loop_speed)},
         {"speed.support_interface", share(s.support_interface_speed)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
@@ -3594,6 +3596,7 @@ std::string settings_json(const Settings& s) {
           {"bridges", speed(s.bridge_speed)},
           {"gap_fill", speed(s.gap_fill_speed)},
           {"over_bridges", share(s.over_bridges_speed)},
+          {"small_loops", share(s.small_loop_speed)},
           {"support_interface", share(s.support_interface_speed)},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
           {"travel_z", speed(s.travel_z_speed)},

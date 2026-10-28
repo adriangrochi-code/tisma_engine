@@ -1082,6 +1082,7 @@
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SpeedBridges, "Puentes", "Bridges") \
     X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedSmallLoops, "Perímetros chicos", "Small loops") \
     X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
     X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
     X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \

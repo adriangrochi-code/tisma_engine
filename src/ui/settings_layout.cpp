@@ -103,6 +103,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.top_solid_infill", N},
             {"speed.bridges", N},
             {"speed.over_bridges", A},
+            {"speed.small_loops", A},
             {"speed.gap_fill", A}}},
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}, {"speed.support_interface", A}}},
           {"travel", T::SubTravelSpeed,

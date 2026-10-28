@@ -111,6 +111,10 @@ struct HeightChange {
 // A test in bands along the height (calibrations.md, rules 1 to 3): band i,
 // from Z = i band_height, tries start + i step, never past end.
 enum class CalibrationMode { Off, Temperature, PressureAdvance, Retraction, MaxFlow, Acceleration, Corners, InputShaping };
+// A closed wall shorter than this goes at speed.small_loops (gcode_motion.md,
+// rule 3: 40.6 mm yes, 42.2 mm no; a circle of 6.5 mm radius), mm.
+inline constexpr double kSmallLoop = 40.84;
+
 struct CalibrationBands {
     CalibrationMode mode = CalibrationMode::Off;
     double start = 0.0, step = 0.0, end = 0.0;
@@ -530,6 +534,7 @@ struct Settings {
     double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
+    Speed small_loop_speed;         // closed walls shorter than kSmallLoop, or a share of walls (their own)
     Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)

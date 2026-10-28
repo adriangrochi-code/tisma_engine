@@ -294,6 +294,9 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "retraction", "start": 1, "step": 2, "end": 80}})"),
                       ContainsSubstring("calibration.end"));
     CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 0}})"));
+    CHECK(parse_settings(R"({"speed": {"small_loops": "25%"}})").small_loop_speed == Speed{25.0, true});
+    CHECK(parse_settings(R"({"speed": {"small_loops": 15}})").small_loop_speed == Speed{15.0, false});
+    CHECK_THROWS(parse_settings(R"({"speed": {"small_loops": 0}})"));
     CHECK(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 1000, "step": 1000, "end": 5000}})")
               .changes.size() == 5);
     CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);

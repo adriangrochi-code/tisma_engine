@@ -919,6 +919,7 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedSmallLoops, "speed.small_loops"},
         {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
@@ -5883,6 +5884,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         // 0: the solid infill's.
         mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
         share_row(T::SpeedOverBridges, "speed.over_bridges", s.over_bridges_speed);
+        share_row(T::SpeedSmallLoops, "speed.small_loops", s.small_loop_speed);
         mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : "—",
            0.5f);
     } else if (id == "infill_support") {

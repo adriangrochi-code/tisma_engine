@@ -2989,7 +2989,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (l < model.seam_block.size())
             painted.block = &model.seam_block[l];
         // over: the feed of what lies over a bridge (solid infill).
-        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double feed, SeamMode seam,
+        // A closed wall shorter than kSmallLoop, the outer one too, at
+        // speed.small_loops (gcode_motion.md, rule 3).
+        const auto small_loop = [&](const Toolpath& t) {
+            if (!t.closed || !(s.small_loop_speed.value > 0.0) || t.points.size() < 2)
+                return false;
+            double length = 0.0;
+            for (std::size_t k = 0; k < t.points.size(); ++k)
+                length += std::hypot(t.points[(k + 1) % t.points.size()].p.x - t.points[k].p.x,
+                                     t.points[(k + 1) % t.points.size()].p.y - t.points[k].p.y);
+            return length < kSmallLoop;
+        };
+        auto group = [&](const std::vector<Toolpath>& paths, const char* type, double group_feed, SeamMode seam,
                          bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {},
                          double over = 0.0) {
             std::vector<Toolpath> ordered = order_paths(paths, cursor, seam, seed, seams,
@@ -2997,6 +3008,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             std::vector<Pending> typed;
             typed.reserve(ordered.size());
             for (Toolpath& t : ordered) {
+                const double feed =
+                    walls && small_loop(t) ? speed(s.small_loop_speed.of(s.wall_speed)) : group_feed;
                 if (over > 0.0 && over_bridge && !in_thick) {
                     for (WallPiece& piece : wall_pieces(t, *over_bridge, *nowhere, 0.0, true))
                         typed.push_back({std::move(piece.path), type, piece.overhang ? over : feed});

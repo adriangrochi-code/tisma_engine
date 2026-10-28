@@ -234,6 +234,7 @@ int main(int argc, char** argv) {
         if (pick(3) == 0) {
             s.bridge_speed = pick(2) == 0 ? 0.0 : uni(5, 120);
             s.over_bridges_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
+            s.small_loop_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
             s.first_layer_infill_speed = pick(2) == 0 ? Speed{uni(10, 150), true} : Speed{uni(5, 120), false};
             s.travel_z_speed = pick(2) == 0 ? 0.0 : uni(2, 60);
             s.infill_max_speed = pick(2) == 0 ? 0.0 : uni(10, 200);
@@ -525,6 +526,8 @@ int main(int argc, char** argv) {
                 ++failures;
                 std::printf("run %d (%s): %zu problems; first: line %zu: %s\n", run, name, c.problem_count,
                             c.problems[0].line, c.problems[0].message.c_str());
+                for (std::size_t k = 1; k < std::min<std::size_t>(c.problems.size(), 3); ++k)
+                    std::printf("  then line %zu: %s\n", c.problems[k].line, c.problems[k].message.c_str());
                 std::printf("  layer %.3f first %.3f walls %d width %.3f infill %.1f pattern %d support %d brim %.2f skirt %d retract %.2f lift %.2f relE %d seam %d minlt %.1f fil %.2f xyoff %.3f shrink %.3f maxv %.0f travel %.0f\n",
                             s.layer_height, s.first_layer_height, s.wall_count, s.wall_width, s.infill_density, int(s.infill_pattern), int(s.support), s.brim_width, s.skirt_loops, s.retract_length, s.retract_lift, int(s.relative_extrusion), int(s.seam), s.min_layer_time, s.filament_diameter, s.xy_offset, s.first_layer_shrink, s.max_speed, s.travel_speed);
                 std::printf("  zaa %d min %.0f raise %d detail %.3f tol %.3f margin %.2f cusp %.3f layers %.3f-%.3f steps",
