@@ -570,3 +570,50 @@ TEST_CASE("curved layers: automatic is the overhangs' and the top faces' togethe
     CHECK(over < 0.05 * flat);
     CHECK(automatic < 0.05 * flat);
 }
+
+TEST_CASE("curved layers: joined pieces keep J across the ramp's top (fuzz 2026-10-28)", "[curved]") {
+    // A gentle roof (top faces' grid, ramped in evenly up to `full`): J
+    // steps from 1.25 under `full` to 1 over it. A straight piece joined
+    // over the ridge has its chord a little under the surface; its E is
+    // the flat E by J at the chord's middle, as for any piece.
+    CurvedField f;
+    f.mode = CurvedMode::Surface;
+    f.flat_below = 0.6;
+    f.full = 5.6;
+    f.grid = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+    f.nx = f.ny = 3;
+    f.cell = 50.0;
+    f.grid_x = f.grid_y = -50.0;
+    Settings s = base();
+    s.curved_mode = CurvedMode::Surface;
+    const double per_mm = 0.1;
+    int pieces = 0;
+    for (double flat = 4.3; flat < 4.7; flat += 0.002) {
+        const std::string text = curve_gcode("G1 X-20 Y0.3 Z" + std::to_string(flat) + " F600\nG1 X20 Y0.3 E4\n", f, s);
+        double x = -20, y = 0.3, z = f.real_z(x, y, flat);
+        std::istringstream in(text);
+        std::string line;
+        std::getline(in, line); // the travel
+        while (std::getline(in, line)) {
+            double nx = x, ny = y, nz = z, e = 0.0;
+            std::istringstream words(line.substr(3));
+            for (std::string w; words >> w;) {
+                const double v = std::atof(w.c_str() + 1);
+                if (w[0] == 'X')
+                    nx = v;
+                else if (w[0] == 'Y')
+                    ny = v;
+                else if (w[0] == 'Z')
+                    nz = v;
+                else if (w[0] == 'E')
+                    e = v;
+            }
+            const double length = std::hypot(nx - x, ny - y);
+            const double j = f.thickness(0.5 * (x + nx), 0.5 * (y + ny), 0.5 * (z + nz));
+            INFO("flat " << flat << ": " << line);
+            CHECK_THAT(e, WithinAbs(per_mm * j * length, 0.02 * per_mm * j * length + 2e-5));
+            x = nx, y = ny, z = nz, ++pieces;
+        }
+    }
+    CHECK(pieces > 1000);
+}

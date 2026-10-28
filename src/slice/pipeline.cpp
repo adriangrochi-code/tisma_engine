@@ -21,6 +21,7 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -194,15 +195,20 @@ std::optional<LayerWalls> one_wall_on_top(const Polygons& region, const Polygons
 }
 
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings) {
+    return compensated_like(mesh, mesh, settings);
+}
+
+IndexedMesh compensated_like(const IndexedMesh& mesh, const IndexedMesh& part, const Settings& settings) {
     // The filament's shrinkage (gcode_extras.md, rule 4): the part grows so
     // that, shrunk, it measures what was asked.
     const double grow_xy = 100.0 / (100.0 - settings.shrinkage_xy), grow_z = 100.0 / (100.0 - settings.shrinkage_z);
     const double sx = settings.scale_x / 100.0 * grow_xy, sy = settings.scale_y / 100.0 * grow_xy,
                  sz = settings.scale_z / 100.0 * grow_z;
-    if (mesh.vertices.empty() || (sx == 1.0 && sy == 1.0 && sz == 1.0))
+    if (mesh.vertices.empty() || part.vertices.empty() || (sx == 1.0 && sy == 1.0 && sz == 1.0))
         return mesh;
-    float x0 = mesh.vertices.front().x, x1 = x0, y0 = mesh.vertices.front().y, y1 = y0, z0 = mesh.vertices.front().z;
-    for (const Vec3f& v : mesh.vertices) {
+    // About the part's centre and its bottom, whatever mesh moves.
+    float x0 = part.vertices.front().x, x1 = x0, y0 = part.vertices.front().y, y1 = y0, z0 = part.vertices.front().z;
+    for (const Vec3f& v : part.vertices) {
         x0 = std::min(x0, v.x), x1 = std::max(x1, v.x);
         y0 = std::min(y0, v.y), y1 = std::max(y1, v.y);
         z0 = std::min(z0, v.z);
@@ -305,6 +311,7 @@ void append_object(SlicedModel& out, SlicedModel&& part, SlicedObject object) {
         out.groups.push_back(std::move(g));
     }
     out.open_contours += part.open_contours;
+    out.cut_away += part.cut_away;
     out.zaa_points += part.zaa_points;
     out.objects.push_back(std::move(object));
 }
@@ -355,8 +362,17 @@ namespace {
 // it took (`taken`) is not this one's. The support is the plate's: the part
 // rests on it but lays none, nor skirt or brim. Its fills are centred where
 // the plate's are.
+// A modifier that changes only the infill (model_tools.md, rule 3, MT4):
+// where it reaches, the sparse infill takes its pattern, density and angle;
+// the walls go round the whole part.
+struct InfillZone {
+    std::vector<Polygons> reach; // per layer of the frame
+    Settings settings;
+};
+
 struct PartFrame {
     LayerStack stack;
+    const std::vector<InfillZone>* infill_zones = nullptr;
     const std::vector<Polygons>* cover = nullptr;
     const std::vector<Polygons>* taken = nullptr;
     const std::vector<Polygons>* support = nullptr;
@@ -375,10 +391,13 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& se
                          const IndexedMesh* negative = nullptr);
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1,
-                        const IndexedMesh* negative = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr);
+// `uncompensated`: the plate before compensated(), for the modifiers to be
+// compensated as it was.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects,
-                        const IndexedMesh* negative = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
+                        const IndexedMesh* uncompensated = nullptr);
 
 // Each list of a part's paths (walls and fills, not the support), with its layer.
 template <class F>
@@ -463,10 +482,12 @@ PartNozzles part_nozzles(const Settings& s, int tool) {
     return p;
 }
 
-// Whether the plate's objects print with more than one extruder.
+// Whether the plate's objects print with more than one extruder, or with
+// settings of their own that differ (model_tools.md, rules 5 and 7).
 bool several_tools(const std::vector<MeshObject>& objects, const Settings& settings) {
     return std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
-        return object_tool(o, settings) != object_tool(objects.front(), settings);
+        return object_tool(o, settings) != object_tool(objects.front(), settings) ||
+               o.settings != objects.front().settings;
     });
 }
 
@@ -474,10 +495,93 @@ bool several_tools(const std::vector<MeshObject>& objects, const Settings& setti
 
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
                         const StressField* stress, const Painting* painting, const std::vector<MeshObject>* given,
-                        const std::vector<ColorMix>* mixes, const IndexedMesh* negative_volumes) {
+                        const std::vector<ColorMix>* mixes, const IndexedMesh* negative_volumes,
+                        const std::vector<MeshModifier>* given_modifiers) {
     SlicedModel out;
     if (input.vertices.empty())
         return out;
+    // Height ranges (model_tools.md, rule 6): their layer heights as tramos
+    // of layers.heights, each starting a layer, and their other settings as a
+    // modifier as wide as the object between their heights, under the parts'
+    // own settings and the modifiers.
+    std::vector<MeshModifier> with_ranges;
+    std::optional<Settings> ranged;
+    if (given)
+        for (const MeshObject& o : *given) {
+            if (o.ranges.empty())
+                continue;
+            const IndexedMesh piece = object_mesh(input, o);
+            if (piece.vertices.empty())
+                continue;
+            float x0 = piece.vertices.front().x, x1 = x0, y0 = piece.vertices.front().y, y1 = y0, z0 = piece.vertices.front().z;
+            for (const Vec3f& v : piece.vertices)
+                x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y),
+                z0 = std::min(z0, v.z);
+            for (const MeshObject::HeightRange& r : o.ranges) {
+                if (!(r.to > r.from))
+                    continue;
+                char span[64];
+                std::snprintf(span, sizeof span, " %g-%g mm", r.from, r.to);
+                const std::string where = o.name + span;
+                const Settings own = own_settings(settings, r.settings, where, true); // and its errors said
+                bool layers = false;
+                const std::string rest = own_without(r.settings, "layers", &layers);
+                if (layers) {
+                    if (!ranged)
+                        ranged = settings;
+                    if (!settings.layer_heights.empty()) {
+                        out.notices.push_back(o.name + ": layers.heights is given, so the height ranges' layer heights are left out");
+                    } else {
+                        // Past the range, the height that held there before it.
+                        auto& h = ranged->layer_heights;
+                        double after = settings.layer_height;
+                        for (const auto& t : h)
+                            if (t[0] <= z0 + r.to + 1e-9)
+                                after = t[1];
+                        h.erase(std::remove_if(h.begin(), h.end(), [&](const auto& t) {
+                                    return t[0] >= z0 + r.from - 1e-9 && t[0] < z0 + r.to - 1e-9;
+                                }),
+                                h.end());
+                        h.push_back({double(z0) + r.from, own.layer_height});
+                        if (std::none_of(h.begin(), h.end(), [&](const auto& t) { return std::abs(t[0] - (z0 + r.to)) < 1e-9; }))
+                            h.push_back({double(z0) + r.to, after});
+                        std::sort(h.begin(), h.end());
+                    }
+                }
+                if (rest.empty())
+                    continue;
+                MeshModifier m{where, o.object, {}, rest, true};
+                const Vec3f lo{x0 - 1.0f, y0 - 1.0f, float(double(z0) + r.from)}, hi{x1 + 1.0f, y1 + 1.0f, float(double(z0) + r.to)};
+                const Vec3f c[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                                    {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+                static constexpr int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                                 {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+                for (const auto& t : f)
+                    m.mesh.add_triangle(c[t[0]], c[t[1]], c[t[2]]);
+                with_ranges.push_back(std::move(m));
+            }
+        }
+    if (!with_ranges.empty() && given_modifiers)
+        with_ranges.insert(with_ranges.end(), given_modifiers->begin(), given_modifiers->end());
+    if (ranged || !with_ranges.empty()) {
+        // The ranges' layers, the ranges as modifiers (first in the list: the
+        // modifiers, later, win), and the objects without their ranges.
+        std::vector<MeshObject> plain = *given;
+        for (MeshObject& o : plain)
+            o.ranges.clear();
+        SlicedModel ranged_out = slice_model(input, ranged ? *ranged : settings, gpu, stress, painting, &plain, mixes,
+                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges);
+        ranged_out.notices.insert(ranged_out.notices.begin(), out.notices.begin(), out.notices.end());
+        return ranged_out;
+    }
+    const std::vector<MeshModifier>* modifiers =
+        given_modifiers && !given_modifiers->empty() ? given_modifiers : nullptr;
+    // Modifiers change parts of objects: without a list, the plate is object 0.
+    std::vector<MeshObject> whole;
+    if (modifiers && (!given || given->empty())) {
+        whole.push_back({"object", 0, input.triangles.size(), 0, 0});
+        given = &whole;
+    }
     const IndexedMesh* negative =
         negative_volumes && !negative_volumes->triangles.empty() ? negative_volumes : nullptr;
     // A belt printer (belt_printer.md): the part turned so that the planes
@@ -487,6 +591,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         Settings flat = settings;
         flat.belt_enabled = false;
         flat.skirt_loops = 0;
+        if (modifiers)
+            throw std::invalid_argument("belt printers do not take modifiers yet");
         if (negative) {
             const IndexedMesh turned = belt_mesh(*negative, settings);
             return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes, &turned);
@@ -499,6 +605,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
     if (settings.curved_mode != CurvedMode::Disabled) {
         if (painting && !painting->empty())
             throw CurvedError("curved layers do not take painted faces yet (curved.mode)");
+        if (modifiers)
+            throw CurvedError("curved layers do not take modifiers yet (curved.mode)");
         if (negative)
             throw CurvedError("curved layers do not take negative volumes yet (curved.mode)");
         std::optional<CurvedField> field = curved_field(settings, input);
@@ -559,7 +667,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (mesh.triangles.empty())
                     continue;
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
-                SlicedModel part = slice_plate(mesh, settings, gpu, stress, painting ? &paint : nullptr, nullptr,
+                const Settings own = own_settings(settings, o.settings, o.name);
+                SlicedModel part = slice_plate(mesh, own, gpu, stress, painting ? &paint : nullptr, nullptr,
                                                object_tool(o, settings), negative);
                 if (part.layers.empty())
                     continue;
@@ -580,11 +689,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         // Each extruder's objects apart on the plate's layers
         // (multi_extruder.md, rule 1); one other than the first, every path its.
-        if (several_tools(*objects, settings)) {
-            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative);
+        if (several_tools(*objects, settings) || modifiers) {
+            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers);
         } else {
-            out = slice_plate(input, settings, gpu, stress, painting, nullptr, object_tool(objects->front(), settings),
-                              negative);
+            out = slice_plate(input, own_settings(settings, objects->front().settings, objects->front().name), gpu,
+                              stress, painting, nullptr, object_tool(objects->front(), settings), negative);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -608,13 +717,13 @@ namespace {
 
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool,
-                        const IndexedMesh* negative) {
+                        const IndexedMesh* negative, const std::vector<MeshModifier>* modifiers) {
     // Several extruders print layer by layer, every extruder on every layer:
     // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
     if (settings.extruders > 1 && settings.detail_height > 0.0) {
         Settings flat = settings;
         flat.detail_height = 0.0;
-        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative);
+        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative, modifiers);
     }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
@@ -625,7 +734,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative);
+        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative, modifiers);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -636,17 +745,18 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
-        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers);
         add_raft(raft, settings);
         return raft;
     }
     const IndexedMesh mesh = compensated(input, settings);
     std::optional<IndexedMesh> cut;
     if (negative)
-        cut = compensated(*negative, settings);
+        cut = compensated_like(*negative, input, settings);
     if (!tools)
         return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr);
-    return slice_tools(mesh, settings, gpu, stress, painting, *tools, cut ? &*cut : nullptr);
+    return slice_tools(mesh, settings, gpu, stress, painting, *tools, cut ? &*cut : nullptr, modifiers,
+                       &input);
 }
 
 // A part's regions on given layers, as slice_layers makes them before its
@@ -734,7 +844,8 @@ void interlock(std::vector<std::vector<Polygons>>& regions, const std::vector<La
 // and their walls and fills, each path marked with its extruder, in place
 // of the plate's.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
-                        const Painting* painting, const std::vector<MeshObject>& objects, const IndexedMesh* negative) {
+                        const Painting* painting, const std::vector<MeshObject>& objects, const IndexedMesh* negative,
+                        const std::vector<MeshModifier>* modifiers, const IndexedMesh* uncompensated) {
     SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative);
     if (out.layers.empty())
         return out;
@@ -759,22 +870,55 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     frame.support = &out.support_areas;
     Settings part_settings = settings;
     part_settings.support = false;
+    // The parts to slice apart: the objects of each extruder with the same
+    // settings of their own (model_tools.md, rules 5, 7 and 8). The first
+    // extruder first; with one extruder, the group whose part comes later in
+    // the list first, so that it keeps what it shares with an earlier one
+    // (MT11).
+    struct Group {
+        int tool = 1;
+        std::string settings, part; // the merged settings, and the part's own (for the ranges)
+        std::size_t last = 0;
+    };
+    std::vector<Group> groups;
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        const int tool = object_tool(objects[i], settings);
+        const auto g = std::find_if(groups.begin(), groups.end(), [&](const Group& x) {
+            return x.tool == tool && x.settings == objects[i].settings && x.part == objects[i].part_settings;
+        });
+        if (g == groups.end())
+            groups.push_back({tool, objects[i].settings, objects[i].part_settings, i});
+        else
+            g->last = i;
+    }
+    std::sort(groups.begin(), groups.end(), [](const Group& a, const Group& b) {
+        return a.tool != b.tool ? a.tool < b.tool : a.last > b.last;
+    });
     std::vector<int> tools;
-    for (const MeshObject& o : objects)
-        tools.push_back(object_tool(o, settings));
-    std::sort(tools.begin(), tools.end());
-    tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+    std::vector<Settings> group_settings;
+    for (const Group& g : groups) {
+        tools.push_back(g.tool);
+        const MeshObject& named = objects[g.last];
+        Settings own = own_settings(part_settings, g.settings, named.name);
+        group_settings.push_back(std::move(own));
+    }
+    std::vector<int> distinct = tools;
+    std::sort(distinct.begin(), distinct.end());
+    distinct.erase(std::unique(distinct.begin(), distinct.end()), distinct.end());
     // The combined infill (docs/INFILL.md) in the same runs for every part,
     // as thick as the finest of their infill nozzles holds.
     if (settings.infill_combine_auto || settings.infill_combine_layers > 1 || settings.fine_walls_coarse_infill) {
         double most = std::numeric_limits<double>::infinity();
-        for (const int tool : tools) {
+        for (const int tool : distinct) {
             const PartNozzles nozzles = part_nozzles(settings, tool);
             if (nozzles.settings.infill_combine_auto || nozzles.settings.infill_combine_layers > 1)
                 most = std::min(most, combine_max_height(nozzles.settings, nozzles.infill_nozzle));
         }
-        if (std::isfinite(most))
+        if (std::isfinite(most)) {
             part_settings.infill_combine_max_height = {most, false};
+            for (Settings& g : group_settings)
+                g.infill_combine_max_height = {most, false};
+        }
     }
     std::vector<LayerWalls> walls(n);
     std::vector<LayerFill> fills(n);
@@ -794,7 +938,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     std::vector<Painting> part_paints(tools.size());
     for (std::size_t p = 0; p < tools.size(); ++p)
         for (const MeshObject& o : objects) {
-            if (object_tool(o, settings) != tools[p])
+            if (object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
+                o.part_settings != groups[p].part)
                 continue;
             const IndexedMesh piece = object_mesh(mesh, o);
             if (painting)
@@ -804,9 +949,94 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
             for (const auto& t : piece.triangles)
                 part_meshes[p].triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
         }
+    // The modifiers (model_tools.md, rules 3 and 5): where one meets the
+    // parts of its object in a group, a group of its own with its settings
+    // over the group's, its regions that zone. They go first, the later
+    // modifier first, so that they keep their zone (MT12).
+    std::vector<std::vector<Polygons>> zone(tools.size());
+    std::vector<std::vector<InfillZone>> infill_zones(tools.size()); // by the parts' groups
+    // A zone's settings (rule 5): a modifier's over the part's, a height
+    // range's between the object's and the part's own.
+    const auto zone_own = [](const Group& g, const MeshModifier& m) {
+        return m.under_parts ? merged_own(merged_own(g.settings, m.settings), g.part) : merged_own(g.settings, m.settings);
+    };
+    if (modifiers && uncompensated) {
+        Settings bare = settings; // the modifier's outline as it is, no offsets
+        bare.xy_offset = 0.0, bare.hole_offset = 0.0, bare.first_layer_shrink = 0.0;
+        std::vector<int> zone_tools;
+        std::vector<Settings> zone_settings;
+        std::vector<IndexedMesh> zone_meshes;
+        std::vector<std::vector<Polygons>> zones;
+        for (std::size_t mi = modifiers->size(); mi-- > 0;) {
+            MeshModifier m = (*modifiers)[mi];
+            // The layer height is the object's (rule 4, MT6): left out, and said so.
+            bool layers = false;
+            m.settings = own_without(m.settings, "layers", &layers);
+            if (layers)
+                out.notices.push_back(m.name + ": the layer height is the object's, not a modifier's (model_tools.md, rule 4)");
+            const IndexedMesh modifier = compensated_like(weld_exact(m.mesh), *uncompensated, settings);
+            if (modifier.triangles.empty())
+                continue;
+            const std::vector<Polygons> reach = part_regions(modifier, bare, frame.stack.layers, gpu);
+            // Only the infill: no zone of its own, the groups' infill changes there (MT4).
+            bool other = false;
+            const std::string infill_only = own_without(m.settings, "infill", &other);
+            if (other && infill_only.empty()) {
+                for (std::size_t p = 0; p < groups.size(); ++p)
+                    if (std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
+                            return o.object == m.object && object_tool(o, settings) == tools[p] &&
+                                   o.settings == groups[p].settings && o.part_settings == groups[p].part;
+                        }))
+                        infill_zones[p].push_back(
+                            {reach, own_settings(part_settings, zone_own(groups[p], m), m.name)});
+                continue;
+            }
+            for (std::size_t p = 0; p < groups.size(); ++p) {
+                // This group's parts of the modifier's object.
+                IndexedMesh parts;
+                for (const MeshObject& o : objects) {
+                    if (o.object != m.object || object_tool(o, settings) != tools[p] || o.settings != groups[p].settings ||
+                        o.part_settings != groups[p].part)
+                        continue;
+                    const IndexedMesh piece = object_mesh(mesh, o);
+                    const auto base = std::uint32_t(parts.vertices.size());
+                    parts.vertices.insert(parts.vertices.end(), piece.vertices.begin(), piece.vertices.end());
+                    for (const auto& t : piece.triangles)
+                        parts.triangles.push_back({t[0] + base, t[1] + base, t[2] + base});
+                }
+                if (parts.triangles.empty())
+                    continue;
+                std::vector<Polygons> shared = part_regions(parts, group_settings[p], frame.stack.layers, gpu);
+                bool any = false;
+                for (std::size_t l = 0; l < n; ++l) {
+                    shared[l] = l < reach.size() && !reach[l].empty() && !shared[l].empty()
+                                    ? Clipper2Lib::Intersect(shared[l], reach[l], Clipper2Lib::FillRule::NonZero)
+                                    : Polygons{};
+                    any = any || !shared[l].empty();
+                }
+                if (!any)
+                    continue;
+                zone_tools.push_back(tools[p]);
+                zone_settings.push_back(own_settings(part_settings, zone_own(groups[p], m), m.name));
+                zone_settings.back().infill_combine_max_height = group_settings[p].infill_combine_max_height;
+                zone_meshes.push_back(std::move(parts));
+                zones.push_back(std::move(shared));
+            }
+        }
+        // In front of the parts' groups.
+        tools.insert(tools.begin(), zone_tools.begin(), zone_tools.end());
+        group_settings.insert(group_settings.begin(), std::make_move_iterator(zone_settings.begin()),
+                              std::make_move_iterator(zone_settings.end()));
+        part_meshes.insert(part_meshes.begin(), std::make_move_iterator(zone_meshes.begin()),
+                           std::make_move_iterator(zone_meshes.end()));
+        part_paints.insert(part_paints.begin(), zone_tools.size(), Painting{});
+        zone.insert(zone.begin(), std::make_move_iterator(zones.begin()), std::make_move_iterator(zones.end()));
+        infill_zones.insert(infill_zones.begin(), zone_tools.size(), std::vector<InfillZone>{});
+    }
     // Beams between the materials (rule 17): every part's regions first.
     std::vector<std::vector<Polygons>> beamed;
-    if (settings.interlock_beams && tools.size() > 1) {
+    // Only between materials, each extruder one part.
+    if (settings.interlock_beams && distinct.size() > 1 && distinct.size() == tools.size()) {
         beamed.resize(tools.size());
         for (std::size_t p = 0; p < tools.size(); ++p)
             beamed[p] = part_meshes[p].triangles.empty() ? std::vector<Polygons>(n)
@@ -818,9 +1048,11 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         const IndexedMesh& part_mesh = part_meshes[p];
         if (part_mesh.triangles.empty())
             continue;
-        frame.regions = beamed.empty() ? nullptr : &beamed[p];
+        frame.regions = !zone[p].empty() ? &zone[p] : beamed.empty() ? nullptr : &beamed[p];
+        frame.infill_zones = infill_zones[p].empty() ? nullptr : &infill_zones[p];
         SlicedModel part =
-            slice_layers(part_mesh, part_settings, gpu, stress, painting ? &part_paints[p] : nullptr, &frame, tool, negative);
+            slice_layers(part_mesh, group_settings[p], gpu, stress,
+                         painting && !part_paints[p].empty() ? &part_paints[p] : nullptr, &frame, tool, negative);
         tag_tool(part, tool);
         zaa_points += part.zaa_points;
         // Their combined infill, in the same runs (above).
@@ -948,6 +1180,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
     std::vector<std::size_t> open(out.layers.size(), 0);
+    std::vector<char> cut_away(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
     // The thinnest feature that gets a bead (bead_count grows with the thickness).
     double lo = 0.0, hi = 4.0 * beading.preferred_width;
@@ -987,12 +1220,18 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             open[l] += c.closed ? 0 : 1;
         Polygons region = layer_region(simplify(to_polygons(contours[source[l]]), settings.simplify_tolerance),
                                        settings.fill_mode);
-        if (!cut.empty() && !cut[l].empty())
+        if (!cut.empty() && !cut[l].empty() && !region.empty()) {
             region = Clipper2Lib::Difference(region, cut[l], Clipper2Lib::FillRule::NonZero);
+            cut_away[l] = region.empty();
+        }
         const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
-        if (frame && frame->regions)
+        if (frame && frame->regions) {
             out.regions[l] = (*frame->regions)[l];
+            // Regions given from outside (a modifier's zone) lose the negative volumes too.
+            if (!cut.empty() && !cut[l].empty() && !out.regions[l].empty())
+                out.regions[l] = Clipper2Lib::Difference(out.regions[l], cut[l], Clipper2Lib::FillRule::NonZero);
+        }
         // Where an earlier extruder's part is, this one is not.
         if (frame && frame->taken && !(*frame->taken)[l].empty())
             out.regions[l] = Clipper2Lib::Difference(out.regions[l], (*frame->taken)[l], Clipper2Lib::FillRule::NonZero);
@@ -1043,6 +1282,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     }
     for (std::size_t n : open)
         out.open_contours += n;
+    out.cut_away = std::size_t(std::count(cut_away.begin(), cut_away.end(), 1));
     out.open_by_layer = std::move(open);
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)
@@ -1323,6 +1563,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 Clipper2Lib::Difference(out.surfaces[l].sparse, under, Clipper2Lib::FillRule::NonZero);
             dense_region[l] = std::move(under);
         });
+    // The infill-only modifiers' zones (model_tools.md, rule 3, MT4): their
+    // part of the sparse infill, the later modifier's first.
+    const std::size_t zones = frame && frame->infill_zones ? frame->infill_zones->size() : 0;
+    std::vector<std::vector<Polygons>> zone_region(zones, std::vector<Polygons>(out.layers.size()));
+    if (zones > 0)
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            for (std::size_t z = 0; z < zones && !out.surfaces[l].sparse.empty(); ++z) {
+                const InfillZone& zone = (*frame->infill_zones)[z];
+                if (l >= zone.reach.size() || zone.reach[l].empty())
+                    continue;
+                Polygons r = Clipper2Lib::Intersect(out.surfaces[l].sparse, zone.reach[l], Clipper2Lib::FillRule::NonZero);
+                if (r.empty())
+                    continue;
+                out.surfaces[l].sparse = Clipper2Lib::Difference(out.surfaces[l].sparse, r, Clipper2Lib::FillRule::NonZero);
+                zone_region[z][l] = std::move(r);
+            }
+        });
     // Combined sparse infill (docs/INFILL.md): what every layer of a run has
     // as sparse infill prints once, at the run's top layer, as thick as the
     // run. Layer heights by zone already print it thick: not with them; nor
@@ -1389,6 +1646,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
                dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty() &&
+               std::all_of(zone_region.begin(), zone_region.end(), [&](const std::vector<Polygons>& z) { return z[l].empty(); }) &&
                arc_paths[l].empty() && overhang_walls[l].empty();
     };
     std::vector<char> repeats(out.layers.size(), 0);
@@ -1422,6 +1680,20 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
                               for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
+                                  out.fills[l].sparse.push_back(std::move(t));
+                          }
+                          for (std::size_t z = 0; z < zones; ++z) {
+                              if (zone_region[z][l].empty())
+                                  continue;
+                              const Settings& own = (*frame->infill_zones)[z].settings;
+                              FillParams zoned = fill;
+                              zoned.density = own.infill_density / 100.0;
+                              zoned.angle = own.infill_angle;
+                              zoned.pattern = own.infill_pattern;
+                              zoned.depth = nullptr;
+                              LayerSurfaces only;
+                              only.sparse = zone_region[z][l];
+                              for (Toolpath& t : fill_layer(only, l, zoned, out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (!dense_region[l].empty()) {

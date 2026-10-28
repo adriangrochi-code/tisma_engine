@@ -6,6 +6,8 @@
 
 #include "slice/placement.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -373,6 +375,107 @@ std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std:
             best = PlateHit{o, h->first, h->second};
     }
     return best;
+}
+
+namespace {
+
+nlohmann::ordered_json own_json(const std::string& own) {
+    if (own.empty())
+        return nlohmann::ordered_json::object();
+    nlohmann::ordered_json j = nlohmann::ordered_json::parse(own);
+    return j.is_object() ? j : nlohmann::ordered_json::object();
+}
+
+std::pair<std::string, std::string> split_key(std::string_view key) {
+    const std::size_t dot = key.find('.');
+    if (dot == std::string_view::npos)
+        return {std::string(key), {}};
+    return {std::string(key.substr(0, dot)), std::string(key.substr(dot + 1))};
+}
+
+} // namespace
+
+std::vector<std::string> own_keys(const std::string& own) {
+    std::vector<std::string> out;
+    const nlohmann::ordered_json j = own_json(own);
+    for (const auto& [group, keys] : j.items())
+        if (keys.is_object())
+            for (const auto& [key, value] : keys.items())
+                out.push_back(group + "." + key);
+    return out;
+}
+
+std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key) {
+    nlohmann::ordered_json j = own_json(own);
+    const auto [group, name] = split_key(key);
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(profile));
+    if (!all.contains(group) || !all.at(group).contains(name))
+        return own;
+    j[group][name] = all.at(group).at(name);
+    return j.dump();
+}
+
+std::string without_own_key(const std::string& own, std::string_view key) {
+    nlohmann::ordered_json j = own_json(own);
+    const auto [group, name] = split_key(key);
+    if (j.contains(group)) {
+        j[group].erase(name);
+        if (j[group].empty())
+            j.erase(group);
+    }
+    return j.empty() ? std::string() : j.dump();
+}
+
+std::string own_values(const std::string& own, const Settings& edited) {
+    nlohmann::ordered_json j = own_json(own);
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(edited));
+    for (auto& [group, keys] : j.items())
+        for (auto& [key, value] : keys.items())
+            if (all.contains(group) && all.at(group).contains(key))
+                value = all.at(group).at(key);
+    return j.empty() ? std::string() : j.dump();
+}
+
+std::vector<std::string> own_setting_keys(const Settings& profile) {
+    std::vector<std::string> out;
+    const nlohmann::ordered_json all = nlohmann::ordered_json::parse(settings_json(profile));
+    for (const char* group : {"walls", "infill", "surfaces"})
+        if (all.contains(group))
+            for (const auto& [key, value] : all.at(group).items())
+                out.push_back(std::string(group) + "." + key);
+    return out;
+}
+
+TriangleMesh volume_mesh(const PlateVolume& v, const BoundingBox& placed) {
+    TriangleMesh m;
+    if (placed.empty)
+        return m;
+    const double cx = 0.5 * (double(placed.min.x) + placed.max.x) + v.offset[0];
+    const double cy = 0.5 * (double(placed.min.y) + placed.max.y) + v.offset[1];
+    const double z0 = double(placed.min.z) + v.offset[2], z1 = z0 + std::max(v.size[2], 0.01);
+    const double rx = std::max(v.size[0], 0.01) / 2.0, ry = std::max(v.size[1], 0.01) / 2.0;
+    const auto p = [](double x, double y, double z) { return Vec3f{float(x), float(y), float(z)}; };
+    if (v.shape == PlateVolume::Shape::Box) {
+        const Vec3f c[8] = {p(cx - rx, cy - ry, z0), p(cx + rx, cy - ry, z0), p(cx + rx, cy + ry, z0), p(cx - rx, cy + ry, z0),
+                            p(cx - rx, cy - ry, z1), p(cx + rx, cy - ry, z1), p(cx + rx, cy + ry, z1), p(cx - rx, cy + ry, z1)};
+        static constexpr int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                         {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+        for (const auto& t : f)
+            m.add_triangle(c[t[0]], c[t[1]], c[t[2]]);
+        return m;
+    }
+    constexpr int sides = 48;
+    const Vec3f bottom = p(cx, cy, z0), top = p(cx, cy, z1);
+    for (int i = 0; i < sides; ++i) {
+        const double a0 = 2.0 * 3.14159265358979323846 * i / sides, a1 = 2.0 * 3.14159265358979323846 * (i + 1) / sides;
+        const Vec3f b0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z0), b1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z0);
+        const Vec3f t0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z1), t1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z1);
+        m.add_triangle(bottom, b1, b0);
+        m.add_triangle(top, t0, t1);
+        m.add_triangle(b0, b1, t1);
+        m.add_triangle(b0, t1, t0);
+    }
+    return m;
 }
 
 } // namespace tisma::ui

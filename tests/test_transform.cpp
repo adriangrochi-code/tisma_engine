@@ -4,20 +4,24 @@
 #include "io/model.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/printable.hpp"
 #include "surfaces/surfaces.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 
 using namespace tisma;
+using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 
@@ -404,4 +408,271 @@ TEST_CASE("model tools: negative volumes take their volume away (MT1, MT3)", "[t
     r = slice_file(formats / "box_negative.3mf", "mt1b", R"("transform": {"split": true})");
     CHECK(r.code == kExitUsage);
     CHECK(r.err.find("negative volumes") != std::string::npos);
+}
+
+namespace {
+
+// The most walls a layer has where all of a path's points lie between x0
+// and x1: its highest bead index, plus one.
+int walls_between(const SlicedModel& m, std::size_t layer, double x0, double x1) {
+    int most = 0;
+    for (const Toolpath& t : m.walls[layer].toolpaths) {
+        if (t.points.empty())
+            continue;
+        bool inside = true;
+        for (const ToolpathPoint& p : t.points)
+            inside = inside && p.p.x >= x0 && p.p.x <= x1;
+        if (inside)
+            most = std::max(most, t.index + 1);
+    }
+    return most;
+}
+
+// Boxes in one mesh, each a part (one MeshObject) of object 0, with its own
+// settings.
+SlicedModel slice_parts(const std::vector<std::pair<std::array<Vec3f, 2>, std::string>>& parts, const Settings& s) {
+    TriangleMesh mesh;
+    std::vector<MeshObject> objects;
+    for (const auto& [box, own] : parts) {
+        const std::size_t first = mesh.triangle_count();
+        add_box(mesh, box[0], box[1]);
+        MeshObject o{"box", first, mesh.triangle_count() - first, 0, 0};
+        o.settings = own;
+        objects.push_back(o);
+    }
+    return slice_model(weld_exact(mesh), s, nullptr, nullptr, nullptr, &objects);
+}
+
+} // namespace
+
+TEST_CASE("model tools: settings of an object and of a part (MT7, MT8, MT11)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    // MT7: the object's 3 walls and 40 % infill, though the profile says 0 %.
+    SlicedModel m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, R"({"walls": {"count": 3}, "infill": {"density": 40}})"}},
+                                s);
+    REQUIRE(m.layers.size() == 50);
+    for (const std::size_t l : {std::size_t(5), std::size_t(25), std::size_t(45)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 21) == 3);
+        CHECK_FALSE(m.fills[l].sparse.empty());
+    }
+    // MT8: two loose boxes in one object, the second with 4 walls of its own.
+    m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""},
+                     {{Vec3f{30, 0, 0}, Vec3f{50, 20, 10}}, R"({"walls": {"count": 4}})"}},
+                    s);
+    CHECK(walls_between(m, 25, -1, 21) == 2);
+    CHECK(walls_between(m, 25, 29, 51) == 4);
+    // MT11: two boxes sharing X 10 to 20; the later one keeps what they share.
+    m = slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""},
+                     {{Vec3f{10, 0, 0}, Vec3f{30, 20, 10}}, R"({"walls": {"count": 4}})"}},
+                    s);
+    CHECK(walls_between(m, 25, 9.9, 31) == 4);  // X 10 to 30, with 4
+    CHECK(walls_between(m, 25, -1, 10.1) == 2); // X 0 to 10, with 2
+    m = slice_parts({{{Vec3f{10, 0, 0}, Vec3f{30, 20, 10}}, R"({"walls": {"count": 4}})"},
+                     {{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, ""}},
+                    s);
+    CHECK(walls_between(m, 25, 19.9, 31) == 4); // only X 20 to 30 with 4
+    CHECK(walls_between(m, 25, -1, 20.1) == 2);
+    // Rule 9: what cannot change for one part is refused, not ignored.
+    CHECK_THROWS_AS(slice_parts({{{Vec3f{0, 0, 0}, Vec3f{20, 20, 10}}, R"({"layers": {"height": 0.1}})"},
+                                 {{Vec3f{30, 0, 0}, Vec3f{50, 20, 10}}, ""}},
+                                s),
+                    SettingsError);
+    CHECK_THROWS_AS(own_settings(s, R"({"walls": {"count": -1}})", "box"), SettingsError);
+    CHECK(own_settings(s, "", "box").wall_count == 2);
+}
+
+TEST_CASE("model tools: modifiers give the zone they share their settings (MT4, MT5, MT6, MT9, MT10, MT12)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    const auto modifier = [](Vec3f lo, Vec3f hi, std::string own) {
+        MeshModifier m{"modifier", 0, box(lo, hi), std::move(own)};
+        return m;
+    };
+    const auto run = [&](Vec3f hi, const std::string& part_own, const std::vector<MeshModifier>& modifiers) {
+        const TriangleMesh part = box({0, 0, 0}, hi);
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        objects.front().settings = part_own;
+        return slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, nullptr, &modifiers);
+    };
+    // MT5: Z 5 to 20 and X 10 to 30 (out of the part) with 5 walls: no more
+    // layers; below Z 5, 2 walls; above, the -X half 2 and the +X half 5,
+    // each with its own outline.
+    SlicedModel m = run({20, 20, 10}, "", {modifier({10, -5, 5}, {30, 25, 20}, R"({"walls": {"count": 5}})")});
+    REQUIRE(m.layers.size() == 50);
+    CHECK(walls_between(m, 10, -1, 21) == 2);
+    CHECK(walls_between(m, 10, 9.9, 21) == 0); // no zone there: the box's walls go round it all
+    CHECK(walls_between(m, 40, -1, 10.1) == 2);
+    CHECK(walls_between(m, 40, 9.9, 21) == 5);
+    // MT9: the object's 3 walls, its part's 4, a modifier on +X with 5: -X
+    // with 4, +X with 5, on every layer.
+    m = run({40, 20, 10}, R"({"walls": {"count": 4}})",
+            {modifier({20, -5, -5}, {45, 25, 15}, R"({"walls": {"count": 5}})")});
+    for (const std::size_t l : {std::size_t(5), std::size_t(25), std::size_t(45)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 20.1) == 4);
+        CHECK(walls_between(m, l, 19.9, 41) == 5);
+    }
+    // MT12: X 10 to 30 with 3 walls and, later, X 20 to 41 with 5: X 0 to 10
+    // with 2, 10 to 20 with 3, 20 to 40 with 5.
+    m = run({40, 20, 10}, "",
+            {modifier({10, -5, -5}, {30, 25, 15}, R"({"walls": {"count": 3}})"),
+             modifier({20, -5, -5}, {41, 25, 15}, R"({"walls": {"count": 5}})")});
+    CHECK(walls_between(m, 25, -1, 10.1) == 2);
+    CHECK(walls_between(m, 25, 9.9, 20.1) == 3);
+    CHECK(walls_between(m, 25, 19.9, 41) == 5);
+    // The same volume printed: a modifier adds no material.
+    const SlicedModel plain = run({40, 20, 10}, "", {});
+    CHECK(m.layers.size() == plain.layers.size());
+    // MT4: grid at 20 %, a modifier on +X with rectilinear at 60 %: one pair
+    // of walls round it all; on -X the grid's two directions, on +X one, and
+    // much more of it.
+    {
+        Settings g = s;
+        g.infill_density = 20.0;
+        g.infill_pattern = InfillPattern::Grid;
+        const TriangleMesh part = box({0, 0, 0}, {40, 20, 10});
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        const std::vector<MeshModifier> mods{
+            modifier({20, -5, -5}, {45, 25, 15}, R"({"infill": {"pattern": "rectilinear", "density": 60}})")};
+        const SlicedModel f = slice_model(weld_exact(part), g, nullptr, nullptr, nullptr, &objects, nullptr, nullptr, &mods);
+        REQUIRE(f.layers.size() == 50);
+        CHECK(walls_between(f, 25, -1, 41) == 2);
+        CHECK(walls_between(f, 25, 19.9, 41) == 0); // no walls at the modifier's edge
+        std::set<long> left_angles, right_angles;
+        double left_length = 0.0, right_length = 0.0;
+        for (const Toolpath& t : f.fills[25].sparse) {
+            if (t.points.size() < 2)
+                continue;
+            bool left = true, right = true;
+            double length = 0.0;
+            for (std::size_t i = 0; i < t.points.size(); ++i) {
+                left = left && t.points[i].p.x <= 20.0 + 1e-6;
+                right = right && t.points[i].p.x >= 20.0 - 1e-6;
+                if (i > 0)
+                    length += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+            }
+            const Point2d d{t.points[1].p.x - t.points[0].p.x, t.points[1].p.y - t.points[0].p.y};
+            const long angle = std::lround(std::fmod(std::atan2(d.y, d.x) * 180.0 / kPi + 360.0, 180.0)) % 180;
+            if (left)
+                left_angles.insert(angle), left_length += length;
+            else if (right)
+                right_angles.insert(angle), right_length += length;
+        }
+        CHECK(left_angles.size() == 2);
+        CHECK(right_angles.size() == 1);
+        CHECK(right_length > 2.0 * left_length);
+    }
+    // MT6: a modifier's layer height changes nothing, and says so.
+    m = run({40, 20, 10}, "", {modifier({20, -5, -5}, {45, 25, 15}, R"({"layers": {"height": 0.1}})")});
+    CHECK(m.layers.size() == 50);
+    REQUIRE(m.notices.size() == 1);
+    CHECK(m.notices.front().find("layer height") != std::string::npos);
+    // MT10: a modifier on +X with 4 walls and a 10 x 10 mm negative volume
+    // across the edge of the two zones: the hole in both, each zone with its
+    // walls, nothing printed in the hole.
+    {
+        const TriangleMesh part = box({0, 0, 0}, {40, 20, 10});
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        const std::vector<MeshModifier> modifiers{modifier({20, -5, -5}, {45, 25, 15}, R"({"walls": {"count": 4}})")};
+        const IndexedMesh hole = weld_exact(box({15, 5, -5}, {25, 15, 15}));
+        m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, &hole, &modifiers);
+        REQUIRE(m.layers.size() == 50);
+        CHECK(m.regions[25].size() == 2); // the outline and the hole
+        CHECK(walls_between(m, 25, 19.9, 41) == 4);
+        CHECK(walls_between(m, 25, -1, 20.1) == 2);
+        bool in_hole = false;
+        for (const std::vector<Toolpath>* paths : {&m.walls[25].toolpaths, &m.fills[25].sparse, &m.fills[25].solid})
+            for (const Toolpath& t : *paths)
+                for (const ToolpathPoint& p : t.points)
+                    in_hole = in_hole || (p.p.x > 15.3 && p.p.x < 24.7 && p.p.y > 5.3 && p.p.y < 14.7);
+        CHECK_FALSE(in_hole);
+    }
+}
+
+TEST_CASE("model tools: height ranges (MT7b, MT9, MT13)", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    const TriangleMesh part = box({0, 0, 0}, {20, 20, 10});
+    const auto object = [&](std::string own, std::vector<MeshObject::HeightRange> ranges) {
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        objects.front().settings = std::move(own);
+        objects.front().ranges = std::move(ranges);
+        return objects;
+    };
+    // MT13: the object's 3 walls; from 6 to 10 mm, 5.
+    std::vector<MeshObject> objects = object(R"({"walls": {"count": 3}})", {{6.0, 10.0, R"({"walls": {"count": 5}})"}});
+    SlicedModel m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    REQUIRE(m.layers.size() == 50);
+    CHECK(walls_between(m, 10, -1, 21) == 3);
+    CHECK(walls_between(m, 29, -1, 21) == 3); // Z 5.8 to 6.0: its top on the edge, the range below's
+    CHECK(walls_between(m, 30, -1, 21) == 5); // Z 6.0 to 6.2
+    CHECK(walls_between(m, 40, -1, 21) == 5);
+    // MT7b: 4 to 6 mm at 0.1 mm layers; 6 to 10 with 4 walls and 50 % infill.
+    objects = object("", {{4.0, 6.0, R"({"layers": {"height": 0.1}})"},
+                          {6.0, 10.0, R"({"walls": {"count": 4}, "infill": {"density": 50}})"}});
+    m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    REQUIRE(m.layers.size() == 60);
+    CHECK_THAT(m.layers[19].top, WithinAbs(4.0, 1e-6));
+    CHECK_THAT(m.layers[20].top, WithinAbs(4.1, 1e-6));
+    CHECK_THAT(m.layers[39].top, WithinAbs(6.0, 1e-6));
+    CHECK_THAT(m.layers[40].top, WithinAbs(6.2, 1e-6));
+    CHECK(walls_between(m, 35, -1, 21) == 2);
+    CHECK(m.fills[35].sparse.empty());
+    CHECK(walls_between(m, 45, -1, 21) == 4);
+    CHECK_FALSE(m.fills[45].sparse.empty());
+    // Ranges that overlap: the later wins where they do, the earlier keeps
+    // its layer height past it (3 to 8 mm at 0.25, then 0 to 5 at 0.1).
+    objects = object("", {{3.0, 8.0, R"({"layers": {"height": 0.25}})"}, {0.0, 5.0, R"({"layers": {"height": 0.1}})"}});
+    m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    const auto thickness_at = [&](double z) {
+        for (const auto& l : m.layers)
+            if (l.bottom < z && l.top > z)
+                return l.top - l.bottom;
+        return 0.0;
+    };
+    CHECK_THAT(thickness_at(4.05), WithinAbs(0.1, 1e-6));
+    CHECK_THAT(thickness_at(6.0), WithinAbs(0.25, 1e-6));
+    CHECK_THAT(thickness_at(9.0), WithinAbs(0.2, 1e-6));
+    // MT9: the part's 4 walls win over the range's 6.
+    const TriangleMesh wide = box({0, 0, 0}, {40, 20, 10});
+    std::vector<MeshObject> nine{{"box", 0, wide.triangle_count(), 0, 0}};
+    nine.front().settings = R"({"walls": {"count": 4}})";
+    nine.front().part_settings = R"({"walls": {"count": 4}})";
+    nine.front().ranges = {{6.0, 10.0, R"({"walls": {"count": 6}})"}};
+    const std::vector<MeshModifier> plus_x{
+        {"modifier", 0, box({20, -5, -5}, {45, 25, 15}), R"({"walls": {"count": 5}})"}};
+    m = slice_model(weld_exact(wide), s, nullptr, nullptr, nullptr, &nine, nullptr, nullptr, &plus_x);
+    for (const std::size_t l : {std::size_t(10), std::size_t(40)}) {
+        INFO(l);
+        CHECK(walls_between(m, l, -1, 20.1) == 4);
+        CHECK(walls_between(m, l, 19.9, 41) == 5);
+    }
+}
+
+TEST_CASE("model tools: a negative volume or a range's settings that go wrong say so", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    const TriangleMesh part = box({0, 0, 0}, {20, 20, 10});
+    std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+    // A negative volume around the whole part leaves nothing, and says why.
+    const IndexedMesh all = weld_exact(box({-5, -5, -5}, {25, 25, 15}));
+    SlicedModel m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, &all);
+    CHECK(m.cut_away > 0);
+    CHECK_THAT(unprintable_reason(m, s), ContainsSubstring("negative volumes take all of it away"));
+    // A range whose settings are not JSON, or name a setting that does not
+    // exist: the object and the range in the message.
+    objects.front().ranges = {{2.0, 4.5, R"({"walls": {"count": )"}};
+    CHECK_THROWS_WITH(slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects),
+                      ContainsSubstring("box 2-4.5 mm: its settings are not valid JSON"));
+    objects.front().ranges = {{2.0, 4.5, R"({"walls": {"countt": 3}})"}};
+    CHECK_THROWS_WITH(slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects),
+                      ContainsSubstring("box 2-4.5 mm") && ContainsSubstring("walls.countt"));
 }

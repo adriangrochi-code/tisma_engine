@@ -1172,6 +1172,30 @@
     X(ExtruderNozzle, "   Extrusor %d", "   Extruder %d") \
     X(ToolMaterialTip, "Extrusor y color del objeto", "The object's extruder and colour") \
     X(ObjectExtruder, "Extrusor", "Extruder") \
+    X(ObjectInfill, "Relleno", "Infill") \
+    X(ObjectWalls, "Capas y perímetros", "Layers and perimeters") \
+    X(ObjectSurfaces, "Capas sólidas", "Solid layers") \
+    X(ObjectAddSetting, "Agregar ajuste", "Add setting") \
+    X(ObjectSettingsOpen, "Ajustes de la pieza…", "Object settings…") \
+    X(ObjectSettingsTitle, "Ajustes de %s", "Settings of %s") \
+    X(ObjectSettingsHint, "Estos ajustes valen solo para esta pieza; el resto sale del perfil.", "These settings hold for this object only; the rest comes from the profile.") \
+    X(ObjectSettingsNone, "La pieza no tiene ajustes propios.", "The object has no settings of its own.") \
+    X(ObjectSettingsBasic, "Los ajustes por pieza se ponen en los niveles Normal y Avanzado.", "Settings per object are set at the Normal and Advanced levels.") \
+    X(ObjectSettingsRemove, "Quitar de la pieza", "Remove from the object") \
+    X(ObjectOwnSettings, "Ajustes propios: %d", "Own settings: %d") \
+    X(AddModifier, "Agregar modificador", "Add modifier") \
+    X(AddNegativeVolume, "Agregar volumen negativo", "Add negative volume") \
+    X(AddHeightRange, "Agregar rango de alturas", "Add height range") \
+    X(ModifierItem, "Modificador %d", "Modifier %d") \
+    X(NegativeVolumeItem, "Volumen negativo %d", "Negative volume %d") \
+    X(RangeItem, "Alturas de %.2f a %.2f mm", "Heights from %.2f to %.2f mm") \
+    X(HeightFrom, "desde", "from") \
+    X(HeightTo, "hasta", "to") \
+    X(ShapeBox, "Caja", "Box") \
+    X(ShapeCylinder, "Cilindro", "Cylinder") \
+    X(RemoveVolume, "Quitar", "Remove") \
+    X(VolumeOffset, "Lugar (mm)", "Place (mm)") \
+    X(VolumeSize, "Tamaño (mm)", "Size (mm)") \
     X(ExtruderItem, "Extrusor %d", "Extruder %d") \
     X(VirtualExtruder, "Extrusor virtual #%d", "Virtual extruder #%d") \
     X(WipeIntoInfill, "Purgar en su relleno", "Purge into its infill") \

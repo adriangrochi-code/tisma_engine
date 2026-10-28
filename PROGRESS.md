@@ -6456,5 +6456,107 @@ agrega capas. Con corte, separar o copias la línea de comandos todavía lo rech
 techo sólidos) en `[transform]`. El piso de MT3 a Z 2,6 debería ser un puente sobre el relleno vacío: el motor todavía
 no hace puentes internos (pendiente de I1). 670 de 670 en el árbol de trabajo.
 
-**Sigue:** partes con ajustes propios y ajustes por objeto (reglas 5, 7 y 8; MT7, MT8, MT11), después modificadores y
-rangos (P4).
+**Después: ajustes de un objeto o una parte (reglas 5, 7 y 8).** Cada `MeshObject` puede traer sus ajustes en JSON
+(los del objeto y los de la parte ya juntos); `own_settings` los pone sobre los del perfil y rechaza lo que todavía no
+puede cambiar por parte (regla 9: hoy cambian paredes, relleno y superficies). El laminado agrupa las partes por
+extrusor y ajustes y lamina cada grupo aparte sobre las capas de la placa, como con varios extrusores: el grupo de la
+parte que viene después va primero y se queda con lo que comparte (MT11). MT7, MT8 y MT11 en `[transform]`; 671 de 671
+en el árbol de trabajo.
+
+**Sigue:** poner esos ajustes desde la interfaz (`settings_levels.md`, reglas 10 y 11), después modificadores y rangos
+de alturas (P4).
+
+## 2026-10-28 — Ajustes de una pieza en la interfaz
+
+**Hecho:** clic derecho sobre una pieza abre su menú (`settings_levels.md`, regla 10): en Básico solo el aviso de que
+esto está en Normal y Avanzado; en los demás, «Relleno», «Capas y perímetros», «Capas sólidas» y «Agregar ajuste ▸».
+Cada uno agrega los ajustes con el valor del perfil y abre la ventana «Ajustes de …» (regla 11), que dibuja las mismas
+filas del panel sobre una copia de los ajustes con los de la pieza, con una cruz por ajuste. Se guardan en el proyecto
+(`models[i].settings`, revisados al abrir) y pasan a las piezas de un corte o de separar. Funciones puras en
+`src/ui/plate.*` con su prueba; captura `ui_object_settings`.
+
+**Falta:** la lista de objetos con sus filas hijas, leer los ajustes de un 3MF de proyecto, y los demás grupos por pieza.
+
+**Después: modificadores en el motor (reglas 3 a 5).** `slice_model` recibe una lista de `MeshModifier` (malla,
+objeto y ajustes propios). En `slice_tools`, donde un modificador toca las partes de su objeto en un grupo, esa zona
+(la intersección de sus regiones) se lamina como un grupo más, con los ajustes del modificador sobre los de la parte,
+antes que los grupos de las partes, el modificador de después primero. Su altura de capa se deja de lado con un aviso
+(`notices`, aviso `part_settings`). De paso: el negativo y el modificador se compensan (`compensation.scale_*`,
+contracción) alrededor del centro de la pieza, no del suyo. MT5, MT6, MT9, MT10 y MT12 en `[transform]`; 674 de 674 en
+el árbol de trabajo.
+
+**Después (MT4):** un modificador que cambia solo el relleno no hace una zona con paredes: su alcance pasa a los
+grupos de su objeto como zona de relleno, que se saca del relleno ralo y se llena con su patrón, densidad y ángulo,
+como el relleno denso bajo las tapas. MT4: una sola vuelta de paredes, la mitad −X en grilla (dos direcciones) y la +X
+en una dirección, 535 mm en la capa 25 (Tisma Slicer, 541). 674 de 674 en el árbol de trabajo.
+
+**Después: rangos de alturas (regla 6).** `MeshObject::ranges` (desde, hasta y ajustes). La altura de capa de un
+rango entra como tramos de `layers.heights` (desde el rango, esa altura; desde su fin, la del perfil): cada tramo
+empieza una capa, así que con un rango de 4 a 6 mm a 0,1 las capas van 4,0 → 4,1 … 6,0 → 6,2 (MT7b). Sus otros
+ajustes son un modificador del ancho del objeto entre esas alturas, con la precedencia de la regla 5: sobre los del
+objeto, debajo de los de la parte (`MeshObject::part_settings`) y de los modificadores. MT7b, MT9 (el rango no cambia
+nada) y MT13 en `[transform]`; 675 de 675 en el árbol de trabajo.
+
+**Límite:** la pila de capas es de toda la placa: con varios objetos, la altura de capa de un rango vale para todos
+(salvo imprimiendo objeto por objeto). Si ya hay `layers.heights`, la de los rangos se deja de lado con un aviso.
+
+**Después: modificadores, negativos y rangos en la interfaz.** El menú del clic derecho agrega un modificador (una
+caja con relleno propio), un volumen negativo (un cilindro) o un rango de alturas (de 0 a 2 mm con la altura de capa
+del perfil). En la ventana «Ajustes de …» cada uno tiene su forma (caja o cilindro), lugar y tamaño, o desde y hasta, y
+sus ajustes con las filas del panel (`own_settings_editor`, el mismo editor que los ajustes de la pieza). Se dibujan
+sobre la vista, viajan con la pieza, se guardan en el proyecto (`models[i].volumes` y `ranges`, con su prueba) y van
+al laminador (`SliceVolumes`, también en la caché del corte). Probado: `ui_object_volumes`, y exportar el cubo con un
+modificador de 5 paredes, un negativo y un rango: el verificador del G-code no encuentra problemas (55 164 líneas) y
+el filamento baja de 415 a 333 mm.
+
+**Falta:** la lista de objetos con sus filas hijas, modificadores con la forma de un archivo, y que los volúmenes
+sigan a la pieza al girarla o escalarla (hoy solo al moverla).
+
+
+## 2026-10-28 — mantenimiento (03:00)
+
+**Revisado:** `origin/dev` y `origin/main` sin cambios nuevos; fuzzer con semillas nuevas (20261028 y 7741028: 4000
+corridas); casos borde de lo agregado ayer (volúmenes negativos, modificadores, rangos de alturas); los «No probado»
+recientes (el clic de Medir en mallas grandes); el banco contra la 0.9.0-alpha.1, compilada aparte.
+
+**Encontrado y arreglado:**
+- **Capas curvas (fuzzer, semilla 20261028, corridas 196 y 667):** con la rampa pareja de las caras de arriba, J
+  salta donde la rampa termina. Dos trozos unidos sobre una cresta tenían la cuerda un poco debajo de la superficie,
+  y un trozo podía cruzar el salto al redondear sus números: el filamento salía de J de un lado y el verificador leía
+  el del otro (un 8 a 15 % de diferencia), así que el G-code se rechazaba. J se toma ahora en las coordenadas que el
+  G-code escribe, redondeadas, y dos trozos se unen solo si J en el medio de la cuerda unida también coincide.
+  Prueba nueva en `[curved]`; las dos semillas, 0 fallas.
+- **Rangos de alturas que se pisan:** con un rango de 3 a 8 mm a 0,25 y después otro de 0 a 5 a 0,1, de 5 a 8 mm
+  volvía la altura del perfil (0,2) en lugar de 0,25. Pasado un rango vuelve la altura que había ahí antes de él.
+- **Mensajes:** un volumen negativo que se lleva toda la pieza decía «¿la malla es plana o abierta?»; ahora dice que
+  los volúmenes negativos se la llevan (`SlicedModel::cut_away`). Un rango cuyos ajustes no son JSON daba el error
+  crudo del lector; ahora nombra el objeto y el rango («box 2-4.5 mm: its settings are not valid JSON»), y el
+  modificador de un rango se llama así en lugar de «box 2.000000-4.500000».
+- **Escribir con `walls.detect_overhangs`** (encendido por defecto desde QA13) tardaba el doble en la esfera: para
+  cada tramo de cada pared cerca de lo que cuelga, mirar si su medio cuelga recorría todas las aristas de esa zona,
+  un anillo fino alrededor de cada capa de la mitad de abajo. Ahora un rayo cruza solo las aristas de las celdas de
+  su fila. Mismo G-code byte a byte en 8 casos (esfera, esfera de un millón de triángulos, Benchy y el cráneo, con y
+  sin soportes).
+- **El clic de Medir** sobre una superficie curva ponía todas las aristas de la malla en un `std::map`: 0,87 s con
+  un millón de triángulos. Ahora los triángulos de cada vértice van seguidos en un arreglo: 0,18 s (0,15 s es soldar
+  la malla). Los mismos triángulos, en el mismo orden.
+
+**Medido** (4 núcleos; la máquina de hoy es más lenta que la de ayer: la 0.9.0-alpha.1 compilada hoy lamina la
+esfera en 1,30 a 1,51 s, contra 1,08 s anotados ayer):
+
+| | 0.9.0-alpha.1 | Antes de hoy | Ahora |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos, laminar | 1,30 a 1,51 s | 1,40 a 1,47 s | 1,40 a 1,49 s |
+| La misma, escribir | 137 a 142 ms | 243 a 300 ms | 177 ms |
+| Esfera de 50 mm, escribir | — | 74 ms | 56 ms |
+| Benchy, laminar / escribir | — | 645 a 659 ms / 108 a 118 ms | igual |
+| Clic de Medir, un millón de triángulos | — | 0,87 s | 0,18 s |
+| Análisis del cubo (`analyze`, comando completo / solución) | — | 0,29 a 0,37 s / 0,19 s | igual |
+
+La escritura de la esfera sigue por encima de la 0.9.0 (177 contra 140 ms): lo que queda es partir las paredes en
+voladizo (`cut_at`), que la 0.9.0 no hacía.
+
+**Pruebas nuevas:** J a lo largo de un techo con el salto de la rampa (`[curved]`); rangos que se pisan, y los
+mensajes del negativo y de un rango con ajustes rotos (`[transform]`).
+
+**Sigue:** la lista de objetos con sus filas hijas y que los volúmenes sigan a la pieza al girarla o escalarla (P1).

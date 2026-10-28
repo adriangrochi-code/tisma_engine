@@ -83,6 +83,23 @@ std::string write_project(const Project& project) {
             models.back()["wipe_into_infill"] = true;
         if (m.wipe_into_object)
             models.back()["wipe_into_object"] = true;
+        if (!m.settings.empty())
+            models.back()["settings"] = ordered_json::parse(m.settings);
+        for (const ProjectVolume& v : m.volumes) {
+            ordered_json item = {{"kind", v.negative ? "negative" : "modifier"},
+                                 {"shape", v.cylinder ? "cylinder" : "box"},
+                                 {"offset", v.offset},
+                                 {"size", v.size}};
+            if (!v.settings.empty())
+                item["settings"] = ordered_json::parse(v.settings);
+            models.back()["volumes"].push_back(std::move(item));
+        }
+        for (const ProjectRange& r : m.ranges) {
+            ordered_json item = {{"from", r.from}, {"to", r.to}};
+            if (!r.settings.empty())
+                item["settings"] = ordered_json::parse(r.settings);
+            models.back()["ranges"].push_back(std::move(item));
+        }
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -236,6 +253,70 @@ static Project read_project_checked(std::string_view data) {
                         fail(what + "." + key + ": must be true or false");
                     *flag = m.at(key).get<bool>();
                 }
+            if (m.contains("settings")) {
+                if (!m.at("settings").is_object())
+                    fail(what + ".settings: must be an object of groups");
+                model.settings = m.at("settings").dump();
+                try {
+                    own_settings(p.settings, model.settings, model.name);
+                } catch (const SettingsError& e) {
+                    fail(what + ".settings: " + e.what());
+                }
+            }
+            const auto three = [&](const ordered_json& o, const char* key, const std::string& where) {
+                std::array<double, 3> a{};
+                const auto it = o.find(key);
+                if (it == o.end() || !it->is_array() || it->size() != 3)
+                    fail(where + "." + key + ": must be [x, y, z] in mm");
+                for (std::size_t k = 0; k < 3; ++k) {
+                    if (!(*it)[k].is_number())
+                        fail(where + "." + key + ": must be [x, y, z] in mm");
+                    a[k] = (*it)[k].get<double>();
+                }
+                return a;
+            };
+            if (m.contains("volumes")) {
+                if (!m.at("volumes").is_array())
+                    fail(what + ".volumes: must be a list");
+                for (std::size_t k = 0; k < m.at("volumes").size(); ++k) {
+                    const ordered_json& v = m.at("volumes")[k];
+                    const std::string at = what + ".volumes[" + std::to_string(k) + "]";
+                    if (!v.is_object())
+                        fail(at + ": must be an object");
+                    ProjectVolume volume;
+                    const std::string kind = v.value("kind", std::string("modifier")), shape = v.value("shape", std::string("box"));
+                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder"))
+                        fail(at + ": kind must be modifier or negative, shape box or cylinder");
+                    volume.negative = kind == "negative";
+                    volume.cylinder = shape == "cylinder";
+                    volume.offset = three(v, "offset", at);
+                    volume.size = three(v, "size", at);
+                    if (v.contains("settings")) {
+                        if (!v.at("settings").is_object())
+                            fail(at + ".settings: must be an object of groups");
+                        volume.settings = v.at("settings").dump();
+                    }
+                    model.volumes.push_back(std::move(volume));
+                }
+            }
+            if (m.contains("ranges")) {
+                if (!m.at("ranges").is_array())
+                    fail(what + ".ranges: must be a list");
+                for (std::size_t k = 0; k < m.at("ranges").size(); ++k) {
+                    const ordered_json& r = m.at("ranges")[k];
+                    const std::string at = what + ".ranges[" + std::to_string(k) + "]";
+                    if (!r.is_object() || !r.contains("from") || !r.contains("to") || !r.at("from").is_number() ||
+                        !r.at("to").is_number() || !(r.at("to").get<double>() > r.at("from").get<double>()))
+                        fail(at + ": must have from and to in mm, to above from");
+                    ProjectRange range{r.at("from").get<double>(), r.at("to").get<double>(), {}};
+                    if (r.contains("settings")) {
+                        if (!r.at("settings").is_object())
+                            fail(at + ".settings: must be an object of groups");
+                        range.settings = r.at("settings").dump();
+                    }
+                    model.ranges.push_back(std::move(range));
+                }
+            }
             p.models.push_back(std::move(model));
         }
     }

@@ -62,6 +62,22 @@ a centrar. **Laminar** corre el motor en segundo plano y la ventana sigue respon
 
 #### Herramientas de la placa
 
+**Ajustes de una pieza** (fichas `settings_levels.md`, reglas 10 y 11, y `model_tools.md`, regla 7): clic derecho
+sobre una pieza abre su menú. En el nivel Básico solo dice que esto está en Normal y Avanzado; en los demás ofrece
+«Relleno», «Capas y perímetros», «Capas sólidas» y «Agregar ajuste ▸» (paredes, relleno y capas sólidas). Cada uno
+agrega a la pieza esos ajustes con el valor del perfil y abre la ventana «Ajustes de …», con las mismas filas del
+panel, una cruz por ajuste para devolverlo al perfil y «Agregar ajuste». Se guardan en el proyecto
+(`models[i].settings`) y pasan a las piezas que salen de un corte o de separar. `--object-settings JSON` le pone esos
+ajustes a la primera pieza al abrir, para las capturas.
+
+El mismo menú agrega **modificadores**, **volúmenes negativos** y **rangos de alturas** (`model_tools.md`, reglas 2,
+3 y 6). Un modificador o un negativo es una caja o un cilindro, con su lugar (desde el centro de la caja de la pieza en
+X e Y y desde su base en Z) y su tamaño; el modificador tiene sus ajustes. Un rango tiene desde y hasta (mm sobre la
+base de la pieza) y sus ajustes, la altura de capa incluida. Todo se edita en la ventana «Ajustes de …», se dibuja
+sobre la vista (los modificadores en naranja, los negativos en gris), viaja con la pieza al moverla y se guarda en el
+proyecto (`models[i].volumes` y `ranges`). Al cortar o separar, las piezas nuevas no los llevan. `--object-add
+modifier,negative,range` los agrega a la primera pieza al abrir, para las capturas.
+
 La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
 izquierda de la vista 3D, una columna con:
 

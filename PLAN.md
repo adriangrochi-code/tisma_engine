@@ -742,9 +742,22 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
   En la interfaz, Espejar, Cortar con un plano horizontal, Separar en piezas y Medir caras y vértices (reglas 13, 14,
   16, 18 y 20 en parte). Volúmenes negativos (2026-10-27, regla 2, MT1 y MT3): el 3MF los trae aparte, siguen a la
-  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Falta: los negativos con
-  corte, separar o copias, el plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), partes con
-  ajustes propios, modificadores y ajustes por objeto y por rango (reglas 3 a 10), las copias en grilla (regla 15), y el
+  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Ajustes propios de un
+  objeto o una parte en el motor (2026-10-27, reglas 5, 7 y 8; MT7, MT8 y MT11): `MeshObject::settings`, paredes,
+  relleno y superficies, laminado aparte sobre las capas de la placa; donde dos partes se pisan gana la de después; lo
+  que todavía no puede cambiar por parte se rechaza (regla 9). En la interfaz (2026-10-28, `settings_levels.md`,
+  reglas 10 y 11): el menú del clic derecho y la ventana de ajustes de la pieza, guardados en el proyecto.
+  Modificadores en el motor (2026-10-28, reglas 3 a 5; MT5, MT6, MT9, MT10, MT12): `MeshModifier`, la zona que comparte
+  con las partes de su objeto como un grupo propio con sus ajustes sobre los de la parte, el modificador de después
+  primero, y su altura de capa dejada de lado con un aviso; el que cambia solo el relleno cambia el relleno ralo en su
+  zona sin paredes en el borde (MT4). Rangos de alturas en el motor (2026-10-28, regla 6; MT7b, MT9, MT13):
+  `MeshObject::ranges`, su altura de capa como tramos de `layers.heights` y sus otros ajustes como un modificador del
+  ancho del objeto entre el objeto y la parte. Falta: leer los ajustes del 3MF, la lista de objetos con sus
+  filas hijas (regla 11 de `settings_levels.md`), los demás grupos por objeto (velocidades, temperaturas, altura de
+  capa), los negativos con corte, separar o copias, el plano libre y los conectores del corte, Separar en partes
+  (reglas 18 y 19), los modificadores y negativos con la forma de un archivo (hoy caja o cilindro, agregados en la interfaz el
+  2026-10-28), la altura de capa de un rango cuando hay varios objetos con
+  rangos distintos (hoy la pila de capas es de toda la placa), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir

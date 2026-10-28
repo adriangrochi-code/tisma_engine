@@ -111,9 +111,11 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
 std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     const bool any = std::any_of(model.regions.begin(), model.regions.end(), [](const Polygons& r) { return !r.empty(); });
     if (!any) {
-        // Say what emptied it: a shrinking setting, or holes in the mesh.
+        // Say what emptied it: the negative volumes, a shrinking setting, or holes in the mesh.
         std::string reason = "no layer of the model encloses any area";
-        if (s.xy_offset < 0.0) {
+        if (model.cut_away > 0)
+            reason += ": the negative volumes take all of it away";
+        else if (s.xy_offset < 0.0) {
             char text[120];
             std::snprintf(text, sizeof text, ": slicing.xy_offset (%.3g mm) may have shrunk it away", s.xy_offset);
             reason += text;

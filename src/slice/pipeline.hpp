@@ -68,6 +68,7 @@ struct SlicedModel {
     // Painted seams (docs/PAINTING.md), one area per layer; empty when none was painted.
     std::vector<Polygons> seam_enforce, seam_block;
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
+    std::size_t cut_away = 0;      // layers the negative volumes took all of (model_tools.md, rule 2; copied layers not counted)
     std::vector<std::size_t> open_by_layer; // the same per layer
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
     // Layer heights by zone (docs/LOCAL_LAYERS.md): the layers above are the
@@ -82,6 +83,9 @@ struct SlicedModel {
     // printed one after another, their layers one after the other's here.
     std::vector<SlicedObject> objects;
     bool sequential = false;
+    // Settings of a part or a modifier the slicing left out, said so (a
+    // modifier's layer height is the object's: model_tools.md, rules 4 and 9).
+    std::vector<std::string> notices;
     // Curved layers (nonplanar.md): the field the layers were sliced
     // through; the layers above are flat in its space, and the G-code puts
     // every point back on its curve.
@@ -93,6 +97,9 @@ struct SlicedModel {
 // bottom, so it stays where it was on the bed, and grown by the filament's
 // shrinkage. The mesh itself when the scales are all 100 % and nothing shrinks.
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
+// Another mesh (a negative volume, a modifier) moved as compensated() moves
+// `part`: about the part's centre and bottom.
+IndexedMesh compensated_like(const IndexedMesh& mesh, const IndexedMesh& part, const Settings& settings);
 
 // The diameter of the round bead of bridges and overhang perimeters
 // (gcode_motion.md, rule 1, "unos 0,40 mm" with a 0.4 nozzle): the nozzle's,
@@ -117,10 +124,12 @@ double bridge_bead(const Settings& settings);
 // a blend this machine cannot print is left out (rule 5).
 // The negative volumes (model_tools.md, rule 2), in the mesh's coordinates,
 // take their volume away from every layer they cross; they add no layers.
+// The modifiers (rule 3) give the zone they share with their object's parts
+// their settings: changing the walls, that zone has walls of its own.
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
                         const StressField* stress = nullptr, const Painting* painting = nullptr,
                         const std::vector<MeshObject>* objects = nullptr, const std::vector<ColorMix>* mixes = nullptr,
-                        const IndexedMesh* negative = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr);
 
 // Object k of a model sliced object by object, as a model of its own (its
 // layers from 0), for what looks at a stack of layers (the stability review).

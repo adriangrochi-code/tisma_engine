@@ -291,7 +291,18 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool measure --measure 0,2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_measure.png)
-    set_tests_properties(ui_cut ui_measure PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # An object's own settings in their window (settings_levels.md, rule 11).
+    add_test(NAME ui_object_settings
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --object-settings "{\"infill\": {\"density\": 40, \"pattern\": \"grid\"}, \"walls\": {\"count\": 3}}"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_settings.png)
+    # A modifier, a negative volume and a height range of the cube (model_tools.md, rules 2, 3 and 6).
+    add_test(NAME ui_object_volumes
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --object-add modifier,negative,range
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_volumes.png)
+    set_tests_properties(ui_cut ui_measure ui_object_settings ui_object_volumes PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # More › Credits and sources, in English (credits.md, CR2 and CR4).
     add_test(NAME ui_credits
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

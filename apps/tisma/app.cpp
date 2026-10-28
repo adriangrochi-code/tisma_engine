@@ -444,6 +444,13 @@ private:
     // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
     bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset);
     bool card_rows(std::string_view id, bool& bed);
+    // An object's menu and the window with its own settings (settings_levels.md, rules 10 and 11).
+    void object_menu();
+    void object_settings_window();
+    bool own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where);
+    void volumes_overlay();
+    int object_settings_ = -1;       // the object whose settings window is open
+    std::set<std::string> row_only_; // while drawing an object's settings: the rows to show
     bool setting_shown(std::string_view key, std::string_view card) const;
     bool setting_applies(std::string_view key) const;
     bool card_shown(const SubsectionLayout& sub) const;
@@ -2238,6 +2245,31 @@ bool App::init(std::string& error) {
         cut_height_ = options_.cut;
         cut_selected();
     }
+    if (!options_.object_add.empty() && !objects_.empty()) {
+        PlateObject& o = objects_.front();
+        const std::array<double, 3> size = placed_size(o);
+        const std::array<double, 3> half{size[0] / 2.0, size[1] / 2.0, size[2] / 2.0};
+        std::stringstream list(options_.object_add);
+        for (std::string what; std::getline(list, what, ',');)
+            if (what == "modifier")
+                o.volumes.push_back({PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {size[0] / 4.0, 0.0, 0.0},
+                                     {half[0], size[1] + 2.0, size[2] + 2.0}, R"({"walls":{"count":5}})"});
+            else if (what == "negative")
+                o.volumes.push_back({PlateVolume::Kind::Negative, PlateVolume::Shape::Cylinder, {0.0, 0.0, -1.0},
+                                     {half[0], half[1], size[2] + 2.0}, {}});
+            else if (what == "range")
+                o.ranges.push_back({0.0, 2.0, with_own_key("", settings_, "layers.height")});
+        selected_ = object_settings_ = 0;
+    }
+    if (!options_.object_settings.empty() && !objects_.empty()) {
+        try {
+            own_settings(settings_, options_.object_settings, objects_.front().name);
+            objects_.front().settings = options_.object_settings;
+            selected_ = object_settings_ = 0;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, e.what());
+        }
+    }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
     if (options_.tool == "mixing") {
         mixing_open_ = true;
@@ -2809,6 +2841,13 @@ void App::open_project(const std::filesystem::path& path) {
             o.extruder = m.extruder;
             o.wipe_into_infill = m.wipe_into_infill;
             o.wipe_into_object = m.wipe_into_object;
+            o.settings = m.settings;
+            for (const ProjectVolume& v : m.volumes)
+                o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
+                                     v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
+                                     v.settings});
+            for (const ProjectRange& r : m.ranges)
+                o.ranges.push_back({r.from, r.to, r.settings});
             const BoundingBox box = o.mesh.bounding_box();
             o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
             o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
@@ -2861,9 +2900,16 @@ void App::save_project_to(const std::filesystem::path& path) {
     p.settings = settings_;
     p.profiles = chosen_profile_;
     // Each model as placed on the bed, its turn and scale applied.
-    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
-                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+                            objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
+                            objects_[i].settings});
+        for (const PlateVolume& v : objects_[i].volumes)
+            p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
+                                               v.offset, v.size, v.settings});
+        for (const PlateRange& r : objects_[i].ranges)
+            p.models.back().ranges.push_back({r.from, r.to, r.settings});
+    }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
     if (calibration_)
@@ -3417,18 +3463,41 @@ void App::start_slice() {
     std::vector<MeshObject> objects;
     for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
-                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object});
+                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object, objects_[i].settings});
+        for (const PlateRange& r : objects_[i].ranges)
+            objects.back().ranges.push_back({r.from, r.to, r.settings});
         first += placed_meshes_[i].triangle_count();
+    }
+    // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
+    SliceVolumes volumes;
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        for (std::size_t k = 0; k < objects_[i].volumes.size(); ++k) {
+            const PlateVolume& v = objects_[i].volumes[k];
+            TriangleMesh shape = volume_mesh(v, box);
+            if (v.kind == PlateVolume::Kind::Negative) {
+                for (std::size_t t = 0; t < shape.triangle_count(); ++t)
+                    volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
+            } else {
+                volumes.modifiers.push_back(
+                    {objects_[i].name + " modifier " + std::to_string(k + 1), i, std::move(shape), v.settings});
+            }
+        }
     }
     // The objects go to the slicer when there are several, or when each may
     // print with its own extruder or a mixed colour.
-    const bool by_object = objects.size() > 1 || settings.extruders > 1;
+    const bool by_object = objects.size() > 1 || settings.extruders > 1 || !volumes.empty() ||
+                           std::any_of(objects_.begin(), objects_.end(), [](const PlateObject& o) {
+                               return !o.settings.empty() || !o.ranges.empty();
+                           });
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
-                      painting = std::move(painting), objects = std::move(objects), mixes = mixes_, by_object]() {
+                      painting = std::move(painting), objects = std::move(objects), mixes = mixes_, by_object,
+                      volumes = std::move(volumes)]() {
         return slicer_.run(placed, settings, load ? &*load : nullptr, painting.empty() ? nullptr : &painting,
-                           by_object ? &objects : nullptr, mixes.empty() ? nullptr : &mixes);
+                           by_object ? &objects : nullptr, mixes.empty() ? nullptr : &mixes,
+                           volumes.empty() ? nullptr : &volumes);
     });
 }
 
@@ -5515,6 +5584,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // A row shows if the panel shows its setting; one shown only because it
     // differs from the profile carries its level.
     const auto shown = [&](const char* key) {
+        // An object's window shows its own settings' rows, whatever the level.
+        if (!row_only_.empty()) {
+            if (!row_only_.contains(key))
+                return false;
+            g_row_key = key;
+            return true;
+        }
         if (!setting_shown(key, id))
             return false;
         const std::optional<SettingPlace> place = setting_place(key);
@@ -6623,6 +6699,14 @@ void App::viewport() {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
     }
+    // A right click on a model, not a drag: its menu (settings_levels.md, rule 10).
+    if (editing && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f)
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+            selected_ = int(hit->object);
+            ImGui::OpenPopup("##object_menu");
+        }
+    object_menu();
     ImGui::End();
     ImGui::PopStyleVar();
 }
@@ -6726,6 +6810,234 @@ void App::view_tools() {
 
 // The plate's tools (docs/UI.md, «Herramientas de la placa»): a column at
 // the left of the view, and next to it the chosen tool's numbers.
+// A model's menu (settings_levels.md, rule 10): at the Normal and Advanced
+// levels, shortcuts that give it settings of its own, starting from the
+// profile's values, and any other setting it may have.
+void App::object_menu() {
+    if (!ImGui::BeginPopup("##object_menu"))
+        return;
+    if (selected_ < 0 || std::size_t(selected_) >= objects_.size()) {
+        ImGui::EndPopup();
+        return;
+    }
+    PlateObject& o = objects_[std::size_t(selected_)];
+    ImGui::TextDisabled("%s", o.name.c_str());
+    ImGui::Separator();
+    if (view_level_ == ViewLevel::Basic) {
+        ImGui::TextDisabled("%s", tr(T::ObjectSettingsBasic));
+        ImGui::EndPopup();
+        return;
+    }
+    const auto add = [&](const std::vector<std::string_view>& keys) {
+        for (const std::string_view key : keys)
+            o.settings = with_own_key(o.settings, settings_, key);
+        object_settings_ = selected_;
+        plate_changed();
+    };
+    if (ImGui::MenuItem(tr(T::ObjectInfill)))
+        add({"infill.density", "infill.pattern"});
+    if (ImGui::MenuItem(tr(T::ObjectWalls)))
+        add({"walls.count"});
+    if (ImGui::MenuItem(tr(T::ObjectSurfaces)))
+        add({"surfaces.top_layers", "surfaces.bottom_layers"});
+    if (ImGui::BeginMenu(tr(T::ObjectAddSetting))) {
+        const std::vector<std::string> mine = own_keys(o.settings);
+        for (const std::string& key : own_setting_keys(settings_))
+            if (setting_place(key) && std::find(mine.begin(), mine.end(), key) == mine.end() &&
+                ImGui::MenuItem((key_label(key) + "##" + key).c_str()))
+                add({key});
+        ImGui::EndMenu();
+    }
+    ImGui::Separator();
+    // A modifier, a negative volume or a height range (model_tools.md, rules
+    // 2, 3 and 6), over the middle of the model.
+    const std::array<double, 3> size = placed_size(o);
+    const std::array<double, 3> half{std::max(1.0, size[0] / 2.0), std::max(1.0, size[1] / 2.0), std::max(1.0, size[2] / 2.0)};
+    if (ImGui::MenuItem(tr(T::AddModifier))) {
+        o.volumes.push_back({PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {0.0, 0.0, size[2] / 4.0}, half,
+                             with_own_key("", settings_, "infill.density")});
+        object_settings_ = selected_;
+        plate_changed();
+    }
+    if (ImGui::MenuItem(tr(T::AddNegativeVolume))) {
+        o.volumes.push_back({PlateVolume::Kind::Negative, PlateVolume::Shape::Cylinder, {0.0, 0.0, size[2] / 4.0}, half, {}});
+        object_settings_ = selected_;
+        plate_changed();
+    }
+    if (ImGui::MenuItem(tr(T::AddHeightRange))) {
+        // From 0 to 2 mm with the profile's layer height (rule 6).
+        o.ranges.push_back({0.0, 2.0, with_own_key("", settings_, "layers.height")});
+        object_settings_ = selected_;
+        plate_changed();
+    }
+    if ((!o.settings.empty() || !o.volumes.empty() || !o.ranges.empty()) && ImGui::MenuItem(tr(T::ObjectSettingsOpen)))
+        object_settings_ = selected_;
+    ImGui::EndPopup();
+}
+
+// The window with a model's own settings (rule 11): the panel's rows for its
+// keys, on its values, each with a cross to give it back to the profile.
+// Own settings over `under` (a JSON object of groups over the profile's):
+// the panel's rows for own's keys on those values, a cross per key, and an
+// Add button; with `layers`, a height range's layer height may be one. True
+// when own changed.
+bool App::own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where) {
+    bool any = false;
+    const std::vector<std::string> keys = own_keys(own);
+    if (keys.empty())
+        ImGui::TextDisabled("%s", tr(T::ObjectSettingsNone));
+    // Its cards, each once, in the order of its keys.
+    std::vector<const SubsectionLayout*> cards;
+    for (const std::string& key : keys)
+        if (const std::optional<SettingPlace> place = setting_place(key))
+            if (std::find(cards.begin(), cards.end(), place->subsection) == cards.end())
+                cards.push_back(place->subsection);
+    Settings mine = settings_;
+    try {
+        mine = own_settings(own_settings(settings_, under, where), own, where, layers);
+    } catch (const std::exception&) {
+    }
+    bool changed = false, bed = false;
+    row_only_ = std::set<std::string>(keys.begin(), keys.end());
+    std::swap(settings_, mine);
+    for (const SubsectionLayout* card : cards) {
+        ImGui::SeparatorText(tr(card->title));
+        ImGui::PushID(card->id.data(), card->id.data() + card->id.size());
+        changed |= card_rows(card->id, bed);
+        ImGui::PopID();
+    }
+    std::swap(settings_, mine);
+    row_only_.clear();
+    if (changed) {
+        own = own_values(own, mine);
+        any = true;
+    }
+    ImGui::Spacing();
+    for (const std::string& key : keys) {
+        ImGui::PushID(key.c_str());
+        if (ImGui::SmallButton(("× " + key_label(key)).c_str())) {
+            own = without_own_key(own, key);
+            any = true;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tr(T::ObjectSettingsRemove));
+        ImGui::PopID();
+    }
+    if (ImGui::SmallButton(tr(T::ObjectAddSetting)))
+        ImGui::OpenPopup("##add_own");
+    if (ImGui::BeginPopup("##add_own")) {
+        std::vector<std::string> choices = own_setting_keys(settings_);
+        if (layers)
+            choices.insert(choices.begin(), "layers.height");
+        Settings base = settings_;
+        try {
+            base = own_settings(settings_, under, where);
+        } catch (const std::exception&) {
+        }
+        for (const std::string& key : choices)
+            if (setting_place(key) && std::find(keys.begin(), keys.end(), key) == keys.end() &&
+                ImGui::Selectable((key_label(key) + "##" + key).c_str())) {
+                own = with_own_key(own, base, key);
+                any = true;
+            }
+        ImGui::EndPopup();
+    }
+    return any;
+}
+
+// The window with a model's own settings (rule 11), and its modifiers,
+// negative volumes and height ranges (model_tools.md, rules 2, 3 and 6).
+void App::object_settings_window() {
+    if (object_settings_ < 0 || std::size_t(object_settings_) >= objects_.size()) {
+        object_settings_ = -1;
+        return;
+    }
+    PlateObject& o = objects_[std::size_t(object_settings_)];
+    bool open = true, changed = false;
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x - 400.0f * scale_, vp->Pos.y + 120.0f * scale_),
+                            ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize(ImVec2(380.0f * scale_, 0.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(300.0f * scale_, 0.0f), ImVec2(FLT_MAX, vp->Size.y * 0.8f));
+    const std::string title = format(tr(T::ObjectSettingsTitle), o.name.c_str()) + "###object_settings";
+    if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextDisabled("%s", tr(T::ObjectSettingsHint));
+        ImGui::PopTextWrapPos();
+        ImGui::PushID("own");
+        changed |= own_settings_editor(o.settings, {}, false, o.name);
+        ImGui::PopID();
+        const float field = 70.0f * scale_;
+        const auto three = [&](const char* id, T label, std::array<double, 3>& v, double lo) {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(tr(label));
+            for (int k = 0; k < 3; ++k) {
+                ImGui::SameLine(110.0f * scale_ + float(k) * (field + 4.0f * scale_));
+                ImGui::SetNextItemWidth(field);
+                ImGui::PushID(k);
+                changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &v[std::size_t(k)], 0.1f, &lo, nullptr, "%.1f");
+                ImGui::PopID();
+            }
+        };
+        // Its modifiers and negative volumes (rules 2 and 3).
+        for (std::size_t k = 0; k < o.volumes.size(); ++k) {
+            PlateVolume& v = o.volumes[k];
+            ImGui::PushID(int(k) + 1000);
+            const bool negative = v.kind == PlateVolume::Kind::Negative;
+            const std::string head = format(tr(negative ? T::NegativeVolumeItem : T::ModifierItem), int(k) + 1);
+            if (ImGui::CollapsingHeader(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+                int shape = int(v.shape);
+                const char* shapes[] = {tr(T::ShapeBox), tr(T::ShapeCylinder)};
+                ImGui::SetNextItemWidth(140.0f * scale_);
+                if (ImGui::Combo("##shape", &shape, shapes, 2)) {
+                    v.shape = PlateVolume::Shape(shape);
+                    changed = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+                    o.volumes.erase(o.volumes.begin() + std::ptrdiff_t(k));
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                three("##offset", T::VolumeOffset, v.offset, -1000.0);
+                three("##size", T::VolumeSize, v.size, 0.1);
+                if (!negative)
+                    changed |= own_settings_editor(v.settings, o.settings, false, head);
+            }
+            ImGui::PopID();
+        }
+        // Its height ranges (rule 6).
+        for (std::size_t k = 0; k < o.ranges.size(); ++k) {
+            PlateRange& r = o.ranges[k];
+            ImGui::PushID(int(k) + 2000);
+            const std::string head = format(tr(T::RangeItem), r.from, r.to);
+            if (ImGui::CollapsingHeader((head + "###range").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+                const double lo = 0.0;
+                ImGui::SetNextItemWidth(field);
+                changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(field);
+                changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
+                ImGui::SameLine();
+                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+                    o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
+                    changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                changed |= own_settings_editor(r.settings, o.settings, true, head);
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::End();
+    if (changed)
+        plate_changed();
+    if (!open)
+        object_settings_ = -1;
+}
+
 void App::plate_tools() {
     const float size = 34.0f * scale_, margin = 12.0f * scale_;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
@@ -7095,6 +7407,7 @@ void App::split_selected() {
         PlateObject p{o.name + " (" + std::to_string(k + 1) + ")", std::move(pieces[k]), {}, {}};
         p.extruder = o.extruder;
         p.wipe_into_infill = o.wipe_into_infill, p.wipe_into_object = o.wipe_into_object;
+        p.settings = o.settings;
         parts.push_back(std::move(p));
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
@@ -7135,6 +7448,7 @@ void App::cut_selected() {
     for (PlateObject* half : {&below, &above}) {
         half->extruder = o.extruder;
         half->wipe_into_infill = o.wipe_into_infill, half->wipe_into_object = o.wipe_into_object;
+        half->settings = o.settings;
     }
     objects_.erase(objects_.begin() + std::ptrdiff_t(index));
     objects_.insert(objects_.begin() + std::ptrdiff_t(index), {std::move(below), std::move(above)});
@@ -7170,6 +7484,45 @@ void App::cut_plane_overlay() {
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
     dl->AddConvexPolyFilled(c, 4, ImGui::GetColorU32(rgb(theme_.accent, 0.28f)));
     dl->AddPolyline(c, 4, ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f)), 2.0f * scale_, ImDrawFlags_Closed);
+    dl->PopClipRect();
+}
+
+// The models' modifiers (orange) and negative volumes (grey) over the 3D
+// view, as wire shapes (model_tools.md, rules 2 and 3).
+void App::volumes_overlay() {
+    if (!(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const Vec3f& p, ImVec2& out) {
+        const float cx = vp[0] * p.x + vp[4] * p.y + vp[8] * p.z + vp[12];
+        const float cy = vp[1] * p.x + vp[5] * p.y + vp[9] * p.z + vp[13];
+        const float w = vp[3] * p.x + vp[7] * p.y + vp[11] * p.z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        if (objects_[i].volumes.empty())
+            continue;
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        for (const PlateVolume& v : objects_[i].volumes) {
+            const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
+            const TriangleMesh shape = volume_mesh(v, box);
+            // The outline of every face but the cylinder's caps' spokes.
+            for (std::size_t t = 0; t < shape.triangle_count(); ++t) {
+                ImVec2 a, b, c;
+                if (!project(shape.corner(t, 0), a) || !project(shape.corner(t, 1), b) || !project(shape.corner(t, 2), c))
+                    continue;
+                if (v.shape == PlateVolume::Shape::Box)
+                    dl->AddTriangle(a, b, c, colour, 1.2f * scale_);
+                else if (t % 4 >= 2)
+                    dl->AddLine(a, b, colour, 1.2f * scale_);
+            }
+        }
+    }
     dl->PopClipRect();
 }
 
@@ -8809,8 +9162,11 @@ void App::layout() {
             help_panel();
         status_bar();
         view_tools();
-        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_)
+        if (tab_ == Tab::Prepare && !objects_.empty() && !calibration_ && !viewer_) {
             plate_tools();
+            volumes_overlay();
+            object_settings_window();
+        }
         mixing_dialog();
         if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
             empty_hint();

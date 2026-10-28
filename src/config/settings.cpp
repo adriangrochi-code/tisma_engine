@@ -376,6 +376,79 @@ bool json_depth_ok(std::string_view text, int max_depth) {
     return true;
 }
 
+Settings own_settings(const Settings& base, std::string_view own, std::string_view where, bool layers) {
+    if (own.empty())
+        return base;
+    json given;
+    try {
+        given = json::parse(own.begin(), own.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string(where) + ": its settings are not valid JSON: " + e.what());
+    }
+    if (!given.is_object())
+        throw SettingsError(std::string(where) + ": its settings must be an object of groups");
+    static const std::set<std::string> regional = {"walls", "infill", "surfaces"};
+    json root = json::parse(settings_json(base));
+    for (const auto& [group, keys] : given.items()) {
+        if (!keys.is_object())
+            throw SettingsError(std::string(where) + ": " + group + " must be an object");
+        for (const auto& [key, value] : keys.items()) {
+            if (!regional.contains(group) && !(layers && group == "layers" && key == "height"))
+                throw SettingsError(std::string(where) + ": " + group + "." + key +
+                                    " cannot change for one object or part yet (walls, infill and surfaces can)");
+            root[group][key] = value;
+        }
+    }
+    Settings out;
+    try {
+        out = parse_settings(root.dump());
+    } catch (const SettingsError& e) {
+        throw SettingsError(std::string(where) + ": " + e.what());
+    }
+    out.ignored_groups = base.ignored_groups;
+    return out;
+}
+
+std::string merged_own(std::string_view under, std::string_view over) {
+    if (under.empty())
+        return std::string(over);
+    if (over.empty())
+        return std::string(under);
+    json out, top;
+    try {
+        out = json::parse(under.begin(), under.end());
+        top = json::parse(over.begin(), over.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string("settings of a part: not valid JSON: ") + e.what());
+    }
+    if (!out.is_object() || !top.is_object())
+        throw SettingsError("settings of a part: must be objects of groups");
+    for (const auto& [group, keys] : top.items())
+        if (keys.is_object())
+            for (const auto& [key, value] : keys.items())
+                out[group][key] = value;
+    return out.dump();
+}
+
+std::string own_without(std::string_view own, std::string_view group, bool* had) {
+    if (had)
+        *had = false;
+    if (own.empty())
+        return {};
+    json j;
+    try {
+        j = json::parse(own.begin(), own.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string("settings of a part: not valid JSON: ") + e.what());
+    }
+    if (!j.is_object() || !j.contains(std::string(group)))
+        return std::string(own);
+    if (had)
+        *had = true;
+    j.erase(std::string(group));
+    return j.empty() ? std::string() : j.dump();
+}
+
 std::optional<std::string> engine_setting_key(std::string_view key) {
     if (!key.starts_with("material."))
         return std::string(key);

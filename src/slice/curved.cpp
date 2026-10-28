@@ -843,6 +843,9 @@ std::string number(double v, int decimals) {
     return text;
 }
 
+// To the thousandth, as the G-code writes it.
+double round3(double v) { return std::round(v * 1000.0) / 1000.0; }
+
 } // namespace
 
 std::string curve_gcode(std::string_view text, const CurvedField& field, const Settings& s) {
@@ -913,12 +916,18 @@ std::string curve_gcode(std::string_view text, const CurvedField& field, const S
         }
         // On a curved layer: in pieces, each on the layer's surface; the
         // pieces that make a straight run, with about the same J, join again
-        // (within gcode.resolution).
+        // (within gcode.resolution). J at the joined chord's middle, a little
+        // off the surface, must agree too: J steps where an even ramp ends.
+        // J is taken where the G-code says the nozzle is, its numbers rounded.
         const double length = std::hypot(x1 - x, y1 - y);
         const int n = std::max(1, int(std::ceil(length / piece - 1e-9)));
         const bool extrudes = ne && *ne > 0.0;
         struct Point {
             double x, y, z;
+        };
+        const auto written_j = [&](const Point& a, const Point& b) {
+            return field.thickness(0.5 * (round3(a.x) + round3(b.x)), 0.5 * (round3(a.y) + round3(b.y)),
+                                   0.5 * (round3(a.z + z_offset) + round3(b.z + z_offset)) - z_offset);
         };
         std::vector<Point> points{{x, y, field.real_z(x, y, flat)}};
         std::vector<double> js;
@@ -926,9 +935,7 @@ std::string curve_gcode(std::string_view text, const CurvedField& field, const S
             const double t = double(i) / n;
             const double qx = x + (x1 - x) * t, qy = y + (y1 - y) * t;
             points.push_back({qx, qy, field.real_z(qx, qy, flat + (flat1 - flat) * t)});
-            const Point& p = points[points.size() - 2];
-            const Point& q = points.back();
-            js.push_back(field.thickness(0.5 * (p.x + q.x), 0.5 * (p.y + q.y), 0.5 * (p.z + q.z)));
+            js.push_back(written_j(points[points.size() - 2], points.back()));
         }
         const double tolerance = std::max(s.gcode_resolution, 1e-4);
         const auto off_chord = [&](const Point& a, const Point& b, const Point& c) { // c from the segment a-b
@@ -951,6 +958,9 @@ std::string curve_gcode(std::string_view text, const CurvedField& field, const S
                     straight = off_chord(points[i], points[j + 1], points[m]) <= tolerance;
                 if (!straight)
                     break;
+                const double mid = written_j(points[i], points[j + 1]);
+                if (std::max(hi, mid) > std::min(lo, mid) * 1.005)
+                    break;
                 j_lo = lo, j_hi = hi, ++j;
             }
             double share = 0.0; // of the flat move, by J
@@ -969,8 +979,8 @@ std::string curve_gcode(std::string_view text, const CurvedField& field, const S
                 f = std::min(f, z_most * std::sqrt(dxy * dxy + dz * dz) / dz); // Z within its speed (rule 5)
             std::string g = "G1";
             if (nx || ny)
-                g += " X" + number(q.x, 3) + " Y" + number(q.y, 3);
-            const std::string z_text = number(q.z + z_offset, 3);
+                g += " X" + number(round3(q.x), 3) + " Y" + number(round3(q.y), 3);
+            const std::string z_text = number(round3(q.z + z_offset), 3);
             if (z_text != number(z_out, 3)) {
                 g += " Z" + z_text;
                 z_out = std::atof(z_text.c_str());

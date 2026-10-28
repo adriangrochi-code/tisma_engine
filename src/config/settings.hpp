@@ -776,6 +776,19 @@ Settings with_filament_retraction(const Settings& settings);
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 
+// The settings of an object or a part (model_tools.md, rules 5, 7 and 8):
+// `own`, a JSON object of groups with the profile's keys, over `base`. Only
+// the groups the slicing of a region reads are taken today (walls, infill,
+// surfaces; with `layers`, a height range's layer height too); another
+// throws SettingsError naming the key and `where` (rule 9: refused, not
+// ignored). Empty `own`: `base`.
+Settings own_settings(const Settings& base, std::string_view own, std::string_view where, bool layers = false);
+// Two such JSON objects in one, `over`'s keys winning (a modifier's over its
+// part's, model_tools.md rule 5).
+std::string merged_own(std::string_view under, std::string_view over);
+// Such a JSON object without one group; `had` says whether it had it.
+std::string own_without(std::string_view own, std::string_view group, bool* had = nullptr);
+
 // The engine's key for a key of the specs' `material` group
 // ("material.nozzle_temp" → "machine.variables.temperature",
 // "material.density" → "extrusion.density"); other keys as they are. None

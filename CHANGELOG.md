@@ -26,6 +26,17 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
+- **Ajustes de una pieza** (`model_tools.md`, reglas 5, 7 y 8; `settings_levels.md`, reglas 10 y 11): clic derecho
+  sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
+  la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.
+- **Modificadores, volúmenes negativos y rangos de alturas desde la interfaz:** clic derecho sobre la pieza (niveles
+  Normal y Avanzado), editados en la ventana «Ajustes de …» y guardados en el proyecto.
+- **Rangos de alturas en el motor** (`model_tools.md`, regla 6): un tramo de alturas de un objeto con sus ajustes,
+  la altura de capa incluida (el tramo empieza una capa).
+- **Modificadores en el motor** (`model_tools.md`, reglas 3 a 5): donde un modificador toca las partes de su objeto,
+  esa zona toma sus ajustes (paredes, relleno, capas sólidas) con paredes propias; el de después gana donde dos se
+  pisan, y una altura de capa en un modificador se deja de lado con un aviso. Uno que cambia solo el relleno cambia el
+  relleno de su zona sin paredes en el borde. Todavía no se agregan desde la interfaz.
 - **Volúmenes negativos:** un proyecto 3MF con volúmenes negativos los resta de la pieza en cada capa que cruzan, sin
   agregar capas ni mover la pieza (`model_tools.md`, regla 2). Todavía no con corte, separar o copias.
 - **El grupo `material` de las fichas:** `material.nozzle_temp`, `material.bed_temp`, `material.flow_factor`,
@@ -42,6 +53,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   se hicieron), en lugar de las preferencias de la interfaz. Las que ya estaban en las preferencias se siguen
   mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
+
+### Corregido
+
+- **Capas curvas:** donde la rampa de las caras de arriba termina, un tramo podía llevar el filamento del espesor de
+  un lado y el verificador leer el del otro, y el G-code se rechazaba. El espesor se toma ahora donde el G-code pone
+  la boquilla, con sus números redondeados.
+- **Rangos de alturas que se pisan:** pasado el de después, el de antes vuelve a su altura de capa (antes volvía la
+  del perfil).
+- **Mensajes:** un volumen negativo que se lleva toda la pieza lo dice (antes: «¿la malla es plana o abierta?»); un
+  rango con ajustes que no son JSON nombra el objeto y el rango («box 2-4.5 mm»).
+- **Más rápido:** escribir el G-code con `walls.detect_overhangs` en piezas con voladizos todo alrededor (una
+  esfera de un millón de triángulos: de 300 a 177 ms), y el clic de Medir sobre una superficie curva en mallas
+  grandes (de 0,87 a 0,18 s con un millón de triángulos).
 
 ## [0.10.0-alpha.2] - 2026-10-27
 
