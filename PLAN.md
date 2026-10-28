@@ -905,6 +905,15 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
+- [ ] **`walls.transition_angle` y `walls.transition_margin`** (`perimeters.md` P13 y P14, medidas por el equipo de
+  fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
+  sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
+  solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
+  queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
+  contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
+- [ ] **`walls.staggered`** (`staggered_perimeters.md`, ST1): los lazos internos impares media capa más arriba; el
+  material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
+  material de los bloques no planares también sea lineal en el espesor
 - [x] **Modelo del cordón de las fichas** (hecho 2026-10-28; queda la corrida 48 del fuzzer, `PROGRESS.md`) (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;
   pedido del equipo de fichas, 2026-10-28). Hoy el motor pone los cordones borde con borde y saca el filamento de
   `w·h`. Las fichas dicen: sección `A = (w − h)·h + π·(h/2)²` (rectángulo con costados redondeados) y vecinos a
