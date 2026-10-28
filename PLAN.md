@@ -916,6 +916,10 @@ Con el PR #23 (2026-10-26):
   relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
   sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
   que en el ajuste
+- [x] **`machine`** (alias `max_speed` y `max_acceleration`, `custom_parameters`), **`print`** (`custom_parameters`,
+  `variables`) y **`calibration`** (pruebas por franjas, CA1 a CA7; hechos 2026-10-28). Quedan `machine.feedstock`
+  (pellets, P3), `machine.high_flow_nozzle`, `machine.process` (WAAM), la prueba VFA y las pruebas por parches. `fins`,
+  `fragment` y `waam` son de después de la primera versión, como dicen sus fichas
 - [ ] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
   2026-10-28 `pattern`, `sheath`, `interface_pattern`, `interface_spacing` e `interface_contact_loops` (SM6, SM7,
   SM10), `enforce_layers` (SM1) y el estilo `snug` con `closing_radius` (SM8, SM9), y `free_bridge_length` con el aviso de

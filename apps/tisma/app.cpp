@@ -953,6 +953,7 @@ const std::map<T, const char*>& row_keys() {
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
         {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
+        {T::CustomTemplateGcode, "gcode.custom_template"},
         {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
         {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
         {T::RaftExpansion, "adhesion.raft_expansion"}, {T::RaftFirstDensity, "adhesion.raft_first_layer_density"},
@@ -6540,16 +6541,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 text->resize(31);
         }
     // The templates below the table, full width (gcode_templates.md).
-    if (id == "gcode_templates") {
+    if (id == "gcode_templates" || id == "gcode_heights") {
         const std::pair<T, std::pair<const char*, std::string*>> texts[] = {
             {T::FilamentStartGcode, {"extrusion.start_gcode", &s.filament_start_gcode}},
             {T::FilamentEndGcode, {"extrusion.end_gcode", &s.filament_end_gcode}},
             {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
             {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
+            {T::CustomTemplateGcode, {"gcode.custom_template", &s.gcode_custom_template}},
             {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},
             {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}},
             {T::BetweenObjectsGcode, {"gcode.between_objects", &s.gcode_between_objects}}};
-        for (const auto& [label, key_text] : texts)
+        for (const auto& [label, key_text] : texts) {
+            // Each card its own: the colour change, the pause and the custom G-code by height.
+            const std::string_view key = key_text.first;
+            const bool by_height = key == "gcode.color_change" || key == "gcode.pause" || key == "gcode.custom_template";
+            if (by_height != (id == "gcode_heights"))
+                continue;
             if (shown(key_text.first)) {
                 ImGui::TextUnformatted(tr(label));
                 ImGui::PushID(key_text.first);
@@ -6557,6 +6564,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                                                      ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
                 ImGui::PopID();
             }
+        }
     }
     // The tool change's G-code below the table, full width (multi_extruder.md, rule 5).
     if (id == "extruders" && shown("gcode.toolchange")) {

@@ -252,11 +252,11 @@ const std::vector<SectionLayout>& print_layout() {
            {{"gcode.auto_temperatures", A},
             {"extrusion.start_gcode", A},
             {"extrusion.end_gcode", A},
-            {"gcode.color_change", A},
-            {"gcode.pause", A},
             {"gcode.before_layer", A},
             {"gcode.after_layer", A},
             {"gcode.between_objects", A}}},
+          {"gcode_heights", T::SubGcodeHeights,
+           {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.custom_template", A}}},
           {"slicing", T::SubSlicing,
            {{"slicing.fill_mode", A}, {"slicing.gap_closing_radius", A}, {"slicing.simplify_tolerance", A}}}}},
     };
@@ -671,6 +671,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "skirt")
         return s.skirt_loops > 0 ? format(T::SumSkirt, s.skirt_loops, number(s.skirt_distance).c_str()) : tr(T::SumNoSkirt);
     if (id == "gcode_templates")
+        return s.auto_temperatures ? tr(T::AutoTemperatures) : tr(T::SumOff);
+    if (id == "gcode_heights")
         return s.gcode_color_change.substr(0, s.gcode_color_change.find('\n')) + " / " +
                s.gcode_pause.substr(0, s.gcode_pause.find('\n'));
     if (id == "raft")

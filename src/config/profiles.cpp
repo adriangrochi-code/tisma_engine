@@ -166,7 +166,7 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
         group == "adhesion" || group == "support" || group == "compute" || group == "zaa" || group == "fuzzy" ||
         group == "vase" || group == "placement" || group == "transform" || group == "arcs" || group == "ironing" || group == "output" ||
         group == "extruders" || group == "wipe_tower" || group == "interlocking" || group == "painting" ||
-        group == "multi" || group == "curved" || group == "print")
+        group == "multi" || group == "curved" || group == "print" || group == "calibration")
         return ProfileKind::Print;
     return std::nullopt;
 }

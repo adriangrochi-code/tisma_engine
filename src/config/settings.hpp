@@ -102,6 +102,19 @@ struct HeightChange {
     // 13): gcode.color_change or gcode.pause at the layer's start.
     bool color_change = false;
     bool pause = false;
+    bool custom = false; // gcode.custom_template at that layer's start
+    // Made from calibration's bands when the settings were read: not written
+    // back with the changes.
+    bool from_calibration = false;
+};
+
+// A test in bands along the height (calibrations.md, rules 1 to 3): band i,
+// from Z = i band_height, tries start + i step, never past end.
+enum class CalibrationMode { Off, Temperature, PressureAdvance, Retraction, MaxFlow, Acceleration, Corners, InputShaping };
+struct CalibrationBands {
+    CalibrationMode mode = CalibrationMode::Off;
+    double start = 0.0, step = 0.0, end = 0.0;
+    double band_height = 5.0; // mm
 };
 
 // A speed in mm/s, or a percentage of another speed.
@@ -301,6 +314,9 @@ struct Settings {
     // custom_parameter_filament_<name>[0] and custom_parameter_print_<name>;
     // print.variables as print_<name>.
     std::map<std::string, std::string> printer_parameters, filament_parameters, print_parameters, print_variables;
+    // A test in bands along the height, turned into height changes
+    // (calibration group; calibrations.md).
+    CalibrationBands calibration;
     // Motion limits, for the time estimate. Like every speed, from the
     // printer's profile; 0: not known, not applied.
     double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
@@ -758,6 +774,7 @@ struct Settings {
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";
     std::string gcode_pause = "M601";
+    std::string gcode_custom_template; // a change's own G-code by height (gcode_templates.md, rule 13)
     std::string gcode_before_layer; // right before each layer's move in Z, from the second layer
     std::string gcode_after_layer;  // right after it
     std::string gcode_between_objects; // sequential printing: between one object and the next (sequential.md, rule 3)

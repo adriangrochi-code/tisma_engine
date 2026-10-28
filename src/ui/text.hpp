@@ -1110,6 +1110,7 @@
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
+    X(SubGcodeHeights, "G-code por altura", "G-code by height") \
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
@@ -1407,6 +1408,7 @@
     X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \
+    X(CustomTemplateGcode, "G-code propio por altura", "Custom G-code by height") \
     X(BeforeLayerGcode, "Antes de cada capa", "Before each layer") \
     X(AfterLayerGcode, "Después de cada capa", "After each layer") \
     X(SubRaft, "Balsa", "Raft") \

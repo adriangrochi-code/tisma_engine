@@ -96,6 +96,20 @@ constexpr const char* kAccelerationNames[] = {"default",          "walls",      
                                               "bridges",          "first_layer",  "first_layer_over_raft",
                                               "travel",           "short_travel", "wipe_tower"};
 
+const char* calibration_mode_name(CalibrationMode m) {
+    switch (m) {
+    case CalibrationMode::Temperature: return "temperature";
+    case CalibrationMode::PressureAdvance: return "pressure_advance";
+    case CalibrationMode::Retraction: return "retraction";
+    case CalibrationMode::MaxFlow: return "max_flow";
+    case CalibrationMode::Acceleration: return "acceleration";
+    case CalibrationMode::Corners: return "corners";
+    case CalibrationMode::InputShaping: return "input_shaping";
+    case CalibrationMode::Off: break;
+    }
+    return "off";
+}
+
 const char* support_style_name(SupportStyle s) {
     return s == SupportStyle::Organic ? "organic" : s == SupportStyle::Snug ? "snug" : "grid";
 }
@@ -194,6 +208,56 @@ std::map<std::string, std::string> flat_parameters(const json& value, const std:
             fail(key + "." + name, "must be a number, a text or true/false (unable to parse custom parameters)");
     }
     return out;
+}
+
+// The height changes of calibration's bands (calibrations.md, rules 1 to 3),
+// with the commands of the flavor for the corners and the input shaping.
+void add_calibration_changes(Settings& s) {
+    const CalibrationBands& b = s.calibration;
+    if (b.mode == CalibrationMode::Off)
+        return;
+    const bool klipper = s.flavor == GcodeFlavor::Klipper;
+    const bool rrf = s.flavor == GcodeFlavor::RepRapFirmware || s.flavor == GcodeFlavor::RepRap;
+    // From start towards end by step; one band when step is 0 or goes the other way.
+    const double span = b.end - b.start;
+    const std::size_t bands =
+        b.step != 0.0 && span / b.step >= 0.0 ? std::min<std::size_t>(std::size_t(std::floor(span / b.step + 1e-9)) + 1, 1000)
+                                              : 1;
+    for (std::size_t i = 0; i < bands; ++i) {
+        const double v = b.start + double(i) * b.step;
+        HeightChange c;
+        c.z = double(i) * b.band_height;
+        c.from_calibration = true;
+        char text[160];
+        switch (b.mode) {
+        case CalibrationMode::Temperature: c.temperature = v; break;
+        case CalibrationMode::PressureAdvance: c.pressure_advance = v; break;
+        case CalibrationMode::Retraction: c.retract_length = v; break;
+        case CalibrationMode::MaxFlow: c.volumetric_flow = v; break;
+        case CalibrationMode::Acceleration: c.acceleration = v; break;
+        case CalibrationMode::Corners:
+            if (klipper)
+                std::snprintf(text, sizeof text, "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=%.2f", v);
+            else if (rrf)
+                std::snprintf(text, sizeof text, "M566 X%.0f Y%.0f", v * 60.0, v * 60.0);
+            else
+                std::snprintf(text, sizeof text, "M205 X%.2f Y%.2f", v, v);
+            c.gcode = text;
+            break;
+        case CalibrationMode::InputShaping:
+            if (klipper)
+                std::snprintf(text, sizeof text, "SET_INPUT_SHAPER SHAPER_FREQ_X=%.1f SHAPER_FREQ_Y=%.1f", v, v);
+            else
+                std::snprintf(text, sizeof text, "M593 F%.1f", v);
+            c.gcode = text;
+            break;
+        case CalibrationMode::Off: break;
+        }
+        c.gcode = c.gcode.empty() ? "; calibration" : "; calibration\n" + c.gcode;
+        s.changes.push_back(std::move(c));
+    }
+    std::stable_sort(s.changes.begin(), s.changes.end(),
+                     [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
 }
 
 // The same object back, for writing the settings out.
@@ -688,7 +752,7 @@ Settings parse_checked(std::string_view text) {
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
-            group == "belt" || group == "print")
+            group == "belt" || group == "print" || group == "calibration")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -2316,7 +2380,7 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
                                "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
-                               "toolchange"},
+                               "toolchange", "custom_template"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
             s.object_labels = choice<ObjectLabels>(
@@ -2341,6 +2405,7 @@ Settings parse_checked(std::string_view text) {
                 fail(k, "must be a string");
             (n == "color_change" ? s.gcode_color_change
              : n == "pause"      ? s.gcode_pause
+             : n == "custom_template" ? s.gcode_custom_template
              : n == "toolchange" ? s.gcode_toolchange
              : n == "before_layer" ? s.gcode_before_layer
              : n == "between_objects" ? s.gcode_between_objects
@@ -2567,10 +2632,10 @@ Settings parse_checked(std::string_view text) {
                     if (!v.is_string())
                         fail(where + ".gcode", "must be a string");
                     c.gcode = v.get<std::string>();
-                } else if (n == "color_change" || n == "pause") {
+                } else if (n == "color_change" || n == "pause" || n == "custom") {
                     if (!v.is_boolean())
                         fail(where + "." + n, "must be true or false");
-                    (n == "color_change" ? c.color_change : c.pause) = v.get<bool>();
+                    (n == "color_change" ? c.color_change : n == "pause" ? c.pause : c.custom) = v.get<bool>();
                 } else {
                     fail(where + "." + n, "unknown setting (see docs/CONFIG.md)");
                 }
@@ -2580,12 +2645,41 @@ Settings parse_checked(std::string_view text) {
         std::stable_sort(s.changes.begin(), s.changes.end(),
                          [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
     }
+    read_group(root, "calibration", {"mode", "start", "step", "end", "band_height"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "mode") {
+                       s.calibration.mode = choice<CalibrationMode>(
+                           g, n, k,
+                           {{"off", CalibrationMode::Off},
+                            {"temperature", CalibrationMode::Temperature},
+                            {"pressure_advance", CalibrationMode::PressureAdvance},
+                            {"retraction", CalibrationMode::Retraction},
+                            {"max_flow", CalibrationMode::MaxFlow},
+                            {"acceleration", CalibrationMode::Acceleration},
+                            {"corners", CalibrationMode::Corners},
+                            {"input_shaping", CalibrationMode::InputShaping}});
+                       return;
+                   }
+                   const double d = number(g, n, k);
+                   if (n == "band_height") {
+                       if (!(d >= 0.05 && d <= 1000.0))
+                           fail(k, "must be from 0.05 to 1000 mm");
+                       s.calibration.band_height = d;
+                       return;
+                   }
+                   if (!std::isfinite(d) || std::fabs(d) > 1e6)
+                       fail(k, "must be a number from -1000000 to 1000000");
+                   (n == "start" ? s.calibration.start : n == "step" ? s.calibration.step : s.calibration.end) = d;
+               });
+    add_calibration_changes(s);
     return s;
 }
 
 nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
     nlohmann::ordered_json list = nlohmann::ordered_json::array();
     for (const HeightChange& c : changes) {
+        if (c.from_calibration) // written as the calibration group
+            continue;
         nlohmann::ordered_json j;
         j["z"] = c.z;
         const std::pair<const char*, const std::optional<double>*> values[] = {
@@ -2602,6 +2696,8 @@ nlohmann::ordered_json changes_json(const std::vector<HeightChange>& changes) {
             j["gcode"] = c.gcode;
         if (c.color_change)
             j["color_change"] = true;
+        if (c.custom)
+            j["custom"] = true;
         if (c.pause)
             j["pause"] = true;
         list.push_back(j);
@@ -3080,6 +3176,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.resolution", num(s.gcode_resolution)},
         {"gcode.color_change", text(s.gcode_color_change)},
         {"gcode.pause", text(s.gcode_pause)},
+        {"gcode.custom_template", text(s.gcode_custom_template)},
         {"gcode.before_layer", text(s.gcode_before_layer)},
         {"gcode.after_layer", text(s.gcode_after_layer)},
         {"gcode.between_objects", text(s.gcode_between_objects)},
@@ -3565,6 +3662,12 @@ std::string settings_json(const Settings& s) {
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
         {"print", {{"custom_parameters", flat_json(s.print_parameters)}, {"variables", flat_json(s.print_variables)}}},
+        {"calibration",
+         {{"mode", calibration_mode_name(s.calibration.mode)},
+          {"start", s.calibration.start},
+          {"step", s.calibration.step},
+          {"end", s.calibration.end},
+          {"band_height", s.calibration.band_height}}},
         {"extrusion",
          {{"flow", s.flow},
           {"custom_parameters", flat_json(s.filament_parameters)},
@@ -3606,6 +3709,7 @@ std::string settings_json(const Settings& s) {
          {{"resolution", s.gcode_resolution},
           {"color_change", s.gcode_color_change},
           {"pause", s.gcode_pause},
+          {"custom_template", s.gcode_custom_template},
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
           {"between_objects", s.gcode_between_objects},

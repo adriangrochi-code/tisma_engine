@@ -707,6 +707,18 @@ Valores propios del perfil de impresión para las plantillas de G-code (ficha `p
 | `custom_parameters` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `custom_parameter_print_<nombre>`. Listas u objetos adentro son un error |
 | `variables` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `print_<nombre>` |
 
+### `calibration`
+
+Una prueba por franjas a lo largo de la altura (ficha `calibrations.md`, reglas 1 a 3): la franja `i` (desde 0) empieza
+en Z = `i · band_height` y prueba `start + i · step`, sin pasar de `end`. Se convierte en cambios por altura al leer los
+ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes queda como este grupo, no como cambios.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `mode` | texto | `off` | `off`, `temperature`, `pressure_advance`, `retraction`, `max_flow`, `acceleration`, `corners`, `input_shaping` | Qué cambia: la temperatura de la boquilla (la espera inicial ya es la de la primera franja), el avance de presión, el largo de retracción, el caudal forzado (mm³/s), la aceleración (con el comando del dialecto), la velocidad en las esquinas (Klipper `SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY`, RepRapFirmware `M566` en mm/min, el resto `M205 X Y`) o la frecuencia del input shaping (Klipper `SET_INPUT_SHAPER`, el resto `M593 F`) |
+| `start`, `step`, `end` | número | 0 | −1 000 000 a 1 000 000 | Valor de la primera franja, cuánto cambia en cada una (puede ser negativo) y el último. Con `step` 0, o hacia el otro lado, una sola franja |
+| `band_height` | número | 5 | 0,05 a 1000 | Alto de cada franja, en mm |
+
 ### `extrusion`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -759,6 +771,7 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | `volumetric_e` | booleano | `false` | | Toda E (extrusión y retracción) en mm³ de plástico en vez de mm de filamento: la E de siempre por la sección del filamento (ficha `gcode_extras.md`, regla 11). El motor no escribe `M200`: va en el G-code de inicio |
 | `color_change` | texto | `"M600"` | | Lo que se escribe en un cambio de color de `changes` (ficha `gcode_templates.md`, regla 13), con las variables de `machine.variables`, después de la marca `;COLOR_CHANGE` |
 | `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |
+| `custom_template` | texto | `""` | | Lo mismo para el G-code propio de un cambio con `"custom": true`, después de `;CUSTOM_GCODE` (ficha `gcode_templates.md`, regla 13) |
 | `before_layer` | texto | `""` | | G-code justo antes del movimiento en Z de cada cambio de capa, desde la segunda capa (regla 11, prueba T8), con las variables y además `layer_num` (desde 0), `layer_z` y `max_layer_z` (la Z escrita, sin ceros de más). Va como G-code propio (`;TYPE:Custom`); si tiene algo más que comentarios, el viaje siguiente vuelve a escribir todos los ejes |
 | `after_layer` | texto | `""` | | Lo mismo, justo después del movimiento en Z |
 | `between_objects` | texto | `""` | | En la impresión secuencial, el G-code entre un objeto y el siguiente (ficha `sequential.md`, regla 3), con las variables y `current_object_idx`, el número del objeto que sigue (desde 0). Si pone temperaturas (`M104`, `M109`, `M140`, `M190`), el motor no escribe las suyas |
@@ -827,6 +840,7 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 | `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
 | `color_change` | booleano | | Cambio de color a esa altura: `gcode.color_change` (`M600`) al empezar la capa (ficha `gcode_templates.md`, regla 13) |
 | `pause` | booleano | | Pausa a esa altura: `gcode.pause` (`M601`) |
+| `custom` | booleano | | El G-code propio a esa altura: `gcode.custom_template`, después de `;CUSTOM_GCODE` |
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).
 

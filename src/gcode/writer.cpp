@@ -2524,7 +2524,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The bed's first-layer temperature: with several extruders that of
     // extruders.bed_temperature_from, or of the first to print (rule 4).
     const int bed_tool = s.bed_temperature_from > 0 ? s.bed_temperature_from : initial_tool;
-    const double nozzle = value_of("temperature"),
+    // A temperature change at Z 0 (a temperature test's first band,
+    // calibrations.md, rule 2) is the one waited for at the start.
+    double start_nozzle = value_of("temperature");
+    for (const HeightChange& c : s.changes)
+        if (c.z <= 1e-9 && c.temperature)
+            start_nozzle = *c.temperature;
+    const double nozzle = start_nozzle,
                  bed = s.extruders > 1 && value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1)) > 0.0
                            ? value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1))
                            : value_of("bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
@@ -3793,6 +3799,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             }
             if (c.pause) {
                 active.lines += ";PAUSE_PRINT\n" + render_template(s.gcode_pause, templates, "gcode.pause") + "\n";
+                active.user = true;
+            }
+            if (c.custom) {
+                active.lines += ";CUSTOM_GCODE\n" +
+                                render_template(s.gcode_custom_template, templates, "gcode.custom_template") + "\n";
                 active.user = true;
             }
             if (c.retract_length)

@@ -269,6 +269,15 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(snug.support_style == SupportStyle::Snug);
     CHECK(snug.support_closing_radius == 0.5);
     CHECK(Settings{}.support_free_bridge_length == 16.0);
+    const Settings cal = parse_settings(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210,
+                                                           "band_height": 4}})");
+    REQUIRE(cal.changes.size() == 5);
+    CHECK(cal.changes[1].z == 4.0);
+    CHECK(*cal.changes[1].temperature == 225.0);
+    CHECK(cal.changes[1].from_calibration);
+    CHECK(parse_settings(R"({"calibration": {"mode": "corners", "start": 5, "step": 0, "end": 10}})").changes.size() == 1);
+    CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "speed"}})"));
+    CHECK_THROWS(parse_settings(R"({"calibration": {"band_height": 0}})"));
     CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);
     CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),

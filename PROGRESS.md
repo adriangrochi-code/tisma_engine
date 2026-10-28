@@ -7010,4 +7010,32 @@ de la zona en grilla contra la columna (SM8).
 - `high_flow_nozzle` (multiextrusor, con los datos del archivo);
 - `process` (WAAM, después de la primera versión).
 
-**Sigue:** `machine.high_flow_nozzle` y `calibration` (`mode`, `start`, `step`, `end`, `band_height`), después `gcode`.
+**Grupo `calibration`** (`calibrations.md`, reglas 1 a 3): una prueba por franjas sobre cualquier pieza.
+- Al leer los ajustes se convierte en cambios por altura. La franja i empieza en `i · band_height` y prueba
+  `start + i · step`, sin pasar de `end`.
+- Cada cambio lleva `; calibration`. No se escriben de vuelta como cambios: quedan como el grupo.
+- Modos: temperatura, avance de presión, retracción, caudal forzado, aceleración, esquinas e input shaping. Las
+  esquinas y el input shaping llevan el comando de cada firmware.
+- Un cambio de temperatura en Z 0 es ahora la temperatura que se espera al empezar (regla 2).
+
+**Pruebas CA, prisma de 20 × 20 × 25 mm:**
+- CA1: `M109 S230` y después 225, 220, 215 y 210 en Z 5,2, 10,2, 15,2 y 20,2; la segunda capa no pisa la franja.
+- CA2 y CA3: el avance de presión en Klipper, Marlin y RepRapFirmware, en las mismas alturas.
+- CA4: las retracciones de cada franja, 0,5 a 2,5 mm.
+- CA5 y CA6: las esquinas y el input shaping con el comando de cada firmware.
+- CA7: Marlin `M204 P2000` en Z 5,2.
+
+**Diferencia que queda:** en Klipper la aceleración sale como `SET_VELOCITY_LIMIT ACCEL=`, el comando del dialecto que
+el motor ya usaba, y Tisma Slicer escribe `M204 S`. Los dos valen en Klipper.
+
+**No hecho:**
+- la prueba de VFA (velocidad de los perímetros por franja): los cambios por altura todavía no tienen una velocidad
+  de perímetros propia;
+- las pruebas por parches a lo largo de X (regla 4).
+
+**`gcode.custom_template`** (`gcode_templates.md`, regla 13): el G-code propio a una altura, como el cambio de color y
+la pausa. Un cambio con `"custom": true` escribe la plantilla después de `;CUSTOM_GCODE`, y la vista previa lo marca
+como G-code propio.
+
+**Sigue:** `machine.high_flow_nozzle`, `gcode` (`corner_smoothing`, `pressure_advance_in_gcode`,
+`pressure_advance_piece`, `thumbnails`).
