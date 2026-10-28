@@ -140,7 +140,7 @@ struct RoundBead {
 // for the point tests, and the edges in a grid of cells for the crossings.
 class AreaIndex {
 public:
-    explicit AreaIndex(const Polygons& region) : region_(region) {
+    explicit AreaIndex(const Polygons& region) {
         box_ = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
                 std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest()};
         for (const Polygon& poly : region) {
@@ -156,7 +156,6 @@ public:
                 edges_.push_back({p, q});
                 b = {std::min(b[0], p.x), std::min(b[1], p.y), std::max(b[2], p.x), std::max(b[3], p.y)};
             }
-            boxes_.push_back(b);
             box_ = {std::min(box_[0], b[0]), std::min(box_[1], b[1]), std::max(box_[2], b[2]), std::max(box_[3], b[3])};
         }
         if (edges_.empty())
@@ -181,21 +180,30 @@ public:
                std::max(a.y, b.y) >= box_[1] && std::min(a.y, b.y) <= box_[3];
     }
 
-    // As region_contains, looking only at the polygons whose box holds the point.
+    // As region_contains (non-zero winding): a ray from the point to the
+    // nearer side of the box, crossing only the edges in the cells of its row.
+    // Each edge counts in the cell where the ray crosses it.
     bool contains(double x, double y) const {
         if (edges_.empty() || x < box_[0] || x > box_[2] || y < box_[1] || y > box_[3])
             return false;
-        const Clipper2Lib::Point64 q{to_units(x), to_units(y)};
+        const auto column = [&](double v) { return std::size_t(std::clamp((v - box_[0]) / cell_, 0.0, double(nx_ - 1))); };
+        const std::size_t row = std::size_t(std::clamp((y - box_[1]) / cell_, 0.0, double(ny_ - 1)));
+        const std::size_t at = column(x);
+        const bool right = box_[2] - x < x - box_[0];
         int winding = 0;
-        for (std::size_t k = 0; k < region_.size(); ++k) {
-            const auto& b = boxes_[k];
-            if (x < b[0] || x > b[2] || y < b[1] || y > b[3])
-                continue;
-            const Clipper2Lib::PointInPolygonResult r = Clipper2Lib::PointInPolygon(q, region_[k]);
-            if (r == Clipper2Lib::PointInPolygonResult::IsOn)
-                return true;
-            if (r == Clipper2Lib::PointInPolygonResult::IsInside)
-                winding += Clipper2Lib::IsPositive(region_[k]) ? 1 : -1;
+        for (std::size_t c = at;; right ? ++c : --c) {
+            for (const std::uint32_t k : cells_[row * nx_ + c]) {
+                const Edge& e = edges_[k];
+                const bool up = e.a.y <= y && y < e.b.y, down = e.b.y <= y && y < e.a.y;
+                if (!up && !down)
+                    continue;
+                const double cross = e.a.x + (y - e.a.y) * (e.b.x - e.a.x) / (e.b.y - e.a.y);
+                if (column(cross) != c || (right ? !(cross > x) : !(cross < x)))
+                    continue;
+                winding += (up == right) ? 1 : -1;
+            }
+            if (right ? c + 1 == nx_ : c == 0)
+                break;
         }
         return winding != 0;
     }
@@ -296,8 +304,6 @@ private:
         const auto cy = [&](double y) { return std::size_t(std::clamp((y - box_[1]) / cell_, 0.0, double(ny_ - 1))); };
         return {cx(std::min(a.x, b.x)), cy(std::min(a.y, b.y)), cx(std::max(a.x, b.x)), cy(std::max(a.y, b.y))};
     }
-    const Polygons& region_;
-    std::vector<std::array<double, 4>> boxes_;
     std::array<double, 4> box_{};
     std::vector<Edge> edges_;
     std::vector<std::uint32_t> prev_, next_; // each edge's neighbours on its polygon
