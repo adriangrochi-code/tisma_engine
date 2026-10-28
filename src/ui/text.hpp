@@ -1012,6 +1012,7 @@
     X(SeamGap, "Hueco en la costura", "Seam gap") \
     X(OuterWidth, "Ancho de la pared externa", "Outer wall width") \
     X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
+    X(TransitionLength, "Largo de las transiciones", "Transition length") \
     X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
     X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
     X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \

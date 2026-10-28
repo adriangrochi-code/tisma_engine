@@ -1202,6 +1202,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // table P2): Kuipers et al.'s inward distributed scheme with N of them.
     beading.scheme = BeadingScheme::InwardDistributed;
     beading.inward_beads = double(settings.wall_spread_count);
+    beading.transition_length = settings.wall_transition_length.of(settings.nozzle_diameter);
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);

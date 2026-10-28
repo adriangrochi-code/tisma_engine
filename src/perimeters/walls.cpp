@@ -32,7 +32,10 @@ LayerWalls layer_walls(const Polygons& input, const BeadingParams& given) {
     MedialGraph graph = medial_graph(region);
     mark_central(graph);
     filter_marking(graph, params.preferred_width);
-    const TransitionResult transitions = apply_transitions(graph, params);
+    TransitionSettings ramps;
+    if (params.transition_length > 0.0)
+        ramps.transition_length = params.transition_length;
+    const TransitionResult transitions = apply_transitions(graph, params, ramps);
     out.toolpaths = extract_toolpaths(graph, node_beadings(graph, transitions.bead_counts, params));
     if (overlap > 0.0)
         for (Toolpath& t : out.toolpaths)

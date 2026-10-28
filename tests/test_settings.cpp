@@ -492,3 +492,16 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
         check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
         ContainsSubstring("thicker than 8 mm"));
 }
+
+TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[settings]") {
+    Settings s = parse_settings(R"({"walls": {"spread_count": 2, "transition_length": "150%"}})");
+    CHECK(s.wall_spread_count == 2);
+    CHECK(s.wall_transition_length.percent);
+    CHECK_THAT(s.wall_transition_length.of(0.4), WithinAbs(0.6, 1e-12));
+    s = parse_settings(R"({"walls": {"transition_length": 0.8}})");
+    CHECK_FALSE(s.wall_transition_length.percent);
+    CHECK_THAT(s.wall_transition_length.value, WithinAbs(0.8, 1e-12));
+    CHECK(parse_settings(settings_json(s)).wall_transition_length == s.wall_transition_length);
+    CHECK_THROWS_AS(parse_settings(R"({"walls": {"spread_count": 0}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"walls": {"transition_length": "x%"}})"), SettingsError);
+}

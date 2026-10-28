@@ -733,7 +733,7 @@ Settings parse_checked(std::string_view text) {
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
-                "spread_count"},
+                "spread_count", "transition_length"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -809,8 +809,11 @@ Settings parse_checked(std::string_view text) {
             s.wall_spread_count = static_cast<int>(v.get<long long>());
             return;
         }
-        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap") {
-            Speed& target = n == "min_line_width" ? s.wall_min_line_width : n == "seam_gap" ? s.wall_seam_gap : s.wall_min_detail;
+        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length") {
+            Speed& target = n == "min_line_width"      ? s.wall_min_line_width
+                            : n == "seam_gap"          ? s.wall_seam_gap
+                            : n == "transition_length" ? s.wall_transition_length
+                                                       : s.wall_min_detail;
             if (g.at(n).is_string()) {
                 const std::string t = g.at(n).get<std::string>();
                 char* end = nullptr;
@@ -2561,6 +2564,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.min_line_width", s.wall_min_line_width.percent ? num(s.wall_min_line_width.value) + "%"
                                                                : num(s.wall_min_line_width.value)},
         {"walls.seam_gap", s.wall_seam_gap.percent ? num(s.wall_seam_gap.value) + "%" : num(s.wall_seam_gap.value)},
+        {"walls.transition_length", s.wall_transition_length.percent ? num(s.wall_transition_length.value) + "%"
+                                                                     : num(s.wall_transition_length.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
         {"sequential.enabled", flag(s.sequential)},
@@ -3054,6 +3059,9 @@ std::string settings_json(const Settings& s) {
                                  : ordered_json(s.wall_min_line_width.value)},
           {"seam_gap", s.wall_seam_gap.percent ? ordered_json(json(s.wall_seam_gap.value).dump() + "%")
                                                : ordered_json(s.wall_seam_gap.value)},
+          {"transition_length", s.wall_transition_length.percent
+                                    ? ordered_json(json(s.wall_transition_length.value).dump() + "%")
+                                    : ordered_json(s.wall_transition_length.value)},
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},

@@ -141,6 +141,9 @@ struct Settings {
     // How many beads, from the middle of a wall, take its difference from
     // the nominal width (walls.spread_count, perimeters.md rule 3).
     int wall_spread_count = 1;
+    // The ramp from n to n + 1 beads along a wall (walls.transition_length,
+    // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
+    Speed wall_transition_length{100.0, true};
     double wall_width = 0.4; // preferred bead width w*
     double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;

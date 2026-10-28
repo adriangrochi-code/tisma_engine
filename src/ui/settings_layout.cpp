@@ -56,6 +56,7 @@ const std::vector<SectionLayout>& print_layout() {
           {"walls_more", T::SubWallsMore,
            {{"walls.staggered_inner_seams", A},
             {"walls.spread_count", A},
+            {"walls.transition_length", A},
             {"walls.top_one_wall", A},
             {"walls.first_layer_one_wall", A},
             {"walls.extra_if_needed", A},

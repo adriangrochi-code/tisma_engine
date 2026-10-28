@@ -6809,3 +6809,10 @@ cordón: el corte usa el esquema de Kuipers et al. que carga la diferencia en lo
 
 **Fuzzer, 2000 corridas (semilla 20261029):** 22 rechazadas como no imprimibles, 2 fallas (las de capas curvas, ya
 arregladas).
+
+**`walls.transition_length`** (`perimeters.md`): el largo de la rampa en la que una pared pasa de N a N + 1
+cordones, en mm o en % de la boquilla (100 % por defecto; antes, el paso de un cordón). En el panel, en «Paredes,
+más». `walls.transition_angle` y `walls.transition_margin` esperan la respuesta del equipo de fichas (preguntado:
+qué ángulo y qué margen son, con una prueba de caja negra). `walls.staggered` (ST1) es lo próximo de `walls`: pide
+que el material de un cordón subido sea lineal en su espesor también en los bloques no planares. Toda la lista: 699
+casos, todos pasan.

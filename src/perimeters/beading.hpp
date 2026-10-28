@@ -32,6 +32,9 @@ struct BeadingParams {
     // widths above less this, min_width and min_detail as they are, on the
     // region shrunk by half of it, and gives the beads this wider.
     double overlap = 0.0;
+    // The length of the ramp from n to n + 1 beads along the wall
+    // (walls.transition_length, perimeters.md); 0: w*.
+    double transition_length = 0.0;
 };
 
 // The outer bead's width within the shell: outer_width, or w*.
