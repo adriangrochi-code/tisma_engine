@@ -269,6 +269,41 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(snug.support_style == SupportStyle::Snug);
     CHECK(snug.support_closing_radius == 0.5);
     CHECK(Settings{}.support_free_bridge_length == 16.0);
+    CHECK(parse_settings(R"({"gcode": {"corner_smoothing": 0.02}})").corner_smoothing == 0.02);
+    const Settings sf = parse_settings(R"({"surfaces": {"bottom_pattern": "rectilinear", "bridge_angle": 30},
+                                          "infill": {"before_walls": true, "max_link": 20}})");
+    CHECK_FALSE(sf.monotonic_bottom);
+    CHECK(sf.bridge_angle == 30.0);
+    CHECK(sf.infill_before_walls);
+    CHECK(sf.infill_max_link == 20.0);
+    CHECK(Settings{}.monotonic_bottom);
+    CHECK(Settings{}.infill_max_link == 50.0);
+    CHECK_THROWS(parse_settings(R"({"gcode": {"corner_smoothing": 0.1}})"));
+    const Settings cal = parse_settings(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210,
+                                                           "band_height": 4}})");
+    REQUIRE(cal.changes.size() == 5);
+    CHECK(cal.changes[1].z == 4.0);
+    CHECK(*cal.changes[1].temperature == 225.0);
+    CHECK(cal.changes[1].from_calibration);
+    CHECK(parse_settings(R"({"calibration": {"mode": "corners", "start": 5, "step": 0, "end": 10}})").changes.size() == 1);
+    CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "speed"}})"));
+    CHECK_THROWS(parse_settings(R"({"calibration": {"band_height": 0}})"));
+    // A band's value within what a height change takes: no M104 S1000.
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 1000}})"),
+                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 0 to 500 C"));
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "retraction", "start": 1, "step": 2, "end": 80}})"),
+                      ContainsSubstring("calibration.end"));
+    CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 0}})"));
+    CHECK(parse_settings(R"({"speed": {"small_loops": "25%"}})").small_loop_speed == Speed{25.0, true});
+    CHECK(parse_settings(R"({"speed": {"small_loops": 15}})").small_loop_speed == Speed{15.0, false});
+    CHECK_THROWS(parse_settings(R"({"speed": {"small_loops": 0}})"));
+    CHECK(parse_settings(R"({"speed": {"max_flow": 12.5}})").speed_max_flow == 12.5);
+    CHECK(parse_settings(R"({"speed": {"max_flow": 0}})").speed_max_flow == 0.0);
+    CHECK_THROWS(parse_settings(R"({"speed": {"max_flow": -1}})"));
+    CHECK(parse_settings(R"({"retraction": {"coast": 0.5}})").coast == 0.5);
+    CHECK_THROWS(parse_settings(R"({"retraction": {"coast": 21}})"));
+    CHECK(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 1000, "step": 1000, "end": 5000}})")
+              .changes.size() == 5);
     CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);
     CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),
@@ -532,6 +567,13 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_THROWS_WITH(
         check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
         ContainsSubstring("thicker than 8 mm"));
+    // The first layer's bead too (the spec team's BH1): 20 mm on a 0.4 nozzle
+    // spilt past the skirt; 1.6 mm, four nozzles, is the most.
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"layers": {"first_line_width": 20}})")),
+                      ContainsSubstring("layers.first_line_width: 20 mm cannot come out of a 0.4 mm nozzle"));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.6}})")));
+    CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": "1000%"}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
 }
 
 TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[settings]") {

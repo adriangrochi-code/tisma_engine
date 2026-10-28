@@ -946,6 +946,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
             min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
             min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
         }
+        if (!settings.placement_drop_to_bed) // what is under the bed is not printed (placement.md, PL5)
+            min_z = std::max(min_z, 0.0f);
         frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
         frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     }
@@ -1223,6 +1225,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
         min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
     }
+    // Without placement.drop_to_bed, the layers start at the bed: what is
+    // under it is not printed (placement.md, rule 3, PL5).
+    if (!settings.placement_drop_to_bed)
+        min_z = std::max(min_z, 0.0f);
     // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md);
     // with variable heights, planned layer by layer (docs/VARIABLE_LAYERS.md).
     const int ratio = detail_ratio(settings);
@@ -1420,8 +1426,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width,
                  others.empty() ? nullptr : &others);
     out.air_bridges.resize(out.surfaces.size());
-    for (std::size_t l = 0; l < out.surfaces.size(); ++l)
+    for (std::size_t l = 0; l < out.surfaces.size(); ++l) {
         out.air_bridges[l] = out.surfaces[l].bridge;
+        // A set direction for every bridge (surfaces.bridge_angle); 0: each its own.
+        if (settings.bridge_angle != 0.0 && !out.surfaces[l].bridge.empty())
+            out.surfaces[l].bridge_angle = settings.bridge_angle;
+    }
     // A solid layer every N (infill_patterns.md, rule 21): layers N, 2N...
     // fill all their sparse infill solid, as bridges over the sparse infill
     // below.
@@ -1748,6 +1758,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.top_width = settings.top_width > 0.0 ? settings.top_width : settings.nozzle_diameter;
     fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
+    fill.max_link = settings.infill_max_link;
+    fill.monotonic_bottom = settings.monotonic_bottom;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress

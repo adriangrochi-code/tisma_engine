@@ -97,6 +97,7 @@ Settings without_gcode_settings(Settings s) {
     s.support_speed = d.support_speed, s.travel_speed = d.travel_speed, s.first_layer_speed = d.first_layer_speed;
     s.max_speed = d.max_speed, s.corner_speed = d.corner_speed;
     s.bridge_speed = d.bridge_speed, s.gap_fill_speed = d.gap_fill_speed, s.over_bridges_speed = d.over_bridges_speed;
+    s.small_loop_speed = d.small_loop_speed, s.speed_max_flow = d.speed_max_flow;
     s.first_layer_infill_speed = d.first_layer_infill_speed, s.travel_z_speed = d.travel_z_speed;
     s.infill_max_speed = d.infill_max_speed, s.infill_max_crossing_speed = d.infill_max_crossing_speed;
     s.accel_default = d.accel_default, s.accel_walls = d.accel_walls, s.accel_outer_wall = d.accel_outer_wall;
@@ -112,13 +113,14 @@ Settings without_gcode_settings(Settings s) {
     s.acceleration = d.acceleration, s.travel_acceleration = d.travel_acceleration;
     s.max_feed_x = d.max_feed_x, s.max_feed_y = d.max_feed_y, s.max_feed_z = d.max_feed_z, s.max_feed_e = d.max_feed_e;
     s.retract_length = d.retract_length, s.retract_speed = d.retract_speed, s.retract_lift = d.retract_lift;
-    s.retract_min_travel = d.retract_min_travel;
+    s.retract_min_travel = d.retract_min_travel, s.coast = d.coast;
     s.min_layer_time = d.min_layer_time, s.min_print_speed = d.min_print_speed, s.keep_outer_speed = d.keep_outer_speed;
     s.fan_min = d.fan_min, s.fan_max = d.fan_max, s.fan_below_time = d.fan_below_time, s.fan_always = d.fan_always;
     s.fan_bridges = d.fan_bridges, s.fan_off_layers = d.fan_off_layers;
     s.full_fan_layer = d.full_fan_layer, s.cooling_enabled = d.cooling_enabled;
     s.dynamic_overhang_fan = d.dynamic_overhang_fan, s.overhang_fans = d.overhang_fans;
     s.slowdown_logic = d.slowdown_logic, s.transition_distance = d.transition_distance;
+    s.corner_smoothing = d.corner_smoothing;
     s.start_gcode = d.start_gcode, s.end_gcode = d.end_gcode, s.variables = d.variables;
     s.printer_parameters = d.printer_parameters, s.filament_parameters = d.filament_parameters;
     s.print_parameters = d.print_parameters, s.print_variables = d.print_variables;

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <numbers>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -616,4 +617,63 @@ TEST_CASE("retraction: the settings read and write the options", "[retraction][s
     CHECK_THROWS_AS(parse_settings(R"({"travel": {"max_detour": "abc"}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"extrusion": {"retraction": {"temperature": 1}}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"travel": {"slope": 95}})"), SettingsError);
+}
+
+TEST_CASE("coasting: each wall's and infill's last retraction.coast mm with no E, at its feed (coasting.md, CO1)",
+          "[retraction]") {
+    Settings s = base();
+    s.min_layer_time = 0.0; // the paths at their own feeds
+    // The moves of layer 11 that go at a print feed with no E: the coasted ends.
+    const auto coasted = [](const Read& r) {
+        std::vector<Move> out;
+        for (std::size_t k = r.layer_starts[10]; k < r.layer_starts[11]; ++k) {
+            const Move& m = r.moves[k];
+            if (m.xy && std::abs(m.e) < 1e-9 && k > 0 && r.moves[k - 1].e > 0.0 && m.f < 6000.0)
+                out.push_back(m);
+        }
+        return out;
+    };
+    const std::string plain = gcode_of(cube(), s);
+    CHECK(coasted(read(plain)).empty());
+    s.coast = 0.5;
+    const std::string with = gcode_of(cube(), s);
+    const std::vector<Move> ends = coasted(read(with));
+    REQUIRE_FALSE(ends.empty());
+    std::set<std::string> kinds;
+    for (const Move& m : ends) {
+        INFO(m.type << " " << m.length() << " mm at F" << m.f);
+        CHECK(m.length() <= 0.5 + 2e-3); // a whole end or the last of its pieces
+        kinds.insert(m.type);
+        if (m.type == "Perimeter")
+            CHECK(m.f == 3600.0);
+        else if (m.type == "External perimeter")
+            CHECK(m.f == 1800.0);
+        else
+            CHECK(m.type == "Internal infill");
+    }
+    CHECK(kinds == std::set<std::string>{"External perimeter", "Internal infill", "Perimeter"});
+    // Each coasted end, its moves together, is 0.5 mm.
+    const Read r = read(with);
+    double end = 0.0;
+    std::vector<double> ends_length;
+    for (std::size_t k = r.layer_starts[10]; k < r.layer_starts[11]; ++k) {
+        const Move& m = r.moves[k];
+        if (m.xy && std::abs(m.e) < 1e-9 && m.f < 6000.0 && k > 0 &&
+            (r.moves[k - 1].e > 0.0 || (end > 0.0 && std::abs(r.moves[k - 1].e) < 1e-9))) {
+            end += m.length();
+        } else if (end > 0.0) {
+            ends_length.push_back(end);
+            end = 0.0;
+        }
+    }
+    REQUIRE_FALSE(ends_length.empty());
+    for (const double l : ends_length)
+        CHECK_THAT(l, WithinAbs(0.5, 2e-3));
+    // Less filament in all (rule 4).
+    double e_plain = 0.0, e_with = 0.0;
+    for (const Move& m : read(plain).moves)
+        e_plain += std::max(m.e, 0.0);
+    for (const Move& m : read(with).moves)
+        e_with += std::max(m.e, 0.0);
+    CHECK(e_with < e_plain);
 }

@@ -192,6 +192,25 @@ TEST_CASE("templates in the G-code: the profiles' own parameters (gcode_template
     CHECK_THROWS(parse_settings(R"({"machine": {"custom_parameters": 3}})"));
 }
 
+TEST_CASE("templates in the G-code: the custom template at a height (rule 13)", "[template][gcode]") {
+    Settings s = printer();
+    s.gcode_custom_template = "M117 at {layer_z}";
+    HeightChange c;
+    c.z = 2.0;
+    c.custom = true;
+    s.changes.push_back(c);
+    const std::string g = gcode_of(s);
+    const std::size_t mark = g.find(";CUSTOM_GCODE\nM117 at 2.2\n");
+    CHECK(mark != std::string::npos);
+    CHECK(mark > g.find(";Z:2.2"));
+    CHECK(g.find(";CUSTOM_GCODE", mark + 1) == std::string::npos);
+    // Written out and read back.
+    const Settings back = parse_settings(settings_json(s));
+    REQUIRE(back.changes.size() == 1);
+    CHECK(back.changes.front().custom);
+    CHECK(back.gcode_custom_template == s.gcode_custom_template);
+}
+
 TEST_CASE("templates in the G-code: the layer change and the end (rule 11, T8)", "[template][gcode]") {
     Settings s = printer();
     s.gcode_before_layer = ";BEFORE {layer_num} {layer_z}";

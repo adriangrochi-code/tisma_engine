@@ -7010,4 +7010,213 @@ de la zona en grilla contra la columna (SM8).
 - `high_flow_nozzle` (multiextrusor, con los datos del archivo);
 - `process` (WAAM, después de la primera versión).
 
-**Sigue:** `machine.high_flow_nozzle` y `calibration` (`mode`, `start`, `step`, `end`, `band_height`), después `gcode`.
+**Grupo `calibration`** (`calibrations.md`, reglas 1 a 3): una prueba por franjas sobre cualquier pieza.
+- Al leer los ajustes se convierte en cambios por altura. La franja i empieza en `i · band_height` y prueba
+  `start + i · step`, sin pasar de `end`.
+- Cada cambio lleva `; calibration`. No se escriben de vuelta como cambios: quedan como el grupo.
+- Modos: temperatura, avance de presión, retracción, caudal forzado, aceleración, esquinas e input shaping. Las
+  esquinas y el input shaping llevan el comando de cada firmware.
+- Un cambio de temperatura en Z 0 es ahora la temperatura que se espera al empezar (regla 2).
+
+**Pruebas CA, prisma de 20 × 20 × 25 mm:**
+- CA1: `M109 S230` y después 225, 220, 215 y 210 en Z 5,2, 10,2, 15,2 y 20,2; la segunda capa no pisa la franja.
+- CA2 y CA3: el avance de presión en Klipper, Marlin y RepRapFirmware, en las mismas alturas.
+- CA4: las retracciones de cada franja, 0,5 a 2,5 mm.
+- CA5 y CA6: las esquinas y el input shaping con el comando de cada firmware.
+- CA7: Marlin `M204 P2000` en Z 5,2.
+
+**Diferencia que queda:** en Klipper la aceleración sale como `SET_VELOCITY_LIMIT ACCEL=`, el comando del dialecto que
+el motor ya usaba, y Tisma Slicer escribe `M204 S`. Los dos valen en Klipper.
+
+**No hecho:**
+- la prueba de VFA (velocidad de los perímetros por franja): los cambios por altura todavía no tienen una velocidad
+  de perímetros propia;
+- las pruebas por parches a lo largo de X (regla 4).
+
+**`gcode.custom_template`** (`gcode_templates.md`, regla 13): el G-code propio a una altura, como el cambio de color y
+la pausa. Un cambio con `"custom": true` escribe la plantilla después de `;CUSTOM_GCODE`, y la vista previa lo marca
+como G-code propio.
+
+**`gcode.corner_smoothing`** (`toolpath_time.md`, regla 7):
+- Las esquinas de las paredes internas y de los rellenos se cambian por un arco tangente a sus dos tramos. El arco se
+  aparta del vértice a lo sumo el ajuste (hasta 0,05 mm) y no toma más del 45 % de ninguno de los dos tramos.
+- La pared externa no cambia.
+- TT7, en un cubo en lugar del Benchy:
+  - las líneas de la pared externa son las mismas que sin el ajuste;
+  - las internas tienen más puntos;
+  - en la prueba de unidad, ningún punto se aparta más del ajuste (cuadrado y zigzag abierto, cuyas puntas quedan).
+
+**De paso:** un aviso `-Wshadow` del commit de las franjas.
+
+**Encontrado en este bloque, no en el motor:** compilar un solo blanco mientras se editaba `settings.hpp` dejó objetos
+con dos versiones de `Settings`, y la interfaz se caía en el destructor. Se arregló compilando todo de nuevo. El CI
+local (`tools/ci_linux.sh`) no corre ese riesgo: no se edita mientras compila.
+
+**No hecho del grupo `gcode`:**
+- `pressure_advance_in_gcode` y `pressure_advance_piece`: la ficha dice que el motor los hace solo si el dueño lo pide;
+- `thumbnails`: hace falta dibujar la pieza sin la interfaz y una biblioteca de imágenes revisada.
+
+**`surfaces` e `infill`:**
+- `surfaces.bottom_pattern` (`monotonic` por defecto, como la ficha): las superficies de abajo en líneas monótonas sin
+  unir, que llegan tan lejos como el zigzag. Con `infill.wall_overlap`, como las de arriba, una tira de 0,3 mm sin
+  paredes recibía líneas: la prueba de «nada que imprimir» lo encontró.
+- `surfaces.bridge_angle`: una dirección fija para todos los puentes (0, la de cada uno). En la mesa, las líneas a 30°.
+- `infill.before_walls` (`gcode_motion.md`, regla 8, M8): en cada isla, primero el relleno poco denso, después los
+  demás rellenos y al final las paredes.
+- `infill.max_link` (50 mm por defecto): el tramo de borde por el que se unen dos líneas del relleno poco denso. Antes,
+  tres separaciones. En una cuña con el borde a 10° de las líneas, ahora se unen.
+
+**Sigue:** `machine.high_flow_nozzle`, `object` (`extruder`, `wipe_into_infill`, `wipe_into_object`), `speed`
+(`max_flow`, `small_loops`), `extrusion` (pellets), `filament.transmission_distance`, `orient`, y los sueltos
+(`layers.first_line_width`, `mixing.purge_infill_max`, `placement.drop_to_bed`, `retraction.coast`).
+
+## 2026-10-28 (tarde): mantenimiento
+
+**Revisado:**
+- `tools/ci_linux.sh` sobre `ee5df73`: pasa (710 casos);
+- el fuzzer, 2000 corridas con dos semillas nuevas (7731028 y 9902811): 0 fallas, 23 rechazadas como no imprimibles;
+- lo agregado hoy, por casos borde: las esquinas redondeadas, los alias de los límites de la máquina, `max_link`, las
+  franjas de calibración;
+- los «No probado» de `PROGRESS.md`.
+
+**Encontrado y arreglado:**
+- **Orden de los trazos** (en el commit de `surfaces`): dos comienzos igual de cerca se elegían por el ruido de las
+  cuentas. En la mesa, la pared externa de cada pata empieza sobre su diagonal y los dos extremos de una línea corta
+  del relleno sólido quedan a la misma distancia; movida la pieza en Z, el ruido del corte daba vuelta la línea y
+  el G-code dejaba de ser el mismo (la prueba de «una pieza por debajo o por encima de z = 0»). Ahora las distancias a
+  menos de 1 nm empatan y gana el primer trazo, su comienzo antes que su final. La búsqueda por celdas y la de las
+  cajas de los lazos miran también los empates.
+- **Franjas de calibración:** el valor de cada franja no se revisaba: `{"mode": "temperature", "start": 1000}`
+  escribía `M104 S1000`, que como cambio por altura se rechaza. Ahora la primera y la última franja tienen que estar
+  dentro del rango del cambio que hacen (temperatura 0 a 500 °C, avance de presión 0 a 2, retracción 0 a 50 mm,
+  caudal 0,5 a 1000 mm³/s, aceleración 100 a 100 000; esquinas 0 a 1000 mm/s, input shaping 1 a 1000 Hz), y el
+  mensaje dice qué valor da.
+
+**Medido:** un clic de medir en una superficie curva de un millón de triángulos (un cilindro de 500 000 lados) tarda
+291 ms, con el CI compilando al mismo tiempo; queda como prueba oculta `[bench]`. Era el «No probado» del 2026-10-27.
+No se midió la esfera: la máquina no estuvo libre en este bloque (el CI corría).
+
+**Mensajes del equipo de fichas:** `support.free_bridge_length` solo maneja el aviso de la revisión (S10, ya es así);
+los lazos de contacto van en las dos capas de interfaz de arriba (`supports_more.md`, regla 12): el motor los pone
+solo en la de arriba, se cambia cuando la ficha llegue a `main`; el lector STEP propio (`step_reader.md`, decisión
+del dueño) entra en `PLAN.md` cuando llegue a `main`.
+
+## 2026-10-28 (tarde): `speed.small_loops`
+
+**Hecho:** `speed.small_loops` (`gcode_motion.md`, regla 3): un perímetro cerrado de menos de 40,84 mm (la
+circunferencia de 6,5 mm de radio de la ficha; 40,6 mm sí, 42,2 mm no) va a esa velocidad, también el externo, en
+mm/s o un porcentaje de `speed.walls`. Sin valor, como antes. El largo se mide sobre el lazo entero; si tiene tramos
+en voladizo, estos siguen yendo más lentos que la velocidad del lazo chico. En el panel, en «Velocidad de paredes y
+superficies», nivel Avanzado; el fuzzer la sortea.
+
+**Probado:** M4 con cubos: en uno de 10 mm (lazos de 38,2 mm a lo sumo) todas las paredes a 15 mm/s, o al 25 % de
+60; en uno de 20 mm, ninguna.
+
+**Sigue:** `speed.max_flow`, `machine.high_flow_nozzle`, `object`, `extrusion` (pellets),
+`filament.transmission_distance`, `orient`, y los sueltos (`layers.first_line_width`, `mixing.purge_infill_max`,
+`placement.drop_to_bed`, `retraction.coast`). Los lazos de contacto en las dos capas de arriba y el lector STEP
+esperan a que sus fichas lleguen a `main`.
+
+## 2026-10-28 (tarde): dos arreglos
+
+- **Fuzzer, corrida 287 (semilla 20261028):** la verificación leía una limpieza como dos retracciones. La limpieza pasa
+  por dos puntos a 0,001 mm; los dos pasos escriben la misma E, y un movimiento que no tira filamento terminaba la
+  retracción. Ahora solo la termina uno que empuja o uno sin E (un viaje). El G-code del motor estaba bien. Prueba
+  nueva: un paso así agregado a la limpieza del cubo; sin el arreglo falla («retracts again…»), con él pasa.
+- **BH1 (búsqueda de errores de caja negra del equipo de fichas):** `layers.first_line_width` de 20 mm en una
+  boquilla de 0,4 hacía que el G-code saliera del área de la pieza con su falda, y la exportación salía con el código
+  6. `check_settings` ahora le pone el rango de `walls.width`: entre un cuarto y cuatro boquillas (0,1 a 1,6 mm con
+  0,4), también cuando es un porcentaje de la primera capa.
+- **No hecho:** el aviso de Z por debajo de la cama con un `machine.z_offset` muy negativo (observación del equipo de
+  fichas, no un error).
+
+**Probado:** toda la lista, 720 casos, pasan; el fuzzer, 400 corridas con la semilla 20261028, 0 fallas.
+
+## 2026-10-28 (tarde): `speed.max_flow`
+
+**Hecho:** `speed.max_flow` (`gcode_motion.md`, regla 4): el tope de caudal del perfil de impresión, en mm³/s (0, sin
+tope). Ninguna extrusión pasa el menor entre él, `machine.max_flow` y `extrusion.max_flow`; la velocidad baja como
+con los otros dos. En el panel, en «Topes de velocidad», nivel Avanzado; es de las que cambian solo el G-code (la
+prueba de laminado por etapas la incluye, y también `speed.small_loops`); el fuzzer la sortea.
+
+**Probado:** en el cubo, con 2,5 mm³/s ningún tramo pasa 2,55 y alguno pasa 2; con `machine.max_flow` en 2, manda
+el de la máquina.
+
+**Sigue:** `machine.high_flow_nozzle`, `object`, `extrusion` (pellets), `filament.transmission_distance`, `orient`,
+y los sueltos (`layers.first_line_width` ya leído; `mixing.purge_infill_max`, `placement.drop_to_bed`,
+`retraction.coast`).
+
+## 2026-10-28 (tarde): `retraction.coast`
+
+**Hecho:** coasting (`coasting.md`): los últimos `retraction.coast` mm de cada perímetro, del externo y de cada
+relleno (poco denso, sólido y de arriba) se escriben como `G1 X Y` sin E, a la velocidad del trazo (con el mismo tope
+de caudal). El corte se hace al escribir, sobre el trazo ya ordenado y antes de buscar arcos:
+- un trazo de menos de 3 veces el largo no cambia (regla 2);
+- un tramo de pared que sigue en el siguiente (una pared partida por un voladizo) no se corta: solo el final real;
+- no en modo vaso ni en los cordones no planares;
+- el tramo sin E cuenta para el tiempo de la capa y su enfriamiento, y la limpieza lo recorre.
+En el panel, una ficha propia en Retracción («Coasting»); el fuzzer lo sortea.
+
+**Probado:** CO1 en el cubo de las pruebas de retracción: en la capa 11 cada final sin E mide 0,500 mm, a 60 mm/s en
+los perímetros, 30 en el externo y la velocidad del relleno; sin coasting no hay ninguno; el filamento total baja.
+
+## 2026-10-28 (tarde): `placement.drop_to_bed`
+
+**Hecho:** `placement.drop_to_bed` (`placement.md`, regla 3; `true` por defecto, como hasta ahora). Con `false`:
+- las capas empiezan en Z = 0 y no en la base de la malla: lo que está debajo de la cama no se imprime (PL5);
+- los objetos de un corte o una separación no bajan cada uno a la cama;
+- una pieza que no toca la cama se rechaza antes de laminar: «an object has no extrusions on the first layer: its
+  base is at z …» (PL9; la línea de comandos sale con el código 4, el de un modelo que no se puede imprimir, sin
+  archivo); una que queda toda debajo, «the model is under the bed».
+Es de la línea de comandos, como el resto de `placement`; la interfaz ubica las piezas ella misma.
+
+**Probado:** PL5 con un cubo de Z −5 a 10: G-code de Z 0,2 a 10, verificado; con el ajuste encendido, el mismo cubo
+llega a 15 (PL4). PL9 con un cubo de Z 50 a 70: rechazado.
+
+**Diferencia con la ficha:** PL9 da el código 1 en Tisma Slicer; el motor usa el 4, su código de modelo que no se
+puede imprimir (la regla pide un código distinto de 0).
+
+## 2026-10-28 (tarde): grupo `object`
+
+**Hecho:** `object.extruder`, `object.wipe_into_infill` y `object.wipe_into_object` (`multi_extruder.md`, reglas 1 y
+13): en la línea de comandos, cada objeto que da el modelo (él solo, sus copias, las piezas de un corte) los toma.
+Son los mismos campos que los objetos de la placa ya tenían en la interfaz, cada uno en su menú; por eso no están en
+el panel. `check_settings` rechaza un extrusor que la máquina no tiene.
+
+**Probado:** con dos extrusores, `object.extruder` 2 imprime todo con `T1` y 1 con `T0`; 3 da el error
+«object.extruder: extruder 3, but the machine has 2».
+
+**No hecho del grupo `mixing`:** `mixing.purge_infill_max` es la regla 35 de `color_mixing_plus.md`, que todavía no
+se empezó (sus reglas 33 y 34, la purga en el relleno de las mezclas, van antes). `filament.transmission_distance`
+también es de esa ficha.
+
+**Sigue:** `orient.method` y `orient.precision` (`orientation.md`), y los de pellets (`machine.feedstock`,
+`machine.high_flow_nozzle`, `extrusion.flow_by_speed`, `extrusion.section`; `pellets.md`).
+
+## 2026-10-28 (noche): traducción y números de la interfaz
+
+El equipo de fichas revisó la interfaz como caja negra en los dos idiomas (23 pantallas cada uno, en `515d08f`).
+
+**Arreglado:**
+- **TR1:** en castellano, coma decimal en todos los números:
+  - los textos de ImGui pasan por `loc::Text`, `loc::TextDisabled`, etc., que escriben con `vformat` (cada número con
+    coma flotante sale con la coma; el resto como printf);
+  - los campos de arrastre muestran el valor con coma mientras no se los toca; al pasarles el ratón, tenerlos en foco
+    o editarlos vuelven al formato de ImGui (con punto), que es el que lee lo que se escribe;
+  - la sección de calibración de la impresora escribe sus valores con coma.
+  Los nombres de perfiles («0.20 mm») quedan como están.
+- **TR2:** en inglés los miles van con coma («4,013»); en castellano siguen con espacio.
+- **TR3:** la ficha de información en inglés pasa el rango y el valor por defecto de `docs/CONFIG.md` a inglés («0 to
+  100», «0.1»). La descripción sigue en castellano (ya avisado en la ficha).
+- **TR4:** «1 bead takes the change in width»; con más, «N beads share the change in width».
+- **TR5:** «%d per layer» en el análisis; el comando `tisma-engine analyze` va en una línea propia.
+- **UI1:** el recorrido numera sus pasos como sus títulos: la bienvenida sin número, «2 / 6» en «2. Elegí impresora…».
+- **UI2:** el «+» de la barra de capas tapaba el final de la altura de arriba: `SameLine` cuenta desde el borde de la
+  ventana y no desde su margen.
+
+**Probado:** una prueba de `vformat`, `grouped` y el resumen de paredes finas en los dos idiomas; capturas de la vista
+previa (es y en), la ficha de `infill.density` en inglés, el paso 2 del recorrido y la calibración de la impresora,
+revisadas a ojo. Toda la lista: 724 casos, pasan.
+
+**No probado:** los campos de ingreso de texto (`InputDouble`, en las guías de calibración) siguen con punto: ImGui
+escribe y lee su texto con él.

@@ -295,13 +295,23 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
         return false;
     }
     std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings, negative);
+    // Every object the model makes, with the object group's extruder and
+    // purges (multi_extruder.md, rules 1 and 13).
+    const auto as_objects = [&] {
+        for (MeshObject& o : objects) {
+            o.extruder = settings.object_extruder;
+            o.wipe_into_infill = settings.object_wipe_into_infill;
+            o.wipe_into_object = settings.object_wipe_into_object;
+        }
+        return true;
+    };
     if (parts.size() > 1) {
         if (copies > 1) {
             err << "error: --copies does not go with transform.cut_z or transform.split\n";
             return false;
         }
         mesh = place_objects(parts, settings, name, &objects);
-        return true;
+        return as_objects();
     }
     mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
     if (copies > 1) {
@@ -310,7 +320,7 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
         place_on_bed(mesh, settings, negative);
         objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
     }
-    return true;
+    return as_objects();
 }
 
 // Whether the output is a resin printer's GOO file.

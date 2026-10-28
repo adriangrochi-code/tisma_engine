@@ -72,7 +72,8 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit, bool monotonic, double overlap, double shift) {
+                                       bool connect, bool fit, bool monotonic, double overlap, double shift,
+                                       double max_join) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -165,7 +166,7 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     if (monotonic)
         open = order_monotonic(std::move(open), step, width / 2.0 * kUnitsPerMm);
     else if (connect)
-        open = join_along_boundary(open, turned, kMaxJoin * step, step);
+        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step);
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
             continue;
@@ -243,7 +244,16 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
         out.top = rectilinear_fill(surface, top - d, angle, top, true, true, false, d / 2.0);
-    out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);
+    // The bottom surfaces monotonic like the top ones (surfaces.bottom_pattern),
+    // reaching as far as the zig-zags; the solid layers under a top surface
+    // zig-zag.
+    if (params.monotonic_bottom && !surfaces.bottom.empty()) {
+        out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+        for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
+            out.solid.push_back(std::move(t));
+    } else {
+        out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);
+    }
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;
         lines.insert(lines.end(), out.solid.begin(), out.solid.end());
@@ -261,10 +271,12 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
     case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)
-        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, angle, w, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, angle, w, true, false, false, 0.0, 0.0,
+                                      params.max_link);
         break;
     case InfillPattern::AlignedRectilinear: // every layer at the infill angle (rule 1)
-        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, params.angle, w, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, params.angle, w, true, false, false, 0.0, 0.0,
+                                      params.max_link);
         break;
     case InfillPattern::Grid: {
         const double spacing = 2.0 * ws / params.density;

@@ -37,6 +37,7 @@ add_executable(tisma_tests
   test_infill.cpp
   test_gcode.cpp
   test_resolution.cpp
+  test_corners.cpp
   test_gcode_arcs.cpp
   test_firmware.cpp
   test_template.cpp

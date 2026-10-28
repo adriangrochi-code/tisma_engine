@@ -818,3 +818,27 @@ TEST_CASE("walls: one width with gap fill in the middle, at speed.gap_fill (wall
     s.wall_gap_fill = true;
     CHECK(layer10(s).first.count("Gap fill") == 0);
 }
+
+TEST_CASE("speeds: closed walls shorter than 40.84 mm at speed.small_loops, the outer one too (gcode_motion.md, "
+          "rule 3; M4)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.min_layer_time = 0.0; // no cooling slowdown in the way
+    const auto walls = [&](float side, const Settings& settings) {
+        std::set<double> feeds;
+        for (const Move& m : moves_of(gcode_of(cube(side, 2.0f), settings)))
+            if (extrudes(m) && m.z == "1.000" && (m.type == "Perimeter" || m.type == "External perimeter"))
+                feeds.insert(m.feed / 60.0);
+        return feeds;
+    };
+    // Not set: each wall its own speed.
+    CHECK(walls(10.0f, s) == std::set<double>{30.0, 60.0});
+    // A 10 mm cube's loops, at most 4 x 9.55 = 38.2 mm: all at 15 mm/s.
+    s.small_loop_speed = {15.0, false};
+    CHECK(walls(10.0f, s) == std::set<double>{15.0});
+    // A 20 mm cube's, from 4 x 17.9 = 71.6 mm: none.
+    CHECK(walls(20.0f, s) == std::set<double>{30.0, 60.0});
+    // A share of speed.walls.
+    s.small_loop_speed = {25.0, true};
+    CHECK(walls(10.0f, s) == std::set<double>{15.0});
+}

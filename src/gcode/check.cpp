@@ -431,8 +431,11 @@ private:
     // path: an arc's length.
     void classify(const double to[4], const bool given[4], std::optional<double> path) {
         const double de = to[3] - position_[3];
-        if (!(de < -1e-9))
-            pulling_ = false; // a move that pulls nothing ends a retraction's pieces
+        // A move that pushes, or that gives no E (a travel), ends a
+        // retraction's pieces; a wipe's step whose E rounds to the last one's
+        // (a hundredth of a micron of path) does not.
+        if (de > 1e-9 || (!(de < -1e-9) && !given[3]))
+            pulling_ = false;
         const double dx = to[0] - position_[0], dy = to[1] - position_[1];
         const bool moves = path ? *path > 1e-9 : (given[0] || given[1]) && (std::abs(dx) > 1e-9 || std::abs(dy) > 1e-9);
         const double length = path ? *path : moves && known_[0] && known_[1] ? std::hypot(dx, dy) : 0.0;

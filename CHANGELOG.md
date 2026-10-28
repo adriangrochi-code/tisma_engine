@@ -12,6 +12,22 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Grupo `object`** (ficha `multi_extruder.md`, reglas 1 y 13): en la línea de comandos, el extrusor del modelo
+  (`object.extruder`) y si una purga va a su relleno o a todo él (`object.wipe_into_infill`, `object.wipe_into_object`).
+
+- **`placement.drop_to_bed`** (ficha `placement.md`, regla 3): con `false` la pieza queda donde viene en Z; lo que
+  está debajo de la cama no se imprime, y un objeto que no la toca se rechaza («no extrusions on the first layer»).
+
+- **`retraction.coast`** (ficha `coasting.md`): el final de cada perímetro y de cada relleno se recorre a su velocidad
+  sin extruir; la presión que queda en la boquilla lo termina. Menos gotas en la costura y menos hilos. En el panel,
+  en Retracción, «Coasting».
+
+- **`speed.max_flow`** (ficha `gcode_motion.md`, regla 4): un tope de caudal propio del perfil de impresión, en mm³/s;
+  vale el menor entre él, `machine.max_flow` y `extrusion.max_flow`.
+
+- **`speed.small_loops`** (ficha `gcode_motion.md`, regla 3): los perímetros cerrados de menos de 40,84 mm, también el
+  externo, van a esa velocidad, en mm/s o un porcentaje de `speed.walls`. Sin valor, cada pared a la suya.
+
 - **Guías de calibración en la ayuda** (ficha `assistant.md`): la pestaña Calibraciones con las guías del paquete en
   orden, del filamento y de la impresora; cada guía dice para qué sirve, cuándo repetirla, qué prueba conviene hacer
   antes, sus pasos, cómo leer la impresión, el resultado y sus fuentes («Basado en»). Con lo medido (la altura en
@@ -28,7 +44,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
   `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
-  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `walls.staggered` (perímetros escalonados: los internos impares media capa más arriba), `walls.transition_angle` (cantidades impares de cordones solo en esquinas cerradas), `cooling.dynamic_overhang_fan` y `cooling.overhang_fan_0` a `_3` (ventilador según cuánto se apoya el cordón de la pared), `cooling.slowdown_logic` (`consistent_surface`: la pared externa y la que la toca se frenan al final) y `cooling.transition_distance` (los últimos mm de una capa frenada a su velocidad), el relleno del soporte (`support.pattern`: líneas, grilla o panal; `support.sheath`, un lazo por el borde de la base; `support.interface_pattern`, `support.interface_spacing` y `support.interface_contact_loops`), `support.enforce_layers` (soporte bajo lo que cuelga en las primeras capas), el estilo `snug` de `support.style` con `support.closing_radius` (soporte ajustado a lo que cuelga), `support.free_bridge_length` (el aviso `long_bridge` de los puentes más largos que eso sobre nada), `machine.max_speed` y `machine.max_acceleration` (un límite para X e Y), los parámetros propios de las plantillas (`machine.custom_parameters`, `material.custom_parameters`, `print.custom_parameters`, `print.variables`), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `walls.staggered` (perímetros escalonados: los internos impares media capa más arriba), `walls.transition_angle` (cantidades impares de cordones solo en esquinas cerradas), `cooling.dynamic_overhang_fan` y `cooling.overhang_fan_0` a `_3` (ventilador según cuánto se apoya el cordón de la pared), `cooling.slowdown_logic` (`consistent_surface`: la pared externa y la que la toca se frenan al final) y `cooling.transition_distance` (los últimos mm de una capa frenada a su velocidad), el relleno del soporte (`support.pattern`: líneas, grilla o panal; `support.sheath`, un lazo por el borde de la base; `support.interface_pattern`, `support.interface_spacing` y `support.interface_contact_loops`), `support.enforce_layers` (soporte bajo lo que cuelga en las primeras capas), el estilo `snug` de `support.style` con `support.closing_radius` (soporte ajustado a lo que cuelga), `support.free_bridge_length` (el aviso `long_bridge` de los puentes más largos que eso sobre nada), `machine.max_speed` y `machine.max_acceleration` (un límite para X e Y), los parámetros propios de las plantillas (`machine.custom_parameters`, `material.custom_parameters`, `print.custom_parameters`, `print.variables`), `gcode.custom_template` (el G-code propio de un cambio por altura con `"custom": true`), `gcode.corner_smoothing` (esquinas redondeadas en las paredes internas y los rellenos), `surfaces.bottom_pattern`, `surfaces.bridge_angle` (dirección fija de los puentes), `infill.before_walls` (los rellenos antes que las paredes) e `infill.max_link`, las pruebas por franjas del grupo `calibration` (`mode`, `start`, `step`, `end`, `band_height`: temperatura, avance de presión, retracción, caudal, aceleración, esquinas o input shaping a lo largo de la altura), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
   `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
@@ -52,6 +68,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Las superficies de abajo van en líneas monótonas** (`surfaces.bottom_pattern`, `monotonic` por defecto, como la
+  ficha): sin unirlas en zigzag. Las capas sólidas bajo una superficie de arriba siguen en zigzag.
+- **El relleno poco denso une sus líneas por tramos de hasta 50 mm** siguiendo el borde (`infill.max_link`); antes, solo
+  hasta tres separaciones de líneas.
+- **Un cambio de temperatura en Z 0 es la temperatura del comienzo** (`calibrations.md`, regla 2): la espera inicial
+  (`M109`) ya es la de la primera franja de una torre de temperatura, no la del filamento.
 - **La base del soporte lleva vaina** (`supports_more.md`, regla 10): un lazo cerrado por el borde de cada zona y las
   líneas adentro, como Tisma Slicer por defecto. `support.sheath` en `false` vuelve al zigzag solo.
 - **Las capas cortas se frenan a una velocidad común** (`cooling.md`, regla 2): todas las extrusiones más rápidas
@@ -104,6 +126,31 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
+
+- **Números en la interfaz** (revisión de traducción del equipo de fichas, TR1 a TR5):
+  - en castellano, coma decimal en todos lados: los campos, la vista previa, la barra de estado y la calibración de la
+    impresora;
+  - en inglés, la coma para los miles («4,013»);
+  - la ficha de información en inglés dice «0 to 100»;
+  - «1 bead takes the change in width»;
+  - «%d per layer» en el análisis, y su comando en una línea propia.
+- **Recorrido de bienvenida:** el contador sigue el número del título («2 / 6» en «2. Elegí impresora…»).
+- **Vista previa:** la altura de la capa de arriba ya no queda tapada por el «+» de la barra de capas.
+
+- **`layers.first_line_width`** (lo encontró el equipo de fichas, BH1): con 20 mm o más en una boquilla de 0,4 el
+  G-code salía del área permitida y la exportación fallaba con el código 6. Ahora, como `walls.width`, tiene que estar
+  entre un cuarto y cuatro veces el diámetro de la boquilla, y el mensaje lo dice al revisar los ajustes.
+
+- **Verificación del G-code con limpieza:** un paso de la limpieza tan corto que su E redondeaba a la del anterior
+  cortaba la retracción en dos, y la verificación rechazaba el archivo («retracts again without undoing the last
+  retraction»; lo encontró el fuzzer). El archivo estaba bien; ahora la verificación también lo acepta.
+
+- **Franjas de calibración:** un valor fuera de rango (por ejemplo una temperatura de 1000 °C) se escribía en el
+  G-code; ahora se rechaza al leer los ajustes, con el mismo rango que un cambio por altura.
+
+- **Orden de los trazos:** dos comienzos igual de cerca (por ejemplo los dos extremos de una línea corta en una isla
+  simétrica, vistos desde su eje) se elegían por el ruido de las cuentas; la misma pieza movida en Z daba otro
+  G-code. Ahora las distancias a menos de 1 nm empatan y gana siempre el mismo.
 
 - **Capas curvas:** el primer viaje de la impresión terminaba a la Z plana de la capa aunque la capa fuera curva ahí;
   la primera extrusión arrancaba fuera de la superficie y el G-code no pasaba la verificación (lo encontró el

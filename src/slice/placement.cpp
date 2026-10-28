@@ -148,7 +148,7 @@ TriangleMesh place_objects(const std::vector<TriangleMesh>& meshes, const Settin
     for (std::size_t k = 0; k < meshes.size(); ++k) {
         if (objects)
             objects->push_back({name + " " + std::to_string(k + 1), out.triangle_count(), meshes[k].triangle_count(), k, 0});
-        const float dx = float(at[k][0] - own[k][0]), dy = float(at[k][1] - own[k][1]), dz = -floor[k];
+        const float dx = float(at[k][0] - own[k][0]), dy = float(at[k][1] - own[k][1]), dz = s.placement_drop_to_bed ? -floor[k] : 0.0f;
         for (std::size_t t = 0; t < meshes[k].triangle_count(); ++t) {
             Vec3f c[3];
             for (int i = 0; i < 3; ++i) {

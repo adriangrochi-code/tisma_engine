@@ -152,6 +152,8 @@ private:
         } else if (c == "PAUSE_PRINT") {
             pause_comment_ = true;
             mark(MarkKind::Pause);
+        } else if (c == "CUSTOM_GCODE") {
+            mark(MarkKind::Custom);
         } else if (c == "LAYER_CHANGE") {
             layer_comments_ = true;
             // A layer of only travels (the start G-code before the first

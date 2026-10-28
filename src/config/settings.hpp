@@ -102,6 +102,23 @@ struct HeightChange {
     // 13): gcode.color_change or gcode.pause at the layer's start.
     bool color_change = false;
     bool pause = false;
+    bool custom = false; // gcode.custom_template at that layer's start
+    // Made from calibration's bands when the settings were read: not written
+    // back with the changes.
+    bool from_calibration = false;
+};
+
+// A test in bands along the height (calibrations.md, rules 1 to 3): band i,
+// from Z = i band_height, tries start + i step, never past end.
+enum class CalibrationMode { Off, Temperature, PressureAdvance, Retraction, MaxFlow, Acceleration, Corners, InputShaping };
+// A closed wall shorter than this goes at speed.small_loops (gcode_motion.md,
+// rule 3: 40.6 mm yes, 42.2 mm no; a circle of 6.5 mm radius), mm.
+inline constexpr double kSmallLoop = 40.84;
+
+struct CalibrationBands {
+    CalibrationMode mode = CalibrationMode::Off;
+    double start = 0.0, step = 0.0, end = 0.0;
+    double band_height = 5.0; // mm
 };
 
 // A speed in mm/s, or a percentage of another speed.
@@ -225,6 +242,8 @@ struct Settings {
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
+    bool monotonic_bottom = true; // bottom surfaces too (surfaces.bottom_pattern, surfaces_infill.md)
+    double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
     double top_width = 0.0;    // the top surface; 0: one nozzle
@@ -301,6 +320,9 @@ struct Settings {
     // custom_parameter_filament_<name>[0] and custom_parameter_print_<name>;
     // print.variables as print_<name>.
     std::map<std::string, std::string> printer_parameters, filament_parameters, print_parameters, print_variables;
+    // A test in bands along the height, turned into height changes
+    // (calibration group; calibrations.md).
+    CalibrationBands calibration;
     // Motion limits, for the time estimate. Like every speed, from the
     // printer's profile; 0: not known, not applied.
     double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
@@ -328,6 +350,12 @@ struct Settings {
     // to the centre of the bed's box; without one, it stays where it is. The
     // interface places objects itself and does not use these.
     bool placement_arrange = true;
+    // The command line's model as an object (multi_extruder.md, rules 1 and
+    // 13): its extruder, from 1, and whether a change of filament purges
+    // into its sparse infill or into all of it.
+    int object_extruder = 1;
+    bool object_wipe_into_infill = false, object_wipe_into_object = false;
+    bool placement_drop_to_bed = true; // the base to Z = 0; off: what is below is not printed (placement.md, rule 3)
     std::optional<std::array<double, 2>> placement_center;
     double placement_spacing = 6.0; // mm between the boxes of copies (placement.md, rule 2)
     // What the command line does to the model before it places it
@@ -507,11 +535,13 @@ struct Settings {
     double travel_speed = 0.0;
     double first_layer_speed = 0.0;
     double max_speed = 0.0; // no extrusion goes faster; 0: no cap
+    double speed_max_flow = 0.0; // mm3/s the print's own flow cap (speed.max_flow); 0: none
     // Speeds of their own (gcode_motion.md; speeds_accels.md, rules 1 to 4),
     // also from the printer's profile; 0: the one in brackets.
     double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
+    Speed small_loop_speed;         // closed walls shorter than kSmallLoop, or a share of walls (their own)
     Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
@@ -556,6 +586,7 @@ struct Settings {
     bool retract_layer_change = false;
     bool wipe = false;
     double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
+    double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
     bool firmware_retraction = false; // G10 and G11
     // Travels (rules 5 and 8): a lift as a ramp, and the route inside the part.
@@ -567,6 +598,8 @@ struct Settings {
     Speed max_detour;                  // mm or % of the straight travel a route may add; 0: no limit
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
     bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
+    bool infill_before_walls = false;  // each island's fills before its walls (gcode_motion.md, rule 8)
+    double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
     // printer's, 0 included. with_filament_retraction applies them.
@@ -733,6 +766,9 @@ struct Settings {
     // gcode
     // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
     double gcode_resolution = 0.0125;
+    // mm an inner wall's or an infill's corner may be rounded off by
+    // (toolpath_time.md, rule 7); 0: sharp corners.
+    double corner_smoothing = 0.0;
     // E in mm3 of plastic instead of mm of filament (gcode_extras.md, rule 11).
     bool volumetric_e = false;
     // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).
@@ -758,6 +794,7 @@ struct Settings {
     // machine.variables; the layer's ones also layer_num, layer_z and max_layer_z.
     std::string gcode_color_change = "M600";
     std::string gcode_pause = "M601";
+    std::string gcode_custom_template; // a change's own G-code by height (gcode_templates.md, rule 13)
     std::string gcode_before_layer; // right before each layer's move in Z, from the second layer
     std::string gcode_after_layer;  // right after it
     std::string gcode_between_objects; // sequential printing: between one object and the next (sequential.md, rule 3)

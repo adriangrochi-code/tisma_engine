@@ -145,6 +145,7 @@
     X(SpeedSupport, "Soporte", "Support")                                                                             \
     X(SpeedTravel, "Viajes", "Travel")                                                                                \
     X(SpeedFirstLayer, "Primera capa", "First layer")                                                                 \
+    X(SpeedMaxFlow, "Caudal máximo", "Maximum flow")                                                                  \
     X(SpeedMax, "Máxima", "Maximum")                                                                                  \
     X(LoadSettings, "Cargar…", "Load…")                                                                               \
     X(SaveSettings, "Guardar…", "Save…")                                                                              \
@@ -788,8 +789,9 @@
     X(OverLimit, "Más que el máximo del análisis (%s vóxeles): no correría a esta calidad",                            \
       "More than the analysis's maximum (%s voxels): it would not run at this quality")                               \
     X(AnalysisNeedsModel, "Abrí un modelo para ver sus vóxeles", "Open a model to see its voxels")                    \
-    X(AnalysisCli, "El análisis completo, con apoyos y cargas, corre por ahora con «tisma-engine analyze» (docs/ANALYSIS.md).", \
-      "The full analysis, with supports and loads, runs for now with \"tisma-engine analyze\" (docs/ANALYSIS.md).") \
+    X(AnalysisCli, "El análisis completo, con apoyos y cargas, corre por ahora en la línea de comandos (docs/ANALYSIS.md):", \
+      "The full analysis, with supports and loads, runs for now on the command line (docs/ANALYSIS.md):") \
+    X(PerLayer, "%d por capa", "%d per layer") \
     X(SecQuality, "Calidad", "Quality") \
     X(SecStrength, "Resistencia", "Strength") \
     X(SecSpeed, "Velocidad", "Speed") \
@@ -1082,6 +1084,7 @@
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SpeedBridges, "Puentes", "Bridges") \
     X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedSmallLoops, "Perímetros chicos", "Small loops") \
     X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
     X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
     X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
@@ -1110,6 +1113,12 @@
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
+    X(SubGcodeHeights, "G-code por altura", "G-code by height") \
+    X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
+    X(BottomPattern, "Patrón de abajo", "Bottom pattern") \
+    X(BridgeAngle, "Dirección de los puentes", "Bridge direction") \
+    X(InfillBeforeWalls, "Relleno antes que las paredes", "Infill before walls") \
+    X(MaxLink, "Unión máxima del relleno", "Maximum infill link") \
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
@@ -1407,6 +1416,7 @@
     X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \
+    X(CustomTemplateGcode, "G-code propio por altura", "Custom G-code by height") \
     X(BeforeLayerGcode, "Antes de cada capa", "Before each layer") \
     X(AfterLayerGcode, "Después de cada capa", "After each layer") \
     X(SubRaft, "Balsa", "Raft") \
@@ -1473,9 +1483,12 @@
     X(AvoidCurledOverhangs, "Esquivar voladizos levantados", "Avoid curled overhangs") \
     X(ExtraOnOverhangs, "Perímetros extra en voladizos", "Extra perimeters on overhangs") \
     X(SumWallsMore, "%d de 7 activas", "%d of 7 on") \
-    X(SumWallsThin, "%d cordones absorben la diferencia", "%d beads take the difference") \
+    X(SumWallsThin, "%d cordones reparten el cambio de ancho", "%d beads share the change in width") \
+    X(SumWallsThinOne, "1 cordón toma el cambio de ancho", "1 bead takes the change in width") \
     X(WallsStaggered, "Perímetros escalonados", "Staggered perimeters") \
     X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
+    X(SubCoast, "Coasting", "Coasting") \
+    X(Coast, "Final sin extruir", "End without extruding") \
     X(SumPrinterValues, "Los de la impresora", "The printer's") \
     X(SumMaterialValues, "%d del material", "%d of the material's") \
     X(FilamentRetractionRow, "Retracción y viajes del material", "The material's retraction and travel") \
@@ -1495,6 +1508,9 @@
     X(ListCount, "%d en la lista", "%d in the list") \
     X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
 
+#include <cstdarg>
+#include <string>
+
 namespace tisma::ui {
 
 enum class T : int {
@@ -1511,5 +1527,22 @@ Language language();
 
 // The text in the current language.
 const char* tr(T id);
+
+// printf for the interface: as vsnprintf, with each float's decimal point
+// the language's, a comma in Spanish (the spec team's TR1). Other
+// conversions are as printf writes them.
+std::string vformat(const char* fmt, std::va_list args);
+std::string format(const char* fmt, ...)
+#if defined(__GNUC__)
+    __attribute__((format(printf, 1, 2)))
+#endif
+    ;
+
+// A whole number with the language's thousands separator: 4 013 in
+// Spanish, 4,013 in English (TR2).
+std::string grouped(unsigned long long n);
+
+// A number written by printf ("0.20") with the language's decimal point.
+std::string localized(std::string number);
 
 } // namespace tisma::ui

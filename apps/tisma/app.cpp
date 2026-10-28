@@ -200,25 +200,79 @@ void apply_style(const Theme& t, float scale) {
     ImGui::GetStyle() = style;
 }
 
-std::string number_text(std::size_t n) {
-    // Thousands with thin gaps: 297 412.
-    std::string digits = std::to_string(n), out;
-    for (std::size_t i = 0; i < digits.size(); ++i) {
-        if (i > 0 && (digits.size() - i) % 3 == 0)
-            out += ' ';
-        out += digits[i];
+// Thousands as the language groups them: 297 412, or 297,412 in English (TR2).
+std::string number_text(std::size_t n) { return grouped(n); }
+
+// A default or a range as docs/CONFIG.md writes it, in Spanish ("0,1 a 2"),
+// in the interface's language: in English the decimal point and "to"
+// (the spec team's TR3).
+std::string doc_value_text(const std::string& text) {
+    if (language() == Language::Spanish)
+        return text;
+    std::string out;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        const bool between_digits = i > 0 && i + 1 < text.size() && std::isdigit(static_cast<unsigned char>(text[i - 1])) &&
+                                    std::isdigit(static_cast<unsigned char>(text[i + 1]));
+        if (text[i] == ',' && between_digits) {
+            out += '.';
+        } else if (text.compare(i, 3, " a ") == 0) {
+            out += " to ";
+            i += 2;
+        } else if (text.compare(i, 3, " o ") == 0) {
+            out += " or ";
+            i += 2;
+        } else {
+            out += text[i];
+        }
     }
     return out;
 }
 
-std::string format(const char* fmt, ...) {
-    char text[1024];
-    va_list args;
-    va_start(args, fmt);
-    std::vsnprintf(text, sizeof text, fmt, args);
-    va_end(args);
-    return text;
+// What a drag or slider field shows (the spec team's TR1): its value with
+// the language's decimal point. While the field is hovered, focused or in
+// use, ImGui's own format: it writes '.' and reads typed text with it.
+const char* field_text(const char* label, const char* fmt, double v) {
+    static std::string kept[8];
+    static std::size_t next = 0;
+    const ImGuiID id = ImGui::GetID(label);
+    const ImGuiContext& g = *GImGui;
+    if (language() != Language::Spanish || g.ActiveId == id || g.HoveredIdPreviousFrame == id || g.NavId == id ||
+        !std::strchr(fmt, '%'))
+        return fmt;
+    std::string& out = kept[next++ % 8];
+    out.clear();
+    for (const char c : format(fmt, v)) { // its '%' stays a '%'
+        out += c;
+        if (c == '%')
+            out += '%';
+    }
+    return out.c_str();
 }
+
+// ImGui's printf-like texts, each number with the language's decimal point (TR1).
+namespace loc {
+#define TISMA_LOC_TEXT(call)                                                                                           \
+    std::va_list args;                                                                                                 \
+    va_start(args, fmt);                                                                                               \
+    const std::string text = vformat(fmt, args);                                                                       \
+    va_end(args);                                                                                                      \
+    call
+void Text(const char* fmt, ...) IM_FMTARGS(1);
+void Text(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextUnformatted(text.c_str())); }
+void TextDisabled(const char* fmt, ...) IM_FMTARGS(1);
+void TextDisabled(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextDisabled("%s", text.c_str())); }
+void TextWrapped(const char* fmt, ...) IM_FMTARGS(1);
+void TextWrapped(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextWrapped("%s", text.c_str())); }
+void TextColored(const ImVec4& colour, const char* fmt, ...) IM_FMTARGS(2);
+void TextColored(const ImVec4& colour, const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextColored(colour, "%s", text.c_str())); }
+void BulletText(const char* fmt, ...) IM_FMTARGS(1);
+void BulletText(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::BulletText("%s", text.c_str())); }
+void SetTooltip(const char* fmt, ...) IM_FMTARGS(1);
+void SetTooltip(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::SetTooltip("%s", text.c_str())); }
+void SetItemTooltip(const char* fmt, ...) IM_FMTARGS(1);
+void SetItemTooltip(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::SetItemTooltip("%s", text.c_str())); }
+#undef TISMA_LOC_TEXT
+} // namespace loc
 
 T kind_text(LineKind kind) {
     constexpr T names[kLineKinds] = {T::KindTravel,       T::KindOuterWall,     T::KindInnerWall,  T::KindOverhangWall,
@@ -829,7 +883,7 @@ bool App::button(const char* id, const char* icon_name, const char* label, bool 
     const bool held = ImGui::IsItemActive();
     ImGui::EndDisabled();
     if (tip && hovered)
-        ImGui::SetItemTooltip("%s", tip);
+        loc::SetItemTooltip("%s", tip);
 
     ImU32 bg = 0, fg = ImGui::GetColorU32(rgb(theme_.text));
     if (primary) {
@@ -901,6 +955,8 @@ const std::map<T, const char*>& row_keys() {
         {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
         {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
+        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -916,7 +972,9 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedSolid, "speed.solid_infill"}, {T::SpeedTop, "speed.top_solid_infill"},
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
+        {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedSmallLoops, "speed.small_loops"},
         {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
@@ -939,6 +997,7 @@ const std::map<T, const char*>& row_keys() {
         {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
         {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
         {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"},
+        {T::CornerSmoothing, "gcode.corner_smoothing"},
         {T::ScarfMode, "walls.scarf"}, {T::ScarfLength, "walls.scarf_length"},
         {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
@@ -953,6 +1012,7 @@ const std::map<T, const char*>& row_keys() {
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
         {T::ColorChangeGcode, "gcode.color_change"}, {T::PauseGcode, "gcode.pause"},
+        {T::CustomTemplateGcode, "gcode.custom_template"},
         {T::BeforeLayerGcode, "gcode.before_layer"}, {T::AfterLayerGcode, "gcode.after_layer"},
         {T::RaftLayers, "adhesion.raft_layers"}, {T::RaftGap, "adhesion.raft_gap"},
         {T::RaftExpansion, "adhesion.raft_expansion"}, {T::RaftFirstDensity, "adhesion.raft_first_layer_density"},
@@ -999,7 +1059,8 @@ const std::map<T, const char*>& row_keys() {
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
         {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
-        {T::BeforeWipe, "retraction.before_wipe"}, {T::FirmwareRetraction, "retraction.firmware"},
+        {T::BeforeWipe, "retraction.before_wipe"},
+        {T::Coast, "retraction.coast"}, {T::FirmwareRetraction, "retraction.firmware"},
         {T::LiftAbove, "retraction.lift_above"}, {T::LiftBelow, "retraction.lift_below"},
         {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
         {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
@@ -1156,17 +1217,17 @@ void info_button(T label, const char* key) {
             // The glossary's definition, on the pointer (rule 12).
             ImGui::BeginTooltip();
             ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
-            ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", term->term.c_str());
+            loc::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", term->term.c_str());
             ImGui::TextUnformatted(term->definition.c_str());
             ImGui::PopTextWrapPos();
             ImGui::EndTooltip();
         } else {
-            ImGui::SetTooltip("%s", tr(T::Info));
+            loc::SetTooltip("%s", tr(T::Info));
         }
     }
     if (ImGui::BeginPopup("##info_card")) {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
-        ImGui::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
+        loc::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
         const auto& docs = setting_docs();
         const auto doc = docs.find(key);
         if (label == T::NozzleTemp || label == T::BedTemp)
@@ -1174,13 +1235,13 @@ void info_button(T label, const char* key) {
         else if (doc != docs.end())
             ImGui::TextUnformatted(doc->second.meaning.c_str());
         ImGui::Spacing();
-        ImGui::TextDisabled("%s: %s", tr(T::InfoKey), key);
+        loc::TextDisabled("%s: %s", tr(T::InfoKey), key);
         if (doc != docs.end() && !doc->second.default_value.empty())
-            ImGui::TextDisabled("%s: %s", tr(T::InfoDefault), doc->second.default_value.c_str());
+            loc::TextDisabled("%s: %s", tr(T::InfoDefault), doc_value_text(doc->second.default_value).c_str());
         if (doc != docs.end() && !doc->second.range.empty())
-            ImGui::TextDisabled("%s: %s", tr(T::InfoRange), doc->second.range.c_str());
+            loc::TextDisabled("%s: %s", tr(T::InfoRange), doc_value_text(doc->second.range).c_str());
         if (language() == Language::English)
-            ImGui::TextDisabled("%s", tr(T::InfoSpanish));
+            loc::TextDisabled("%s", tr(T::InfoSpanish));
         if (term) {
             ImGui::SeparatorText(tr(T::HelpGlossary));
             ImGui::TextUnformatted((term->term + ": " + term->definition).c_str());
@@ -1360,7 +1421,7 @@ const char* calibration_title(CalibrationKind kind) {
 // A nozzle's name: "0,4 mm" and, when known, "· hardened steel".
 std::string nozzle_text(double diameter, bool hardened) {
     char text[32];
-    std::snprintf(text, sizeof text, "%g mm", diameter);
+    std::snprintf(text, sizeof text, "%s", format("%g mm", diameter).c_str());
     std::string out = text;
     if (language() == Language::Spanish)
         std::replace(out.begin(), out.end(), '.', ',');
@@ -1498,7 +1559,7 @@ void App::printer_card() {
             ImGui::EndCombo();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::BedType));
+            loc::SetTooltip("%s", tr(T::BedType));
     }
     // The gear: the printer's settings (rule 37).
     ImGui::SameLine(0, gap);
@@ -1511,7 +1572,7 @@ void App::printer_card() {
                   ImGui::GetColorU32(rgb(hovered ? theme_.accent_hover : theme_.text_dim)));
         dl->AddCircleFilled(ImVec2(g.x + line * 0.5f, g.y + line * 0.5f), line * 0.12f, ImGui::GetColorU32(rgb(theme_.panel)));
         if (hovered)
-            ImGui::SetTooltip("%s", tr(T::PrinterSettingsTip));
+            loc::SetTooltip("%s", tr(T::PrinterSettingsTip));
     }
 
     // The nozzle (rules 21 to 23).
@@ -1543,7 +1604,7 @@ void App::printer_card() {
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", tr(T::Nozzle));
+        loc::SetTooltip("%s", tr(T::Nozzle));
     if (other) {
         other_nozzle_ = settings_.nozzle_diameter;
         ImGui::OpenPopup("##other_nozzle");
@@ -1734,7 +1795,7 @@ void App::printer_page() {
             else if (!next)
                 next = kind;
         }
-        ImGui::Text(tr(T::CalibratedCount), done, int(kinds.size()));
+        loc::Text(tr(T::CalibratedCount), done, int(kinds.size()));
         ImGui::SameLine();
         if (next && ImGui::SmallButton(tr(T::CalibrateInOrder))) {
             printer_page_ = false;
@@ -1762,27 +1823,29 @@ void App::printer_page() {
                         const auto t = settings_.variables.find("temperature");
                         value = t != settings_.variables.end() && !t->second.empty() ? t->second.front() + " °C" : "—";
                     } else if (const auto v = values.find(std::string(key)); v != values.end()) {
-                        value = v->second == "null" ? "—" : v->second;
+                        const bool number = !v->second.empty() &&
+                                            v->second.find_first_not_of("0123456789.-+eE") == std::string::npos;
+                        value = v->second == "null" ? "—" : number ? localized(v->second) : v->second;
                     }
-                    ImGui::TextDisabled("%s: %s", key_label(key).c_str(), value.c_str());
+                    loc::TextDisabled("%s: %s", key_label(key).c_str(), value.c_str());
                 }
                 ImGui::TableNextColumn();
                 const CalibrationRecord* record = record_of(kind);
                 switch (calibration_state(record, settings_.nozzle_diameter)) {
                 case CalibrationState::Missing:
-                    ImGui::TextDisabled("%s", tr(T::NotCalibrated));
+                    loc::TextDisabled("%s", tr(T::NotCalibrated));
                     break;
                 case CalibrationState::Done:
-                    ImGui::TextColored(rgb(0x3FBF7F), tr(T::CalibratedOn), record->date.c_str());
+                    loc::TextColored(rgb(0x3FBF7F), tr(T::CalibratedOn), record->date.c_str());
                     break;
                 case CalibrationState::OtherNozzle:
-                    ImGui::TextColored(rgb(0xE8B83D), tr(T::CalibratedOtherNozzle),
+                    loc::TextColored(rgb(0xE8B83D), tr(T::CalibratedOtherNozzle),
                                        nozzle_text(record->nozzle, false).c_str());
                     break;
                 }
                 if (record && filament_calibration(kind) && !record->filament.empty()) {
                     ImGui::SameLine();
-                    ImGui::TextDisabled(tr(T::CalibratedWith), record->filament.c_str());
+                    loc::TextDisabled(tr(T::CalibratedWith), record->filament.c_str());
                 }
                 ImGui::TableNextColumn();
                 if (ImGui::SmallButton(tr(T::CalibrateButton))) {
@@ -1807,9 +1870,9 @@ void App::printer_page() {
                                printer_->status().state != device::PrinterState::Error;
         ImGui::PushTextWrapPos(0.0f);
         if (connected)
-            ImGui::Text(tr(T::ConnectionNow), device_port_ == "sim" ? tr(T::DeviceSimulated) : device_port_.c_str());
+            loc::Text(tr(T::ConnectionNow), device_port_ == "sim" ? tr(T::DeviceSimulated) : device_port_.c_str());
         else
-            ImGui::TextDisabled("%s", tr(T::ConnectionNone));
+            loc::TextDisabled("%s", tr(T::ConnectionNone));
         ImGui::PopTextWrapPos();
         if (ImGui::Button(tr(T::OpenInDevices))) {
             printer_page_ = false;
@@ -1853,14 +1916,14 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", tip);
+        loc::SetTooltip("%s", tip);
     if (const char* info = row_key(label))
         info_button(label, info);
     if (g_row_tag) {
         ImGui::SameLine();
-        ImGui::TextDisabled("%s", g_row_tag);
+        loc::TextDisabled("%s", g_row_tag);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::HiddenChanged));
+            loc::SetTooltip("%s", tr(T::HiddenChanged));
         g_row_tag = nullptr;
     }
     const float tall = ImGui::GetFrameHeight();
@@ -1875,7 +1938,7 @@ void label_cell(T label, const char* tip = nullptr) {
         const bool hovered = ImGui::IsItemHovered();
         eye_struck(ImGui::GetWindowDrawList(), at, size, ImGui::GetColorU32(hovered ? ImGuiCol_CheckMark : ImGuiCol_TextDisabled));
         if (hovered)
-            ImGui::SetTooltip("%s", tr(T::HideSetting));
+            loc::SetTooltip("%s", tr(T::HideSetting));
         ImGui::PopID();
     }
     ImGui::TableNextColumn();
@@ -1902,7 +1965,7 @@ bool row(T label, double& v, double min, double max, const char* fmt, float spee
     label_cell(label, tip);
     const RowId id(label, &v);
     const bool changed =
-        ImGui::DragScalar("##v", ImGuiDataType_Double, &v, speed, &min, &max, fmt, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragScalar("##v", ImGuiDataType_Double, &v, speed, &min, &max, field_text("##v", fmt, v), ImGuiSliderFlags_AlwaysClamp);
     return changed;
 }
 
@@ -1956,12 +2019,12 @@ bool height_steps_rows(std::vector<std::array<double, 2>>& steps, double layer_h
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
-        changed |= ImGui::DragScalar("##z", ImGuiDataType_Double, &steps[i][0], 0.05f, &z_min, &z_max, "Z %.2f mm",
+        changed |= ImGui::DragScalar("##z", ImGuiDataType_Double, &steps[i][0], 0.05f, &z_min, &z_max, field_text("##z", "Z %.2f mm", steps[i][0]),
                                      ImGuiSliderFlags_AlwaysClamp);
         ImGui::TableNextColumn();
         const float button = ImGui::GetFrameHeight();
         ImGui::SetNextItemWidth(-(button + ImGui::GetStyle().ItemSpacing.x));
-        changed |= ImGui::DragScalar("##h", ImGuiDataType_Double, &steps[i][1], 0.002f, &h_min, &h_max, "%.3f mm",
+        changed |= ImGui::DragScalar("##h", ImGuiDataType_Double, &steps[i][1], 0.002f, &h_min, &h_max, field_text("##h", "%.3f mm", steps[i][1]),
                                      ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         if (ImGui::Button("x", ImVec2(button, button)))
@@ -3144,7 +3207,7 @@ void App::profile_row(ProfileKind kind) {
         ImGui::EndCombo();
     }
     if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", tr(T::ProfileModifiedTip));
+        loc::SetTooltip("%s", tr(T::ProfileModifiedTip));
     auto save_as = [&] {
         save_profile_kind_ = kind;
         save_profile_open_ = true;
@@ -3212,7 +3275,7 @@ void App::catalog_dialog() {
     }
     if (catalog) {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", tr(T::CatalogHint));
+        loc::TextDisabled("%s", tr(T::CatalogHint));
         ImGui::PopTextWrapPos();
         if (ImGui::IsWindowAppearing())
             ImGui::SetKeyboardFocusHere();
@@ -3229,7 +3292,7 @@ void App::catalog_dialog() {
             catalog_pick_ = -1;
         if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())
             catalog_pick_ = 0; // a screenshot shows the first entry
-        ImGui::TextDisabled(tr(T::CatalogCount), found, total);
+        loc::TextDisabled(tr(T::CatalogCount), found, total);
 
         const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
         ImGui::BeginChild("##catalog_list", ImVec2(300.0f * scale_, -footer), ImGuiChildFlags_Borders);
@@ -3247,7 +3310,7 @@ void App::catalog_dialog() {
             ImGui::PopID();
         }
         if (found == 0)
-            ImGui::TextDisabled("%s", tr(T::CatalogEmpty));
+            loc::TextDisabled("%s", tr(T::CatalogEmpty));
         ImGui::EndChild();
         ImGui::SameLine();
         ImGui::BeginChild("##catalog_entry", ImVec2(0, -footer), ImGuiChildFlags_Borders);
@@ -3256,38 +3319,38 @@ void App::catalog_dialog() {
             char text[32];
             if (!v)
                 return std::string("-");
-            std::snprintf(text, sizeof text, "%g %s", *v, unit);
+            std::snprintf(text, sizeof text, "%s", format("%g %s", *v, unit).c_str());
             return std::string(text);
         };
         const auto range = [](const std::optional<std::array<double, 2>>& r, const char* unit) {
             char text[48];
             if (!r)
                 return std::string("-");
-            std::snprintf(text, sizeof text, "%g–%g %s", (*r)[0], (*r)[1], unit);
+            std::snprintf(text, sizeof text, "%s", format("%g–%g %s", (*r)[0], (*r)[1], unit).c_str());
             return std::string(text);
         };
         const std::vector<std::string>* sources = nullptr;
         if (catalog_pick_ >= 0 && printers) {
             const PrinterModel& p = *found_printers[std::size_t(catalog_pick_)];
             ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-            ImGui::Text("%s %s", p.vendor.c_str(), p.model.c_str());
+            loc::Text("%s %s", p.vendor.c_str(), p.model.c_str());
             ImGui::PopFont();
-            ImGui::Text("%s: %g × %g × %g mm", tr(T::BuildVolume), p.build_volume[0], p.build_volume[1], p.build_volume[2]);
+            loc::Text("%s: %g × %g × %g mm", tr(T::BuildVolume), p.build_volume[0], p.build_volume[1], p.build_volume[2]);
             if (p.circular)
-                ImGui::TextDisabled(tr(T::BedRound), p.build_volume[0]);
+                loc::TextDisabled(tr(T::BedRound), p.build_volume[0]);
             const char* firmware = p.firmware == "marlin"    ? "Marlin"
                                    : p.firmware == "klipper" ? "Klipper"
                                    : p.firmware == "reprap"  ? "RepRapFirmware"
                                    : p.firmware == "bambu"   ? "Bambu Lab"
                                    : p.firmware == "other"   ? tr(T::OwnFirmware)
                                                              : "-";
-            ImGui::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
+            loc::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
                         p.direct_drive ? tr(T::DirectDrive) : tr(T::Bowden),
                         p.enclosed ? (std::string(" · ") + tr(T::Enclosed)).c_str() : "");
-            ImGui::Text(tr(T::MaxTemps), maybe(p.max_nozzle_temp, "°C").c_str(), maybe(p.max_bed_temp, "°C").c_str());
-            ImGui::Text(tr(T::MaxMotion), maybe(p.max_speed, "mm/s").c_str(), maybe(p.max_acceleration, "mm/s²").c_str());
+            loc::Text(tr(T::MaxTemps), maybe(p.max_nozzle_temp, "°C").c_str(), maybe(p.max_bed_temp, "°C").c_str());
+            loc::Text(tr(T::MaxMotion), maybe(p.max_speed, "mm/s").c_str(), maybe(p.max_acceleration, "mm/s²").c_str());
             if (!p.multi_material.empty())
-                ImGui::Text("%s: %s", tr(T::MultiMaterial), p.multi_material.c_str());
+                loc::Text("%s: %s", tr(T::MultiMaterial), p.multi_material.c_str());
             // The capabilities in detail, those the maker states.
             const auto join = [](const std::vector<std::string>& items) {
                 std::string out;
@@ -3297,7 +3360,7 @@ void App::catalog_dialog() {
             };
             const auto line = [](T label, const std::string& value) {
                 if (!value.empty())
-                    ImGui::Text("%s: %s", tr(label), value.c_str());
+                    loc::Text("%s: %s", tr(label), value.c_str());
             };
             line(T::Kinematics, p.kinematics);
             if (p.max_flow)
@@ -3316,14 +3379,14 @@ void App::catalog_dialog() {
             if (p.tools)
                 line(T::Tools, std::to_string(*p.tools));
             if (needs_own_start_gcode(p))
-                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::OwnStartGcode));
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::OwnStartGcode));
             catalog_nozzle_ = std::min(catalog_nozzle_, p.nozzles.size() - 1);
             ImGui::SetNextItemWidth(120.0f * scale_);
             char nozzle[24];
-            std::snprintf(nozzle, sizeof nozzle, "%g mm", p.nozzles[catalog_nozzle_]);
+            std::snprintf(nozzle, sizeof nozzle, "%s", format("%g mm", p.nozzles[catalog_nozzle_]).c_str());
             if (ImGui::BeginCombo(tr(T::NozzleSize), nozzle)) {
                 for (std::size_t n = 0; n < p.nozzles.size(); ++n) {
-                    std::snprintf(nozzle, sizeof nozzle, "%g mm", p.nozzles[n]);
+                    std::snprintf(nozzle, sizeof nozzle, "%s", format("%g mm", p.nozzles[n]).c_str());
                     if (ImGui::Selectable(nozzle, n == catalog_nozzle_))
                         catalog_nozzle_ = n;
                 }
@@ -3333,43 +3396,43 @@ void App::catalog_dialog() {
         } else if (catalog_pick_ >= 0) {
             const FilamentModel& f = *found_filaments[std::size_t(catalog_pick_)];
             ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-            ImGui::Text("%s %s", f.vendor.c_str(), f.name.c_str());
+            loc::Text("%s %s", f.vendor.c_str(), f.name.c_str());
             ImGui::PopFont();
-            ImGui::Text("%s: %s · %g mm", tr(T::Material), f.material.c_str(), f.diameter);
-            ImGui::Text("%s: %s%s", tr(T::NozzleRange), range(f.nozzle_temp, "°C").c_str(),
+            loc::Text("%s: %s · %g mm", tr(T::Material), f.material.c_str(), f.diameter);
+            loc::Text("%s: %s%s", tr(T::NozzleRange), range(f.nozzle_temp, "°C").c_str(),
                         f.nozzle_recommended ? (" · " + maybe(f.nozzle_recommended, "°C") + " " + tr(T::Recommended)).c_str() : "");
-            ImGui::Text("%s: %s%s", tr(T::BedRange), range(f.bed_temp, "°C").c_str(),
+            loc::Text("%s: %s%s", tr(T::BedRange), range(f.bed_temp, "°C").c_str(),
                         f.bed_recommended ? (" · " + maybe(f.bed_recommended, "°C") + " " + tr(T::Recommended)).c_str() : "");
             if (f.fan)
-                ImGui::Text("%s: %s", tr(T::FanMin), range(f.fan, "%").c_str());
+                loc::Text("%s: %s", tr(T::FanMin), range(f.fan, "%").c_str());
             if (f.density)
-                ImGui::Text("%s: %s", tr(T::Density), maybe(f.density, "g/cm³").c_str());
+                loc::Text("%s: %s", tr(T::Density), maybe(f.density, "g/cm³").c_str());
             if (f.enclosure.value_or(false))
-                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::NeedsEnclosure));
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::NeedsEnclosure));
             if (is_abrasive(f))
-                ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::AbrasiveFilament));
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::AbrasiveFilament));
             if (f.max_flow)
-                ImGui::Text("%s: %s", tr(T::MaxFlow), maybe(f.max_flow, "mm³/s").c_str());
+                loc::Text("%s: %s", tr(T::MaxFlow), maybe(f.max_flow, "mm³/s").c_str());
             if (f.chamber_temp)
-                ImGui::Text("%s: %s", tr(T::ChamberHeating), range(f.chamber_temp, "°C").c_str());
+                loc::Text("%s: %s", tr(T::ChamberHeating), range(f.chamber_temp, "°C").c_str());
             if (f.drying_temp)
-                ImGui::Text("%s: %s%s", tr(T::Drying), maybe(f.drying_temp, "°C").c_str(),
+                loc::Text("%s: %s%s", tr(T::Drying), maybe(f.drying_temp, "°C").c_str(),
                             f.drying_hours ? (", " + maybe(f.drying_hours, "h")).c_str() : "");
             if (f.soluble.value_or(false))
-                ImGui::Text("%s", tr(T::Soluble));
+                loc::Text("%s", tr(T::Soluble));
             if (!f.hardness.empty())
-                ImGui::Text("%s: %s", tr(T::Hardness), f.hardness.c_str());
+                loc::Text("%s: %s", tr(T::Hardness), f.hardness.c_str());
             if (f.glass_transition)
-                ImGui::Text("Tg: %s", maybe(f.glass_transition, "°C").c_str());
+                loc::Text("Tg: %s", maybe(f.glass_transition, "°C").c_str());
             if (f.heat_deflection)
-                ImGui::Text("HDT: %s", maybe(f.heat_deflection, "°C").c_str());
+                loc::Text("HDT: %s", maybe(f.heat_deflection, "°C").c_str());
             if (f.shrinkage)
-                ImGui::Text("%s: %s", tr(T::Shrinkage), maybe(f.shrinkage, "%").c_str());
+                loc::Text("%s: %s", tr(T::Shrinkage), maybe(f.shrinkage, "%").c_str());
             if (!f.bed_surfaces.empty()) {
                 std::string surfaces;
                 for (const std::string& b : f.bed_surfaces)
                     surfaces += (surfaces.empty() ? "" : ", ") + b;
-                ImGui::Text("%s: %s", tr(T::BedSurfaces), surfaces.c_str());
+                loc::Text("%s: %s", tr(T::BedSurfaces), surfaces.c_str());
             }
             sources = &f.sources;
         }
@@ -4036,7 +4099,7 @@ void App::search_box(float width, float height) {
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     search_list_hovered_ = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
     if (hits.empty())
-        ImGui::TextDisabled("%s", tr(T::SearchNoMatch));
+        loc::TextDisabled("%s", tr(T::SearchNoMatch));
     for (const SettingHit& hit : hits) {
         const std::string label = key_label(hit.key) + "##" + hit.key;
         if (ImGui::Selectable(label.c_str())) {
@@ -4045,7 +4108,7 @@ void App::search_box(float width, float height) {
             search_list_hovered_ = false;
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("%s › %s", tr(hit.place.section->title), tr(hit.place.subsection->title));
+        loc::TextDisabled("%s › %s", tr(hit.place.section->title), tr(hit.place.subsection->title));
     }
     ImGui::End();
 }
@@ -4151,7 +4214,7 @@ void App::choose_settings_dialog() {
                                 if (ImGui::Checkbox(label.c_str(), &value))
                                     custom_set(draft, {e}, value);
                                 ImGui::SameLine();
-                                ImGui::TextDisabled("%s", tr(e.level == SettingLevel::Basic    ? T::LevelBasic
+                                loc::TextDisabled("%s", tr(e.level == SettingLevel::Basic    ? T::LevelBasic
                                                              : e.level == SettingLevel::Normal ? T::LevelNormal
                                                                                                : T::LevelAdvanced));
                             }
@@ -4219,7 +4282,7 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
             std::string text;
             for (const FeatureCredit* c : from)
                 text += (text.empty() ? "" : "\n") + based_on(*c);
-            ImGui::SetTooltip("%s", text.c_str());
+            loc::SetTooltip("%s", text.c_str());
         }
     }
     // The arrow, the title and the changes.
@@ -4249,7 +4312,7 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
         if (ImGui::MenuItem(tr(T::ResetCard), nullptr, false, changes > 0))
             reset = true;
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", tr(T::ResetCardTip));
+            loc::SetTooltip("%s", tr(T::ResetCardTip));
         ImGui::EndPopup();
     }
     if (changes > 0) {
@@ -4297,16 +4360,16 @@ void App::card_credits(std::string_view card, float left, float right) {
     for (const FeatureCredit* c : from) {
         ImGui::PushID(c);
         ImGui::SetCursorScreenPos(ImVec2(left, ImGui::GetCursorScreenPos().y));
-        ImGui::TextDisabled("%s", tr(T::BasedOn));
+        loc::TextDisabled("%s", tr(T::BasedOn));
         const std::string& name = card_source(*c);
         next(name.c_str(), ImGui::CalcTextSize(" ").x);
         ImGui::TextLinkOpenURL(name.c_str(), c->url.c_str());
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s\n%s", c->source.c_str(), c->url.c_str());
+            loc::SetTooltip("%s\n%s", c->source.c_str(), c->url.c_str());
         if (!c->author.empty()) {
             const std::string by = std::string(tr(T::BasedOnBy)) + c->author;
             next(by.c_str(), 0.0f);
-            ImGui::TextDisabled("%s", by.c_str());
+            loc::TextDisabled("%s", by.c_str());
         }
         ImGui::PopID();
     }
@@ -4386,13 +4449,13 @@ void App::help_panel() {
     ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
     for (const FeatureCredit& c : credits().features)
         if (help_tab_ != 4 && c.spec == "assistant.md" && c.author == "Rafa Barajas") {
-            ImGui::TextDisabled("%s", tr(T::HelpBasedOn));
+            loc::TextDisabled("%s", tr(T::HelpBasedOn));
             ImGui::SameLine(0.0f, ImGui::CalcTextSize(" ").x);
             ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
             ImGui::TextLinkOpenURL(c.author.c_str(), c.url.c_str());
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", c.url.c_str());
+                loc::SetTooltip("%s", c.url.c_str());
             break;
         }
     ImGui::PopFont();
@@ -4427,7 +4490,7 @@ void App::help_body() {
     if (!help_query_.empty()) {
         const std::vector<KnowledgeHit> hits = search_knowledge(k, help_query_);
         if (hits.empty())
-            ImGui::TextDisabled("%s", tr(T::HelpNothingFound));
+            loc::TextDisabled("%s", tr(T::HelpNothingFound));
         for (const KnowledgeHit& h : hits) {
             ImGui::PushID(int(h.index) * 8 + int(h.kind));
             using Kind = KnowledgeHit::Kind;
@@ -4442,7 +4505,7 @@ void App::help_body() {
                 break;
             case Kind::Term:
                 ImGui::TextUnformatted(k.terms[h.index].term.c_str());
-                ImGui::TextDisabled("%s", k.terms[h.index].definition.c_str());
+                loc::TextDisabled("%s", k.terms[h.index].definition.c_str());
                 break;
             case Kind::Material:
                 ImGui::TextUnformatted(k.materials[h.index].name.c_str());
@@ -4456,7 +4519,7 @@ void App::help_body() {
                 break;
             }
             ImGui::SameLine();
-            ImGui::TextDisabled("· %s", tr(h.kind == Kind::Problem     ? T::HelpProblems
+            loc::TextDisabled("· %s", tr(h.kind == Kind::Problem     ? T::HelpProblems
                                            : h.kind == Kind::Procedure ? T::HelpProcedures
                                            : h.kind == Kind::Term      ? T::HelpGlossary
                                            : h.kind == Kind::Tutorial  ? T::HelpTutorials
@@ -4469,7 +4532,7 @@ void App::help_body() {
     if (help_tab_ == 3) {
         // The interface's own tour is here whether or not the data came.
         ImGui::TextUnformatted(tr(T::HelpTour));
-        ImGui::TextDisabled("%s", tr(T::HelpTourAbout));
+        loc::TextDisabled("%s", tr(T::HelpTourAbout));
         if (ImGui::Button(tr(T::HelpStart))) {
             tour_step_ = 0;
             help_open_ = false;
@@ -4479,7 +4542,7 @@ void App::help_body() {
             const KnowledgeTutorial& t = k.tutorials[i];
             ImGui::PushID(int(i));
             ImGui::TextUnformatted(t.name.c_str());
-            ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(t.steps.size()), t.minutes).c_str());
+            loc::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(t.steps.size()), t.minutes).c_str());
             // Where it was left, if it was (rule 18).
             const auto left = guide_memory_.step.find(t.id);
             if (ImGui::Button(tr(left != guide_memory_.step.end() ? T::GuideContinue : T::HelpStart))) {
@@ -4492,9 +4555,9 @@ void App::help_body() {
         }
     }
     if (k.empty()) {
-        ImGui::TextDisabled("%s", tr(T::HelpNoData));
+        loc::TextDisabled("%s", tr(T::HelpNoData));
         for (const std::string& e : k.errors)
-            ImGui::TextColored(rgb(theme_.paint_block), "%s", e.c_str());
+            loc::TextColored(rgb(theme_.paint_block), "%s", e.c_str());
         return;
     }
     if (help_tab_ == 0) {
@@ -4502,7 +4565,7 @@ void App::help_body() {
             ImGui::PushID(int(i));
             if (ImGui::Selectable(k.problems[i].name.c_str()))
                 open_problem(i), help_back_.clear();
-            ImGui::TextDisabled("%s", k.problems[i].symptoms.c_str());
+            loc::TextDisabled("%s", k.problems[i].symptoms.c_str());
             ImGui::PopID();
             ImGui::Spacing();
         }
@@ -4511,14 +4574,14 @@ void App::help_body() {
             ImGui::PushID(int(i));
             if (ImGui::Selectable(k.procedures[i].name.c_str()))
                 open_procedure(i);
-            ImGui::TextDisabled("%s", k.procedures[i].for_cases.c_str());
+            loc::TextDisabled("%s", k.procedures[i].for_cases.c_str());
             ImGui::PopID();
             ImGui::Spacing();
         }
     } else if (help_tab_ == 2) {
         for (const KnowledgeTerm& t : k.terms) {
             ImGui::TextUnformatted(t.term.c_str());
-            ImGui::TextDisabled("%s", t.definition.c_str());
+            loc::TextDisabled("%s", t.definition.c_str());
             ImGui::Spacing();
         }
     } else if (help_tab_ == 4) {
@@ -4532,7 +4595,7 @@ void App::help_body() {
                 ImGui::PushID(int(i));
                 if (ImGui::Selectable(g.name.c_str()))
                     open_guide(g.id);
-                ImGui::TextDisabled("%s", g.why.c_str());
+                loc::TextDisabled("%s", g.why.c_str());
                 ImGui::PopID();
                 ImGui::Spacing();
             }
@@ -4556,15 +4619,15 @@ void App::help_problem(const KnowledgeProblem& p) {
     ImGui::PushFont(nullptr, kTitleSize * 0.8f);
     ImGui::TextUnformatted(p.name.c_str());
     ImGui::PopFont();
-    ImGui::TextDisabled("%s", p.symptoms.c_str());
+    loc::TextDisabled("%s", p.symptoms.c_str());
     for (const KnowledgeCause* c : causes_in_order(p.causes)) {
         ImGui::PushID(c);
         ImGui::SeparatorText(c->name.c_str());
         if (c->last_resort)
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::HelpLastResort));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::HelpLastResort));
         ImGui::TextUnformatted(c->explain.c_str());
         if (!c->check.empty())
-            ImGui::TextDisabled("%s", c->check.c_str());
+            loc::TextDisabled("%s", c->check.c_str());
         for (std::size_t i = 0; i < c->actions.size(); ++i) {
             ImGui::PushID(int(i));
             help_action(c->actions[i]);
@@ -4594,7 +4657,7 @@ void App::help_action(const KnowledgeAction& a) {
         ImGui::Bullet();
         ImGui::TextUnformatted((key_label(a.key) + ": " + change->before + " » " + change->after).c_str());
         if (!a.why.empty())
-            ImGui::TextDisabled("%s", a.why.c_str());
+            loc::TextDisabled("%s", a.why.c_str());
         if (ImGui::SmallButton(tr(T::HelpApply))) {
             help_change_ = change;
             help_change_open_ = true;
@@ -4682,12 +4745,12 @@ void App::help_guide(const KnowledgeCalibration& g) {
     ImGui::PopFont();
     ImGui::TextUnformatted(g.why.c_str());
     if (!g.repeat.empty())
-        ImGui::TextDisabled(tr(T::GuideRepeat), g.repeat.c_str());
+        loc::TextDisabled(tr(T::GuideRepeat), g.repeat.c_str());
     // Rule 22: what is not done yet goes before; it warns, it does not stop.
     for (const std::string& id : guides_missing(g.before, guides_done())) {
         const KnowledgeCalibration* before = find_guide(k, id);
         ImGui::PushID(id.c_str());
-        ImGui::TextColored(rgb(kWarningColour), tr(T::GuideBefore), before ? before->name.c_str() : id.c_str());
+        loc::TextColored(rgb(kWarningColour), tr(T::GuideBefore), before ? before->name.c_str() : id.c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton(tr(T::HelpOpen))) {
             if (const std::string_view test = test_for_guide(id); !test.empty()) {
@@ -4720,7 +4783,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
             if (ImGui::Checkbox(label.c_str(), &done))
                 help_steps_done_[i] = done;
             ImGui::Indent();
-            ImGui::TextDisabled("%s", g.steps[i].text.c_str());
+            loc::TextDisabled("%s", g.steps[i].text.c_str());
             ImGui::Unindent();
             ImGui::PopID();
         }
@@ -4743,14 +4806,14 @@ void App::help_guide(const KnowledgeCalibration& g) {
     if (!g.result_text.empty())
         ImGui::TextUnformatted(g.result_text.c_str());
     if (g.result_where == "printer_firmware") {
-        ImGui::TextColored(rgb(kWarningColour), "%s", tr(T::GuideFirmware));
+        loc::TextColored(rgb(kWarningColour), "%s", tr(T::GuideFirmware));
         // AS18: with the printer connected, its firmware's command.
         if (firmware_command(g.id, settings_.flavor, 1.0)) {
             ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
             ImGui::InputDouble(tr(T::GuideFrequency), &guide_input_.measured, 0.0, 0.0, "%g");
             if (const std::optional<std::string> command =
                     firmware_command(g.id, settings_.flavor, guide_input_.measured)) {
-                ImGui::TextDisabled("%s", command->c_str());
+                loc::TextDisabled("%s", command->c_str());
                 const bool connected = printer_ && printer_->status().state != device::PrinterState::Disconnected &&
                                        printer_->status().state != device::PrinterState::Error;
                 if (connected && ImGui::Button(tr(T::GuideSend))) {
@@ -4771,7 +4834,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
         } catch (const std::exception&) {
         }
         if (now)
-            ImGui::TextDisabled(tr(T::GuideNow), (key_label(key) + " " + now->before).c_str());
+            loc::TextDisabled(tr(T::GuideNow), (key_label(key) + " " + now->before).c_str());
         const float field = ImGui::GetFontSize() * 7.0f;
         const auto input = [&](T label, double& v) {
             ImGui::SetNextItemWidth(field);
@@ -4795,8 +4858,8 @@ void App::help_guide(const KnowledgeCalibration& g) {
                 guide_from_ = guide_input_;
             }
             char value[32];
-            std::snprintf(value, sizeof value, "%g", std::round(r->value * 1e4) / 1e4);
-            ImGui::TextColored(rgb(theme_.accent_hover), tr(T::GuideReadValue), value);
+            std::snprintf(value, sizeof value, "%s", format("%g", std::round(r->value * 1e4) / 1e4).c_str());
+            loc::TextColored(rgb(theme_.accent_hover), tr(T::GuideReadValue), value);
             ImGui::SetNextItemWidth(field);
             ImGui::InputDouble(tr(T::GuideProposed), &*guide_proposed_, 0.0, 0.0, "%g");
             std::optional<SettingChange> change;
@@ -4821,7 +4884,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
     if (!g.tips.empty()) {
         ImGui::SeparatorText(tr(T::GuideTips));
         for (const std::string& t : g.tips)
-            ImGui::BulletText("%s", t.c_str());
+            loc::BulletText("%s", t.c_str());
     }
     if (!g.open.empty())
         for (std::size_t i = 0; i < k.procedures.size(); ++i)
@@ -4834,7 +4897,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
     if (!g.sources.empty()) {
         ImGui::Spacing();
         ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
-        ImGui::TextDisabled("%s", tr(T::BasedOn));
+        loc::TextDisabled("%s", tr(T::BasedOn));
         ImGui::PushStyleColor(ImGuiCol_TextLink, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         for (const KnowledgeSource& src : g.sources) {
             const std::string label = src.author.empty() ? src.title : src.title + " (" + src.author + ")";
@@ -4842,7 +4905,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
             if (!src.url.empty())
                 ImGui::TextLinkOpenURL(label.c_str(), src.url.c_str());
             else
-                ImGui::TextDisabled("%s", label.c_str());
+                loc::TextDisabled("%s", label.c_str());
         }
         ImGui::PopStyleColor();
         ImGui::PopFont();
@@ -4860,9 +4923,9 @@ void App::help_procedure(const KnowledgeProcedure& p) {
     ImGui::TextUnformatted(p.name.c_str());
     ImGui::PopFont();
     if (!p.applies_to.empty())
-        ImGui::TextDisabled("%s", p.applies_to.c_str());
+        loc::TextDisabled("%s", p.applies_to.c_str());
     for (const std::string& w : p.warnings)
-        ImGui::TextColored(rgb(kWarningColour), "%s", w.c_str());
+        loc::TextColored(rgb(kWarningColour), "%s", w.c_str());
     help_steps_done_.resize(p.steps.size(), false);
     for (std::size_t i = 0; i < p.steps.size(); ++i) {
         ImGui::PushID(int(i));
@@ -4870,19 +4933,19 @@ void App::help_procedure(const KnowledgeProcedure& p) {
         if (ImGui::Checkbox(p.steps[i].title.c_str(), &done))
             help_steps_done_[i] = done;
         ImGui::Indent();
-        ImGui::TextDisabled("%s", p.steps[i].text.c_str());
+        loc::TextDisabled("%s", p.steps[i].text.c_str());
         ImGui::Unindent();
         ImGui::PopID();
     }
     if (!p.prevention.empty()) {
         ImGui::SeparatorText(tr(T::HelpPrevention));
         for (const std::string& t : p.prevention)
-            ImGui::BulletText("%s", t.c_str());
+            loc::BulletText("%s", t.c_str());
     }
     if (!p.notes.empty()) {
         ImGui::SeparatorText(tr(T::HelpNotes));
         for (const std::string& t : p.notes)
-            ImGui::BulletText("%s", t.c_str());
+            loc::BulletText("%s", t.c_str());
     }
 }
 
@@ -4909,9 +4972,9 @@ void App::material_card() {
             return std::string("—");
         char text[64];
         if (r.min == r.max)
-            std::snprintf(text, sizeof text, "%g %s", r.min, unit);
+            std::snprintf(text, sizeof text, "%s", format("%g %s", r.min, unit).c_str());
         else
-            std::snprintf(text, sizeof text, "%g%s%g %s", r.min, tr(T::RangeTo), r.max, unit);
+            std::snprintf(text, sizeof text, "%s", format("%g%s%g %s", r.min, tr(T::RangeTo), r.max, unit).c_str());
         return std::string(text);
     };
     const std::vector<MaterialWarning> warnings = material_warnings(material_info(*m), settings_);
@@ -4927,22 +4990,22 @@ void App::material_card() {
         return;
     ImGui::PushTextWrapPos(0.0f);
     for (const MaterialWarning w : warnings)
-        ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(w, material_info(*m)).c_str());
-    ImGui::TextDisabled("%s · %s", m->family.c_str(), m->category.c_str());
-    ImGui::Text("%s: %s", tr(T::NozzleTemp), range(m->nozzle_temp, "°C").c_str());
-    ImGui::Text("%s: %s", tr(T::BedTemp), range(m->bed_temp, "°C").c_str());
+        loc::TextColored(rgb(kWarningColour), "%s", material_warning_text(w, material_info(*m)).c_str());
+    loc::TextDisabled("%s · %s", m->family.c_str(), m->category.c_str());
+    loc::Text("%s: %s", tr(T::NozzleTemp), range(m->nozzle_temp, "°C").c_str());
+    loc::Text("%s: %s", tr(T::BedTemp), range(m->bed_temp, "°C").c_str());
     if (m->base && m->base->chamber_temp)
-        ImGui::Text("%s: %g °C", tr(T::MaterialChamber), *m->base->chamber_temp);
+        loc::Text("%s: %g °C", tr(T::MaterialChamber), *m->base->chamber_temp);
     if (m->fan.known)
-        ImGui::Text("%s: %s", tr(T::MaterialFan), range(m->fan, "%").c_str());
+        loc::Text("%s: %s", tr(T::MaterialFan), range(m->fan, "%").c_str());
     if (!m->enclosure.empty())
-        ImGui::Text("%s: %s", tr(T::MaterialEnclosure), m->enclosure.c_str());
-    ImGui::Text("%s: %s", tr(T::MaterialNozzle), m->nozzle_material.c_str());
+        loc::Text("%s: %s", tr(T::MaterialEnclosure), m->enclosure.c_str());
+    loc::Text("%s: %s", tr(T::MaterialNozzle), m->nozzle_material.c_str());
     if (!m->surfaces.empty()) {
         std::string list;
         for (const std::string& s : m->surfaces)
             list += (list.empty() ? "" : ", ") + s;
-        ImGui::Text("%s: %s", tr(T::BedSurfaces), list.c_str());
+        loc::Text("%s: %s", tr(T::BedSurfaces), list.c_str());
     }
     // Direct or Bowden: the engine does not know the printer's extruder yet,
     // so both are shown.
@@ -4952,13 +5015,13 @@ void App::material_card() {
             r += format(tr(T::MaterialDirect), *m->base->retraction_direct);
         if (m->base->retraction_bowden)
             r += (r.empty() ? "" : ", ") + format(tr(T::MaterialBowden), *m->base->retraction_bowden);
-        ImGui::Text("%s: %s", tr(T::MaterialRetraction), r.c_str());
+        loc::Text("%s: %s", tr(T::MaterialRetraction), r.c_str());
     }
     if (m->drying) {
         std::string d = range(m->drying->temp, "°C");
         if (m->drying->hours_before_printing)
             d += ", " + std::to_string(*m->drying->hours_before_printing) + " h";
-        ImGui::Text("%s: %s", tr(T::MaterialDrying), d.c_str());
+        loc::Text("%s: %s", tr(T::MaterialDrying), d.c_str());
     }
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
@@ -5006,9 +5069,9 @@ void App::guide_overlay() {
         ImGui::Begin("##guide_offer", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                          ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::GuideOffer));
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::GuideOffer));
         ImGui::TextUnformatted(knowledge_->tutorials[t].name.c_str());
-        ImGui::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(knowledge_->tutorials[t].steps.size()),
+        loc::TextDisabled("%s", format(tr(T::HelpTutorialSteps), int(knowledge_->tutorials[t].steps.size()),
                                          knowledge_->tutorials[t].minutes)
                                       .c_str());
         if (ImGui::Button(tr(T::GuideAccept))) {
@@ -5091,14 +5154,14 @@ void App::guide_overlay() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
-    ImGui::TextDisabled("%s · %d / %d", tutorial.name.c_str(), guide_->step + 1, int(tutorial.steps.size()));
+    loc::TextDisabled("%s · %d / %d", tutorial.name.c_str(), guide_->step + 1, int(tutorial.steps.size()));
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-    ImGui::TextColored(rgb(theme_.accent_hover), "%s", step.title.c_str());
+    loc::TextColored(rgb(theme_.accent_hover), "%s", step.title.c_str());
     ImGui::PopFont();
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(step.text.c_str());
     if (!step.wait_for.empty())
-        ImGui::TextDisabled("%s", tr(T::GuideWaits));
+        loc::TextDisabled("%s", tr(T::GuideWaits));
     ImGui::PopTextWrapPos();
     // A step that opens something (rule 16).
     if (!step.open_type.empty() && ImGui::Button(tr(T::HelpOpen))) {
@@ -5150,9 +5213,9 @@ void App::help_apply_dialog() {
     if (help_change_) {
         const SettingChange& c = *help_change_;
         ImGui::TextUnformatted(key_label(c.key).c_str());
-        ImGui::Text("%s » %s", c.before.c_str(), c.after.c_str());
+        loc::Text("%s » %s", c.before.c_str(), c.after.c_str());
         if (c.clamped)
-            ImGui::TextColored(rgb(kWarningColour), "%s", format(tr(T::HelpLimitUsed), c.after.c_str()).c_str());
+            loc::TextColored(rgb(kWarningColour), "%s", format(tr(T::HelpLimitUsed), c.after.c_str()).c_str());
         if (ImGui::Button(tr(T::HelpApply), ImVec2(120.0f * scale_, 0))) {
             try {
                 const Settings before = settings_;
@@ -5203,7 +5266,7 @@ void App::credits_dialog() {
     if (!ImGui::BeginPopupModal(title.c_str()))
         return;
     const Credits& all = credits();
-    ImGui::TextWrapped("%s", tr(T::CreditsIntro));
+    loc::TextWrapped("%s", tr(T::CreditsIntro));
     const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     ImGui::BeginChild("##credits_body", ImVec2(0, -bottom));
     constexpr ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
@@ -5219,22 +5282,22 @@ void App::credits_dialog() {
             ImGui::PushID(&c);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", c.feature.now().c_str());
+            loc::TextWrapped("%s", c.feature.now().c_str());
             ImGui::TableNextColumn();
             // A link that wraps: a paper's title is long.
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextLink));
-            ImGui::TextWrapped("%s", c.source.c_str());
+            loc::TextWrapped("%s", c.source.c_str());
             ImGui::PopStyleColor();
             if (ImGui::IsItemHovered()) {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-                ImGui::SetTooltip("%s", c.url.c_str());
+                loc::SetTooltip("%s", c.url.c_str());
             }
             if (ImGui::IsItemClicked() && ImGui::GetPlatformIO().Platform_OpenInShellFn)
                 ImGui::GetPlatformIO().Platform_OpenInShellFn(ImGui::GetCurrentContext(), c.url.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", c.author.c_str());
+            loc::TextWrapped("%s", c.author.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", c.license.now().c_str());
+            loc::TextWrapped("%s", c.license.now().c_str());
             ImGui::PopID();
         }
         ImGui::EndTable();
@@ -5254,13 +5317,13 @@ void App::credits_dialog() {
             ImGui::TableNextColumn();
             ImGui::TextLinkOpenURL(lib.name.c_str(), lib.url.c_str());
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", lib.url.c_str());
+                loc::SetTooltip("%s", lib.url.c_str());
             ImGui::TableNextColumn();
             // A commit is long: its first twelve digits say which.
             ImGui::TextUnformatted(lib.version.size() > 24 ? (lib.version.substr(0, 12) + "…").c_str()
                                                              : lib.version.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextWrapped("%s", lib.license.c_str());
+            loc::TextWrapped("%s", lib.license.c_str());
             ImGui::TableNextColumn();
             const bool shown = credits_notice_ == int(i);
             if (ImGui::Selectable(tr(T::CreditsShowNotice), shown))
@@ -5375,7 +5438,7 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
                     hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
                 if (hidden > 0) {
                     ImGui::Spacing();
-                    ImGui::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
+                    loc::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
                                                                                         : T::MoreSettingsAdvanced),
                                                      hidden)
                                                   .c_str());
@@ -5482,7 +5545,7 @@ void App::settings_panel() {
                 if (ImGui::Selectable(item.c_str(), level == view_level_))
                     choose_level(level);
                 if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", tr(tip));
+                    loc::SetTooltip("%s", tr(tip));
                 ImGui::GetWindowDrawList()->AddCircleFilled(
                     ImVec2(row.x + 6.0f * scale_, row.y + ImGui::GetTextLineHeight() * 0.5f), 4.0f * scale_,
                     ImGui::GetColorU32(rgb(colour)));
@@ -5496,7 +5559,7 @@ void App::settings_panel() {
             ImGui::EndCombo();
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::LevelTip));
+            loc::SetTooltip("%s", tr(T::LevelTip));
         ImGui::GetWindowDrawList()->AddCircleFilled(
             ImVec2(at.x + ImGui::GetStyle().FramePadding.x + 4.0f * scale_, at.y + ImGui::GetFrameHeight() * 0.5f),
             4.0f * scale_, ImGui::GetColorU32(rgb(dot)));
@@ -5578,7 +5641,7 @@ void App::settings_panel() {
                 ImGui::TextUnformatted(tr(section->title));
                 for (const SubsectionLayout& sub : section->subsections)
                     if (card_shown(sub))
-                        ImGui::BulletText("%s", tr(sub.title));
+                        loc::BulletText("%s", tr(sub.title));
                 ImGui::EndTooltip();
             }
         }
@@ -5594,7 +5657,7 @@ void App::settings_panel() {
             continue;
         if (single_column_) {
             ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
-            ImGui::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
+            loc::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
             ImGui::PopFont();
             ImGui::Spacing();
         }
@@ -5684,7 +5747,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (!shown(key))
             return;
         label_cell(label, tr(T::ListEditTip));
-        ImGui::TextDisabled("%s", format(tr(T::ListCount), int(n)).c_str());
+        loc::TextDisabled("%s", format(tr(T::ListCount), int(n)).c_str());
     };
 
     // Print: Quality.
@@ -5797,6 +5860,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         if (shown("surfaces.top_pattern"))
             changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        if (shown("surfaces.bottom_pattern"))
+            changed |= row(T::BottomPattern, s.monotonic_bottom, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : "—",
+           0.5f);
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
@@ -5822,6 +5889,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::InfillAngle, "infill.angle", s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);
+        mm(T::MaxLink, "infill.max_link", s.infill_max_link, 0.0, 1000.0, s.infill_max_link > 0.0 ? "%.0f mm" : "—", 0.5f);
         whole(T::SolidEvery, "infill.solid_every", s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
         mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 1000.0, "%.0f mm²", 1.0f,
            tr(T::SolidBelowAreaTip));
@@ -5873,6 +5942,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         // 0: the solid infill's.
         mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
         share_row(T::SpeedOverBridges, "speed.over_bridges", s.over_bridges_speed);
+        share_row(T::SpeedSmallLoops, "speed.small_loops", s.small_loop_speed);
         mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : "—",
            0.5f);
     } else if (id == "infill_support") {
@@ -5889,6 +5959,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            s.max_detour.value <= 0.0 ? "—" : s.max_detour.percent ? "%.0f %%" : "%.1f mm", 0.1f);
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::SpeedMaxFlow, "speed.max_flow", s.speed_max_flow, 0.0, 200.0,
+           s.speed_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
         mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
            s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
         mm(T::FlowSlopeDown, "speed.flow_slope_down", s.flow_slope_down, 0.0, 1000.0,
@@ -6163,6 +6235,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
         flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
         flag(T::GcodeArcs, "gcode.arcs", s.gcode_arcs);
+        mm(T::CornerSmoothing, "gcode.corner_smoothing", s.corner_smoothing, 0.0, 0.05,
+           s.corner_smoothing > 0.0 ? "%.3f mm" : "—", 0.0005f);
         flag(T::GcodeBinary, "gcode.binary", s.gcode_binary);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
@@ -6258,6 +6332,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::TravelSlope, "travel.slope", s.travel_slope, 0.0, 89.0, "%.1f°", 0.1f);
         mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : "—", 0.01f);
         flag(T::LiftBeforeObstacle, "travel.lift_before_obstacle", s.lift_before_obstacle);
+    } else if (id == "coast") {
+        mm(T::Coast, "retraction.coast", s.coast, 0.0, 20.0, s.coast > 0.0 ? "%.2f mm" : "—", 0.01f);
     } else if (id == "material_retraction") {
         count(T::FilamentRetractionRow, "extrusion.retraction", s.filament_retraction.size());
     } else if (id == "needs") {
@@ -6286,7 +6362,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 }
             } else {
                 label_cell(T::BedWidth);
-                ImGui::TextDisabled("%zu", s.bed.size());
+                loc::TextDisabled("%zu", s.bed.size());
             }
         }
         mm(T::MaxHeight, "machine.max_height", s.max_height, 0.0, 2000.0, "%.0f mm", 0.5f);
@@ -6411,7 +6487,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 const double low = 0.1, high = 2.0;
                 ImGui::PushID("extruder_nozzle");
                 ImGui::PushID(e);
-                if (ImGui::DragScalar("##v", ImGuiDataType_Double, &v, 0.005f, &low, &high, "%.2f mm",
+                if (ImGui::DragScalar("##v", ImGuiDataType_Double, &v, 0.005f, &low, &high, field_text("##v", "%.2f mm", v),
                                       ImGuiSliderFlags_AlwaysClamp)) {
                     std::vector<double> nozzles;
                     for (int k = 1; k <= s.extruders; ++k)
@@ -6540,16 +6616,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 text->resize(31);
         }
     // The templates below the table, full width (gcode_templates.md).
-    if (id == "gcode_templates") {
+    if (id == "gcode_templates" || id == "gcode_heights") {
         const std::pair<T, std::pair<const char*, std::string*>> texts[] = {
             {T::FilamentStartGcode, {"extrusion.start_gcode", &s.filament_start_gcode}},
             {T::FilamentEndGcode, {"extrusion.end_gcode", &s.filament_end_gcode}},
             {T::ColorChangeGcode, {"gcode.color_change", &s.gcode_color_change}},
             {T::PauseGcode, {"gcode.pause", &s.gcode_pause}},
+            {T::CustomTemplateGcode, {"gcode.custom_template", &s.gcode_custom_template}},
             {T::BeforeLayerGcode, {"gcode.before_layer", &s.gcode_before_layer}},
             {T::AfterLayerGcode, {"gcode.after_layer", &s.gcode_after_layer}},
             {T::BetweenObjectsGcode, {"gcode.between_objects", &s.gcode_between_objects}}};
-        for (const auto& [label, key_text] : texts)
+        for (const auto& [label, key_text] : texts) {
+            // Each card its own: the colour change, the pause and the custom G-code by height.
+            const std::string_view key = key_text.first;
+            const bool by_height = key == "gcode.color_change" || key == "gcode.pause" || key == "gcode.custom_template";
+            if (by_height != (id == "gcode_heights"))
+                continue;
             if (shown(key_text.first)) {
                 ImGui::TextUnformatted(tr(label));
                 ImGui::PushID(key_text.first);
@@ -6557,6 +6639,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                                                      ImVec2(-9.0f * scale_, ImGui::GetTextLineHeight() * 3));
                 ImGui::PopID();
             }
+        }
     }
     // The tool change's G-code below the table, full width (multi_extruder.md, rule 5).
     if (id == "extruders" && shown("gcode.toolchange")) {
@@ -6595,38 +6678,38 @@ void App::status_bar() {
         const Vec3f size{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y, placed_.max.z - placed_.min.z};
         const std::string name = objects_.size() > 1 ? std::to_string(objects_.size()) + " " + tr(T::Models)
                                                      : utf8(model_path_.filename());
-        ImGui::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
+        loc::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
                     number_text(mesh_->triangle_count()).c_str(), tr(T::Triangles), double(size.x), double(size.y),
                     double(size.z));
     } else {
-        ImGui::TextDisabled("%s", tr(T::NoModel));
+        loc::TextDisabled("%s", tr(T::NoModel));
     }
     ImGui::SameLine(0, 30.0f * scale_);
     if (slice_job_.running()) {
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s %.1f s", tr(T::Slicing), glfwGetTime() - slice_started_);
+        loc::TextColored(rgb(theme_.accent_hover), "%s %.1f s", tr(T::Slicing), glfwGetTime() - slice_started_);
     } else if (result_ && viewer_) {
-        ImGui::TextDisabled("%s", tr(T::ViewerOnly));
+        loc::TextDisabled("%s", tr(T::ViewerOnly));
     } else if (result_ && stale_) {
-        ImGui::TextColored(rgb(0xE8A33D), "%s", tr(T::Stale));
+        loc::TextColored(rgb(0xE8A33D), "%s", tr(T::Stale));
     } else if (result_) {
         const double total = result_->slice_seconds + result_->gcode_seconds + result_->check_seconds;
-        ImGui::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
+        loc::Text("%s", format(tr(result_->staged ? T::GcodeAgainIn : T::SlicedIn), total).c_str());
         ImGui::SameLine(0, 16.0f * scale_);
         if (result_->resin)
-            ImGui::TextColored(rgb(0x3FBF7F), "%s",
+            loc::TextColored(rgb(0x3FBF7F), "%s",
                                format(tr(T::ResinSliced), int(result_->resin->layers.size()), result_->resin->volume / 1000.0,
                                       result_->resin->weight)
                                    .c_str());
         else if (result_->check.ok())
-            ImGui::TextColored(rgb(0x3FBF7F), "%s",
+            loc::TextColored(rgb(0x3FBF7F), "%s",
                                format(tr(T::GcodeOk), number_text(result_->check.stats.lines).c_str()).c_str());
         else
-            ImGui::TextColored(rgb(0xE5484D), "%s", format(tr(T::GcodeBad), int(result_->check.problem_count)).c_str());
+            loc::TextColored(rgb(0xE5484D), "%s", format(tr(T::GcodeBad), int(result_->check.problem_count)).c_str());
         // The slicing's warnings (thin details, short layers, what the
         // machine cannot give the filament), listed when hovered.
         if (!result_->warnings.empty()) {
             ImGui::SameLine(0, 16.0f * scale_);
-            ImGui::TextColored(rgb(0xE8A33D), "%s", format(tr(T::Warnings), int(result_->warnings.size())).c_str());
+            loc::TextColored(rgb(0xE8A33D), "%s", format(tr(T::Warnings), int(result_->warnings.size())).c_str());
             // A click lists them with a link to the help's problem of each (assistant.md, rule 9).
             if (ImGui::IsItemClicked())
                 ImGui::OpenPopup("##review");
@@ -6635,7 +6718,7 @@ void App::status_bar() {
                 for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i) {
                     const Warning& w = result_->warnings[i];
                     ImGui::PushID(int(i));
-                    ImGui::BulletText("%s", w.message.c_str());
+                    loc::BulletText("%s", w.message.c_str());
                     const std::string_view problem = review_problem(w.kind);
                     if (!problem.empty() && knowledge_)
                         for (std::size_t p = 0; p < knowledge_->problems.size(); ++p)
@@ -6654,15 +6737,15 @@ void App::status_bar() {
             } else if (ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
                 for (std::size_t i = 0; i < result_->warnings.size() && i < 20; ++i)
-                    ImGui::BulletText("%s", result_->warnings[i].message.c_str());
+                    loc::BulletText("%s", result_->warnings[i].message.c_str());
                 if (result_->warnings.size() > 20)
-                    ImGui::TextDisabled("…");
+                    loc::TextDisabled("…");
                 ImGui::PopTextWrapPos();
                 ImGui::EndTooltip();
             }
         }
     } else {
-        ImGui::TextDisabled("%s", tr(T::Ready));
+        loc::TextDisabled("%s", tr(T::Ready));
     }
     // The chosen material's warnings (assistant.md, rule 14).
     if (const KnowledgeMaterial* m = assistant_material_ ? current_material() : nullptr) {
@@ -6670,10 +6753,10 @@ void App::status_bar() {
         const std::vector<MaterialWarning> warnings = material_warnings(info, settings_);
         if (!warnings.empty()) {
             ImGui::SameLine(0, 16.0f * scale_);
-            ImGui::TextColored(rgb(kWarningColour), "%s", material_warning_text(warnings.front(), info).c_str());
+            loc::TextColored(rgb(kWarningColour), "%s", material_warning_text(warnings.front(), info).c_str());
             if (warnings.size() > 1 && ImGui::IsItemHovered() && ImGui::BeginTooltip()) {
                 for (const MaterialWarning w : warnings)
-                    ImGui::BulletText("%s", material_warning_text(w, info).c_str());
+                    loc::BulletText("%s", material_warning_text(w, info).c_str());
                 ImGui::EndTooltip();
             }
         }
@@ -6686,9 +6769,9 @@ void App::status_bar() {
         right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
     if (!right.empty()) {
         ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
-        ImGui::TextDisabled("%s", right.c_str());
+        loc::TextDisabled("%s", right.c_str());
         if (view_ms_ > 0.0 && ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::ViewTimeTip));
+            loc::SetTooltip("%s", tr(T::ViewTimeTip));
     }
     ImGui::End();
     ImGui::PopStyleVar();
@@ -6884,26 +6967,26 @@ void App::view_tools() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * scale_, 7.0f * scale_));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
     if (ImGui::BeginPopup("##render_menu")) {
-        ImGui::TextDisabled("%s", tr(T::Render));
+        loc::TextDisabled("%s", tr(T::Render));
         for (int m = 0; m < 3; ++m) {
             if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m))
                 render_mode_ = static_cast<RenderMode>(m);
-            ImGui::SetItemTooltip("%s", tr(mode_tips[m]));
+            loc::SetItemTooltip("%s", tr(mode_tips[m]));
         }
         if (render_mode_ != RenderMode::Fast) {
             ImGui::SetNextItemWidth(200.0f * scale_);
-            ImGui::SliderFloat(tr(T::AoStrength), &ao_strength_, 0.0f, 1.5f, "%.2f");
+            ImGui::SliderFloat(tr(T::AoStrength), &ao_strength_, 0.0f, 1.5f, field_text(tr(T::AoStrength), "%.2f", ao_strength_));
         }
         if (render_mode_ == RenderMode::RayTraced) {
             if (ray_failed_)
-                ImGui::TextColored(rgb(0xE5484D), "%s", tr(T::RayTooBig));
+                loc::TextColored(rgb(0xE5484D), "%s", tr(T::RayTooBig));
             else if (!renderer_.has_ray_scene())
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::RayPreparing));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::RayPreparing));
             else
-                ImGui::TextDisabled(tr(T::RaySamples), renderer_.ray_samples(), 256);
+                loc::TextDisabled(tr(T::RaySamples), renderer_.ray_samples(), 256);
         }
         ImGui::Separator();
-        ImGui::TextDisabled("%s", tr(T::Antialiasing));
+        loc::TextDisabled("%s", tr(T::Antialiasing));
         std::vector<int> choices = {1};
         for (int n = 2; n <= std::min(renderer_.max_samples(), 8); n *= 2)
             choices.push_back(n);
@@ -6918,7 +7001,7 @@ void App::view_tools() {
         ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
         ImGui::Checkbox(tr(T::MoireFilter), &moire_);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::MoireFilterTip));
+            loc::SetTooltip("%s", tr(T::MoireFilterTip));
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
@@ -6940,10 +7023,10 @@ void App::object_menu() {
         return;
     }
     PlateObject& o = objects_[std::size_t(selected_)];
-    ImGui::TextDisabled("%s", o.name.c_str());
+    loc::TextDisabled("%s", o.name.c_str());
     ImGui::Separator();
     if (view_level_ == ViewLevel::Basic) {
-        ImGui::TextDisabled("%s", tr(T::ObjectSettingsBasic));
+        loc::TextDisabled("%s", tr(T::ObjectSettingsBasic));
         ImGui::EndPopup();
         return;
     }
@@ -7004,7 +7087,7 @@ bool App::own_settings_editor(std::string& own, const std::string& under, bool l
     bool any = false;
     const std::vector<std::string> keys = own_keys(own);
     if (keys.empty())
-        ImGui::TextDisabled("%s", tr(T::ObjectSettingsNone));
+        loc::TextDisabled("%s", tr(T::ObjectSettingsNone));
     // Its cards, each once, in the order of its keys.
     std::vector<const SubsectionLayout*> cards;
     for (const std::string& key : keys)
@@ -7039,7 +7122,7 @@ bool App::own_settings_editor(std::string& own, const std::string& under, bool l
             any = true;
         }
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::ObjectSettingsRemove));
+            loc::SetTooltip("%s", tr(T::ObjectSettingsRemove));
         ImGui::PopID();
     }
     if (ImGui::SmallButton(tr(T::ObjectAddSetting)))
@@ -7081,7 +7164,7 @@ void App::object_settings_window() {
     const std::string title = format(tr(T::ObjectSettingsTitle), o.name.c_str()) + "###object_settings";
     if (ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", tr(T::ObjectSettingsHint));
+        loc::TextDisabled("%s", tr(T::ObjectSettingsHint));
         ImGui::PopTextWrapPos();
         ImGui::PushID("own");
         changed |= own_settings_editor(o.settings, {}, false, o.name);
@@ -7144,7 +7227,7 @@ bool App::volume_editor(PlateObject& o, std::size_t k, bool& removed) {
             ImGui::SameLine(110.0f * scale_ + float(c) * (field + 4.0f * scale_));
             ImGui::SetNextItemWidth(field);
             ImGui::PushID(c);
-            changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &values[std::size_t(c)], 0.1f, &lo, nullptr, "%.1f");
+            changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &values[std::size_t(c)], 0.1f, &lo, nullptr, field_text(id, "%.1f", values[std::size_t(c)]));
             ImGui::PopID();
         }
     };
@@ -7163,10 +7246,10 @@ bool App::range_editor(PlateObject& o, std::size_t k, bool& removed) {
     const float field = 70.0f * scale_;
     const double lo = 0.0;
     ImGui::SetNextItemWidth(field);
-    changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
+    changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, field_text(tr(T::HeightFrom), "%.2f mm", r.from));
     ImGui::SameLine();
     ImGui::SetNextItemWidth(field);
-    changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
+    changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, field_text(tr(T::HeightTo), "%.2f mm", r.to));
     ImGui::SameLine();
     if (ImGui::SmallButton(tr(T::RemoveVolume))) {
         o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
@@ -7183,7 +7266,7 @@ bool App::range_editor(PlateObject& o, std::size_t k, bool& removed) {
 // list, from the profile's values.
 void App::objects_list() {
     if (objects_.empty()) {
-        ImGui::TextDisabled("%s", tr(T::ObjectsEmpty));
+        loc::TextDisabled("%s", tr(T::ObjectsEmpty));
         return;
     }
     if (list_object_ >= int(objects_.size()))
@@ -7226,7 +7309,7 @@ void App::objects_list() {
     }
     ImGui::EndChild();
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", tr(T::ObjectsHint));
+    loc::TextDisabled("%s", tr(T::ObjectsHint));
     ImGui::PopTextWrapPos();
     if (list_object_ < 0)
         return;
@@ -7236,7 +7319,7 @@ void App::objects_list() {
         list_row_ && std::find(rows.begin(), rows.end(), *list_row_) == rows.end())
         list_row_.reset();
     ImGui::Separator();
-    ImGui::TextColored(rgb(theme_.lavender), "%s", tr(T::ObjectsPicked));
+    loc::TextColored(rgb(theme_.lavender), "%s", tr(T::ObjectsPicked));
     ImGui::BeginChild("##object_pick", ImVec2(0, 0));
     ImGui::PushID("pick");
     bool removed = false;
@@ -7368,7 +7451,7 @@ void App::plate_tools() {
     ImGui::Begin("##plate_tool", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    ImGui::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
+    loc::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
     const float field = 110.0f * scale_;
     bool changed = false;
     int mirror_axis = -1; // done after the card, as they change the plate's objects
@@ -7379,12 +7462,12 @@ void App::plate_tools() {
         ImGui::SameLine(70.0f * scale_);
         ImGui::SetNextItemWidth(field);
         const bool edited = ImGui::DragScalar((std::string("##") + label).c_str(), ImGuiDataType_Double, &v, float(speed), &lo,
-                                              &hi, fmt, ImGuiSliderFlags_AlwaysClamp);
+                                              &hi, field_text((std::string("##") + label).c_str(), fmt, v), ImGuiSliderFlags_AlwaysClamp);
         changed |= edited;
         return edited;
     };
     if (tool_ == PlateTool::Move) {
-        ImGui::TextDisabled("%s", tr(T::ToolMoveHint));
+        loc::TextDisabled("%s", tr(T::ToolMoveHint));
         number("X", o.place.x, 0.1, -10000.0, 10000.0, "%.2f mm");
         number("Y", o.place.y, 0.1, -10000.0, 10000.0, "%.2f mm");
     } else if (tool_ == PlateTool::Rotate) {
@@ -7427,7 +7510,7 @@ void App::plate_tools() {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(field);
             double lo = 0.001, hi = 100000.0;
-            changed |= ImGui::DragScalar("##mm", ImGuiDataType_Double, &mm[k], 0.1f, &lo, &hi, "%.2f mm",
+            changed |= ImGui::DragScalar("##mm", ImGuiDataType_Double, &mm[k], 0.1f, &lo, &hi, field_text("##mm", "%.2f mm", mm[k]),
                                          ImGuiSliderFlags_AlwaysClamp);
             double factor = 1.0;
             if (percent[k] != before_percent)
@@ -7456,11 +7539,11 @@ void App::plate_tools() {
         }
     } else if (tool_ == PlateTool::LayFlat) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
-        ImGui::TextDisabled("%s", tr(T::ToolLayFlatHint));
+        loc::TextDisabled("%s", tr(T::ToolLayFlatHint));
         ImGui::PopTextWrapPos();
     } else if (tool_ == PlateTool::Measure) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
-        ImGui::TextDisabled("%s", tr(T::ToolMeasureHint));
+        loc::TextDisabled("%s", tr(T::ToolMeasureHint));
         if (measure_object_ != selected_)
             measure_picks_.clear();
         // What each pick is, with a round surface's diameter or a cone's angle.
@@ -7468,13 +7551,13 @@ void App::plate_tools() {
             const MeasureFeature& f = measure_picks_[i];
             using Kind = MeasureFeature::Kind;
             if (f.kind == Kind::Circle)
-                ImGui::BulletText("%s", format(tr(f.hole ? T::MeasureHole : T::MeasureCylinder), f.diameter).c_str());
+                loc::BulletText("%s", format(tr(f.hole ? T::MeasureHole : T::MeasureCylinder), f.diameter).c_str());
             else if (f.kind == Kind::Cone)
-                ImGui::BulletText("%s", format(tr(T::MeasureCone), f.angle, std::max(f.diameter, f.diameter_end),
+                loc::BulletText("%s", format(tr(T::MeasureCone), f.angle, std::max(f.diameter, f.diameter_end),
                                                std::min(f.diameter, f.diameter_end))
                                             .c_str());
             else
-                ImGui::BulletText("%s", tr(f.kind == Kind::Plane ? T::MeasurePlane : T::MeasurePoint));
+                loc::BulletText("%s", tr(f.kind == Kind::Plane ? T::MeasurePlane : T::MeasurePoint));
         }
         // One hole or cylinder: writing the diameter it should have scales the model to it.
         if (measure_picks_.size() == 1 && measure_picks_[0].kind == MeasureFeature::Kind::Circle &&
@@ -7487,7 +7570,7 @@ void App::plate_tools() {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(field);
             const double lo = 0.001, hi = 100000.0;
-            ImGui::DragScalar("##wanted_d", ImGuiDataType_Double, &measure_wanted_, 0.05f, &lo, &hi, "Ø %.3f mm",
+            ImGui::DragScalar("##wanted_d", ImGuiDataType_Double, &measure_wanted_, 0.05f, &lo, &hi, field_text("##wanted_d", "Ø %.3f mm", measure_wanted_),
                               ImGuiSliderFlags_AlwaysClamp);
             ImGui::SameLine();
             if (ImGui::Button(tr(T::MeasureScale))) {
@@ -7502,7 +7585,7 @@ void App::plate_tools() {
         if (measure_picks_.size() == 2) {
             const Measurement m = measure(measure_picks_[0], measure_picks_[1]);
             if (m.distance) {
-                ImGui::Text("%s: %.3f mm", tr(T::MeasureDistance), *m.distance);
+                loc::Text("%s: %.3f mm", tr(T::MeasureDistance), *m.distance);
                 // Writing what it should measure scales the model evenly.
                 if (measure_wanted_ <= 0.0)
                     measure_wanted_ = *m.distance;
@@ -7511,7 +7594,7 @@ void App::plate_tools() {
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(field);
                 const double lo = 0.001, hi = 100000.0;
-                ImGui::DragScalar("##wanted", ImGuiDataType_Double, &measure_wanted_, 0.1f, &lo, &hi, "%.3f mm",
+                ImGui::DragScalar("##wanted", ImGuiDataType_Double, &measure_wanted_, 0.1f, &lo, &hi, field_text("##wanted", "%.3f mm", measure_wanted_),
                                   ImGuiSliderFlags_AlwaysClamp);
                 ImGui::SameLine();
                 if (ImGui::Button(tr(T::MeasureScale)) && *m.distance > 0.0) {
@@ -7523,7 +7606,7 @@ void App::plate_tools() {
                     changed = true;
                 }
             } else if (m.angle) {
-                ImGui::Text("%s: %.2f°", tr(T::MeasureAngle), *m.angle);
+                loc::Text("%s: %.2f°", tr(T::MeasureAngle), *m.angle);
             }
         } else if (measure_picks_.size() != 1) {
             measure_wanted_ = 0.0;
@@ -7534,7 +7617,7 @@ void App::plate_tools() {
         // objects, side by side.
         const double tall = placed_size(o)[2];
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
-        ImGui::TextDisabled("%s", tr(T::ToolCutHint));
+        loc::TextDisabled("%s", tr(T::ToolCutHint));
         ImGui::PopTextWrapPos();
         cut_height_ = std::clamp(cut_height_, 0.0, tall);
         ImGui::AlignTextToFramePadding();
@@ -7542,7 +7625,7 @@ void App::plate_tools() {
         ImGui::SameLine(70.0f * scale_);
         ImGui::SetNextItemWidth(field);
         const double lo = 0.0;
-        ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, "%.2f mm",
+        ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, field_text("##cut_z", "%.2f mm", cut_height_),
                           ImGuiSliderFlags_AlwaysClamp);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
         ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
@@ -7554,7 +7637,7 @@ void App::plate_tools() {
         if (ImGui::Button(tr(T::SplitButton)))
             split = true;
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", tr(T::SplitTip));
+            loc::SetTooltip("%s", tr(T::SplitTip));
     } else if (tool_ == PlateTool::Material) {
         // The object's extruder, one of the machine's or a mixed colour's
         // (multi_extruder.md, rule 1; color_mixing.md), and where a filament
@@ -7900,7 +7983,7 @@ void App::mixing_dialog() {
             const std::string c = mix_color({filament_color(a), filament_color(b)}, {0.5, 0.5});
             if (ImGui::ColorButton("##pair", color_of(c), 0, ImVec2(36.0f * scale_, 36.0f * scale_)))
                 add(a, b);
-            ImGui::SetItemTooltip("%d+%d", a, b);
+            loc::SetItemTooltip("%d+%d", a, b);
             ImGui::SameLine();
             ImGui::TextUnformatted((std::to_string(a) + "+" + std::to_string(b)).c_str());
             ImGui::SameLine();
@@ -7912,7 +7995,7 @@ void App::mixing_dialog() {
         ColorMix& m = mixes_[std::size_t(mix_edit_)];
         ImGui::SeparatorText(format(tr(T::VirtualExtruder), m.id).c_str());
         ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", tr(T::MixingEditorHint));
+        loc::TextDisabled("%s", tr(T::MixingEditorHint));
         ImGui::PopTextWrapPos();
         bool edited = false;
         const auto pick = [&](const char* id, int& extruder) {
@@ -7940,7 +8023,7 @@ void App::mixing_dialog() {
             }
             ImGui::SameLine();
             pick("##b", m.components[1].extruder);
-            ImGui::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
+            loc::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
                         int(std::lround(m.components[1].share * 100.0)));
         }
         bool third = m.components.size() > 2;
@@ -8011,7 +8094,7 @@ void App::paint_card(ImVec2 at) {
     ImGui::Begin("##paint_tool", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ToolPaint));
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ToolPaint));
     // Fuzzy skin and colours come with the engine's fuzzy skin and extruders.
     const struct {
         T label;
@@ -8029,7 +8112,7 @@ void App::paint_card(ImVec2 at) {
         }
         ImGui::EndDisabled();
         if (!c.ready)
-            ImGui::SetItemTooltip("%s", tr(T::PaintLater));
+            loc::SetItemTooltip("%s", tr(T::PaintLater));
     }
     ImGui::Separator();
     if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
@@ -8040,7 +8123,7 @@ void App::paint_card(ImVec2 at) {
             paint_mark_ = kPaintBlock;
     }
     ImGui::SetNextItemWidth(170.0f * scale_);
-    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, "%.1f mm", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_), ImGuiSliderFlags_Logarithmic);
     const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
     ImGui::BeginDisabled(!chosen || objects_[std::size_t(std::max(selected_, 0))].painting.empty(paint_channel_));
     if (ImGui::Button(tr(T::PaintClear))) {
@@ -8052,7 +8135,7 @@ void App::paint_card(ImVec2 at) {
     }
     ImGui::EndDisabled();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
-    ImGui::TextDisabled("%s", tr(T::PaintHint));
+    loc::TextDisabled("%s", tr(T::PaintHint));
     ImGui::PopTextWrapPos();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8159,14 +8242,18 @@ void App::help_windows() {
     const T title = tour ? kTour[std::size_t(tour_step_)].first : tip_texts().at(tip_).title;
     const T text = tour ? kTour[std::size_t(tour_step_)].second : tip_texts().at(tip_).text;
     ImGui::PushFont(nullptr, kTitleSize);
-    ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
     ImGui::PopFont();
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(tr(text));
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
     if (tour) {
-        ImGui::TextDisabled("%d / %d", tour_step_ + 1, int(kTour.size()));
+        // The welcome has no number; the steps, as their titles (UI1).
+        if (tour_step_ > 0)
+            loc::TextDisabled("%d / %d", tour_step_, int(kTour.size()) - 1);
+        else
+            ImGui::Dummy(ImVec2(0.0f, 0.0f));
         ImGui::SameLine();
         const bool last = tour_step_ + 1 == int(kTour.size());
         const float buttons = (last ? 1.0f : 2.0f) * 100.0f * scale_ + (tour_step_ > 0 ? 100.0f * scale_ : 0.0f);
@@ -8215,7 +8302,7 @@ void App::empty_hint() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav);
     ImGui::PushFont(nullptr, kTitleSize);
-    ImGui::TextColored(rgb(theme_.text_dim), "%s", text);
+    loc::TextColored(rgb(theme_.text_dim), "%s", text);
     ImGui::PopFont();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8287,7 +8374,7 @@ void App::preview_overlay(const GcodePreview& p) {
             const ImVec2 mouse = ImGui::GetIO().MousePos;
             if (!ImGui::GetIO().WantCaptureMouse && std::abs(mouse.x - a.x) < s * 0.5f && mouse.y > a.y - s * 1.7f &&
                 mouse.y < a.y + 2.0f)
-                ImGui::SetTooltip(tr(T::NozzleAt), double(m.x1), double(m.y1), double(m.z1), double(m.feed));
+                loc::SetTooltip(tr(T::NozzleAt), double(m.x1), double(m.y1), double(m.z1), double(m.feed));
         }
     }
     dl->PopClipRect();
@@ -8395,13 +8482,14 @@ void App::preview_panels() {
     {
         const std::string top_text = layer_text(top_layer_);
         ImGui::TextUnformatted(top_text.c_str());
-        // The «+» (rule 12).
-        ImGui::SameLine(text_w - ImGui::GetFrameHeight() + style.ItemSpacing.x);
+        // The «+» (rule 12), after the widest label; SameLine counts from
+        // the window's edge, not from its padding (the spec team's UI2).
+        ImGui::SameLine(style.WindowPadding.x + text_w - ImGui::GetFrameHeight() + style.ItemSpacing.x);
         if (!viewer_ && !result_->resin) {
             if (ImGui::SmallButton("+"))
                 add_change_at(top_layer_, ChangeKind::Color);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", tr(T::AddAtLayer));
+                loc::SetTooltip("%s", tr(T::AddAtLayer));
             if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
                 ImGui::OpenPopup("##add_change");
             if (ImGui::BeginPopup("##add_change")) {
@@ -8463,7 +8551,7 @@ void App::preview_panels() {
             const ImVec2 m0(cx + 6.0f * scale_, y - 3.0f * scale_), m1(cx + 14.0f * scale_, y + 3.0f * scale_);
             dl->AddRectFilled(m0, m1, ImGui::GetColorU32(rgb(colour)), 2.0f * scale_);
             if (ImGui::IsMouseHoveringRect(m0, m1)) {
-                ImGui::SetTooltip("%s", (h.color_change ? format(tr(T::ColorChangeAt), l + 1)
+                loc::SetTooltip("%s", (h.color_change ? format(tr(T::ColorChangeAt), l + 1)
                                          : h.pause      ? format(tr(T::PauseAt), l + 1) + (h.gcode.empty() ? "" : "\n" + h.gcode)
                                                         : format(tr(T::GcodeAt), l + 1) + "\n" + h.gcode)
                                             .c_str());
@@ -8494,7 +8582,7 @@ void App::preview_panels() {
             dl->AddCircle(ImVec2(cx, y), grab, ImGui::GetColorU32(rgb(0xFFFFFF)), 20, 1.5f * scale_);
         }
     }
-    ImGui::TextDisabled("%s", layer_text(shown_lo).c_str());
+    loc::TextDisabled("%s", layer_text(shown_lo).c_str());
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
@@ -8522,7 +8610,7 @@ void App::preview_panels() {
             ImGui::SetNextItemWidth(w);
             ImGui::SliderInt("##move_cut", &move_cut_, 1, int(top.count), "");
             ImGui::SameLine();
-            ImGui::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
+            loc::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
             ImGui::End();
             ImGui::PopStyleColor();
             ImGui::PopStyleVar();
@@ -8548,12 +8636,12 @@ void App::preview_panels() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     const PreviewLayer& layer = p.layers[std::size_t(top_layer_)];
-    ImGui::Text(tr(T::LayerOf), top_layer_ + 1, layers, layer.z);
+    loc::Text(tr(T::LayerOf), top_layer_ + 1, layers, layer.z);
     if (calibration_ && !viewer_)
         for (const CalibrationSegment& seg : calibration_->segments)
             if (layer.z > seg.z0 + 1e-6 && layer.z <= seg.z1 + 1e-6) {
                 const std::string value = format("%g %s", seg.value, calibration_->unit == "C" ? "°C" : calibration_->unit.c_str());
-                ImGui::TextColored(rgb(theme_.accent_hover), tr(T::SegmentAt), value.c_str());
+                loc::TextColored(rgb(theme_.accent_hover), tr(T::SegmentAt), value.c_str());
             }
     ImGui::Checkbox(tr(T::OnlyThisLayer), &only_layer_);
     ImGui::Separator();
@@ -8573,7 +8661,7 @@ void App::preview_panels() {
     const float swatch = ImGui::GetTextLineHeight();
     if (preview_view_ == PreviewView::Kind && !p.typed) {
         // A G-code without the kinds' comments (rule 13, PV10).
-        ImGui::TextDisabled("%s", tr(T::NoTypes));
+        loc::TextDisabled("%s", tr(T::NoTypes));
     } else if (preview_view_ == PreviewView::Kind) {
         // Each kind: its colour, its time and share of the moves' time, and
         // its filament (rule 2).
@@ -8602,7 +8690,7 @@ void App::preview_panels() {
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
                 if (all > 0.0)
-                    ImGui::TextDisabled("%s", format_duration(p.kind_seconds[k]).c_str());
+                    loc::TextDisabled("%s", format_duration(p.kind_seconds[k]).c_str());
                 ImGui::TableNextColumn();
                 if (all > 0.0) {
                     const double share = p.kind_seconds[k] / all;
@@ -8615,12 +8703,12 @@ void App::preview_panels() {
                     ImGui::Dummy(ImVec2(bar, 1));
                     ImGui::SameLine();
                     ImGui::AlignTextToFramePadding();
-                    ImGui::TextDisabled("%.1f %%", 100.0 * share);
+                    loc::TextDisabled("%.1f %%", 100.0 * share);
                 }
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
                 if (p.kind_filament[k] > 0.0)
-                    ImGui::TextDisabled("%.2f m · %.2f g", p.kind_filament[k] / 1000.0,
+                    loc::TextDisabled("%.2f m · %.2f g", p.kind_filament[k] / 1000.0,
                                         p.kind_filament[k] * area / 1000.0 * density);
                 ImGui::PopID();
             }
@@ -8695,7 +8783,7 @@ void App::preview_panels() {
             dl->AddRectFilled(at, ImVec2(at.x + size, at.y + size), value ? on : off, 5.0f * scale_);
             draw(dl, at, size);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", tr(tip));
+                loc::SetTooltip("%s", tr(tip));
         };
         icon_toggle("##travels", show_travels_, T::IconTravels, [&](ImDrawList* dl, ImVec2 a, float s) {
             dl->AddLine(ImVec2(a.x + s * 0.2f, a.y + s * 0.7f), ImVec2(a.x + s * 0.8f, a.y + s * 0.3f),
@@ -8732,7 +8820,7 @@ void App::preview_panels() {
         auto line = [](const char* name, const std::string& value) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextDisabled("%s", name);
+            loc::TextDisabled("%s", name);
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(value.c_str());
         };
@@ -8776,20 +8864,20 @@ void App::analysis_panel() {
     ImGui::TextUnformatted(tr(T::AnalysisTitle));
     ImGui::PopFont();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f * scale_);
-    ImGui::TextDisabled("%s", tr(T::AnalysisHint));
+    loc::TextDisabled("%s", tr(T::AnalysisHint));
     ImGui::Separator();
     if (!mesh_) {
         ImGui::TextUnformatted(tr(T::AnalysisNeedsModel));
     } else if (voxel_job_.running() || !voxels_) {
-        ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
     } else if (!voxels_->ok) {
-        ImGui::TextColored(rgb(0xE5484D), "%s", voxels_->error.c_str());
+        loc::TextColored(rgb(0xE5484D), "%s", voxels_->error.c_str());
     } else {
         const auto card = [&](const char* id, T title, const VoxelCount& c) {
             ImGui::PushID(id);
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
             if (!c.ok) {
-                ImGui::TextColored(rgb(0xE5484D), "%s", c.error.c_str());
+                loc::TextColored(rgb(0xE5484D), "%s", c.error.c_str());
                 ImGui::PopID();
                 return;
             }
@@ -8797,23 +8885,23 @@ void App::analysis_panel() {
             ImGui::PushFont(nullptr, kTitleSize * 1.25f);
             ImGui::TextUnformatted(number_text(counted ? c.printed_voxels : c.grid_voxels).c_str());
             ImGui::PopFont();
-            ImGui::TextDisabled("%s", tr(counted ? T::Voxels : T::GridVoxels));
+            loc::TextDisabled("%s", tr(counted ? T::Voxels : T::GridVoxels));
             if (counted && ImGui::BeginTable("##card", 2)) {
                 auto line = [](const char* name, const std::string& value) {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("%s", name);
+                    loc::TextDisabled("%s", name);
                     ImGui::TableNextColumn();
                     ImGui::TextUnformatted(value.c_str());
                 };
                 line(tr(T::GridVoxels), number_text(c.grid_voxels));
-                line(tr(T::VoxelSize), format("%.3f mm  ·  %d / %s", c.voxel, c.rows_per_layer, tr(T::Layer)));
+                line(tr(T::VoxelSize), format("%.3f mm  ·  %s", c.voxel, format(tr(T::PerLayer), c.rows_per_layer).c_str()));
                 line(tr(T::Memory), format("%.0f MB", c.memory_mb));
                 line(tr(T::ApproxTime), format_duration(c.seconds));
                 ImGui::EndTable();
             }
             if (c.over_limit)
-                ImGui::TextColored(rgb(0xE8A33D), "%s", format(tr(T::OverLimit), number_text(c.limit).c_str()).c_str());
+                loc::TextColored(rgb(0xE8A33D), "%s", format(tr(T::OverLimit), number_text(c.limit).c_str()).c_str());
             ImGui::PopID();
         };
         card("normal", T::QualityNormal, voxels_->normal);
@@ -8821,7 +8909,8 @@ void App::analysis_panel() {
         card("high", T::QualityHigh, voxels_->high);
     }
     ImGui::Separator();
-    ImGui::TextDisabled("%s", tr(T::AnalysisCli));
+    loc::TextDisabled("%s", tr(T::AnalysisCli));
+    ImGui::TextDisabled("tisma-engine analyze");
     ImGui::PopTextWrapPos();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8847,20 +8936,20 @@ void App::calibration_panel() {
     ImGui::TextUnformatted(tr(T::CalibrationTitle));
     ImGui::PopFont();
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", tr(T::CalibrationHint));
+    loc::TextDisabled("%s", tr(T::CalibrationHint));
     const float field = 110.0f * scale_;
     const auto number = [&](T label, double& v, double lo, double hi, const char* fmt, float speed) {
         ImGui::SetNextItemWidth(field);
         ImGui::PushID(&v);
-        ImGui::DragScalar(tr(label), ImGuiDataType_Double, &v, speed, &lo, &hi, fmt, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragScalar(tr(label), ImGuiDataType_Double, &v, speed, &lo, &hi, field_text(tr(label), fmt, v), ImGuiSliderFlags_AlwaysClamp);
         ImGui::PopID();
     };
     const auto unit_text = [](const CalibrationPrint& c, double v) {
         char text[32];
         if (c.unit.empty())
-            std::snprintf(text, sizeof text, "%g", v);
+            std::snprintf(text, sizeof text, "%s", format("%g", v).c_str());
         else
-            std::snprintf(text, sizeof text, "%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str());
+            std::snprintf(text, sizeof text, "%s", format("%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str()).c_str());
         return std::string(text);
     };
 
@@ -8891,8 +8980,8 @@ void App::calibration_panel() {
         const float row_right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
         ImGui::BeginGroup();
         ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - create_w - 8.0f * scale_);
-        ImGui::TextColored(rgb(active ? theme_.accent_hover : theme_.text), "%s", tr(title));
-        ImGui::TextDisabled("%s", tr(what));
+        loc::TextColored(rgb(active ? theme_.accent_hover : theme_.text), "%s", tr(title));
+        loc::TextDisabled("%s", tr(what));
         ImGui::PopTextWrapPos();
         ImGui::EndGroup();
         ImGui::SameLine(row_right - create_w);
@@ -8934,18 +9023,18 @@ void App::calibration_panel() {
         if (active) {
             const CalibrationPrint& c = *calibration_;
             // 1: created and sliced.
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepCreated));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepCreated));
             ImGui::SameLine();
             if (slice_job_.running())
-                ImGui::TextDisabled("%s", tr(T::Slicing));
+                loc::TextDisabled("%s", tr(T::Slicing));
             else if (result_ && !stale_ && !viewer_) {
                 const std::string time = result_->preview.estimated_seconds >= 0.0
                                              ? format_duration(result_->preview.estimated_seconds)
                                              : std::string("-");
                 if (is_tower(card.kind))
-                    ImGui::TextDisabled(tr(T::TowerReady), int(c.segments.size()), time.c_str());
+                    loc::TextDisabled(tr(T::TowerReady), int(c.segments.size()), time.c_str());
                 else
-                    ImGui::TextDisabled(tr(T::PartReady), time.c_str());
+                    loc::TextDisabled(tr(T::PartReady), time.c_str());
             }
             const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
             if (button("##export_calibration", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false,
@@ -8953,11 +9042,11 @@ void App::calibration_panel() {
                        button_h))
                 begin_export();
             // 2: print and look.
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepPrint));
-            ImGui::TextDisabled("%s", tr(card.hint));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepPrint));
+            loc::TextDisabled("%s", tr(card.hint));
             if (card.kind == CalibrationKind::Dimensions) {
                 // 3: measure.
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
                 number(T::MeasuredX, measured_.x, 1.0, 1000.0, "%.3f mm", 0.005f);
                 number(T::MeasuredY, measured_.y, 1.0, 1000.0, "%.3f mm", 0.005f);
                 number(T::MeasuredZ, measured_.z, 1.0, 1000.0, "%.3f mm", 0.005f);
@@ -8967,17 +9056,17 @@ void App::calibration_panel() {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("%s", tr(T::Current));
+                    loc::TextDisabled("%s", tr(T::Current));
                     ImGui::TableNextColumn();
-                    ImGui::TextDisabled("%s", tr(T::New));
+                    loc::TextDisabled("%s", tr(T::New));
                     const auto line = [](const char* name, double now, double then, const char* fmt) {
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted(name);
                         ImGui::TableNextColumn();
-                        ImGui::Text(fmt, now);
+                        loc::Text(fmt, now);
                         ImGui::TableNextColumn();
-                        ImGui::Text(fmt, then);
+                        loc::Text(fmt, then);
                     };
                     line("X", settings_.scale_x, next.scale_x, "%.3f %%");
                     line("Y", settings_.scale_y, next.scale_y, "%.3f %%");
@@ -9003,11 +9092,11 @@ void App::calibration_panel() {
                 }
             } else if (card.kind == CalibrationKind::ElephantFoot) {
                 // 3: measure the bottom against the body.
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
                 number(T::MeasuredBottom, elephant_bottom_, 1.0, 1000.0, "%.3f mm", 0.005f);
                 number(T::MeasuredBody, elephant_body_, 1.0, 1000.0, "%.3f mm", 0.005f);
                 const double next = elephant_foot_from(elephant_bottom_, elephant_body_, settings_);
-                ImGui::Text("%s: %.3f mm (%s) · %.3f mm (%s)", tr(T::FirstLayerShrink), settings_.first_layer_shrink,
+                loc::Text("%s: %.3f mm (%s) · %.3f mm (%s)", tr(T::FirstLayerShrink), settings_.first_layer_shrink,
                             tr(T::Current), next, tr(T::New));
                 if (button("##apply_shrink", nullptr, tr(T::ApplyShrink), true, false, true, nullptr, button_h)) {
                     settings_.first_layer_shrink = next;
@@ -9018,13 +9107,13 @@ void App::calibration_panel() {
                 }
             } else if (card.kind == CalibrationKind::ResinMeasure) {
                 // 3: measure the block; the scale corrections follow (resin.md, rule 19).
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepMeasure));
                 number(T::MeasuredX, resin_measured_[0], 1.0, 1000.0, "%.3f mm", 0.005f);
                 number(T::MeasuredY, resin_measured_[1], 1.0, 1000.0, "%.3f mm", 0.005f);
                 number(T::MeasuredZ, resin_measured_[2], 1.0, 1000.0, "%.3f mm", 0.005f);
                 const std::array<double, 3> next =
                     resin_scale_from(settings_, resin_measured_[0], resin_measured_[1], resin_measured_[2]);
-                ImGui::Text("%s: %.4f · %.4f · %.4f", tr(T::New), next[0], next[1], next[2]);
+                loc::Text("%s: %.4f · %.4f · %.4f", tr(T::New), next[0], next[1], next[2]);
                 if (button("##apply_scale", nullptr, tr(T::ApplyCompensation), true, false, true, nullptr, button_h)) {
                     settings_.resin_scale_x = std::clamp(next[0], 0.5, 2.0);
                     settings_.resin_scale_y = std::clamp(next[1], 0.5, 2.0);
@@ -9037,22 +9126,22 @@ void App::calibration_panel() {
                 }
             } else if (card.kind == CalibrationKind::FirstLayer) {
                 // 3: what each look means; the height is set on the printer.
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepJudge));
                 ImGui::TextUnformatted(tr(T::FirstLayerJudge));
             } else if (card.kind == CalibrationKind::Fit) {
                 // 3: the least clearance that comes free, for the user's designs.
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChooseFit));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChooseFit));
                 chips(c);
                 if (chosen_value_)
-                    ImGui::TextColored(rgb(theme_.accent_hover), tr(T::FitAdvice), unit_text(c, *chosen_value_).c_str());
+                    loc::TextColored(rgb(theme_.accent_hover), tr(T::FitAdvice), unit_text(c, *chosen_value_).c_str());
             } else {
                 // 3: pick the best segment and use its value.
-                ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChoose));
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StepChoose));
                 chips(c);
                 if (chosen_value_) {
                     const std::string value = unit_text(c, *chosen_value_);
                     if (card.kind == CalibrationKind::Speed)
-                        ImGui::TextDisabled(tr(T::VolumetricFlow), value.c_str(),
+                        loc::TextDisabled(tr(T::VolumetricFlow), value.c_str(),
                                             volumetric_flow(settings_, *chosen_value_));
                     if (button("##use", nullptr, format(tr(T::UseValue), value.c_str()).c_str(), true, false, true,
                                nullptr, button_h)) {
@@ -9109,19 +9198,19 @@ void App::calibration_panel() {
         }
         if (extruder_open_) {
             const bool klipper = settings_.flavor == GcodeFlavor::Klipper;
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep1));
             if (button("##export_test", "tisma_save", tr(T::ExportTest), false, false, true, nullptr, button_h)) {
                 purpose_ = Purpose::SaveExtruderTest;
                 browser_.open(FileBrowser::Mode::Save, tr(T::ExportTest), {".gcode"}, last_folder_,
                               "tisma_extruder_steps.gcode");
             }
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep2));
             number(klipper ? T::CurrentRotation : T::CurrentSteps, extruder_current_, 0.1, 10000.0, "%.3f", 0.01f);
             number(T::Remaining, extruder_left_, 0.0, 120.0, "%.1f mm", 0.05f);
             const double extruded = 120.0 - extruder_left_;
             const double value = extruder_steps_from(settings_.flavor, extruder_current_, 100.0, extruded);
-            ImGui::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
-            ImGui::Text(tr(T::ExtruderResult), extruded, value);
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ExtruderStep3));
+            loc::Text(tr(T::ExtruderResult), extruded, value);
             std::string text = extruder_steps_text(settings_.flavor, value);
             const float two_lines =
                 ImGui::GetTextLineHeight() * 2.0f + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f * scale_;
@@ -9130,13 +9219,13 @@ void App::calibration_panel() {
                 ImGui::SetClipboardText(text.c_str());
                 notify(tr(T::Copied));
             }
-            ImGui::TextDisabled("%s", tr(T::ExtruderWhere));
+            loc::TextDisabled("%s", tr(T::ExtruderWhere));
         }
         ImGui::PopID();
     }
     ImGui::Separator();
     if (ImGui::CollapsingHeader(tr(T::MoreCalibrations)))
-        ImGui::TextDisabled("%s", tr(T::MoreCalibrationsList));
+        loc::TextDisabled("%s", tr(T::MoreCalibrationsList));
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
     ImGui::End();
@@ -9188,7 +9277,7 @@ void App::toasts() {
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                          ImGuiWindowFlags_NoNav | (it->undo ? 0 : ImGuiWindowFlags_NoInputs));
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(ImVec4(1, 1, 1, 1), "%s", it->text.c_str());
+        loc::TextColored(ImVec4(1, 1, 1, 1), "%s", it->text.c_str());
         if (it->undo) {
             ImGui::SameLine();
             if (ImGui::SmallButton(tr(T::Undo))) {
@@ -9303,9 +9392,9 @@ void App::dialogs() {
             bool builtin = false;
             const bool exists = find_profile(kind, name, &builtin) != nullptr;
             if (exists && builtin)
-                ImGui::TextColored(rgb(0xE5484D), "%s", tr(T::ProfileIsBuiltin));
+                loc::TextColored(rgb(0xE5484D), "%s", tr(T::ProfileIsBuiltin));
             else if (exists)
-                ImGui::TextDisabled("%s", tr(T::ProfileReplaces));
+                loc::TextDisabled("%s", tr(T::ProfileReplaces));
             const bool ok = !name.empty() && !(exists && builtin);
             ImGui::BeginDisabled(!ok);
             if (ImGui::Button(tr(T::SaveButton), ImVec2(120.0f * scale_, 0)) || (enter && ok)) {
@@ -9334,8 +9423,8 @@ void App::dialogs() {
     if (ImGui::BeginPopupModal(
             (std::string(tr(change_kind_ == ChangeKind::Pause ? T::AddPause : T::AddCustomGcode)) + "###layer_change").c_str(),
             nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text(tr(T::ChangeAtLayer), change_layer_ + 1);
-        ImGui::TextDisabled("%s", tr(change_kind_ == ChangeKind::Pause ? T::PauseMessage : T::CustomGcodeText));
+        loc::Text(tr(T::ChangeAtLayer), change_layer_ + 1);
+        loc::TextDisabled("%s", tr(change_kind_ == ChangeKind::Pause ? T::PauseMessage : T::CustomGcodeText));
         if (ImGui::IsWindowAppearing())
             ImGui::SetKeyboardFocusHere();
         if (change_kind_ == ChangeKind::Pause)
@@ -9366,10 +9455,10 @@ void App::dialogs() {
         ImGui::PushFont(nullptr, kTitleSize);
         ImGui::TextUnformatted("TISMA");
         ImGui::PopFont();
-        ImGui::Text(tr(T::AboutText), TISMA_VERSION);
+        loc::Text(tr(T::AboutText), TISMA_VERSION);
         ImGui::EndGroup();
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 480.0f * scale_);
-        ImGui::TextDisabled("%s", tr(T::AboutLibraries));
+        loc::TextDisabled("%s", tr(T::AboutLibraries));
         ImGui::PopTextWrapPos();
         if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
             ImGui::CloseCurrentPopup();
@@ -9797,7 +9886,7 @@ void App::device_panel() {
     ImGui::TextUnformatted(tr(T::DeviceTitle));
     ImGui::PopFont();
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("%s", tr(T::DeviceHint));
+    loc::TextDisabled("%s", tr(T::DeviceHint));
     const float button_h = 30.0f * scale_;
     const float field = 150.0f * scale_;
 
@@ -9832,7 +9921,7 @@ void App::device_panel() {
         }
     }
     if (device_ports_.empty())
-        ImGui::TextDisabled("%s", tr(T::DeviceNoPorts));
+        loc::TextDisabled("%s", tr(T::DeviceNoPorts));
     ImGui::EndDisabled();
     if (!connected) {
         if (button("##connect", "tisma_printer", tr(T::DeviceConnect), true, false, true, nullptr, button_h))
@@ -9856,21 +9945,21 @@ void App::device_panel() {
                                                     ImGui::GetColorU32(rgb(state_colour)));
         ImGui::Dummy(ImVec2(r * 2.0f, ImGui::GetTextLineHeight()));
         ImGui::SameLine(0, 6.0f * scale_);
-        ImGui::TextColored(rgb(state_colour), "%s", tr(state_text[int(s.state)]));
+        loc::TextColored(rgb(state_colour), "%s", tr(state_text[int(s.state)]));
     }
     if (!s.firmware.empty()) {
         ImGui::SameLine();
-        ImGui::TextDisabled(tr(T::DeviceFirmware), s.firmware.c_str());
+        loc::TextDisabled(tr(T::DeviceFirmware), s.firmware.c_str());
     }
     if (!s.error.empty())
-        ImGui::TextColored(rgb(0xE5484D), "%s", s.error.c_str());
+        loc::TextColored(rgb(0xE5484D), "%s", s.error.c_str());
     if (connected) {
         const auto heater = [&](T label, const device::Temperature& t, double& target, bool nozzle) {
             ImGui::PushID(nozzle ? "nozzle" : "bed");
-            ImGui::Text("%s  %.1f / %.0f °C", tr(label), t.actual, t.target);
+            loc::Text("%s  %.1f / %.0f °C", tr(label), t.actual, t.target);
             ImGui::SetNextItemWidth(field * 0.7f);
             double lo = 0.0, hi = nozzle ? 400.0 : 150.0;
-            ImGui::DragScalar("##target", ImGuiDataType_Double, &target, 1.0f, &lo, &hi, "%.0f °C",
+            ImGui::DragScalar("##target", ImGuiDataType_Double, &target, 1.0f, &lo, &hi, field_text("##target", "%.0f °C", target),
                               ImGuiSliderFlags_AlwaysClamp);
             ImGui::SameLine();
             if (ImGui::SmallButton(tr(T::DeviceSet)))
@@ -9891,16 +9980,16 @@ void App::device_panel() {
         ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
         ImGui::ProgressBar(float(s.progress), ImVec2(-FLT_MIN, 0.0f));
         ImGui::PopStyleColor();
-        ImGui::Text(tr(T::DeviceProgress), s.job.c_str(), s.progress * 100.0, number_text(s.lines_sent).c_str(),
+        loc::Text(tr(T::DeviceProgress), s.job.c_str(), s.progress * 100.0, number_text(s.lines_sent).c_str(),
                     number_text(s.lines_total).c_str());
         const double total = result_ && result_->preview.estimated_seconds > 0.0 ? result_->preview.estimated_seconds
                              : s.progress > 0.01                                ? s.elapsed / s.progress
                                                                                 : 0.0;
         if (busy)
-            ImGui::TextDisabled(tr(T::DeviceTimes), format_duration(s.elapsed).c_str(),
+            loc::TextDisabled(tr(T::DeviceTimes), format_duration(s.elapsed).c_str(),
                                 format_duration(std::max(0.0, total * (1.0 - s.progress))).c_str());
         if (s.resends > 0)
-            ImGui::TextDisabled(tr(T::DeviceResends), s.resends);
+            loc::TextDisabled(tr(T::DeviceResends), s.resends);
     }
     if (busy) {
         if (s.state == State::Paused) {
@@ -9916,12 +10005,12 @@ void App::device_panel() {
         const std::string what = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
                                  : model_path_.empty()          ? std::string("G-code")
                                                                 : utf8(model_path_.filename());
-        ImGui::TextDisabled(tr(T::DevicePrintWhat), what.c_str());
+        loc::TextDisabled(tr(T::DevicePrintWhat), what.c_str());
         if (button("##print", "tisma_print", tr(T::DevicePrint), true, false, s.state == State::Idle, nullptr,
                    button_h))
             device_print();
     } else {
-        ImGui::TextDisabled("%s", tr(T::DeviceNothingToPrint));
+        loc::TextDisabled("%s", tr(T::DeviceNothingToPrint));
     }
 
     // 4: moving and extruding, when idle.
@@ -9931,7 +10020,7 @@ void App::device_panel() {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(field * 0.6f);
         double lo = 0.1, hi = 100.0;
-        ImGui::DragScalar(tr(T::DeviceStep), ImGuiDataType_Double, &device_step_, 0.1f, &lo, &hi, "%.1f mm",
+        ImGui::DragScalar(tr(T::DeviceStep), ImGuiDataType_Double, &device_step_, 0.1f, &lo, &hi, field_text(tr(T::DeviceStep), "%.1f mm", device_step_),
                           ImGuiSliderFlags_AlwaysClamp);
         for (const char axis : {'X', 'Y', 'Z'}) {
             ImGui::PushID(axis);
@@ -9953,7 +10042,7 @@ void App::device_panel() {
             printer_->extrude(-5.0, 20.0);
         ImGui::SetNextItemWidth(field * 0.6f);
         double flo = 0.0, fhi = 100.0;
-        ImGui::DragScalar("##fan", ImGuiDataType_Double, &device_fan_, 1.0f, &flo, &fhi, "%.0f %%",
+        ImGui::DragScalar("##fan", ImGuiDataType_Double, &device_fan_, 1.0f, &flo, &fhi, field_text("##fan", "%.0f %%", device_fan_),
                           ImGuiSliderFlags_AlwaysClamp);
         ImGui::SameLine();
         if (ImGui::SmallButton(tr(T::DeviceFan)))
@@ -9963,7 +10052,7 @@ void App::device_panel() {
     // 5: what happened.
     if (!device_log_.empty() && ImGui::CollapsingHeader(tr(T::DeviceLog))) {
         for (auto it = device_log_.rbegin(); it != device_log_.rend() && it - device_log_.rbegin() < 30; ++it)
-            ImGui::TextDisabled("%s", it->c_str());
+            loc::TextDisabled("%s", it->c_str());
     }
     ImGui::PopTextWrapPos();
     ImGui::EndChild();

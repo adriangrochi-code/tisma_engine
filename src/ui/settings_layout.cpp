@@ -71,6 +71,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.top_min_thickness", B},
             {"surfaces.bottom_min_thickness", B},
             {"surfaces.top_pattern", B},
+            {"surfaces.bottom_pattern", A},
+            {"surfaces.bridge_angle", A},
             {"surfaces.interface_shells", A}}},
           {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}}},
           {"infill_more", T::SubInfillMore,
@@ -79,7 +81,9 @@ const std::vector<SectionLayout>& print_layout() {
             {"infill.solid_below_area", A},
             {"infill.dense_under_top", N},
             {"infill.dense_density", N},
-            {"infill.stress_density", A}}},
+            {"infill.stress_density", A},
+            {"infill.before_walls", A},
+            {"infill.max_link", A}}},
           {"combine", T::SubCombine,
            {{"infill.combine_layers", A}, {"infill.combine_auto", A}, {"infill.combine_max_height", A}}},
           {"wavy", T::SubWavy,
@@ -99,11 +103,12 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.top_solid_infill", N},
             {"speed.bridges", N},
             {"speed.over_bridges", A},
+            {"speed.small_loops", A},
             {"speed.gap_fill", A}}},
           {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}, {"speed.support_interface", A}}},
           {"travel", T::SubTravelSpeed,
            {{"speed.travel", N}, {"speed.travel_z", A}, {"travel.avoid_crossing_walls", N}, {"travel.max_detour", A}}},
-          {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
+          {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.max_flow", A}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
           {"overhang_speeds", T::SubOverhangSpeeds,
            {{"speed.dynamic_overhangs", N},
             {"speed.overhang_0", A},
@@ -246,17 +251,17 @@ const std::vector<SectionLayout>& print_layout() {
           {"fuzzy", T::SubFuzzy, {{"fuzzy.mode", N}, {"fuzzy.thickness", N}, {"fuzzy.point_distance", N}}},
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
-            {"gcode.arcs", A}, {"gcode.binary", A}}},
+            {"gcode.arcs", A}, {"gcode.binary", A}, {"gcode.corner_smoothing", A}}},
           {"output_file", T::SubOutputFile, {{"output.filename_format", A}, {"output.post_process", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
            {{"gcode.auto_temperatures", A},
             {"extrusion.start_gcode", A},
             {"extrusion.end_gcode", A},
-            {"gcode.color_change", A},
-            {"gcode.pause", A},
             {"gcode.before_layer", A},
             {"gcode.after_layer", A},
             {"gcode.between_objects", A}}},
+          {"gcode_heights", T::SubGcodeHeights,
+           {{"gcode.color_change", A}, {"gcode.pause", A}, {"gcode.custom_template", A}}},
           {"slicing", T::SubSlicing,
            {{"slicing.fill_mode", A}, {"slicing.gap_closing_radius", A}, {"slicing.simplify_tolerance", A}}}}},
     };
@@ -314,6 +319,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"travel.slope", A},
             {"travel.max_lift", A},
             {"travel.lift_before_obstacle", A}}},
+          {"coast", T::SubCoast, {{"retraction.coast", A}}},
           {"material_retraction", T::SubMaterialRetraction, {{"extrusion.retraction", A}}},
           {"mmu_load", T::SubMmuLoad,
            {{"extrusion.loading_speed", A},
@@ -469,9 +475,7 @@ std::string number(double v, int decimals = 2) {
 }
 
 std::string format(T id, auto... args) {
-    char text[256];
-    std::snprintf(text, sizeof text, tr(id), args...);
-    return text;
+    return ui::format(tr(id), args...); // the language's decimal point
 }
 
 const char* seam_title(SeamMode mode) {
@@ -607,7 +611,7 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "walls")
         return s.wall_count == 0 ? tr(T::SumNoWalls) : s.wall_count == 1 ? tr(T::SumOneWall) : format(T::SumWalls, s.wall_count);
     if (id == "walls_thin")
-        return format(T::SumWallsThin, s.wall_spread_count);
+        return s.wall_spread_count == 1 ? tr(T::SumWallsThinOne) : format(T::SumWallsThin, s.wall_spread_count);
     if (id == "walls_more")
         return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
@@ -671,6 +675,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "skirt")
         return s.skirt_loops > 0 ? format(T::SumSkirt, s.skirt_loops, number(s.skirt_distance).c_str()) : tr(T::SumNoSkirt);
     if (id == "gcode_templates")
+        return s.auto_temperatures ? tr(T::AutoTemperatures) : tr(T::SumOff);
+    if (id == "gcode_heights")
         return s.gcode_color_change.substr(0, s.gcode_color_change.find('\n')) + " / " +
                s.gcode_pause.substr(0, s.gcode_pause.find('\n'));
     if (id == "raft")
@@ -744,6 +750,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumNoRetract);
     if (id == "retract_travel")
         return s.retract_lift > 0.0 ? format(T::SumHop, number(s.retract_lift).c_str()) : tr(T::SumNoHop);
+    if (id == "coast")
+        return s.coast > 0.0 ? number(s.coast) + " mm" : tr(T::SumOff);
     if (id == "material_retraction")
         return s.filament_retraction.empty() ? tr(T::SumPrinterValues)
                                              : format(T::SumMaterialValues, int(s.filament_retraction.size()));
