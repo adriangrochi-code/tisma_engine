@@ -1010,6 +1010,9 @@
     X(DetectOverhangs, "Paredes en voladizo", "Overhang walls") \
     X(MinLineWidth, "Cordón más fino", "Thinnest bead") \
     X(SeamGap, "Hueco en la costura", "Seam gap") \
+    X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
+    X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
+    X(InfillWidth, "Ancho del relleno", "Infill width") \
     X(MinDetail, "Detalle más chico", "Smallest detail") \
     X(ScarfTip, "La pared empieza en una rampa desde la capa de abajo y termina pasando sobre ella: casi no deja costura. Ver walls_extra.md.", "The wall starts on a ramp up from the layer below and ends over it: the seam hardly shows. See walls_extra.md.") \
     X(ScaleXRow, "Escala en X", "Scale in X") \

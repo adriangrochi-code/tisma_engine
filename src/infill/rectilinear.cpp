@@ -233,12 +233,13 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const Polygons solid = surfaces.top_under.empty()
                                ? surfaces.bottom
                                : Clipper2Lib::Union(surfaces.bottom, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+    const double top = params.top_width > 0.0 ? params.top_width : params.width;
+    const double inner = params.solid_width > 0.0 ? params.solid_width : params.width;
     if (params.monotonic_top)
-        out.top = rectilinear_fill(surface, params.width, angle, params.width, false, true, true,
-                                   params.wall_overlap * params.width);
+        out.top = rectilinear_fill(surface, top, angle, top, false, true, true, params.wall_overlap * top);
     else
-        out.top = rectilinear_fill(surface, params.width, angle, params.width, true, true);
-    out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
+        out.top = rectilinear_fill(surface, top, angle, top, true, true);
+    out.solid = rectilinear_fill(solid, inner, angle, inner, true, true);
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;
         lines.insert(lines.end(), out.solid.begin(), out.solid.end());

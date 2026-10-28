@@ -1860,3 +1860,33 @@ TEST_CASE("walls: a closed loop ends walls.seam_gap before its start (perimeters
     closed.wall_seam_gap = {1.0, false};
     CHECK_THAT(whole - outer(closed), Catch::Matchers::WithinAbs(1.0, 0.002));
 }
+
+TEST_CASE("fills: line widths of their own for the top, the solid and the sparse infill (surfaces_infill.md)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 30, 30, 5);
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    s.top_width = 0.5, s.solid_width = 0.42, s.infill_width = 0.55;
+    const SlicedModel model = slice_model(m, s);
+    std::set<double> top, solid, sparse;
+    for (const LayerFill& f : model.fills) {
+        for (const Toolpath& t : f.top)
+            for (const ToolpathPoint& p : t.points)
+                top.insert(p.width);
+        for (const Toolpath& t : f.solid)
+            for (const ToolpathPoint& p : t.points)
+                solid.insert(p.width);
+        for (const Toolpath& t : f.sparse)
+            for (const ToolpathPoint& p : t.points)
+                sparse.insert(p.width);
+    }
+    CHECK(top == std::set<double>{0.5});
+    CHECK(solid == std::set<double>{0.42});
+    CHECK(sparse == std::set<double>{0.55});
+    // Written with those widths, and the checker agrees with the filament.
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    CHECK(out.str().find(";WIDTH:0.500\n") != std::string::npos);
+    CHECK(out.str().find(";WIDTH:0.550\n") != std::string::npos);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}

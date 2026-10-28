@@ -6698,3 +6698,13 @@ el modo vaso. Prueba: en el cubo, la vuelta externa mide 0,06 mm menos que cerra
 de la costura en rampa cuentan el hueco de los lazos sin rampa. En el panel va en «Ancho de línea» (la tarjeta de
 paredes ya tiene 8). Toda la lista: 646 casos, todos pasan; fuzzer 600 corridas (semilla 5281028), 0 fallas.
 
+**Después: anchos de línea por tipo** (`surfaces_infill.md`): `surfaces.top_width` (la capa de arriba de todo),
+`surfaces.solid_width` (el resto del relleno sólido) e `infill.width` (el poco denso; con boquillas distintas, en
+proporción a la del relleno). Cada línea lleva su ancho y el escritor saca la E de él, así que el verificador y el
+filamento quedan de acuerdo. **Diferencia con la ficha:** con 0 valen `walls.width` (lo de siempre); la ficha da 0 = la
+boquilla (arriba) y 1,125 × la boquilla (los otros). La pregunta va al equipo de fichas antes de cambiar lo de
+siempre. Prueba: una caja de 30 × 30 × 5 con 0,5, 0,42 y 0,55 mm, cada relleno con su ancho, `;WIDTH:0.500` y
+`0.550` en el G-code, y el verificador conforme. 175 casos, todos pasan.
+
+**Sigue:** `walls.outer_width` y `layers.first_line_width` (tocan el generador de paredes), y el resto de `walls`.
+

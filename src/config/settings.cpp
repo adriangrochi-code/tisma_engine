@@ -1271,8 +1271,15 @@ Settings parse_checked(std::string_view text) {
         s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
-                                  "bottom_min_thickness", "interface_shells"},
+                                  "bottom_min_thickness", "interface_shells", "top_width", "solid_width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "top_width" || n == "solid_width") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 (walls.width) to 10 mm");
+            (n == "top_width" ? s.top_width : s.solid_width) = v;
+            return;
+        }
         if (n == "interface_shells") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
@@ -1298,8 +1305,15 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
-                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length"},
+                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "width") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 (walls.width) to 10 mm");
+            s.infill_width = v;
+            return;
+        }
         if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar" || n == "waves") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
@@ -2592,6 +2606,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+        {"surfaces.top_width", num(s.top_width)},
+        {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
         {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
         {"surfaces.interface_shells", flag(s.interface_shells)},
@@ -2634,6 +2650,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
+        {"infill.width", num(s.infill_width)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -3129,6 +3146,8 @@ std::string settings_json(const Settings& s) {
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+          {"top_width", s.top_width},
+          {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},
           {"bottom_min_thickness", s.bottom_min_thickness},
           {"interface_shells", s.interface_shells}}},
@@ -3137,6 +3156,7 @@ std::string settings_json(const Settings& s) {
           {"angle", s.infill_angle},
           {"pattern", pattern},
           {"wall_overlap", s.infill_wall_overlap},
+          {"width", s.infill_width},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

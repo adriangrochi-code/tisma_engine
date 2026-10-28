@@ -465,7 +465,7 @@ struct PartNozzles {
     double infill_nozzle; // mm
 };
 PartNozzles part_nozzles(const Settings& s, int tool) {
-    PartNozzles p{s, s.wall_width, s.nozzle_diameter};
+    PartNozzles p{s, s.infill_width > 0.0 ? s.infill_width : s.wall_width, s.nozzle_diameter};
     if (s.extruders < 2 || s.nozzle_diameters.empty() || s.single_extruder_mmu)
         return p;
     const KindExtruders kinds = kind_extruders(s);
@@ -473,7 +473,7 @@ PartNozzles part_nozzles(const Settings& s, int tool) {
     const double infill = nozzle_of(s, kinds.infill > 0 ? kinds.infill : tool);
     p.settings.wall_width = s.wall_width * walls / s.nozzle_diameter;
     p.settings.nozzle_diameter = walls;
-    p.sparse_width = s.wall_width * infill / s.nozzle_diameter;
+    p.sparse_width = (s.infill_width > 0.0 ? s.infill_width : s.wall_width) * infill / s.nozzle_diameter;
     p.infill_nozzle = infill;
     if (s.fine_walls_coarse_infill && infill != walls) {
         p.settings.infill_combine_auto = true;
@@ -1611,6 +1611,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     settings.monotonic_top};
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
+    fill.top_width = settings.top_width;
+    fill.solid_width = settings.solid_width;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
