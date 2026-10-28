@@ -1833,7 +1833,7 @@ Settings parse_checked(std::string_view text) {
                                                     : s.raft_first_layer_expansion) = d;
                });
     read_group(root, "support",
-               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
+               {"enabled", "automatic", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
                 "synchronize_layers"},
@@ -1926,6 +1926,8 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    if (n == "z_gap")
                        s.support_z_gap = d;
+                   else if (n == "bottom_z_gap")
+                       s.support_bottom_z_gap = d;
                    else
                        s.support_xy_gap = {d, false};
                });
@@ -2806,6 +2808,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.automatic", flag(s.support_automatic)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
+        {"support.bottom_z_gap", num(s.support_bottom_z_gap)},
         {"support.xy_gap", s.support_xy_gap.percent ? num(s.support_xy_gap.value) + "%" : num(s.support_xy_gap.value)},
         {"support.width", s.support_width.percent ? num(s.support_width.value) + "%" : num(s.support_width.value)},
         {"support.line_angle", num(s.support_line_angle)},
@@ -3248,6 +3251,7 @@ std::string settings_json(const Settings& s) {
           {"automatic", s.support_automatic},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
+          {"bottom_z_gap", s.support_bottom_z_gap},
           {"xy_gap", s.support_xy_gap.percent ? ordered_json(json(s.support_xy_gap.value).dump() + "%")
                                               : ordered_json(s.support_xy_gap.value)},
           {"width", s.support_width.percent ? ordered_json(json(s.support_width.value).dump() + "%")

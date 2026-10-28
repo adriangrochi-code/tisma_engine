@@ -129,7 +129,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_angle", A},
             {"support.tree_branch_diameter_angle", A},
             {"support.tree_double_wall_diameter", A}}},
-          {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.xy_gap", N}}},
+          {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.bottom_z_gap", A}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface, {{"support.interface_layers", N}, {"support.synchronize_layers", A}}},
           {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}, {"support.width", A}}},
           {"arcs", T::SubArcs,

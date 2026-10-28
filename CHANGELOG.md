@@ -26,6 +26,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
+- **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
+  `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, y los nombres de las fichas
+  `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
   elegida muestra sus ajustes debajo de la lista.
@@ -57,6 +60,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   se hicieron), en lugar de las preferencias de la interfaz. Las que ya estaban en las preferencias se siguen
   mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
+
+- **El soporte de grilla que apoya sobre la pieza deja una separación** (`support.bottom_z_gap`; sin valor, la de
+  `support.z_gap`), como pide `supports_more.md` (regla 6). Antes empezaba pegado a la pieza.
 
 ### Corregido
 

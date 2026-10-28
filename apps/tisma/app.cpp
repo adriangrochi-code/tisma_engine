@@ -961,7 +961,7 @@ const std::map<T, const char*>& row_keys() {
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
         {T::GapClosing, "slicing.gap_closing_radius"}, {T::SimplifyTolerance, "slicing.simplify_tolerance"},
         {T::WallOverlap, "infill.wall_overlap"}, {T::CombineMaxHeight, "infill.combine_max_height"},
-        {T::SupportZGap, "support.z_gap"}, {T::SupportXyGap, "support.xy_gap"},
+        {T::SupportZGap, "support.z_gap"}, {T::SupportBottomZGap, "support.bottom_z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
         {T::SupportLineAngle, "support.line_angle"},
         {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
@@ -5908,6 +5908,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
            0.05f, tr(T::TreeDoubleWallTip));
     } else if (id == "gap") {
         mm(T::SupportZGap, "support.z_gap", s.support_z_gap, 0.0, 5.0, "%.2f mm", 0.01f);
+        mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
+           s.support_bottom_z_gap > 0.0 ? "%.2f mm" : "—", 0.01f);
         if (shown("support.xy_gap"))
             changed |= row(T::SupportXyGap, s.support_xy_gap.value, 0.0, s.support_xy_gap.percent ? 1000.0 : 10.0,
                            s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);

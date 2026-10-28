@@ -561,6 +561,7 @@ struct Settings {
     bool support_synchronize_layers = false;
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
+    double support_bottom_z_gap = 0.0; // mm between the part and the support standing on it; 0: support_z_gap
     // Between the support and the part beside it: mm, or percent of the
     // wall width (supports_skirt.md, rule 2: 50 %).
     Speed support_xy_gap{50.0, true};

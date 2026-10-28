@@ -6654,3 +6654,23 @@ S255; con 40 %, S20 a S102; sin el ajuste, S102 desde la capa 4 (lo de la ficha)
 
 **Sigue:** `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.buildplate_only`.
 
+
+## 2026-10-28 — `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap` (bloques nocturnos)
+
+**Hecho:**
+- `speed.support_interface` (mm/s o % de `speed.support`; sin valor, `speed.support`) y `acceleration.wipe_tower`
+  (0: `acceleration.default`), en el panel (Avanzado) y en `docs/CONFIG.md`. SM11: interfaz a 3600 y 1800 mm/min con
+  el soporte a 60 mm/s, 100 % y 50 %.
+- `support.bottom_z_gap` (`supports_more.md`, regla 6): el soporte de grilla que apoya sobre la pieza empieza esas capas
+  por encima; sin valor, `support.z_gap`. **Cambia lo de siempre**: antes ese soporte empezaba pegado a la pieza. Se
+  resta de cada capa de soporte la pieza de las capas de la separación, agrandada medio cordón para que no queden
+  hilos colgando del borde. Falta la primera capa más gruesa de la regla (0,4 mm en SM3) y medir SM3 con el estante.
+- `spec/next` fusionada (`cooling.md` regla 5 con K6 a K8, `assistant.md`, `calibration_models.md`, la medición de los
+  ajustes; `tools/check_spec.py` limpio), y K6 y K8 como prueba.
+
+**Medido:** `[support]`, `[gcode]`, `[settings]`, `[layout]` y `[ui]`: 163 casos, todos pasan; la columna sobre una
+losa con dos capas de separación empieza en la capa 5.
+
+**Sigue:** `support.buildplate_only` (quitar entera una zona que toca la pieza: componentes conexos en 3D) y
+`support.bottom_interface_layers`; después el grupo `walls`.
+

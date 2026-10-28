@@ -1024,6 +1024,7 @@
     X(WallOverlap, "Solapamiento con paredes", "Overlap with walls") \
     X(CombineMaxHeight, "Alto máximo combinado", "Thickest combined") \
     X(SupportZGap, "Separación en Z", "Z gap") \
+    X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
