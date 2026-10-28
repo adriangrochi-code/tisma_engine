@@ -82,6 +82,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Capas curvas:** el primer viaje de la impresión terminaba a la Z plana de la capa aunque la capa fuera curva ahí;
+  la primera extrusión arrancaba fuera de la superficie y el G-code no pasaba la verificación (lo encontró el
+  fuzzer).
+
 - **Un resto de filamento ya no salta con la boquilla:** lo que sobraba de un pedazo de cordón demasiado corto para
   escribirse se sumaba al primer tramo después de un viaje, en otro lugar de la pieza (lo encontró el fuzzer).
 

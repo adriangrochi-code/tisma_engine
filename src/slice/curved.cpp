@@ -911,6 +911,16 @@ std::string curve_gcode(std::string_view text, const CurvedField& field, const S
             out.push_back('\n');
             if (nz)
                 z_out = *nz;
+            // A travel left as it is because where the nozzle was is not known
+            // yet (the first one of the print) ends on a curved layer: down or
+            // up to the layer's surface there, where the next move starts.
+            if (!was_known && known_x && known_y && known_z && !(ne && *ne > 0.0) && !field.flat_at(flat1)) {
+                const std::string z_text = number(round3(field.real_z(x1, y1, flat1) + z_offset), 3);
+                if (z_text != number(z_out, 3)) {
+                    out += "G1 Z" + z_text + "\n";
+                    z_out = std::atof(z_text.c_str());
+                }
+            }
             x = x1, y = y1, flat = flat1;
             continue;
         }

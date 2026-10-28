@@ -623,3 +623,35 @@ TEST_CASE("curved layers: joined pieces keep J across the ramp's top (fuzz 2026-
     }
     CHECK(pieces > 1000);
 }
+
+TEST_CASE("curved layers: the print's first travel ends on the layer's surface (fuzz 2026-10-29)", "[curved]") {
+    // The first move of the print: where the nozzle was is not known, so the
+    // travel goes as the flat G-code says; on a curved layer the nozzle then
+    // goes to the surface there before the first extrusion starts from it.
+    CurvedField f;
+    f.mode = CurvedMode::Surface;
+    f.flat_below = 0.6;
+    f.full = 5.6;
+    f.grid = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+    f.nx = f.ny = 3;
+    f.cell = 50.0;
+    f.grid_x = f.grid_y = -50.0;
+    Settings s = base();
+    s.curved_mode = CurvedMode::Surface;
+    const std::string text = curve_gcode("G1 Z4.500 F600\nG1 X-20 Y0.3\nG1 X20 Y0.3 E4\n", f, s);
+    double z = 0.0;
+    bool extruded = false;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line) && !extruded;) {
+        const std::size_t at = line.find(" Z");
+        if (line.find(" E") != std::string::npos) {
+            extruded = true;
+            break;
+        }
+        if (at != std::string::npos)
+            z = std::atof(line.c_str() + at + 2);
+    }
+    REQUIRE(extruded);
+    CHECK_THAT(z, WithinAbs(std::round(f.real_z(-20.0, 0.3, 4.5) * 1000.0) / 1000.0, 1e-9));
+    CHECK(std::abs(f.real_z(-20.0, 0.3, 4.5) - 4.5) > 0.01); // the layer is curved there
+}
