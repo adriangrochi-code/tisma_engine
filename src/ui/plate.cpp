@@ -446,4 +446,36 @@ std::vector<std::string> own_setting_keys(const Settings& profile) {
     return out;
 }
 
+TriangleMesh volume_mesh(const PlateVolume& v, const BoundingBox& placed) {
+    TriangleMesh m;
+    if (placed.empty)
+        return m;
+    const double cx = 0.5 * (double(placed.min.x) + placed.max.x) + v.offset[0];
+    const double cy = 0.5 * (double(placed.min.y) + placed.max.y) + v.offset[1];
+    const double z0 = double(placed.min.z) + v.offset[2], z1 = z0 + std::max(v.size[2], 0.01);
+    const double rx = std::max(v.size[0], 0.01) / 2.0, ry = std::max(v.size[1], 0.01) / 2.0;
+    const auto p = [](double x, double y, double z) { return Vec3f{float(x), float(y), float(z)}; };
+    if (v.shape == PlateVolume::Shape::Box) {
+        const Vec3f c[8] = {p(cx - rx, cy - ry, z0), p(cx + rx, cy - ry, z0), p(cx + rx, cy + ry, z0), p(cx - rx, cy + ry, z0),
+                            p(cx - rx, cy - ry, z1), p(cx + rx, cy - ry, z1), p(cx + rx, cy + ry, z1), p(cx - rx, cy + ry, z1)};
+        static constexpr int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                         {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+        for (const auto& t : f)
+            m.add_triangle(c[t[0]], c[t[1]], c[t[2]]);
+        return m;
+    }
+    constexpr int sides = 48;
+    const Vec3f bottom = p(cx, cy, z0), top = p(cx, cy, z1);
+    for (int i = 0; i < sides; ++i) {
+        const double a0 = 2.0 * 3.14159265358979323846 * i / sides, a1 = 2.0 * 3.14159265358979323846 * (i + 1) / sides;
+        const Vec3f b0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z0), b1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z0);
+        const Vec3f t0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z1), t1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z1);
+        m.add_triangle(bottom, b1, b0);
+        m.add_triangle(top, t0, t1);
+        m.add_triangle(b0, b1, t1);
+        m.add_triangle(b0, t1, t0);
+    }
+    return m;
+}
+
 } // namespace tisma::ui

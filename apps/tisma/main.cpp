@@ -98,6 +98,8 @@ int main(int argc, char** argv) {
                 std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, measure, paint, material or mixing\n");
                 return 2;
             }
+        } else if (arg == "--object-add") {
+            options.object_add = value();
         } else if (arg == "--object-settings") {
             options.object_settings = value();
         } else if (arg == "--measure") {

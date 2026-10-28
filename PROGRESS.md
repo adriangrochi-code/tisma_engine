@@ -6500,4 +6500,14 @@ nada) y MT13 en `[transform]`; 675 de 675 en el árbol de trabajo.
 **Límite:** la pila de capas es de toda la placa: con varios objetos, la altura de capa de un rango vale para todos
 (salvo imprimiendo objeto por objeto). Si ya hay `layers.heights`, la de los rangos se deja de lado con un aviso.
 
-**Sigue:** agregar modificadores y rangos desde la interfaz.
+**Después: modificadores, negativos y rangos en la interfaz.** El menú del clic derecho agrega un modificador (una
+caja con relleno propio), un volumen negativo (un cilindro) o un rango de alturas (de 0 a 2 mm con la altura de capa
+del perfil). En la ventana «Ajustes de …» cada uno tiene su forma (caja o cilindro), lugar y tamaño, o desde y hasta, y
+sus ajustes con las filas del panel (`own_settings_editor`, el mismo editor que los ajustes de la pieza). Se dibujan
+sobre la vista, viajan con la pieza, se guardan en el proyecto (`models[i].volumes` y `ranges`, con su prueba) y van
+al laminador (`SliceVolumes`, también en la caché del corte). Probado: `ui_object_volumes`, y exportar el cubo con un
+modificador de 5 paredes, un negativo y un rango: el verificador del G-code no encuentra problemas (55 164 líneas) y
+el filamento baja de 415 a 333 mm.
+
+**Falta:** la lista de objetos con sus filas hijas, modificadores con la forma de un archivo, y que los volúmenes
+sigan a la pieza al girarla o escalarla (hoy solo al moverla).

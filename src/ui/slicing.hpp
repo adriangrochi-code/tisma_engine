@@ -65,6 +65,15 @@ Settings without_gcode_settings(Settings settings);
 // settings but those only the G-code reads (without_gcode_settings) makes
 // only the G-code, its check and its preview again, the same bytes as a whole
 // slice.
+// The plate's negative volumes, in one mesh, and its modifiers, in the
+// plate's coordinates (model_tools.md, rules 2 and 3).
+struct SliceVolumes {
+    TriangleMesh negative;
+    std::vector<MeshModifier> modifiers;
+    bool empty() const { return negative.empty() && modifiers.empty(); }
+};
+bool same_volumes(const SliceVolumes& a, const SliceVolumes& b);
+
 class Slicer {
 public:
     Slicer();
@@ -75,9 +84,11 @@ public:
     // With the plate's objects (their triangles in the mesh), sequential
     // printing prints them one by one (sequential.md), each with its
     // extruder or one of the project's mixed colours (color_mixing.md).
+    // With volumes, the negative ones and the modifiers of the objects
+    // (model_tools.md, rules 2 and 3).
     SliceResult run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load = nullptr,
                     const Painting* painting = nullptr, const std::vector<MeshObject>* objects = nullptr,
-                    const std::vector<ColorMix>* mixes = nullptr);
+                    const std::vector<ColorMix>* mixes = nullptr, const SliceVolumes* volumes = nullptr);
 
 private:
     struct Cut;
@@ -85,7 +96,8 @@ private:
     // warnings (into out); null with out.error on a refusal.
     std::shared_ptr<const SlicedModel> cut(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
                                            const Painting* painting, const std::vector<MeshObject>* objects,
-                                           const std::vector<ColorMix>* mixes, SliceResult& out);
+                                           const std::vector<ColorMix>* mixes, const SliceVolumes* volumes,
+                                           SliceResult& out);
     std::unique_ptr<gpu::Context> gpu_;
     bool gpu_tried_ = false;
     std::shared_ptr<const Cut> last_; // the last run's cut and what it was made from

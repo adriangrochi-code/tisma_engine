@@ -1183,6 +1183,19 @@
     X(ObjectSettingsBasic, "Los ajustes por pieza se ponen en los niveles Normal y Avanzado.", "Settings per object are set at the Normal and Advanced levels.") \
     X(ObjectSettingsRemove, "Quitar de la pieza", "Remove from the object") \
     X(ObjectOwnSettings, "Ajustes propios: %d", "Own settings: %d") \
+    X(AddModifier, "Agregar modificador", "Add modifier") \
+    X(AddNegativeVolume, "Agregar volumen negativo", "Add negative volume") \
+    X(AddHeightRange, "Agregar rango de alturas", "Add height range") \
+    X(ModifierItem, "Modificador %d", "Modifier %d") \
+    X(NegativeVolumeItem, "Volumen negativo %d", "Negative volume %d") \
+    X(RangeItem, "Alturas de %.2f a %.2f mm", "Heights from %.2f to %.2f mm") \
+    X(HeightFrom, "desde", "from") \
+    X(HeightTo, "hasta", "to") \
+    X(ShapeBox, "Caja", "Box") \
+    X(ShapeCylinder, "Cilindro", "Cylinder") \
+    X(RemoveVolume, "Quitar", "Remove") \
+    X(VolumeOffset, "Lugar (mm)", "Place (mm)") \
+    X(VolumeSize, "Tamaño (mm)", "Size (mm)") \
     X(ExtruderItem, "Extrusor %d", "Extruder %d") \
     X(VirtualExtruder, "Extrusor virtual #%d", "Virtual extruder #%d") \
     X(WipeIntoInfill, "Purgar en su relleno", "Purge into its infill") \

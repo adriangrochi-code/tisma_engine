@@ -35,6 +35,9 @@ struct AppOptions {
     // The first object's own settings at start, a JSON object of groups, with
     // their window open (settings_levels.md, rule 11).
     std::string object_settings;
+    // What to add to the first object at start, for screenshots: "modifier",
+    // "negative" and "range", separated by commas (model_tools.md, rules 2, 3 and 6).
+    std::string object_add;
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy

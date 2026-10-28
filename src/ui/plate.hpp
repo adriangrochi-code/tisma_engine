@@ -31,6 +31,26 @@ struct Placement {
     std::array<double, 3> scale{1.0, 1.0, 1.0}; // each above 0: a mirror would turn the triangles inside out
 };
 
+// A modifier or a negative volume added to an object (settings_levels.md,
+// rule 10; model_tools.md, rules 2 and 3): a box or a cylinder, placed from
+// the object's box as it stands on the bed (the centre in X and Y, the bottom
+// in Z), with a modifier's own settings.
+struct PlateVolume {
+    enum class Kind { Modifier, Negative } kind = Kind::Modifier;
+    enum class Shape { Box, Cylinder } shape = Shape::Box;
+    std::array<double, 3> offset{0.0, 0.0, 0.0}; // mm: its box's centre in X and Y, its bottom in Z
+    std::array<double, 3> size{10.0, 10.0, 10.0}; // mm
+    std::string settings{};
+    friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
+};
+// A height range of an object (model_tools.md, rule 6): from and to over its
+// bottom, mm, with settings of its own (its layer height among them).
+struct PlateRange {
+    double from = 0.0, to = 2.0;
+    std::string settings{};
+    friend bool operator==(const PlateRange&, const PlateRange&) = default;
+};
+
 struct PlateObject {
     std::string name;
     TriangleMesh mesh; // as its file has it
@@ -44,7 +64,13 @@ struct PlateObject {
     // Its own settings (model_tools.md, rule 7; settings_levels.md, rules 10
     // and 11): a JSON object of groups over the profile's; empty: none.
     std::string settings{};
+    std::vector<PlateVolume> volumes{};
+    std::vector<PlateRange> ranges{};
 };
+
+// A volume's mesh over the object's box as placed on the bed (a cylinder of
+// 48 sides, its axis on Z), its faces out.
+TriangleMesh volume_mesh(const PlateVolume& volume, const BoundingBox& placed);
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);

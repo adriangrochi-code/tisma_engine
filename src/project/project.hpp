@@ -24,6 +24,20 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// A modifier or negative volume added to a model, a box or a cylinder placed
+// from the model's box (the centre in X and Y, the bottom in Z), and a height
+// range of it (model_tools.md, rules 2, 3 and 6).
+struct ProjectVolume {
+    bool negative = false;
+    bool cylinder = false;
+    std::array<double, 3> offset{0.0, 0.0, 0.0}, size{10.0, 10.0, 10.0};
+    std::string settings{};
+};
+struct ProjectRange {
+    double from = 0.0, to = 2.0;
+    std::string settings{};
+};
+
 struct ProjectModel {
     std::string name;                // the file it came from, or the calibration's name
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
@@ -37,6 +51,8 @@ struct ProjectModel {
     // Its own settings (model_tools.md, rule 7): a JSON object of groups
     // over the profile's; empty: none.
     std::string settings{};
+    std::vector<ProjectVolume> volumes{};
+    std::vector<ProjectRange> ranges{};
 };
 
 // The calibration being printed: which one, and the value of each segment.
