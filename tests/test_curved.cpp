@@ -186,7 +186,9 @@ TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved
             continue;
         const double j = f->thickness(0.5 * (m.x0 + m.x1), 0.5 * (m.y0 + m.y1), 0.5 * (m.z0 + m.z1));
         j_lo = std::min(j_lo, j), j_hi = std::max(j_hi, j);
-        ratio.push_back(m.e / length / (width * s.layer_height / area * j));
+        // The layer's bead (rounded sides, gcode_motion.md rule 1) by J.
+        const double h = s.layer_height, section = (width - h) * h + std::numbers::pi / 4.0 * h * h;
+        ratio.push_back(m.e / length / (section / area * j));
     }
     REQUIRE(ratio.size() > 100);
     std::sort(ratio.begin(), ratio.end());

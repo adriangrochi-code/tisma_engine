@@ -11,10 +11,15 @@
 
 namespace tisma {
 
-LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap_fill, double outer) {
+LayerWalls fixed_walls(const Polygons& given, double width, int count, bool gap_fill, double outer, double overlap) {
     LayerWalls out;
     if (!(outer > 0.0))
         outer = width;
+    // In spacings, on the region shrunk by half an overlap (perimeters.md,
+    // rule 1, as layer_walls); the beads are written an overlap wider.
+    overlap = std::clamp(overlap, 0.0, 0.5 * std::min(width, outer));
+    width -= overlap, outer -= overlap;
+    const Polygons region = overlap > 0.0 ? offset(given, -overlap / 2.0) : given;
     // Loop k's width, and the depth of its centre line from the outline.
     const auto width_of = [&](std::size_t k) { return k == 0 ? outer : width; };
     const auto depth_of = [&](int k) { return k == 0 ? outer / 2.0 : outer + (double(k) - 0.5) * width; };
@@ -33,7 +38,7 @@ LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap
             t.closed = true;
             t.index = k;
             for (const auto& q : ring)
-                t.points.push_back({{to_mm(q.x), to_mm(q.y)}, wk});
+                t.points.push_back({{to_mm(q.x), to_mm(q.y)}, wk + overlap});
             out.toolpaths.push_back(std::move(t));
         }
         centres.push_back(std::move(centre));
@@ -62,7 +67,8 @@ LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap
     if (left.empty())
         return out;
     BeadingParams beads;
-    beads.preferred_width = width;
+    beads.preferred_width = width + overlap;
+    beads.overlap = overlap;
     // Island by island: smaller diagrams, and the medial axis of some sets of
     // islands takes an open bisector between two of them as inside (PLAN.md,
     // "Eje medio con varias islas").

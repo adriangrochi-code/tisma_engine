@@ -4,6 +4,7 @@
 
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
+#include "geom/bead.hpp"
 #include "infill/adaptive.hpp"
 #include "infill/arcs.hpp"
 #include "infill/combine.hpp"
@@ -153,10 +154,11 @@ void add_raft(SlicedModel& out, const Settings& settings) {
 }
 
 // The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
-// are wide, their section pi/4 of the width squared, the height past the
-// layer's in each path's gap. The ones resting on the support get its gap after.
+// are wide, their section pi/4 of the width squared (bead_area), the height
+// past the layer's in each path's gap. The ones resting on the support get
+// its gap after.
 void round_bridges(std::vector<Toolpath>& bridges, double width, double layer_height) {
-    const double gap = std::max(0.0, std::numbers::pi / 4.0 * width - layer_height);
+    const double gap = std::max(0.0, width - layer_height);
     for (Toolpath& t : bridges)
         t.gap = gap;
 }
@@ -176,7 +178,7 @@ double outer_bead(const Settings& settings) {
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
-        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width);
+        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width, beading.overlap);
     beading.wall_count = count;
     return layer_walls(region, beading);
 }
@@ -1208,6 +1210,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         first_settings.wall_width = first_beading.preferred_width = first_bead(settings);
         first_settings.outer_wall_width = first_beading.outer_width = first_settings.wall_width;
     }
+    // Each layer's beads overlap by its height's share (perimeters.md, rule 1).
+    const auto beading_at = [&](std::size_t l) {
+        BeadingParams b = l == 0 ? first_beading : beading;
+        b.overlap = bead_overlap(out.layers[l].top - out.layers[l].bottom);
+        return b;
+    };
     std::vector<std::size_t> open(out.layers.size(), 0);
     std::vector<char> cut_away(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
@@ -1270,7 +1278,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         if (settings.wall_count > 0) {
             // Only the outer wall on the first layer (walls_extra.md, rule 11).
             out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
-                                    l == 0 ? first_settings : settings, l == 0 ? first_beading : beading);
+                                    l == 0 ? first_settings : settings, beading_at(l));
             // What the walls leave, simplified as the contours are: each wall's
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).
@@ -1301,7 +1309,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 return;
             std::optional<LayerWalls> walls =
                 one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, l == 0 ? first_settings : settings,
-                                l == 0 ? first_beading : beading);
+                                beading_at(l));
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
@@ -1389,8 +1397,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
             if (out.regions[l].empty() || held[l - 1].empty())
                 return;
-            // Round beads, as the bridges' (rule 3): pi/4 of the width squared.
-            const double round = std::numbers::pi / 4.0 * settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
+            // Round beads, as the bridges' (rule 3): as thick as they are wide.
+            const double round = settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
             for (ArcZone& z : overhang_arcs(out.regions[l], held[l - 1], ap)) {
                 for (Toolpath& t : z.arcs) {
                     t.gap = round;
@@ -1416,7 +1424,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
             if (out.regions[l].empty() || held[l - 1].empty())
                 return;
-            const double round = std::max(0.0, std::numbers::pi / 4.0 * w - (out.layers[l].top - out.layers[l].bottom));
+            const double round = std::max(0.0, w - (out.layers[l].top - out.layers[l].bottom));
             Polygons taken;
             for (const HeldZone& z : held_zones(out.regions[l], held[l - 1], w)) {
                 const Polygons area = Clipper2Lib::Intersect(z.zone, out.walls[l].infill, Clipper2Lib::FillRule::NonZero);
@@ -1680,6 +1688,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // fill period below (fill_period), has its fill (prismatic parts; the
     // speed report's V10).
     const std::size_t period = fill_period(fill);
+    // Each layer's lines overlap by its height's share (perimeters.md, rule 1).
+    const auto overlapping = [&](FillParams params, std::size_t l) {
+        params.overlap = bead_overlap(out.layers[l].top - out.layers[l].bottom);
+        return params;
+    };
     // The first layer's lines first_bead wide (perimeters.md, rule 7).
     FillParams first_fill = fill;
     if (settings.first_line_width.value > 0.0)
@@ -1704,7 +1717,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                       [&](std::size_t l) {
                           if (repeats[l])
                               return;
-                          out.fills[l] = fill_layer(out.surfaces[l], l, l == 0 ? first_fill : fill, out.layers[l].slice_z());
+                          out.fills[l] = fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
+                                                    out.layers[l].slice_z());
                           round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
@@ -1722,7 +1736,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               denser.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
-                              for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(denser, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           for (std::size_t z = 0; z < zones; ++z) {
@@ -1736,7 +1750,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               zoned.depth = nullptr;
                               LayerSurfaces only;
                               only.sparse = zone_region[z][l];
-                              for (Toolpath& t : fill_layer(only, l, zoned, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(zoned, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (!dense_region[l].empty()) {
@@ -1747,7 +1761,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               dense.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = dense_region[l];
-                              for (Toolpath& t : fill_layer(only, l, dense, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(dense, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (out.support_areas[l].empty())
@@ -1821,9 +1835,14 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 above[l] = Clipper2Lib::Union(above[l + 1], skins[l + 1], Clipper2Lib::FillRule::NonZero);
         }
         const double spacing = settings.ironing_spacing;
-        // As ;WIDTH writes it (three decimals), so the material matches what
-        // the G-code says: a tiny width loses much in the rounding otherwise.
-        const double width = std::max(0.001, std::round(spacing * settings.ironing_flow / 100.0 * 1000.0) / 1000.0);
+        // The bead whose section is spacing x flow x the layer's height
+        // (ironing.md, rule 3), as ;WIDTH writes it (three decimals), so the
+        // material matches what the G-code says: a tiny width loses much in
+        // the rounding otherwise.
+        const auto width_at = [&](std::size_t l) {
+            const double h = out.layers[l].top - out.layers[l].bottom;
+            return std::max(0.001, std::round(bead_width(spacing * settings.ironing_flow / 100.0 * h, h) * 1000.0) / 1000.0);
+        };
         const Polygons nothing;
         tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) {
             Polygons area;
@@ -1843,7 +1862,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (area.empty())
                 return;
             const double angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + 45.0;
-            out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width, true);
+            out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });
     }
     // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
@@ -1870,7 +1889,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             const double z = 0.5 * (out.layers[first].bottom + out.layers[last].top);
             ThickLayer& t = out.thick[last];
             t.height = out.layers[last].top - out.layers[first].bottom;
-            t.fill.sparse = fill_layer(only, r, fill, z).sparse;
+            FillParams thick = fill;
+            thick.overlap = bead_overlap(t.height);
+            t.fill.sparse = fill_layer(only, r, thick, z).sparse;
         });
     }
     if (!stack.groups.empty()) {

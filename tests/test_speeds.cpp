@@ -133,8 +133,8 @@ TEST_CASE("speeds: bridges and overhang perimeters at speed.bridges, with a roun
         INFO(m.z << " " << m.type);
         CHECK(m.z == "5.200");
         CHECK(m.feed == 25.0 * 60.0);
-        // Round, 0.4 mm across: pi/4 of 0.4 thick.
-        CHECK(m.height == "0.314");
+        // Round, 0.4 mm across and as tall.
+        CHECK(m.height == "0.400");
         (m.type == "Bridge infill" ? bridge : overhang) += m.length();
         (m.type == "Bridge infill" ? bridge_e : overhang_e) += m.e;
     }

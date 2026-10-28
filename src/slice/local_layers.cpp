@@ -1,5 +1,6 @@
 #include "slice/local_layers.hpp"
 
+#include "geom/bead.hpp"
 #include "slice/variable_layers.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -151,6 +152,17 @@ std::vector<ThickLayer> split_thick_zones(const std::vector<LayerGroup>& groups,
         t.fill.sparse = clip_toolpaths(f.sparse, wider, true);
         t.fill.bridge = clip_toolpaths(f.bridge, wider, true);
         t.fill.gaps = clip_toolpaths(f.gaps, wider, true);
+        // The beads were laid out for the fine layers: thicker, they overlap
+        // more (perimeters.md, rule 1), so each is that much wider to lay the
+        // same material per spacing.
+        const double fine = t.height / double(g.last - g.first + 1);
+        const double wider_by = bead_overlap(t.height) - bead_overlap(fine);
+        for (std::vector<Toolpath>* kind :
+             {&t.walls, &t.fill.top, &t.fill.solid, &t.fill.sparse, &t.fill.bridge, &t.fill.gaps})
+            for (Toolpath& path : *kind)
+                for (ToolpathPoint& p : path.points)
+                    if (p.width > 0.0)
+                        p.width += wider_by;
         for (std::size_t l = g.first; l <= g.last; ++l) {
             walls[l].toolpaths = clip_toolpaths(walls[l].toolpaths, g.coarse, false);
             LayerFill& fl = fills[l];

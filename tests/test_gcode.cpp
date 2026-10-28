@@ -798,10 +798,12 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
     CHECK(overhang > 70.0);
     CHECK(overhang < 80.0);
     CHECK_THAT(bridge_min_x, Catch::Matchers::WithinAbs(9.4, 0.1));
-    // Twice the filament per mm of the solid infill above: twice as thick.
+    // Twice as thick as the solid infill above, both 0.4 wide: a round bead
+    // against a rectangle with rounded sides (gcode_motion.md, rule 1).
     REQUIRE(bridge > 0.0);
     REQUIRE(solid > 0.0);
-    CHECK_THAT((bridge_e / bridge) / (solid_e / solid), WithinRel(2.0, 0.02));
+    const double round = std::numbers::pi / 4.0 * 0.4 * 0.4, flat = 0.2 * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
+    CHECK_THAT((bridge_e / bridge) / (solid_e / solid), WithinRel(round / flat, 0.02));
     // Without walls.detect_overhangs the walls keep their types, still as thick
     // over the support.
     s.detect_overhangs = false;
@@ -837,8 +839,8 @@ TEST_CASE("arcs: the shelf's overhang in arcs, round beads, slow, a retraction e
         for (const Extrusion& x : extrusions(out.str())) {
             INFO(x.z << " " << x.type << " " << x.height);
             if (x.z == "8.200" && x.type == "Overhang perimeter" && x.feed == 300.0) {
-                // 5 mm/s, a round bead (pi/4 of 0.4 squared), no bridge.
-                CHECK(x.height == "0.314");
+                // 5 mm/s, a round bead (as tall as its 0.4 mm), no bridge.
+                CHECK(x.height == "0.400");
                 arcs += x.length();
                 arc_e += x.e;
             }
@@ -864,20 +866,23 @@ TEST_CASE("walls: a wall thinner than the nozzle prints with walls.min_line_widt
     add_box(m, 0, 0, 0.2f, 10, 5); // a 0.2 mm wall
     const SlicedModel model = slice_model(m, s);
     REQUIRE_FALSE(model.walls[10].toolpaths.empty());
+    // A spacing of 85 % of the nozzle, 0.34 mm, written an overlap wider:
+    // 0.383 (perimeters.md, table P2).
+    const double overlap = 0.2 * (1.0 - std::numbers::pi / 4.0);
     for (const Toolpath& t : model.walls[10].toolpaths)
         for (const ToolpathPoint& p : t.points) {
-            CHECK_THAT(p.width, WithinRel(0.34, 1e-6)); // 85 % of the nozzle
+            CHECK_THAT(p.width, WithinRel(0.34 + overlap, 1e-6));
             CHECK_THAT(p.p.x, Catch::Matchers::WithinAbs(0.1, 0.02));
         }
     std::ostringstream out;
     write_gcode(out, model, s);
-    CHECK(out.str().find(";WIDTH:0.340") != std::string::npos);
+    CHECK(out.str().find(";WIDTH:0.383") != std::string::npos);
     // In mm instead.
     s.wall_min_line_width = {0.3, false};
     const SlicedModel narrower = slice_model(m, s);
     for (const Toolpath& t : narrower.walls[10].toolpaths)
         for (const ToolpathPoint& p : t.points)
-            CHECK_THAT(p.width, WithinRel(0.3, 1e-6));
+            CHECK_THAT(p.width, WithinRel(0.3 + overlap, 1e-6));
     // Thinner than walls.min_detail (0.1 mm): nothing.
     IndexedMesh hair;
     add_box(hair, 0, 0, 0.05f, 10, 5);
@@ -954,9 +959,9 @@ TEST_CASE("walls: the stretches over the air are overhang perimeters at the brid
         const bool overhang = x.type == "Overhang perimeter";
         if (overhang) {
             CHECK(x.z == "8.200");
-            // The bridges' round bead, 0.4 mm across (pi/4 of 0.4 squared):
-            // W2's 0.05224 mm of filament per mm.
-            CHECK(x.height == "0.314");
+            // The bridges' round bead, 0.4 mm across and as tall (pi/4 of 0.4
+            // squared): W2's 0.05224 mm of filament per mm.
+            CHECK(x.height == "0.400");
             if (x.length() > 0.5)
                 CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.05224, 0.0002));
             CHECK(x.feed == 25.0 * 60.0);
@@ -1905,4 +1910,27 @@ TEST_CASE("fills: line widths of their own for the top, the solid and the sparse
     CHECK(out.str().find(";WIDTH:0.500\n") != std::string::npos);
     CHECK(out.str().find(";WIDTH:0.550\n") != std::string::npos);
     CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("filament per mm from the bead's rounded section (gcode_motion.md, rule 1, M1)", "[gcode]") {
+    // The 20 mm cube with 0.45 mm walls on 0.2 mm layers: (0.45 - 0.2) 0.2 +
+    // pi 0.1^2 = 0.081416 mm2 over 1.75 mm filament, 0.033849 mm a mm.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.wall_width = 0.45;
+    s.layer_height = s.first_layer_height = 0.2;
+    s.filament_diameter = 1.75;
+    std::ostringstream out;
+    const SlicedModel model = slice_model(m, s);
+    write_gcode(out, model, s);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+    std::size_t walls = 0;
+    for (const Extrusion& x : extrusions(out.str()))
+        if (x.z == "2.200" && (x.type == "External perimeter" || x.type == "Perimeter") && x.length() > 5.0) {
+            ++walls;
+            CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.033849, 0.00002));
+        }
+    CHECK(walls >= 8);
 }

@@ -905,7 +905,7 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **Modelo del cordón de las fichas** (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;
+- [x] **Modelo del cordón de las fichas** (hecho 2026-10-28; queda la corrida 48 del fuzzer, `PROGRESS.md`) (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;
   pedido del equipo de fichas, 2026-10-28). Hoy el motor pone los cordones borde con borde y saca el filamento de
   `w·h`. Las fichas dicen: sección `A = (w − h)·h + π·(h/2)²` (rectángulo con costados redondeados) y vecinos a
   `(w₁ + w₂)/2 − δ`, con `δ = h·(1 − π/4)`. Las dos cosas van juntas, en un solo commit: el filamento por mm de

@@ -446,7 +446,9 @@ TEST_CASE("retraction: travels round the walls, unless told not to or the detour
     s.avoid_crossing_walls = true;
     const double inside = travelled(s);
     CHECK(inside > straight);
-    s.max_detour = {1.0, false};
+    // This layer's detours add up to half a millimetre (the spec's R7 has
+    // 5.5 mm with its travels): a cap of 0.2 mm sends them straight.
+    s.max_detour = {0.2, false};
     const double limited = travelled(s);
     CHECK(limited < inside);
     CHECK(limited >= straight - 1e-6);

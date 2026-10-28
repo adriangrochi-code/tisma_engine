@@ -52,6 +52,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **El cordón de las fichas** (`perimeters.md` regla 1, `gcode_motion.md` regla 1): el filamento sale de la sección
+  con costados redondeados, `(w − h)·h + π·(h/2)²`, y los cordones vecinos se solapan `h·(1 − π/4)` (con 0,45 × 0,2,
+  a 0,407 mm en vez de 0,45). Paredes, rellenos, torre de purga, verificador y vista previa usan el mismo modelo; los
+  puentes y voladizos redondos se escriben tan altos como anchos. **Cambia el G-code de siempre.**
+
 - **Los anchos de los rellenos en 0 salen de la boquilla** (`surfaces_infill.md`, I9): la capa de arriba de todo, una
   boquilla; el resto del relleno sólido y el poco denso, 1,125 boquillas (0,45 mm con 0,4). Antes seguían a
   `walls.width`. **Cambia el G-code de siempre** en los rellenos.

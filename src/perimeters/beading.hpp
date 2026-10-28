@@ -27,6 +27,11 @@ struct BeadingParams {
     // The outer bead's width within the shell (walls.outer_width,
     // perimeters.md); 0: w*.
     double outer_width = 0.0;
+    // How much neighbouring beads overlap (bead_overlap of the layer's
+    // height, perimeters.md rule 1). layer_walls works in spacings: the
+    // widths above less this, min_width and min_detail as they are, on the
+    // region shrunk by half of it, and gives the beads this wider.
+    double overlap = 0.0;
 };
 
 // The outer bead's width within the shell: outer_width, or w*.

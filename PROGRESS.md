@@ -6758,3 +6758,28 @@ próximo paso, en un bloque propio.
 hace el motor. Las dos cosas tienen que entrar juntas o la pieza queda mal extruida. Diseño y pasos en `PLAN.md`
 («Modelo del cordón de las fichas»); se hace en los bloques que siguen, sin commit hasta que pase toda la lista.
 
+**Hecho (2026-10-28, de noche): el modelo del cordón de las fichas.** **Cambia el G-code de siempre**, en todo:
+- **Sección** (`src/geom/bead.hpp`): `A(w, h) = (w − h)·h + π·(h/2)²`; con `w ≤ h`, la elipse `π·w·h/4`. La usan el
+  escritor (filamento y tope de caudal), el verificador, la vista previa (ancho desde el filamento, su inversa) y la
+  torre de purga. Fuera de la Z de la capa (Z anti-aliasing, rampas) el material es el de la capa por la parte de su
+  altura que queda (`z_antialiasing.md`, regla 3). Los cordones redondos (puentes, voladizos, arcos) se escriben tan
+  altos como anchos (`;HEIGHT:0.400` con 0,4, antes 0,314), así la misma fórmula da `π·w²/4` (M2).
+- **Paso con solape** (`δ = h·(1 − π/4)`): las paredes (variables y fijas) trabajan en pasos `w − δ` sobre la región
+  achicada `δ/2` y escriben el cordón `δ` más ancho; `walls.min_line_width` y `walls.min_detail` son pasos (P2: 0,34
+  de paso, 0,383 de ancho). Los rellenos van a `w − δ` (sólido) y `(w − δ)/densidad` (poco denso); la torre de
+  purga también. Las zonas gruesas de las capas por zona ensanchan sus cordones `δ(H) − δ(h)`. El planchado escribe
+  el ancho cuya sección es separación × flujo × altura.
+- **Contra las fichas:** P1 (0,225, 0,632 y 1,039 mm), P12 (0,225 / 0,636 / 1,071 y 0,300 / 0,736 / 1,071), las
+  paredes de P2 de 0,4 a 1,0 mm, M1 (0,033849 mm/mm), P11 de `infill_patterns.md` (0,06056 contra 0,03385) e IR1
+  (0,001247) dan los números de las fichas. **Diferencia que queda:** desde tres cordones, Tisma Slicer carga la
+  diferencia solo en el del medio (P2 1,2 mm: 0,450 / 0,386 / 0,450) y el motor la reparte entre todos
+  (`walls.spread_count`, en la lista de ajustes).
+- **Pruebas:** las que contaban filamento por mm, posiciones o áreas de relleno con el modelo viejo pasan a las
+  cuentas nuevas (el relleno del cubo de 10 mm con 3 paredes de 0,4 empieza a 1,093 mm del borde, no a 1,2). La
+  torre de caudal se prueba por el caudal de cada tramo (sección × F) y no por una F fija. Toda la lista: 696 casos,
+  todos pasan.
+- **Fuzzer** (300 corridas, semilla 20261028): 1 falla, la corrida 48 (anillo, E volumétrica desde Z 1,31, capas
+  variables): un tramo de 0,023 mm justo después de volver de una retracción pone 0,00126 mm³ donde se esperan
+  0,00068. Sin este cambio esa corrida se rechazaba como no imprimible, así que es un caso que antes no se veía.
+  Queda para el próximo bloque.
+

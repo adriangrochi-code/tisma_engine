@@ -11,6 +11,7 @@
 #include "gcode/template.hpp"
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
+#include "geom/bead.hpp"
 #include "infill/nonplanar.hpp"
 #include "slice/belt.hpp"
 #include "slice/wipe_tower.hpp"
@@ -1424,7 +1425,12 @@ public:
                 shown_height_ = shown;
             }
         }
-        const double e = width * height * length / filament_area_ * flow_;
+        // Off the layer's Z (Z anti-aliasing, a scarf ramp), the layer's bead
+        // by the share of its height that is left (z_antialiasing.md, rule 3);
+        // a wavy bead is a bead of its own thickness.
+        const double section = nonplanar_ || !(height_ > 0.0) ? bead_area(width, height)
+                                                             : bead_area(width, height_) * height / height_;
+        const double e = section * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height);
         extruded_[feed] += length;
         if (outer_)
@@ -1465,7 +1471,7 @@ public:
             z_now_ = z_layer;
         }
         const double width = points[a.first].width, length = a.length();
-        const double e = width * height_ * length / filament_area_ * flow_;
+        const double e = bead_area(width, height_) * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height_);
         extruded_[feed] += length;
         if (outer_)
@@ -1686,10 +1692,11 @@ private:
     // cap (it looks for the limit) as far as the machine moves; else no faster
     // than the hot end and the filament melt, rounded down to whole mm/min.
     double melt_feed(double feed, double width, double height) const {
-        if (forced_flow_ > 0.0 && width * height * flow_ > 0.0)
-            return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height * flow_) * 60.0)) / 60.0);
-        if (max_flow_ > 0.0 && width * height * flow_ > 0.0) {
-            const double cap = max_flow_ / (width * height * flow_);
+        const double section = bead_area(width, height);
+        if (forced_flow_ > 0.0 && section * flow_ > 0.0)
+            return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (section * flow_) * 60.0)) / 60.0);
+        if (max_flow_ > 0.0 && section * flow_ > 0.0) {
+            const double cap = max_flow_ / (section * flow_);
             if (feed > cap)
                 return std::max(1.0, std::floor(cap * 60.0)) / 60.0;
         }
@@ -2791,7 +2798,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         std::optional<AreaIndex> hanging, on_support;
         if (split_walls)
             hanging.emplace(*hanging_area), on_support.emplace(on_support_area);
-        const RoundBead round{bead, std::max(0.0, std::numbers::pi / 4.0 * bead - layer_height)};
+        const RoundBead round{bead, std::max(0.0, bead - layer_height)};
         // The solid infill right over a bridge, at speed.over_bridges
         // (speeds_accels.md, rule 2).
         std::optional<AreaIndex> over_bridge, nowhere;

@@ -12,7 +12,10 @@ namespace tisma {
 // it is at least half a bead thick, gets variable-width beads (Kuipers et al.
 // 2020, as the solid surfaces' gaps) in `gaps`: the middle of a wall too thin
 // for another loop. Own design.
-// The outer loop is `outer` wide (walls.outer_width); 0: `width`.
-LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap_fill, double outer = 0.0);
+// The outer loop is `outer` wide (walls.outer_width); 0: `width`. Neighbours
+// overlap by `overlap` (bead_overlap, perimeters.md rule 1), the outer bead's
+// edge on the outline.
+LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap_fill, double outer = 0.0,
+                       double overlap = 0.0);
 
 } // namespace tisma

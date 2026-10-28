@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <numbers>
 
 using namespace tisma;
 using Catch::Matchers::ContainsSubstring;
@@ -343,7 +344,10 @@ TEST_CASE("slice_model builds the walls of every layer and leaves the middle for
             for (const ToolpathPoint& q : t.points)
                 CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
         }
-        CHECK_THAT(area_mm2(w.infill), WithinAbs(7.6 * 7.6, 1e-6)); // 10 mm less 3 walls on each side
+        // 10 mm less 3 walls on each side: half an overlap, then three spacings
+        // of 0.4 less the overlap (perimeters.md, rule 1).
+        const double overlap = 0.2 * (1.0 - std::numbers::pi / 4.0), side = 10.0 - 2.0 * (overlap / 2.0 + 3.0 * (0.4 - overlap));
+        CHECK_THAT(area_mm2(w.infill), WithinAbs(side * side, 1e-5)); // offsets on the nm grid
     }
     s.wall_count = 0;
     const SlicedModel bare = slice_model(m, s);
