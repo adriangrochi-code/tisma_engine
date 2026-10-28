@@ -629,6 +629,7 @@ struct Settings {
     bool support = false;
     bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
     bool support_buildplate_only = false; // only support standing on the bed (supports_more.md, rule 2)
+    bool support_under_bridges = false;   // support under bridges too (supports_skirt.md, rule 1, S6, S10)
     // The support on the part's layers (multi_extruder.md, rule 19): read;
     // the engine always prints the support on the part's layers.
     bool support_synchronize_layers = false;

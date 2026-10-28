@@ -947,12 +947,13 @@ Con el PR #23 (2026-10-26):
   `variables`) y **`calibration`** (pruebas por franjas, CA1 a CA7; hechos 2026-10-28). Quedan `machine.feedstock`
   (pellets, P3), `machine.high_flow_nozzle`, `machine.process` (WAAM), la prueba VFA y las pruebas por parches. `fins`,
   `fragment` y `waam` son de después de la primera versión, como dicen sus fichas
-- [ ] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
+- [x] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
   2026-10-28 `pattern`, `sheath`, `interface_pattern`, `interface_spacing` e `interface_contact_loops` (SM6, SM7,
-  SM10), `enforce_layers` (SM1) y el estilo `snug` con `closing_radius` (SM8, SM9), y `free_bridge_length` con el aviso de
-  puentes largos (R5, R6); falta `under_bridges` (S6), con una pregunta al equipo de fichas (si
-  `free_bridge_length` también decide qué puentes van sin soporte). `fins` (`support_fins.md`) y `waam` son de después de la primera versión, como dicen
-  sus fichas
+  SM10; los lazos en las dos capas de arriba desde la ficha del PR #39), `enforce_layers` (SM1) y el estilo `snug` con
+  `closing_radius` (SM8, SM9), `free_bridge_length` con el aviso de puentes largos (R5, R6) y `under_bridges` (S6,
+  S10: sin él, los puentes no llevan soporte, sea cual sea su largo). Falta igualar la zona de la interfaz de SM10
+  (la nuestra es un 30 % más chica; pregunta enviada al equipo de fichas). `fins` (`support_fins.md`) y `waam` son de
+  después de la primera versión, como dicen sus fichas
 - [x] **`cooling.dynamic_overhang_fan`** y `cooling.overhang_fan_0` a `_3` (`cooling_more.md`, reglas 2 a 4, C2;
   hecho 2026-10-28): el ventilador de cada tramo de pared según su apoyo, el mayor con el de la capa
 - [x] **`cooling.slowdown_logic`** `consistent_surface` (`cooling_more.md`, regla 5, C3) y

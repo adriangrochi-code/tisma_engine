@@ -991,7 +991,7 @@ const std::map<T, const char*>& row_keys() {
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
         {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
-        {T::SupportBuildplateOnly, "support.buildplate_only"}, {T::SupportEnforceLayers, "support.enforce_layers"},
+        {T::SupportBuildplateOnly, "support.buildplate_only"}, {T::SupportUnderBridges, "support.under_bridges"}, {T::SupportEnforceLayers, "support.enforce_layers"},
         {T::SupportClosingRadius, "support.closing_radius"}, {T::SupportFreeBridge, "support.free_bridge_length"},
         {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
         {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
@@ -6039,6 +6039,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::Supports, "support.enabled", s.support);
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
+        flag(T::SupportUnderBridges, "support.under_bridges", s.support_under_bridges);
         whole(T::SupportEnforceLayers, "support.enforce_layers", s.support_enforce_layers, 0, 1000);
         mm(T::SupportFreeBridge, "support.free_bridge_length", s.support_free_bridge_length, 0.0, 1000.0,
            s.support_free_bridge_length > 0.0 ? "%.0f mm" : "—", 0.5f);
@@ -6048,8 +6049,6 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SupportStyle::Snug, tr(T::SupportSnug)},
                             {SupportStyle::Organic, tr(T::SupportOrganic)}},
                            tr(T::SupportStyleTip));
-        if (s.support_style == SupportStyle::Snug)
-            mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
         mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
     } else if (id == "tree") {
         mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
@@ -6094,6 +6093,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (shown("support.width"))
             changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,
                            s.support_width.percent ? "%.0f %%" : "%.2f mm", s.support_width.percent ? 0.5f : 0.01f);
+        if (s.support_style == SupportStyle::Snug)
+            mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
     } else if (id == "arcs") {
         flag(T::ArcsEnabled, "arcs.enabled", s.arcs);
         mm(T::ArcsOverlap, "arcs.overlap", s.arcs_overlap, 0.0, 90.0, "%.0f %%", 0.5f);

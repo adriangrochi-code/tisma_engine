@@ -2,6 +2,7 @@
 
 #include "support/support.hpp"
 
+#include "gcode/order.hpp"
 #include "geom/bitgrid.hpp"
 #include "gpu/compute.hpp"
 
@@ -46,10 +47,43 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
     return out;
 }
 
+bool is_bridge(const Polygons& island, const Polygons& below, double reach) {
+    if (island.empty() || below.empty())
+        return false;
+    const Polygons outline{island.front()};
+    const Polygons band = Clipper2Lib::Difference(offset(outline, reach), outline, Clipper2Lib::FillRule::NonZero);
+    const Polygons held = Clipper2Lib::Intersect(band, below, Clipper2Lib::FillRule::NonZero);
+    // Specks of a bead's square or less are where an edge grazes a corner.
+    const double speck = reach * reach * double(kUnitsPerMm) * double(kUnitsPerMm);
+    std::size_t stretches = 0;
+    for (const Polygons& piece : split_islands(held))
+        if (std::fabs(Clipper2Lib::Area(piece)) > speck) {
+            if (piece.size() > 1) // a ring: held all round
+                return true;
+            ++stretches;
+        }
+    return stretches >= 2;
+}
+
 std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                           const SupportParams& params) {
     const std::size_t n = regions.size();
     std::vector<Polygons> over = params.automatic ? overhangs(regions, heights, params) : std::vector<Polygons>(n);
+    if (params.automatic && !params.under_bridges)
+        tbb::parallel_for(std::size_t(1), std::max<std::size_t>(n, 1), [&](std::size_t l) {
+            if (over[l].empty())
+                return;
+            // Held past the reach allowed, by a bead more.
+            const double reach = (params.threshold_angle > 0.0
+                                      ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
+                                      : params.bead / 2.0) +
+                                 params.bead;
+            Polygons kept;
+            for (Polygons& island : split_islands(over[l]))
+                if (!is_bridge(island, regions[l - 1], reach))
+                    kept.insert(kept.end(), std::make_move_iterator(island.begin()), std::make_move_iterator(island.end()));
+            over[l] = std::move(kept);
+        });
     if (params.enforce || params.block) {
         const auto at = [&](const std::vector<Polygons>* areas, std::size_t l) -> const Polygons* {
             return areas && l < areas->size() && !(*areas)[l].empty() ? &(*areas)[l] : nullptr;

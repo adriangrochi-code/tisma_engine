@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`support.under_bridges`** (ficha `supports_skirt.md`, regla 1, S6 y S10): soporte también bajo los puentes. Sin
+  él (por defecto), lo que cuelga sostenido en dos extremos, o todo alrededor como una tapa, no lleva soporte, sea
+  cual sea su largo; un voladizo sostenido de un solo lado sí. En el panel, en Soportes.
+
 - **Chequeo de la vista 3D en cada captura** (`tisma --screenshot`, pedido del dueño): en Preparar y Vista previa, la
   imagen propia de la vista no puede tener píxeles negros (un NaN de la luz) ni más de uno de cada mil que destelle;
   si falla, sale con 1 y deja la imagen al lado. `--no-view-check` lo saltea; `--ao-strength` elige la fuerza de la
@@ -72,6 +76,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **Sin soporte bajo los puentes por defecto** (`support.under_bridges`): antes el soporte iba bajo todo lo que
+  colgaba, también un puente entre dos pilares.
+- **Lazos de contacto en las dos capas de interfaz de arriba** (`support.interface_contact_loops`, ficha
+  `supports_more.md`, regla 12): antes solo en la de arriba.
 
 - **Abrir modelos grandes:** con 2 millones de triángulos, de unos 0,75 s a unos 0,57 s antes del primer cuadro
   (la caja de la pieza sin armar la malla dos veces, una copia menos y los vértices de la vista en paralelo), y a

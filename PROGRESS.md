@@ -7352,3 +7352,34 @@ mira la vista mientras se mueve (titileo entre cuadros).
 **Sigue:** confirmar con el dueño; bajar el costo del filtro de moiré; armar la malla de la placa en otro hilo; las
 fichas nuevas del PR #39 (lazos de contacto en dos capas, lector STEP, margen de la transición de paredes); las claves
 `orient.*` y las de pellets.
+
+## 2026-10-28 (noche): fichas del PR #39 (soporte)
+
+Llegó a `dev` el PR #39 del equipo de fichas (`supports_more.md`, `supports_skirt.md`, `perimeters.md` y la ficha
+nueva `step_reader.md`); `tools/check_spec.py` pasa sobre todas.
+
+**Hecho:**
+- **Lazos de contacto en dos capas** (`supports_more.md`, regla 12, SM10): con 3 capas de interfaz, las dos de arriba
+  empiezan con lazos por el borde de su zona; la de abajo, solo líneas.
+- **`support.under_bridges`** (`supports_skirt.md`, regla 1, S6, S10): nuestro soporte iba también bajo los puentes,
+  y la ficha dice que un puente (sostenido en dos extremos) no lleva soporte salvo con este ajuste, y que
+  `support.free_bridge_length` no lo cambia (solo el aviso). `is_bridge` mira el contorno exterior de cada isla de lo
+  que cuelga: si la capa de abajo lo toca en dos tramos separados, o en un anillo alrededor (una tapa sobre un tubo),
+  es puente. Un voladizo de un solo lado, o el anillo de abajo de una esfera (sostenido solo por dentro), siguen con
+  soporte. Prueba S10 (dos pilares a 10, 20 y 30 mm con una tabla: sin soporte con `free_bridge_length` 0, 16 y 40;
+  con `under_bridges`, soporte) y pruebas de `is_bridge` (tabla, voladizo, tapa sobre un tubo fino, esfera).
+  En el panel va en la tarjeta Soportes; `support.closing_radius` pasó a la tarjeta del patrón (las tarjetas llevan
+  hasta 8 ajustes).
+
+**Medido (SM10, caja negra de nuestro motor):** en Z 7,4 y 7,6, 516,4 mm de líneas de interfaz por capa (la ficha:
+743,0); en Z 7,8, un lazo de 58,0 mm (la ficha: dos, de 92,7 y 51,6). Nuestra zona de interfaz es un 30 % más chica;
+se le preguntó al equipo de fichas por las cajas de los lazos y de las líneas.
+
+**Probado:** toda la lista (767 casos) en `build-next`; el fuzz de G-code, ver abajo.
+
+**No hecho:** `walls.transition_margin` (P13) no está en el motor. La tabla nueva no se explica como un margen de
+espesor: con λ = 5 mm, cualquier margen de 25 % o más saca las crestas de A ≤ 0,15 y ninguna de A ≥ 0,2, ni con 100 %.
+Queda para estudiarlo con la tabla.
+
+**Sigue:** la respuesta sobre la zona de SM10; P13 (`walls.transition_margin`); el lector STEP (`step_reader.md`).
+
