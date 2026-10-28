@@ -35,7 +35,8 @@ que los cordones pedidos se cubren con menos cordones, de ancho variable, sin hu
 1. **Modelo del cordón:**
    - un cordón de ancho `w` (el de `;WIDTH:`) y alto `h` tiene sección de rectángulo con costados redondeados;
    - dos cordones vecinos se ponen a una distancia `w − h·(1 − π/4)` (en la prueba P1, 0,407 mm con `w` = 0,45 y
-     `h` = 0,2);
+     `h` = 0,2). Si los dos tienen anchos distintos, `w` es el promedio de los dos (prueba P12);
+   - `walls.outer_width` en 0 sale de la boquilla (1,125 × `d`), aunque `walls.width` tenga otro valor (prueba P12);
    - el borde exterior del cordón externo coincide con el contorno de la pieza.
 2. **Paredes comunes:** `walls.count` cordones de ancho nominal desde cada borde; lo que queda adentro es para el relleno.
 3. **Paredes finas:**
@@ -74,6 +75,7 @@ X = 100, Y = 100), con `walls.count` 3 salvo que se diga otra cosa. Las posicion
 | P9 | Cilindro de P6 | `random` | Un ángulo distinto en cada capa, sin patrón |
 | P10 | Cubo de P1 | `walls.outer_first` | Mismas vueltas que P1, en orden inverso: la externa primero |
 | P11 | Cuña en planta: triángulo de 30 mm de largo cuyo espesor crece de 0 (X = −15) a 3 mm (X = +15), 3 mm de alto | — | Tabla P11: el espesor cambia de a poco, así que las transiciones quedan a lo largo de la pieza |
+| P12 | Cubo de 20 × 20 × 10 mm, boquilla de 0,4, capas de 0,3, `walls.count` 3; ejes en la capa 5, medidos desde el borde | `walls.width` 0,5 y `walls.outer_width` 0; después `walls.width` 0,4 y `walls.outer_width` 0,6 | Primero: externo de 0,45 a 0,225; internos de 0,5 a 0,636 y 1,071. Después: externo de 0,6 a 0,300; internos de 0,4 a 0,736 y 1,071. Cada paso es el promedio de los dos anchos menos 0,0644 (`h·(1 − π/4)` con `h` = 0,3) |
 
 **Tabla P2.** Cordones de la capa 11 de cada pared: posición del eje respecto del centro de la pared (mm) y ancho
 (mm). E es el cordón externo y P uno interno. Las paredes de 2,9 mm o más dejan un hueco en el centro, que llena el
