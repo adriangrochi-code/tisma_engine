@@ -149,6 +149,25 @@ TEST_CASE("settings: the specs' material group goes to the engine's keys", "[set
     CHECK_FALSE(engine_setting_key("material.zz_not_a_key"));
 }
 
+TEST_CASE("settings: the specs' names for settings the engine has under another (2026-10-28-ajustes.md)", "[settings]") {
+    const Settings s = parse_settings(R"({"support": {"angle_limit": 40}, "arrange": {"distance": 9},
+                                          "filament": {"pressure_advance": 0.04}, "machine": {"e_mode": "volume"}})");
+    CHECK(s.support_angle == 40.0);
+    CHECK(s.placement_spacing == 9.0);
+    CHECK(s.pressure_advance == 0.04);
+    CHECK(s.volumetric_e);
+    CHECK_FALSE(parse_settings(R"({"machine": {"e_mode": "length"}})").volumetric_e);
+    // Given under both names, or a value the spec does not have: errors.
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"angle_limit": 40, "threshold_angle": 30}})"),
+                      Catch::Matchers::ContainsSubstring("also given as support.threshold_angle"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"e_mode": "pellets"}})"),
+                      Catch::Matchers::ContainsSubstring("machine.e_mode"));
+    // A spec group with a key the engine does not have yet stays an error.
+    CHECK_THROWS_AS(parse_settings(R"({"filament": {"transmission_distance": 5}})"), SettingsError);
+    CHECK(engine_setting_key("support.angle_limit") == "support.threshold_angle");
+    CHECK_FALSE(engine_setting_key("machine.e_mode"));
+}
+
 TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings("{"), ContainsSubstring("not valid JSON"));
     CHECK_THROWS_WITH(parse_settings("[]"), ContainsSubstring("top level"));

@@ -806,6 +806,21 @@ escribe: al leer, cada clave pasa a su lugar.
 Una clave que no está en la tabla es un error, y también una que viene a la vez por su nombre del motor
 (`material.cost` y `extrusion.cost`). El asistente acepta estos nombres en sus acciones (`material.nozzle_temp`).
 
+### Otros nombres de las fichas
+
+Algunas claves de las fichas son ajustes que el motor ya tiene con otro nombre, con el mismo significado y valor
+(medición del equipo de fichas, `docs/spec/qa/2026-10-28-ajustes.md`). Se leen igual y pasan a su clave del motor:
+
+| Clave de la ficha | Clave del motor |
+|---|---|
+| `support.angle_limit` | `support.threshold_angle` |
+| `arrange.distance` | `placement.spacing` |
+| `filament.pressure_advance` | `extrusion.pressure_advance` |
+| `machine.e_mode` (`"length"` o `"volume"`) | `gcode.volumetric_e` (`false` o `true`) |
+
+Dadas con los dos nombres a la vez, es un error. Los grupos `arrange` y `filament` no tienen otras claves todavía:
+cualquier otra es un error.
+
 ## Grupos previstos (todavía no implementados)
 
 Ninguno. Un grupo nuevo se define acá cuando se implementa, a partir de las fichas de `docs/spec/features/`.

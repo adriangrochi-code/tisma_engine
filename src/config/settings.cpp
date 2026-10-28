@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -449,7 +450,53 @@ std::string own_without(std::string_view own, std::string_view group, bool* had)
     return j.empty() ? std::string() : j.dump();
 }
 
+namespace {
+
+// Settings the specs name differently from the engine, with the same meaning
+// and value (docs/spec/qa/2026-10-28-ajustes.md): the spec's key, the
+// engine's. machine.e_mode, a text, is converted on its own.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kSpecAliases = {{
+    {"support.angle_limit", "support.threshold_angle"},
+    {"arrange.distance", "placement.spacing"},
+    {"filament.pressure_advance", "extrusion.pressure_advance"},
+    {"machine.e_mode", "gcode.volumetric_e"},
+}};
+
+// Each spec name given moves to the engine's (a key given under both is an
+// error); a group left empty goes.
+void spec_aliases(json& root) {
+    for (const auto& [from, to] : kSpecAliases) {
+        const std::string fg(from.substr(0, from.find('.'))), fk(from.substr(from.find('.') + 1));
+        const std::string tg(to.substr(0, to.find('.'))), tk(to.substr(to.find('.') + 1));
+        const auto group = root.find(fg);
+        if (group == root.end() || !group->is_object() || !group->contains(fk))
+            continue;
+        json value = group->at(fk);
+        group->erase(fk);
+        if (group->empty())
+            root.erase(group);
+        if (from == "machine.e_mode") {
+            if (!value.is_string() || (value != "length" && value != "volume"))
+                fail("machine.e_mode", "must be \"length\" or \"volume\"");
+            value = value == "volume";
+        }
+        json& target = root[tg];
+        if (target.is_null())
+            target = json::object();
+        if (!target.is_object())
+            fail(tg, "must be an object");
+        if (target.contains(tk))
+            fail(std::string(from), "is also given as " + std::string(to));
+        target[tk] = std::move(value);
+    }
+}
+
+} // namespace
+
 std::optional<std::string> engine_setting_key(std::string_view key) {
+    for (const auto& [from, to] : kSpecAliases)
+        if (key == from)
+            return from == "machine.e_mode" ? std::nullopt : std::optional<std::string>(to); // a text, not the flag
     if (!key.starts_with("material."))
         return std::string(key);
     const std::string name(key.substr(9));
@@ -567,6 +614,7 @@ Settings parse_checked(std::string_view text) {
     if (!root.is_object())
         throw SettingsError("settings: the top level must be an object");
     material_aliases(root);
+    spec_aliases(root);
 
     Settings s;
     for (const auto& [group, value] : root.items()) {
