@@ -2,6 +2,7 @@
 
 #include "ui/text.hpp"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,9 @@ struct AppOptions {
     // What to add to the first object at start, for screenshots: "modifier",
     // "negative" and "range", separated by commas (model_tools.md, rules 2, 3 and 6).
     std::string object_add;
+    // The first object turned at start about X, Y and Z, degrees, after what
+    // --object-add adds (its volumes turn with it).
+    std::array<double, 3> object_turn{0.0, 0.0, 0.0};
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy

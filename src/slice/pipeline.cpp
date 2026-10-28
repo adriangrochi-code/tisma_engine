@@ -4,6 +4,7 @@
 
 #include "adhesion/adhesion.hpp"
 #include "gcode/order.hpp"
+#include "geom/bead.hpp"
 #include "infill/adaptive.hpp"
 #include "infill/arcs.hpp"
 #include "infill/combine.hpp"
@@ -57,6 +58,13 @@ void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double 
     }
 }
 
+// The first layer's bead (layers.first_line_width, perimeters.md, rule 7):
+// mm, or a share of the first layer's height; 0, the walls'.
+double first_bead(const Settings& settings) {
+    return settings.first_line_width.value > 0.0 ? settings.first_line_width.of(settings.first_layer_height)
+                                                 : settings.wall_width;
+}
+
 // The raft (skirt_brim_raft.md, rules 3 and 9 to 14) under a part sliced
 // without it: raft_layers layers of support put before the part's, which go
 // up by their height and raft_gap. The raft follows the part's first layer
@@ -97,15 +105,17 @@ void add_raft(SlicedModel& out, const Settings& settings) {
         layers.push_back({z, z + h});
         z += h;
         regions[k] = k == 0 ? first_area : area;
-        const double bead = loop_spacing(width, h);
+        // The raft's first layer, on the bed, with the first layer's beads.
+        const double w = k == 0 && settings.first_line_width.value > 0.0 ? first_bead(settings) : width;
+        const double bead = loop_spacing(w, h);
         if (k + interfaces >= n) { // interface, the top one at 135
             const double angle = (n - 1 - k) % 2 == 0 ? 135.0 : 45.0;
-            fills[k].support_interface = rectilinear_fill(regions[k], bead, angle, width, true);
+            fills[k].support_interface = rectilinear_fill(regions[k], bead, angle, w, true);
         } else { // base, the top one at support.line_angle
             const double angle = settings.support_line_angle + ((n - interfaces - 1 - k) % 2 == 1 ? 90.0 : 0.0);
             const double spacing =
                 k == 0 ? bead / (settings.raft_first_layer_density / 100.0) : settings.support_spacing + bead;
-            fills[k].support = rectilinear_fill(regions[k], spacing, angle, width, true);
+            fills[k].support = rectilinear_fill(regions[k], spacing, angle, w, true);
         }
     }
     // The part goes up.
@@ -140,14 +150,15 @@ void add_raft(SlicedModel& out, const Settings& settings) {
     out.brim.clear();
     AdhesionShape shape = adhesion_shape(settings);
     shape.brim_width = 0.0;
-    out.skirt = skirt_loops(first_area, shape, settings.wall_width, settings.first_layer_height);
+    out.skirt = skirt_loops(first_area, shape, first_bead(settings), settings.first_layer_height);
 }
 
 // The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
-// are wide, their section pi/4 of the width squared, the height past the
-// layer's in each path's gap. The ones resting on the support get its gap after.
+// are wide, their section pi/4 of the width squared (bead_area), the height
+// past the layer's in each path's gap. The ones resting on the support get
+// its gap after.
 void round_bridges(std::vector<Toolpath>& bridges, double width, double layer_height) {
-    const double gap = std::max(0.0, std::numbers::pi / 4.0 * width - layer_height);
+    const double gap = std::max(0.0, width - layer_height);
     for (Toolpath& t : bridges)
         t.gap = gap;
 }
@@ -158,10 +169,16 @@ double bridge_bead(const Settings& settings) {
     return settings.nozzle_diameter * std::sqrt(std::max(settings.bridge_flow_ratio, 0.0));
 }
 
+// The outer wall's bead: walls.outer_width, or 1.125 nozzles, whatever
+// walls.width is (perimeters.md, rule 1, P12).
+double outer_bead(const Settings& settings) {
+    return settings.outer_wall_width > 0.0 ? settings.outer_wall_width : 1.125 * settings.nozzle_diameter;
+}
+
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
-        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill);
+        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, beading.outer_width, beading.overlap);
     beading.wall_count = count;
     return layer_walls(region, beading);
 }
@@ -465,15 +482,18 @@ struct PartNozzles {
     double infill_nozzle; // mm
 };
 PartNozzles part_nozzles(const Settings& s, int tool) {
-    PartNozzles p{s, s.wall_width, s.nozzle_diameter};
+    // The sparse infill's width: its own, or 1.125 nozzles (surfaces_infill.md, I9).
+    const double sparse = s.infill_width > 0.0 ? s.infill_width : 1.125 * s.nozzle_diameter;
+    PartNozzles p{s, sparse, s.nozzle_diameter};
     if (s.extruders < 2 || s.nozzle_diameters.empty() || s.single_extruder_mmu)
         return p;
     const KindExtruders kinds = kind_extruders(s);
     const double walls = nozzle_of(s, kinds.walls > 0 ? kinds.walls : tool);
     const double infill = nozzle_of(s, kinds.infill > 0 ? kinds.infill : tool);
     p.settings.wall_width = s.wall_width * walls / s.nozzle_diameter;
+    p.settings.outer_wall_width = s.outer_wall_width * walls / s.nozzle_diameter;
     p.settings.nozzle_diameter = walls;
-    p.sparse_width = s.wall_width * infill / s.nozzle_diameter;
+    p.sparse_width = sparse * infill / s.nozzle_diameter;
     p.infill_nozzle = infill;
     if (s.fine_walls_coarse_infill && infill != walls) {
         p.settings.infill_combine_auto = true;
@@ -745,6 +765,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
+        part.first_line_width = {}; // the raft's first layer has them
         SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers);
         add_raft(raft, settings);
         return raft;
@@ -1176,9 +1197,30 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     out.walls.resize(out.layers.size());
     BeadingParams beading;
     beading.preferred_width = settings.wall_width;
+    beading.outer_width = outer_bead(settings);
+    // Only the middle beads take the difference (perimeters.md, rule 3,
+    // table P2): Kuipers et al.'s inward distributed scheme with N of them.
+    beading.scheme = BeadingScheme::InwardDistributed;
+    beading.inward_beads = double(settings.wall_spread_count);
+    beading.transition_length = settings.wall_transition_length.of(settings.nozzle_diameter);
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
+    // The first layer: every bead first_bead wide, the outer one too (with
+    // a width of its own; 0 leaves the first layer as the others).
+    const bool first_own = settings.first_line_width.value > 0.0;
+    Settings first_settings = settings;
+    BeadingParams first_beading = beading;
+    if (first_own) {
+        first_settings.wall_width = first_beading.preferred_width = first_bead(settings);
+        first_settings.outer_wall_width = first_beading.outer_width = first_settings.wall_width;
+    }
+    // Each layer's beads overlap by its height's share (perimeters.md, rule 1).
+    const auto beading_at = [&](std::size_t l) {
+        BeadingParams b = l == 0 ? first_beading : beading;
+        b.overlap = bead_overlap(out.layers[l].top - out.layers[l].bottom);
+        return b;
+    };
     std::vector<std::size_t> open(out.layers.size(), 0);
     std::vector<char> cut_away(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
@@ -1209,7 +1251,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         source[l] = same ? source[l - 1] : l;
         copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
                     (cut.empty() || cut[l] == cut[l - 1]) &&
-                    !(l == 1 && settings.first_layer_one_wall) &&
+                    !(l == 1 && (settings.first_layer_one_wall || first_own)) &&
                     !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
                     !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
     }
@@ -1241,7 +1283,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         if (settings.wall_count > 0) {
             // Only the outer wall on the first layer (walls_extra.md, rule 11).
             out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
-                                    settings, beading);
+                                    l == 0 ? first_settings : settings, beading_at(l));
             // What the walls leave, simplified as the contours are: each wall's
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).
@@ -1271,7 +1313,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (out.regions[l].empty() || (l == 0 && settings.first_layer_one_wall))
                 return;
             std::optional<LayerWalls> walls =
-                one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, settings, beading);
+                one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, l == 0 ? first_settings : settings,
+                                beading_at(l));
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
@@ -1359,8 +1402,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
             if (out.regions[l].empty() || held[l - 1].empty())
                 return;
-            // Round beads, as the bridges' (rule 3): pi/4 of the width squared.
-            const double round = std::numbers::pi / 4.0 * settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
+            // Round beads, as the bridges' (rule 3): as thick as they are wide.
+            const double round = settings.wall_width - (out.layers[l].top - out.layers[l].bottom);
             for (ArcZone& z : overhang_arcs(out.regions[l], held[l - 1], ap)) {
                 for (Toolpath& t : z.arcs) {
                     t.gap = round;
@@ -1386,7 +1429,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
             if (out.regions[l].empty() || held[l - 1].empty())
                 return;
-            const double round = std::max(0.0, std::numbers::pi / 4.0 * w - (out.layers[l].top - out.layers[l].bottom));
+            const double round = std::max(0.0, w - (out.layers[l].top - out.layers[l].bottom));
             Polygons taken;
             for (const HeldZone& z : held_zones(out.regions[l], held[l - 1], w)) {
                 const Polygons area = Clipper2Lib::Intersect(z.zone, out.walls[l].infill, Clipper2Lib::FillRule::NonZero);
@@ -1424,6 +1467,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         SupportParams sp;
         sp.threshold_angle = settings.support_angle;
         sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
+        sp.bottom_gap_layers = settings.support_bottom_z_gap > 0.0
+                                   ? int(std::lround(settings.support_bottom_z_gap / stack_height))
+                                   : sp.z_gap_layers;
+        sp.buildplate_only = settings.support_buildplate_only;
         sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
         sp.margin = kSupportMargin;
         sp.bead = settings.wall_width;
@@ -1607,6 +1654,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     settings.monotonic_top};
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
+    // At 0 from the nozzle, not the walls (surfaces_infill.md, I9): the top
+    // surface one nozzle wide, the other solid infill 1.125.
+    fill.top_width = settings.top_width > 0.0 ? settings.top_width : settings.nozzle_diameter;
+    fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
@@ -1634,14 +1685,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         const AdhesionShape shape = adhesion_shape(settings);
-        out.brim = brim_loops(out.regions.front(), shape, settings.wall_width, first);
-        out.skirt = skirt_loops(out.regions.front(), shape, settings.wall_width, first);
+        out.brim = brim_loops(out.regions.front(), shape, first_bead(settings), first);
+        out.skirt = skirt_loops(out.regions.front(), shape, first_bead(settings), first);
     }
     out.fills.resize(out.layers.size());
     // A layer with nothing but its surfaces to fill, the same as the layer a
     // fill period below (fill_period), has its fill (prismatic parts; the
     // speed report's V10).
     const std::size_t period = fill_period(fill);
+    // Each layer's lines overlap by its height's share (perimeters.md, rule 1).
+    const auto overlapping = [&](FillParams params, std::size_t l) {
+        params.overlap = bead_overlap(out.layers[l].top - out.layers[l].bottom);
+        return params;
+    };
+    // The first layer's lines first_bead wide (perimeters.md, rule 7).
+    FillParams first_fill = fill;
+    if (settings.first_line_width.value > 0.0)
+        first_fill.width = first_fill.top_width = first_fill.solid_width = first_fill.sparse_width = first_bead(settings);
     const auto plain = [&](std::size_t l) {
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
@@ -1653,7 +1713,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     if (period > 0)
         tbb::parallel_for(period, out.layers.size(), [&](std::size_t l) {
             const LayerSurfaces &a = out.surfaces[l], &b = out.surfaces[l - period];
-            repeats[l] = plain(l) && plain(l - period) && a.bridge_angle == b.bridge_angle && a.top == b.top &&
+            // Not the first layer's fill: its lines have their own width.
+            repeats[l] = l > period && plain(l) && plain(l - period) && a.bridge_angle == b.bridge_angle && a.top == b.top &&
                          a.top_under == b.top_under && a.bottom == b.bottom && a.sparse == b.sparse &&
                          a.bridge == b.bridge;
         });
@@ -1661,7 +1722,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                       [&](std::size_t l) {
                           if (repeats[l])
                               return;
-                          out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          out.fills[l] = fill_layer(out.surfaces[l], l, overlapping(l == 0 ? first_fill : fill, l),
+                                                    out.layers[l].slice_z());
                           round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
@@ -1679,7 +1741,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               denser.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
-                              for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(denser, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           for (std::size_t z = 0; z < zones; ++z) {
@@ -1693,7 +1755,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               zoned.depth = nullptr;
                               LayerSurfaces only;
                               only.sparse = zone_region[z][l];
-                              for (Toolpath& t : fill_layer(only, l, zoned, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(zoned, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (!dense_region[l].empty()) {
@@ -1704,7 +1766,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               dense.pattern = banded_pattern;
                               LayerSurfaces only;
                               only.sparse = dense_region[l];
-                              for (Toolpath& t : fill_layer(only, l, dense, out.layers[l].slice_z()).sparse)
+                              for (Toolpath& t : fill_layer(only, l, overlapping(dense, l), out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (out.support_areas[l].empty())
@@ -1716,12 +1778,29 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           for (int k = 1; k <= settings.support_interface_layers; ++k)
                               if (const std::size_t a = l + gap + std::size_t(k); a < out.regions.size())
                                   above = Clipper2Lib::Union(above, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                          // And the support with the part below it within the next
+                          // bottom_interface_layers layers under the bottom Z gap
+                          // (supports_more.md, rule 7; grid support).
+                          if (settings.support_style != SupportStyle::Organic) {
+                              const std::size_t bottom_gap =
+                                  settings.support_bottom_z_gap > 0.0
+                                      ? std::size_t(std::max(0L, std::lround(settings.support_bottom_z_gap / stack_height)))
+                                      : gap;
+                              const int below_layers = settings.support_bottom_interface_layers < 0
+                                                           ? settings.support_interface_layers
+                                                           : settings.support_bottom_interface_layers;
+                              for (int k = 1; k <= below_layers; ++k)
+                                  if (const std::size_t b = bottom_gap + std::size_t(k); b <= l)
+                                      above = Clipper2Lib::Union(above, out.regions[l - b], Clipper2Lib::FillRule::NonZero);
+                          }
                           const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           // Its own bead width (supports_more.md, rule 18): a
                           // percentage is of the layer height; 0, the walls'.
                           const double h = out.layers[l].top - out.layers[l].bottom;
-                          const double width = settings.support_width.value <= 0.0 ? settings.wall_width
+                          // The first layer's, on the bed (supports_more.md, rule 18, SM14).
+                          const double width = l == 0 && settings.first_line_width.value > 0.0 ? first_bead(settings)
+                                               : settings.support_width.value <= 0.0 ? settings.wall_width
                                                : settings.support_width.percent ? settings.support_width.value / 100.0 * h
                                                                                 : settings.support_width.value;
                           if (settings.support_style == SupportStyle::Organic) {
@@ -1761,9 +1840,14 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 above[l] = Clipper2Lib::Union(above[l + 1], skins[l + 1], Clipper2Lib::FillRule::NonZero);
         }
         const double spacing = settings.ironing_spacing;
-        // As ;WIDTH writes it (three decimals), so the material matches what
-        // the G-code says: a tiny width loses much in the rounding otherwise.
-        const double width = std::max(0.001, std::round(spacing * settings.ironing_flow / 100.0 * 1000.0) / 1000.0);
+        // The bead whose section is spacing x flow x the layer's height
+        // (ironing.md, rule 3), as ;WIDTH writes it (three decimals), so the
+        // material matches what the G-code says: a tiny width loses much in
+        // the rounding otherwise.
+        const auto width_at = [&](std::size_t l) {
+            const double h = out.layers[l].top - out.layers[l].bottom;
+            return std::max(0.001, std::round(bead_width(spacing * settings.ironing_flow / 100.0 * h, h) * 1000.0) / 1000.0);
+        };
         const Polygons nothing;
         tbb::parallel_for(std::size_t(0), n, [&](std::size_t l) {
             Polygons area;
@@ -1783,7 +1867,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (area.empty())
                 return;
             const double angle = settings.infill_angle + (l % 2 == 1 ? 90.0 : 0.0) + 45.0;
-            out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width, true);
+            out.fills[l].ironing = rectilinear_fill(area, spacing, angle, width_at(l), true);
         });
     }
     // Wavy nonplanar infill (docs/NONPLANAR_INFILL.md, N1): only where the
@@ -1810,7 +1894,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             const double z = 0.5 * (out.layers[first].bottom + out.layers[last].top);
             ThickLayer& t = out.thick[last];
             t.height = out.layers[last].top - out.layers[first].bottom;
-            t.fill.sparse = fill_layer(only, r, fill, z).sparse;
+            FillParams thick = fill;
+            thick.overlap = bead_overlap(t.height);
+            t.fill.sparse = fill_layer(only, r, thick, z).sparse;
         });
     }
     if (!stack.groups.empty()) {

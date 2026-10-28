@@ -752,11 +752,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   primero, y su altura de capa dejada de lado con un aviso; el que cambia solo el relleno cambia el relleno ralo en su
   zona sin paredes en el borde (MT4). Rangos de alturas en el motor (2026-10-28, regla 6; MT7b, MT9, MT13):
   `MeshObject::ranges`, su altura de capa como tramos de `layers.heights` y sus otros ajustes como un modificador del
-  ancho del objeto entre el objeto y la parte. Falta: leer los ajustes del 3MF, la lista de objetos con sus
-  filas hijas (regla 11 de `settings_levels.md`), los demás grupos por objeto (velocidades, temperaturas, altura de
+  ancho del objeto entre el objeto y la parte. La lista de objetos con sus filas hijas, en la pestaña Objetos
+  (2026-10-28, reglas 11 y 13 de `settings_levels.md`). Falta: leer los ajustes del 3MF, los demás grupos por objeto (velocidades, temperaturas, altura de
   capa), los negativos con corte, separar o copias, el plano libre y los conectores del corte, Separar en partes
   (reglas 18 y 19), los modificadores y negativos con la forma de un archivo (hoy caja o cilindro, agregados en la interfaz el
-  2026-10-28), la altura de capa de un rango cuando hay varios objetos con
+  2026-10-28; siguen a la pieza al moverla, girarla, escalarla y espejarla), la altura de capa de un rango cuando hay varios objetos con
   rangos distintos (hoy la pila de capas es de toda la placa), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
@@ -898,6 +898,39 @@ Con el PR #23 (2026-10-26):
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
+- [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
+  `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
+  del laminado. Faltan, por grupo: `fins` 20, `support` 13, `waam` 10 (después de la primera versión), `walls` 9,
+  `cooling` 7, `fragment` 7, `machine` 7, `calibration` 5 (los nombres de las franjas: `mode`, `start`, `step`, `end`,
+  `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
+  2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
+  nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
+- [ ] **`walls.transition_angle` y `walls.transition_margin`** (`perimeters.md` P13 y P14, medidas por el equipo de
+  fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
+  sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
+  solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
+  queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
+  contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
+- [ ] **`walls.staggered`** (`staggered_perimeters.md`, ST1): los lazos internos impares media capa más arriba; el
+  material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
+  material de los bloques no planares también sea lineal en el espesor
+- [x] **Modelo del cordón de las fichas** (hecho 2026-10-28; queda la corrida 48 del fuzzer, `PROGRESS.md`) (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;
+  pedido del equipo de fichas, 2026-10-28). Hoy el motor pone los cordones borde con borde y saca el filamento de
+  `w·h`. Las fichas dicen: sección `A = (w − h)·h + π·(h/2)²` (rectángulo con costados redondeados) y vecinos a
+  `(w₁ + w₂)/2 − δ`, con `δ = h·(1 − π/4)`. Las dos cosas van juntas, en un solo commit: el filamento por mm de
+  ancho de paso (`A / h = w − δ`) es el mismo que hoy si el paso es el ancho de hoy, así que cambiar una sola dejaría
+  la pieza sub- o sobreextruida. Pasos:
+  - una función de la sección (`A(w, h)`; con `w ≤ h`, elipse `π·w·h/4`, igual en `w = h`) usada por el escritor
+    (filamento, tope de caudal), el verificador (filamento por mm) y la vista previa (ancho desde el filamento);
+  - los puentes redondos siguen en `π·w²/4` (M2): marcar sus tramos como redondos en vez de deducirlo de la altura;
+  - paredes: la región achicada `δ/2`, el reparto de Kuipers en pasos (`w − δ`; `walls.min_line_width` y
+    `walls.min_detail` ya son pasos: P2 da 0,383 de ancho con 0,34 de separación) y el ancho escrito, paso + `δ`.
+    Cuentas hechas contra P2: 0,4 → un cordón de 0,400; 0,7 → ±0,164 de 0,371; 1,2 → ±0,375 de 0,450 y uno de 0,386;
+    P1 → 0,225, 0,632 y 1,039. Lo mismo en las paredes fijas;
+  - rellenos: líneas a `w − δ` (sólido) y `(w − δ)/densidad` (poco denso), y el borde del relleno donde termina el
+    último paso;
+  - todas las pruebas que cuentan filamento por mm o posiciones de cordones, con los números de las fichas (M1:
+    0,033849 mm/mm con 0,45 × 0,2 y filamento de 1,75)
 - [ ] Medición del equipo de fichas (2026-10-26, `dev` d3e814a contra Tisma Slicer, caja negra, cada uno con sus
   ajustes): en las piezas grandes el motor tarda 2 a 3 veces más (Benchy 7,0 s contra 3,3 s; Benchy al doble con
   gyroid 17,8 contra 5,8 s) y su G-code pesa hasta 3,3 veces más (Benchy 7,57 MB contra 2,29 MB). Cuenta para el

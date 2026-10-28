@@ -2,6 +2,8 @@
 
 #include "gcode/preview.hpp"
 
+#include "geom/bead.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -335,7 +337,7 @@ private:
                 height = std::max(0.0, height + ((z_ - layer.z) + (z - layer.z)) / 2.0);
             double width = width_;
             if (!width_comments_ && height > 0.0)
-                width = de * filament_area_ / (length * height);
+                width = bead_width(de * filament_area_ / length, height);
             mv.kind = kind_;
             mv.width = float(std::clamp(width, 0.01, 10.0));
             mv.height = float(height);
@@ -450,7 +452,7 @@ void time_preview(GcodePreview& preview, const Kinematics& kinematics, double fi
             const double dx = double(m.x1) - m.x0, dy = double(m.y1) - m.y0, dz = double(m.z1) - m.z0;
             const bool extruding = m.kind != LineKind::Travel;
             const double length = std::sqrt(dx * dx + dy * dy + dz * dz);
-            const double de = extruding && area > 0.0 ? double(m.width) * m.height * length / area : 0.0;
+            const double de = extruding && area > 0.0 ? bead_area(m.width, m.height) * length / area : 0.0;
             // A move with no feed of its own (a file that never sets one): 50 mm/s.
             time.add(dx, dy, dz, de, m.feed > 0.0f ? double(m.feed) : 50.0, extruding);
             marks.push_back(time.mark());

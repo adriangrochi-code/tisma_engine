@@ -6560,3 +6560,264 @@ voladizo (`cut_at`), que la 0.9.0 no hacía.
 mensajes del negativo y de un rango con ajustes rotos (`[transform]`).
 
 **Sigue:** la lista de objetos con sus filas hijas y que los volúmenes sigan a la pieza al girarla o escalarla (P1).
+
+
+## 2026-10-28 — Los modificadores y negativos siguen a la pieza al girarla, escalarla y espejarla
+
+**Por qué:** lo que seguía de P1 (pedido del dueño de seguir con lo próximo): los volúmenes de una pieza solo la
+seguían al moverla.
+
+**Hecho:**
+- Un modificador o un negativo se define ahora en el marco del modelo, sobre su caja tal como viene en su archivo y en
+  sus milímetros, y `volume_mesh` lo lleva a la cama con el mismo mapa que `placed_mesh` (`placing`: escala, giro y
+  el corrimiento que dejó la primera esquina). Sin giro ni escala queda donde estaba: los proyectos de ayer abren igual.
+- Cada volumen tiene un giro propio (`PlateVolume::turn`), para los casos en que la malla de la pieza cambia de marco:
+  guardar el proyecto (la pieza se guarda como está en la cama) y espejar una pieza girada (que toma su giro en la
+  malla). `carried_volume` lleva el volumen al marco nuevo: el centro por el mapa, los ejes por el mapa y
+  normalizados (su estiramiento escala el tamaño), uno dado vuelta si el mapa espeja (una caja y un cilindro son su
+  propia imagen) y Gram-Schmidt si una escala despareja los torció. En el proyecto, `models[i].volumes[k].turn`
+  (nueve números por filas), escrito solo si no es el giro nulo.
+- Agregar un volumen desde el menú usa las medidas del modelo (`model_size`), no las de la pieza en la cama.
+- `--object-turn X,Y,Z` gira la primera pieza al abrir, después de `--object-add`, y la prueba `ui_object_volumes_turned`
+  (el cubo a 45° con un modificador y un negativo).
+
+**Medido:** `[plate]`: una caja de 4 mm a 5 mm del centro en +X queda en X 105; con la pieza girada 90° en Z, en Y 105;
+con escala 2, en Y 110, Z 10 y de 8 mm; guardada como está, en el mismo lugar con 8 mm; espejada en X, a −5 y derecha.
+`[project]`: `turn` va y vuelve. Exportar desde la interfaz el cubo con un modificador de 5 paredes y un negativo: sin
+giro, 333,11 mm de filamento (lo mismo que ayer); girado 45°, 334,91 mm; los dos pasan el verificador al exportar.
+
+**Falta:** la lista de objetos con sus filas hijas; los volúmenes al cortar o separar; editar el giro propio de un
+volumen en la ventana (hoy solo cambia al guardar o espejar).
+
+**No medido:** el dibujo de los volúmenes calcula en cada cuadro la caja del modelo (una pasada por sus vértices) por
+cada volumen; con mallas de millones de triángulos puede notarse.
+
+
+## 2026-10-28 — La pestaña Objetos: las piezas con sus filas hijas
+
+**Por qué:** lo siguiente de P1 (`settings_levels.md`, reglas 11 y 13; `tools/check_spec.py` limpio): el panel de la
+izquierda con Impresión, Material y Objetos, y en Objetos cada pieza con sus ajustes propios, partes y modificadores
+debajo.
+
+**Hecho:**
+- `object_rows` (`src/ui/plate.*`): las filas bajo una pieza, un grupo de ajustes propios por fila (paredes, relleno y
+  superficies en ese orden, después cualquier otro), cada modificador o negativo y cada rango.
+- La pestaña **Objetos** al lado de Impresión y Material: la lista de piezas con esas filas; elegir la pieza la elige en
+  la placa y elegir una fila muestra abajo «Ajustes de la pieza a cambiar» (regla 11), con el mismo editor que la
+  ventana «Ajustes de …»: los ajustes de la pieza con su cruz, o la forma, el lugar, el tamaño y los ajustes de un
+  volumen, o las alturas y los ajustes de un rango (`volume_editor` y `range_editor`, sacados de la ventana).
+- `--section objects/<fila>` abre la pestaña con esa fila elegida, y la prueba `ui_objects_list`.
+
+**Medido:** `[plate]`: las filas de un cubo con relleno y paredes propios (paredes primero), dos volúmenes y un rango.
+La captura en inglés muestra la fila Infill elegida con «Infill density» 15 % y «Infill pattern» Grid, cada uno con su
+cruz, como la imagen de la regla 11.
+
+**Falta:** los íconos de las filas; elegir una fila desde la vista 3D (un clic en un modificador); arrastrar filas.
+
+
+## 2026-10-28 — Ajustes de las fichas: los primeros alias (bloque nocturno)
+
+**Por qué:** la medición del equipo de fichas (`docs/spec/qa/2026-10-28-ajustes.md`, `spec/next` cc8d580,
+`tools/check_spec.py` limpio): el motor lee 368 de 479 claves del laminado. Anotada en `PLAN.md`; primero los alias.
+
+**Hecho:** `spec_aliases` (`src/config/settings.cpp`), como `material_aliases`: `support.angle_limit` →
+`support.threshold_angle`, `arrange.distance` → `placement.spacing`, `filament.pressure_advance` →
+`extrusion.pressure_advance` y `machine.e_mode` (`length` o `volume`) → `gcode.volumetric_e`; las cuatro con el mismo
+significado en la ficha y en el motor. Con los dos nombres a la vez es un error, y `engine_setting_key` también las
+traduce para el asistente. `docs/CONFIG.md`, «Otros nombres de las fichas».
+
+**Medido:** `[settings]` (1915 aserciones): las cuatro se leen, `length` apaga el E volumétrico, los dos nombres juntos
+y `machine.e_mode` `pellets` son errores, `filament.transmission_distance` sigue siendo desconocida.
+
+**Sigue:** las claves que faltan, por grupo; las más cortas primero: `cooling.enabled` y `cooling.full_fan_layer`,
+`speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap` y `support.buildplate_only`.
+
+
+## 2026-10-28 — `cooling.full_fan_layer` y `cooling.enabled` (bloque nocturno)
+
+**Hecho:** dos claves de la medición del equipo de fichas (`cooling.md` y `cooling_more.md`, `tools/check_spec.py`
+limpio):
+- `cooling.full_fan_layer`: el ventilador sube en línea recta desde la primera capa con ventilador hasta esa capa
+  (regla 1). Va sobre lo que le toca a la capa, incluido `fan_always` y el máximo de una capa frenada; no sobre un
+  ventilador puesto por un cambio de altura.
+- `cooling.enabled`: apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa
+  (con `fan_always`, `fan_min`); el de los puentes y los cambios de altura siguen. Primero fue una interpretación
+  propia; el equipo de fichas lo midió en Tisma Slicer y coincide en todo: `cooling.md`, regla 5 y pruebas K6 a K8
+  (`spec/next` 2dfa2d4, fusionada en `dev` con `tools/check_spec.py` limpio). K6 y K8 quedan como prueba (`[gcode]`).
+- Las dos en el panel (nivel Avanzado: Ventilador y Capas cortas), en `docs/CONFIG.md` y en el laminado por etapas de
+  la interfaz (`slicing.cpp`).
+
+**Medido:** C1: con ventilador de 100 %, capas 1 a 3 apagado, capa 4 `M106 S51`, 5 S102, 6 S153, 7 S204, 8 en adelante
+S255; con 40 %, S20 a S102; sin el ajuste, S102 desde la capa 4 (lo de la ficha). Con el enfriamiento apagado y
+`min_layer_time` 1000 s, ningún `M106 S` ni frenado. `[layout]`, `[settings]`, `[settings_view]`, `[ui]` y `[gcode]`:
+151 casos, todos pasan.
+
+**Sigue:** `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.buildplate_only`.
+
+
+## 2026-10-28 — `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap` (bloques nocturnos)
+
+**Hecho:**
+- `speed.support_interface` (mm/s o % de `speed.support`; sin valor, `speed.support`) y `acceleration.wipe_tower`
+  (0: `acceleration.default`), en el panel (Avanzado) y en `docs/CONFIG.md`. SM11: interfaz a 3600 y 1800 mm/min con
+  el soporte a 60 mm/s, 100 % y 50 %.
+- `support.bottom_z_gap` (`supports_more.md`, regla 6): el soporte de grilla que apoya sobre la pieza empieza esas capas
+  por encima; sin valor, `support.z_gap`. **Cambia lo de siempre**: antes ese soporte empezaba pegado a la pieza. Se
+  resta de cada capa de soporte la pieza de las capas de la separación, agrandada medio cordón para que no queden
+  hilos colgando del borde. Falta la primera capa más gruesa de la regla (0,4 mm en SM3) y medir SM3 con el estante.
+- `spec/next` fusionada (`cooling.md` regla 5 con K6 a K8, `assistant.md`, `calibration_models.md`, la medición de los
+  ajustes; `tools/check_spec.py` limpio), y K6 y K8 como prueba.
+
+**Medido:** `[support]`, `[gcode]`, `[settings]`, `[layout]` y `[ui]`: 163 casos, todos pasan; la columna sobre una
+losa con dos capas de separación empieza en la capa 5.
+
+**Sigue:** `support.buildplate_only` (quitar entera una zona que toca la pieza: componentes conexos en 3D) y
+`support.bottom_interface_layers`; después el grupo `walls`.
+
+**Después: `support.bottom_interface_layers`** (`supports_more.md`, regla 7): sobre la pieza, el soporte de grilla que
+tiene la pieza debajo en las capas siguientes a la separación de abajo va como interfaz; −1 (por defecto) es tantas
+capas como `support.interface_layers`, así que **también cambia lo de siempre**: el soporte sobre la pieza empieza
+con tres capas de interfaz. Prueba con una losa, un poste y un estante: separación de una capa, tres de interfaz y
+después base; con dos de separación y una de interfaz, la capa 7 es interfaz y la 8 base; con 0, ninguna. Los
+árboles no la llevan todavía. 164 casos de `[support]`, `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
+
+**Después: `support.buildplate_only`** (`supports_more.md`, regla 2): las islas del soporte de grilla de cada capa,
+unidas con las de la capa de abajo que tocan, forman zonas; una zona con alguna isla justo sobre la pieza (dentro de la
+separación de abajo) se quita entera, también lo que tiene sobre la cama (`keep_from_bed`). Prueba: el estante sobre
+la losa queda sin soporte (SM2: «ningún soporte»), una T sobre la cama lo conserva. Los árboles no lo llevan todavía.
+165 casos, todos pasan.
+
+**Después: `walls.outer_first`** (`perimeters.md`, regla 4, P10): en cada isla, las paredes de la externa hacia
+adentro. Prueba: en la capa 10 del cubo de 3 paredes, `Perimeter` y después `External perimeter`; con el ajuste, al
+revés. 156 casos de `[gcode]`, `[settings]`, `[layout]` y `[ui]`, todos pasan.
+
+**Después: `walls.seam_gap`** (`perimeters.md`, regla 5, P1): un lazo cerrado de pared (externo o interno) termina
+esa distancia antes de su inicio, por defecto 15 % de la boquilla (0,06 mm con 0,4), recortado sobre su último tramo
+(`seam_gapped`). **Cambia el G-code de siempre**: antes cada lazo volvía a su inicio. No en las costuras en rampa ni en
+el modo vaso. Prueba: en el cubo, la vuelta externa mide 0,06 mm menos que cerrada, y 1 mm menos con 1 mm; las pruebas
+de la costura en rampa cuentan el hueco de los lazos sin rampa. En el panel va en «Ancho de línea» (la tarjeta de
+paredes ya tiene 8). Toda la lista: 646 casos, todos pasan; fuzzer 600 corridas (semilla 5281028), 0 fallas.
+
+**Después: anchos de línea por tipo** (`surfaces_infill.md`): `surfaces.top_width` (la capa de arriba de todo),
+`surfaces.solid_width` (el resto del relleno sólido) e `infill.width` (el poco denso; con boquillas distintas, en
+proporción a la del relleno). Cada línea lleva su ancho y el escritor saca la E de él, así que el verificador y el
+filamento quedan de acuerdo. **Diferencia con la ficha:** con 0 valen `walls.width` (lo de siempre); la ficha da 0 = la
+boquilla (arriba) y 1,125 × la boquilla (los otros). La pregunta va al equipo de fichas antes de cambiar lo de
+siempre. Prueba: una caja de 30 × 30 × 5 con 0,5, 0,42 y 0,55 mm, cada relleno con su ancho, `;WIDTH:0.500` y
+`0.550` en el G-code, y el verificador conforme. 175 casos, todos pasan.
+
+**Anchos en 0 desde la boquilla (I9).** El equipo de fichas respondió: con 0, la capa de arriba de todo lleva el ancho
+de la boquilla y el resto del relleno sólido y el poco denso 1,125 boquillas, sin seguir a `walls.width`. Ahora es
+así (con boquillas distintas, 1,125 de la del relleno: 0,675 mm con 0,6). **Cambia el G-code de siempre**: con 0,4,
+los rellenos pasan de 0,4 a 0,45 mm (arriba sigue en 0,4). Cinco pruebas suponían el ancho de las paredes y se
+ajustaron: el relleno denso bajo la tapa fija `infill.width` 0,4 para comparar separaciones de 4 y 1 mm; la J de las
+capas curvas se mide con 0,45; el puente sobre el soporte, con `surfaces.solid_width` igual al de las paredes; el
+modelo sin nada para extruir fija también los rellenos en 0,8; el relleno de la boquilla gruesa es de 0,675 mm.
+Prueba nueva: con `walls.width` 0,5 y los anchos en 0, arriba 0,4 y lo demás 0,45. Toda la lista: 692 casos, todos
+pasan.
+
+**Sigue:** `walls.outer_width` y `layers.first_line_width` (tocan el generador de paredes), y el resto de `walls`.
+
+**`walls.outer_width`** (`perimeters.md`): el cordón de la pared externa con su ancho; los demás siguen en
+`walls.width`, cada uno desde donde termina el anterior, y el relleno empieza donde termina la última pared. En el
+generador variable va en la cáscara (los dos cordones de afuera tienden a su ancho y la rampa empieza más tarde si
+hace falta, para que quede medio cordón libre en el medio); en el de ancho fijo, el primer lazo. Con boquillas
+distintas, en proporción a la de las paredes. En el panel, en «Ancho de línea». **Diferencia con la ficha:** con 0
+vale `walls.width`; la ficha da 0 = 1,125 × la boquilla para los dos, pero no dice qué pasa con `walls.width` fijo y
+la externa en 0 (pregunta enviada al equipo de fichas). Prueba: cubo de 20 mm, 3 paredes de 0,45 con la externa de
+0,6, los dos generadores: anchos 0,6 / 0,45 / 0,45, centros a 0,3, 0,825 y 1,275 mm del borde y el relleno desde
+1,5 mm; con 0, todas de 0,45. Toda la lista: 692 casos, todos pasan.
+
+**`layers.first_line_width`** (`perimeters.md`, regla 7; `supports_more.md`, SM14): todos los cordones de la primera
+capa con ese ancho, en mm o en % de la altura de la primera capa, por defecto 200 % (0,4 mm con 0,2): paredes (la
+externa también), rellenos, falda, borde, soporte, y con balsa su primera capa (la primera capa de la pieza sobre la
+balsa queda como las demás). 0: como las demás capas. La segunda capa ya no copia las paredes de la primera ni la
+capa a un período de relleno copia el relleno de la primera. **Cambia el G-code de siempre** en la primera capa
+cuando la altura de la primera capa no es 0,2 o `walls.width` no es 0,4, y en sus rellenos (que desde I9 eran de
+0,45). En el panel, en «Ancho de línea». Prueba: cubo de 20 mm con paredes de 0,45 y la externa de 0,6: la primera
+capa entera de 0,4 (paredes, rellenos, falda) y la segunda con la externa de 0,6; con primera capa de 0,3, 0,6; con
+0,5 mm, 0,5; con 0, 0,45 y 0,6 como las demás. Una prueba de boquillas (MM2) con primera capa de 0,15 fija 0. Toda la
+lista: 694 casos, todos pasan.
+
+**P12: la pared externa en 0 sale de la boquilla.** El equipo de fichas midió en Tisma Slicer (`perimeters.md`,
+regla 1 y P12, traída de `spec/next`): con `walls.outer_width` 0 la externa mide 1,125 × la boquilla aunque
+`walls.width` valga otra cosa. Ahora es así. **Cambia el G-code de siempre**: con los valores por defecto del motor
+(`walls.width` 0,4) la pared externa pasa a 0,45 mm. Catorce pruebas que suponían todas las paredes de 0,4 fijan la
+externa igual a las demás; la de `walls.outer_width` comprueba 0,45 con `walls.width` 0,5. Toda la lista pasa.
+
+**Falta de P12: el paso entre cordones.** En Tisma Slicer los cordones vecinos se solapan: el paso es el promedio de
+sus anchos menos `h·(1 − π/4)` (0,0644 mm con capas de 0,3); el motor los pone borde con borde. Toca el generador de
+paredes entero (las posiciones, el relleno y las transiciones) y lo que se ve en las pruebas P1, P2 y P11: es el
+próximo paso, en un bloque propio.
+
+**Sigue:** el paso de P12; después el resto de `walls` (`staggered`, `transition_*`, `spread_count`,
+`vertical_shell`).
+
+**El paso de P12 es el modelo del cordón entero (2026-10-28, de noche).** Al empezarlo, la ficha `gcode_motion.md`
+(regla 1, M1) dice además que el filamento sale de la sección redondeada `(w − h)·h + π·(h/2)²`, no de `w·h` como
+hace el motor. Las dos cosas tienen que entrar juntas o la pieza queda mal extruida. Diseño y pasos en `PLAN.md`
+(«Modelo del cordón de las fichas»); se hace en los bloques que siguen, sin commit hasta que pase toda la lista.
+
+**Hecho (2026-10-28, de noche): el modelo del cordón de las fichas.** **Cambia el G-code de siempre**, en todo:
+- **Sección** (`src/geom/bead.hpp`): `A(w, h) = (w − h)·h + π·(h/2)²`; con `w ≤ h`, la elipse `π·w·h/4`. La usan el
+  escritor (filamento y tope de caudal), el verificador, la vista previa (ancho desde el filamento, su inversa) y la
+  torre de purga. Fuera de la Z de la capa (Z anti-aliasing, rampas) el material es el de la capa por la parte de su
+  altura que queda (`z_antialiasing.md`, regla 3). Los cordones redondos (puentes, voladizos, arcos) se escriben tan
+  altos como anchos (`;HEIGHT:0.400` con 0,4, antes 0,314), así la misma fórmula da `π·w²/4` (M2).
+- **Paso con solape** (`δ = h·(1 − π/4)`): las paredes (variables y fijas) trabajan en pasos `w − δ` sobre la región
+  achicada `δ/2` y escriben el cordón `δ` más ancho; `walls.min_line_width` y `walls.min_detail` son pasos (P2: 0,34
+  de paso, 0,383 de ancho). Los rellenos van a `w − δ` (sólido) y `(w − δ)/densidad` (poco denso); la torre de
+  purga también. Las zonas gruesas de las capas por zona ensanchan sus cordones `δ(H) − δ(h)`. El planchado escribe
+  el ancho cuya sección es separación × flujo × altura.
+- **Contra las fichas:** P1 (0,225, 0,632 y 1,039 mm), P12 (0,225 / 0,636 / 1,071 y 0,300 / 0,736 / 1,071), las
+  paredes de P2 de 0,4 a 1,0 mm, M1 (0,033849 mm/mm), P11 de `infill_patterns.md` (0,06056 contra 0,03385) e IR1
+  (0,001247) dan los números de las fichas. **Diferencia que queda:** desde tres cordones, Tisma Slicer carga la
+  diferencia solo en el del medio (P2 1,2 mm: 0,450 / 0,386 / 0,450) y el motor la reparte entre todos
+  (`walls.spread_count`, en la lista de ajustes).
+- **Pruebas:** las que contaban filamento por mm, posiciones o áreas de relleno con el modelo viejo pasan a las
+  cuentas nuevas (el relleno del cubo de 10 mm con 3 paredes de 0,4 empieza a 1,093 mm del borde, no a 1,2). La
+  torre de caudal se prueba por el caudal de cada tramo (sección × F) y no por una F fija. Toda la lista: 696 casos,
+  todos pasan.
+- **Fuzzer** (300 corridas, semilla 20261028): 1 falla, la corrida 48 (anillo, E volumétrica desde Z 1,31, capas
+  variables): un tramo de 0,023 mm justo después de volver de una retracción pone 0,00126 mm³ donde se esperan
+  0,00068. Sin este cambio esa corrida se rechazaba como no imprimible, así que es un caso que antes no se veía.
+  **Arreglado** en el bloque de mantenimiento que siguió: no era la sección. El escritor guarda el filamento de los
+  pedazos demasiado cortos para escribirse (0,02 mm de cordón, acá) y lo suma al tramo siguiente; si en el medio hay
+  un viaje, ese filamento caía en otro lugar de la pieza. Ahora se descarta al viajar (y se resta del total). La
+  corrida 48 pasa; toda la lista, 697 casos, pasa.
+
+
+## 2026-10-28 (madrugada): mantenimiento
+
+**Revisado:** `tools/ci_linux.sh` sobre `f1e167a` (pasa); el fuzzer, 300 corridas con la semilla 20261028 sobre el
+modelo del cordón y 2000 con la semilla 20261029 sobre el arreglo que siguió; las capas por zona y las torres con el
+modelo nuevo.
+
+**Encontrado y arreglado:**
+- **Filamento que saltaba con la boquilla** (semilla 20261028, corrida 48): ver arriba.
+- **Capas curvas, el primer viaje de la impresión** (semilla 20261029, corridas 41 y 225; ya fallaba en `f1e167a`, no
+  es del modelo nuevo): ese viaje queda como lo dice el G-code plano, porque todavía no se sabe dónde está la
+  boquilla; si la capa es curva ahí, la primera extrusión arrancaba fuera de la superficie. Ahora le sigue un
+  movimiento a la Z de la superficie. Prueba nueva en `[curved]`.
+- **Tope de velocidad del verificador con caudal forzado** (torre de caudal): contaba el cordón más angosto como un
+  rectángulo; con la sección redondeada pide más velocidad (839 contra 800 mm/s). Ahora usa la misma sección.
+
+**`walls.spread_count`** (`perimeters.md`, regla 3, tabla P2), que había quedado como diferencia del modelo del
+cordón: el corte usa el esquema de Kuipers et al. que carga la diferencia en los N cordones del medio (N = el ajuste,
+1 por defecto). Las filas de 1,2 y 1,5 mm de P2 dan los números de la ficha (0,450 / 0,386 / 0,450 a ±0,375;
+0,450 / 0,364 / 0,364 / 0,450). En el panel, en «Paredes, más». Toda la lista: 698 casos, todos pasan.
+
+**Fuzzer, 2000 corridas (semilla 20261029):** 22 rechazadas como no imprimibles, 2 fallas (las de capas curvas, ya
+arregladas).
+
+**`walls.transition_length`** (`perimeters.md`): el largo de la rampa en la que una pared pasa de N a N + 1
+cordones, en mm o en % de la boquilla (100 % por defecto; antes, el paso de un cordón). En el panel, en «Paredes,
+más». `walls.transition_angle` y `walls.transition_margin` esperan la respuesta del equipo de fichas (preguntado:
+qué ángulo y qué margen son, con una prueba de caja negra). `walls.staggered` (ST1) es lo próximo de `walls`: pide
+que el material de un cordón subido sea lineal en su espesor también en los bloques no planares. Toda la lista: 699
+casos, todos pasan.
+
+**Medido** (mantenimiento, máquina libre, esfera de un millón de triángulos, 3 corridas cada una): `f1e167a` (antes
+del modelo del cordón) lamina en 1,60 a 1,64 s y escribe en 190 a 209 ms; ahora, 1,61 a 1,77 s y 183 a 194 ms.
+Sin cambio medible. Las fichas P13 y P14 (`transition_margin`, `transition_angle`) llegaron de `spec/next` y quedan
+en `PLAN.md`.

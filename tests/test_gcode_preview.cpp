@@ -117,9 +117,11 @@ TEST_CASE("the preview follows relative moves and extrusion", "[gcode][preview]"
 }
 
 TEST_CASE("without comments the preview finds layers by Z and widths by volume", "[gcode][preview]") {
-    // 1.75 mm filament: a 10 mm line 0.45 wide and 0.2 high needs 0.9 mm3.
+    // 1.75 mm filament: a 10 mm line 0.45 wide and 0.2 high, its section a
+    // rectangle with rounded sides (gcode_motion.md, rule 1).
     const double area = std::numbers::pi * 0.25 * 1.75 * 1.75;
-    const double e = 0.45 * 0.2 * 10.0 / area;
+    const double section = (0.45 - 0.2) * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
+    const double e = section * 10.0 / area;
     std::ostringstream g;
     g << "G1 Z0.2\nG1 X0 Y0\nG1 X10 E" << e << "\n";
     g << "G1 Z0.4\nG1 X0 E" << 2 * e << "\n";
@@ -130,7 +132,8 @@ TEST_CASE("without comments the preview finds layers by Z and widths by volume",
     CHECK_THAT(p.layers[2].height, WithinAbs(0.3, 1e-6));
     CHECK_THAT(p.moves[p.extrusions[0]].width, WithinRel(0.45, 1e-5));
     CHECK_THAT(p.moves[p.extrusions[1]].width, WithinRel(0.45, 1e-5));
-    CHECK_THAT(p.moves[p.extrusions[2]].width, WithinRel(0.45 * 0.2 / 0.3, 1e-5));
+    // The same section 0.3 high: (w - 0.3) 0.3 + pi/4 0.3^2.
+    CHECK_THAT(p.moves[p.extrusions[2]].width, WithinRel(section / 0.3 + 0.3 * (1.0 - std::numbers::pi / 4.0), 1e-5));
 }
 
 TEST_CASE("the preview of the engine's G-code matches its check", "[gcode][preview]") {

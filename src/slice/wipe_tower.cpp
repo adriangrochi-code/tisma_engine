@@ -4,6 +4,7 @@
 
 #include "slice/wipe_tower.hpp"
 
+#include "geom/bead.hpp"
 #include "slice/pipeline.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -293,7 +294,8 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
     if (last == model.layers.size())
         return tower; // no change: no tower
     Frame f{s.wipe_tower_width, 0.0, s.wall_width * s.wipe_tower_extra_flow / 100.0, 0.0};
-    f.spacing = f.w * s.wipe_tower_extra_spacing / 100.0;
+    // Its lines overlap as the part's beads (perimeters.md, rule 1).
+    f.spacing = (f.w - bead_overlap(s.layer_height)) * s.wipe_tower_extra_spacing / 100.0;
     // A line across the inside, inside the outline's bead, its ends half a bead in.
     const double line = f.width - 3.0 * f.w;
     if (!(line > f.w))
@@ -314,7 +316,7 @@ WipeTower plan_wipe_tower(const SlicedModel& model, const Settings& s, const Too
                 continue;
             // What the objects did not take of the purge (rule 13).
             const double volume = tools.tower_purge[l][g];
-            const int n = s.single_extruder_mmu ? std::max(0, int(std::ceil(volume / (f.w * h * line) - 1e-9))) : kPrimeLines;
+            const int n = s.single_extruder_mmu ? std::max(0, int(std::ceil(volume / (bead_area(f.w, h) * line) - 1e-9))) : kPrimeLines;
             counts[l].push_back(n);
             used += n * f.spacing;
             std::vector<double> lengths, feeds;

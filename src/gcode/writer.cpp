@@ -11,6 +11,7 @@
 #include "gcode/template.hpp"
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
+#include "geom/bead.hpp"
 #include "infill/nonplanar.hpp"
 #include "slice/belt.hpp"
 #include "slice/wipe_tower.hpp"
@@ -703,6 +704,36 @@ const KindNotes& notes_of(const char* type) {
     return kOtherNotes;
 }
 
+// A closed loop as an open path that stops `gap` mm before its start, back
+// along its last stretch (perimeters.md, rule 5); one shorter than twice the
+// gap stays as it is.
+Toolpath seam_gapped(Toolpath t, double gap) {
+    if (!t.closed || t.points.size() < 3 || !(gap > 0.0))
+        return t;
+    double length = 0.0;
+    for (std::size_t i = 0; i < t.points.size(); ++i)
+        length += std::hypot(t.points[(i + 1) % t.points.size()].p.x - t.points[i].p.x,
+                             t.points[(i + 1) % t.points.size()].p.y - t.points[i].p.y);
+    if (!(length > 2.0 * gap))
+        return t;
+    t.points.push_back(t.points.front());
+    t.closed = false;
+    double left = gap;
+    while (left > 0.0 && t.points.size() > 2) {
+        const ToolpathPoint& a = t.points[t.points.size() - 2];
+        const ToolpathPoint& b = t.points.back();
+        const double d = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
+        if (d <= left) {
+            left -= d;
+            t.points.pop_back();
+            continue;
+        }
+        t.points.back() = between(a, b, 1.0 - left / d);
+        left = 0.0;
+    }
+    return t;
+}
+
 // A closed loop that starts `back` mm earlier along its own way round, at a
 // point put there (walls_extra.md, rule 3: the inner walls' staggered seams).
 Toolpath start_earlier(Toolpath loop, double back) {
@@ -1265,6 +1296,11 @@ public:
                 const Point2d* planned_from = nullptr, bool force_retract = false, const char* next_type = nullptr) {
         const char* note = first_travel_ ? "travel to first layer point" : notes_of(next_type).travel;
         first_travel_ = false;
+        // The E of pieces too short to write stays where they were: it does
+        // not follow the nozzle to the next place (a tip of 0.02 mm of bead
+        // landed on the first move after a travel, fuzz seed 20261028 run 48).
+        total_e_ -= pending_;
+        pending_ = 0.0;
         extruder_off();
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at
@@ -1394,7 +1430,12 @@ public:
                 shown_height_ = shown;
             }
         }
-        const double e = width * height * length / filament_area_ * flow_;
+        // Off the layer's Z (Z anti-aliasing, a scarf ramp), the layer's bead
+        // by the share of its height that is left (z_antialiasing.md, rule 3);
+        // a wavy bead is a bead of its own thickness.
+        const double section = nonplanar_ || !(height_ > 0.0) ? bead_area(width, height)
+                                                             : bead_area(width, height_) * height / height_;
+        const double e = section * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height);
         extruded_[feed] += length;
         if (outer_)
@@ -1435,7 +1476,7 @@ public:
             z_now_ = z_layer;
         }
         const double width = points[a.first].width, length = a.length();
-        const double e = width * height_ * length / filament_area_ * flow_;
+        const double e = bead_area(width, height_) * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height_);
         extruded_[feed] += length;
         if (outer_)
@@ -1656,10 +1697,11 @@ private:
     // cap (it looks for the limit) as far as the machine moves; else no faster
     // than the hot end and the filament melt, rounded down to whole mm/min.
     double melt_feed(double feed, double width, double height) const {
-        if (forced_flow_ > 0.0 && width * height * flow_ > 0.0)
-            return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (width * height * flow_) * 60.0)) / 60.0);
-        if (max_flow_ > 0.0 && width * height * flow_ > 0.0) {
-            const double cap = max_flow_ / (width * height * flow_);
+        const double section = bead_area(width, height);
+        if (forced_flow_ > 0.0 && section * flow_ > 0.0)
+            return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (section * flow_) * 60.0)) / 60.0);
+        if (max_flow_ > 0.0 && section * flow_ > 0.0) {
+            const double cap = max_flow_ / (section * flow_);
             if (feed > cap)
                 return std::max(1.0, std::floor(cap * 60.0)) / 60.0;
         }
@@ -2548,7 +2590,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     const double infill_cap = crossing ? s.infill_max_crossing_speed : s.infill_max_speed;
     const double sparse_feed = infill_cap > 0.0 ? std::min(s.infill_speed, infill_cap) : s.infill_speed;
     const double fill_speed[7] = {s.solid_infill_speed, s.top_solid_infill_speed, bridge_feed, gap_feed,
-                                  sparse_feed,          s.support_speed,          s.support_speed};
+                                  sparse_feed,          s.support_speed,
+                                  s.support_interface_speed.value > 0.0 ? s.support_interface_speed.of(s.support_speed)
+                                                                        : s.support_speed};
     // The bridges' round bead, for the walls over the air.
     const double bead = bridge_bead(s);
     // Each kind's acceleration (speeds_accels.md, rules 10 and 12): with the
@@ -2574,6 +2618,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                : is("Internal infill")                              ? accel_infill
                : is("Solid infill")                                 ? accel_solid
                : is("Top solid infill")                             ? accel_top
+               : is("Wipe tower")                                   ? or_else(s.accel_wipe_tower, s.accel_default)
                                                                     : s.accel_default; // support, skirt, gap fill
     };
 
@@ -2758,7 +2803,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         std::optional<AreaIndex> hanging, on_support;
         if (split_walls)
             hanging.emplace(*hanging_area), on_support.emplace(on_support_area);
-        const RoundBead round{bead, std::max(0.0, std::numbers::pi / 4.0 * bead - layer_height)};
+        const RoundBead round{bead, std::max(0.0, bead - layer_height)};
         // The solid infill right over a bridge, at speed.over_bridges
         // (speeds_accels.md, rule 2).
         std::optional<AreaIndex> over_bridge, nowhere;
@@ -3193,8 +3238,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // (arc_overhangs.md, rule 4).
                 for (Toolpath t : i.arcs)
                     lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
-                for (const auto& [index, paths] : i.walls)
-                    walls(index, paths);
+                // From the inside out, or with walls.outer_first from the outer
+                // wall in (perimeters.md, rule 4).
+                if (s.walls_outer_first)
+                    for (auto w = i.walls.rbegin(); w != i.walls.rend(); ++w)
+                        walls(w->first, w->second);
+                else
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths);
                 // The loops over an overhang, from its outline in, after the walls
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
@@ -3644,7 +3695,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         g.reset_times();
         write_layer(l, a, steps);
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
-        const Slowdown slowdown = a.volumetric_flow > 0.0
+        const Slowdown slowdown = a.volumetric_flow > 0.0 || !s.cooling_enabled
                                       ? Slowdown{}
                                       : s.keep_outer_speed
                                       ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
@@ -3666,13 +3717,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The fan: a height change's, else by the layer's time; a slowed layer
         // at fan_max, even among the first layers, which otherwise print
         // without fan (owner's decision, 2026-10-24). Bridges get their own.
+        // Without cooling, no fan by the layer's time (fan_min with fan_always).
+        // Up step by step from the first layer with fan to full_fan_layer
+        // (cooling_more.md, rule 1).
         const bool fan_off = local(l) < std::size_t(std::max(s.fan_off_layers, 0)) && slowdown.stage == 0;
-        const double fan = a.fan            ? *a.fan
-                           : fan_off        ? 0.0
-                           : slowdown.stage ? s.fan_max
-                                            : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
-                                                        s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
-                                                        s.fan_always);
+        double fan = a.fan               ? *a.fan
+                     : fan_off           ? 0.0
+                     : !s.cooling_enabled ? (s.fan_always ? s.fan_min : 0.0)
+                     : slowdown.stage     ? s.fan_max
+                                          : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
+                                                      s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
+                                                      s.fan_always);
+        if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);
+            !a.fan && full > off && n > off && n < full)
+            fan *= (n - off) / (full - off);
         g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges);
         const double seconds = g.end_layer();
         if (l == 0)
@@ -3794,6 +3852,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                    s.scarf_entire_loop ? std::numeric_limits<double>::infinity()
                                                                        : s.scarf_length,
                                                    s.scarf_max_segment);
+                        else if (!s.vase && step.path.points.size() > 2 &&
+                                 (std::strcmp(step.type, "External perimeter") == 0 || std::strcmp(step.type, "Perimeter") == 0))
+                            step.path = seam_gapped(std::move(step.path), s.wall_seam_gap.of(s.nozzle_diameter));
                         if (from)
                             step.from = from;
                         if (step.from)

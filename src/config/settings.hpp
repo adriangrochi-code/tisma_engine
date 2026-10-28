@@ -118,6 +118,9 @@ struct CalibrationDate {
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
+    // The first layer's beads (layers.first_line_width, perimeters.md, rule
+    // 7): mm, or a percentage of the first layer's height; 0: walls.width.
+    Speed first_line_width{200.0, true};
     // Layer heights by zone (docs/LOCAL_LAYERS.md): the height of the fine
     // sub-layers where the part changes, layer_height elsewhere; 0: off.
     double detail_height = 0.0;
@@ -135,7 +138,14 @@ struct Settings {
     double first_layer_shrink = 0.0;
     double simplify_tolerance = 0.01;
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
+    // How many beads, from the middle of a wall, take its difference from
+    // the nominal width (walls.spread_count, perimeters.md rule 3).
+    int wall_spread_count = 1;
+    // The ramp from n to n + 1 beads along a wall (walls.transition_length,
+    // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
+    Speed wall_transition_length{100.0, true};
     double wall_width = 0.4; // preferred bead width w*
+    double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
     // on a ramp up from the layer below instead of a step.
@@ -167,6 +177,9 @@ struct Settings {
     // machine.nozzle_diameter: a wall thinner than min_line_width is printed
     // with a bead that wide, centred; thinner than min_detail, not at all.
     Speed wall_min_line_width{85.0, true};
+    // A closed wall loop ends this much before its start, mm or % of the
+    // nozzle (perimeters.md, rule 5): 0.06 mm with a 0.4 nozzle.
+    Speed wall_seam_gap{15.0, true};
     Speed wall_min_detail{25.0, true};
     // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
     // spiral, a layer each turn, over flat bottom layers.
@@ -199,6 +212,11 @@ struct Settings {
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
+    // Line widths of their own, mm; 0: from the nozzle, not the walls
+    // (surfaces_infill.md, I9).
+    double top_width = 0.0;    // the top surface; 0: one nozzle
+    double solid_width = 0.0;  // the other solid infill; 0: 1.125 nozzles
+    double infill_width = 0.0; // the sparse infill; 0: 1.125 nozzles
     // Where one extruder's part rests on another's, each keeps its own top
     // and bottom solid layers, as if apart (multi_extruder.md, rule 16).
     bool interface_shells = false;
@@ -474,6 +492,7 @@ struct Settings {
     double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
+    Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
     double travel_z_speed = 0.0;    // moves in Z (speed.travel)
@@ -498,6 +517,7 @@ struct Settings {
     double accel_solid_infill = 0.0;     // (accel_infill)
     double accel_top_solid_infill = 0.0; // (accel_solid_infill)
     double accel_bridges = 0.0;          // bridges and overhang perimeters (accel_default)
+    double accel_wipe_tower = 0.0;       // the wipe tower (accel_default)
     double accel_first_layer = 0.0;      // everything on the first layer (each kind's)
     double accel_first_layer_over_raft = 0.0; // the part's first layer on a raft (each kind's)
     double accel_travel = 0.0;           // travels (none)
@@ -526,6 +546,7 @@ struct Settings {
     bool avoid_crossing_walls = true;  // travels run inside, round holes (docs/spec/BEHAVIOR.md)
     Speed max_detour;                  // mm or % of the straight travel a route may add; 0: no limit
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
+    bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
     // printer's, 0 included. with_filament_retraction applies them.
@@ -554,11 +575,13 @@ struct Settings {
     // support (docs/spec/BEHAVIOR.md, "Soportes")
     bool support = false;
     bool support_automatic = true; // false: support only under faces painted to have it (docs/PAINTING.md)
+    bool support_buildplate_only = false; // only support standing on the bed (supports_more.md, rule 2)
     // The support on the part's layers (multi_extruder.md, rule 19): read;
     // the engine always prints the support on the part's layers.
     bool support_synchronize_layers = false;
     double support_angle = 0.0;  // degrees from the horizontal; 0: automatic (half a bead per layer)
     double support_z_gap = 0.2;  // mm between the support and the part above it
+    double support_bottom_z_gap = 0.0; // mm between the part and the support standing on it; 0: support_z_gap
     // Between the support and the part beside it: mm, or percent of the
     // wall width (supports_skirt.md, rule 2: 50 %).
     Speed support_xy_gap{50.0, true};
@@ -579,6 +602,7 @@ struct Settings {
     double tree_tip_diameter = 0.8;         // mm
     double tree_top_rate = 15.0;            // percent: how close the tips are under the part
     int support_interface_layers = 3; // dense layers right under the part
+    int support_bottom_interface_layers = -1; // dense layers right over the part it stands on; -1: interface_layers
 
     // cooling
     double min_layer_time = 5.0;  // s: faster layers slow down (docs/spec/BEHAVIOR.md, "Enfriamiento")
@@ -592,6 +616,12 @@ struct Settings {
     bool fan_always = false;       // the fan never below fan_min
     double fan_bridges = 100.0;    // %: the fan while bridging
     int fan_off_layers = 3;        // the first layers print with the fan off
+    // The fan up step by step until this layer (counted from 1) after the
+    // ones without fan (cooling_more.md, rule 1); 0: at once.
+    int full_fan_layer = 0;
+    // Off: no slowing down for the minimum layer time and no fan by layer
+    // time (cooling.md); the bridges' fan and the height changes' stay.
+    bool cooling_enabled = true;
     // The outer walls keep their speed while the rest slows down for the
     // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
     bool keep_outer_speed = true;

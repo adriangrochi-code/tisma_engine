@@ -405,6 +405,25 @@ std::vector<std::string> own_keys(const std::string& own) {
     return out;
 }
 
+std::vector<ObjectRow> object_rows(const PlateObject& object) {
+    std::vector<ObjectRow> out;
+    std::vector<std::string> groups;
+    for (const std::string& key : own_keys(object.settings)) {
+        const std::string group = key.substr(0, key.find('.'));
+        if (std::find(groups.begin(), groups.end(), group) == groups.end())
+            groups.push_back(group);
+    }
+    const auto rank = [](const std::string& g) { return g == "walls" ? 0 : g == "infill" ? 1 : g == "surfaces" ? 2 : 3; };
+    std::stable_sort(groups.begin(), groups.end(), [&](const std::string& a, const std::string& b) { return rank(a) < rank(b); });
+    for (std::string& g : groups)
+        out.push_back({ObjectRow::Kind::Settings, std::move(g), 0});
+    for (std::size_t k = 0; k < object.volumes.size(); ++k)
+        out.push_back({ObjectRow::Kind::Volume, {}, k});
+    for (std::size_t k = 0; k < object.ranges.size(); ++k)
+        out.push_back({ObjectRow::Kind::Range, {}, k});
+    return out;
+}
+
 std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key) {
     nlohmann::ordered_json j = own_json(own);
     const auto [group, name] = split_key(key);
@@ -446,18 +465,55 @@ std::vector<std::string> own_setting_keys(const Settings& profile) {
     return out;
 }
 
-TriangleMesh volume_mesh(const PlateVolume& v, const BoundingBox& placed) {
+Affine placing(const PlateObject& object, const TriangleMesh& placed) {
+    Affine out;
+    if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())
+        return out;
+    // Scaled and turned, and moved as the first corner was (placed_mesh scales
+    // about the box's centre: the move takes that in).
+    const Rotation& r = object.place.rotation;
+    const auto& s = object.place.scale;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            out.a[std::size_t(3 * i + j)] = r[std::size_t(3 * i + j)] * s[std::size_t(j)];
+    const Vec3f first = object.mesh.corner(0, 0), there = placed.corner(0, 0);
+    const double m[3] = {double(first.x), double(first.y), double(first.z)};
+    const double there_d[3] = {double(there.x), double(there.y), double(there.z)};
+    for (int i = 0; i < 3; ++i) {
+        double turned = 0.0;
+        for (int j = 0; j < 3; ++j)
+            turned += out.a[std::size_t(3 * i + j)] * m[j];
+        out.b[std::size_t(i)] = there_d[i] - turned;
+    }
+    return out;
+}
+
+TriangleMesh volume_mesh(const PlateVolume& v, const PlateObject& object, const TriangleMesh& placed) {
     TriangleMesh m;
-    if (placed.empty)
+    if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())
         return m;
-    const double cx = 0.5 * (double(placed.min.x) + placed.max.x) + v.offset[0];
-    const double cy = 0.5 * (double(placed.min.y) + placed.max.y) + v.offset[1];
-    const double z0 = double(placed.min.z) + v.offset[2], z1 = z0 + std::max(v.size[2], 0.01);
+    // In the model's frame, over its box as its file has it, turned about its
+    // centre; then set down with the model.
+    const BoundingBox box = object.mesh.bounding_box();
+    const double h = std::max(v.size[2], 0.01);
+    const double cx = 0.5 * (double(box.min.x) + box.max.x) + v.offset[0];
+    const double cy = 0.5 * (double(box.min.y) + box.max.y) + v.offset[1];
+    const double cz = double(box.min.z) + v.offset[2] + h / 2.0;
     const double rx = std::max(v.size[0], 0.01) / 2.0, ry = std::max(v.size[1], 0.01) / 2.0;
-    const auto p = [](double x, double y, double z) { return Vec3f{float(x), float(y), float(z)}; };
+    const Affine to_bed = placing(object, placed);
+    const Rotation& u = v.turn;
+    const auto p = [&](double x, double y, double z) { // x, y, z from the volume's centre, along its axes
+        const double q[3] = {cx + u[0] * x + u[1] * y + u[2] * z, cy + u[3] * x + u[4] * y + u[5] * z,
+                             cz + u[6] * x + u[7] * y + u[8] * z};
+        const auto& a = to_bed.a;
+        return Vec3f{float(a[0] * q[0] + a[1] * q[1] + a[2] * q[2] + to_bed.b[0]),
+                     float(a[3] * q[0] + a[4] * q[1] + a[5] * q[2] + to_bed.b[1]),
+                     float(a[6] * q[0] + a[7] * q[1] + a[8] * q[2] + to_bed.b[2])};
+    };
+    const double z0 = -h / 2.0, z1 = h / 2.0;
     if (v.shape == PlateVolume::Shape::Box) {
-        const Vec3f c[8] = {p(cx - rx, cy - ry, z0), p(cx + rx, cy - ry, z0), p(cx + rx, cy + ry, z0), p(cx - rx, cy + ry, z0),
-                            p(cx - rx, cy - ry, z1), p(cx + rx, cy - ry, z1), p(cx + rx, cy + ry, z1), p(cx - rx, cy + ry, z1)};
+        const Vec3f c[8] = {p(-rx, -ry, z0), p(rx, -ry, z0), p(rx, ry, z0), p(-rx, ry, z0),
+                            p(-rx, -ry, z1), p(rx, -ry, z1), p(rx, ry, z1), p(-rx, ry, z1)};
         static constexpr int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
                                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
         for (const auto& t : f)
@@ -465,17 +521,91 @@ TriangleMesh volume_mesh(const PlateVolume& v, const BoundingBox& placed) {
         return m;
     }
     constexpr int sides = 48;
-    const Vec3f bottom = p(cx, cy, z0), top = p(cx, cy, z1);
+    const Vec3f bottom = p(0.0, 0.0, z0), top = p(0.0, 0.0, z1);
     for (int i = 0; i < sides; ++i) {
         const double a0 = 2.0 * 3.14159265358979323846 * i / sides, a1 = 2.0 * 3.14159265358979323846 * (i + 1) / sides;
-        const Vec3f b0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z0), b1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z0);
-        const Vec3f t0 = p(cx + rx * std::cos(a0), cy + ry * std::sin(a0), z1), t1 = p(cx + rx * std::cos(a1), cy + ry * std::sin(a1), z1);
+        const Vec3f b0 = p(rx * std::cos(a0), ry * std::sin(a0), z0), b1 = p(rx * std::cos(a1), ry * std::sin(a1), z0);
+        const Vec3f t0 = p(rx * std::cos(a0), ry * std::sin(a0), z1), t1 = p(rx * std::cos(a1), ry * std::sin(a1), z1);
         m.add_triangle(bottom, b1, b0);
         m.add_triangle(top, t0, t1);
         m.add_triangle(b0, b1, t1);
         m.add_triangle(b0, t1, t0);
     }
     return m;
+}
+
+PlateVolume carried_volume(const PlateVolume& v, const BoundingBox& from, const Affine& map, const BoundingBox& to) {
+    PlateVolume out = v;
+    const auto& a = map.a;
+    const auto apply = [&](const std::array<double, 3>& q) {
+        return std::array<double, 3>{a[0] * q[0] + a[1] * q[1] + a[2] * q[2], a[3] * q[0] + a[4] * q[1] + a[5] * q[2],
+                                     a[6] * q[0] + a[7] * q[1] + a[8] * q[2]};
+    };
+    const double h = std::max(v.size[2], 0.01);
+    std::array<double, 3> centre = apply({0.5 * (double(from.min.x) + from.max.x) + v.offset[0],
+                                          0.5 * (double(from.min.y) + from.max.y) + v.offset[1],
+                                          double(from.min.z) + v.offset[2] + h / 2.0});
+    for (std::size_t k = 0; k < 3; ++k)
+        centre[k] += map.b[k];
+    // Its axes, mapped: each one's stretch scales its size.
+    std::array<std::array<double, 3>, 3> axis;
+    for (std::size_t k = 0; k < 3; ++k) {
+        axis[k] = apply({v.turn[k], v.turn[3 + k], v.turn[6 + k]});
+        const double length = std::sqrt(axis[k][0] * axis[k][0] + axis[k][1] * axis[k][1] + axis[k][2] * axis[k][2]);
+        if (length > 0.0) {
+            out.size[k] = v.size[k] * length;
+            for (double& c : axis[k])
+                c /= length;
+        }
+    }
+    // A proper turn again after a mirror: one axis turns back. Which one does
+    // not change the solid (a box and a cylinder are symmetric about their
+    // middle planes); the one furthest from its own direction, so an upright
+    // volume stays upright.
+    const auto det = [](const std::array<std::array<double, 3>, 3>& m) {
+        return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[1][0] * (m[0][1] * m[2][2] - m[0][2] * m[2][1]) +
+               m[2][0] * (m[0][1] * m[1][2] - m[0][2] * m[1][1]);
+    };
+    if (det(axis) < 0.0) {
+        std::size_t flip = 0;
+        for (std::size_t k = 1; k < 3; ++k)
+            if (axis[k][k] < axis[flip][flip])
+                flip = k;
+        for (double& c : axis[flip])
+            c = -c;
+    }
+    // Square again where an uneven scale sheared it (Gram-Schmidt).
+    const auto dot = [](const std::array<double, 3>& p, const std::array<double, 3>& q) {
+        return p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+    };
+    const auto normal = [](std::array<double, 3>& p) {
+        const double l = std::sqrt(p[0] * p[0] + p[1] * p[1] + p[2] * p[2]);
+        if (l > 0.0)
+            for (double& c : p)
+                c /= l;
+    };
+    for (std::size_t k = 1; k < 3; ++k) {
+        for (std::size_t j = 0; j < k; ++j) {
+            const double d = dot(axis[k], axis[j]);
+            for (std::size_t c = 0; c < 3; ++c)
+                axis[k][c] -= d * axis[j][c];
+        }
+        normal(axis[k]);
+    }
+    for (std::size_t k = 0; k < 3; ++k)
+        for (std::size_t r = 0; r < 3; ++r)
+            out.turn[3 * r + k] = std::abs(axis[k][r]) < 1e-12 ? 0.0 : axis[k][r];
+    const double h2 = std::max(out.size[2], 0.01);
+    out.offset = {centre[0] - 0.5 * (double(to.min.x) + to.max.x), centre[1] - 0.5 * (double(to.min.y) + to.max.y),
+                  centre[2] - h2 / 2.0 - double(to.min.z)};
+    return out;
+}
+
+std::array<double, 3> model_size(const PlateObject& object) {
+    if (object.mesh.triangle_count() == 0)
+        return {0.0, 0.0, 0.0};
+    const BoundingBox box = object.mesh.bounding_box();
+    return {double(box.max.x) - box.min.x, double(box.max.y) - box.min.y, double(box.max.z) - box.min.z};
 }
 
 } // namespace tisma::ui

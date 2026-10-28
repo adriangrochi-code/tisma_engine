@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <numbers>
 
 using namespace tisma;
 using Catch::Matchers::ContainsSubstring;
@@ -147,6 +148,25 @@ TEST_CASE("settings: the specs' material group goes to the engine's keys", "[set
     CHECK(engine_setting_key("walls.count") == "walls.count");
     CHECK_FALSE(engine_setting_key("material.flow_factor"));
     CHECK_FALSE(engine_setting_key("material.zz_not_a_key"));
+}
+
+TEST_CASE("settings: the specs' names for settings the engine has under another (2026-10-28-ajustes.md)", "[settings]") {
+    const Settings s = parse_settings(R"({"support": {"angle_limit": 40}, "arrange": {"distance": 9},
+                                          "filament": {"pressure_advance": 0.04}, "machine": {"e_mode": "volume"}})");
+    CHECK(s.support_angle == 40.0);
+    CHECK(s.placement_spacing == 9.0);
+    CHECK(s.pressure_advance == 0.04);
+    CHECK(s.volumetric_e);
+    CHECK_FALSE(parse_settings(R"({"machine": {"e_mode": "length"}})").volumetric_e);
+    // Given under both names, or a value the spec does not have: errors.
+    CHECK_THROWS_WITH(parse_settings(R"({"support": {"angle_limit": 40, "threshold_angle": 30}})"),
+                      Catch::Matchers::ContainsSubstring("also given as support.threshold_angle"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"e_mode": "pellets"}})"),
+                      Catch::Matchers::ContainsSubstring("machine.e_mode"));
+    // A spec group with a key the engine does not have yet stays an error.
+    CHECK_THROWS_AS(parse_settings(R"({"filament": {"transmission_distance": 5}})"), SettingsError);
+    CHECK(engine_setting_key("support.angle_limit") == "support.threshold_angle");
+    CHECK_FALSE(engine_setting_key("machine.e_mode"));
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -314,6 +334,7 @@ TEST_CASE("slice_model applies XY offset and the first-layer shrink", "[settings
 TEST_CASE("slice_model builds the walls of every layer and leaves the middle for infill", "[settings]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings s; // 3 walls of 0.4 mm
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(sliced.walls.size() == sliced.layers.size());
     for (const LayerWalls& w : sliced.walls) {
@@ -323,7 +344,10 @@ TEST_CASE("slice_model builds the walls of every layer and leaves the middle for
             for (const ToolpathPoint& q : t.points)
                 CHECK_THAT(q.width, WithinAbs(0.4, 1e-9));
         }
-        CHECK_THAT(area_mm2(w.infill), WithinAbs(7.6 * 7.6, 1e-6)); // 10 mm less 3 walls on each side
+        // 10 mm less 3 walls on each side: half an overlap, then three spacings
+        // of 0.4 less the overlap (perimeters.md, rule 1).
+        const double overlap = 0.2 * (1.0 - std::numbers::pi / 4.0), side = 10.0 - 2.0 * (overlap / 2.0 + 3.0 * (0.4 - overlap));
+        CHECK_THAT(area_mm2(w.infill), WithinAbs(side * side, 1e-5)); // offsets on the nm grid
     }
     s.wall_count = 0;
     const SlicedModel bare = slice_model(m, s);
@@ -467,4 +491,17 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_THROWS_WITH(
         check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
         ContainsSubstring("thicker than 8 mm"));
+}
+
+TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[settings]") {
+    Settings s = parse_settings(R"({"walls": {"spread_count": 2, "transition_length": "150%"}})");
+    CHECK(s.wall_spread_count == 2);
+    CHECK(s.wall_transition_length.percent);
+    CHECK_THAT(s.wall_transition_length.of(0.4), WithinAbs(0.6, 1e-12));
+    s = parse_settings(R"({"walls": {"transition_length": 0.8}})");
+    CHECK_FALSE(s.wall_transition_length.percent);
+    CHECK_THAT(s.wall_transition_length.value, WithinAbs(0.8, 1e-12));
+    CHECK(parse_settings(settings_json(s)).wall_transition_length == s.wall_transition_length);
+    CHECK_THROWS_AS(parse_settings(R"({"walls": {"spread_count": 0}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"walls": {"transition_length": "x%"}})"), SettingsError);
 }

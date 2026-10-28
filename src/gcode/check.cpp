@@ -5,6 +5,7 @@
 #include "adhesion/adhesion.hpp"
 #include "gcode/dialect.hpp"
 
+#include "geom/bead.hpp"
 #include "infill/nonplanar.hpp"
 
 #include "config/settings.hpp"
@@ -483,7 +484,9 @@ private:
                 if (limits_.curved) // by the local thickness J (nonplanar.md, rule 4)
                     thickness *= limits_.curved->thickness(0.5 * (position_[0] + to[0]), 0.5 * (position_[1] + to[1]),
                                                            0.5 * (position_[2] + to[2]) - limits_.z_offset);
-                const double per_mm = *width_ * thickness / limits_.filament_area * flow_;
+                // The layer's bead by the share of its height left (z_antialiasing.md, rule 3).
+                const double per_mm = (*height_ > 0.0 ? bead_area(*width_, *height_) * thickness / *height_ : 0.0) /
+                                      limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 // ;HEIGHT, written to 3 decimals, may hide half the last one:
                 // much of a bead a few thousandths thick (a scarf ramp's foot,
@@ -626,7 +629,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         // The loops added for the skirt's filament (skirt_brim_raft.md, rule
         // 1): each at least as long as a circle of the skirt's distance.
         const double area = std::numbers::pi * s.filament_diameter * s.filament_diameter / 4.0;
-        const double path = s.skirt_min_filament * area / std::max(s.wall_width * s.first_layer_height, 1e-9);
+        const double path = s.skirt_min_filament * area / std::max(bead_area(s.wall_width, s.first_layer_height), 1e-9);
         const double shortest = 2.0 * std::numbers::pi * std::max(s.skirt_distance, 0.5 * s.wall_width);
         skirt += std::min(double(kMaxSkirtLoops), std::ceil(path / shortest)) * s.wall_width;
     }
@@ -697,15 +700,16 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         double height = s.layer_height;
         for (const Layer& layer : model.layers)
             height = std::min(height, layer.top - layer.bottom);
-        // The ironing's lines are beads spacing x flow wide (ironing.md, rule 3).
-        const double ironing = std::max(0.001, std::round(s.ironing_spacing * s.ironing_flow / 100.0 * 1000.0) / 1000.0);
+        // The ironing's lines: beads of section spacing x flow x height (ironing.md, rule 3).
+        const double ironing = std::max(
+            0.001, std::round(bead_width(s.ironing_spacing * s.ironing_flow / 100.0 * height, height) * 1000.0) / 1000.0);
         const double narrow = s.ironing ? std::min(0.25 * s.wall_width, ironing) : 0.25 * s.wall_width;
         const double machine = std::max(s.max_feed_x, s.max_feed_y); // 0: not known, no cap
         // A scarf ramp's foot or a Z anti-aliased bead is thinner than any
         // layer: up to what the machine moves.
         const bool thinner = s.scarf != ScarfMode::Nowhere || s.zaa;
         const double needed = thinner ? std::numeric_limits<double>::infinity()
-                                      : forced / std::max(narrow * height * min_flow, 1e-9);
+                                      : forced / std::max(bead_area(narrow, height) * min_flow, 1e-9);
         limits.max_feed = std::max(limits.max_feed, machine > 0.0 ? std::min(machine, needed) : needed);
     }
     const double r = s.filament_diameter / 2.0;

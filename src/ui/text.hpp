@@ -1009,6 +1009,14 @@
     X(ScarfInner, "También paredes internas", "Inner walls too") \
     X(DetectOverhangs, "Paredes en voladizo", "Overhang walls") \
     X(MinLineWidth, "Cordón más fino", "Thinnest bead") \
+    X(SeamGap, "Hueco en la costura", "Seam gap") \
+    X(OuterWidth, "Ancho de la pared externa", "Outer wall width") \
+    X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
+    X(TransitionLength, "Largo de las transiciones", "Transition length") \
+    X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
+    X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
+    X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
+    X(InfillWidth, "Ancho del relleno", "Infill width") \
     X(MinDetail, "Detalle más chico", "Smallest detail") \
     X(ScarfTip, "La pared empieza en una rampa desde la capa de abajo y termina pasando sobre ella: casi no deja costura. Ver walls_extra.md.", "The wall starts on a ramp up from the layer below and ends over it: the seam hardly shows. See walls_extra.md.") \
     X(ScaleXRow, "Escala en X", "Scale in X") \
@@ -1024,6 +1032,9 @@
     X(WallOverlap, "Solapamiento con paredes", "Overlap with walls") \
     X(CombineMaxHeight, "Alto máximo combinado", "Thickest combined") \
     X(SupportZGap, "Separación en Z", "Z gap") \
+    X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
+    X(SupportBuildplateOnly, "Solo desde la cama", "From the bed only") \
+    X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
@@ -1051,11 +1062,14 @@
     X(FanAlways, "Ventilador siempre", "Fan always on") \
     X(FanBridges, "Ventilador en puentes", "Fan on bridges") \
     X(FanOffLayers, "Capas sin ventilador", "Layers without fan") \
+    X(FullFanLayer, "Ventilador completo desde la capa", "Full fan from layer") \
+    X(CoolingEnabled, "Enfriamiento automático", "Automatic cooling") \
     X(MinSpeed, "Velocidad mínima", "Minimum speed") \
     X(PressureAdvance, "Avance de presión", "Pressure advance") \
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SpeedBridges, "Puentes", "Bridges") \
     X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
     X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
     X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
     X(SpeedTravelZ, "Viajes en Z", "Travel in Z") \
@@ -1175,6 +1189,10 @@
     X(ObjectInfill, "Relleno", "Infill") \
     X(ObjectWalls, "Capas y perímetros", "Layers and perimeters") \
     X(ObjectSurfaces, "Capas sólidas", "Solid layers") \
+    X(Objects, "Objetos", "Objects") \
+    X(ObjectsEmpty, "La placa no tiene piezas.", "The plate has no objects.") \
+    X(ObjectsHint, "Clic derecho sobre una pieza para darle ajustes propios, modificadores, volúmenes negativos o rangos de alturas.", "Right-click an object to give it settings of its own, modifiers, negative volumes or height ranges.") \
+    X(ObjectsPicked, "Ajustes de la pieza a cambiar", "Object settings to modify") \
     X(ObjectAddSetting, "Agregar ajuste", "Add setting") \
     X(ObjectSettingsOpen, "Ajustes de la pieza…", "Object settings…") \
     X(ObjectSettingsTitle, "Ajustes de %s", "Settings of %s") \
@@ -1399,6 +1417,7 @@
     X(AccelSolid, "Relleno sólido", "Solid infill") \
     X(AccelTop, "Superficie de arriba", "Top surface") \
     X(AccelBridges, "Puentes", "Bridges") \
+    X(AccelWipeTower, "Torre de purga", "Wipe tower") \
     X(AccelFirstLayer, "Primera capa", "First layer") \
     X(AccelTravel, "Viajes", "Travels") \
     X(AccelShortTravel, "Viajes cortos", "Short travels") \
@@ -1418,6 +1437,7 @@
     X(AvoidCrossingWalls, "Viajes sin cruzar paredes", "Avoid crossing walls") \
     X(MaxDetour, "Desvío máximo", "Maximum detour") \
     X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
+    X(WallsOuterFirst, "Pared externa primero", "Outer wall first") \
     X(SubWallsMore, "Más opciones de paredes", "More wall options") \
     X(StaggeredSeams, "Costuras internas escalonadas", "Staggered inner seams") \
     X(TopOneWallRow, "Un solo perímetro arriba", "One wall on top") \

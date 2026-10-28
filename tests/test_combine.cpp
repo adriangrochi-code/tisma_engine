@@ -172,10 +172,11 @@ TEST_CASE("combined infill: the spec's cube (P11), sliced to checked G-code", "[
         CHECK((z / 200) % 2 == 1); // Z 1.0, 1.4, ...: layers 4, 6, ...
         CHECK_THAT(s.height, WithinAbs(0.4, 1e-9));
     }
-    // The filament per mm of a 0.4 mm layer: twice that of a 0.2 mm one.
+    // The filament per mm of a 0.4 mm layer against a 0.2 mm one: the spec's
+    // 0.06056 and 0.03385 mm (rounded sides, gcode_motion.md rule 1).
     const Sparse& thin = each.at(1000);
     const Sparse& thick = combined.at(1000);
-    CHECK_THAT((thick.filament / thick.length) / (thin.filament / thin.length), WithinAbs(2.0, 0.03));
+    CHECK_THAT((thick.filament / thick.length) / (thin.filament / thin.length), WithinAbs(0.06056 / 0.03385, 0.03));
     // The same infill in half the passes: less time.
     CHECK(minutes(b.str()) < minutes(a.str()));
 }
@@ -257,6 +258,7 @@ TEST_CASE("dense infill under the top surfaces (D1), sliced to checked G-code", 
     Settings s = base();
     s.infill_density = 10.0;
     s.infill_dense_under_top = true;
+    s.infill_width = 0.4; // sparse lines 4 mm apart
     const SlicedModel sliced = slice_model(m, s);
     std::ostringstream g;
     write_gcode(g, sliced, s);
@@ -290,6 +292,9 @@ TEST_CASE("the as-printed analysis sees the infill printed in thick layers", "[c
     Settings zones = base();
     zones.layer_height = 0.3;
     zones.detail_height = 0.1;
+    // The cube's infill zone on 0.1 mm layers is 69.95 mm2, just under
+    // infill.solid_below_area: kept sparse, to compare like with like.
+    zones.infill_solid_below_area = 0.0;
     const AnalysisEstimate z = estimate_analysis(m, zones, c);
     CHECK_THAT(double(z.printed_voxels) / double(z.part_voxels), WithinAbs(double(a.printed_voxels) / double(a.part_voxels), 0.08));
 }
@@ -437,10 +442,14 @@ TEST_CASE("a solid layer every N layers, printed as a bridge (P12)", "[combine]"
 }
 
 TEST_CASE("small infill zones are solid (surfaces_infill.md, rule 9, test I6)", "[combine]") {
-    // A leg of the spec's table, 5 x 20 x 5 mm: inside two walls, an infill
-    // zone of 3.4 x 18.4 = 62.6 mm2, under the 70 mm2 of the default.
+    // A leg of the spec's table, 5 x 20 x 5 mm: inside two walls (half an
+    // overlap and two spacings of 0.4 less it, perimeters.md rule 1), an
+    // infill zone of about 3.53 x 18.53 = 65.4 mm2, under the 70 mm2 of the
+    // default (the spec: about 60).
+    const double band = 0.2 * (1.0 - std::numbers::pi / 4.0) / 2.0 + 2.0 * (0.4 - 0.2 * (1.0 - std::numbers::pi / 4.0));
     const IndexedMesh leg = block(5.0f, 20.0f, 5.0f);
     Settings s = base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const SlicedModel sliced = slice_model(leg, s);
     std::ostringstream out;
     write_gcode(out, sliced, s);
@@ -453,7 +462,7 @@ TEST_CASE("small infill zones are solid (surfaces_infill.md, rule 9, test I6)", 
         CHECK(sliced.surfaces[l].sparse.empty());
         CHECK(sliced.fills[l].sparse.empty());
     }
-    CHECK_THAT(area_mm2(sliced.surfaces[12].bottom), WithinAbs(62.6, 0.5));
+    CHECK_THAT(area_mm2(sliced.surfaces[12].bottom), WithinAbs((5.0 - 2.0 * band) * (20.0 - 2.0 * band), 0.5));
     CHECK(!sliced.fills[12].solid.empty());
     // Off, or with no infill asked for: the middle layers keep their sparse zone.
     Settings off = s;
@@ -462,10 +471,10 @@ TEST_CASE("small infill zones are solid (surfaces_infill.md, rule 9, test I6)", 
     Settings hollow = s;
     hollow.infill_density = 0.0;
     CHECK(!slice_model(leg, hollow).surfaces[12].sparse.empty());
-    // A zone just over the limit stays sparse: the 20 mm cube's is 335 mm2.
+    // A zone over the limit stays sparse: the 20 mm cube's is 343 mm2.
     CHECK(!slice_model(cube(20.0f), s).surfaces[50].sparse.empty());
     Settings big = s;
-    big.infill_solid_below_area = 340.0;
+    big.infill_solid_below_area = 350.0;
     CHECK(slice_model(cube(20.0f), big).surfaces[50].sparse.empty());
 }
 

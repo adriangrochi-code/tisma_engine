@@ -446,20 +446,22 @@ TEST_CASE("wipe tower: relative E only, and where it stands (ME6)", "[extruders]
     CHECK_THAT(nozzles[0], WithinAbs(180.2, 0.05));
     CHECK_THAT(nozzles[2], WithinAbs(239.8, 0.05));
     CHECK_THAT(nozzles[1], WithinAbs(140.2, 0.05));
-    CHECK_THAT(nozzles[3], WithinAbs(142.6, 0.05)); // 5 lines and the outline: 2.8 mm deep (Tisma Slicer: 3)
+    // 5 lines a spacing apart (0.4 less the overlap) and the outline: 2.6 mm deep (Tisma Slicer: 3).
+    CHECK_THAT(nozzles[3], WithinAbs(142.385, 0.05));
     Settings more = tower_base(false);
     more.purge_volumes = {{0, 300}, {300, 0}};
-    CHECK_THAT(at10(gcode_of(two_colours(), more))[3], WithinAbs(142.6, 0.05));
+    CHECK_THAT(at10(gcode_of(two_colours(), more))[3], WithinAbs(142.385, 0.05));
     // A single-extruder MMU rams (4 lines 0.6 mm apart), then purges 140 mm3
-    // a change: 30 lines of 58.8 mm.
+    // a change: 33 lines of 58.8 mm, each bead's section a rectangle with
+    // rounded sides (gcode_motion.md, rule 1).
     const std::string mmu_text = gcode_of(two_colours(), tower_base(true));
     const TowerTrace mmu = tower_box(mmu_text);
-    CHECK_THAT(mmu.layer_box.at(10)[3], WithinAbs(155.0, 0.05)); // Tisma Slicer: 154.4
+    CHECK_THAT(mmu.layer_box.at(10)[3], WithinAbs(155.141, 0.05)); // Tisma Slicer: 154.4
     const double per_layer = tower_of(trace(mmu_text)).length.at(10);
-    CHECK_THAT(per_layer, WithinAbs(2123.98, 1.0)); // the ramming within speed.max (80 mm/s); Tisma Slicer: 2038.1
+    CHECK_THAT(per_layer, WithinAbs(2359.65, 1.0)); // the ramming within speed.max (80 mm/s); Tisma Slicer: 2038.1
     Settings s = tower_base(true);
     s.purge_volumes = {{0, 300}, {300, 0}};
-    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(168.6, 0.05)); // 64 lines; Tisma: 169.4
+    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(168.71, 0.05)); // Tisma: 169.4
     s = tower_base(true);
     s.wipe_tower_width = 40.0;
     const std::array<double, 4> narrow = at10(gcode_of(two_colours(), s));
@@ -479,7 +481,7 @@ TEST_CASE("wipe tower: relative E only, and where it stands (ME6)", "[extruders]
     CHECK(tower_of(trace(gcode_of(two_colours(), s))).length.at(10) < 0.75 * per_layer);
     s = tower_base(true);
     s.purge_multiplier = {50.0};
-    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(149.0, 0.05)); // 15 lines; Tisma: 147.9
+    CHECK_THAT(at10(gcode_of(two_colours(), s))[3], WithinAbs(149.07, 0.05)); // Tisma: 147.9
 }
 
 TEST_CASE("wipe tower: the change over the tower, sparse up to the last change (ME7)", "[extruders][tower]") {
@@ -745,12 +747,12 @@ TEST_CASE("nozzles: fine walls, coarse sparse infill combined (MM1)", "[extruder
     CHECK(sparse_2 > 0.0);
     CHECK(sparse_1 == 0.0);
     CHECK(other_2 == 0.0);
-    // The coarse nozzle's infill: 0.72 mm wide (0.3 by 0.6 / 0.25), combined
+    // The coarse nozzle's infill: 0.675 mm wide (1.125 nozzles, I9), combined
     // three layers at a time (0.45 mm, 75 % of 0.6), a layer in three.
     const Shown lines = shown(text);
     REQUIRE(lines.widths.count("Internal infill"));
     for (const double w : lines.widths.at("Internal infill"))
-        CHECK_THAT(w, WithinAbs(0.72, 0.005));
+        CHECK_THAT(w, WithinAbs(0.675, 0.005));
     for (const char* walls : {"External perimeter", "Perimeter"})
         if (lines.widths.count(walls))
             for (const double w : lines.widths.at(walls))
@@ -800,6 +802,7 @@ TEST_CASE("nozzles: turned off, every kind back to the print's extruders (MM2)",
     // A cube on the coarse extruder takes its widths.
     s.nozzle_diameters = {0.25, 0.6};
     s.fine_walls_coarse_infill = false;
+    s.first_line_width = {}; // the first layer's too (not 200 % of its height)
     const Shown coarse = shown(gcode_of(cube(2), s));
     REQUIRE(coarse.widths.count("Perimeter"));
     for (const double w : coarse.widths.at("Perimeter"))

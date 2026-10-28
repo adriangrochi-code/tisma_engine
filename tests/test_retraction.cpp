@@ -446,7 +446,9 @@ TEST_CASE("retraction: travels round the walls, unless told not to or the detour
     s.avoid_crossing_walls = true;
     const double inside = travelled(s);
     CHECK(inside > straight);
-    s.max_detour = {1.0, false};
+    // This layer's detours add up to half a millimetre (the spec's R7 has
+    // 5.5 mm with its travels): a cap of 0.2 mm sends them straight.
+    s.max_detour = {0.2, false};
     const double limited = travelled(s);
     CHECK(limited < inside);
     CHECK(limited >= straight - 1e-6);
@@ -559,6 +561,7 @@ TEST_CASE("retraction: the filament's lift, even 0, replaces the printer's (R10)
 
 TEST_CASE("retraction: the filament's minimum travel and wipe (R11)", "[retraction]") {
     Settings s = base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     const int printer = count(read(gcode_of(cube(), s)), standing_retraction);
     s.filament_retraction = parse_settings(R"({"extrusion": {"retraction": {"min_travel": 20}}})").filament_retraction;
     const int filament = count(read(gcode_of(cube(), s)), standing_retraction);

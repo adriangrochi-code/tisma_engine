@@ -744,10 +744,12 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
           "rule 4; QA13)",
           "[gcode][support]") {
     Settings s = test_printer();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.skirt_loops = 0;
     s.support = true;
     s.relative_extrusion = true;
     s.wall_count = 2; // as in the test
+    s.solid_width = s.wall_width; // the bridge's width: only the height differs
     const IndexedMesh m = shelf();
     const SlicedModel model = slice_model(m, s);
     REQUIRE(model.layers.size() == 50);
@@ -796,10 +798,12 @@ TEST_CASE("support: the part's first layer over it fills the Z gap, its walls ov
     CHECK(overhang > 70.0);
     CHECK(overhang < 80.0);
     CHECK_THAT(bridge_min_x, Catch::Matchers::WithinAbs(9.4, 0.1));
-    // Twice the filament per mm of the solid infill above: twice as thick.
+    // Twice as thick as the solid infill above, both 0.4 wide: a round bead
+    // against a rectangle with rounded sides (gcode_motion.md, rule 1).
     REQUIRE(bridge > 0.0);
     REQUIRE(solid > 0.0);
-    CHECK_THAT((bridge_e / bridge) / (solid_e / solid), WithinRel(2.0, 0.02));
+    const double round = std::numbers::pi / 4.0 * 0.4 * 0.4, flat = 0.2 * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
+    CHECK_THAT((bridge_e / bridge) / (solid_e / solid), WithinRel(round / flat, 0.02));
     // Without walls.detect_overhangs the walls keep their types, still as thick
     // over the support.
     s.detect_overhangs = false;
@@ -835,8 +839,8 @@ TEST_CASE("arcs: the shelf's overhang in arcs, round beads, slow, a retraction e
         for (const Extrusion& x : extrusions(out.str())) {
             INFO(x.z << " " << x.type << " " << x.height);
             if (x.z == "8.200" && x.type == "Overhang perimeter" && x.feed == 300.0) {
-                // 5 mm/s, a round bead (pi/4 of 0.4 squared), no bridge.
-                CHECK(x.height == "0.314");
+                // 5 mm/s, a round bead (as tall as its 0.4 mm), no bridge.
+                CHECK(x.height == "0.400");
                 arcs += x.length();
                 arc_e += x.e;
             }
@@ -862,20 +866,23 @@ TEST_CASE("walls: a wall thinner than the nozzle prints with walls.min_line_widt
     add_box(m, 0, 0, 0.2f, 10, 5); // a 0.2 mm wall
     const SlicedModel model = slice_model(m, s);
     REQUIRE_FALSE(model.walls[10].toolpaths.empty());
+    // A spacing of 85 % of the nozzle, 0.34 mm, written an overlap wider:
+    // 0.383 (perimeters.md, table P2).
+    const double overlap = 0.2 * (1.0 - std::numbers::pi / 4.0);
     for (const Toolpath& t : model.walls[10].toolpaths)
         for (const ToolpathPoint& p : t.points) {
-            CHECK_THAT(p.width, WithinRel(0.34, 1e-6)); // 85 % of the nozzle
+            CHECK_THAT(p.width, WithinRel(0.34 + overlap, 1e-6));
             CHECK_THAT(p.p.x, Catch::Matchers::WithinAbs(0.1, 0.02));
         }
     std::ostringstream out;
     write_gcode(out, model, s);
-    CHECK(out.str().find(";WIDTH:0.340") != std::string::npos);
+    CHECK(out.str().find(";WIDTH:0.383") != std::string::npos);
     // In mm instead.
     s.wall_min_line_width = {0.3, false};
     const SlicedModel narrower = slice_model(m, s);
     for (const Toolpath& t : narrower.walls[10].toolpaths)
         for (const ToolpathPoint& p : t.points)
-            CHECK_THAT(p.width, WithinRel(0.3, 1e-6));
+            CHECK_THAT(p.width, WithinRel(0.3 + overlap, 1e-6));
     // Thinner than walls.min_detail (0.1 mm): nothing.
     IndexedMesh hair;
     add_box(hair, 0, 0, 0.05f, 10, 5);
@@ -952,9 +959,9 @@ TEST_CASE("walls: the stretches over the air are overhang perimeters at the brid
         const bool overhang = x.type == "Overhang perimeter";
         if (overhang) {
             CHECK(x.z == "8.200");
-            // The bridges' round bead, 0.4 mm across (pi/4 of 0.4 squared):
-            // W2's 0.05224 mm of filament per mm.
-            CHECK(x.height == "0.314");
+            // The bridges' round bead, 0.4 mm across and as tall (pi/4 of 0.4
+            // squared): W2's 0.05224 mm of filament per mm.
+            CHECK(x.height == "0.400");
             if (x.length() > 0.5)
                 CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.05224, 0.0002));
             CHECK(x.feed == 25.0 * 60.0);
@@ -1576,4 +1583,354 @@ TEST_CASE("extras: the old firmwares' dialects (gcode_extras.md, rule 6, X5)", "
         return n;
     };
     CHECK(xy(none) == xy(reprap));
+}
+
+TEST_CASE("cooling: the fan up step by step to cooling.full_fan_layer (cooling_more.md, C1), and cooling off", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.fan_off_layers = 3;
+    s.fan_always = true;
+    s.full_fan_layer = 8;
+    // Each layer's fan, from its last M106 or M107 before its first extrusion.
+    const auto fans = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::vector<std::string> by_layer;
+        std::string fan = "M107";
+        bool counted = true;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line == ";LAYER_CHANGE")
+                counted = false;
+            else if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+                fan = line;
+            else if (!counted && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos)
+                by_layer.push_back(fan), counted = true;
+        }
+        return by_layer;
+    };
+    s.fan_min = s.fan_max = 100.0;
+    std::vector<std::string> f = fans(s);
+    REQUIRE(f.size() > 10);
+    CHECK(f[0] == "M107");
+    CHECK(f[2] == "M107");
+    CHECK(f[3] == "M106 S51"); // layer 4: 20 %
+    CHECK(f[4] == "M106 S102");
+    CHECK(f[5] == "M106 S153");
+    CHECK(f[6] == "M106 S204");
+    CHECK(f[7] == "M106 S255"); // layer 8 on: 100 %
+    CHECK(f[10] == "M106 S255");
+    s.fan_min = s.fan_max = 40.0; // 8, 16, 24, 32 and 40 %
+    f = fans(s);
+    CHECK(f[3] == "M106 S20");
+    CHECK(f[7] == "M106 S102");
+    s.full_fan_layer = 0; // without it: the whole value from layer 4
+    f = fans(s);
+    CHECK(f[3] == "M106 S102");
+    // Cooling off: no fan by the layer's time and no slowing down.
+    s.cooling_enabled = false;
+    s.fan_always = false;
+    s.min_layer_time = 1000.0;
+    std::ostringstream out;
+    write_gcode(out, slice_model(m, s), s);
+    CHECK(out.str().find("M106 S") == std::string::npos);
+    CHECK(out.str().find(" F1\n") == std::string::npos);
+}
+
+TEST_CASE("support: the interface's own speed (supports_more.md, SM11) and the wipe tower's acceleration", "[gcode][support]") {
+    IndexedMesh m;
+    add_box(m, 4, 4, 6, 6, 2);
+    const auto base = std::uint32_t(m.vertices.size());
+    add_box(m, 0, 0, 10, 10, 1);
+    for (std::size_t v = base; v < m.vertices.size(); ++v)
+        m.vertices[v].z += 2.0f;
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.support_speed = 60.0;
+    s.min_layer_time = 0.0; // no slowing down
+    // The feeds of the interface's extrusions, mm/min.
+    const auto feeds = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::set<int> found;
+        std::string type;
+        int feed = 0;
+        const std::regex f(" F([0-9]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            if (line.rfind("G1", 0) == 0 && std::regex_search(line, hit, f))
+                feed = std::stoi(hit[1].str());
+            if (type == "Support material interface" && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos)
+                found.insert(feed);
+        }
+        return found;
+    };
+    CHECK(feeds(s) == std::set<int>{3600}); // not set: speed.support
+    s.support_interface_speed = {100.0, true};
+    CHECK(feeds(s) == std::set<int>{3600});
+    s.support_interface_speed = {50.0, true};
+    CHECK(feeds(s) == std::set<int>{1800});
+    s.support_interface_speed = {25.0, false};
+    CHECK(feeds(s) == std::set<int>{1500});
+    // The wipe tower's acceleration, read and written back.
+    const Settings back = parse_settings(R"({"acceleration": {"default": 2000, "wipe_tower": 800}, "speed": {"support_interface": "50%"}})");
+    CHECK(back.accel_wipe_tower == 800.0);
+    CHECK(back.support_interface_speed == Speed{50.0, true});
+    CHECK(parse_settings(settings_json(back)).accel_wipe_tower == 800.0);
+}
+
+TEST_CASE("cooling: with cooling.enabled off, no slowing down and no fan by layer time (cooling.md, rule 5, K6 and K8)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 4, 4, 5);
+    Settings s = test_printer();
+    s.layer_height = 0.3, s.first_layer_height = 0.35;
+    s.min_layer_time = 5.0;
+    s.skirt_loops = 0;
+    const auto text = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        return out.str();
+    };
+    // K6: on, the small layers slow down with the fan at full; off, neither.
+    const std::string on = text(s);
+    CHECK(on.find("M106 S255") != std::string::npos);
+    s.cooling_enabled = false;
+    const std::string off = text(s);
+    CHECK(off.find("M106 S") == std::string::npos);
+    const auto slowest = [](const std::string& g) {
+        int least = 1 << 30;
+        const std::regex f(" F([0-9]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(g))
+            if (line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos && std::regex_search(line, hit, f))
+                least = std::min(least, std::stoi(hit[1].str()));
+        return least;
+    };
+    CHECK(slowest(off) > slowest(on));
+    // K8: fan_always at 35 %: off on layers 1 to 3, S89 from layer 4.
+    s.fan_always = true;
+    s.fan_min = 35.0;
+    std::vector<std::string> fans;
+    std::string fan = "M107";
+    for (const std::string& line : lines_of(text(s))) {
+        if (line == ";LAYER_CHANGE")
+            fans.push_back(fan);
+        else if (line.rfind("M106", 0) == 0 || line.rfind("M107", 0) == 0)
+            fan = line;
+    }
+    REQUIRE(fans.size() > 6);
+    // The fan command of a layer comes just before its ;LAYER_CHANGE (rule 4).
+    CHECK(fans[2] != "M106 S89");
+    CHECK(fans[4] == "M106 S89");
+    CHECK(fans[6] == "M106 S89");
+}
+
+TEST_CASE("support: a gap and interface layers over the part it stands on (supports_more.md, rules 6 and 7)", "[gcode][support]") {
+    // A slab 1 mm thick, a post at one corner, a shelf from Z 3 to 4: the
+    // support under the shelf stands on the slab.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 1);
+    auto lifted = [&](float x0, float y0, float x1, float y1, float z0, float z1) {
+        const auto base = std::uint32_t(m.vertices.size());
+        add_box(m, x0, y0, x1, y1, z1 - z0);
+        for (std::size_t v = base; v < m.vertices.size(); ++v)
+            m.vertices[v].z += z0;
+    };
+    lifted(0, 0, 3, 3, 1, 3);
+    lifted(0, 0, 20, 20, 3, 4);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.layer_height = s.first_layer_height = 0.2; // the slab: layers 0 to 4
+    const auto at = [](const SlicedModel& model, std::size_t l) {
+        // Over the slab only: the support's margin round it stands on the bed.
+        const auto over = [](const std::vector<Toolpath>& paths) {
+            std::size_t n = 0;
+            for (const Toolpath& t : paths)
+                for (const ToolpathPoint& p : t.points)
+                    n += p.p.x > 0.5 && p.p.x < 19.5 && p.p.y > 0.5 && p.p.y < 19.5 ? 1 : 0;
+            return n;
+        };
+        return std::pair{over(model.fills[l].support_interface), over(model.fills[l].support)};
+    };
+    const auto on_slab = [](const SlicedModel& model, std::size_t l) {
+        return area_mm2(Clipper2Lib::Intersect(model.support_areas[l], model.regions[0], Clipper2Lib::FillRule::NonZero));
+    };
+    // Default: one layer of gap (support.z_gap 0.2), three of interface, then base.
+    SlicedModel model = slice_model(m, s);
+    CHECK(on_slab(model, 5) < 1.0);
+    CHECK(at(model, 6).first > 0);
+    CHECK(at(model, 8).first > 0);
+    CHECK(at(model, 10).first == 0);
+    CHECK(at(model, 10).second > 0);
+    // Two layers of gap; one layer of interface; none.
+    s.support_bottom_z_gap = 0.4;
+    s.support_bottom_interface_layers = 1;
+    model = slice_model(m, s);
+    CHECK(on_slab(model, 6) < 1.0);
+    CHECK(at(model, 7).first > 0);
+    CHECK(at(model, 8).first == 0);
+    s.support_bottom_interface_layers = 0;
+    model = slice_model(m, s);
+    CHECK(at(model, 7).first == 0);
+    CHECK(at(model, 7).second > 0);
+}
+
+TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support]") {
+    const auto lifted = [](IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, float z1) {
+        const auto base = std::uint32_t(m.vertices.size());
+        add_box(m, x0, y0, x1, y1, z1 - z0);
+        for (std::size_t v = base; v < m.vertices.size(); ++v)
+            m.vertices[v].z += z0;
+    };
+    const auto support_layers = [](const SlicedModel& model) {
+        std::size_t n = 0;
+        for (const Polygons& p : model.support_areas)
+            n += p.empty() ? 0 : 1;
+        return n;
+    };
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    // A shelf over a slab: its support stands on the slab, its margin ring on the bed.
+    IndexedMesh shelf;
+    add_box(shelf, 0, 0, 20, 20, 1);
+    lifted(shelf, 0, 0, 3, 3, 1, 3);
+    lifted(shelf, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(shelf, s)) > 5);
+    s.support_buildplate_only = true;
+    CHECK(support_layers(slice_model(shelf, s)) == 0);
+    // A T on the bed: its support stands on the bed, and stays.
+    IndexedMesh t;
+    add_box(t, 8, 8, 12, 12, 3);
+    lifted(t, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(t, s)) > 5);
+}
+
+TEST_CASE("walls: walls.outer_first prints each island's walls from the outer one in (perimeters.md, P10)", "[gcode]") {
+    Settings s = test_printer();
+    s.wall_count = 3;
+    // The order of the wall kinds in the cube's layer 10.
+    const auto order = [&](const Settings& settings) {
+        const std::vector<std::string> lines = lines_of(cube_gcode(settings));
+        std::vector<std::string> kinds;
+        int layer = -1;
+        for (const std::string& line : lines) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (layer == 10 && line.rfind(";TYPE:", 0) == 0 &&
+                     (line == ";TYPE:External perimeter" || line == ";TYPE:Perimeter") &&
+                     (kinds.empty() || kinds.back() != line))
+                kinds.push_back(line.substr(6));
+        }
+        return kinds;
+    };
+    CHECK(order(s) == std::vector<std::string>{"Perimeter", "External perimeter"});
+    s.walls_outer_first = true;
+    CHECK(order(s) == std::vector<std::string>{"External perimeter", "Perimeter"});
+}
+
+TEST_CASE("walls: a closed loop ends walls.seam_gap before its start (perimeters.md, rule 5, P1)", "[gcode]") {
+    Settings s = test_printer();
+    // The outer loop's extruded length in the cube's layer 10.
+    const auto outer = [&](const Settings& settings) {
+        double length = 0.0, x = 0.0, y = 0.0;
+        int layer = -1;
+        std::string type;
+        const std::regex rx(" X([-0-9.]+)"), ry(" Y([-0-9.]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(cube_gcode(settings))) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            else if (line.rfind("G1", 0) == 0) {
+                double nx = x, ny = y;
+                if (std::regex_search(line, hit, rx))
+                    nx = std::stod(hit[1].str());
+                if (std::regex_search(line, hit, ry))
+                    ny = std::stod(hit[1].str());
+                if (layer == 10 && type == "External perimeter" && line.find(" E") != std::string::npos)
+                    length += std::hypot(nx - x, ny - y);
+                x = nx, y = ny;
+            }
+        }
+        return length;
+    };
+    Settings closed = s;
+    closed.wall_seam_gap = {0.0, false};
+    const double whole = outer(closed), gapped = outer(s);
+    CHECK_THAT(whole - gapped, Catch::Matchers::WithinAbs(0.15 * s.nozzle_diameter, 0.002)); // 15 % of the nozzle: 0.06 mm
+    closed.wall_seam_gap = {1.0, false};
+    CHECK_THAT(whole - outer(closed), Catch::Matchers::WithinAbs(1.0, 0.002));
+}
+
+TEST_CASE("fills: line widths of their own for the top, the solid and the sparse infill (surfaces_infill.md)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 30, 30, 5);
+    Settings s = test_printer();
+    s.infill_density = 20.0;
+    const auto widths = [&m](const Settings& settings) {
+        std::array<std::set<double>, 3> w; // top, solid, sparse, past the first layer
+        const SlicedModel sliced = slice_model(m, settings);
+        for (std::size_t l = 1; l < sliced.fills.size(); ++l) {
+            const LayerFill& f = sliced.fills[l];
+            for (const Toolpath& t : f.top)
+                for (const ToolpathPoint& p : t.points)
+                    w[0].insert(p.width);
+            for (const Toolpath& t : f.solid)
+                for (const ToolpathPoint& p : t.points)
+                    w[1].insert(p.width);
+            for (const Toolpath& t : f.sparse)
+                for (const ToolpathPoint& p : t.points)
+                    w[2].insert(p.width);
+        }
+        return w;
+    };
+    // At 0 from the nozzle, whatever the walls' width (I9): the top one
+    // nozzle, the other solid infill and the sparse 1.125 nozzles.
+    s.wall_width = 0.5;
+    const auto from_nozzle = widths(s);
+    CHECK(from_nozzle[0] == std::set<double>{s.nozzle_diameter});
+    CHECK(from_nozzle[1] == std::set<double>{1.125 * s.nozzle_diameter});
+    CHECK(from_nozzle[2] == std::set<double>{1.125 * s.nozzle_diameter});
+    s.wall_width = 0.4;
+    s.top_width = 0.5, s.solid_width = 0.42, s.infill_width = 0.55;
+    const SlicedModel model = slice_model(m, s);
+    const auto own = widths(s);
+    CHECK(own[0] == std::set<double>{0.5});
+    CHECK(own[1] == std::set<double>{0.42});
+    CHECK(own[2] == std::set<double>{0.55});
+    // Written with those widths, and the checker agrees with the filament.
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    CHECK(out.str().find(";WIDTH:0.500\n") != std::string::npos);
+    CHECK(out.str().find(";WIDTH:0.550\n") != std::string::npos);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("filament per mm from the bead's rounded section (gcode_motion.md, rule 1, M1)", "[gcode]") {
+    // The 20 mm cube with 0.45 mm walls on 0.2 mm layers: (0.45 - 0.2) 0.2 +
+    // pi 0.1^2 = 0.081416 mm2 over 1.75 mm filament, 0.033849 mm a mm.
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 10);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.wall_width = 0.45;
+    s.layer_height = s.first_layer_height = 0.2;
+    s.filament_diameter = 1.75;
+    std::ostringstream out;
+    const SlicedModel model = slice_model(m, s);
+    write_gcode(out, model, s);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+    std::size_t walls = 0;
+    for (const Extrusion& x : extrusions(out.str()))
+        if (x.z == "2.200" && (x.type == "External perimeter" || x.type == "Perimeter") && x.length() > 5.0) {
+            ++walls;
+            CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.033849, 0.00002));
+        }
+    CHECK(walls >= 8);
 }

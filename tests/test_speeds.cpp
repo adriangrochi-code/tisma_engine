@@ -133,8 +133,8 @@ TEST_CASE("speeds: bridges and overhang perimeters at speed.bridges, with a roun
         INFO(m.z << " " << m.type);
         CHECK(m.z == "5.200");
         CHECK(m.feed == 25.0 * 60.0);
-        // Round, 0.4 mm across: pi/4 of 0.4 thick.
-        CHECK(m.height == "0.314");
+        // Round, 0.4 mm across and as tall.
+        CHECK(m.height == "0.400");
         (m.type == "Bridge infill" ? bridge : overhang) += m.length();
         (m.type == "Bridge infill" ? bridge_e : overhang_e) += m.e;
     }
@@ -515,6 +515,7 @@ TEST_CASE("flow equalizer: the flow changes at most speed.flow_slope_down or _up
     // V7: the inner wall (60 mm/s) ends in pieces down to the outer wall's
     // 30, 2.44 mm3/s lower, over about 1.4 s at 1.8 mm3/s2.
     Settings s = test_printer();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.flow_slope_down = 1.8;
     std::vector<Move> inner; // the layer's inner wall, up to the outer
     bool seen_outer = false;
@@ -583,6 +584,7 @@ TEST_CASE("flow equalizer: the flow changes at most speed.flow_slope_down or _up
 TEST_CASE("speeds: the check takes the new speeds as the fastest a G-code may ask", "[gcode][speeds]") {
     // A bridge faster than every other speed (the fuzzer's run 211, seed 20261030).
     Settings s = test_printer();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.max_speed = 0.0;
     s.bridge_speed = 150.0; // past the travels' 130 too
     s.relative_extrusion = true;

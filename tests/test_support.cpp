@@ -100,4 +100,10 @@ TEST_CASE("support: a part standing on another stops the column there", "[suppor
     CHECK(area_mm2(support[3]) > 50.0);
     for (int l = 0; l < 3; ++l)
         CHECK(support[std::size_t(l)].empty()); // it stands on the slab
+    // Two layers over the slab (supports_more.md, rule 6): from layer 5 up.
+    p.bottom_gap_layers = 2;
+    const std::vector<Polygons> gapped = support_areas(regions, heights, p);
+    CHECK(gapped[3].empty());
+    CHECK(gapped[4].empty());
+    CHECK(area_mm2(gapped[5]) > 50.0);
 }

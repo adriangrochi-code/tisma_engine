@@ -39,11 +39,17 @@ int bead_count(const BeadingParams& p, double d) {
     return p.wall_count > 0 ? std::min(n, 2 * p.wall_count) : n;
 }
 
+double outer_bead(const BeadingParams& p) {
+    return p.outer_width > 0.0 ? p.outer_width : p.preferred_width;
+}
+
 std::optional<ShellRamp> shell_ramp(const BeadingParams& p) {
     if (p.wall_count <= 0 || p.scheme == BeadingScheme::Uniform)
         return std::nullopt;
-    const double start = transition_thickness(p, 2 * p.wall_count);
-    return ShellRamp{start, start + p.preferred_width / 2.0};
+    const double w = p.preferred_width;
+    const double shell = 2.0 * (outer_bead(p) + (p.wall_count - 1) * w); // both sides, at their widths
+    const double start = std::max(transition_thickness(p, 2 * p.wall_count), shell + w / 2.0);
+    return ShellRamp{start, start + w / 2.0};
 }
 
 double transition_thickness(const BeadingParams& p, int n) {
@@ -63,12 +69,15 @@ Beading compute_beading(const BeadingParams& p, int n, double d) {
     const std::optional<ShellRamp> shell = shell_ramp(p);
     if (!shell || n < 2 * p.wall_count || d <= shell->start)
         return fill(p, n, d);
-    // The shell: the 2M beads of the ramp's start, narrowed towards w*.
+    // The shell: the 2M beads of the ramp's start, narrowed towards w* (the
+    // outer two towards their own width).
     const int m = 2 * p.wall_count;
     Beading b = fill(p, m, shell->start);
     const double s = std::min(1.0, (d - shell->start) / (shell->end - shell->start));
-    for (double& w : b.widths)
-        w += s * (p.preferred_width - w);
+    for (int i = 0; i < m; ++i) {
+        double& w = b.widths[std::size_t(i)];
+        w += s * ((i == 0 || i == m - 1 ? outer_bead(p) : p.preferred_width) - w);
+    }
     double edge = 0.0;
     for (int i = 0; i < p.wall_count; ++i) {
         const std::size_t k = std::size_t(i);

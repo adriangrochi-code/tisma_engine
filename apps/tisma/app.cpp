@@ -448,6 +448,9 @@ private:
     void object_menu();
     void object_settings_window();
     bool own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where);
+    bool volume_editor(PlateObject& o, std::size_t k, bool& removed);
+    bool range_editor(PlateObject& o, std::size_t k, bool& removed);
+    void objects_list();
     void volumes_overlay();
     int object_settings_ = -1;       // the object whose settings window is open
     std::set<std::string> row_only_; // while drawing an object's settings: the rows to show
@@ -515,6 +518,11 @@ private:
     // the last frame (for its background), Basic's «Show all» until the
     // section changes, and the settings that differ from the chosen profiles.
     SettingsTab panel_tab_ = SettingsTab::Print;
+    // The Objects tab instead of the settings (settings_levels.md, rule 13):
+    // the object chosen in its list, and the row under it.
+    bool objects_tab_ = false;
+    int list_object_ = -1;
+    std::optional<ObjectRow> list_row_;
     ViewLevel view_level_ = ViewLevel::Normal;
     std::array<std::string, 3> panel_section_{"quality", "temperature", "machine"};
     std::map<std::string, bool> card_open_;
@@ -900,6 +908,7 @@ const std::map<T, const char*>& row_keys() {
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
         {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
+        {T::SupportBuildplateOnly, "support.buildplate_only"},
         {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
         {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
         {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
@@ -907,6 +916,7 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -933,6 +943,8 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
+        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
+        {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
         {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
@@ -952,8 +964,9 @@ const std::map<T, const char*>& row_keys() {
         {T::FirstLayerShrink, "slicing.first_layer_shrink"}, {T::FillModeRow, "slicing.fill_mode"},
         {T::GapClosing, "slicing.gap_closing_radius"}, {T::SimplifyTolerance, "slicing.simplify_tolerance"},
         {T::WallOverlap, "infill.wall_overlap"}, {T::CombineMaxHeight, "infill.combine_max_height"},
-        {T::SupportZGap, "support.z_gap"}, {T::SupportXyGap, "support.xy_gap"},
+        {T::SupportZGap, "support.z_gap"}, {T::SupportBottomZGap, "support.bottom_z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
+        {T::SupportBottomInterface, "support.bottom_interface_layers"},
         {T::SupportLineAngle, "support.line_angle"},
         {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
@@ -973,6 +986,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
+        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
@@ -982,6 +996,7 @@ const std::map<T, const char*>& row_keys() {
         {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
         {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
+        {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
@@ -2137,6 +2152,7 @@ bool App::init(std::string& error) {
         show_labels_ = true;
     if (const std::size_t slash = options_.section.find('/'); slash != std::string::npos) {
         const std::string tab = options_.section.substr(0, slash);
+        objects_tab_ = tab == "objects"; // objects/<row>: the list, its row chosen below (after --object-add)
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
         // The printer's settings are on its page (settings_panel.md, rule 37).
@@ -2247,7 +2263,7 @@ bool App::init(std::string& error) {
     }
     if (!options_.object_add.empty() && !objects_.empty()) {
         PlateObject& o = objects_.front();
-        const std::array<double, 3> size = placed_size(o);
+        const std::array<double, 3> size = model_size(o);
         const std::array<double, 3> half{size[0] / 2.0, size[1] / 2.0, size[2] / 2.0};
         std::stringstream list(options_.object_add);
         for (std::string what; std::getline(list, what, ',');)
@@ -2261,6 +2277,10 @@ bool App::init(std::string& error) {
                 o.ranges.push_back({0.0, 2.0, with_own_key("", settings_, "layers.height")});
         selected_ = object_settings_ = 0;
     }
+    if (options_.object_turn != std::array<double, 3>{0.0, 0.0, 0.0} && !objects_.empty()) {
+        objects_.front().place.rotation = from_euler_degrees(options_.object_turn);
+        plate_changed();
+    }
     if (!options_.object_settings.empty() && !objects_.empty()) {
         try {
             own_settings(settings_, options_.object_settings, objects_.front().name);
@@ -2269,6 +2289,18 @@ bool App::init(std::string& error) {
         } catch (const std::exception& e) {
             fail(T::CannotOpen, e.what());
         }
+    }
+    // --section objects/<row>: the first object's row in the Objects tab
+    // (infill, walls, surfaces, volume1, range1...), its window closed.
+    if (objects_tab_ && !objects_.empty()) {
+        list_object_ = selected_ = 0;
+        object_settings_ = -1;
+        const std::string row = options_.section.substr(options_.section.find('/') + 1);
+        for (const ObjectRow& r : object_rows(objects_.front()))
+            if ((r.kind == ObjectRow::Kind::Settings && r.group == row) ||
+                (r.kind == ObjectRow::Kind::Volume && row == "volume" + std::to_string(r.index + 1)) ||
+                (r.kind == ObjectRow::Kind::Range && row == "range" + std::to_string(r.index + 1)))
+                list_row_ = r;
     }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
     if (options_.tool == "mixing") {
@@ -2845,7 +2877,7 @@ void App::open_project(const std::filesystem::path& path) {
             for (const ProjectVolume& v : m.volumes)
                 o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
                                      v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
-                                     v.settings});
+                                     v.settings, v.turn});
             for (const ProjectRange& r : m.ranges)
                 o.ranges.push_back({r.from, r.to, r.settings});
             const BoundingBox box = o.mesh.bounding_box();
@@ -2904,9 +2936,14 @@ void App::save_project_to(const std::filesystem::path& path) {
         p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
                             objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
                             objects_[i].settings});
-        for (const PlateVolume& v : objects_[i].volumes)
+        // The model is saved as placed: its volumes go with it.
+        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
+        const BoundingBox from = objects_[i].mesh.bounding_box(), to = placed_meshes_[i].bounding_box();
+        for (const PlateVolume& own : objects_[i].volumes) {
+            const PlateVolume v = carried_volume(own, from, to_bed, to);
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
-                                               v.offset, v.size, v.settings});
+                                               v.offset, v.size, v.settings, v.turn});
+        }
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
     }
@@ -3471,10 +3508,9 @@ void App::start_slice() {
     // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
     SliceVolumes volumes;
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        const BoundingBox box = placed_meshes_[i].bounding_box();
         for (std::size_t k = 0; k < objects_[i].volumes.size(); ++k) {
             const PlateVolume& v = objects_[i].volumes[k];
-            TriangleMesh shape = volume_mesh(v, box);
+            TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             if (v.kind == PlateVolume::Kind::Negative) {
                 for (std::size_t t = 0; t < shape.triangle_count(); ++t)
                     volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
@@ -5399,16 +5435,21 @@ void App::settings_panel() {
         for (const T name : {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom})
             level_width = std::max(level_width, ImGui::CalcTextSize((std::string("    ") + tr(name)).c_str()).x);
         level_width += ImGui::GetFrameHeight() + 2.0f * ImGui::GetStyle().FramePadding.x;
-        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 2.0f * gap) / 2.0f;
-        const std::array<std::pair<SettingsTab, T>, 2> tabs = {
-            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}}};
+        const float tab_width = (ImGui::GetContentRegionAvail().x - level_width - 3.0f * gap) / 3.0f;
+        // Print, Material and the plate's Objects (settings_levels.md, rule 13).
+        const std::array<std::pair<SettingsTab, T>, 3> tabs = {
+            {{SettingsTab::Print, T::Print}, {SettingsTab::Material, T::Material}, {SettingsTab::Printer, T::Objects}}};
         for (const auto& [tab, title] : tabs) {
-            const bool chosen = panel_tab_ == tab;
+            const bool objects = title == T::Objects;
+            const bool chosen = objects ? objects_tab_ : !objects_tab_ && panel_tab_ == tab;
             ImGui::PushStyleColor(ImGuiCol_Button, chosen ? rgb(theme_.accent) : rgb(theme_.frame, 0.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, chosen ? rgb(theme_.accent_hover) : rgb(theme_.frame_hover));
             ImGui::PushStyleColor(ImGuiCol_Text, chosen ? rgb(0xFFFFFF) : rgb(theme_.text_dim));
-            if (ImGui::Button(tr(title), ImVec2(tab_width, 0)))
-                panel_tab_ = tab;
+            if (ImGui::Button(tr(title), ImVec2(tab_width, 0))) {
+                objects_tab_ = objects;
+                if (!objects)
+                    panel_tab_ = tab;
+            }
             ImGui::PopStyleColor(3);
             ImGui::SameLine(0, gap);
         }
@@ -5462,6 +5503,12 @@ void App::settings_panel() {
             choose_level(ViewLevel::Advanced);
         if (ImGui::IsKeyPressed(ImGuiKey_4))
             choose_level(ViewLevel::Custom);
+    }
+    if (objects_tab_) {
+        objects_list();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     if (panel_tab_ == SettingsTab::Material)
@@ -5647,6 +5694,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::DetailMargin, "layers.detail_margin", s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
     } else if (id == "line_width") {
         mm(T::LineWidth, "walls.width", s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
+        mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 2.0, s.outer_wall_width > 0.0 ? "%.2f mm" : "—",
+           0.002f);
+        if (shown("layers.first_line_width"))
+            changed |= row(T::FirstLineWidth, s.first_line_width.value, 0.0, s.first_line_width.percent ? 1000.0 : 40.0,
+                           s.first_line_width.percent ? "%.0f %%" : "%.2f mm", s.first_line_width.percent ? 0.5f : 0.01f);
+        mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 2.0, s.top_width > 0.0 ? "%.2f mm" : "—", 0.002f);
+        mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 2.0, s.solid_width > 0.0 ? "%.2f mm" : "—", 0.002f);
+        mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 2.0, s.infill_width > 0.0 ? "%.2f mm" : "—", 0.002f);
+        if (shown("walls.seam_gap"))
+            changed |= row(T::SeamGap, s.wall_seam_gap.value, 0.0, s.wall_seam_gap.percent ? 1000.0 : 40.0,
+                           s.wall_seam_gap.percent ? "%.0f %%" : "%.2f mm", s.wall_seam_gap.percent ? 0.5f : 0.01f);
     } else if (id == "seam") {
         if (shown("walls.seam"))
             changed |= row(T::Seam, s.seam,
@@ -5703,8 +5761,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
         flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
+        flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 20);
+        if (shown("walls.transition_length"))
+            changed |= row(T::TransitionLength, s.wall_transition_length.value, 0.0,
+                           s.wall_transition_length.percent ? 1000.0 : 40.0,
+                           s.wall_transition_length.percent ? "%.0f %%" : "%.2f mm",
+                           s.wall_transition_length.percent ? 0.5f : 0.01f);
         if (shown("walls.top_one_wall"))
             changed |= row(T::TopOneWallRow, s.top_one_wall,
                            {{TopOneWall::None, tr(T::TopOneWallNone)},
@@ -5802,6 +5867,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "infill_support") {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
@@ -5835,6 +5901,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             accel(T::AccelSolid, "acceleration.solid_infill", s.accel_solid_infill);
             accel(T::AccelTop, "acceleration.top_solid_infill", s.accel_top_solid_infill);
             accel(T::AccelBridges, "acceleration.bridges", s.accel_bridges);
+            accel(T::AccelWipeTower, "acceleration.wipe_tower", s.accel_wipe_tower);
         } else {
             accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
             accel(T::AccelOverRaft, "acceleration.first_layer_over_raft", s.accel_first_layer_over_raft);
@@ -5846,6 +5913,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "support") {
         flag(T::Supports, "support.enabled", s.support);
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
+        flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
         if (shown("support.style"))
             changed |= row(T::SupportStyle, s.support_style,
                            {{SupportStyle::Grid, tr(T::SupportGrid)}, {SupportStyle::Organic, tr(T::SupportOrganic)}},
@@ -5864,11 +5932,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
            0.05f, tr(T::TreeDoubleWallTip));
     } else if (id == "gap") {
         mm(T::SupportZGap, "support.z_gap", s.support_z_gap, 0.0, 5.0, "%.2f mm", 0.01f);
+        mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
+           s.support_bottom_z_gap > 0.0 ? "%.2f mm" : "—", 0.01f);
         if (shown("support.xy_gap"))
             changed |= row(T::SupportXyGap, s.support_xy_gap.value, 0.0, s.support_xy_gap.percent ? 1000.0 : 10.0,
                            s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
+        whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
+              s.support_bottom_interface_layers < 0 ? "—" : "%d");
         flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
@@ -6095,7 +6167,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::FanAlways, "cooling.fan_always", s.fan_always);
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
+        whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
     } else if (id == "short_layers") {
+        flag(T::CoolingEnabled, "cooling.enabled", s.cooling_enabled);
         mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
         mm(T::MinSpeed, "cooling.min_speed", s.min_print_speed, 0.0, 100.0, "%.0f mm/s", 0.5f);
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
@@ -6850,8 +6924,8 @@ void App::object_menu() {
     }
     ImGui::Separator();
     // A modifier, a negative volume or a height range (model_tools.md, rules
-    // 2, 3 and 6), over the middle of the model.
-    const std::array<double, 3> size = placed_size(o);
+    // 2, 3 and 6), over the middle of the model, in its own measures.
+    const std::array<double, 3> size = model_size(o);
     const std::array<double, 3> half{std::max(1.0, size[0] / 2.0), std::max(1.0, size[1] / 2.0), std::max(1.0, size[2] / 2.0)};
     if (ImGui::MenuItem(tr(T::AddModifier))) {
         o.volumes.push_back({PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {0.0, 0.0, size[2] / 4.0}, half,
@@ -6967,68 +7041,28 @@ void App::object_settings_window() {
         ImGui::PushID("own");
         changed |= own_settings_editor(o.settings, {}, false, o.name);
         ImGui::PopID();
-        const float field = 70.0f * scale_;
-        const auto three = [&](const char* id, T label, std::array<double, 3>& v, double lo) {
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(tr(label));
-            for (int k = 0; k < 3; ++k) {
-                ImGui::SameLine(110.0f * scale_ + float(k) * (field + 4.0f * scale_));
-                ImGui::SetNextItemWidth(field);
-                ImGui::PushID(k);
-                changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &v[std::size_t(k)], 0.1f, &lo, nullptr, "%.1f");
-                ImGui::PopID();
-            }
-        };
         // Its modifiers and negative volumes (rules 2 and 3).
         for (std::size_t k = 0; k < o.volumes.size(); ++k) {
-            PlateVolume& v = o.volumes[k];
             ImGui::PushID(int(k) + 1000);
-            const bool negative = v.kind == PlateVolume::Kind::Negative;
+            const bool negative = o.volumes[k].kind == PlateVolume::Kind::Negative;
             const std::string head = format(tr(negative ? T::NegativeVolumeItem : T::ModifierItem), int(k) + 1);
-            if (ImGui::CollapsingHeader(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                int shape = int(v.shape);
-                const char* shapes[] = {tr(T::ShapeBox), tr(T::ShapeCylinder)};
-                ImGui::SetNextItemWidth(140.0f * scale_);
-                if (ImGui::Combo("##shape", &shape, shapes, 2)) {
-                    v.shape = PlateVolume::Shape(shape);
-                    changed = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
-                    o.volumes.erase(o.volumes.begin() + std::ptrdiff_t(k));
-                    changed = true;
-                    ImGui::PopID();
-                    break;
-                }
-                three("##offset", T::VolumeOffset, v.offset, -1000.0);
-                three("##size", T::VolumeSize, v.size, 0.1);
-                if (!negative)
-                    changed |= own_settings_editor(v.settings, o.settings, false, head);
-            }
+            bool removed = false;
+            if (ImGui::CollapsingHeader(head.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                changed |= volume_editor(o, k, removed);
             ImGui::PopID();
+            if (removed)
+                break;
         }
         // Its height ranges (rule 6).
         for (std::size_t k = 0; k < o.ranges.size(); ++k) {
-            PlateRange& r = o.ranges[k];
             ImGui::PushID(int(k) + 2000);
-            const std::string head = format(tr(T::RangeItem), r.from, r.to);
-            if (ImGui::CollapsingHeader((head + "###range").c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                const double lo = 0.0;
-                ImGui::SetNextItemWidth(field);
-                changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
-                ImGui::SameLine();
-                ImGui::SetNextItemWidth(field);
-                changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
-                ImGui::SameLine();
-                if (ImGui::SmallButton(tr(T::RemoveVolume))) {
-                    o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
-                    changed = true;
-                    ImGui::PopID();
-                    break;
-                }
-                changed |= own_settings_editor(r.settings, o.settings, true, head);
-            }
+            const std::string head = format(tr(T::RangeItem), o.ranges[k].from, o.ranges[k].to);
+            bool removed = false;
+            if (ImGui::CollapsingHeader((head + "###range").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+                changed |= range_editor(o, k, removed);
             ImGui::PopID();
+            if (removed)
+                break;
         }
     }
     ImGui::End();
@@ -7036,6 +7070,143 @@ void App::object_settings_window() {
         plate_changed();
     if (!open)
         object_settings_ = -1;
+}
+
+// A modifier's or negative volume's shape, place, size and settings; true
+// when something changed (`removed`: the volume was taken away).
+bool App::volume_editor(PlateObject& o, std::size_t k, bool& removed) {
+    PlateVolume& v = o.volumes[k];
+    bool changed = false;
+    const bool negative = v.kind == PlateVolume::Kind::Negative;
+    int shape = int(v.shape);
+    const char* shapes[] = {tr(T::ShapeBox), tr(T::ShapeCylinder)};
+    ImGui::SetNextItemWidth(140.0f * scale_);
+    if (ImGui::Combo("##shape", &shape, shapes, 2)) {
+        v.shape = PlateVolume::Shape(shape);
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+        o.volumes.erase(o.volumes.begin() + std::ptrdiff_t(k));
+        removed = true;
+        return true;
+    }
+    const float field = 70.0f * scale_;
+    const auto three = [&](const char* id, T label, std::array<double, 3>& values, double lo) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(label));
+        for (int c = 0; c < 3; ++c) {
+            ImGui::SameLine(110.0f * scale_ + float(c) * (field + 4.0f * scale_));
+            ImGui::SetNextItemWidth(field);
+            ImGui::PushID(c);
+            changed |= ImGui::DragScalar(id, ImGuiDataType_Double, &values[std::size_t(c)], 0.1f, &lo, nullptr, "%.1f");
+            ImGui::PopID();
+        }
+    };
+    three("##offset", T::VolumeOffset, v.offset, -1000.0);
+    three("##size", T::VolumeSize, v.size, 0.1);
+    if (!negative)
+        changed |= own_settings_editor(v.settings, o.settings, false,
+                                       format(tr(T::ModifierItem), int(k) + 1));
+    return changed;
+}
+
+// A height range's heights and settings; true when something changed.
+bool App::range_editor(PlateObject& o, std::size_t k, bool& removed) {
+    PlateRange& r = o.ranges[k];
+    bool changed = false;
+    const float field = 70.0f * scale_;
+    const double lo = 0.0;
+    ImGui::SetNextItemWidth(field);
+    changed |= ImGui::DragScalar(tr(T::HeightFrom), ImGuiDataType_Double, &r.from, 0.1f, &lo, &r.to, "%.2f mm");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(field);
+    changed |= ImGui::DragScalar(tr(T::HeightTo), ImGuiDataType_Double, &r.to, 0.1f, &r.from, nullptr, "%.2f mm");
+    ImGui::SameLine();
+    if (ImGui::SmallButton(tr(T::RemoveVolume))) {
+        o.ranges.erase(o.ranges.begin() + std::ptrdiff_t(k));
+        removed = true;
+        return true;
+    }
+    changed |= own_settings_editor(r.settings, o.settings, true, format(tr(T::RangeItem), r.from, r.to));
+    return changed;
+}
+
+// The plate's objects (settings_levels.md, rules 11 and 13): each with a row
+// below it for each group of its own settings, each modifier or negative
+// volume and each height range. The row chosen shows its settings under the
+// list, from the profile's values.
+void App::objects_list() {
+    if (objects_.empty()) {
+        ImGui::TextDisabled("%s", tr(T::ObjectsEmpty));
+        return;
+    }
+    if (list_object_ >= int(objects_.size()))
+        list_object_ = -1;
+    bool changed = false;
+    const float list_height = std::min(ImGui::GetContentRegionAvail().y * 0.4f,
+                                       ImGui::GetFrameHeightWithSpacing() * float(4 + 3 * objects_.size()));
+    ImGui::BeginChild("##object_list", ImVec2(0, list_height), ImGuiChildFlags_Borders);
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        const PlateObject& o = objects_[i];
+        ImGui::PushID(int(i));
+        const bool here = list_object_ == int(i);
+        if (ImGui::Selectable(o.name.c_str(), selected_ == int(i) && (!here || !list_row_))) {
+            selected_ = list_object_ = int(i);
+            list_row_.reset();
+        }
+        ImGui::Indent();
+        for (const ObjectRow& row : object_rows(o)) {
+            std::string label;
+            if (row.kind == ObjectRow::Kind::Settings)
+                label = row.group == "walls"    ? tr(T::ObjectWalls)
+                        : row.group == "infill" ? tr(T::ObjectInfill)
+                        : row.group == "surfaces" ? tr(T::ObjectSurfaces)
+                                                  : row.group;
+            else if (row.kind == ObjectRow::Kind::Volume)
+                label = format(tr(o.volumes[row.index].kind == PlateVolume::Kind::Negative ? T::NegativeVolumeItem
+                                                                                            : T::ModifierItem),
+                               int(row.index) + 1);
+            else
+                label = format(tr(T::RangeItem), o.ranges[row.index].from, o.ranges[row.index].to);
+            const bool chosen = here && list_row_ == row;
+            if (ImGui::Selectable((label + "##" + std::to_string(int(row.kind)) + row.group + std::to_string(row.index)).c_str(),
+                                  chosen)) {
+                selected_ = list_object_ = int(i);
+                list_row_ = row;
+            }
+        }
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextDisabled("%s", tr(T::ObjectsHint));
+    ImGui::PopTextWrapPos();
+    if (list_object_ < 0)
+        return;
+    PlateObject& o = objects_[std::size_t(list_object_)];
+    // The row may be gone (removed in the object's window).
+    if (const std::vector<ObjectRow> rows = object_rows(o);
+        list_row_ && std::find(rows.begin(), rows.end(), *list_row_) == rows.end())
+        list_row_.reset();
+    ImGui::Separator();
+    ImGui::TextColored(rgb(theme_.lavender), "%s", tr(T::ObjectsPicked));
+    ImGui::BeginChild("##object_pick", ImVec2(0, 0));
+    ImGui::PushID("pick");
+    bool removed = false;
+    if (!list_row_ || list_row_->kind == ObjectRow::Kind::Settings)
+        changed |= own_settings_editor(o.settings, {}, false, o.name);
+    else if (list_row_->kind == ObjectRow::Kind::Volume)
+        changed |= volume_editor(o, list_row_->index, removed);
+    else
+        changed |= range_editor(o, list_row_->index, removed);
+    if (removed)
+        list_row_.reset();
+    ImGui::PopID();
+    ImGui::EndChild();
+    if (changed)
+        plate_changed();
 }
 
 void App::plate_tools() {
@@ -7419,17 +7590,33 @@ void App::split_selected() {
 
 void App::mirror_selected(int axis) {
     PlateObject& o = objects_[std::size_t(selected_)];
+    const BoundingBox from = o.mesh.bounding_box();
+    // Its modifiers and negative volumes go where the mirror puts them: the
+    // map from the model's old frame to its new one.
+    Affine map;
     if (o.place.rotation == kNoRotation) {
         // On the model's own axis, which is the bed's: its scale stays.
         mirror_mesh(o.mesh, axis);
     } else {
         // Turned, the model takes its turn and size into its mesh first.
         TriangleMesh m = placed_mesh(o);
+        map = placing(o, m);
         mirror_mesh(m, axis);
         o.mesh = std::move(m);
         o.place.rotation = kNoRotation;
         o.place.scale = {1.0, 1.0, 1.0};
     }
+    // Then the mirror itself, about the centre of the mesh's box (mirror_mesh).
+    const BoundingBox to = o.mesh.bounding_box();
+    const double centre = axis == 0 ? 0.5 * (double(to.min.x) + to.max.x)
+                          : axis == 1 ? 0.5 * (double(to.min.y) + to.max.y)
+                                      : 0.5 * (double(to.min.z) + to.max.z);
+    const std::size_t a = std::size_t(axis);
+    for (std::size_t j = 0; j < 3; ++j)
+        map.a[3 * a + j] = -map.a[3 * a + j];
+    map.b[a] = 2.0 * centre - map.b[a];
+    for (PlateVolume& v : o.volumes)
+        v = carried_volume(v, from, map, to);
     plate_changed();
 }
 
@@ -7507,10 +7694,9 @@ void App::volumes_overlay() {
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         if (objects_[i].volumes.empty())
             continue;
-        const BoundingBox box = placed_meshes_[i].bounding_box();
         for (const PlateVolume& v : objects_[i].volumes) {
             const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
-            const TriangleMesh shape = volume_mesh(v, box);
+            const TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             // The outline of every face but the cylinder's caps' spokes.
             for (std::size_t t = 0; t < shape.triangle_count(); ++t) {
                 ImVec2 a, b, c;

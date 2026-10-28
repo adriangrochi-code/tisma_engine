@@ -236,16 +236,18 @@ TEST_CASE("scarf seam in the G-code: contours, everywhere, smooth only (W1, W1b,
     contours.scarf = ScarfMode::Contours;
     const auto walls_contours = outer_walls(gcode(contours), 10);
     REQUIRE(walls_contours.size() == 2);
-    // Each loop 20 mm longer with its ramp, from the layer below's top.
+    // Each loop 20 mm longer with its ramp, from the layer below's top; a
+    // plain loop stops walls.seam_gap short of its start (perimeters.md, rule 5).
+    const double gap = s.wall_seam_gap.of(s.nozzle_diameter);
     std::multimap<double, double> by_length; // plain length -> lowest Z with the scarf
     for (std::size_t k = 0; k < 2; ++k) {
-        CHECK_THAT(walls_every[k].second, WithinAbs(walls_plain[k].second + 20.0, 0.01));
+        CHECK_THAT(walls_every[k].second, WithinAbs(walls_plain[k].second + gap + 20.0, 0.01));
         CHECK_THAT(walls_every[k].first, WithinAbs(z - s.layer_height, 1e-3));
     }
     // contours: only the outer contour's loop (the longer one) has the ramp.
     for (std::size_t k = 0; k < 2; ++k) {
         const bool outer = walls_plain[k].second > walls_plain[1 - k].second;
-        CHECK_THAT(walls_contours[k].second, WithinAbs(walls_plain[k].second + (outer ? 20.0 : 0.0), 0.01));
+        CHECK_THAT(walls_contours[k].second, WithinAbs(walls_plain[k].second + (outer ? gap + 20.0 : 0.0), 0.01));
         CHECK_THAT(walls_contours[k].first, WithinAbs(outer ? z - s.layer_height : z, 1e-3));
     }
     // The first layer keeps its plain loops: under it there is only the bed.
@@ -273,7 +275,7 @@ TEST_CASE("scarf seam: a cube's sharp corners keep the plain loop unless asked (
     const auto kept = outer_walls(smooth.str(), 10), ramped = outer_walls(any.str(), 10);
     REQUIRE(kept.size() == 1);
     REQUIRE(ramped.size() == 1);
-    CHECK_THAT(ramped[0].second, WithinAbs(kept[0].second + 20.0, 0.01));
+    CHECK_THAT(ramped[0].second, WithinAbs(kept[0].second + s.wall_seam_gap.of(s.nozzle_diameter) + 20.0, 0.01));
     CHECK(ramped[0].first < kept[0].first - 0.1);
     CHECK(check_gcode(any.str(), gcode_limits(sliced, s)).ok());
 }

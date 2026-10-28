@@ -12,6 +12,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <regex>
@@ -481,16 +482,43 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     const SlicedModel m = slice_model(weld_exact(flow.mesh), s);
     const std::string g = gcode_of(m, s);
     CHECK(checks(g, gcode_limits(m, s)));
-    // A 0.4 x 0.2 mm line at 16 mm3/s runs at 200 mm/s; at 8 mm3/s, 100 mm/s.
-    const std::size_t top = g.find(";Z:10.2");
-    REQUIRE(top != std::string::npos);
-    CHECK(g.find("F12000", top) != std::string::npos);
-    CHECK(g.find("F6000") < top);
-    CHECK(g.find("F12000") > top);
+    // Each extrusion of a layer at its segment's flow: its section (a
+    // rectangle with rounded sides, gcode_motion.md rules 1 and 4) times its
+    // feed, the feed rounded down to whole mm/min.
+    const auto flows = [&g](const std::string& z) {
+        std::vector<double> out;
+        const std::size_t from = g.find(";Z:" + z + "\n");
+        if (from == std::string::npos)
+            return out;
+        const std::size_t to = g.find(";Z:", from + 3);
+        std::istringstream in(g.substr(from, to - from));
+        double width = 0.0;
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind(";WIDTH:", 0) == 0)
+                width = std::stod(line.substr(7));
+            const std::size_t e = line.find(" E"), f = line.find(" F");
+            if (line.rfind("G1 X", 0) != 0 || e == std::string::npos || f == std::string::npos)
+                continue;
+            const double section = (width - 0.2) * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
+            out.push_back(section * std::stod(line.substr(f + 2)) / 60.0);
+        }
+        return out;
+    };
+    // Most at the flow (;WIDTH's three decimals aside), none past it (a few
+    // are held back by the machine's limits).
+    std::vector<double> high = flows("10.200"), low = flows("2.200");
+    REQUIRE(high.size() > 50);
+    REQUIRE(low.size() > 50);
+    std::sort(high.begin(), high.end());
+    std::sort(low.begin(), low.end());
+    CHECK_THAT(high[high.size() / 2], WithinAbs(16.0, 0.03));
+    CHECK_THAT(low[low.size() / 2], WithinAbs(8.0, 0.03));
+    CHECK(high.back() < 16.05);
+    CHECK(low.back() < 8.05);
     // What the machine cannot move is not asked.
     s.max_feed_x = s.max_feed_y = 150.0;
     const std::string slow = gcode_of(slice_model(weld_exact(flow.mesh), s), s);
-    CHECK(slow.find("F12000") == std::string::npos);
+    CHECK(slow.find("F13442") == std::string::npos); // 16 mm3/s on a 0.4 mm bead
     CHECK(slow.find("F9000", slow.find(";Z:10.2")) != std::string::npos);
 
     // The acceleration tower: the start writes the acceleration in use, each

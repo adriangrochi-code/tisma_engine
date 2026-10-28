@@ -163,16 +163,62 @@ basadas en la wiki de calibración de OrcaSlicer, la guía de ajuste de Andrew E
       impresora (`settings_panel.md`, regla 38): cada prueba tiene un botón «Cómo se hace» que abre su guía;
     - en el panel de ayuda, una pestaña Calibraciones con las guías en orden, separadas en «Del filamento» (se repiten
       con cada filamento) y «De la impresora» (al cambiar la máquina).
+
+    Qué guía abre cada prueba (`calibration_models.md`, `calibrations.md`):
+
+    | Guía | Prueba del motor |
+    |---|---|
+    | `first_layer` | Primera capa (desfase Z) |
+    | `temperature_tower`, `stringing_temperature` | Temperatura (la misma torre: una guía mira la calidad, la otra los hilos del pin) |
+    | `max_flow` | Caudal máximo |
+    | `pressure_advance` | Pressure advance |
+    | `flow` | Flujo (%) |
+    | `retraction` | Retracción |
+    | `cornering` | Esquinas |
+    | `input_shaping` | Vibraciones |
+    | `vfa` | VFA |
+    | `dimensional` | Bloque de medidas (`calibrations.md`, regla 6) |
+    | `cooling`, `overhang_angle`, `supports` | Ninguna: solo en la pestaña de ayuda, sin botón «Calibrar» |
+
+    Las pruebas sin guía (aceleración, coasting, arcos, planchado, velocidad de retracción y las demás) no muestran
+    «Cómo se hace».
 21. **Una guía:** para qué sirve, cuándo repetirla, qué prueba va antes (con enlace), los pasos, una tabla «Lo que
     ves → Qué significa», el resultado y los consejos. Al pie, «Basado en …» con sus fuentes.
 22. **Orden:** si la prueba de `before` no está hecha (sin fecha en la sección Calibración), la guía lo avisa: «Antes
     conviene hacer: Flujo máximo», con un botón que abre esa prueba. No impide seguir.
+    - **Dónde está la fecha:** al aplicar un resultado se guardan la fecha y la boquilla, por `id` de guía: en el perfil
+      de la impresora las de `group` `printer`, y en el del filamento las de `group` `filament` (con la impresora y la
+      boquilla). El nombre del campo lo elige el motor (`docs/CONFIG.md`). Es el mismo dato que muestra
+      `settings_panel.md`, regla 38.
+    - Una guía sin prueba del motor (tabla de la regla 20) cuenta como hecha cuando la persona aplica su resultado
+      desde la guía.
 23. **Resultado:**
     - si `result` trae `key`, la guía muestra el valor actual de ese ajuste y, al terminar la prueba, un campo para
-      escribir lo medido (la altura o el bloque elegido); con la fórmula de la guía calcula el valor nuevo y ofrece
-      **Aplicar**, como la regla 7 (con Deshacer);
+      escribir lo medido (la altura o el bloque elegido); con la cuenta de la tabla calcula el valor nuevo y ofrece
+      **Aplicar**, como la regla 7 (con Deshacer). El valor propuesto se puede corregir antes de aplicar;
+    - **inicio, paso y alto de franja:** vienen de la última prueba de esa guía que el motor generó para esa impresora
+      (los ajustes `calibration.*` de la pieza). Se pueden cambiar. Sin prueba generada, la persona los escribe; el
+      alto de franja es 1 mm si no lo escribe;
     - si trae `where` `printer_firmware`, el resultado no va al perfil: la guía explica que se guarda en la impresora
       y, si la impresora está conectada, ofrece mandar el comando de su firmware (`calibrations.md`, regla 3).
+
+    Las cuentas (los datos de `calibrations.json` solo traen el texto; la cuenta es esta tabla). «Franja» es
+    `inicio + paso · ⌊altura / alto de franja⌋`, como `calibration_models.md`, regla 4, con el sentido de inicio a fin:
+
+    | Guía | Lo que escribe la persona | Valor propuesto | Ajuste |
+    |---|---|---|---|
+    | `temperature_tower` | La temperatura del bloque elegido (está en relieve) | Ese valor | `material.nozzle_temp` |
+    | `stringing_temperature` | La temperatura del bloque sin hilos | Ese valor | `material.nozzle_temp` |
+    | `max_flow` | La altura en mm justo debajo del cambio | Franja × 0,9 (10 % menos, el borde bajo del 10 a 20 % de la guía) | `extrusion.max_flow` |
+    | `pressure_advance` | La altura en mm de las esquinas más limpias | Franja | `extrusion.pressure_advance` |
+    | `retraction` | La altura en mm del tramo limpio más bajo | Franja | `retraction.length` |
+    | `cornering` | La altura en mm donde las esquinas todavía están bien | Franja | `machine.corner_speed` |
+    | `flow` | El parche elegido | El valor de ese parche (el flujo del parche, no una corrección) | `extrusion.flow` |
+    | `cooling` | Los segundos de la pieza sana | Ese valor | `cooling.min_layer_time` |
+    | `overhang_angle` | El ángulo de la rampa más tendida limpia | Ese valor, en la convención de `support.threshold_angle` | `support.threshold_angle` |
+    | `supports` | Cuántas capas de separación | Capas × `layers.height` | `support.z_gap` |
+    | `vfa` | Una velocidad fuera de los tramos con rayas | Ese valor | `speed.outer_wall` |
+    | `dimensional` | Las medidas del bloque | La cuenta de `calibrations.md`, regla 6 | `compensation.hole_offset` y los de esa regla |
 24. **Tutorial `new_material`:** su paso de calibración sigue el orden de las guías (temperatura, flujo máximo, avance
     de presión, flujo, retracción).
 
@@ -202,3 +248,6 @@ procedimiento, cinco términos y un tutorial de tres pasos.
 | AS17 | Guía de Flujo máximo: escribir 19 mm con inicio 5 y paso 0,5 | Calcula 14,5 mm³/s, propone un 10 % menos y ofrece Aplicar a `extrusion.max_flow` |
 | AS18 | Guía de Input shaping | Dice que el resultado va en la impresora; con una impresora conectada ofrece mandar el comando |
 | AS19 | Pestaña Calibraciones del panel de ayuda | 14 guías en orden, en dos grupos, cada una con «Basado en» al pie |
+| AS20 | Generar la torre de caudal máximo por defecto (5 a 25 mm³/s, paso 1, franjas de 2 mm), abrir su guía y escribir 19 mm | Inicio, paso y franja ya escritos; calcula 14 mm³/s y propone 12,6 |
+| AS21 | Aplicar el resultado de Flujo y abrir la guía de Retracción | Sin aviso de «Antes conviene hacer»; la sección Calibración muestra Flujo con la fecha |
+| AS22 | Página de calibraciones, prueba de aceleración | Sin botón «Cómo se hace»: esa prueba no tiene guía |

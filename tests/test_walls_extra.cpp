@@ -11,14 +11,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <numbers>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace tisma;
@@ -259,4 +262,197 @@ TEST_CASE("walls: an overhang held from one side filled with perimeters (walls_e
     CHECK(length_of(runs, 40, "Solid infill") < 1.0);
     // The layer above is as without it.
     CHECK(length_of(runs, 41, "Overhang perimeter") == 0.0);
+}
+
+TEST_CASE("walls: the outer wall with a width of its own (perimeters.md, walls.outer_width)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    for (const WallGenerator generator : {WallGenerator::Variable, WallGenerator::Fixed}) {
+        s.wall_generator = generator;
+        const SlicedModel model = slice_model(m, s);
+        const LayerWalls& walls = model.walls[10];
+        // Each loop's width along the sides (the fixed loops have their
+        // points at the corners only) and the distance of its centre from
+        // the outline at X 90.
+        std::map<int, std::vector<double>> widths;
+        std::map<int, double> depth;
+        for (const Toolpath& t : walls.toolpaths)
+            for (const ToolpathPoint& p : t.points) {
+                if (generator == WallGenerator::Fixed || (p.p.y > 95.0 && p.p.y < 105.0))
+                    widths[t.index].push_back(p.width);
+                depth[t.index] = std::min(depth.count(t.index) ? depth[t.index] : 1e9, p.p.x - 90.0);
+            }
+        INFO((generator == WallGenerator::Fixed ? "fixed" : "variable"));
+        REQUIRE(widths.size() == 3);
+        for (const auto& [index, list] : widths)
+            for (const double w : list)
+                CHECK_THAT(w, WithinAbs(index == 0 ? 0.6 : 0.45, 1e-6));
+        // Neighbours overlap (perimeters.md, rule 1): 0.3, then + 0.525 - d,
+        // then + 0.45 - d, d = 0.2 (1 - pi/4); the infill starts where the
+        // third bead's spacing ends.
+        const double d = 0.2 * (1.0 - std::numbers::pi / 4.0);
+        CHECK_THAT(depth[0], WithinAbs(0.3, 0.002));
+        CHECK_THAT(depth[1], WithinAbs(0.825 - d, 0.002));
+        CHECK_THAT(depth[2], WithinAbs(1.275 - 2.0 * d, 0.002));
+        double min_x = 1e9;
+        for (const Polygon& ring : walls.infill)
+            for (const auto& q : ring)
+                min_x = std::min(min_x, to_mm(q.x));
+        CHECK_THAT(min_x - 90.0, WithinAbs(1.5 - 2.5 * d, 0.002));
+    }
+    // At 0 from the nozzle, 1.125 of it, whatever walls.width is (P12).
+    s.outer_wall_width = 0.0;
+    s.wall_width = 0.5;
+    s.wall_generator = WallGenerator::Variable;
+    const SlicedModel same = slice_model(m, s);
+    for (const Toolpath& t : same.walls[10].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            if (p.p.y > 95.0 && p.p.y < 105.0)
+                CHECK_THAT(p.width, WithinAbs(t.index == 0 ? 1.125 * s.nozzle_diameter : 0.5, 1e-6));
+}
+
+TEST_CASE("first layer: every bead layers.first_line_width wide (perimeters.md, rule 7)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 2;
+    s.skirt_loops = 1;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    const auto first_widths = [&m](const Settings& settings) {
+        const SlicedModel model = slice_model(m, settings);
+        std::set<double> walls, fills, skirt, above;
+        for (const Toolpath& t : model.walls[0].toolpaths)
+            for (const ToolpathPoint& p : t.points)
+                walls.insert(std::round(p.width * 1e6) / 1e6);
+        for (const auto* list : {&model.fills[0].solid, &model.fills[0].top, &model.fills[0].sparse})
+            for (const Toolpath& t : *list)
+                for (const ToolpathPoint& p : t.points)
+                    fills.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.skirt)
+            for (const ToolpathPoint& p : t.points)
+                skirt.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.walls[1].toolpaths)
+            if (t.index == 0)
+                above.insert(std::round(t.points.front().width * 1e6) / 1e6);
+        return std::array<std::set<double>, 4>{walls, fills, skirt, above};
+    };
+    // 200 % of a 0.2 mm first layer: 0.4 mm, the outer wall too; the second
+    // layer keeps its own widths.
+    auto w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.4});
+    CHECK(w[1] == std::set<double>{0.4});
+    CHECK(w[2] == std::set<double>{0.4});
+    CHECK(w[3].count(0.6) == 1);
+    s.first_layer_height = 0.3; // 0.6 mm
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.6});
+    CHECK(w[1] == std::set<double>{0.6});
+    s.first_line_width = {0.5, false};
+    CHECK(first_widths(s)[0] == std::set<double>{0.5});
+    s.first_line_width = {}; // 0: as the other layers
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.45, 0.6});
+}
+
+namespace {
+
+// The distance from the outline at X 90 of each wall loop's centre along the
+// side, and its width, at layer l: the beads of the square's left side.
+std::map<int, std::pair<double, double>> left_side(const SlicedModel& model, std::size_t l) {
+    std::map<int, std::pair<double, double>> out;
+    for (const Toolpath& t : model.walls[l].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            if (p.p.y > 95.0 && p.p.y < 105.0 && p.p.x < 95.0)
+                out[t.index] = {p.p.x - 90.0, p.width};
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("walls: neighbouring beads overlap by h (1 - pi/4) (perimeters.md, rule 1, P1 and P12)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    for (const WallGenerator generator : {WallGenerator::Variable, WallGenerator::Fixed}) {
+        INFO((generator == WallGenerator::Fixed ? "fixed" : "variable"));
+        s.wall_generator = generator;
+        // P1: 0.45 mm beads on 0.2 mm layers, 0.407 apart.
+        s.layer_height = s.first_layer_height = 0.2;
+        s.wall_width = 0.45, s.outer_wall_width = 0.0;
+        auto side = left_side(slice_model(m, s), 10);
+        if (generator == WallGenerator::Fixed) { // the fixed loops have their points at the corners
+            const SlicedModel model = slice_model(m, s);
+            side.clear();
+            for (const Toolpath& t : model.walls[10].toolpaths)
+                for (const ToolpathPoint& p : t.points)
+                    if (!side.count(t.index) || p.p.x - 90.0 < side[t.index].first)
+                        side[t.index] = {p.p.x - 90.0, p.width};
+        }
+        REQUIRE(side.size() == 3);
+        CHECK_THAT(side[0].first, WithinAbs(0.225, 0.002));
+        CHECK_THAT(side[1].first, WithinAbs(0.632, 0.002));
+        CHECK_THAT(side[2].first, WithinAbs(1.039, 0.002));
+        for (const auto& [index, at] : side)
+            CHECK_THAT(at.second, WithinAbs(0.45, 1e-6));
+    }
+    s.wall_generator = WallGenerator::Variable;
+    // P12: 0.3 mm layers; walls.width 0.5 with the outer one from the nozzle,
+    // then 0.4 with an outer one of 0.6.
+    s.layer_height = s.first_layer_height = 0.3;
+    s.wall_width = 0.5, s.outer_wall_width = 0.0;
+    auto side = left_side(slice_model(m, s), 5);
+    REQUIRE(side.size() == 3);
+    CHECK_THAT(side[0].first, WithinAbs(0.225, 0.002));
+    CHECK_THAT(side[0].second, WithinAbs(0.45, 1e-6));
+    CHECK_THAT(side[1].first, WithinAbs(0.636, 0.002));
+    CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
+    CHECK_THAT(side[2].second, WithinAbs(0.5, 1e-6));
+    s.wall_width = 0.4, s.outer_wall_width = 0.6;
+    side = left_side(slice_model(m, s), 5);
+    REQUIRE(side.size() == 3);
+    CHECK_THAT(side[0].first, WithinAbs(0.300, 0.002));
+    CHECK_THAT(side[1].first, WithinAbs(0.736, 0.002));
+    CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
+}
+
+TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    // Thickness: the beads' distances from the wall's middle and widths.
+    const std::vector<std::tuple<double, std::vector<double>, std::vector<double>>> rows = {
+        {0.4, {0.0}, {0.400}},
+        {0.5, {0.0}, {0.500}},
+        {0.7, {-0.164, 0.164}, {0.371, 0.371}},
+        {1.0, {-0.239, 0.239}, {0.521, 0.521}},
+        // From three beads on, only the middle ones take the difference
+        // (walls.spread_count 1, rule 3).
+        {1.2, {-0.375, 0.0, 0.375}, {0.450, 0.386, 0.450}},
+        {1.5, {-0.525, -0.161, 0.161, 0.525}, {0.450, 0.364, 0.364, 0.450}},
+    };
+    for (const auto& [thickness, centres, widths] : rows) {
+        INFO("thickness " << thickness);
+        const float half = float(thickness / 2.0);
+        const SlicedModel model = slice_model(boxes({{100.0f - half, 90, 0, 100.0f + half, 110, 5}}), s);
+        std::vector<std::pair<double, double>> beads; // centre, width at Y 100
+        for (const Toolpath& t : model.walls[11].toolpaths)
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const ToolpathPoint &a = t.points[i - 1], &b = t.points[i];
+                if ((a.p.y - 100.0) * (b.p.y - 100.0) > 0.0 || a.p.y == b.p.y)
+                    continue;
+                const double f = (100.0 - a.p.y) / (b.p.y - a.p.y);
+                beads.push_back({a.p.x + f * (b.p.x - a.p.x) - 100.0, a.width + f * (b.width - a.width)});
+            }
+        std::sort(beads.begin(), beads.end());
+        REQUIRE(beads.size() == centres.size());
+        for (std::size_t i = 0; i < beads.size(); ++i) {
+            CHECK_THAT(beads[i].first, WithinAbs(centres[i], 0.003));
+            CHECK_THAT(beads[i].second, WithinAbs(widths[i], 0.003));
+        }
+    }
 }

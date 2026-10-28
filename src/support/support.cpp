@@ -69,6 +69,10 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
     return over;
 }
 
+namespace {
+void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap);
+} // namespace
+
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
     const std::size_t n = regions.size();
@@ -136,14 +140,89 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             if (c.width() == 0 || c.empty())
                 return;
             // Simplified to half a bead (support needs no detail, and its
-            // lines follow the outline), then kept xy_gap off the part, exactly.
+            // lines follow the outline), then kept xy_gap off the part, exactly,
+            // and bottom_gap_layers over the part it stands on (supports_more.md, rule 6).
             out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
                                              Clipper2Lib::FillRule::NonZero);
+            for (std::size_t g = 1; g <= std::size_t(std::max(params.bottom_gap_layers, 0)) && g <= l && !out[l].empty(); ++g)
+                // Grown by half a bead: no slivers left hanging over its edge.
+                out[l] = Clipper2Lib::Difference(out[l], offset(regions[l - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         });
         top = bottom;
     }
+    if (params.buildplate_only)
+        keep_from_bed(out, regions, params.bottom_gap_layers);
     return out;
 }
+
+namespace {
+
+// support.buildplate_only (supports_more.md, rule 2): the support's islands,
+// each layer's joined to the ones of the layer below they overlap, make
+// zones; a zone with an island right over the part (within the bottom gap)
+// stands on it and goes whole, the part of it on the bed too. Own design.
+void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap) {
+    struct Island {
+        std::size_t layer;
+        Polygons area;
+        Clipper2Lib::Rect64 box;
+    };
+    std::vector<Island> islands;
+    std::vector<std::size_t> first(support.size() + 1, 0);
+    for (std::size_t l = 0; l < support.size(); ++l) {
+        first[l] = islands.size();
+        if (support[l].empty())
+            continue;
+        Clipper2Lib::PolyTree64 tree;
+        Clipper2Lib::Clipper64 c;
+        c.AddSubject(support[l]);
+        c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+        for (const auto& outer : tree) {
+            Island island{l, {outer->Polygon()}, {}};
+            for (const auto& hole : *outer)
+                island.area.push_back(hole->Polygon());
+            island.box = Clipper2Lib::GetBounds(island.area);
+            islands.push_back(std::move(island));
+        }
+    }
+    first[support.size()] = islands.size();
+    std::vector<std::size_t> parent(islands.size());
+    for (std::size_t i = 0; i < parent.size(); ++i)
+        parent[i] = i;
+    const auto root = [&](std::size_t i) {
+        while (parent[i] != i)
+            i = parent[i] = parent[parent[i]];
+        return i;
+    };
+    const auto overlap = [](const Clipper2Lib::Rect64& a, const Clipper2Lib::Rect64& b) {
+        return a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
+    };
+    std::vector<char> on_part(islands.size(), 0);
+    for (std::size_t i = 0; i < islands.size(); ++i) {
+        const Island& a = islands[i];
+        if (a.layer == 0)
+            continue;
+        for (std::size_t j = first[a.layer - 1]; j < first[a.layer]; ++j)
+            if (overlap(a.box, islands[j].box) &&
+                !Clipper2Lib::Intersect(a.area, islands[j].area, Clipper2Lib::FillRule::NonZero).empty())
+                parent[root(i)] = root(j);
+        for (std::size_t g = 1; g <= std::size_t(std::max(bottom_gap, 0)) + 1 && g <= a.layer && !on_part[i]; ++g)
+            on_part[i] = area_mm2(Clipper2Lib::Intersect(a.area, regions[a.layer - g], Clipper2Lib::FillRule::NonZero)) > 0.01;
+    }
+    std::vector<char> gone(islands.size(), 0);
+    for (std::size_t i = 0; i < islands.size(); ++i)
+        if (on_part[i])
+            gone[root(i)] = 1;
+    for (std::size_t l = 0; l < support.size(); ++l) {
+        Polygons kept;
+        for (std::size_t i = first[l]; i < first[l + 1]; ++i)
+            if (!gone[root(i)])
+                kept.insert(kept.end(), islands[i].area.begin(), islands[i].area.end());
+        support[l] = std::move(kept);
+    }
+}
+
+} // namespace
 
 void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
                     std::span<BitGrid> kept, int radius) {

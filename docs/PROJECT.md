@@ -61,7 +61,10 @@ El JSON:
   `walls`, `infill` y `surfaces`; otro grupo es un error al abrir.
 - `models[i].volumes` (solo si tiene) son sus modificadores y volúmenes negativos: `kind` (`modifier` o `negative`),
   `shape` (`box` o `cylinder`), `offset` y `size` en mm (el lugar desde el centro de la caja de la pieza en X e Y y
-  desde su base en Z) y, en un modificador, `settings` (`model_tools.md`, reglas 2 y 3).
+  desde su base en Z, en la malla tal como se guarda), `turn` (solo si está girado: su giro propio alrededor de su
+  centro, nueve números por filas) y, en un modificador, `settings` (`model_tools.md`, reglas 2 y 3). La pieza se
+  guarda como está en la cama, con su giro y su escala aplicados: sus volúmenes se guardan donde quedan, y uno de
+  una pieza girada se guarda con `turn`.
 - `models[i].ranges` (solo si tiene) son sus rangos de alturas: `from` y `to` en mm sobre la base de la pieza y
   `settings`, que pueden tener `layers.height` (regla 6).
 - `color_mixing` (solo si hay mezclas o colores de filamento) tiene las mezclas del proyecto en el formato de la ficha

@@ -23,6 +23,7 @@ Reglas:
 |---|---|---|---|---|
 | `height` | número | 0.2 | 0,01 a 10 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
 | `first_height` | número | 0.2 | 0,01 a 10 | Alto de la primera capa, con los mismos topes que `height` |
+| `first_line_width` | número o texto | `"200%"` | 0 a 40 mm, o 0 a 1000 % | Ancho de todos los cordones de la primera capa (paredes, la externa también, rellenos, falda, borde, soporte y la primera capa de la balsa): en mm, o en % de `first_height` (`"200%"` con 0,2 da 0,4 mm). 0: como las demás capas. Ficha `perimeters.md`, regla 7; `supports_more.md`, SM14 |
 
 Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 
@@ -55,6 +56,9 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 |---|---|---|---|---|
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
 | `width` | número | 0.4 | 0,05 a 40 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
+| `outer_width` | número | 0 | 0, o 0,05 a 40 | Ancho del cordón de la pared externa, en mm (ficha `perimeters.md`, regla 1 y P12); los demás siguen en `width` y el relleno empieza donde termina la última pared. 0: 1,125 × la boquilla (0,45 con 0,4), aunque `width` tenga otro valor. Con boquillas distintas, en proporción a la de las paredes |
+| `spread_count` | entero | 1 | 1 a 100 | En una pared más fina o más gruesa que sus cordones nominales, cuántos cordones desde el medio absorben la diferencia de ancho; los demás quedan nominales (ficha `perimeters.md`, regla 3, tabla P2: con 1,2 mm, 0,450 / 0,386 / 0,450). El esquema «distribuido hacia adentro» de Kuipers et al. 2020 con N = este valor |
+| `transition_length` | número o texto | `"100%"` | 0 a 40 mm, o 0 a 1000 % | Largo, a lo largo de la pared, de la rampa en la que pasa de N a N + 1 cordones: en mm, o en % de la boquilla. 0: el paso de un cordón (ficha `perimeters.md`; Kuipers et al. 2020, sección 3.4) |
 | `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 | `scarf` | texto | `"nowhere"` | `nowhere`, `contours`, `everywhere` | Costura en bufanda (ficha `walls_extra.md`, regla 4): la pared externa empieza en una rampa que sube desde la capa de abajo en vez de un escalón, y al final del lazo pasa otra vez sobre la rampa con el cordón cada vez más fino, con el filamento de un lazo común. Casi no deja costura. `contours`: solo la pared de afuera de cada pieza; `everywhere`: también la de los agujeros. Nunca en la primera capa |
 | `scarf_only_smooth` | booleano | `true` | — | La bufanda solo en los lazos sin esquinas marcadas (giros de más de 30°): en un cubo, la costura queda en una esquina, donde no se ve |
@@ -63,10 +67,12 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `scarf_entire_loop` | booleano | `false` | — | La rampa da la vuelta entera: la pared externa sube en espiral a lo largo de toda la capa y una segunda vuelta la completa |
 | `scarf_max_segment` | número | 1 | más de 0, hasta 1000 | El tramo más largo de la rampa y de su segunda pasada, en mm |
 | `scarf_inner` | booleano | `false` | — | También las paredes internas empiezan en rampa |
+| `seam_gap` | número o texto | `"15%"` | 0 a 40 mm | Un lazo cerrado de pared termina esto antes de su inicio, en mm o en % de `machine.nozzle_diameter` (0,06 mm con boquilla de 0,4): la costura no se engrosa (ficha `perimeters.md`, regla 5, P1). No en las costuras en rampa ni en el modo vaso |
 | `min_line_width` | número o texto | `"85%"` | 0 a 40 mm | Ancho mínimo de un cordón, en mm o en % de `machine.nozzle_diameter` (0,34 mm con boquilla de 0,4): una pared de un solo cordón más fina que esto se imprime con un cordón de este ancho, centrado en la pared (ficha `perimeters.md`, regla 3) |
 | `min_detail` | número o texto | `"25%"` | 0 a 40 mm | Una pared más fina que esto, en mm o en % de la boquilla (0,1 mm con 0,4), no se imprime; si la pieza entera queda vacía, es un error |
 | `generator` | texto | `"variable"` | `variable`, `fixed` | `variable`: cordones de ancho variable que llenan la región (Kuipers et al. 2020). `fixed`: lazos de `width` a `width` de distancia, cada uno donde entra un cordón entero, y lo que queda en el medio, con relleno de huecos (ficha `walls_extra.md`, regla 1). El relleno concéntrico sigue con ancho variable |
 | `gap_fill` | booleano | `true` | — | Con `generator` `fixed`: lo que queda entre las paredes (y entre ellas y la región del relleno) de al menos medio cordón se llena con cordones de ancho variable, `;TYPE:Gap fill`, a `speed.gap_fill`; los extremos libres siguen medio ancho hasta el borde del hueco. Apagado, quedan vacíos (regla 2) |
+| `outer_first` | booleano | `false` | | En cada isla, las paredes de afuera hacia adentro: la externa primero (ficha `perimeters.md`, regla 4, P10). Apagado, de adentro hacia afuera, la externa última |
 | `clockwise` | booleano | `false` | | Los lazos de las paredes (también los de los agujeros y la espiral del modo vaso) van en sentido horario; apagado, todos en antihorario (ficha `retraction_travel.md`, regla 9, prueba R8). Cada lazo empieza en la misma costura |
 | `staggered_inner_seams` | booleano | `false` | | Cada pared interna empieza antes que la de afuera sobre su propio lazo, `width` por nivel de profundidad: las costuras forman un zigzag hacia adentro en vez de una línea (ficha `walls_extra.md`, regla 3, prueba W5). La de afuera queda donde dice `seam` |
 | `top_one_wall` | texto | `"none"` | `none`, `top`, `topmost` | Un solo perímetro sobre las superficies de arriba (regla 10, prueba W7): donde la capa de arriba deja la región abierta (más ancha que un cordón) queda solo la pared de afuera, las internas van alrededor de lo que sigue subiendo y la superficie de arriba gana ese lugar. `top`: en cada capa; `topmost`: solo en la última capa de la pieza |
@@ -139,14 +145,17 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `top_min_thickness` | mm | 0 | 0 a 100 | Si las capas sólidas de arriba suman menos, se agregan capas del alto nominal hasta llegar (`docs/INFILL.md`) |
 | `bottom_min_thickness` | mm | 0 | 0 a 100 | Lo mismo con las de abajo |
 | `interface_shells` | booleano | `false` | | Con varios extrusores, donde la parte de uno apoya sobre la de otro, cada una lleva sus capas sólidas de arriba y de abajo como si fueran piezas separadas; sin esto, lo de los otros materiales tapa como si fuera la misma pieza (ficha `multi_extruder.md`, regla 16, ME10) |
+| `top_width` | número | 0 | 0 a 10 | Ancho de los cordones de la capa de arriba de todo, en mm; 0: el diámetro de la boquilla, sin seguir a `walls.width` (ficha `surfaces_infill.md`, I9) |
+| `solid_width` | número | 0 | 0 a 10 | Ancho de los cordones del resto del relleno sólido, en mm; 0: 1,125 × la boquilla (I9) |
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores |
 
 ### `infill`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `walls.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
+| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `infill.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
 | `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
+| `width` | número | 0 | 0 a 10 | Ancho de los cordones del relleno poco denso, en mm (su separación sigue a la densidad); 0: 1,125 × la boquilla (ficha `surfaces_infill.md`, I9). Con boquillas distintas, en proporción a la del relleno |
 | `wall_overlap` | número | 25 | 0 a 100 | Cuánto entran en la pared interna, en % del ancho de cordón, las líneas sólidas que no se unen en zigzag (superficies superiores monotónicas). Con 25 %, el material depositado queda entre −0,5 % y +1,5 % del área |
 | `nonplanar` | sí/no | no | — | Relleno ondulado: sube y baja en Z, igual en todas las capas, solo con patrones que se repiten capa a capa (`docs/NONPLANAR_INFILL.md`) |
 | `nonplanar_amplitude` | % | 250 | 0 a 500 | Altura de la onda, de valle a cresta, en % de la altura de capa |
@@ -248,6 +257,7 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, y puentes y relleno de huecos sin velocidad propia |
 | `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
 | `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
+| `support_interface` | número o texto | — (sin valor: `support`) | Interfaz del soporte, en mm/s o un porcentaje de `support` como `"50%"` (ficha `supports_more.md`, regla 13, SM11) |
 | `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
 | `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
 | `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |
@@ -280,6 +290,7 @@ que falta), ni la de la torre de purga.
 | `solid_infill` | número | 0 | 0 a 100 000 | Relleno sólido; 0: `infill` |
 | `top_solid_infill` | número | 0 | 0 a 100 000 | Superficie de arriba; 0: `solid_infill` |
 | `bridges` | número | 0 | 0 a 100 000 | Puentes y perímetros en voladizo; 0: `default` |
+| `wipe_tower` | número | 0 | 0 a 100 000 | La torre de purga (ficha `speeds_accels.md`); 0: `default` |
 | `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa (con balsa, la de la balsa); 0: la de cada tipo |
 | `first_layer_over_raft` | número | 0 | 0 a 100 000 | La primera capa de la pieza sobre la balsa; 0: la de cada tipo |
 | `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |
@@ -364,13 +375,16 @@ puentes cortos sin soporte vienen después.
 |---|---|---|---|---|
 | `enabled` | booleano | false | | Activa los soportes |
 | `synchronize_layers` | booleano | `false` | | El soporte en las capas de la pieza (ficha `multi_extruder.md`, regla 19, ME12): se lee y se guarda. El motor siempre imprime el soporte en las capas de la pieza (como con el ajuste); las capas propias del soporte, más gruesas, no están hechas |
+| `buildplate_only` | booleano | false | | Solo el soporte que apoya en la cama: una zona de soporte (sus islas, unidas capa a capa donde se tocan) que en alguna capa apoya sobre la pieza se quita entera, también lo que tiene sobre la cama (ficha `supports_more.md`, regla 2, SM2). Solo en el soporte de grilla |
 | `automatic` | booleano | true | | false: solo hay soporte bajo las caras pintadas para tenerlo (`docs/PAINTING.md`; ficha `supports_more.md`, regla 3). Las caras pintadas para no tenerlo nunca lo llevan |
 | `threshold_angle` | número | 0 | 0 a menos de 90 | Una cara más tendida que este ángulo, medido desde la horizontal, lleva soporte; 0 es automático: cada capa puede salir medio cordón más afuera que la de abajo |
 | `z_gap` | número | 0.2 | ≥ 0 | Separación en Z entre el soporte y la pieza de arriba, en mm (se redondea a capas enteras; valor de banco) |
+| `bottom_z_gap` | número | 0 | ≥ 0 | Separación en Z entre la pieza y el soporte que apoya sobre ella, en mm (se redondea a capas enteras); 0: la de `z_gap` (ficha `supports_more.md`, regla 6). Solo en el soporte de grilla; los árboles ya dejan `z_gap` |
 | `xy_gap` | número o texto | `"50%"` | ≥ 0 | Separación horizontal entre el soporte y la pieza: en mm, o un porcentaje del ancho de las paredes (`walls.width`) como `"50%"` (ficha `supports_skirt.md`, regla 2) |
 | `width` | número o texto | 0 | 0 a 40 mm | Ancho de los cordones del soporte y de su interfaz: en mm, o en % de la altura de capa (`"150%"` da 0,3 mm con capas de 0,2); 0, el de las paredes (`walls.width`). Ficha `supports_more.md`, regla 18 |
 | `spacing` | número | 2.5 | > 0 | Espacio libre entre las líneas de la base, en mm: entre los centros hay además la separación de un cordón (2,857 mm con cordones de 0,4 y capas de 0,2; ficha `supports_skirt.md`, regla 6). Líneas en zigzag sobre una grilla fija al origen; la interfaz va a 90° de ellas, a la separación de los cordones |
 | `line_angle` | número | 0 | −360 a 360 | Dirección de las líneas de la base, en grados, la misma en todas las capas |
+| `bottom_interface_layers` | entero | −1 | −1–1000 | Capas de interfaz del soporte que apoya sobre la pieza: el que tiene la pieza debajo en las capas siguientes a `bottom_z_gap` va como la interfaz de arriba; −1: tantas como `interface_layers` (ficha `supports_more.md`, regla 7). Solo en el soporte de grilla |
 | `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va en líneas a la separación de los cordones, a 90° de la base (con `style` `organic`, a 45° y 135° en capas alternas) |
 | `style` | texto | `"grid"` | `grid`, `organic` | `grid`: columnas rectas bajo lo que cuelga. `organic`: soportes en árbol (ficha `supports_more.md`, reglas 15 a 17): bajo lo que cuelga, `interface_layers` capas de interfaz enteras; debajo, puntas redondas que bajan como ramas, se juntan y engordan hasta troncos sobre la cama, y esquivan la pieza; donde no pueden esquivarla, se apoyan en ella, con la separación en Z. Cada rama lleva una pared (dos si es gruesa) y el relleno del soporte adentro |
 | `tree_angle` | número | 40 | 0 a 85 | Inclinación máxima de una rama, en grados desde la vertical, para esquivar la pieza |
@@ -396,6 +410,8 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 | `fan_always` | booleano | false | | El ventilador nunca baja de `fan_min`, ni en las capas largas (sí en las primeras, `fan_off_layers`) |
 | `fan_bridges` | número | 100 | 0–100 | Ventilador mientras se imprime un puente, en %; al terminar el puente vuelve el de la capa |
 | `fan_off_layers` | entero | 3 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
+| `full_fan_layer` | entero | 0 | 0–100000 | Capa, contada desde 1, en la que el ventilador llega a su valor: desde la primera con ventilador (después de `fan_off_layers`) sube en línea recta, la capa n con `(n − fan_off_layers) / (full_fan_layer − fan_off_layers)` de lo que le toca. 0, o no mayor que `fan_off_layers`: el valor completo desde la primera (ficha `cooling_more.md`, regla 1, C1) |
+| `enabled` | booleano | true | | El enfriamiento automático (ficha `cooling.md`): apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa (con `fan_always`, `fan_min`); el de los puentes y los cambios por altura siguen |
 | `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (como la primera etapa, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, se frena todo como en las dos etapas. `false`: las dos etapas de siempre, como Tisma Slicer |
 
 ### `placement`
@@ -805,6 +821,21 @@ escribe: al leer, cada clave pasa a su lugar.
 
 Una clave que no está en la tabla es un error, y también una que viene a la vez por su nombre del motor
 (`material.cost` y `extrusion.cost`). El asistente acepta estos nombres en sus acciones (`material.nozzle_temp`).
+
+### Otros nombres de las fichas
+
+Algunas claves de las fichas son ajustes que el motor ya tiene con otro nombre, con el mismo significado y valor
+(medición del equipo de fichas, `docs/spec/qa/2026-10-28-ajustes.md`). Se leen igual y pasan a su clave del motor:
+
+| Clave de la ficha | Clave del motor |
+|---|---|
+| `support.angle_limit` | `support.threshold_angle` |
+| `arrange.distance` | `placement.spacing` |
+| `filament.pressure_advance` | `extrusion.pressure_advance` |
+| `machine.e_mode` (`"length"` o `"volume"`) | `gcode.volumetric_e` (`false` o `true`) |
+
+Dadas con los dos nombres a la vez, es un error. Los grupos `arrange` y `filament` no tienen otras claves todavía:
+cualquier otra es un error.
 
 ## Grupos previstos (todavía no implementados)
 

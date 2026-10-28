@@ -24,7 +24,21 @@ struct BeadingParams {
     // on the feature. 0: as the quantization gives (half of w*).
     double min_detail = 0.0;
     double min_width = 0.0;
+    // The outer bead's width within the shell (walls.outer_width,
+    // perimeters.md); 0: w*.
+    double outer_width = 0.0;
+    // How much neighbouring beads overlap (bead_overlap of the layer's
+    // height, perimeters.md rule 1). layer_walls works in spacings: the
+    // widths above less this, min_width and min_detail as they are, on the
+    // region shrunk by half of it, and gives the beads this wider.
+    double overlap = 0.0;
+    // The length of the ramp from n to n + 1 beads along the wall
+    // (walls.transition_length, perimeters.md); 0: w*.
+    double transition_length = 0.0;
 };
+
+// The outer bead's width within the shell: outer_width, or w*.
+double outer_bead(const BeadingParams& params);
 
 // The beads across a thickness, from one outline to the other: widths[i] and
 // the distance of each bead's centre line from the first outline. Symmetric:
@@ -49,7 +63,8 @@ double transition_thickness(const BeadingParams& params, int n);
 // of it, continuous in the thickness: from `start`, where the unlimited count
 // would reach 2M + 1, the 2M beads narrow linearly to w* until `end`, w*/2
 // thicker, so the middle gap opens from 0 to w*; beyond `end` the beads stay at
-// w*. The uniform scheme already leaves its gap in the middle and needs no
+// w*. With an outer width of its own the two outer beads go to it instead, and
+// the ramp starts late enough for the shell to leave that gap. The uniform scheme already leaves its gap in the middle and needs no
 // ramp. Empty without a limit.
 struct ShellRamp {
     double start = 0.0, end = 0.0; // thicknesses

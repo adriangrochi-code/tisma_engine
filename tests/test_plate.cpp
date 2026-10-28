@@ -350,3 +350,63 @@ TEST_CASE("plate: an object's own settings, added, edited and taken away (settin
         CHECK_NOTHROW(own_settings(profile, with_own_key("", profile, k), "box"));
     }
 }
+
+TEST_CASE("plate: modifiers and negative volumes follow their model's turn, scale and mirror", "[plate]") {
+    // A model 20 x 10 x 10 mm and a 4 mm box 5 mm toward +X from its centre.
+    PlateObject o;
+    o.name = "block";
+    o.mesh = box(0, 0, 0, 20, 10, 10);
+    o.place.x = 100, o.place.y = 100;
+    const PlateVolume v{PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {5.0, 0.0, 3.0}, {4.0, 4.0, 4.0}, {}};
+    const auto centre = [](const TriangleMesh& m) {
+        const BoundingBox b = m.bounding_box();
+        return std::array<double, 3>{0.5 * (double(b.min.x) + b.max.x), 0.5 * (double(b.min.y) + b.max.y),
+                                     0.5 * (double(b.min.z) + b.max.z)};
+    };
+    const auto near = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
+        return std::abs(a[0] - b[0]) < 1e-3 && std::abs(a[1] - b[1]) < 1e-3 && std::abs(a[2] - b[2]) < 1e-3;
+    };
+    // As it stands: X 105, Z 3 to 7.
+    CHECK(near(centre(volume_mesh(v, o, placed_mesh(o))), {105.0, 100.0, 5.0}));
+    // Turned 90° about Z, the box goes to +Y; scaled twice, twice as far and as big.
+    o.place.rotation = rotated(kNoRotation, 2, 90.0);
+    CHECK(near(centre(volume_mesh(v, o, placed_mesh(o))), {100.0, 105.0, 5.0}));
+    o.place.scale = {2.0, 2.0, 2.0};
+    const TriangleMesh big = volume_mesh(v, o, placed_mesh(o));
+    CHECK(near(centre(big), {100.0, 110.0, 10.0}));
+    CHECK_THAT(double(big.bounding_box().max.x) - big.bounding_box().min.x, WithinAbs(8.0, 1e-3));
+    // Saved as placed (the model's mesh as it stands), the volume stays put.
+    PlateObject saved = o;
+    saved.mesh = placed_mesh(o);
+    saved.place.rotation = kNoRotation, saved.place.scale = {1.0, 1.0, 1.0};
+    const PlateVolume carried = carried_volume(v, o.mesh.bounding_box(), placing(o, saved.mesh), saved.mesh.bounding_box());
+    CHECK(near(centre(volume_mesh(carried, saved, placed_mesh(saved))), {100.0, 110.0, 10.0}));
+    CHECK_THAT(carried.size[0], WithinAbs(8.0, 1e-9));
+    // Mirrored in X (unturned): the box goes to the other side, upright.
+    PlateObject flat;
+    flat.mesh = box(0, 0, 0, 20, 10, 10);
+    flat.place.x = 100, flat.place.y = 100;
+    Affine mirror;
+    mirror.a[0] = -1.0, mirror.b[0] = 20.0; // about X 10, the box's centre
+    const BoundingBox box = flat.mesh.bounding_box();
+    const PlateVolume mirrored = carried_volume(v, box, mirror, box);
+    CHECK(near({mirrored.offset[0], mirrored.offset[1], mirrored.offset[2]}, {-5.0, 0.0, 3.0}));
+    CHECK(mirrored.turn == kNoRotation);
+}
+
+TEST_CASE("plate: the rows under an object in the list (settings_levels.md, rules 11 and 13)", "[plate]") {
+    PlateObject o;
+    o.mesh = box(0, 0, 0, 10, 10, 10);
+    CHECK(object_rows(o).empty());
+    o.settings = R"({"infill": {"density": 15, "pattern": "grid"}, "walls": {"count": 3}})";
+    o.volumes.push_back({});
+    o.volumes.push_back({PlateVolume::Kind::Negative});
+    o.ranges.push_back({});
+    const std::vector<ObjectRow> rows = object_rows(o);
+    REQUIRE(rows.size() == 5);
+    CHECK(rows[0] == ObjectRow{ObjectRow::Kind::Settings, "walls", 0});
+    CHECK(rows[1] == ObjectRow{ObjectRow::Kind::Settings, "infill", 0});
+    CHECK(rows[2] == ObjectRow{ObjectRow::Kind::Volume, {}, 0});
+    CHECK(rows[3] == ObjectRow{ObjectRow::Kind::Volume, {}, 1});
+    CHECK(rows[4] == ObjectRow{ObjectRow::Kind::Range, {}, 0});
+}

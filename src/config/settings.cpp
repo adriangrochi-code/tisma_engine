@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -78,6 +79,7 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
         {"solid_infill", &s.accel_solid_infill},
         {"top_solid_infill", &s.accel_top_solid_infill},
         {"bridges", &s.accel_bridges},
+        {"wipe_tower", &s.accel_wipe_tower},
         {"first_layer", &s.accel_first_layer},
         {"first_layer_over_raft", &s.accel_first_layer_over_raft},
         {"travel", &s.accel_travel},
@@ -92,7 +94,7 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
 constexpr const char* kAccelerationNames[] = {"default",          "walls",       "outer_wall",
                                               "infill",           "solid_infill", "top_solid_infill",
                                               "bridges",          "first_layer",  "first_layer_over_raft",
-                                              "travel",           "short_travel"};
+                                              "travel",           "short_travel", "wipe_tower"};
 
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
@@ -449,7 +451,53 @@ std::string own_without(std::string_view own, std::string_view group, bool* had)
     return j.empty() ? std::string() : j.dump();
 }
 
+namespace {
+
+// Settings the specs name differently from the engine, with the same meaning
+// and value (docs/spec/qa/2026-10-28-ajustes.md): the spec's key, the
+// engine's. machine.e_mode, a text, is converted on its own.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kSpecAliases = {{
+    {"support.angle_limit", "support.threshold_angle"},
+    {"arrange.distance", "placement.spacing"},
+    {"filament.pressure_advance", "extrusion.pressure_advance"},
+    {"machine.e_mode", "gcode.volumetric_e"},
+}};
+
+// Each spec name given moves to the engine's (a key given under both is an
+// error); a group left empty goes.
+void spec_aliases(json& root) {
+    for (const auto& [from, to] : kSpecAliases) {
+        const std::string fg(from.substr(0, from.find('.'))), fk(from.substr(from.find('.') + 1));
+        const std::string tg(to.substr(0, to.find('.'))), tk(to.substr(to.find('.') + 1));
+        const auto group = root.find(fg);
+        if (group == root.end() || !group->is_object() || !group->contains(fk))
+            continue;
+        json value = group->at(fk);
+        group->erase(fk);
+        if (group->empty())
+            root.erase(group);
+        if (from == "machine.e_mode") {
+            if (!value.is_string() || (value != "length" && value != "volume"))
+                fail("machine.e_mode", "must be \"length\" or \"volume\"");
+            value = value == "volume";
+        }
+        json& target = root[tg];
+        if (target.is_null())
+            target = json::object();
+        if (!target.is_object())
+            fail(tg, "must be an object");
+        if (target.contains(tk))
+            fail(std::string(from), "is also given as " + std::string(to));
+        target[tk] = std::move(value);
+    }
+}
+
+} // namespace
+
 std::optional<std::string> engine_setting_key(std::string_view key) {
+    for (const auto& [from, to] : kSpecAliases)
+        if (key == from)
+            return from == "machine.e_mode" ? std::nullopt : std::optional<std::string>(to); // a text, not the flag
     if (!key.starts_with("material."))
         return std::string(key);
     const std::string name(key.substr(9));
@@ -567,6 +615,7 @@ Settings parse_checked(std::string_view text) {
     if (!root.is_object())
         throw SettingsError("settings: the top level must be an object");
     material_aliases(root);
+    spec_aliases(root);
 
     Settings s;
     for (const auto& [group, value] : root.items()) {
@@ -587,8 +636,26 @@ Settings parse_checked(std::string_view text) {
     }
 
     read_group(root, "layers",
-               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height"},
+               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height",
+                "first_line_width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "first_line_width") {
+            // mm, or a percentage of the first layer's height (perimeters.md, rule 7).
+            if (g.at(n).is_string()) {
+                const std::string t = g.at(n).get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                    fail(k, "must be a number of mm or a percentage of the first layer's height like \"200%\"");
+                s.first_line_width = {p, true};
+                return;
+            }
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 40.0))
+                fail(k, "must be from 0 (walls.width) to 40 mm");
+            s.first_line_width = {v, false};
+            return;
+        }
         if (n == "heights") {
             const json& v = g.at(n);
             const char* what = "must be a list of [z, height] pairs in mm, sorted by z, heights from 0.01 to 10";
@@ -663,9 +730,10 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "walls",
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
-                "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width",
-                "min_detail", "generator", "gap_fill", "clockwise", "staggered_inner_seams", "top_one_wall",
-                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs"},
+                "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
+                "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
+                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
+                "spread_count", "transition_length"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -701,10 +769,11 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "scarf_only_smooth" || n == "scarf_entire_loop" || n == "scarf_inner" || n == "detect_overhangs" ||
-            n == "gap_fill" || n == "clockwise") {
+            n == "gap_fill" || n == "clockwise" || n == "outer_first") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "clockwise"           ? s.walls_clockwise
+             : n == "outer_first"       ? s.walls_outer_first
              : n == "scarf_only_smooth" ? s.scarf_only_smooth
              : n == "scarf_entire_loop" ? s.scarf_entire_loop
              : n == "scarf_inner"       ? s.scarf_inner
@@ -733,8 +802,18 @@ Settings parse_checked(std::string_view text) {
             s.wall_count = static_cast<int>(v.get<long long>());
             return;
         }
-        if (n == "min_line_width" || n == "min_detail") {
-            Speed& target = n == "min_line_width" ? s.wall_min_line_width : s.wall_min_detail;
+        if (n == "spread_count") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 1 || v.get<long long>() > 100)
+                fail(k, "must be a whole number from 1 to 100");
+            s.wall_spread_count = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length") {
+            Speed& target = n == "min_line_width"      ? s.wall_min_line_width
+                            : n == "seam_gap"          ? s.wall_seam_gap
+                            : n == "transition_length" ? s.wall_transition_length
+                                                       : s.wall_min_detail;
             if (g.at(n).is_string()) {
                 const std::string t = g.at(n).get<std::string>();
                 char* end = nullptr;
@@ -751,6 +830,12 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
+        if (n == "outer_width") {
+            if (!(v == 0.0 || (v >= 0.05 && v <= 40.0)))
+                fail(k, "must be 0 (from the nozzle) or from 0.05 to 40 mm");
+            s.outer_wall_width = v;
+            return;
+        }
         if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
@@ -1221,8 +1306,15 @@ Settings parse_checked(std::string_view text) {
         s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
-                                  "bottom_min_thickness", "interface_shells"},
+                                  "bottom_min_thickness", "interface_shells", "top_width", "solid_width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "top_width" || n == "solid_width") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 (from the nozzle) to 10 mm");
+            (n == "top_width" ? s.top_width : s.solid_width) = v;
+            return;
+        }
         if (n == "interface_shells") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
@@ -1248,8 +1340,15 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
-                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length"},
+                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "width") {
+            const double v = number(g, n, k);
+            if (v < 0.0 || v > 10.0)
+                fail(k, "must be from 0 (from the nozzle) to 10 mm");
+            s.infill_width = v;
+            return;
+        }
         if (n == "combine_auto" || n == "dense_under_top" || n == "nonplanar" || n == "waves") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
@@ -1587,7 +1686,8 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "speed",
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
-                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft"},
+                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft",
+                "support_interface"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -1608,6 +1708,7 @@ Settings parse_checked(std::string_view text) {
                                         : n == "over_bridges"       ? &s.over_bridges_speed
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
                                         : n == "first_layer_over_raft" ? &s.first_layer_over_raft
+                                        : n == "support_interface" ? &s.support_interface_speed
                                         : n.rfind("overhang_", 0) == 0
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
@@ -1655,7 +1756,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "acceleration",
                {"default", "walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "bridges", "first_layer",
-                "first_layer_over_raft", "travel", "short_travel"},
+                "first_layer_over_raft", "travel", "short_travel", "wipe_tower"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
                    if (!(v >= 0.0 && v <= 100000.0))
@@ -1782,7 +1883,7 @@ Settings parse_checked(std::string_view text) {
                                                     : s.raft_first_layer_expansion) = d;
                });
     read_group(root, "support",
-               {"enabled", "automatic", "threshold_angle", "z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "style",
+               {"enabled", "automatic", "buildplate_only", "threshold_angle", "z_gap", "bottom_z_gap", "xy_gap", "width", "spacing", "line_angle", "interface_layers", "bottom_interface_layers", "style",
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
                 "synchronize_layers"},
@@ -1814,6 +1915,12 @@ Settings parse_checked(std::string_view text) {
                                                             : s.tree_top_rate) = d;
                        return;
                    }
+                   if (n == "buildplate_only") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       s.support_buildplate_only = g.at(n).get<bool>();
+                       return;
+                   }
                    if (n == "enabled" || n == "automatic") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
@@ -1825,6 +1932,13 @@ Settings parse_checked(std::string_view text) {
                        if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                            fail(k, "must be a whole number from 0 to 1000");
                        s.support_interface_layers = static_cast<int>(v.get<long long>());
+                       return;
+                   }
+                   if (n == "bottom_interface_layers") {
+                       const json& v = g.at(n);
+                       if (!v.is_number_integer() || v.get<long long>() < -1 || v.get<long long>() > 1000)
+                           fail(k, "must be a whole number from -1 (as interface_layers) to 1000");
+                       s.support_bottom_interface_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
                    if (n == "width") {
@@ -1875,24 +1989,27 @@ Settings parse_checked(std::string_view text) {
                        fail(k, "must not be negative");
                    if (n == "z_gap")
                        s.support_z_gap = d;
+                   else if (n == "bottom_z_gap")
+                       s.support_bottom_z_gap = d;
                    else
                        s.support_xy_gap = {d, false};
                });
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
-                "fan_off_layers", "keep_outer_speed"},
+                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer"},
                [&](const json& g, const std::string& n, const std::string& k) {
-                   if (n == "keep_outer_speed" || n == "fan_always") {
+                   if (n == "keep_outer_speed" || n == "fan_always" || n == "enabled") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "fan_always" ? s.fan_always : s.keep_outer_speed) = g.at(n).get<bool>();
+                       (n == "fan_always" ? s.fan_always : n == "enabled" ? s.cooling_enabled : s.keep_outer_speed) =
+                           g.at(n).get<bool>();
                        return;
                    }
-                   if (n == "fan_off_layers") {
+                   if (n == "fan_off_layers" || n == "full_fan_layer") {
                        const json& v = g.at(n);
-                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
-                           fail(k, "must be a whole number from 0 to 1000");
-                       s.fan_off_layers = static_cast<int>(v.get<long long>());
+                       if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 100000)
+                           fail(k, "must be a whole number from 0 to 100000");
+                       (n == "fan_off_layers" ? s.fan_off_layers : s.full_fan_layer) = static_cast<int>(v.get<long long>());
                        return;
                    }
                    if (n == "min_speed" && g.at(n).is_null()) { // not set: from the printer's profile
@@ -2417,6 +2534,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
         {"layers.first_height", num(s.first_layer_height)},
+        {"layers.first_line_width", s.first_line_width.percent ? num(s.first_line_width.value) + "%" : num(s.first_line_width.value)},
         {"layers.detail_height", num(s.detail_height)},
         {"layers.detail_tolerance", num(s.detail_tolerance)},
         {"layers.detail_margin", num(s.detail_margin)},
@@ -2428,7 +2546,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"slicing.first_layer_shrink", num(s.first_layer_shrink)},
         {"slicing.simplify_tolerance", num(s.simplify_tolerance)},
         {"walls.count", std::to_string(s.wall_count)},
+        {"walls.spread_count", std::to_string(s.wall_spread_count)},
         {"walls.width", num(s.wall_width)},
+        {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
         {"walls.scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
@@ -2443,6 +2563,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.gap_fill", flag(s.wall_gap_fill)},
         {"walls.min_line_width", s.wall_min_line_width.percent ? num(s.wall_min_line_width.value) + "%"
                                                                : num(s.wall_min_line_width.value)},
+        {"walls.seam_gap", s.wall_seam_gap.percent ? num(s.wall_seam_gap.value) + "%" : num(s.wall_seam_gap.value)},
+        {"walls.transition_length", s.wall_transition_length.percent ? num(s.wall_transition_length.value) + "%"
+                                                                     : num(s.wall_transition_length.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
         {"sequential.enabled", flag(s.sequential)},
@@ -2523,6 +2646,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+        {"surfaces.top_width", num(s.top_width)},
+        {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
         {"surfaces.bottom_min_thickness", num(s.bottom_min_thickness)},
         {"surfaces.interface_shells", flag(s.interface_shells)},
@@ -2565,6 +2690,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
+        {"infill.width", num(s.infill_width)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -2687,6 +2813,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.bridges", speed(s.bridge_speed)},
         {"speed.gap_fill", speed(s.gap_fill_speed)},
         {"speed.over_bridges", share(s.over_bridges_speed)},
+        {"speed.support_interface", share(s.support_interface_speed)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
         {"speed.first_layer_over_raft", share(s.first_layer_over_raft)},
@@ -2704,6 +2831,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"acceleration.solid_infill", num(s.accel_solid_infill)},
         {"acceleration.top_solid_infill", num(s.accel_top_solid_infill)},
         {"acceleration.bridges", num(s.accel_bridges)},
+        {"acceleration.wipe_tower", num(s.accel_wipe_tower)},
         {"acceleration.first_layer", num(s.accel_first_layer)},
         {"acceleration.first_layer_over_raft", num(s.accel_first_layer_over_raft)},
         {"acceleration.travel", num(s.accel_travel)},
@@ -2727,6 +2855,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"travel.avoid_crossing_walls", flag(s.avoid_crossing_walls)},
         {"travel.max_detour", num(s.max_detour.value) == "0" ? "0" : share(s.max_detour)},
         {"walls.clockwise", flag(s.walls_clockwise)},
+        {"walls.outer_first", flag(s.walls_outer_first)},
         {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
@@ -2750,13 +2879,16 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.enabled", flag(s.support)},
         {"support.synchronize_layers", flag(s.support_synchronize_layers)},
         {"support.automatic", flag(s.support_automatic)},
+        {"support.buildplate_only", flag(s.support_buildplate_only)},
         {"support.threshold_angle", num(s.support_angle)},
         {"support.z_gap", num(s.support_z_gap)},
+        {"support.bottom_z_gap", num(s.support_bottom_z_gap)},
         {"support.xy_gap", s.support_xy_gap.percent ? num(s.support_xy_gap.value) + "%" : num(s.support_xy_gap.value)},
         {"support.width", s.support_width.percent ? num(s.support_width.value) + "%" : num(s.support_width.value)},
         {"support.line_angle", num(s.support_line_angle)},
         {"support.spacing", num(s.support_spacing)},
         {"support.interface_layers", std::to_string(s.support_interface_layers)},
+        {"support.bottom_interface_layers", std::to_string(s.support_bottom_interface_layers)},
         {"support.style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
         {"support.tree_angle", num(s.tree_angle)},
         {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
@@ -2774,6 +2906,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_always", s.fan_always ? "true" : "false"},
         {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
+        {"cooling.full_fan_layer", std::to_string(s.full_fan_layer)},
+        {"cooling.enabled", s.cooling_enabled ? "true" : "false"},
         {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
         {"zaa.enabled", s.zaa ? "true" : "false"},
@@ -2883,6 +3017,8 @@ std::string settings_json(const Settings& s) {
         {"layers",
          {{"height", s.layer_height},
           {"first_height", s.first_layer_height},
+          {"first_line_width", s.first_line_width.percent ? ordered_json(json(s.first_line_width.value).dump() + "%")
+                                                         : ordered_json(s.first_line_width.value)},
           {"detail_height", s.detail_height},
           {"detail_tolerance", s.detail_tolerance},
           {"detail_margin", s.detail_margin},
@@ -2896,7 +3032,9 @@ std::string settings_json(const Settings& s) {
           {"simplify_tolerance", s.simplify_tolerance}}},
         {"walls",
          {{"count", s.wall_count},
+          {"spread_count", s.wall_spread_count},
           {"width", s.wall_width},
+          {"outer_width", s.outer_wall_width},
           {"seam", seam},
           {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
           {"scarf_only_smooth", s.scarf_only_smooth},
@@ -2909,6 +3047,7 @@ std::string settings_json(const Settings& s) {
           {"generator", s.wall_generator == WallGenerator::Fixed ? "fixed" : "variable"},
           {"gap_fill", s.wall_gap_fill},
           {"clockwise", s.walls_clockwise},
+          {"outer_first", s.walls_outer_first},
           {"staggered_inner_seams", s.staggered_inner_seams},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
           {"first_layer_one_wall", s.first_layer_one_wall},
@@ -2918,6 +3057,11 @@ std::string settings_json(const Settings& s) {
           {"min_line_width", s.wall_min_line_width.percent
                                  ? ordered_json(json(s.wall_min_line_width.value).dump() + "%")
                                  : ordered_json(s.wall_min_line_width.value)},
+          {"seam_gap", s.wall_seam_gap.percent ? ordered_json(json(s.wall_seam_gap.value).dump() + "%")
+                                               : ordered_json(s.wall_seam_gap.value)},
+          {"transition_length", s.wall_transition_length.percent
+                                    ? ordered_json(json(s.wall_transition_length.value).dump() + "%")
+                                    : ordered_json(s.wall_transition_length.value)},
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
@@ -3049,6 +3193,8 @@ std::string settings_json(const Settings& s) {
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+          {"top_width", s.top_width},
+          {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},
           {"bottom_min_thickness", s.bottom_min_thickness},
           {"interface_shells", s.interface_shells}}},
@@ -3057,6 +3203,7 @@ std::string settings_json(const Settings& s) {
           {"angle", s.infill_angle},
           {"pattern", pattern},
           {"wall_overlap", s.infill_wall_overlap},
+          {"width", s.infill_width},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},
@@ -3138,6 +3285,7 @@ std::string settings_json(const Settings& s) {
           {"bridges", speed(s.bridge_speed)},
           {"gap_fill", speed(s.gap_fill_speed)},
           {"over_bridges", share(s.over_bridges_speed)},
+          {"support_interface", share(s.support_interface_speed)},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
           {"travel_z", speed(s.travel_z_speed)},
           {"first_layer_over_raft", share(s.first_layer_over_raft)},
@@ -3189,8 +3337,10 @@ std::string settings_json(const Settings& s) {
          {{"enabled", s.support},
           {"synchronize_layers", s.support_synchronize_layers},
           {"automatic", s.support_automatic},
+          {"buildplate_only", s.support_buildplate_only},
           {"threshold_angle", s.support_angle},
           {"z_gap", s.support_z_gap},
+          {"bottom_z_gap", s.support_bottom_z_gap},
           {"xy_gap", s.support_xy_gap.percent ? ordered_json(json(s.support_xy_gap.value).dump() + "%")
                                               : ordered_json(s.support_xy_gap.value)},
           {"width", s.support_width.percent ? ordered_json(json(s.support_width.value).dump() + "%")
@@ -3198,6 +3348,7 @@ std::string settings_json(const Settings& s) {
           {"line_angle", s.support_line_angle},
           {"spacing", s.support_spacing},
           {"interface_layers", s.support_interface_layers},
+          {"bottom_interface_layers", s.support_bottom_interface_layers},
           {"style", s.support_style == SupportStyle::Organic ? "organic" : "grid"},
           {"tree_angle", s.tree_angle},
           {"tree_angle_preferred", s.tree_angle_preferred},
@@ -3216,6 +3367,8 @@ std::string settings_json(const Settings& s) {
           {"fan_always", s.fan_always},
           {"fan_bridges", s.fan_bridges},
           {"fan_off_layers", s.fan_off_layers},
+          {"full_fan_layer", s.full_fan_layer},
+          {"enabled", s.cooling_enabled},
           {"keep_outer_speed", s.keep_outer_speed}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
@@ -3424,6 +3577,11 @@ void check_settings(const Settings& s) {
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
+    if (s.outer_wall_width > 0.0 && (s.outer_wall_width < 0.25 * nozzle || s.outer_wall_width > 4.0 * nozzle)) {
+        std::snprintf(text, sizeof text, "walls.outer_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
+                      s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
         throw SettingsError(text);
     }
 }

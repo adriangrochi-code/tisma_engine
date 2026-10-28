@@ -175,6 +175,7 @@ TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved
     // Layer 11 (Z 2.2, in the ramp): filament per mm over the flat amount
     // by J, on the infill.
     const double area = std::numbers::pi * 0.25 * s.filament_diameter * s.filament_diameter;
+    const double width = 1.125 * s.nozzle_diameter; // the sparse infill's (I9)
     std::vector<double> ratio;
     double j_lo = 10.0, j_hi = 0.0;
     for (const Move& m : layer_moves(text, "2.200")) {
@@ -185,7 +186,9 @@ TEST_CASE("curved layers: the material by the local thickness J (NP3)", "[curved
             continue;
         const double j = f->thickness(0.5 * (m.x0 + m.x1), 0.5 * (m.y0 + m.y1), 0.5 * (m.z0 + m.z1));
         j_lo = std::min(j_lo, j), j_hi = std::max(j_hi, j);
-        ratio.push_back(m.e / length / (s.wall_width * s.layer_height / area * j));
+        // The layer's bead (rounded sides, gcode_motion.md rule 1) by J.
+        const double h = s.layer_height, section = (width - h) * h + std::numbers::pi / 4.0 * h * h;
+        ratio.push_back(m.e / length / (section / area * j));
     }
     REQUIRE(ratio.size() > 100);
     std::sort(ratio.begin(), ratio.end());
@@ -362,6 +365,7 @@ TEST_CASE("curved layers: top faces, a flat top stays flat (CO1)", "[curved][sur
 
 TEST_CASE("curved layers: top faces follow a sloping roof (SU1 to SU3, SU5)", "[curved][surface]") {
     Settings s = surface_base();
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     Settings flat = s;
     flat.curved_mode = CurvedMode::Disabled;
     const std::string plain = gcode_of(slice_model(roof_block(20, 24), flat), flat);
@@ -551,7 +555,9 @@ TEST_CASE("curved layers: automatic is the overhangs' and the top faces' togethe
         CHECK_THAT(a->offset(x, 100.0, 34.0), WithinAbs(o->offset(x, 100.0, 34.0), 1e-9));
     // AU2: the roof block has no overhang: as surface.
     Settings top = overhang_base(CurvedMode::Automatic, false);
+    top.outer_wall_width = top.wall_width; // the outer wall as the others
     Settings surface = overhang_base(CurvedMode::Surface, false);
+    surface.outer_wall_width = surface.wall_width;
     const std::optional<CurvedField> b = curved_field(top, roof_block(20, 24));
     const std::optional<CurvedField> c = curved_field(surface, roof_block(20, 24));
     REQUIRE(b);
@@ -616,4 +622,36 @@ TEST_CASE("curved layers: joined pieces keep J across the ramp's top (fuzz 2026-
         }
     }
     CHECK(pieces > 1000);
+}
+
+TEST_CASE("curved layers: the print's first travel ends on the layer's surface (fuzz 2026-10-29)", "[curved]") {
+    // The first move of the print: where the nozzle was is not known, so the
+    // travel goes as the flat G-code says; on a curved layer the nozzle then
+    // goes to the surface there before the first extrusion starts from it.
+    CurvedField f;
+    f.mode = CurvedMode::Surface;
+    f.flat_below = 0.6;
+    f.full = 5.6;
+    f.grid = {0, 0, 0, 0, 1, 0, 0, 0, 0};
+    f.nx = f.ny = 3;
+    f.cell = 50.0;
+    f.grid_x = f.grid_y = -50.0;
+    Settings s = base();
+    s.curved_mode = CurvedMode::Surface;
+    const std::string text = curve_gcode("G1 Z4.500 F600\nG1 X-20 Y0.3\nG1 X20 Y0.3 E4\n", f, s);
+    double z = 0.0;
+    bool extruded = false;
+    std::istringstream in(text);
+    for (std::string line; std::getline(in, line) && !extruded;) {
+        const std::size_t at = line.find(" Z");
+        if (line.find(" E") != std::string::npos) {
+            extruded = true;
+            break;
+        }
+        if (at != std::string::npos)
+            z = std::atof(line.c_str() + at + 2);
+    }
+    REQUIRE(extruded);
+    CHECK_THAT(z, WithinAbs(std::round(f.real_z(-20.0, 0.3, 4.5) * 1000.0) / 1000.0, 1e-9));
+    CHECK(std::abs(f.real_z(-20.0, 0.3, 4.5) - 4.5) > 0.01); // the layer is curved there
 }

@@ -206,8 +206,8 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
                 return {};
         }
     }
-    return "nothing would be printed: every part of the model is thinner than the lines (check walls.width, "
-           "slicing.xy_offset and the model's scale)";
+    return "nothing would be printed: every part of the model is thinner than the lines (check walls.width, the "
+           "infill widths, slicing.xy_offset and the model's scale)";
 }
 
 } // namespace tisma

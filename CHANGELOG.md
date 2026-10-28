@@ -26,11 +26,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
   la ficha y los avisos del material.
 
+- **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
+  `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
+- **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
+  y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
+  elegida muestra sus ajustes debajo de la lista.
 - **Ajustes de una pieza** (`model_tools.md`, reglas 5, 7 y 8; `settings_levels.md`, reglas 10 y 11): clic derecho
   sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
   la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.
 - **Modificadores, volúmenes negativos y rangos de alturas desde la interfaz:** clic derecho sobre la pieza (niveles
-  Normal y Avanzado), editados en la ventana «Ajustes de …» y guardados en el proyecto.
+  Normal y Avanzado), editados en la ventana «Ajustes de …» y guardados en el proyecto. Los modificadores y negativos
+  siguen a la pieza al moverla, girarla, escalarla y espejarla.
 - **Rangos de alturas en el motor** (`model_tools.md`, regla 6): un tramo de alturas de un objeto con sus ajustes,
   la altura de capa incluida (el tramo empieza una capa).
 - **Modificadores en el motor** (`model_tools.md`, reglas 3 a 5): donde un modificador toca las partes de su objeto,
@@ -44,6 +52,21 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Paredes finas de tres cordones o más:** solo los del medio cambian de ancho; los demás quedan nominales
+  (`walls.spread_count` 1, `perimeters.md` P2). Antes todos se repartían la diferencia.
+
+- **El cordón de las fichas** (`perimeters.md` regla 1, `gcode_motion.md` regla 1): el filamento sale de la sección
+  con costados redondeados, `(w − h)·h + π·(h/2)²`, y los cordones vecinos se solapan `h·(1 − π/4)` (con 0,45 × 0,2,
+  a 0,407 mm en vez de 0,45). Paredes, rellenos, torre de purga, verificador y vista previa usan el mismo modelo; los
+  puentes y voladizos redondos se escriben tan altos como anchos. **Cambia el G-code de siempre.**
+
+- **Los anchos de los rellenos en 0 salen de la boquilla** (`surfaces_infill.md`, I9): la capa de arriba de todo, una
+  boquilla; el resto del relleno sólido y el poco denso, 1,125 boquillas (0,45 mm con 0,4). Antes seguían a
+  `walls.width`. **Cambia el G-code de siempre** en los rellenos.
+- **La pared externa en 0 sale de la boquilla** (`walls.outer_width`, `perimeters.md` P12): 1,125 × la boquilla
+  (0,45 mm con 0,4), aunque `walls.width` tenga otro valor.
+- **La primera capa lleva su ancho** (`layers.first_line_width`, 200 % de su altura: 0,4 mm con 0,2): paredes,
+  rellenos, falda, borde y soporte. Antes, el de las paredes.
 - **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con
   un caudal máximo conocido, de la mitad a una vez y media, también en franjas de 2 mm.
 - **Una clave desconocida en `material` es un error**, como en los demás grupos (antes el grupo entero se ignoraba
@@ -54,7 +77,20 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   mostrando.
 - Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
 
+- **Cada lazo de pared termina un poco antes de su inicio** (`walls.seam_gap`, 15 % de la boquilla: 0,06 mm con 0,4;
+  `perimeters.md`, regla 5), para que la costura no se engrose. Antes cada lazo volvía a su inicio.
+- **El soporte de grilla que apoya sobre la pieza deja una separación** (`support.bottom_z_gap`; sin valor, la de
+  `support.z_gap`), como pide `supports_more.md` (regla 6). Antes empezaba pegado a la pieza. Sus primeras capas son
+  de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
+
 ### Corregido
+
+- **Capas curvas:** el primer viaje de la impresión terminaba a la Z plana de la capa aunque la capa fuera curva ahí;
+  la primera extrusión arrancaba fuera de la superficie y el G-code no pasaba la verificación (lo encontró el
+  fuzzer).
+
+- **Un resto de filamento ya no salta con la boquilla:** lo que sobraba de un pedazo de cordón demasiado corto para
+  escribirse se sumaba al primer tramo después de un viaje, en otro lugar de la pieza (lo encontró el fuzzer).
 
 - **Capas curvas:** donde la rampa de las caras de arriba termina, un tramo podía llevar el filamento del espesor de
   un lado y el verificador leer el del otro, y el G-code se rechazaba. El espesor se toma ahora donde el G-code pone

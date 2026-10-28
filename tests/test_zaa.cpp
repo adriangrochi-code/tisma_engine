@@ -102,7 +102,7 @@ std::vector<Extrusion> extrusions(const std::string& gcode, double filament_diam
             const double length = std::hypot(nx - x, ny - y);
             if (line[1] == '1' && ne > e + 1e-9 && length > 1e-9)
                 out.push_back({type, x, y, z, nx, ny, nz, layer_z, height,
-                               (ne - e) * area / (length * width * height)});
+                               (ne - e) * area / (length * ((width - height) * height + std::numbers::pi / 4.0 * height * height))});
             x = nx, y = ny, z = nz, e = ne;
         }
     }
