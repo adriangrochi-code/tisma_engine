@@ -911,6 +911,11 @@ Con el PR #23 (2026-10-26):
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
   queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
+- [ ] **`walls.vertical_shell` y las superficies de arriba en pendiente** (`walls_extra.md` regla 7, W4): en el techo
+  de 15° de W4, capa 30, Tisma Slicer da 20,95 mm de superficie de arriba con `disabled` y 75,22 más 18,39 de
+  relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
+  sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
+  que en el ajuste
 - [x] **`walls.staggered`** (`staggered_perimeters.md`, ST1; hecho 2026-10-28): los lazos internos impares media capa más arriba; el
   material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
   material de los bloques no planares también sea lineal en el espesor
