@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <map>
 #include <vector>
 
 namespace tisma::ui {
@@ -86,12 +85,21 @@ MeasureFeature surface_feature(const TriangleMesh& source, std::size_t triangle)
         const Point3 a = of(mesh.vertices[tri[0]]), b = of(mesh.vertices[tri[1]]), c = of(mesh.vertices[tri[2]]);
         normal[t] = unit(cross3(sub(b, a), sub(c, a)));
     }
-    std::map<std::pair<std::uint32_t, std::uint32_t>, std::vector<std::size_t>> edges;
-    for (std::size_t t = 0; t < n; ++t)
-        for (int k = 0; k < 3; ++k) {
-            std::uint32_t a = mesh.triangles[t][std::size_t(k)], b = mesh.triangles[t][std::size_t((k + 1) % 3)];
-            edges[{std::min(a, b), std::max(a, b)}].push_back(t);
-        }
+    // Each vertex's triangles, one after another (a million triangles in a
+    // few milliseconds): the triangles across an edge are those of one end
+    // that have the other.
+    std::vector<std::uint32_t> first(mesh.vertices.size() + 1, 0), around(3 * n);
+    for (const auto& tri : mesh.triangles)
+        for (const std::uint32_t i : tri)
+            ++first[i + 1];
+    for (std::size_t i = 1; i < first.size(); ++i)
+        first[i] += first[i - 1];
+    {
+        std::vector<std::uint32_t> at(first.begin(), first.end() - 1);
+        for (std::size_t t = 0; t < n; ++t)
+            for (const std::uint32_t i : mesh.triangles[t])
+                around[at[i]++] = std::uint32_t(t);
+    }
     // The smooth stretch around the triangle.
     const double smooth = std::cos(25.0 * kDegree);
     std::vector<char> in(n, 0);
@@ -101,13 +109,18 @@ MeasureFeature surface_feature(const TriangleMesh& source, std::size_t triangle)
         const std::size_t t = todo.back();
         todo.pop_back();
         for (int k = 0; k < 3; ++k) {
-            std::uint32_t a = mesh.triangles[t][std::size_t(k)], b = mesh.triangles[t][std::size_t((k + 1) % 3)];
-            for (const std::size_t u : edges[{std::min(a, b), std::max(a, b)}])
+            const std::uint32_t a = mesh.triangles[t][std::size_t(k)], b = mesh.triangles[t][std::size_t((k + 1) % 3)];
+            for (std::uint32_t j = first[a]; j < first[a + 1]; ++j) {
+                const std::size_t u = around[j];
+                const auto& other = mesh.triangles[u];
+                if (other[0] != b && other[1] != b && other[2] != b)
+                    continue;
                 if (!in[u] && dot(normal[u], normal[t]) >= smooth) {
                     in[u] = 1;
                     region.push_back(u);
                     todo.push_back(u);
                 }
+            }
         }
     }
     bool flat = true;
