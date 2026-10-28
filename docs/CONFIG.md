@@ -248,6 +248,7 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, y puentes y relleno de huecos sin velocidad propia |
 | `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
 | `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
+| `support_interface` | número o texto | — (sin valor: `support`) | Interfaz del soporte, en mm/s o un porcentaje de `support` como `"50%"` (ficha `supports_more.md`, regla 13, SM11) |
 | `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
 | `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
 | `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |
@@ -280,6 +281,7 @@ que falta), ni la de la torre de purga.
 | `solid_infill` | número | 0 | 0 a 100 000 | Relleno sólido; 0: `infill` |
 | `top_solid_infill` | número | 0 | 0 a 100 000 | Superficie de arriba; 0: `solid_infill` |
 | `bridges` | número | 0 | 0 a 100 000 | Puentes y perímetros en voladizo; 0: `default` |
+| `wipe_tower` | número | 0 | 0 a 100 000 | La torre de purga (ficha `speeds_accels.md`); 0: `default` |
 | `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa (con balsa, la de la balsa); 0: la de cada tipo |
 | `first_layer_over_raft` | número | 0 | 0 a 100 000 | La primera capa de la pieza sobre la balsa; 0: la de cada tipo |
 | `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |

@@ -102,6 +102,7 @@ Settings without_gcode_settings(Settings s) {
     s.accel_default = d.accel_default, s.accel_walls = d.accel_walls, s.accel_outer_wall = d.accel_outer_wall;
     s.accel_infill = d.accel_infill, s.accel_solid_infill = d.accel_solid_infill;
     s.accel_top_solid_infill = d.accel_top_solid_infill, s.accel_bridges = d.accel_bridges;
+    s.accel_wipe_tower = d.accel_wipe_tower, s.support_interface_speed = d.support_interface_speed;
     s.accel_first_layer = d.accel_first_layer, s.accel_travel = d.accel_travel;
     s.accel_short_travel = d.accel_short_travel;
     s.dynamic_overhangs = d.dynamic_overhangs, s.overhang_speeds = d.overhang_speeds;

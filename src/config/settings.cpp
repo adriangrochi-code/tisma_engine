@@ -79,6 +79,7 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
         {"solid_infill", &s.accel_solid_infill},
         {"top_solid_infill", &s.accel_top_solid_infill},
         {"bridges", &s.accel_bridges},
+        {"wipe_tower", &s.accel_wipe_tower},
         {"first_layer", &s.accel_first_layer},
         {"first_layer_over_raft", &s.accel_first_layer_over_raft},
         {"travel", &s.accel_travel},
@@ -93,7 +94,7 @@ auto acceleration_of(S& s, std::string_view name) -> decltype(&s.accel_default) 
 constexpr const char* kAccelerationNames[] = {"default",          "walls",       "outer_wall",
                                               "infill",           "solid_infill", "top_solid_infill",
                                               "bridges",          "first_layer",  "first_layer_over_raft",
-                                              "travel",           "short_travel"};
+                                              "travel",           "short_travel", "wipe_tower"};
 
 const char* fuzzy_mode_name(FuzzyMode m) {
     return m == FuzzyMode::External ? "external" : m == FuzzyMode::All ? "all" : "none";
@@ -1635,7 +1636,8 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "speed",
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
-                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft"},
+                "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft",
+                "support_interface"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -1656,6 +1658,7 @@ Settings parse_checked(std::string_view text) {
                                         : n == "over_bridges"       ? &s.over_bridges_speed
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
                                         : n == "first_layer_over_raft" ? &s.first_layer_over_raft
+                                        : n == "support_interface" ? &s.support_interface_speed
                                         : n.rfind("overhang_", 0) == 0
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
@@ -1703,7 +1706,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "acceleration",
                {"default", "walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "bridges", "first_layer",
-                "first_layer_over_raft", "travel", "short_travel"},
+                "first_layer_over_raft", "travel", "short_travel", "wipe_tower"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const double v = number(g, n, k);
                    if (!(v >= 0.0 && v <= 100000.0))
@@ -2736,6 +2739,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.bridges", speed(s.bridge_speed)},
         {"speed.gap_fill", speed(s.gap_fill_speed)},
         {"speed.over_bridges", share(s.over_bridges_speed)},
+        {"speed.support_interface", share(s.support_interface_speed)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
         {"speed.first_layer_over_raft", share(s.first_layer_over_raft)},
@@ -2753,6 +2757,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"acceleration.solid_infill", num(s.accel_solid_infill)},
         {"acceleration.top_solid_infill", num(s.accel_top_solid_infill)},
         {"acceleration.bridges", num(s.accel_bridges)},
+        {"acceleration.wipe_tower", num(s.accel_wipe_tower)},
         {"acceleration.first_layer", num(s.accel_first_layer)},
         {"acceleration.first_layer_over_raft", num(s.accel_first_layer_over_raft)},
         {"acceleration.travel", num(s.accel_travel)},
@@ -3189,6 +3194,7 @@ std::string settings_json(const Settings& s) {
           {"bridges", speed(s.bridge_speed)},
           {"gap_fill", speed(s.gap_fill_speed)},
           {"over_bridges", share(s.over_bridges_speed)},
+          {"support_interface", share(s.support_interface_speed)},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
           {"travel_z", speed(s.travel_z_speed)},
           {"first_layer_over_raft", share(s.first_layer_over_raft)},

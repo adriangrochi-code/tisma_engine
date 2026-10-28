@@ -915,6 +915,7 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedSupport, "speed.support"}, {T::SpeedTravel, "speed.travel"},
         {T::SpeedFirstLayer, "speed.first_layer"}, {T::SpeedMax, "speed.max"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -5843,6 +5844,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "infill_support") {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
+        share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
@@ -5876,6 +5878,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             accel(T::AccelSolid, "acceleration.solid_infill", s.accel_solid_infill);
             accel(T::AccelTop, "acceleration.top_solid_infill", s.accel_top_solid_infill);
             accel(T::AccelBridges, "acceleration.bridges", s.accel_bridges);
+            accel(T::AccelWipeTower, "acceleration.wipe_tower", s.accel_wipe_tower);
         } else {
             accel(T::AccelFirstLayer, "acceleration.first_layer", s.accel_first_layer);
             accel(T::AccelOverRaft, "acceleration.first_layer_over_raft", s.accel_first_layer_over_raft);

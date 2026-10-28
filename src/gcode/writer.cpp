@@ -2548,7 +2548,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     const double infill_cap = crossing ? s.infill_max_crossing_speed : s.infill_max_speed;
     const double sparse_feed = infill_cap > 0.0 ? std::min(s.infill_speed, infill_cap) : s.infill_speed;
     const double fill_speed[7] = {s.solid_infill_speed, s.top_solid_infill_speed, bridge_feed, gap_feed,
-                                  sparse_feed,          s.support_speed,          s.support_speed};
+                                  sparse_feed,          s.support_speed,
+                                  s.support_interface_speed.value > 0.0 ? s.support_interface_speed.of(s.support_speed)
+                                                                        : s.support_speed};
     // The bridges' round bead, for the walls over the air.
     const double bead = bridge_bead(s);
     // Each kind's acceleration (speeds_accels.md, rules 10 and 12): with the
@@ -2574,6 +2576,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                : is("Internal infill")                              ? accel_infill
                : is("Solid infill")                                 ? accel_solid
                : is("Top solid infill")                             ? accel_top
+               : is("Wipe tower")                                   ? or_else(s.accel_wipe_tower, s.accel_default)
                                                                     : s.accel_default; // support, skirt, gap fill
     };
 

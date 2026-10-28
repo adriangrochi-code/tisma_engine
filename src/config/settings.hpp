@@ -474,6 +474,7 @@ struct Settings {
     double bridge_speed = 0.0;      // bridges and overhang perimeters (speed.solid_infill)
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
+    Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
     double travel_z_speed = 0.0;    // moves in Z (speed.travel)
@@ -498,6 +499,7 @@ struct Settings {
     double accel_solid_infill = 0.0;     // (accel_infill)
     double accel_top_solid_infill = 0.0; // (accel_solid_infill)
     double accel_bridges = 0.0;          // bridges and overhang perimeters (accel_default)
+    double accel_wipe_tower = 0.0;       // the wipe tower (accel_default)
     double accel_first_layer = 0.0;      // everything on the first layer (each kind's)
     double accel_first_layer_over_raft = 0.0; // the part's first layer on a raft (each kind's)
     double accel_travel = 0.0;           // travels (none)

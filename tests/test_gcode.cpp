@@ -1629,3 +1629,48 @@ TEST_CASE("cooling: the fan up step by step to cooling.full_fan_layer (cooling_m
     CHECK(out.str().find("M106 S") == std::string::npos);
     CHECK(out.str().find(" F1\n") == std::string::npos);
 }
+
+TEST_CASE("support: the interface's own speed (supports_more.md, SM11) and the wipe tower's acceleration", "[gcode][support]") {
+    IndexedMesh m;
+    add_box(m, 4, 4, 6, 6, 2);
+    const auto base = std::uint32_t(m.vertices.size());
+    add_box(m, 0, 0, 10, 10, 1);
+    for (std::size_t v = base; v < m.vertices.size(); ++v)
+        m.vertices[v].z += 2.0f;
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.support_speed = 60.0;
+    s.min_layer_time = 0.0; // no slowing down
+    // The feeds of the interface's extrusions, mm/min.
+    const auto feeds = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::set<int> found;
+        std::string type;
+        int feed = 0;
+        const std::regex f(" F([0-9]+)");
+        std::smatch hit;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            if (line.rfind("G1", 0) == 0 && std::regex_search(line, hit, f))
+                feed = std::stoi(hit[1].str());
+            if (type == "Support material interface" && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos)
+                found.insert(feed);
+        }
+        return found;
+    };
+    CHECK(feeds(s) == std::set<int>{3600}); // not set: speed.support
+    s.support_interface_speed = {100.0, true};
+    CHECK(feeds(s) == std::set<int>{3600});
+    s.support_interface_speed = {50.0, true};
+    CHECK(feeds(s) == std::set<int>{1800});
+    s.support_interface_speed = {25.0, false};
+    CHECK(feeds(s) == std::set<int>{1500});
+    // The wipe tower's acceleration, read and written back.
+    const Settings back = parse_settings(R"({"acceleration": {"default": 2000, "wipe_tower": 800}, "speed": {"support_interface": "50%"}})");
+    CHECK(back.accel_wipe_tower == 800.0);
+    CHECK(back.support_interface_speed == Speed{50.0, true});
+    CHECK(parse_settings(settings_json(back)).accel_wipe_tower == 800.0);
+}

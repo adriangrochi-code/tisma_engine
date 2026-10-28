@@ -1058,6 +1058,7 @@
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SpeedBridges, "Puentes", "Bridges") \
     X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
     X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
     X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
     X(SpeedTravelZ, "Viajes en Z", "Travel in Z") \
@@ -1405,6 +1406,7 @@
     X(AccelSolid, "Relleno sólido", "Solid infill") \
     X(AccelTop, "Superficie de arriba", "Top surface") \
     X(AccelBridges, "Puentes", "Bridges") \
+    X(AccelWipeTower, "Torre de purga", "Wipe tower") \
     X(AccelFirstLayer, "Primera capa", "First layer") \
     X(AccelTravel, "Viajes", "Travels") \
     X(AccelShortTravel, "Viajes cortos", "Short travels") \
