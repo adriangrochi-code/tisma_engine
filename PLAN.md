@@ -905,9 +905,23 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **Paso entre cordones con solape** (`perimeters.md`, regla 1, P1 y P12; pedido del equipo de fichas,
-  2026-10-28): dos cordones vecinos a `(w₁ + w₂)/2 − h·(1 − π/4)`, no borde con borde. Toca el reparto de cordones
-  (`src/perimeters/beading.*`), las paredes fijas, dónde empieza el relleno y las pruebas P1, P2 y P11
+- [ ] **Modelo del cordón de las fichas** (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;
+  pedido del equipo de fichas, 2026-10-28). Hoy el motor pone los cordones borde con borde y saca el filamento de
+  `w·h`. Las fichas dicen: sección `A = (w − h)·h + π·(h/2)²` (rectángulo con costados redondeados) y vecinos a
+  `(w₁ + w₂)/2 − δ`, con `δ = h·(1 − π/4)`. Las dos cosas van juntas, en un solo commit: el filamento por mm de
+  ancho de paso (`A / h = w − δ`) es el mismo que hoy si el paso es el ancho de hoy, así que cambiar una sola dejaría
+  la pieza sub- o sobreextruida. Pasos:
+  - una función de la sección (`A(w, h)`; con `w ≤ h`, elipse `π·w·h/4`, igual en `w = h`) usada por el escritor
+    (filamento, tope de caudal), el verificador (filamento por mm) y la vista previa (ancho desde el filamento);
+  - los puentes redondos siguen en `π·w²/4` (M2): marcar sus tramos como redondos en vez de deducirlo de la altura;
+  - paredes: la región achicada `δ/2`, el reparto de Kuipers en pasos (`w − δ`; `walls.min_line_width` y
+    `walls.min_detail` ya son pasos: P2 da 0,383 de ancho con 0,34 de separación) y el ancho escrito, paso + `δ`.
+    Cuentas hechas contra P2: 0,4 → un cordón de 0,400; 0,7 → ±0,164 de 0,371; 1,2 → ±0,375 de 0,450 y uno de 0,386;
+    P1 → 0,225, 0,632 y 1,039. Lo mismo en las paredes fijas;
+  - rellenos: líneas a `w − δ` (sólido) y `(w − δ)/densidad` (poco denso), y el borde del relleno donde termina el
+    último paso;
+  - todas las pruebas que cuentan filamento por mm o posiciones de cordones, con los números de las fichas (M1:
+    0,033849 mm/mm con 0,45 × 0,2 y filamento de 1,75)
 - [ ] Medición del equipo de fichas (2026-10-26, `dev` d3e814a contra Tisma Slicer, caja negra, cada uno con sus
   ajustes): en las piezas grandes el motor tarda 2 a 3 veces más (Benchy 7,0 s contra 3,3 s; Benchy al doble con
   gyroid 17,8 contra 5,8 s) y su G-code pesa hasta 3,3 veces más (Benchy 7,57 MB contra 2,29 MB). Cuenta para el

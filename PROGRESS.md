@@ -6753,3 +6753,8 @@ próximo paso, en un bloque propio.
 **Sigue:** el paso de P12; después el resto de `walls` (`staggered`, `transition_*`, `spread_count`,
 `vertical_shell`).
 
+**El paso de P12 es el modelo del cordón entero (2026-10-28, de noche).** Al empezarlo, la ficha `gcode_motion.md`
+(regla 1, M1) dice además que el filamento sale de la sección redondeada `(w − h)·h + π·(h/2)²`, no de `w·h` como
+hace el motor. Las dos cosas tienen que entrar juntas o la pieza queda mal extruida. Diseño y pasos en `PLAN.md`
+(«Modelo del cordón de las fichas»); se hace en los bloques que siguen, sin commit hasta que pase toda la lista.
+
