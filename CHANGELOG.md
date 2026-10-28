@@ -111,6 +111,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Franjas de calibración:** un valor fuera de rango (por ejemplo una temperatura de 1000 °C) se escribía en el
+  G-code; ahora se rechaza al leer los ajustes, con el mismo rango que un cambio por altura.
+
 - **Orden de los trazos:** dos comienzos igual de cerca (por ejemplo los dos extremos de una línea corta en una isla
   simétrica, vistos desde su eje) se elegían por el ruido de las cuentas; la misma pieza movida en Z daba otro
   G-code. Ahora las distancias a menos de 1 nm empatan y gana siempre el mismo.

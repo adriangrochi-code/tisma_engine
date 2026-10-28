@@ -5,6 +5,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <cstdint>
 
@@ -312,6 +314,19 @@ TEST_CASE("measure: a hole's diameter, a cylinder's and a cone's angle", "[ui][m
     MeasureFeature other = c;
     other.point[0] += 30.0;
     CHECK(std::abs(*measure(c, other).distance - 30.0) < 1e-9);
+}
+
+// Not in the list (hidden): how long a click on a curved surface takes on
+// a mesh of a million triangles; run by hand with "[bench]".
+TEST_CASE("measure: a click on a million-triangle cylinder", "[.][bench][measure]") {
+    TriangleMesh big;
+    add_round(big, 50, 50, 80, 500000, false);
+    const auto start = std::chrono::steady_clock::now();
+    const MeasureFeature c = surface_feature(big, 12345);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    std::printf("measure: %zu triangles, %.0f ms\n", big.triangle_count(), ms);
+    CHECK(c.kind == MeasureFeature::Kind::Circle);
+    CHECK(std::abs(c.diameter - 100.0) < 1e-2);
 }
 
 TEST_CASE("plate: an object's own settings, added, edited and taken away (settings_levels.md, rules 10 and 11)", "[ui][plate]") {

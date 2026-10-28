@@ -288,6 +288,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"calibration": {"mode": "corners", "start": 5, "step": 0, "end": 10}})").changes.size() == 1);
     CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "speed"}})"));
     CHECK_THROWS(parse_settings(R"({"calibration": {"band_height": 0}})"));
+    // A band's value within what a height change takes: no M104 S1000.
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 1000}})"),
+                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 0 to 500 C"));
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "retraction", "start": 1, "step": 2, "end": 80}})"),
+                      ContainsSubstring("calibration.end"));
+    CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 0}})"));
+    CHECK(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 1000, "step": 1000, "end": 5000}})")
+              .changes.size() == 5);
     CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);
     CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),

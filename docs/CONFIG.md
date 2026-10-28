@@ -720,7 +720,7 @@ ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes que
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `mode` | texto | `off` | `off`, `temperature`, `pressure_advance`, `retraction`, `max_flow`, `acceleration`, `corners`, `input_shaping` | Qué cambia: la temperatura de la boquilla (la espera inicial ya es la de la primera franja), el avance de presión, el largo de retracción, el caudal forzado (mm³/s), la aceleración (con el comando del dialecto), la velocidad en las esquinas (Klipper `SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY`, RepRapFirmware `M566` en mm/min, el resto `M205 X Y`) o la frecuencia del input shaping (Klipper `SET_INPUT_SHAPER`, el resto `M593 F`) |
-| `start`, `step`, `end` | número | 0 | −1 000 000 a 1 000 000 | Valor de la primera franja, cuánto cambia en cada una (puede ser negativo) y el último. Con `step` 0, o hacia el otro lado, una sola franja |
+| `start`, `step`, `end` | número | 0 | −1 000 000 a 1 000 000 | Valor de la primera franja, cuánto cambia en cada una (puede ser negativo) y el último. Con `step` 0, o hacia el otro lado, una sola franja. Los valores de las franjas tienen que estar dentro de lo que acepta un cambio por altura: temperatura 0 a 500 °C, avance de presión 0 a 2, retracción 0 a 50 mm, caudal 0,5 a 1000 mm³/s, aceleración 100 a 100 000 mm/s²; esquinas 0 a 1000 mm/s e input shaping 1 a 1000 Hz |
 | `band_height` | número | 5 | 0,05 a 1000 | Alto de cada franja, en mm |
 
 ### `extrusion`

@@ -7069,3 +7069,34 @@ local (`tools/ci_linux.sh`) no corre ese riesgo: no se edita mientras compila.
 **Sigue:** `machine.high_flow_nozzle`, `object` (`extruder`, `wipe_into_infill`, `wipe_into_object`), `speed`
 (`max_flow`, `small_loops`), `extrusion` (pellets), `filament.transmission_distance`, `orient`, y los sueltos
 (`layers.first_line_width`, `mixing.purge_infill_max`, `placement.drop_to_bed`, `retraction.coast`).
+
+## 2026-10-28 (tarde): mantenimiento
+
+**Revisado:**
+- `tools/ci_linux.sh` sobre `ee5df73`: pasa (710 casos);
+- el fuzzer, 2000 corridas con dos semillas nuevas (7731028 y 9902811): 0 fallas, 23 rechazadas como no imprimibles;
+- lo agregado hoy, por casos borde: las esquinas redondeadas, los alias de los límites de la máquina, `max_link`, las
+  franjas de calibración;
+- los «No probado» de `PROGRESS.md`.
+
+**Encontrado y arreglado:**
+- **Orden de los trazos** (en el commit de `surfaces`): dos comienzos igual de cerca se elegían por el ruido de las
+  cuentas. En la mesa, la pared externa de cada pata empieza sobre su diagonal y los dos extremos de una línea corta
+  del relleno sólido quedan a la misma distancia; movida la pieza en Z, el ruido del corte daba vuelta la línea y
+  el G-code dejaba de ser el mismo (la prueba de «una pieza por debajo o por encima de z = 0»). Ahora las distancias a
+  menos de 1 nm empatan y gana el primer trazo, su comienzo antes que su final. La búsqueda por celdas y la de las
+  cajas de los lazos miran también los empates.
+- **Franjas de calibración:** el valor de cada franja no se revisaba: `{"mode": "temperature", "start": 1000}`
+  escribía `M104 S1000`, que como cambio por altura se rechaza. Ahora la primera y la última franja tienen que estar
+  dentro del rango del cambio que hacen (temperatura 0 a 500 °C, avance de presión 0 a 2, retracción 0 a 50 mm,
+  caudal 0,5 a 1000 mm³/s, aceleración 100 a 100 000; esquinas 0 a 1000 mm/s, input shaping 1 a 1000 Hz), y el
+  mensaje dice qué valor da.
+
+**Medido:** un clic de medir en una superficie curva de un millón de triángulos (un cilindro de 500 000 lados) tarda
+291 ms, con el CI compilando al mismo tiempo; queda como prueba oculta `[bench]`. Era el «No probado» del 2026-10-27.
+No se midió la esfera: la máquina no estuvo libre en este bloque (el CI corría).
+
+**Mensajes del equipo de fichas:** `support.free_bridge_length` solo maneja el aviso de la revisión (S10, ya es así);
+los lazos de contacto van en las dos capas de interfaz de arriba (`supports_more.md`, regla 12): el motor los pone
+solo en la de arriba, se cambia cuando la ficha llegue a `main`; el lector STEP propio (`step_reader.md`, decisión
+del dueño) entra en `PLAN.md` cuando llegue a `main`.

@@ -223,6 +223,23 @@ void add_calibration_changes(Settings& s) {
     const std::size_t bands =
         b.step != 0.0 && span / b.step >= 0.0 ? std::min<std::size_t>(std::size_t(std::floor(span / b.step + 1e-9)) + 1, 1000)
                                               : 1;
+    // Every band's value within what a height change of its own takes (the
+    // first and the last bound the rest).
+    struct Range {
+        double lo, hi;
+        const char* what;
+    };
+    const Range range = b.mode == CalibrationMode::Temperature       ? Range{0.0, 500.0, "from 0 to 500 C"}
+                        : b.mode == CalibrationMode::PressureAdvance ? Range{0.0, 2.0, "from 0 to 2"}
+                        : b.mode == CalibrationMode::Retraction      ? Range{0.0, 50.0, "from 0 to 50 mm"}
+                        : b.mode == CalibrationMode::MaxFlow         ? Range{0.5, 1000.0, "from 0.5 to 1000 mm3/s"}
+                        : b.mode == CalibrationMode::Acceleration    ? Range{100.0, 100000.0, "from 100 to 100000 mm/s2"}
+                        : b.mode == CalibrationMode::Corners         ? Range{0.0, 1000.0, "from 0 to 1000 mm/s"}
+                                                                     : Range{1.0, 1000.0, "from 1 to 1000 Hz"};
+    for (const double v : {b.start, b.start + double(bands - 1) * b.step})
+        if (!(v >= range.lo && v <= range.hi))
+            fail(v == b.start ? "calibration.start" : "calibration.end",
+                 std::string("gives ") + json(v).dump() + ": the bands' values must be " + range.what);
     for (std::size_t i = 0; i < bands; ++i) {
         const double v = b.start + double(i) * b.step;
         HeightChange c;
