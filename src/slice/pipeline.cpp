@@ -21,6 +21,7 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -310,6 +311,7 @@ void append_object(SlicedModel& out, SlicedModel&& part, SlicedObject object) {
         out.groups.push_back(std::move(g));
     }
     out.open_contours += part.open_contours;
+    out.cut_away += part.cut_away;
     out.zaa_points += part.zaa_points;
     out.objects.push_back(std::move(object));
 }
@@ -518,10 +520,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             for (const MeshObject::HeightRange& r : o.ranges) {
                 if (!(r.to > r.from))
                     continue;
+                char span[64];
+                std::snprintf(span, sizeof span, " %g-%g mm", r.from, r.to);
+                const std::string where = o.name + span;
+                const Settings own = own_settings(settings, r.settings, where, true); // and its errors said
                 bool layers = false;
                 const std::string rest = own_without(r.settings, "layers", &layers);
                 if (layers) {
-                    const Settings own = own_settings(settings, r.settings, o.name, true);
                     if (!ranged)
                         ranged = settings;
                     if (!settings.layer_heights.empty()) {
@@ -545,7 +550,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 }
                 if (rest.empty())
                     continue;
-                MeshModifier m{o.name + " " + std::to_string(r.from) + "-" + std::to_string(r.to), o.object, {}, rest, true};
+                MeshModifier m{where, o.object, {}, rest, true};
                 const Vec3f lo{x0 - 1.0f, y0 - 1.0f, float(double(z0) + r.from)}, hi{x1 + 1.0f, y1 + 1.0f, float(double(z0) + r.to)};
                 const Vec3f c[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
                                     {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
@@ -1175,6 +1180,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
     std::vector<std::size_t> open(out.layers.size(), 0);
+    std::vector<char> cut_away(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
     // The thinnest feature that gets a bead (bead_count grows with the thickness).
     double lo = 0.0, hi = 4.0 * beading.preferred_width;
@@ -1214,8 +1220,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             open[l] += c.closed ? 0 : 1;
         Polygons region = layer_region(simplify(to_polygons(contours[source[l]]), settings.simplify_tolerance),
                                        settings.fill_mode);
-        if (!cut.empty() && !cut[l].empty())
+        if (!cut.empty() && !cut[l].empty() && !region.empty()) {
             region = Clipper2Lib::Difference(region, cut[l], Clipper2Lib::FillRule::NonZero);
+            cut_away[l] = region.empty();
+        }
         const double shrink = shrink_at(l);
         out.regions[l] = offset_holes(offset(region, settings.xy_offset - shrink), settings.hole_offset);
         if (frame && frame->regions) {
@@ -1274,6 +1282,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     }
     for (std::size_t n : open)
         out.open_contours += n;
+    out.cut_away = std::size_t(std::count(cut_away.begin(), cut_away.end(), 1));
     out.open_by_layer = std::move(open);
     std::vector<Polygons> infill(out.walls.size());
     for (std::size_t l = 0; l < out.walls.size(); ++l)

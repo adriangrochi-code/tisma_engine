@@ -414,8 +414,13 @@ std::string merged_own(std::string_view under, std::string_view over) {
         return std::string(over);
     if (over.empty())
         return std::string(under);
-    json out = json::parse(under.begin(), under.end());
-    const json top = json::parse(over.begin(), over.end());
+    json out, top;
+    try {
+        out = json::parse(under.begin(), under.end());
+        top = json::parse(over.begin(), over.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string("settings of a part: not valid JSON: ") + e.what());
+    }
     if (!out.is_object() || !top.is_object())
         throw SettingsError("settings of a part: must be objects of groups");
     for (const auto& [group, keys] : top.items())
@@ -430,7 +435,12 @@ std::string own_without(std::string_view own, std::string_view group, bool* had)
         *had = false;
     if (own.empty())
         return {};
-    json j = json::parse(own.begin(), own.end());
+    json j;
+    try {
+        j = json::parse(own.begin(), own.end());
+    } catch (const json::parse_error& e) {
+        throw SettingsError(std::string("settings of a part: not valid JSON: ") + e.what());
+    }
     if (!j.is_object() || !j.contains(std::string(group)))
         return std::string(own);
     if (had)

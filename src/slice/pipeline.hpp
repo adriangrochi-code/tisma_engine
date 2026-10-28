@@ -68,6 +68,7 @@ struct SlicedModel {
     // Painted seams (docs/PAINTING.md), one area per layer; empty when none was painted.
     std::vector<Polygons> seam_enforce, seam_block;
     std::size_t open_contours = 0; // contours that stayed open after gap closing (dropped)
+    std::size_t cut_away = 0;      // layers the negative volumes took all of (model_tools.md, rule 2; copied layers not counted)
     std::vector<std::size_t> open_by_layer; // the same per layer
     std::vector<double> thin_area; // per layer, mm2 of the region thinner than the thinnest bead (not printed)
     // Layer heights by zone (docs/LOCAL_LAYERS.md): the layers above are the

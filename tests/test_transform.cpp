@@ -4,11 +4,13 @@
 #include "io/model.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "slice/printable.hpp"
 #include "surfaces/surfaces.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cmath>
 #include <filesystem>
@@ -19,6 +21,7 @@
 #include <string>
 
 using namespace tisma;
+using Catch::Matchers::ContainsSubstring;
 using Catch::Matchers::WithinAbs;
 using Catch::Matchers::WithinRel;
 
@@ -652,4 +655,24 @@ TEST_CASE("model tools: height ranges (MT7b, MT9, MT13)", "[transform]") {
         CHECK(walls_between(m, l, -1, 20.1) == 4);
         CHECK(walls_between(m, l, 19.9, 41) == 5);
     }
+}
+
+TEST_CASE("model tools: a negative volume or a range's settings that go wrong say so", "[transform]") {
+    Settings s;
+    s.wall_count = 2;
+    const TriangleMesh part = box({0, 0, 0}, {20, 20, 10});
+    std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+    // A negative volume around the whole part leaves nothing, and says why.
+    const IndexedMesh all = weld_exact(box({-5, -5, -5}, {25, 25, 15}));
+    SlicedModel m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects, nullptr, &all);
+    CHECK(m.cut_away > 0);
+    CHECK_THAT(unprintable_reason(m, s), ContainsSubstring("negative volumes take all of it away"));
+    // A range whose settings are not JSON, or name a setting that does not
+    // exist: the object and the range in the message.
+    objects.front().ranges = {{2.0, 4.5, R"({"walls": {"count": )"}};
+    CHECK_THROWS_WITH(slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects),
+                      ContainsSubstring("box 2-4.5 mm: its settings are not valid JSON"));
+    objects.front().ranges = {{2.0, 4.5, R"({"walls": {"countt": 3}})"}};
+    CHECK_THROWS_WITH(slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects),
+                      ContainsSubstring("box 2-4.5 mm") && ContainsSubstring("walls.countt"));
 }
