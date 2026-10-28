@@ -685,7 +685,16 @@ Va antes que lo demás de P1:
 - [ ] La luz se rompe al mirar desde arriba (informe del dueño, reproducido por el equipo de fichas con
   `--look 100,100,20,260,30,85`): con oclusión ambiental, cuadrados oscuros en la cara de arriba y el borde en
   escalones; a 30° se ve bien. Parece que la oclusión o el mapa de sombras se quedan sin resolución cuando la pieza
-  llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una
+  llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una.
+  El dueño precisó (2026-10-28): con **Vulkan**, sobre todo en la vista previa laminada (las líneas): bajan los cuadros
+  y aparecen efectos de luz. Hecho ese día: la vista previa dibuja primero las capas cercanas al ojo (desde arriba,
+  de 16,3 a 7,1 s por cuadro en lavapipe con una esfera de 80 mm); la oclusión con fuerza mayor que 1 ya no da luz
+  negativa (píxeles negros, 861 en la vista previa con rayos); falta confirmarlo con el dueño en su GPU
+- [x] Chequeos más estrictos de la interfaz (pedido del dueño, 2026-10-28): cada captura de Preparar y Vista previa
+  revisa la imagen propia de la vista 3D (ningún píxel negro, a lo sumo uno de cada mil que destella); la vista previa
+  de Vulkan comparada con la de OpenGL también desde arriba y de lejos; la oclusión y los rayos a la fuerza máxima
+- [ ] Chequeos que siguen: la vista Vulkan en el control del moiré; recorrer cada pestaña y cada vista de color con
+  el chequeo; un modelo curvo (no solo el cubo) en las comparaciones; el costo del filtro de moiré por fragmento
 - [x] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
   pese; anotar los números (2026-10-28: `TISMA_TIMING`; de 0,75 a 0,57 s con 2 millones de triángulos; los cuadros,
   en el rasterizador por software de este contenedor, no se pueden medir acá; después, 0,50 s con la lectura, el giro

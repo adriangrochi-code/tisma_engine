@@ -37,6 +37,20 @@ struct PictureDifference {
 PictureDifference compare_pictures(const std::uint8_t* a, const std::uint8_t* b, int width, int height, int x, int y,
                                    int w, int h, int tolerance);
 
+// A drawn 3D view's health, for the interface's strict checks: the pixels
+// left black (at most 2 in every channel: a NaN or an infinity in a shader's
+// light ends as 0) and the sparkles, pixels whose luma stands above or below
+// all eight neighbours' by more than `step` (0 to 255): a speck or a highlight
+// caught by one pixel, which flickers as the view moves. The picture's edge
+// pixels count as pixels but not as sparkles.
+struct PictureHealth {
+    std::size_t pixels = 0;
+    std::size_t black = 0;
+    std::size_t sparkles = 0;
+    int first_black_x = -1, first_black_y = -1; // where the first black pixel is (rows from the start)
+};
+PictureHealth picture_health(const std::uint8_t* rgba, int width, int height, int step = 48);
+
 // CRC-32 of the PNG specification (ISO 3309), and Adler-32 of RFC 1950
 // (io/checksum.hpp).
 using tisma::adler32;

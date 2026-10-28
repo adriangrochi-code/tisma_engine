@@ -150,7 +150,10 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen
     if (u_debug != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
     float direct = vis.r * seen.y;
-    float ambient = mix(1.0, vis.g, u_ao_strength) * seen.x;
+    // A strength past 1 darkens beyond the occlusion: never below no light
+    // (a negative light made pow() a NaN, drawn black), and a little light
+    // stays even in a closed crease, as bounced light would (no ray follows it).
+    float ambient = max(mix(1.0, vis.g, u_ao_strength) * seen.x, 0.04);
     vec3 v = normalize(u_eye - p);
     if (dot(n, v) < 0.0)
         n = -n;
@@ -1369,12 +1372,11 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         return;
     const std::size_t layers = layer_extrusions_.size() - 1;
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
-    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md).
-    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
-    for (const PreviewRange& range : ranges) {
-        const std::size_t first = range.first, count = range.count;
-        if (count == 0)
-            continue;
+    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md);
+    // the nearest layers first, for the depth test.
+    const std::vector<PreviewRange> draws =
+        preview_draws(order_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden);
+    if (!draws.empty()) {
         const unsigned p = p_.preview;
         lit_uniforms(p, f, vp, gbuffer, visibility);
         glUniform3fv(at(p, "u_colours"), static_cast<GLsizei>(kLineKinds), &f.kind_colours[0].x);
@@ -1389,9 +1391,12 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
             uniform(p, "u_range", min_height_, max_height_);
         else
             uniform(p, "u_range", min_width_, max_width_);
-        // The instances of the first layer drawn start the attribute arrays.
         glBindVertexArray(extrusions_.vao);
         glBindBuffer(GL_ARRAY_BUFFER, extrusions_.vbo);
+    }
+    for (const PreviewRange& range : draws) {
+        const std::size_t first = range.first, count = range.count;
+        // The draw's first instance starts the attribute arrays.
         const std::size_t base = first * sizeof(PreviewInstance);
         const GLsizei stride = sizeof(PreviewInstance);
         glEnableVertexAttribArray(0);

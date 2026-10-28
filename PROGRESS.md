@@ -7312,5 +7312,37 @@ promediadas por esquina, Tokuyoshi y Kaplanyan 2019): en la cúpula no cambia ca
 píxeles) y sumaba 0,5 s al abrir 2 millones de triángulos; se dejó afuera hasta saber si el efecto del dueño es un
 brillo que titila.
 
-**Sigue:** preguntarle al dueño cómo era el efecto (titileo de puntos brillantes al mover, franjas o anillos, la pieza
-cortada o hueca, cuadros oscuros, colores mal) y su GPU.
+**Después, el dueño precisó:** el efecto se nota sobre todo **laminado**, en la vista previa con las líneas: baja el
+rendimiento y aparecen efectos de luz. Pidió además chequeos de errores y de la interfaz más estrictos.
+
+**Encontrado y arreglado:**
+- La vista previa dibujaba las capas de abajo hacia arriba. Desde arriba, cada capa más alta está más cerca del ojo,
+  así que la prueba de profundidad no descartaba nada: cada fragmento de cada capa pasaba por el sombreado del cordón
+  (con el filtro de moiré, 16 muestras del perfil con `atan` y `asin` cada una) y lo tapaba la capa siguiente. Ahora
+  `preview_draws` dibuja primero las capas a la altura del ojo y por debajo, de arriba hacia abajo, y después las de
+  más arriba, de abajo hacia arriba; la imagen es la misma (nada se mezcla con transparencia). Medido con una esfera de
+  80 mm laminada (159 333 cordones, lavapipe, CI corriendo): mirando desde arriba (85°), de 16 336 a 7 119 ms por
+  cuadro; a 35°, de 9 753 a 4 868 ms. El filtro de moiré cuesta unos 2,2 s de esos 7,1 (con él apagado, 4 957 ms).
+- Con la fuerza de la oclusión pasada de 1 (la barra llega a 1,5), `mix(1, visibilidad, fuerza)` daba luz ambiente
+  negativa en los rincones; el color negativo hacía que `pow` diera NaN y el píxel saliera negro. Con los rayos, un
+  rincón cerrado daba también luz 0 exacta. Ahora la luz ambiente nunca baja de 0,04 (la luz rebotada que ningún rayo
+  sigue). Sin el arreglo, la vista previa del cubo con rayos y fuerza 1,5 tenía 861 píxeles negros y 11 destellos.
+
+**Chequeos nuevos (más estrictos):**
+- Cada captura de Preparar y Vista previa lee la imagen propia de la vista 3D (antes de que los paneles se dibujen
+  encima; en Vulkan, con `VulkanView::read_picture`) y falla si un píxel es negro o si más de uno de cada mil destella
+  (se aparta de sus ocho vecinos por más de 48 niveles de luma). Si falla, deja la imagen al lado de la captura. Así
+  todas las pruebas de la interfaz que sacan capturas (37) chequean la vista; `--no-view-check` lo saltea. En su
+  primera corrida encontró los píxeles negros de los rayos.
+- Pruebas nuevas: la vista previa de Vulkan contra la de OpenGL también desde arriba y de lejos (líneas de un píxel);
+  la oclusión y los rayos a la fuerza máxima (1,5) en Preparar y Vista previa, con `--ao-strength`.
+- Una prueba del orden de dibujo (desde arriba, desde abajo, desde el medio y con el corte del deslizador).
+
+**Probado:** toda la lista en `build-next`; las pruebas de la interfaz con el chequeo, en OpenGL y Vulkan (lavapipe).
+
+**No probado:** en una GPU real; el dueño tiene que confirmar si el efecto que veía se fue. El chequeo de destellos no
+mira la vista mientras se mueve (titileo entre cuadros).
+
+**Sigue:** confirmar con el dueño; el control del moiré con Vulkan; recorrer cada pestaña y vista de color con el
+chequeo; bajar el costo del filtro de moiré; armar la malla de la placa en otro hilo; las claves `orient.*` y las de
+pellets.

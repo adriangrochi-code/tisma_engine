@@ -14,7 +14,7 @@ namespace {
 
 constexpr const char* kUsage =
     "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
-    "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
+    "             [--lang es|en] [--light] [--render fast|ao|rt] [--ao-strength S] [--msaa 1|2|4|8] [--fxaa on|off]\n"
     "             [--moire on|off] [--device PORT|sim [--device-print]] [--color VIEW]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
@@ -33,7 +33,7 @@ constexpr const char* kUsage =
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
     "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
-    "                                   [--compare-view other.png]]\n"
+    "                                   [--compare-view other.png] [--no-view-check]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -50,7 +50,11 @@ constexpr const char* kUsage =
     "takes OpenGL for now). --compare-view compares the 3D view with the one in\n"
     "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
     "than 0.5% of its pixels differ by more than 24 levels. --coarse draws a plate of\n"
-    "more than a million triangles as while the view moves: its coarse copy.\n";
+    "more than a million triangles as while the view moves: its coarse copy.\n"
+    "Every screenshot of the Prepare or Preview tab also checks the 3D view's own\n"
+    "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
+    "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
+    "skips that.\n";
 
 } // namespace
 
@@ -231,6 +235,13 @@ int main(int argc, char** argv) {
                 return 2;
             }
             options.fxaa = on == "on" ? 1 : 0;
+        } else if (arg == "--ao-strength") {
+            const double strength = std::atof(value());
+            if (!(strength >= 0.0 && strength <= 1.5)) {
+                std::fprintf(stderr, "error: --ao-strength must be between 0 and 1.5\n");
+                return 2;
+            }
+            options.ao_strength = float(strength);
         } else if (arg == "--moire") {
             const std::string_view on = value();
             if (on != "on" && on != "off") {
@@ -250,6 +261,8 @@ int main(int argc, char** argv) {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--coarse") {
             options.coarse = true;
+        } else if (arg == "--no-view-check") {
+            options.view_check = false;
         } else if (arg == "--compare-view") {
             options.compare_view = value();
         } else if (arg == "--ray-check") {

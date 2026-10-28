@@ -50,6 +50,10 @@ public:
     // until the first record.
     ImTextureID texture() const;
 
+    // The last picture recorded, read back once the device is idle: RGBA,
+    // rows from the top; its size in width and height (0 without one).
+    std::vector<std::uint8_t> read_picture(int& width, int& height);
+
     // The preview's extrusions the last record drew.
     std::size_t drawn_extrusions() const;
 

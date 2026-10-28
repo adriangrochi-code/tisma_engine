@@ -598,7 +598,9 @@ struct VulkanView::Impl {
                            VK_IMAGE_ASPECT_DEPTH_BIT);
         resolved = make_image(w, h, colour_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                               VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-        picture = make_image(w, h, colour_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        picture = make_image(w, h, colour_format,
+                             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // read_picture
                              VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // The scene: cleared, drawn multisampled, resolved for the composite.
@@ -898,11 +900,10 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_ranges(order, lo, hi, f.kind_mask, f.top_shown, f.top_hidden))
-                if (r.count > 0) {
-                    vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
-                    drawn += r.count;
-                }
+            for (const PreviewRange& r : preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden)) {
+                vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
+                drawn += r.count;
+            }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
                 const std::size_t t0 = layer_travels[lo], tn = layer_travels[hi + 1] - t0;
                 if (tn > 0) {
@@ -1105,6 +1106,50 @@ double VulkanView::bench(const ViewFrame& f, int n) {
     return ms;
 }
 
+std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
+    Impl& v = *impl_;
+    width = height = 0;
+    std::vector<std::uint8_t> out;
+    if (!v.ready || !v.picture.image || v.width < 1 || v.height < 1)
+        return out;
+    v.guard([&] {
+        vkDeviceWaitIdle(v.d.device); // the frames in flight write it
+        const VkDeviceSize bytes = VkDeviceSize(v.width) * VkDeviceSize(v.height) * 4;
+        Buffer host = v.make_buffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        v.one_time([&](VkCommandBuffer c) {
+            VkImageMemoryBarrier b{};
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image = v.picture.image;
+            b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &b);
+            VkBufferImageCopy region{};
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {std::uint32_t(v.width), std::uint32_t(v.height), 1};
+            vkCmdCopyImageToBuffer(c, v.picture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.buffer, 1, &region);
+            b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                                 nullptr, 0, nullptr, 1, &b);
+        });
+        void* mapped = nullptr;
+        check(vkMapMemory(v.d.device, host.memory, 0, bytes, 0, &mapped), "vkMapMemory");
+        out.assign(static_cast<const std::uint8_t*>(mapped), static_cast<const std::uint8_t*>(mapped) + bytes);
+        vkUnmapMemory(v.d.device, host.memory);
+        v.free_buffer(host);
+        width = v.width, height = v.height;
+    });
+    return out;
+}
+
 ImTextureID VulkanView::texture() const { return ImTextureID(impl_->picture_set); }
 
 std::size_t VulkanView::drawn_extrusions() const { return impl_->drawn; }
@@ -1130,6 +1175,10 @@ void VulkanView::set_paint(const std::vector<float>&, const std::vector<Renderer
 void VulkanView::set_preview(const PreviewBuffers&) {}
 void VulkanView::clear_preview() {}
 void VulkanView::record(void*, int, const ViewFrame&) {}
+std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
+    width = height = 0;
+    return {};
+}
 ImTextureID VulkanView::texture() const { return ImTextureID(0); }
 std::size_t VulkanView::drawn_extrusions() const { return 0; }
 bool VulkanView::take_time(double&) { return false; }

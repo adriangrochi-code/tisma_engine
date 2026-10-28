@@ -179,4 +179,34 @@ PictureDifference compare_pictures(const std::uint8_t* a, const std::uint8_t* b,
     return d;
 }
 
+PictureHealth picture_health(const std::uint8_t* rgba, int width, int height, int step) {
+    PictureHealth h;
+    if (width < 1 || height < 1)
+        return h;
+    const auto at = [&](int x, int y) { return rgba + (std::size_t(y) * std::size_t(width) + std::size_t(x)) * 4; };
+    const auto luma = [&](int x, int y) {
+        const std::uint8_t* p = at(x, y);
+        return (299 * int(p[0]) + 587 * int(p[1]) + 114 * int(p[2])) / 1000;
+    };
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x) {
+            const std::uint8_t* p = at(x, y);
+            ++h.pixels;
+            if (p[0] <= 2 && p[1] <= 2 && p[2] <= 2 && h.black++ == 0)
+                h.first_black_x = x, h.first_black_y = y;
+            if (x == 0 || y == 0 || x + 1 == width || y + 1 == height)
+                continue;
+            const int c = luma(x, y);
+            int lo = 255, hi = 0;
+            for (int dy = -1; dy <= 1; ++dy)
+                for (int dx = -1; dx <= 1; ++dx)
+                    if (dx != 0 || dy != 0) {
+                        const int n = luma(x + dx, y + dy);
+                        lo = std::min(lo, n), hi = std::max(hi, n);
+                    }
+            h.sparkles += c - hi > step || lo - c > step;
+        }
+    return h;
+}
+
 } // namespace tisma::ui

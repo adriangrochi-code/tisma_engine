@@ -462,6 +462,17 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
     for (std::size_t i = 0; i < p.hidden.size(); ++i)
         if (p.hidden[i] != 0)
             out.hidden_kinds |= 1u << (p.extrusions[i].kind_layer & 0xFFu);
+    out.layer_z.assign(layers, 0.0f);
+    for (std::size_t l = 0; l < layers; ++l) {
+        float z = l > 0 ? out.layer_z[l - 1] : 0.0f;
+        bool any = false;
+        for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i) {
+            const PreviewInstance& e = p.extrusions[i];
+            z = any ? std::max({z, e.z0, e.z1}) : std::max(e.z0, e.z1);
+            any = true;
+        }
+        out.layer_z[l] = z;
+    }
     return out;
 }
 
@@ -482,6 +493,42 @@ std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::s
                  top_hidden == kWholeLayer ? order.layer_hidden[hi + 1] : order.layer_hidden[hi] + top_hidden);
     return {PreviewRange{order.layer_shown[lo], shown_end - order.layer_shown[lo]},
             PreviewRange{order.layer_hidden[lo], whole ? 0 : hidden_end - order.layer_hidden[lo]}};
+}
+
+std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                        std::uint32_t kind_mask, float eye_z, std::size_t top_shown,
+                                        std::size_t top_hidden) {
+    std::vector<PreviewRange> out;
+    const std::array<PreviewRange, 2> ranges = preview_ranges(order, lo, hi, kind_mask, top_shown, top_hidden);
+    if (ranges[0].count + ranges[1].count == 0)
+        return out;
+    const std::size_t layers = order.layer_shown.size() - 1;
+    lo = std::min(lo, layers - 1);
+    hi = std::clamp(hi, lo, layers - 1);
+    // The first layer above the eye.
+    std::size_t split = lo;
+    while (split <= hi && split < order.layer_z.size() && order.layer_z[split] <= eye_z)
+        ++split;
+    const auto add = [&](const PreviewRange& range, const std::vector<std::size_t>& starts, std::size_t l) {
+        const std::size_t b = std::max(range.first, starts[l]);
+        const std::size_t e = std::min(range.first + range.count, starts[l + 1]);
+        if (e <= b)
+            return;
+        if (!out.empty() && out.back().first + out.back().count == b)
+            out.back().count += e - b; // the next layer up, right after this one
+        else
+            out.push_back({b, e - b});
+    };
+    for (int k = 0; k < 2; ++k) {
+        if (ranges[std::size_t(k)].count == 0)
+            continue;
+        const std::vector<std::size_t>& starts = k == 0 ? order.layer_shown : order.layer_hidden;
+        for (std::size_t l = split; l-- > lo;)
+            add(ranges[std::size_t(k)], starts, l);
+        for (std::size_t l = split; l <= hi; ++l)
+            add(ranges[std::size_t(k)], starts, l);
+    }
+    return out;
 }
 
 std::uint32_t kind_colour(LineKind kind) {

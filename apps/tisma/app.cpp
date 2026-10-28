@@ -469,6 +469,7 @@ private:
     void update_coarse_model();
     void check_rays(const ViewFrame& f);
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
+    void check_view(int fb_w, int fb_h);
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
@@ -2305,6 +2306,8 @@ bool App::init(std::string& error) {
         fxaa_ = options_.fxaa != 0;
     if (options_.moire >= 0)
         moire_ = options_.moire != 0;
+    if (options_.ao_strength >= 0.0f)
+        ao_strength_ = options_.ao_strength;
     if (options_.color >= 0 && options_.color < kPreviewViews) {
         preview_view_ = static_cast<PreviewView>(options_.color);
         color_mode_ = kViewInfo[options_.color].shader;
@@ -10248,6 +10251,48 @@ void App::compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int f
     }
 }
 
+// The strict check of every screenshot (owner's request, 2026-10-28): the
+// 3D view's own picture, before the panels go over it, must have no black
+// pixel (a NaN or an infinity in a shader's light) and at most one sparkle in
+// a thousand pixels (picture_health): what aliases into specks and flickers
+// as the view moves.
+void App::check_view(int fb_w, int fb_h) {
+    int w = 0, h = 0;
+    std::vector<std::uint8_t> picture;
+    if (vulkan_) {
+        picture = vk_view_.read_picture(w, h);
+    } else {
+        const ViewFrame f = view_frame(fb_w, fb_h);
+        picture = renderer_.read_colour();
+        w = f.width, h = f.height;
+    }
+    if (picture.size() != std::size_t(w) * std::size_t(h) * 4 || picture.empty()) {
+        std::fprintf(stderr, "error: cannot read the 3D view's picture back\n");
+        failed_ = true;
+        return;
+    }
+    const PictureHealth health = picture_health(picture.data(), w, h);
+    std::printf("view check (%s): %zu pixels, %zu black, %zu sparkles\n", vulkan_ ? "Vulkan" : "OpenGL",
+                health.pixels, health.black, health.sparkles);
+    if (health.black > 0 || health.sparkles * 1000 > health.pixels) {
+        // The picture next to the screenshot, as evidence, rows from the top.
+        std::vector<std::uint8_t> upright(picture.size());
+        const std::size_t row = std::size_t(w) * 4;
+        for (int y = 0; y < h; ++y)
+            std::copy_n(picture.begin() + std::ptrdiff_t(std::size_t(vulkan_ ? y : h - 1 - y) * row), row,
+                        upright.begin() + std::ptrdiff_t(std::size_t(y) * row));
+        for (std::size_t i = 3; i < upright.size(); i += 4)
+            upright[i] = 255;
+        std::filesystem::path out = from_utf8(options_.screenshot);
+        out.replace_extension();
+        write_png(out.string() + "_view.png", w, h, upright.data());
+        std::fprintf(stderr, "error: the 3D view has black pixels or sparkles (the first black at %d, %d %s; %s_view.png)\n",
+                     health.first_black_x, health.first_black_y, vulkan_ ? "from the top" : "from the bottom",
+                     out.string().c_str());
+        failed_ = true;
+    }
+}
+
 void App::frame() {
     if (frames_ < 8) {
         static char step[32];
@@ -10445,6 +10490,8 @@ void App::frame() {
             }
             if (!options_.compare_view.empty())
                 compare_view(flipped, fb_w, fb_h);
+            if (options_.view_check && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
+                check_view(fb_w, fb_h);
             if (!error_title_.empty())
                 std::fprintf(stderr, "%s: %s\n", error_title_.c_str(), error_message_.c_str());
             quit_ = true;

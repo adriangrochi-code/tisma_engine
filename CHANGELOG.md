@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Chequeo de la vista 3D en cada captura** (`tisma --screenshot`, pedido del dueño): en Preparar y Vista previa, la
+  imagen propia de la vista no puede tener píxeles negros (un NaN de la luz) ni más de uno de cada mil que destelle;
+  si falla, sale con 1 y deja la imagen al lado. `--no-view-check` lo saltea; `--ao-strength` elige la fuerza de la
+  oclusión.
+
 - **Grupo `object`** (ficha `multi_extruder.md`, reglas 1 y 13): en la línea de comandos, el extrusor del modelo
   (`object.extruder`) y si una purga va a su relleno o a todo él (`object.wipe_into_infill`, `object.wipe_into_object`).
 
@@ -134,6 +139,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
+
+- **Píxeles negros con la oclusión ambiental fuerte:** con la fuerza de la oclusión pasada de 1 (llega a 1,5), la luz
+  ambiente salía negativa en los rincones y esos píxeles quedaban negros (861 en la vista previa de un cubo con rayos);
+  ahora nunca baja de un poco de luz.
+- **Vista previa laminada lenta mirando desde arriba:** las capas se dibujaban de abajo hacia arriba y desde arriba
+  cada capa se pintaba y se tapaba con la siguiente; ahora van primero las más cercanas al ojo. Con una esfera de 80 mm
+  en Vulkan por software, de 16,3 a 7,1 s por cuadro (en una GPU real los tiempos son mucho menores; la proporción es
+  lo que vale).
 
 - **Ray tracing con modelos de más de 4 194 304 triángulos:** la escena se cortaba en silencio y los rayos pasaban por
   donde faltaba, así que la luz salía mal en esas partes. Ahora la vista avisa que la escena es demasiado grande para

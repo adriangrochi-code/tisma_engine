@@ -862,6 +862,44 @@ TEST_CASE("ui: the move slider draws the top layer up to a move (preview.md, rul
     CHECK(preview_ranges(order, 0, 1, 0xFFFFFFFFu, 100, 100)[0].count == 25);
 }
 
+TEST_CASE("view: the preview's nearest layers are drawn first, for the depth test", "[ui]") {
+    // Four layers of 3 shown extrusions at z 0.2 to 0.8, and 2 hidden ones in layer 1.
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 3, 6, 9, 12};
+    order.layer_hidden = {12, 12, 14, 14, 14};
+    order.layer_z = {0.2f, 0.4f, 0.6f, 0.8f};
+    const std::uint32_t some = 0x6u; // not every kind shown: the hidden ones are drawn too
+    const auto firsts = [](const std::vector<PreviewRange>& d) {
+        std::vector<std::size_t> f;
+        for (const PreviewRange& r : d)
+            f.push_back(r.first);
+        return f;
+    };
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    // From above: the top layer first, down to the bottom; then the hidden ones.
+    const std::vector<PreviewRange> above = preview_draws(order, 0, 3, some, 50.0f);
+    CHECK(firsts(above) == std::vector<std::size_t>{9, 6, 3, 0, 12});
+    CHECK(total(above) == 14);
+    // From below: upwards, in one draw (the hidden ones follow the shown ones).
+    const std::vector<PreviewRange> below = preview_draws(order, 0, 3, some, -5.0f);
+    CHECK(firsts(below) == std::vector<std::size_t>{0});
+    CHECK(below[0].count == 14);
+    // From between layers 1 and 2: down from layer 1, then up from layer 2.
+    const std::vector<PreviewRange> level = preview_draws(order, 0, 3, some, 0.5f);
+    CHECK(firsts(level) == std::vector<std::size_t>{3, 0, 6});
+    CHECK(level[2].count == 6 + 2);
+    // The layers shown and the move slider's cut, as preview_ranges.
+    const std::vector<PreviewRange> cut = preview_draws(order, 1, 2, some, 50.0f, 2, 0);
+    CHECK(firsts(cut) == std::vector<std::size_t>{6, 3, 12});
+    CHECK(total(cut) == 2 + 3 + 2);
+    CHECK(preview_draws(PreviewDrawOrder{}, 0, 3, some, 1.0f).empty());
+}
+
 TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex clustering)", "[ui]") {
     // A sphere of radius 20 in 360 x 180 steps: 129 600 triangles.
     TriangleMesh sphere;

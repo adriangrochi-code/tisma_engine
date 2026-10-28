@@ -122,6 +122,21 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
+    # The strict view check of every screenshot (no black pixel, few
+    # sparkles) with the occlusion at its strongest: a strength past 1 made the
+    # ambient light negative, drawn black (2026-10-28).
+    # The rays find the crease under the cube closed (no ambient light at all).
+    foreach(render ao rt)
+      foreach(view prepare preview)
+        add_test(NAME ui_view_${render}_strongest_${view}
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  --render ${render} --ray-samples 2 --ao-strength 1.5 --graphics opengl
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${render}_strongest_${view}.png)
+        set_tests_properties(ui_view_${render}_strongest_${view}
+                             PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      endforeach()
+    endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines
@@ -188,17 +203,22 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
       # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
       # the model with a painted seam, close; then the sliced cube's preview.
-      set(TISMA_VIEW_prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
-      set(TISMA_VIEW_preview)
-      foreach(view prepare preview)
+      # Then the preview from above, where the layers lie over each other
+      # (drawn nearest first, 2026-10-28), and from far away, its lines a
+      # pixel or less (the moiré filter).
+      set(TISMA_VIEW_prepare --view prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
+      set(TISMA_VIEW_preview --view preview)
+      set(TISMA_VIEW_preview_top --view preview --look 128,128,5,70,30,85)
+      set(TISMA_VIEW_preview_far --view preview --look 128,128,5,600,30,35)
+      foreach(view prepare preview preview_top preview_far)
         add_test(NAME ui_view_${view}_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics opengl
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
         add_test(NAME ui_view_${view}_vulkan_same_as_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics vulkan
                   --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)
