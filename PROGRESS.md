@@ -6485,5 +6485,9 @@ antes que los grupos de las partes, el modificador de después primero. Su altur
 contracción) alrededor del centro de la pieza, no del suyo. MT5, MT6, MT9, MT10 y MT12 en `[transform]`; 674 de 674 en
 el árbol de trabajo.
 
-**Falta:** MT4 (un modificador que cambia solo el relleno no lleva paredes en su borde), agregarlos desde la
-interfaz, y los rangos de alturas (MT7b, MT13).
+**Después (MT4):** un modificador que cambia solo el relleno no hace una zona con paredes: su alcance pasa a los
+grupos de su objeto como zona de relleno, que se saca del relleno ralo y se llena con su patrón, densidad y ángulo,
+como el relleno denso bajo las tapas. MT4: una sola vuelta de paredes, la mitad −X en grilla (dos direcciones) y la +X
+en una dirección, 535 mm en la capa 25 (Tisma Slicer, 541). 674 de 674 en el árbol de trabajo.
+
+**Falta:** agregar modificadores desde la interfaz y los rangos de alturas (MT7b, MT13).

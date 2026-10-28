@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -481,7 +482,7 @@ TEST_CASE("model tools: settings of an object and of a part (MT7, MT8, MT11)", "
     CHECK(own_settings(s, "", "box").wall_count == 2);
 }
 
-TEST_CASE("model tools: modifiers give the zone they share their settings (MT5, MT6, MT9, MT10, MT12)", "[transform]") {
+TEST_CASE("model tools: modifiers give the zone they share their settings (MT4, MT5, MT6, MT9, MT10, MT12)", "[transform]") {
     Settings s;
     s.wall_count = 2;
     s.infill_density = 0.0;
@@ -525,6 +526,45 @@ TEST_CASE("model tools: modifiers give the zone they share their settings (MT5, 
     // The same volume printed: a modifier adds no material.
     const SlicedModel plain = run({40, 20, 10}, "", {});
     CHECK(m.layers.size() == plain.layers.size());
+    // MT4: grid at 20 %, a modifier on +X with rectilinear at 60 %: one pair
+    // of walls round it all; on -X the grid's two directions, on +X one, and
+    // much more of it.
+    {
+        Settings g = s;
+        g.infill_density = 20.0;
+        g.infill_pattern = InfillPattern::Grid;
+        const TriangleMesh part = box({0, 0, 0}, {40, 20, 10});
+        std::vector<MeshObject> objects{{"box", 0, part.triangle_count(), 0, 0}};
+        const std::vector<MeshModifier> mods{
+            modifier({20, -5, -5}, {45, 25, 15}, R"({"infill": {"pattern": "rectilinear", "density": 60}})")};
+        const SlicedModel f = slice_model(weld_exact(part), g, nullptr, nullptr, nullptr, &objects, nullptr, nullptr, &mods);
+        REQUIRE(f.layers.size() == 50);
+        CHECK(walls_between(f, 25, -1, 41) == 2);
+        CHECK(walls_between(f, 25, 19.9, 41) == 0); // no walls at the modifier's edge
+        std::set<long> left_angles, right_angles;
+        double left_length = 0.0, right_length = 0.0;
+        for (const Toolpath& t : f.fills[25].sparse) {
+            if (t.points.size() < 2)
+                continue;
+            bool left = true, right = true;
+            double length = 0.0;
+            for (std::size_t i = 0; i < t.points.size(); ++i) {
+                left = left && t.points[i].p.x <= 20.0 + 1e-6;
+                right = right && t.points[i].p.x >= 20.0 - 1e-6;
+                if (i > 0)
+                    length += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+            }
+            const Point2d d{t.points[1].p.x - t.points[0].p.x, t.points[1].p.y - t.points[0].p.y};
+            const long angle = std::lround(std::fmod(std::atan2(d.y, d.x) * 180.0 / kPi + 360.0, 180.0)) % 180;
+            if (left)
+                left_angles.insert(angle), left_length += length;
+            else if (right)
+                right_angles.insert(angle), right_length += length;
+        }
+        CHECK(left_angles.size() == 2);
+        CHECK(right_angles.size() == 1);
+        CHECK(right_length > 2.0 * left_length);
+    }
     // MT6: a modifier's layer height changes nothing, and says so.
     m = run({40, 20, 10}, "", {modifier({20, -5, -5}, {45, 25, 15}, R"({"layers": {"height": 0.1}})")});
     CHECK(m.layers.size() == 50);

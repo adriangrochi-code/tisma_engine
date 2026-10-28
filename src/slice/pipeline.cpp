@@ -360,8 +360,17 @@ namespace {
 // it took (`taken`) is not this one's. The support is the plate's: the part
 // rests on it but lays none, nor skirt or brim. Its fills are centred where
 // the plate's are.
+// A modifier that changes only the infill (model_tools.md, rule 3, MT4):
+// where it reaches, the sparse infill takes its pattern, density and angle;
+// the walls go round the whole part.
+struct InfillZone {
+    std::vector<Polygons> reach; // per layer of the frame
+    Settings settings;
+};
+
 struct PartFrame {
     LayerStack stack;
+    const std::vector<InfillZone>* infill_zones = nullptr;
     const std::vector<Polygons>* cover = nullptr;
     const std::vector<Polygons>* taken = nullptr;
     const std::vector<Polygons>* support = nullptr;
@@ -868,6 +877,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     // over the group's, its regions that zone. They go first, the later
     // modifier first, so that they keep their zone (MT12).
     std::vector<std::vector<Polygons>> zone(tools.size());
+    std::vector<std::vector<InfillZone>> infill_zones(tools.size()); // by the parts' groups
     if (modifiers && uncompensated) {
         Settings bare = settings; // the modifier's outline as it is, no offsets
         bare.xy_offset = 0.0, bare.hole_offset = 0.0, bare.first_layer_shrink = 0.0;
@@ -886,6 +896,19 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
             if (modifier.triangles.empty())
                 continue;
             const std::vector<Polygons> reach = part_regions(modifier, bare, frame.stack.layers, gpu);
+            // Only the infill: no zone of its own, the groups' infill changes there (MT4).
+            bool other = false;
+            const std::string infill_only = own_without(m.settings, "infill", &other);
+            if (other && infill_only.empty()) {
+                for (std::size_t p = 0; p < groups.size(); ++p)
+                    if (std::any_of(objects.begin(), objects.end(), [&](const MeshObject& o) {
+                            return o.object == m.object && object_tool(o, settings) == tools[p] &&
+                                   o.settings == groups[p].settings;
+                        }))
+                        infill_zones[p].push_back(
+                            {reach, own_settings(part_settings, merged_own(groups[p].settings, m.settings), m.name)});
+                continue;
+            }
             for (std::size_t p = 0; p < groups.size(); ++p) {
                 // This group's parts of the modifier's object.
                 IndexedMesh parts;
@@ -925,6 +948,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
                            std::make_move_iterator(zone_meshes.end()));
         part_paints.insert(part_paints.begin(), zone_tools.size(), Painting{});
         zone.insert(zone.begin(), std::make_move_iterator(zones.begin()), std::make_move_iterator(zones.end()));
+        infill_zones.insert(infill_zones.begin(), zone_tools.size(), std::vector<InfillZone>{});
     }
     // Beams between the materials (rule 17): every part's regions first.
     std::vector<std::vector<Polygons>> beamed;
@@ -942,6 +966,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         if (part_mesh.triangles.empty())
             continue;
         frame.regions = !zone[p].empty() ? &zone[p] : beamed.empty() ? nullptr : &beamed[p];
+        frame.infill_zones = infill_zones[p].empty() ? nullptr : &infill_zones[p];
         SlicedModel part =
             slice_layers(part_mesh, group_settings[p], gpu, stress,
                          painting && !part_paints[p].empty() ? &part_paints[p] : nullptr, &frame, tool, negative);
@@ -1451,6 +1476,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                 Clipper2Lib::Difference(out.surfaces[l].sparse, under, Clipper2Lib::FillRule::NonZero);
             dense_region[l] = std::move(under);
         });
+    // The infill-only modifiers' zones (model_tools.md, rule 3, MT4): their
+    // part of the sparse infill, the later modifier's first.
+    const std::size_t zones = frame && frame->infill_zones ? frame->infill_zones->size() : 0;
+    std::vector<std::vector<Polygons>> zone_region(zones, std::vector<Polygons>(out.layers.size()));
+    if (zones > 0)
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            for (std::size_t z = 0; z < zones && !out.surfaces[l].sparse.empty(); ++z) {
+                const InfillZone& zone = (*frame->infill_zones)[z];
+                if (l >= zone.reach.size() || zone.reach[l].empty())
+                    continue;
+                Polygons r = Clipper2Lib::Intersect(out.surfaces[l].sparse, zone.reach[l], Clipper2Lib::FillRule::NonZero);
+                if (r.empty())
+                    continue;
+                out.surfaces[l].sparse = Clipper2Lib::Difference(out.surfaces[l].sparse, r, Clipper2Lib::FillRule::NonZero);
+                zone_region[z][l] = std::move(r);
+            }
+        });
     // Combined sparse infill (docs/INFILL.md): what every layer of a run has
     // as sparse infill prints once, at the run's top layer, as thick as the
     // run. Layer heights by zone already print it thick: not with them; nor
@@ -1517,6 +1559,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
                dense_region[l].empty() && out.support_areas[l].empty() && out.on_support[l].empty() &&
+               std::all_of(zone_region.begin(), zone_region.end(), [&](const std::vector<Polygons>& z) { return z[l].empty(); }) &&
                arc_paths[l].empty() && overhang_walls[l].empty();
     };
     std::vector<char> repeats(out.layers.size(), 0);
@@ -1550,6 +1593,20 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               LayerSurfaces only;
                               only.sparse = banded[l][b];
                               for (Toolpath& t : fill_layer(only, l, denser, out.layers[l].slice_z()).sparse)
+                                  out.fills[l].sparse.push_back(std::move(t));
+                          }
+                          for (std::size_t z = 0; z < zones; ++z) {
+                              if (zone_region[z][l].empty())
+                                  continue;
+                              const Settings& own = (*frame->infill_zones)[z].settings;
+                              FillParams zoned = fill;
+                              zoned.density = own.infill_density / 100.0;
+                              zoned.angle = own.infill_angle;
+                              zoned.pattern = own.infill_pattern;
+                              zoned.depth = nullptr;
+                              LayerSurfaces only;
+                              only.sparse = zone_region[z][l];
+                              for (Toolpath& t : fill_layer(only, l, zoned, out.layers[l].slice_z()).sparse)
                                   out.fills[l].sparse.push_back(std::move(t));
                           }
                           if (!dense_region[l].empty()) {
