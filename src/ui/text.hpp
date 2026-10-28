@@ -1013,6 +1013,7 @@
     X(OuterWidth, "Ancho de la pared externa", "Outer wall width") \
     X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
     X(TransitionLength, "Largo de las transiciones", "Transition length") \
+    X(TransitionAngle, "Ángulo de las transiciones", "Transition angle") \
     X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
     X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
     X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
@@ -1038,9 +1039,21 @@
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
+    X(SupportPatternRow, "Patrón de la base", "Base pattern") \
+    X(SupportEnforceLayers, "Soporte forzado en las primeras capas", "Enforce support for the first layers") \
+    X(SupportSheath, "Vaina", "Sheath") \
+    X(SupportInterfacePatternRow, "Patrón de la interfaz", "Interface pattern") \
+    X(SupportInterfaceSpacing, "Separación de la interfaz", "Interface spacing") \
+    X(SupportContactLoops, "Lazos de contacto", "Contact loops") \
+    X(PatternLines, "Líneas", "Lines") \
+    X(PatternGrid, "Grilla", "Grid") \
+    X(PatternAutomatic, "Automático", "Automatic") \
     X(SupportInterface, "Capas de interfaz", "Interface layers") \
     X(SupportStyle, "Estilo", "Style") \
     X(SupportGrid, "Grilla", "Grid") \
+    X(SupportSnug, "Ajustado", "Snug") \
+    X(SupportClosingRadius, "Radio de cierre", "Closing radius") \
+    X(SupportFreeBridge, "Puente sin soporte", "Free bridge length") \
     X(SupportOrganic, "Árbol (orgánico)", "Tree (organic)") \
     X(SupportStyleTip, "Árbol: ramas redondas que se juntan hacia la cama; menos marcas en la pieza y se quitan fácil", \
       "Tree: round branches that join on their way to the bed; fewer marks on the part, easy to remove") \
@@ -1084,6 +1097,16 @@
     X(Overhang2, "Apoyado la mitad", "Half supported") \
     X(Overhang3, "Apoyado tres cuartos", "Three quarters supported") \
     X(SumBySupport, "Según el apoyo", "By support") \
+    X(SubOverhangFan, "Ventilador en voladizos", "Overhang fan") \
+    X(SlowdownLogicRow, "Cómo frenar", "How to slow down") \
+    X(SlowdownUniform, "Todo por igual", "Everything alike") \
+    X(SlowdownConsistentSurface, "Superficie pareja", "Consistent surface") \
+    X(TransitionDistance, "Final de capa a su velocidad", "Layer end at its speed") \
+    X(DynamicOverhangFan, "Ventilador según el apoyo", "Fan by support") \
+    X(OverhangFan0, "Ventilador sin apoyo", "Fan unsupported") \
+    X(OverhangFan1, "Ventilador apoyado un cuarto", "Fan a quarter supported") \
+    X(OverhangFan2, "Ventilador apoyado la mitad", "Fan half supported") \
+    X(OverhangFan3, "Ventilador apoyado tres cuartos", "Fan three quarters supported") \
     X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
@@ -1439,6 +1462,7 @@
     X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
     X(WallsOuterFirst, "Pared externa primero", "Outer wall first") \
     X(SubWallsMore, "Más opciones de paredes", "More wall options") \
+    X(SubWallsThin, "Paredes finas", "Thin walls") \
     X(StaggeredSeams, "Costuras internas escalonadas", "Staggered inner seams") \
     X(TopOneWallRow, "Un solo perímetro arriba", "One wall on top") \
     X(TopOneWallNone, "No", "No") \
@@ -1448,7 +1472,9 @@
     X(ExtraIfNeeded, "Perímetros extra si hacen falta", "Extra walls if needed") \
     X(AvoidCurledOverhangs, "Esquivar voladizos levantados", "Avoid curled overhangs") \
     X(ExtraOnOverhangs, "Perímetros extra en voladizos", "Extra perimeters on overhangs") \
-    X(SumWallsMore, "%d de 6 activas", "%d of 6 on") \
+    X(SumWallsMore, "%d de 7 activas", "%d of 7 on") \
+    X(SumWallsThin, "%d cordones absorben la diferencia", "%d beads take the difference") \
+    X(WallsStaggered, "Perímetros escalonados", "Staggered perimeters") \
     X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
     X(SumPrinterValues, "Los de la impresora", "The printer's") \
     X(SumMaterialValues, "%d del material", "%d of the material's") \

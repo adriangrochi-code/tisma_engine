@@ -908,7 +908,8 @@ const std::map<T, const char*>& row_keys() {
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
         {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
-        {T::SupportBuildplateOnly, "support.buildplate_only"},
+        {T::SupportBuildplateOnly, "support.buildplate_only"}, {T::SupportEnforceLayers, "support.enforce_layers"},
+        {T::SupportClosingRadius, "support.closing_radius"}, {T::SupportFreeBridge, "support.free_bridge_length"},
         {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
         {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
         {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
@@ -943,7 +944,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
-        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
+        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
@@ -967,7 +968,10 @@ const std::map<T, const char*>& row_keys() {
         {T::SupportZGap, "support.z_gap"}, {T::SupportBottomZGap, "support.bottom_z_gap"}, {T::SupportXyGap, "support.xy_gap"},
         {T::SupportSpacing, "support.spacing"}, {T::SupportInterface, "support.interface_layers"},
         {T::SupportBottomInterface, "support.bottom_interface_layers"},
-        {T::SupportLineAngle, "support.line_angle"},
+        {T::SupportLineAngle, "support.line_angle"}, {T::SupportPatternRow, "support.pattern"},
+        {T::SupportSheath, "support.sheath"}, {T::SupportInterfacePatternRow, "support.interface_pattern"},
+        {T::SupportInterfaceSpacing, "support.interface_spacing"},
+        {T::SupportContactLoops, "support.interface_contact_loops"},
         {T::SupportStyle, "support.style"}, {T::TreeAngle, "support.tree_angle"},
         {T::TreeAnglePreferred, "support.tree_angle_preferred"}, {T::TreeBranchDiameter, "support.tree_branch_diameter"},
         {T::TreeBranchAngle, "support.tree_branch_diameter_angle"},
@@ -987,6 +991,10 @@ const std::map<T, const char*>& row_keys() {
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
         {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
+        {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
+        {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
+        {T::OverhangFan3, "cooling.overhang_fan_3"}, {T::SlowdownLogicRow, "cooling.slowdown_logic"},
+        {T::TransitionDistance, "cooling.transition_distance"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
@@ -998,7 +1006,7 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
-        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::TopOneWallRow, "walls.top_one_wall"},
+        {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
         {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
         {T::NeedsEnclosure, "extrusion.needs_enclosure"}, {T::Enclosed, "machine.enclosed"},
@@ -5750,26 +5758,29 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "walls") {
         whole(T::Walls, "walls.count", s.wall_count, 0, 50);
         flag(T::DetectOverhangs, "walls.detect_overhangs", s.detect_overhangs);
-        if (shown("walls.min_line_width"))
-            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
-                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
-        if (shown("walls.min_detail"))
-            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
-                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
         if (shown("walls.generator"))
             changed |= row(T::WallGeneratorRow, s.wall_generator,
                            {{WallGenerator::Variable, tr(T::WallVariable)}, {WallGenerator::Fixed, tr(T::WallFixed)}});
         flag(T::WallGapFill, "walls.gap_fill", s.wall_gap_fill);
         flag(T::WallsClockwise, "walls.clockwise", s.walls_clockwise);
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
-    } else if (id == "walls_more") {
-        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+    } else if (id == "walls_thin") {
+        if (shown("walls.min_line_width"))
+            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
+                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
+        if (shown("walls.min_detail"))
+            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
+                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
         whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 20);
         if (shown("walls.transition_length"))
             changed |= row(T::TransitionLength, s.wall_transition_length.value, 0.0,
                            s.wall_transition_length.percent ? 1000.0 : 40.0,
                            s.wall_transition_length.percent ? "%.0f %%" : "%.2f mm",
                            s.wall_transition_length.percent ? 0.5f : 0.01f);
+        mm(T::TransitionAngle, "walls.transition_angle", s.wall_transition_angle, 0.0, 179.0, "%.0f°", 0.5f);
+    } else if (id == "walls_more") {
+        flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        flag(T::WallsStaggered, "walls.staggered", s.walls_staggered);
         if (shown("walls.top_one_wall"))
             changed |= row(T::TopOneWallRow, s.top_one_wall,
                            {{TopOneWall::None, tr(T::TopOneWallNone)},
@@ -5914,10 +5925,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::Supports, "support.enabled", s.support);
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
+        whole(T::SupportEnforceLayers, "support.enforce_layers", s.support_enforce_layers, 0, 1000);
+        mm(T::SupportFreeBridge, "support.free_bridge_length", s.support_free_bridge_length, 0.0, 1000.0,
+           s.support_free_bridge_length > 0.0 ? "%.0f mm" : "—", 0.5f);
         if (shown("support.style"))
             changed |= row(T::SupportStyle, s.support_style,
-                           {{SupportStyle::Grid, tr(T::SupportGrid)}, {SupportStyle::Organic, tr(T::SupportOrganic)}},
+                           {{SupportStyle::Grid, tr(T::SupportGrid)},
+                            {SupportStyle::Snug, tr(T::SupportSnug)},
+                            {SupportStyle::Organic, tr(T::SupportOrganic)}},
                            tr(T::SupportStyleTip));
+        if (s.support_style == SupportStyle::Snug)
+            mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
         mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
     } else if (id == "tree") {
         mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
@@ -5942,8 +5960,22 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
               s.support_bottom_interface_layers < 0 ? "—" : "%d");
         flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
+        if (shown("support.interface_pattern"))
+            changed |= row(T::SupportInterfacePatternRow, s.support_interface_pattern,
+                           {{SupportInterfacePattern::Lines, tr(T::PatternLines)},
+                            {SupportInterfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)}});
+        mm(T::SupportInterfaceSpacing, "support.interface_spacing", s.support_interface_spacing, 0.0, 100.0,
+           s.support_interface_spacing > 0.0 ? "%.2f mm" : "—", 0.01f);
+        flag(T::SupportContactLoops, "support.interface_contact_loops", s.support_contact_loops);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
+        if (shown("support.pattern"))
+            changed |= row(T::SupportPatternRow, s.support_pattern,
+                           {{SupportPattern::Lines, tr(T::PatternLines)},
+                            {SupportPattern::Grid, tr(T::PatternGrid)},
+                            {SupportPattern::Honeycomb, tr(T::Honeycomb)}});
+        flag(T::SupportSheath, "support.sheath", s.support_sheath);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
         if (shown("support.width"))
             changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,
@@ -6168,11 +6200,24 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
         whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
+    } else if (id == "overhang_fan") {
+        flag(T::DynamicOverhangFan, "cooling.dynamic_overhang_fan", s.dynamic_overhang_fan);
+        const T labels[4] = {T::OverhangFan0, T::OverhangFan1, T::OverhangFan2, T::OverhangFan3};
+        const char* keys[4] = {"cooling.overhang_fan_0", "cooling.overhang_fan_1", "cooling.overhang_fan_2",
+                               "cooling.overhang_fan_3"};
+        for (std::size_t k = 0; k < 4; ++k)
+            mm(labels[k], keys[k], s.overhang_fans[k], 0.0, 100.0, "%.0f %%", 0.5f);
     } else if (id == "short_layers") {
         flag(T::CoolingEnabled, "cooling.enabled", s.cooling_enabled);
         mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
         mm(T::MinSpeed, "cooling.min_speed", s.min_print_speed, 0.0, 100.0, "%.0f mm/s", 0.5f);
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
+        if (shown("cooling.slowdown_logic"))
+            changed |= row(T::SlowdownLogicRow, s.slowdown_logic,
+                           {{SlowdownLogic::Uniform, tr(T::SlowdownUniform)},
+                            {SlowdownLogic::ConsistentSurface, tr(T::SlowdownConsistentSurface)}});
+        if (s.slowdown_logic == SlowdownLogic::ConsistentSurface)
+            mm(T::TransitionDistance, "cooling.transition_distance", s.transition_distance, 0.0, 1000.0, "%.1f mm", 0.1f);
     } else if (id == "flow") {
         mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
         mm(T::BridgeFlowRatio, "extrusion.bridge_flow_ratio", s.bridge_flow_ratio, 0.1, 2.0, "%.2f", 0.01f);

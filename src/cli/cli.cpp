@@ -505,7 +505,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (sliced.open_contours > 0)
         err << "warning: " << sliced.open_contours
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
-    std::vector<Warning> model = model_warnings(sliced);
+    std::vector<Warning> model = model_warnings(sliced, settings.support_free_bridge_length);
     warnings.insert(warnings.end(), model.begin(), model.end());
     const std::vector<Warning> stability = stability_warnings(sliced, settings);
     warnings.insert(warnings.end(), stability.begin(), stability.end());

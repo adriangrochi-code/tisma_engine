@@ -47,16 +47,19 @@ const std::vector<SectionLayout>& print_layout() {
          {{"walls", T::SubWalls,
            {{"walls.count", B},
             {"walls.detect_overhangs", A},
-            {"walls.min_line_width", A},
-            {"walls.min_detail", A},
             {"walls.generator", A},
             {"walls.gap_fill", A},
             {"walls.clockwise", A},
             {"walls.outer_first", A}}},
-          {"walls_more", T::SubWallsMore,
-           {{"walls.staggered_inner_seams", A},
+          {"walls_thin", T::SubWallsThin,
+           {{"walls.min_line_width", A},
+            {"walls.min_detail", A},
             {"walls.spread_count", A},
             {"walls.transition_length", A},
+            {"walls.transition_angle", A}}},
+          {"walls_more", T::SubWallsMore,
+           {{"walls.staggered_inner_seams", A},
+            {"walls.staggered", A},
             {"walls.top_one_wall", A},
             {"walls.first_layer_one_wall", A},
             {"walls.extra_if_needed", A},
@@ -124,7 +127,8 @@ const std::vector<SectionLayout>& print_layout() {
         {"support", T::SecSupport, "section_support.svg",
          {{"support", T::SubSupport,
            {{"support.enabled", B}, {"support.automatic", B}, {"support.buildplate_only", N}, {"support.style", N},
-            {"support.threshold_angle", N}}},
+            {"support.threshold_angle", N}, {"support.enforce_layers", A}, {"support.closing_radius", A},
+            {"support.free_bridge_length", A}}},
           {"tree", T::SubSupportTree,
            {{"support.tree_branch_diameter", N},
             {"support.tree_tip_diameter", N},
@@ -136,8 +140,18 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.bottom_z_gap", A}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface,
-           {{"support.interface_layers", N}, {"support.bottom_interface_layers", A}, {"support.synchronize_layers", A}}},
-          {"pattern", T::SubSupportPattern, {{"support.spacing", N}, {"support.line_angle", A}, {"support.width", A}}},
+           {{"support.interface_layers", N},
+            {"support.bottom_interface_layers", A},
+            {"support.synchronize_layers", A},
+            {"support.interface_pattern", A},
+            {"support.interface_spacing", A},
+            {"support.interface_contact_loops", A}}},
+          {"pattern", T::SubSupportPattern,
+           {{"support.spacing", N},
+            {"support.pattern", A},
+            {"support.sheath", A},
+            {"support.line_angle", A},
+            {"support.width", A}}},
           {"arcs", T::SubArcs,
            {{"arcs.enabled", N}, {"arcs.overlap", A}, {"arcs.speed", A}, {"arcs.max_distance", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",
@@ -266,8 +280,15 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.fan_bridges", N},
             {"cooling.fan_off_layers", N},
             {"cooling.full_fan_layer", A}}},
+          {"overhang_fan", T::SubOverhangFan,
+           {{"cooling.dynamic_overhang_fan", A},
+            {"cooling.overhang_fan_0", A},
+            {"cooling.overhang_fan_1", A},
+            {"cooling.overhang_fan_2", A},
+            {"cooling.overhang_fan_3", A}}},
           {"short_layers", T::SubShortLayers,
-           {{"cooling.enabled", A}, {"cooling.min_layer_time", N}, {"cooling.min_speed", N}, {"cooling.keep_outer_speed", A}}}}},
+           {{"cooling.enabled", A}, {"cooling.min_layer_time", N}, {"cooling.min_speed", N}, {"cooling.keep_outer_speed", A},
+            {"cooling.slowdown_logic", A}, {"cooling.transition_distance", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
          {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}, {"extrusion.purge_multiplier", A},
                     {"extrusion.min_purge_on_tower", A}}},
@@ -585,8 +606,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.zaa ? format(T::SumZaaOn, number(s.zaa_min_thickness, 0).c_str()) : tr(T::SumZaaOff);
     if (id == "walls")
         return s.wall_count == 0 ? tr(T::SumNoWalls) : s.wall_count == 1 ? tr(T::SumOneWall) : format(T::SumWalls, s.wall_count);
+    if (id == "walls_thin")
+        return format(T::SumWallsThin, s.wall_spread_count);
     if (id == "walls_more")
-        return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.top_one_wall != TopOneWall::None) +
+        return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
                                            int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs));
     if (id == "top_bottom")
@@ -705,6 +728,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.chamber_temperature > 0.0 ? format(T::SumTemp, int(std::lround(s.chamber_temperature))) : tr(T::SumNoChamber);
     if (id == "fan")
         return format(T::SumFan, number(s.fan_min, 0).c_str(), number(s.fan_max, 0).c_str());
+    if (id == "overhang_fan")
+        return s.dynamic_overhang_fan ? tr(T::SumBySupport) : tr(T::SumOff);
     if (id == "short_layers")
         return format(T::SumMinLayer, number(s.min_layer_time, 1).c_str());
     if (id == "flow")

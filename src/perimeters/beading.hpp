@@ -35,6 +35,17 @@ struct BeadingParams {
     // The length of the ramp from n to n + 1 beads along the wall
     // (walls.transition_length, perimeters.md); 0: w*.
     double transition_length = 0.0;
+    // Odd counts (a bead on the centre) only where the outline's corner is
+    // no wider than this (walls.transition_angle, perimeters.md P14); the
+    // centre's marking with alpha_max = 180 - this (Kuipers et al. 2020,
+    // Section 3.3). Degrees.
+    double transition_angle = 45.0;
+    // A bead on the centre (an odd count from 3 on) only once it would be
+    // this many w* wide; the steps to an even count stay half a bead after
+    // the last one. Table P2 of perimeters.md puts 2 beads in 1.1 mm and 3
+    // in 1.2, 4 in 1.9 and 5 in 2.0: 0.8 (own reading of the measured
+    // table). 0: Eq. 5 as it is.
+    double odd_centre = 0.0;
 };
 
 // The outer bead's width within the shell: outer_width, or w*.

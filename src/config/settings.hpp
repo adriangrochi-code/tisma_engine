@@ -46,8 +46,16 @@ enum class DraftShield { Disabled, Limited, Enabled };
 // the start and used for the time, used for the time only, or neither.
 enum class LimitsUsage { TimeOnly, Emit, Ignore };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
-enum class SupportStyle { Grid, Organic };
+// grid: on a grid round what hangs; snug: fitted to it (supports_more.md,
+// rule 14); organic: branches.
+enum class SupportStyle { Grid, Organic, Snug };
+// The support base's and interface's patterns (supports_more.md, rules 9 and 11).
+enum class SupportPattern { Lines, Grid, Honeycomb };
+enum class SupportInterfacePattern { Lines, Concentric, Automatic };
 enum class FuzzyMode { None, External, All };
+// How a short layer slows down (cooling_more.md, rule 5): everything alike,
+// or the outer wall and the one that touches it last.
+enum class SlowdownLogic { Uniform, ConsistentSurface };
 
 // How the walls are made (walls_extra.md, rule 1): beads of variable width
 // that fill the region (Kuipers et al. 2020), or loops of one width with gap
@@ -144,6 +152,9 @@ struct Settings {
     // The ramp from n to n + 1 beads along a wall (walls.transition_length,
     // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
     Speed wall_transition_length{100.0, true};
+    // Odd bead counts only in corners no wider than this, degrees
+    // (walls.transition_angle, perimeters.md P14).
+    double wall_transition_angle = 10.0;
     double wall_width = 0.4; // preferred bead width w*
     double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;
@@ -168,6 +179,8 @@ struct Settings {
     // avoid_curled_overhangs (rule 9) are read and kept: Tisma Slicer added no
     // wall on the spec's parts, and the second was not measured.
     bool staggered_inner_seams = false;
+    // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
+    bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
     bool first_layer_one_wall = false;
     bool extra_if_needed = true;
@@ -281,6 +294,13 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
+    // Own parameters for the G-code templates (gcode_templates.md; presets.md,
+    // rules 21 and 22), flat name: value (a number, a text or true/false):
+    // machine.custom_parameters, extrusion.custom_parameters (the material's)
+    // and print.custom_parameters, as custom_parameter_printer_<name>,
+    // custom_parameter_filament_<name>[0] and custom_parameter_print_<name>;
+    // print.variables as print_<name>.
+    std::map<std::string, std::string> printer_parameters, filament_parameters, print_parameters, print_variables;
     // Motion limits, for the time estimate. Like every speed, from the
     // printer's profile; 0: not known, not applied.
     double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
@@ -590,6 +610,22 @@ struct Settings {
     Speed support_width{0.0, false};
     double support_spacing = 2.5;    // mm of free space between the base's lines (a bead's spacing more between centres)
     double support_line_angle = 0.0; // degrees, the base's lines; the interface's at 90 to them
+    // The base's pattern, a loop around each zone of it (the sheath), the
+    // interface's pattern and free space between its lines, and loops around
+    // the top interface's zones (supports_more.md, rules 9 to 12).
+    SupportPattern support_pattern = SupportPattern::Lines;
+    // Support under whatever hangs in the first layers, however steep and
+    // with support off too (supports_more.md, rule 1); 0: none.
+    int support_enforce_layers = 0;
+    // mm: with snug, gaps narrower than twice this between support zones close.
+    double support_closing_radius = 2.0;
+    // mm a bridge can span over nothing (SETTINGS_V1.md); longer, a warning
+    // (print_review.md, rule 2).
+    double support_free_bridge_length = 16.0;
+    bool support_sheath = true;
+    SupportInterfacePattern support_interface_pattern = SupportInterfacePattern::Lines;
+    double support_interface_spacing = 0.0; // mm; 0: solid
+    bool support_contact_loops = false;
     // Organic (tree) supports (docs/spec/features/supports_more.md, rules 15
     // to 17): round branches that join on their way down to the bed.
     SupportStyle support_style = SupportStyle::Grid;
@@ -619,12 +655,24 @@ struct Settings {
     // The fan up step by step until this layer (counted from 1) after the
     // ones without fan (cooling_more.md, rule 1); 0: at once.
     int full_fan_layer = 0;
+    // The fan of the walls by how much of their bead rests on the layer below
+    // (cooling_more.md, rules 3 and 4): overhang_fans[k] with 0, 25, 50 and
+    // 75 % held, in a straight line between, down to 0 with all of it; never
+    // below the layer's.
+    bool dynamic_overhang_fan = false;
+    std::array<double, 4> overhang_fans = {0.0, 0.0, 0.0, 0.0}; // %
     // Off: no slowing down for the minimum layer time and no fan by layer
     // time (cooling.md); the bridges' fan and the height changes' stay.
     bool cooling_enabled = true;
     // The outer walls keep their speed while the rest slows down for the
     // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
     bool keep_outer_speed = true;
+    // consistent_surface: the wall that touches the outer one is slowed down
+    // last too (cooling_more.md, rule 5).
+    SlowdownLogic slowdown_logic = SlowdownLogic::Uniform;
+    // mm: with consistent_surface, a slowed layer's last extrusions at their
+    // own speeds (cooling_more.md, rule 6).
+    double transition_distance = 0.0;
 
     // compensation (docs/CALIBRATION.md): the model is scaled around the centre
     // of its footprint and its bottom before slicing; holes grow by hole_offset.

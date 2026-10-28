@@ -21,7 +21,9 @@ int unlimited_count(const BeadingParams& p, double d) {
         return 2 * static_cast<int>(std::floor(d / (2.0 * w) + 0.5));
     case BeadingScheme::Distributed:
     case BeadingScheme::InwardDistributed: {
-        const int n = static_cast<int>(std::floor(d / w + 0.5));
+        int n = static_cast<int>(std::floor(d / w + 0.5));
+        if (p.odd_centre > 0.0 && n >= 3 && n % 2 == 1 && d - (n - 1) * w < p.odd_centre * w)
+            --n;
         // Thinner than half a bead but not than the smallest detail: one bead.
         return n == 0 && p.min_detail > 0.0 && d >= p.min_detail ? 1 : n;
     }
@@ -48,7 +50,8 @@ std::optional<ShellRamp> shell_ramp(const BeadingParams& p) {
         return std::nullopt;
     const double w = p.preferred_width;
     const double shell = 2.0 * (outer_bead(p) + (p.wall_count - 1) * w); // both sides, at their widths
-    const double start = std::max(transition_thickness(p, 2 * p.wall_count), shell + w / 2.0);
+    // Where the count would reach 2M + 1 by Eq. 5, whatever the centre bead asks.
+    const double start = std::max((2 * p.wall_count + 0.5) * w, shell + w / 2.0);
     return ShellRamp{start, start + w / 2.0};
 }
 
@@ -60,7 +63,8 @@ double transition_thickness(const BeadingParams& p, int n) {
         return (2.0 * std::floor(n / 2.0) + 1.0) * w;
     case BeadingScheme::Distributed:
     case BeadingScheme::InwardDistributed:
-        return (n + 0.5) * w;
+        // To an odd count from 3 on, once its centre bead is odd_centre w* wide.
+        return p.odd_centre > 0.0 && n >= 2 && n % 2 == 0 ? (n + p.odd_centre) * w : (n + 0.5) * w;
     }
     return 0.0;
 }

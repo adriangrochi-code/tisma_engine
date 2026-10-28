@@ -28,7 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
   `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
-  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `walls.transition_length` (largo de la rampa de N a N + 1 cordones), `walls.staggered` (perímetros escalonados: los internos impares media capa más arriba), `walls.transition_angle` (cantidades impares de cordones solo en esquinas cerradas), `cooling.dynamic_overhang_fan` y `cooling.overhang_fan_0` a `_3` (ventilador según cuánto se apoya el cordón de la pared), `cooling.slowdown_logic` (`consistent_surface`: la pared externa y la que la toca se frenan al final) y `cooling.transition_distance` (los últimos mm de una capa frenada a su velocidad), el relleno del soporte (`support.pattern`: líneas, grilla o panal; `support.sheath`, un lazo por el borde de la base; `support.interface_pattern`, `support.interface_spacing` y `support.interface_contact_loops`), `support.enforce_layers` (soporte bajo lo que cuelga en las primeras capas), el estilo `snug` de `support.style` con `support.closing_radius` (soporte ajustado a lo que cuelga), `support.free_bridge_length` (el aviso `long_bridge` de los puentes más largos que eso sobre nada), `machine.max_speed` y `machine.max_acceleration` (un límite para X e Y), los parámetros propios de las plantillas (`machine.custom_parameters`, `material.custom_parameters`, `print.custom_parameters`, `print.variables`), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
   `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
@@ -51,6 +51,26 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **La base del soporte lleva vaina** (`supports_more.md`, regla 10): un lazo cerrado por el borde de cada zona y las
+  líneas adentro, como Tisma Slicer por defecto. `support.sheath` en `false` vuelve al zigzag solo.
+- **Las capas cortas se frenan a una velocidad común** (`cooling.md`, regla 2): todas las extrusiones más rápidas
+  bajan a una misma velocidad, la más alta que llega al tiempo mínimo (antes bajaban todas en la misma proporción).
+  Los puentes y los perímetros sobre el aire ya no se frenan (K5). Con `cooling.keep_outer_speed`, cuando frenar lo
+  de adentro hasta `cooling.min_speed` no alcanza, ahora se frena solo la pared externa antes de bajar todo de la
+  mínima. En C3 el motor da 27,82 mm/s donde Tisma Slicer da 27,93.
+- **El cordón del medio llega más tarde:** una pared pasa a 3 o 5 cordones recién cuando el del medio tendría unos
+  0,8 cordones de ancho (`perimeters.md`, tabla P2: 2 cordones en 1,1 mm y 3 en 1,2; 4 en 1,9 y 5 en 2,0). Antes
+  aparecía medio cordón antes.
+
+- **Cordón del medio solo en esquinas cerradas:** una pared pasa por cantidades impares de cordones solo en las
+  esquinas del contorno de 10° o menos (`walls.transition_angle`, `perimeters.md` P14); antes, hasta 45°.
+
+- **Cordones fuera de la Z de la capa:** en el relleno ondulado y en las costuras en rampa, el material es el del
+  cordón de la capa por la parte de su altura que ocupa (lineal en el espesor), como en el Z anti-aliasing. Antes
+  salía de la sección de un cordón de ese espesor.
+- **Tarjeta «Paredes finas»** en Resistencia: `walls.min_line_width`, `walls.min_detail`, `walls.spread_count` y
+  `walls.transition_length`.
 
 - **Paredes finas de tres cordones o más:** solo los del medio cambian de ancho; los demás quedan nominales
   (`walls.spread_count` 1, `perimeters.md` P2). Antes todos se repartían la diferencia.

@@ -905,13 +905,29 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **`walls.transition_angle` y `walls.transition_margin`** (`perimeters.md` P13 y P14, medidas por el equipo de
+- [ ] **`walls.transition_margin`** (`walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
   fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
   sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
   queda aun con 100 %); no es un largo mínimo ni una histéresis del tamaño del margen. Las filas medidas son el
   contrato. Los dos tocan las transiciones de Kuipers (`src/perimeters/transitions.*`)
-- [ ] **`walls.staggered`** (`staggered_perimeters.md`, ST1): los lazos internos impares media capa más arriba; el
+- [ ] **`walls.vertical_shell` y las superficies de arriba en pendiente** (`walls_extra.md` regla 7, W4): en el techo
+  de 15° de W4, capa 30, Tisma Slicer da 20,95 mm de superficie de arriba con `disabled` y 75,22 más 18,39 de
+  relleno sólido con `partial`/`enabled`; el motor (2026-10-28) da 0 de superficie de arriba y 38 de relleno
+  sólido. La diferencia está en cómo se arman las superficies de arriba en las pendientes (`src/surfaces/`), antes
+  que en el ajuste
+- [ ] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
+  2026-10-28 `pattern`, `sheath`, `interface_pattern`, `interface_spacing` e `interface_contact_loops` (SM6, SM7,
+  SM10), `enforce_layers` (SM1) y el estilo `snug` con `closing_radius` (SM8, SM9), y `free_bridge_length` con el aviso de
+  puentes largos (R5, R6); falta `under_bridges` (S6), con una pregunta al equipo de fichas (si
+  `free_bridge_length` también decide qué puentes van sin soporte). `fins` (`support_fins.md`) y `waam` son de después de la primera versión, como dicen
+  sus fichas
+- [x] **`cooling.dynamic_overhang_fan`** y `cooling.overhang_fan_0` a `_3` (`cooling_more.md`, reglas 2 a 4, C2;
+  hecho 2026-10-28): el ventilador de cada tramo de pared según su apoyo, el mayor con el de la capa
+- [x] **`cooling.slowdown_logic`** `consistent_surface` (`cooling_more.md`, regla 5, C3) y
+  **`cooling.transition_distance`** (regla 6, C4; hechos 2026-10-28), con el frenado a velocidad común de `cooling.md`
+  regla 2 y los puentes sin frenar (K5)
+- [x] **`walls.staggered`** (`staggered_perimeters.md`, ST1; hecho 2026-10-28): los lazos internos impares media capa más arriba; el
   material lineal en el espesor (1,5 en la primera capa, la mitad bajo una superficie de arriba). Pide que el
   material de los bloques no planares también sea lineal en el espesor
 - [x] **Modelo del cordón de las fichas** (hecho 2026-10-28; queda la corrida 48 del fuzzer, `PROGRESS.md`) (`perimeters.md` regla 1, P1, P2 y P12; `gcode_motion.md` regla 1, M1 y M2;

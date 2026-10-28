@@ -235,7 +235,7 @@ private:
         } else if (c == "NONPLANAR:1" || c == "NONPLANAR:0") {
             nonplanar_ = c == "NONPLANAR:1";
             if (nonplanar_ && !(limits_.wave > 0.0) && !(limits_.scarf > 0.0))
-                problem("a nonplanar block, but the settings ask for no wavy infill and no scarf seam");
+                problem("a nonplanar block, but the settings ask for no wavy infill, staggered walls or scarf seam");
         } else if (const std::optional<double> h = value("HEIGHT:")) {
             // A nonplanar bead may taper to nothing (the foot of a scarf ramp).
             if (*h < 0.0 || (*h == 0.0 && !nonplanar_))
@@ -484,9 +484,12 @@ private:
                 if (limits_.curved) // by the local thickness J (nonplanar.md, rule 4)
                     thickness *= limits_.curved->thickness(0.5 * (position_[0] + to[0]), 0.5 * (position_[1] + to[1]),
                                                            0.5 * (position_[2] + to[2]) - limits_.z_offset);
-                // The layer's bead by the share of its height left (z_antialiasing.md, rule 3).
-                const double per_mm = (*height_ > 0.0 ? bead_area(*width_, *height_) * thickness / *height_ : 0.0) /
-                                      limits_.filament_area * flow_;
+                // The layer's bead by the share of its height there (z_antialiasing.md,
+                // rule 3); in a nonplanar block ;HEIGHT is the bead's own, the
+                // layer's is the last one out of it.
+                const double base = nonplanar_ && layer_height_ > 0.0 ? layer_height_ : *height_;
+                const double per_mm =
+                    (base > 0.0 ? bead_area(*width_, base) * thickness / base : 0.0) / limits_.filament_area * flow_;
                 const double expected = per_mm * length;
                 // ;HEIGHT, written to 3 decimals, may hide half the last one:
                 // much of a bead a few thousandths thick (a scarf ramp's foot,
@@ -678,9 +681,16 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         limits.scarf = 1.0 - s.scarf_start_height / 100.0;
     if (s.vase) // a turn starts at the layer below's top
         limits.scarf = 1.0;
+    if (s.walls_staggered && !s.vase && s.curved_mode == CurvedMode::Disabled) {
+        // The raised loops, half a layer up (staggered_perimeters.md).
+        double thickest = 0.0;
+        for (const Layer& layer : model.layers)
+            thickest = std::max(thickest, layer.top - layer.bottom);
+        limits.wave = std::max(limits.wave, 0.5 * thickest);
+    }
     if (const std::optional<WaveParams> waves = wave_params(s)) {
         // The crests, and the travels over them, go up to half the amplitude higher.
-        limits.wave = 0.5 * waves->amplitude;
+        limits.wave = std::max(limits.wave, 0.5 * waves->amplitude);
         limits.max_z += limits.wave;
     }
     double speed_factor = 1.0, retract_speed = std::max(s.retract_speed, s.unretract_speed);

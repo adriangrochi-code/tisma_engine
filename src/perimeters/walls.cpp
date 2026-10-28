@@ -30,7 +30,7 @@ LayerWalls layer_walls(const Polygons& input, const BeadingParams& given) {
     if (region.empty())
         return out;
     MedialGraph graph = medial_graph(region);
-    mark_central(graph);
+    mark_central(graph, 180.0 - std::clamp(params.transition_angle, 0.0, 179.0));
     filter_marking(graph, params.preferred_width);
     TransitionSettings ramps;
     if (params.transition_length > 0.0)

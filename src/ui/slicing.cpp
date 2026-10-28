@@ -117,7 +117,11 @@ Settings without_gcode_settings(Settings s) {
     s.fan_min = d.fan_min, s.fan_max = d.fan_max, s.fan_below_time = d.fan_below_time, s.fan_always = d.fan_always;
     s.fan_bridges = d.fan_bridges, s.fan_off_layers = d.fan_off_layers;
     s.full_fan_layer = d.full_fan_layer, s.cooling_enabled = d.cooling_enabled;
+    s.dynamic_overhang_fan = d.dynamic_overhang_fan, s.overhang_fans = d.overhang_fans;
+    s.slowdown_logic = d.slowdown_logic, s.transition_distance = d.transition_distance;
     s.start_gcode = d.start_gcode, s.end_gcode = d.end_gcode, s.variables = d.variables;
+    s.printer_parameters = d.printer_parameters, s.filament_parameters = d.filament_parameters;
+    s.print_parameters = d.print_parameters, s.print_variables = d.print_variables;
     s.flow = d.flow, s.pressure_advance = d.pressure_advance, s.filament_max_flow = d.filament_max_flow;
     s.machine_max_flow = d.machine_max_flow, s.chamber_temperature = d.chamber_temperature;
     s.max_nozzle_temp = d.max_nozzle_temp, s.max_bed_temp = d.max_bed_temp, s.max_chamber_temp = d.max_chamber_temp;
@@ -302,7 +306,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         out.error = std::move(reason);
         return nullptr;
     }
-    std::vector<Warning> warnings = model_warnings(*model);
+    std::vector<Warning> warnings = model_warnings(*model, settings.support_free_bridge_length);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
     warnings = stability_warnings(*model, settings);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());

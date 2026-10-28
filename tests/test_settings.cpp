@@ -10,6 +10,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <numbers>
 
@@ -167,6 +168,15 @@ TEST_CASE("settings: the specs' names for settings the engine has under another 
     CHECK_THROWS_AS(parse_settings(R"({"filament": {"transmission_distance": 5}})"), SettingsError);
     CHECK(engine_setting_key("support.angle_limit") == "support.threshold_angle");
     CHECK_FALSE(engine_setting_key("machine.e_mode"));
+    // The machine's limits, one value for X and Y (SETTINGS_V1.md).
+    const Settings m = parse_settings(R"({"machine": {"max_speed": 300, "max_acceleration": 5000}})");
+    CHECK(m.max_feed_x == 300.0);
+    CHECK(m.max_feed_y == 300.0);
+    CHECK(m.max_accel_x == 5000.0);
+    CHECK(m.max_accel_y == 5000.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_speed": 300, "max_feed_y": 200}})"),
+                      Catch::Matchers::ContainsSubstring("also given as machine.max_feed_y"));
+    CHECK_FALSE(engine_setting_key("machine.max_speed"));
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {
@@ -232,6 +242,37 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(c.fan_min == 20.0);
     CHECK(c.fan_max == 90.0);
     CHECK(c.fan_off_layers == 3);
+    CHECK_FALSE(c.dynamic_overhang_fan);
+    const Settings o = parse_settings(R"({"cooling": {"dynamic_overhang_fan": true, "overhang_fan_0": 100,
+                                                      "overhang_fan_3": 40}})");
+    CHECK(o.dynamic_overhang_fan);
+    CHECK(o.overhang_fans == std::array<double, 4>{100.0, 0.0, 0.0, 40.0});
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"overhang_fan_2": 101}})"),
+                      ContainsSubstring("cooling.overhang_fan_2: must be a percentage"));
+    CHECK(c.slowdown_logic == SlowdownLogic::Uniform);
+    const Settings cs = parse_settings(R"({"cooling": {"slowdown_logic": "consistent_surface", "transition_distance": 5}})");
+    CHECK(cs.slowdown_logic == SlowdownLogic::ConsistentSurface);
+    CHECK(cs.transition_distance == 5.0);
+    CHECK_THROWS(parse_settings(R"({"cooling": {"slowdown_logic": "even"}})"));
+    const Settings sp = parse_settings(R"({"support": {"pattern": "honeycomb", "sheath": false,
+                                                       "interface_pattern": "concentric", "interface_spacing": 1,
+                                                       "interface_contact_loops": true}})");
+    CHECK(sp.support_pattern == SupportPattern::Honeycomb);
+    CHECK_FALSE(sp.support_sheath);
+    CHECK(sp.support_interface_pattern == SupportInterfacePattern::Concentric);
+    CHECK(sp.support_interface_spacing == 1.0);
+    CHECK(sp.support_contact_loops);
+    CHECK(Settings{}.support_sheath);
+    CHECK_THROWS(parse_settings(R"({"support": {"pattern": "gyroid"}})"));
+    CHECK(parse_settings(R"({"support": {"enforce_layers": 10}})").support_enforce_layers == 10);
+    const Settings snug = parse_settings(R"({"support": {"style": "snug", "closing_radius": 0.5}})");
+    CHECK(snug.support_style == SupportStyle::Snug);
+    CHECK(snug.support_closing_radius == 0.5);
+    CHECK(Settings{}.support_free_bridge_length == 16.0);
+    CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);
+    CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),
+                      ContainsSubstring("cooling.transition_distance: must not be negative"));
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
                                                       "travel_acceleration": 3000, "corner_speed": 0}})");
     CHECK(m.max_feed_x == 300.0);

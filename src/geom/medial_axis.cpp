@@ -515,7 +515,8 @@ void mark_central(MedialGraph& g, double alpha_max_degrees) {
         const MedialGraph::Node& a = g.nodes[e.a];
         const MedialGraph::Node& b = g.nodes[e.b];
         const double len = std::hypot(b.p.x - a.p.x, b.p.y - a.p.y);
-        e.central = len > 0.0 && std::fabs(b.radius - a.radius) / len < limit;
+        // A hair of slack: a wedge exactly as sharp as the limit is central.
+        e.central = len > 0.0 && std::fabs(b.radius - a.radius) / len < limit * (1.0 + 1e-6);
         best_neighbour[e.a] = std::max(best_neighbour[e.a], b.radius);
         best_neighbour[e.b] = std::max(best_neighbour[e.b], a.radius);
     }

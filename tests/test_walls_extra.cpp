@@ -434,6 +434,9 @@ TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[
         // (walls.spread_count 1, rule 3).
         {1.2, {-0.375, 0.0, 0.375}, {0.450, 0.386, 0.450}},
         {1.5, {-0.525, -0.161, 0.161, 0.525}, {0.450, 0.364, 0.364, 0.450}},
+        {1.1, {-0.264, 0.264}, {0.571, 0.571}},
+        {1.9, {-0.725, -0.261, 0.261, 0.725}, {0.450, 0.564, 0.564, 0.450}},
+        {2.0, {-0.775, -0.368, 0.0, 0.368, 0.775}, {0.450, 0.450, 0.372, 0.450, 0.450}},
     };
     for (const auto& [thickness, centres, widths] : rows) {
         INFO("thickness " << thickness);
@@ -453,6 +456,126 @@ TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[
         for (std::size_t i = 0; i < beads.size(); ++i) {
             CHECK_THAT(beads[i].first, WithinAbs(centres[i], 0.003));
             CHECK_THAT(beads[i].second, WithinAbs(widths[i], 0.003));
+        }
+    }
+}
+
+TEST_CASE("walls: staggered perimeters, the odd inner loops half a layer up (staggered_perimeters.md, ST1)", "[walls]") {
+    // The 20 mm cube, 3 walls, 0.2 mm layers: the first inner loop half a
+    // layer up with the normal material, 1.5 times on the first layer and
+    // half on the top layer, back at the layer's Z; the others at the layer's Z.
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.walls_staggered = true;
+    s.relative_extrusion = true;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 10}});
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    REQUIRE(check.ok());
+    // Per layer, by bead (outer 0, first inner 1, second inner 2, by their
+    // distance from X 90 along the left side): the Z and the filament per mm.
+    struct Seen {
+        double z = 0.0, e = 0.0, length = 0.0;
+    };
+    std::map<std::pair<int, int>, Seen> seen;
+    std::istringstream in(out.str());
+    int layer = -1;
+    double x = 0.0, y = 0.0, z = 0.0;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";LAYER_CHANGE", 0) == 0)
+            ++layer;
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        const double length = std::hypot(nx - x, ny - y);
+        if (e > 0.0 && length > 5.0 && std::abs(nx - x) < 1e-6 && nx < 92.0) {
+            const int bead = nx - 90.0 < 0.4 ? 0 : nx - 90.0 < 0.8 ? 1 : 2;
+            Seen& k = seen[{layer, bead}];
+            k.z = nz, k.e += e, k.length += length;
+        }
+        x = nx, y = ny, z = nz;
+    }
+    const double normal = 0.033849; // 0.45 x 0.2 on 1.75 mm filament (gcode_motion.md, M1)
+    const auto per_mm = [&](int l, int b) { return seen.at({l, b}).e / seen.at({l, b}).length; };
+    REQUIRE(seen.count({0, 1}));
+    REQUIRE(seen.count({25, 1}));
+    REQUIRE(seen.count({49, 1}));
+    CHECK_THAT(seen.at({0, 1}).z, WithinAbs(0.3, 1e-6));
+    CHECK_THAT(per_mm(0, 1) / per_mm(0, 0), WithinAbs(1.5, 0.02));
+    CHECK_THAT(seen.at({25, 1}).z, WithinAbs(5.3, 1e-6));
+    CHECK_THAT(per_mm(25, 1), WithinAbs(normal, 0.0003));
+    CHECK_THAT(seen.at({25, 0}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({25, 2}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({49, 1}).z, WithinAbs(10.0, 1e-6));
+    CHECK_THAT(per_mm(49, 1), WithinAbs(normal / 2.0, 0.0003));
+}
+
+namespace {
+
+// A wedge lying flat: its tip at (60, 100), opening along +X at `degrees`,
+// 30 mm long and 3 mm tall.
+IndexedMesh wedge(double degrees) {
+    const double half = 30.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    IndexedMesh m;
+    for (float z : {0.0f, 3.0f}) {
+        m.vertices.push_back({60.0f, 100.0f, z});
+        m.vertices.push_back({90.0f, float(100.0 - half), z});
+        m.vertices.push_back({90.0f, float(100.0 + half), z});
+    }
+    m.triangles = {{0, 2, 1}, {3, 4, 5}, {0, 1, 4}, {0, 4, 3}, {1, 2, 5}, {1, 5, 4}, {2, 0, 3}, {2, 3, 5}};
+    return m;
+}
+
+// The bead counts the wedge's walls go through at layer 5, crossing it at
+// every 0.25 mm along X while it is under 2.5 mm thick.
+std::set<int> counts_along(const SlicedModel& model, double degrees) {
+    std::set<int> out;
+    const double slope = 2.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    for (double x = 60.5; x < 90.0 && (x - 60.0) * slope < 2.5; x += 0.25) {
+        int n = 0;
+        for (const Toolpath& t : model.walls[5].toolpaths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& a = t.points[i].p;
+                const Point2d& b = t.points[(i + 1) % t.points.size()].p;
+                n += (a.x - x) * (b.x - x) < 0.0;
+            }
+        out.insert(n);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("walls: odd bead counts only in corners no wider than walls.transition_angle (perimeters.md, P14)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    const auto has_odd = [](const std::set<int>& counts) {
+        return std::any_of(counts.begin(), counts.end(), [](int n) { return n % 2 == 1; });
+    };
+    for (const double setting : {1.0, 10.0, 30.0}) {
+        s.wall_transition_angle = setting;
+        for (const double tip : {5.0, 10.0, 20.0}) {
+            INFO("setting " << setting << ", tip " << tip);
+            const std::set<int> counts = counts_along(slice_model(wedge(tip), s), tip);
+            REQUIRE(counts.size() > 1);
+            CHECK(has_odd(counts) == (tip <= setting));
         }
     }
 }

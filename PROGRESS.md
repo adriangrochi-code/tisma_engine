@@ -6821,3 +6821,193 @@ casos, todos pasan.
 del modelo del cordón) lamina en 1,60 a 1,64 s y escribe en 190 a 209 ms; ahora, 1,61 a 1,77 s y 183 a 194 ms.
 Sin cambio medible. Las fichas P13 y P14 (`transition_margin`, `transition_angle`) llegaron de `spec/next` y quedan
 en `PLAN.md`.
+
+## 2026-10-28 (mañana): perímetros escalonados
+
+**`walls.staggered`** (`staggered_perimeters.md`): los lazos internos impares (el 1.º interno, el 3.º…) media capa
+más arriba donde la capa siguiente sigue encima. Van como los cordones del relleno ondulado (un bloque `;NONPLANAR`
+con su `;HEIGHT`): suben `dz` y se apoyan `below` en el subido de abajo. Su material es el del cordón de la capa por
+la parte de su altura que ocupan: 1,5 veces en la primera capa, el normal en el medio, la mitad bajo una superficie
+de arriba, donde vuelven a la Z de la capa. Con altura variable la subida es la mitad de la menor de las dos capas.
+No en modo vaso, con capas curvas ni en impresoras de cinta. En el panel, en «Más opciones de paredes». La ficha
+anota que la técnica se parece a una patentada en EE. UU.; antes de un uso comercial lo confirma un abogado.
+
+**Cambia también** el material de los bloques no planares que ya había (relleno ondulado, costuras en rampa): ahora
+es lineal en el espesor, como el Z anti-aliasing (antes, la sección de un cordón de ese espesor). El verificador
+usa la misma cuenta, con la altura de la capa de afuera del bloque.
+
+**Panel:** tarjeta nueva «Paredes finas» (ancho mínimo, detalle mínimo, `spread_count`, `transition_length`); las
+de paredes estaban en el tope de 8.
+
+**Prueba:** ST1 (cubo de 20 mm, 3 paredes de 0,45 en capas de 0,2): el 1.er interno a Z 0,3 con 1,5 veces el
+material del externo en la primera capa, a Z + 0,1 con 0,033849 mm/mm en la capa 26, a Z 10,0 con la mitad en la
+última; el externo y el 2.º interno a la Z de la capa. **Fuzzer:** el escalonado entra en 1 de cada 4 corridas.
+Encontró, ya arreglado: los pedazos de un lazo subido (partido por voladizo o por apoyo) perdían la marca y quedaban
+subidos fuera del bloque no planar; con capas curvas la copia plana escalonaba; con altura variable un lazo subido
+pasaba el tope de la capa siguiente. 600 corridas (semilla 20261030), 0 fallas. Toda la lista: 700 casos, todos
+pasan.
+
+**`walls.transition_angle`** (`perimeters.md`, P14): una pared pasa por cantidades impares de cordones (con uno en
+el medio) solo en las esquinas del contorno no más abiertas que el ajuste, 10° por defecto. Es el marcado del
+centro de Kuipers et al. (sección 3.3) con α_max = 180° − el ajuste: en el eje de una cuña de punta θ el ángulo de
+bisectriz es 180° − θ. Antes el motor usaba α_max = 135° fijo (esquinas de hasta 45°). Prueba: cuñas de 5°, 10° y
+20° con el ajuste en 1°, 10° y 30° dan las cantidades de P14 (con 1°, 0 / 2 / 4 / 6; con 10°, todas en las cuñas
+de 5° y 10° y solo pares en la de 20°; con 30°, todas). El fuzzer con el escalonado: 1500 corridas (semilla
+20261031), 0 fallas. Toda la lista: 701 casos, todos pasan. **Sigue:** `walls.transition_margin` (P13) y
+`walls.vertical_shell` (W4).
+
+**El cordón del medio, contra P2.** Al mirar P13 apareció que la pared de 1,1 mm daba 3 cordones en el motor y 2 en
+Tisma Slicer. En P2 y P11 los saltos a una cantidad par (1→2, 3→4, 5→6) caen medio cordón después del anterior,
+como en la ecuación 5 de Kuipers et al., pero los saltos a una impar (2→3, 4→5), que agregan el cordón del medio,
+llegan cuando ese cordón tendría unos 0,8 cordones de ancho. El reparto toma ahora ese umbral (parámetro
+`odd_centre`, 0,8 en el corte; 0 deja la ecuación tal cual para las pruebas del artículo). Las filas de 1,1 (dos
+de 0,571 a ±0,264), 1,2, 1,9 (0,450 / 0,564 / 0,564 / 0,450) y 2,0 mm de P2 dan los números de la ficha. Toda la
+lista: 701 casos, todos pasan; fuzzer 400 corridas (semilla 20261101), 0 fallas.
+
+**`walls.transition_margin` (P13) queda abierto:** con el umbral nuevo el salto 2→3 cae en 1,18 mm, cerca de lo que
+muestran las tiras de P13 sin margen, pero las filas con margen no siguen ni un largo mínimo ni una histéresis del
+tamaño del margen (lo dice la ficha). Hace falta otra medición para encontrar la regla.
+
+**`cooling.dynamic_overhang_fan`** y **`cooling.overhang_fan_0` a `_3`** (`cooling_more.md`, reglas 2 a 4): el
+reparto de las paredes por apoyo, que ya daba la velocidad, da también el ventilador de cada tramo: `overhang_fan_k`
+con 0, 25, 50 y 75 % apoyado, en línea recta entre ellos, y de `_3` a 0 entre 75 y 100 %. Vale el mayor con el de la
+capa; donde la capa va sin ventilador, lo apoyado más del 75 % no lo enciende (como Tisma Slicer en C2). Los puentes
+y los perímetros en voladizo siguen con `fan_bridges`, y las capas sin ventilador siguen sin él. El ventilador se
+escribe en las marcas de la capa, como el de los puentes. En el panel, tarjeta «Ventilador en voladizos» en
+Enfriamiento.
+
+**Prueba C2** (embudos con 100, 80, 60 y 40 %, capa de Z 6,2, paredes de 0,45): pared externa con el de la capa
+apagado a 82, 71, 56, 45 y 40 % en los de 60°, 55°, 45°, 35° y 30° (Tisma Slicer: 81, 70, 53–55, 43–44 y 37–40); 27° y
+20°, apagado; con el de la capa al 1 %, 27° a 35 (Tisma: 32–36); con el de la capa al 60 %, el de la capa; las
+internas, el de la capa. El motor queda 1 a 3 puntos arriba de lo medido: la regla es el contrato, y la diferencia
+coincide con un apoyo medido algo mayor que `1 − d/w`. **Fuzzer:** el ajuste entra en 1 de cada 4 corridas, con
+valores al azar; 600 corridas (semilla 20261102), 0 fallas.
+
+**Arreglado de paso:** la prueba C2 tomaba una referencia a un mapa temporal (aviso de gcc, comportamiento
+indefinido en la prueba, no en el motor).
+
+**El frenado por tiempo mínimo, contra `cooling.md` regla 2.** Al leer C3 apareció que el motor no seguía la regla 2:
+- la primera etapa bajaba todas las extrusiones en la misma proporción, y la regla (y C3 con `uniform`, todo a 27,93)
+  pide una velocidad común `v`, sin bajar de `cooling.min_speed`, con las más lentas quietas;
+- frenaba también los puentes y los perímetros sobre el aire (K5 dice que no).
+
+Ahora las dos etapas son una velocidad común (la primera no baja de la mínima), y los puentes van aparte, con su
+tiempo junto al de los viajes. De paso, la segunda pasada de una capa frenada sumaba los tiempos de la capa anterior
+(solo afectaba el aviso de «ni a 1 mm/min»).
+
+**`cooling.slowdown_logic`** (regla 5) y **`cooling.transition_distance`** (regla 6):
+- con `consistent_surface`, la pared externa y la que la toca (índice de cordón 1) se frenan al final: primero lo
+  demás hasta la velocidad mínima, después esas dos con su propia velocidad común, y solo después todo junto más
+  abajo;
+- `cooling.keep_outer_speed` hace lo mismo con la externa sola;
+- con `consistent_surface` y `transition_distance` = d, los últimos d mm de extrusión de una capa frenada van a su
+  velocidad: la primera pasada anota cada extrusión, el plan cuenta esa cola como tiempo fijo, y la segunda corta el
+  movimiento donde empieza la cola.
+
+**Pruebas:**
+- C3 (cubo de 20 mm, capa 10), comparado con Tisma Slicer:
+
+  | Caso | Motor | Tisma Slicer |
+  |---|---|---|
+  | `uniform`, 15 s | todo a 27,82 | 27,93 |
+  | `consistent_surface`, 15 s | externo 30 y el que lo toca 60; el resto a 23,38 | 30 y 60; el resto a 23,58 |
+  | `consistent_surface`, 40 s | el resto a 10,0; los dos de superficie a 10,2 | 10,0 y 10,4 |
+  | `uniform`, 40 s | todo a 10,07 | 10,15 |
+
+- C4: los últimos 2,0, 5,0 y 10,0 mm del relleno a 80 mm/s; sin efecto con `uniform`.
+- K5 (la mesa, 60 y 300 s): el puente a su velocidad, el resto de la capa frenado.
+- Unidad: velocidad común, segunda etapa y las paredes de superficie al final.
+- Fuzzer: `consistent_surface` con cola de 0 a 9 mm en 1 de cada 3 corridas; 600 corridas (semilla 20261103), 0 fallas.
+- Toda la lista: 703 casos, todos pasan. Las dos pruebas de la vista que piden pantalla corren solo dentro de
+  `tools/ci_linux.sh`.
+
+**Sigue:** el resto de las claves de las fichas (`fragment`, `machine`, `calibration`, …), y `walls.transition_margin`
+cuando llegue la medición.
+
+**Claves de las fichas que faltan, otra vez medido** (2026-10-28): repetí la prueba del equipo de fichas con el motor
+de este bloque (cada clave de la tabla de `2026-10-28-ajustes.md`, con valores de prueba, sobre el cubo de las
+pruebas): faltaban 47. El grupo `cooling` quedó completo. `fins` (20) y `waam` (10) son de después de la primera
+versión, como dicen sus fichas; sigo con `support`.
+
+**Relleno del soporte en grilla** (`supports_more.md`, reglas 9 a 12):
+- `support.pattern`:
+  - `lines`: lo de antes;
+  - `grid`: las mismas líneas giradas 90° en capas alternas;
+  - `honeycomb`: panales con la densidad de las líneas.
+- `support.sheath`, sí por defecto como en la ficha: un lazo por el borde de cada zona de la base y el patrón adentro, a
+  un cordón. Antes la base era solo el zigzag. Con un hueco en la zona (la columna de una T), el lazo da la vuelta
+  también al hueco.
+- `support.interface_pattern`: `lines` (y `automatic`, mientras no haya material soluble) o `concentric`, con lazos
+  hacia adentro a la separación de un cordón.
+- `support.interface_spacing`: el espacio libre entre las líneas de la interfaz.
+- `support.interface_contact_loops`: la capa de interfaz de arriba empieza con un lazo por el borde de cada zona.
+
+**Medido en el voladizo de la ficha, comparado con Tisma Slicer:**
+
+| Prueba | Motor | Tisma Slicer |
+|---|---|---|
+| Base con vaina (capa 2): lazo | 74,5 mm | 68,9 mm |
+| Base con vaina (capa 2): líneas | 99,8 mm | 90,0 mm |
+| Base sin vaina | 105,6 mm | 123,1 mm |
+| Panal | 198,7 mm | 206 a 211 mm |
+| Interfaz sólida | 516 mm | 743 mm |
+| Interfaz con 1 mm libre | 144 mm (28 %) | 240,9 mm (32 %) |
+| Lazos concéntricos | 8 separaciones más largo cada uno, como la ficha (2,856 mm) | 2,856 mm |
+| Lazos de contacto | un lazo de 58 mm | dos lazos |
+
+Las diferencias de largo salen del tamaño de la zona: la del motor es más grande en la base y más chica en la
+interfaz que la de Tisma Slicer. No es del patrón. SM8 lo mide aparte, con el estilo `snug`, que el motor todavía no
+tiene.
+
+**Pregunta para el equipo de fichas:** en SM10 aparece también un lazo en la segunda capa de interfaz (Z 7,6), pero
+la regla 12 habla solo de la de arriba. El motor sigue la regla.
+
+**Pruebas:**
+- SM6, SM7 y SM10 en `test_gcode.cpp`;
+- la prueba de la T ahora cuenta los dos lazos de la vaina;
+- fuzzer: patrón, vaina e interfaz al azar.
+
+**`support.enforce_layers`** (regla 1): soporte bajo todo lo que cuelga en las primeras N capas, sin importar el
+ángulo y aunque el soporte esté apagado. El área se calcula aparte, con todo lo que se sale de la capa de abajo en
+esas capas como forzador. Se suma al soporte de siempre, solo como base, en las capas 0 a N − 4. SM1, cuña de 70°:
+con 10, soporte en las capas 0 a 6; con 20, de 0 a 16, como Tisma Slicer; igual con el soporte encendido; el cubo,
+nada.
+
+**`support.style` `snug` y `support.closing_radius`** (regla 14): la columna del soporte sin el margen de la grilla y
+con los huecos cerrados por `closing_radius` (antes, siempre por un cordón).
+- SM8 (voladizo, capa 12): con `grid` la zona pasa 1,6 mm el borde de la losa; con `snug` termina en el borde, a
+  menos de un píxel de la grilla de la columna (0,05 mm).
+- SM9 (horquilla de dos brazos a 1,5 mm): con radio 0,5, dos zonas; con 2, una; con `grid`, una.
+
+**Encontrado de paso, en mis pruebas nuevas, no en el motor:**
+- un `for` sobre un miembro de un `SlicedModel` temporal (se destruye antes del lazo);
+- antes, la referencia a un mapa temporal en C2.
+
+**`support.free_bridge_length`** y el aviso de puentes largos (`print_review.md`, regla 2): para cada capa, el
+tramo más largo de las líneas de puente sin nada debajo (ni la capa de abajo agrandada medio cordón, ni soporte),
+recortando las líneas como caminos abiertos con Clipper2. Si pasa el ajuste (16 mm por defecto, `SETTINGS_V1.md`),
+un aviso `long_bridge` por cada serie de capas seguidas, con el rango de Z. R5 (tabla de 40 mm sobre pilares a 30 mm):
+un aviso en la primera capa de la tabla, Z 10,0 a 10,2, con 29,6 mm; R6 (35 mm): nada.
+
+**Pregunta al equipo de fichas** (enviada): `supports_skirt.md` dice que los puentes no llevan soporte salvo con
+`support.under_bridges`, y `BEHAVIOR.md` que los más cortos que `free_bridge_length` no lo llevan. `under_bridges`
+espera la respuesta; también pregunté por los lazos de contacto en la segunda capa de interfaz (SM10) y por el borde
+de la zona en grilla contra la columna (SM8).
+
+**`fragment`** (7 claves): la ficha dice «después de la primera versión», como `fins` y `waam`; queda para entonces.
+
+**`machine`:**
+- `machine.max_speed` y `machine.max_acceleration` (`SETTINGS_V1.md`, un solo límite en X e Y) son alias de dos
+  claves del motor: `max_feed_x` y `max_feed_y`, y `max_accel_x` y `max_accel_y`. Darlos junto con una de esas es un
+  error.
+- `machine.custom_parameters`, `material.custom_parameters` y `print.custom_parameters` (`presets.md`, reglas 21 y
+  22) entran a las plantillas como `custom_parameter_printer_<nombre>`, `custom_parameter_filament_<nombre>[0]` y
+  `custom_parameter_print_<nombre>`. Solo valores planos; una lista u objeto adentro es un error al leer los
+  ajustes, no al exportar. `print.variables` entra como `print_<nombre>`. Todo se escribe y se vuelve a leer igual.
+
+**Quedan de `machine`:**
+- `feedstock` (pellets, P3);
+- `high_flow_nozzle` (multiextrusor, con los datos del archivo);
+- `process` (WAAM, después de la primera versión).
+
+**Sigue:** `machine.high_flow_nozzle` y `calibration` (`mode`, `start`, `step`, `end`, `band_height`), después `gcode`.

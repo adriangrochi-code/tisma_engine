@@ -22,6 +22,7 @@ struct SupportParams {
     double xy_gap = 0.6;          // mm between the support and the part beside it
     double bead = 0.4;            // mm, the wall bead width
     double margin = 0.0;          // mm the column reaches past what overhangs (supports_skirt.md, rule 2: about 1.6)
+    double closing = 0.0;         // mm, the radius gaps in the column are closed by; 0: a bead
     // Painted faces (docs/PAINTING.md; supports_more.md, rules 3 to 5), one
     // area per layer, or null. In an enforcer, whatever reaches out past the
     // layer below gets support, however steep; in a blocker, nothing does.

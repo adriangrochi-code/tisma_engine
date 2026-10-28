@@ -10,6 +10,7 @@
 #include "infill/combine.hpp"
 #include "infill/lightning.hpp"
 #include "infill/nonplanar.hpp"
+#include "infill/patterns.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "perimeters/fuzzy.hpp"
 #include "slice/belt.hpp"
@@ -63,6 +64,67 @@ void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double 
 double first_bead(const Settings& settings) {
     return settings.first_line_width.value > 0.0 ? settings.first_line_width.of(settings.first_layer_height)
                                                  : settings.wall_width;
+}
+
+// Closed loops along a region's boundary, half a bead in.
+std::vector<Toolpath> boundary_loops(const Polygons& region, double width) {
+    std::vector<Toolpath> out;
+    for (const Polygon& p : offset(region, -width / 2.0)) {
+        if (p.size() < 3)
+            continue;
+        Toolpath t;
+        t.closed = true;
+        for (const auto& q : p)
+            t.points.push_back({{to_mm(q.x), to_mm(q.y)}, width});
+        out.push_back(std::move(t));
+    }
+    return out;
+}
+
+// A grid support's base (supports_more.md, rules 9 and 10): lines along
+// support.line_angle, support.spacing of free space apart, turned 90 degrees
+// on every other layer with `grid`, or a honeycomb of the same density; with
+// the sheath, a loop around each zone first and the pattern a bead's spacing
+// inside it.
+std::vector<Toolpath> support_base(const Polygons& base, const Settings& settings, double bead, double width,
+                                   std::size_t l) {
+    std::vector<Toolpath> out;
+    Polygons inside = base;
+    if (settings.support_sheath) {
+        out = boundary_loops(base, width);
+        inside = offset(base, -bead);
+    }
+    const double spacing = settings.support_spacing + bead;
+    std::vector<Toolpath> pattern;
+    if (settings.support_pattern == SupportPattern::Honeycomb)
+        pattern = honeycomb_fill(inside, honeycomb_side(width, bead / spacing), settings.support_line_angle, width);
+    else
+        pattern = rectilinear_fill(inside, spacing,
+                                   settings.support_line_angle +
+                                       (settings.support_pattern == SupportPattern::Grid && l % 2 == 1 ? 90.0 : 0.0),
+                                   width, true);
+    out.insert(out.end(), std::make_move_iterator(pattern.begin()), std::make_move_iterator(pattern.end()));
+    return out;
+}
+
+// A grid support's interface (supports_more.md, rules 11 and 12): lines
+// across the base's, support.interface_spacing of free space apart (0:
+// solid), or concentric loops a bead's spacing apart; with contact loops, the
+// top interface (`contact`, part of `interface`) starts with a loop around
+// each of its zones.
+std::vector<Toolpath> support_interface(const Polygons& interface, const Polygons& contact, const Settings& settings,
+                                        double bead, double width) {
+    if (settings.support_interface_pattern == SupportInterfacePattern::Concentric)
+        return concentric_fill(interface, bead, width);
+    const double spacing = bead + settings.support_interface_spacing, angle = settings.support_line_angle + 90.0;
+    if (!settings.support_contact_loops || contact.empty())
+        return rectilinear_fill(interface, spacing, angle, width, true);
+    std::vector<Toolpath> out = boundary_loops(contact, width);
+    Polygons rest = Clipper2Lib::Difference(interface, contact, Clipper2Lib::FillRule::NonZero);
+    rest = Clipper2Lib::Union(rest, offset(contact, -bead), Clipper2Lib::FillRule::NonZero);
+    std::vector<Toolpath> lines = rectilinear_fill(rest, spacing, angle, width, true);
+    out.insert(out.end(), std::make_move_iterator(lines.begin()), std::make_move_iterator(lines.end()));
+    return out;
 }
 
 // The raft (skirt_brim_raft.md, rules 3 and 9 to 14) under a part sliced
@@ -611,6 +673,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         Settings flat = settings;
         flat.belt_enabled = false;
         flat.skirt_loops = 0;
+        flat.walls_staggered = false; // not on a belt (staggered_perimeters.md, rule 5)
         if (modifiers)
             throw std::invalid_argument("belt printers do not take modifiers yet");
         if (negative) {
@@ -633,6 +696,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
             Settings flat = settings;
             flat.curved_mode = CurvedMode::Disabled;
+            flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
             return slice_model(input, flat, gpu, stress, painting, given, mixes, negative);
         }
         const double longest =
@@ -657,6 +721,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         Settings flat = settings;
         flat.curved_mode = CurvedMode::Disabled;
+        flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
         out = slice_model(bent, flat, gpu, stress, nullptr, given ? &pieces : nullptr, mixes);
         out.curved = std::move(field);
         return out;
@@ -1203,6 +1268,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     beading.scheme = BeadingScheme::InwardDistributed;
     beading.inward_beads = double(settings.wall_spread_count);
     beading.transition_length = settings.wall_transition_length.of(settings.nozzle_diameter);
+    beading.transition_angle = settings.wall_transition_angle;
+    beading.odd_centre = 0.8; // perimeters.md, table P2
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
@@ -1460,7 +1527,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         });
     }
     out.support_areas.resize(out.layers.size());
-    if (settings.support && !frame) {
+    // The support under whatever hangs in the first support.enforce_layers
+    // layers, however steep and whether support is on or not
+    // (supports_more.md, rule 1): base only, in layers 0 to N - 4 (SM1).
+    std::vector<Polygons> early_support;
+    if ((settings.support || settings.support_enforce_layers > 0) && !frame) {
         std::vector<double> thickness;
         for (const Layer& layer : out.layers)
             thickness.push_back(layer.top - layer.bottom);
@@ -1472,7 +1543,11 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                    : sp.z_gap_layers;
         sp.buildplate_only = settings.support_buildplate_only;
         sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
-        sp.margin = kSupportMargin;
+        // snug: fitted to what hangs, its gaps closed by support.closing_radius
+        // (supports_more.md, rule 14).
+        sp.margin = settings.support_style == SupportStyle::Snug ? 0.0 : kSupportMargin;
+        if (settings.support_style == SupportStyle::Snug)
+            sp.closing = settings.support_closing_radius;
         sp.bead = settings.wall_width;
         sp.automatic = settings.support_automatic;
         sp.gpu = gpu;
@@ -1483,7 +1558,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             sp.enforce = &enforce;
         if (!painted[1].empty())
             sp.block = &block;
-        if (settings.support_style == SupportStyle::Organic) {
+        if (settings.support && settings.support_style == SupportStyle::Organic) {
             TreeParams tp;
             tp.angle = settings.tree_angle;
             tp.angle_preferred = settings.tree_angle_preferred;
@@ -1497,8 +1572,22 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
             out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
-        } else {
+        } else if (settings.support) {
             out.support_areas = support_areas(out.regions, thickness, sp);
+        }
+        if (const std::size_t n = std::size_t(std::max(settings.support_enforce_layers, 0)); n >= 4) {
+            std::vector<Polygons> early(out.layers.size());
+            for (std::size_t l = 1; l < std::min(n, out.layers.size()); ++l)
+                early[l] = offset(out.regions[l], settings.wall_width);
+            SupportParams ep = sp;
+            ep.automatic = false;
+            ep.enforce = &early;
+            ep.block = nullptr;
+            early_support = support_areas(out.regions, thickness, ep);
+            early_support.resize(std::min(early_support.size(), n - 3));
+            for (std::size_t l = 0; l < early_support.size(); ++l)
+                out.support_areas[l] =
+                    Clipper2Lib::Union(out.support_areas[l], early_support[l], Clipper2Lib::FillRule::NonZero);
         }
     }
     // Where the walls hang (walls_extra.md, rule 8): past the layer below's
@@ -1676,6 +1765,34 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The stress bands and the dense infill hold up loads and skins all
     // through: with lightning, they are cubic.
     const InfillPattern banded_pattern = lightning ? InfillPattern::Cubic : settings.infill_pattern;
+    // Staggered walls (staggered_perimeters.md): the odd inner loops half a
+    // layer up where the next layer goes on over them (rule 1), as wavy beads
+    // whose thickness runs from the raised loop below (half of its layer up)
+    // to their own top: 1.5 layers on the first layer (rule 2), half a layer
+    // under the top (rule 3), the real heights with variable layers (rule 4).
+    // Not in vase mode nor with curved layers (rule 5).
+    // Half the thinner of the layer and the next one, so a raised loop never
+    // passes the next layer's top; the loop above rests on that much.
+    if (settings.walls_staggered && !settings.vase && settings.curved_mode == CurvedMode::Disabled) {
+        const auto raise = [&](std::size_t l) {
+            return l + 1 < out.layers.size()
+                       ? 0.5 * std::min(out.layers[l].top - out.layers[l].bottom, out.layers[l + 1].top - out.layers[l + 1].bottom)
+                       : 0.0;
+        };
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            const double up = raise(l), below = l > 0 ? raise(l - 1) : 0.0;
+            const Polygons* above = l + 1 < out.regions.size() ? &out.regions[l + 1] : nullptr;
+            for (Toolpath& t : out.walls[l].toolpaths) {
+                if (!t.closed || t.index % 2 == 0 || t.points.size() < 3)
+                    continue;
+                for (ToolpathPoint& p : t.points) {
+                    p.dz = above && region_contains(*above, p.p.x, p.p.y) ? up : 0.0;
+                    p.below = below;
+                }
+                t.wavy = true;
+            }
+        });
+    }
     // The outer wall lies half a bead inside the surface: a painted strip of
     // the surface, grown by a bead, holds it.
     if (!painted[2].empty())
@@ -1793,7 +1910,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                   if (const std::size_t b = bottom_gap + std::size_t(k); b <= l)
                                       above = Clipper2Lib::Union(above, out.regions[l - b], Clipper2Lib::FillRule::NonZero);
                           }
-                          const Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
+                          Polygons interface = Clipper2Lib::Intersect(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
+                          if (l < early_support.size() && !early_support[l].empty()) // base only
+                              interface = Clipper2Lib::Difference(interface, early_support[l], Clipper2Lib::FillRule::NonZero);
                           const Polygons base = Clipper2Lib::Difference(out.support_areas[l], above, Clipper2Lib::FillRule::NonZero);
                           // Its own bead width (supports_more.md, rule 18): a
                           // percentage is of the layer height; 0, the walls'.
@@ -1815,10 +1934,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           // of free space apart; the interface across them, a
                           // bead's spacing apart (supports_skirt.md, rules 5 and 6).
                           const double bead = loop_spacing(width, h);
-                          out.fills[l].support = rectilinear_fill(base, settings.support_spacing + bead, settings.support_line_angle,
-                                                                  width, true);
-                          out.fills[l].support_interface =
-                              rectilinear_fill(interface, bead, settings.support_line_angle + 90.0, width, true);
+                          out.fills[l].support = support_base(base, settings, bead, width, l);
+                          // The top interface: right under the Z gap.
+                          Polygons contact;
+                          if (const std::size_t a = l + gap + 1; settings.support_contact_loops && a < out.regions.size())
+                              contact = Clipper2Lib::Intersect(interface, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                          out.fills[l].support_interface = support_interface(interface, contact, settings, bead, width);
                       });
     for (std::size_t l = period; l < out.layers.size(); ++l)
         if (repeats[l]) {
