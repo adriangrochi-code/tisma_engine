@@ -3921,6 +3921,15 @@ void check_settings(const Settings& s) {
                       s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
         throw SettingsError(text);
     }
+    // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt
+    // past the skirt and the G-code failed its own check (the spec team's BH1).
+    if (const double first = s.first_line_width.of(s.first_layer_height);
+        s.first_line_width.value > 0.0 && (first < 0.25 * nozzle || first > 4.0 * nozzle)) {
+        std::snprintf(text, sizeof text,
+                      "layers.first_line_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", first,
+                      nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
 }
 
 } // namespace tisma

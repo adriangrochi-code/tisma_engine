@@ -7116,3 +7116,18 @@ superficies», nivel Avanzado; el fuzzer la sortea.
 `filament.transmission_distance`, `orient`, y los sueltos (`layers.first_line_width`, `mixing.purge_infill_max`,
 `placement.drop_to_bed`, `retraction.coast`). Los lazos de contacto en las dos capas de arriba y el lector STEP
 esperan a que sus fichas lleguen a `main`.
+
+## 2026-10-28 (tarde): dos arreglos
+
+- **Fuzzer, corrida 287 (semilla 20261028):** la verificación leía una limpieza como dos retracciones. La limpieza pasa
+  por dos puntos a 0,001 mm; los dos pasos escriben la misma E, y un movimiento que no tira filamento terminaba la
+  retracción. Ahora solo la termina uno que empuja o uno sin E (un viaje). El G-code del motor estaba bien. Prueba
+  nueva: un paso así agregado a la limpieza del cubo; sin el arreglo falla («retracts again…»), con él pasa.
+- **BH1 (búsqueda de errores de caja negra del equipo de fichas):** `layers.first_line_width` de 20 mm en una
+  boquilla de 0,4 hacía que el G-code saliera del área de la pieza con su falda, y la exportación salía con el código
+  6. `check_settings` ahora le pone el rango de `walls.width`: entre un cuarto y cuatro boquillas (0,1 a 1,6 mm con
+  0,4), también cuando es un porcentaje de la primera capa.
+- **No hecho:** el aviso de Z por debajo de la cama con un `machine.z_offset` muy negativo (observación del equipo de
+  fichas, no un error).
+
+**Probado:** toda la lista, 720 casos, pasan; el fuzzer, 400 corridas con la semilla 20261028, 0 fallas.

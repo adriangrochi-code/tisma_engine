@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <sstream>
@@ -291,6 +292,42 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
     const GcodeExport nowhere = export_gcode(dir / "tisma_no_such_dir" / "x.gcode", model, s);
     CHECK(!nowhere.written);
     CHECK_THAT(nowhere.error, ContainsSubstring("cannot write"));
+}
+
+TEST_CASE("G-code check: a wipe's step whose E rounds to the last one's stays in the wipe", "[gcode][check]") {
+    // The fuzzer's run 287 (seed 20261028): a wipe went over a point 0.001
+    // mm from the next, both steps wrote the same E, and the pieces after it
+    // read as a second retraction.
+    Settings s = test_printer();
+    s.wipe = true;
+    const Output o = slice_and_write(cube(), s);
+    REQUIRE(check_gcode(o.gcode, o.limits).ok());
+    // The first wipe step: a move in X and Y whose E is below the last E.
+    std::istringstream in(o.gcode);
+    std::string line, out;
+    double last_e = 0.0;
+    bool done = false;
+    while (std::getline(in, line)) {
+        out += line + "\n";
+        const std::size_t e = line.find(" E");
+        if (done || !line.starts_with("G1 ") || e == std::string::npos)
+            continue;
+        const double value = std::stod(line.substr(e + 2));
+        if (value < last_e - 1e-9 && line.find(" X") != std::string::npos) {
+            // A step of the same E right after it, a hair away.
+            const std::size_t x = line.find(" X");
+            const double at = std::stod(line.substr(x + 2));
+            char extra[96];
+            std::snprintf(extra, sizeof extra, "G1 X%.3f E%.5f\n", at + 0.001, value);
+            out += extra;
+            done = true;
+        }
+        last_e = value;
+    }
+    REQUIRE(done);
+    const GcodeCheck c = check_gcode(out, o.limits);
+    INFO(problems_of(c));
+    CHECK(c.ok());
 }
 
 TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {

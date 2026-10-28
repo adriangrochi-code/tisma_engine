@@ -562,6 +562,13 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_THROWS_WITH(
         check_settings(parse_settings(R"({"machine": {"nozzle_diameter": 8}, "layers": {"height": 9}, "walls": {"width": 9}})")),
         ContainsSubstring("thicker than 8 mm"));
+    // The first layer's bead too (the spec team's BH1): 20 mm on a 0.4 nozzle
+    // spilt past the skirt; 1.6 mm, four nozzles, is the most.
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"layers": {"first_line_width": 20}})")),
+                      ContainsSubstring("layers.first_line_width: 20 mm cannot come out of a 0.4 mm nozzle"));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.6}})")));
+    CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": "1000%"}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
 }
 
 TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[settings]") {

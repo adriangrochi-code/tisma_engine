@@ -114,6 +114,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **`layers.first_line_width`** (lo encontró el equipo de fichas, BH1): con 20 mm o más en una boquilla de 0,4 el
+  G-code salía del área permitida y la exportación fallaba con el código 6. Ahora, como `walls.width`, tiene que estar
+  entre un cuarto y cuatro veces el diámetro de la boquilla, y el mensaje lo dice al revisar los ajustes.
+
+- **Verificación del G-code con limpieza:** un paso de la limpieza tan corto que su E redondeaba a la del anterior
+  cortaba la retracción en dos, y la verificación rechazaba el archivo («retracts again without undoing the last
+  retraction»; lo encontró el fuzzer). El archivo estaba bien; ahora la verificación también lo acepta.
+
 - **Franjas de calibración:** un valor fuera de rango (por ejemplo una temperatura de 1000 °C) se escribía en el
   G-code; ahora se rechaza al leer los ajustes, con el mismo rango que un cambio por altura.
 
