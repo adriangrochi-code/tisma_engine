@@ -625,6 +625,19 @@ TEST_CASE("model tools: height ranges (MT7b, MT9, MT13)", "[transform]") {
     CHECK(m.fills[35].sparse.empty());
     CHECK(walls_between(m, 45, -1, 21) == 4);
     CHECK_FALSE(m.fills[45].sparse.empty());
+    // Ranges that overlap: the later wins where they do, the earlier keeps
+    // its layer height past it (3 to 8 mm at 0.25, then 0 to 5 at 0.1).
+    objects = object("", {{3.0, 8.0, R"({"layers": {"height": 0.25}})"}, {0.0, 5.0, R"({"layers": {"height": 0.1}})"}});
+    m = slice_model(weld_exact(part), s, nullptr, nullptr, nullptr, &objects);
+    const auto thickness_at = [&](double z) {
+        for (const auto& l : m.layers)
+            if (l.bottom < z && l.top > z)
+                return l.top - l.bottom;
+        return 0.0;
+    };
+    CHECK_THAT(thickness_at(4.05), WithinAbs(0.1, 1e-6));
+    CHECK_THAT(thickness_at(6.0), WithinAbs(0.25, 1e-6));
+    CHECK_THAT(thickness_at(9.0), WithinAbs(0.2, 1e-6));
     // MT9: the part's 4 walls win over the range's 6.
     const TriangleMesh wide = box({0, 0, 0}, {40, 20, 10});
     std::vector<MeshObject> nine{{"box", 0, wide.triangle_count(), 0, 0}};

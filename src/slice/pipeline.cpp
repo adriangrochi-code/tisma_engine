@@ -527,14 +527,19 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                     if (!settings.layer_heights.empty()) {
                         out.notices.push_back(o.name + ": layers.heights is given, so the height ranges' layer heights are left out");
                     } else {
+                        // Past the range, the height that held there before it.
                         auto& h = ranged->layer_heights;
+                        double after = settings.layer_height;
+                        for (const auto& t : h)
+                            if (t[0] <= z0 + r.to + 1e-9)
+                                after = t[1];
                         h.erase(std::remove_if(h.begin(), h.end(), [&](const auto& t) {
                                     return t[0] >= z0 + r.from - 1e-9 && t[0] < z0 + r.to - 1e-9;
                                 }),
                                 h.end());
                         h.push_back({double(z0) + r.from, own.layer_height});
                         if (std::none_of(h.begin(), h.end(), [&](const auto& t) { return std::abs(t[0] - (z0 + r.to)) < 1e-9; }))
-                            h.push_back({double(z0) + r.to, settings.layer_height});
+                            h.push_back({double(z0) + r.to, after});
                         std::sort(h.begin(), h.end());
                     }
                 }
