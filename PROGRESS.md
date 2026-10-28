@@ -6728,6 +6728,16 @@ la externa en 0 (pregunta enviada al equipo de fichas). Prueba: cubo de 20 mm, 3
 0,6, los dos generadores: anchos 0,6 / 0,45 / 0,45, centros a 0,3, 0,825 y 1,275 mm del borde y el relleno desde
 1,5 mm; con 0, todas de 0,45. Toda la lista: 692 casos, todos pasan.
 
-**Sigue:** `layers.first_line_width` (200 % de la primera capa; toca paredes, rellenos, falda y borde de la primera
-capa) y el resto de `walls`.
+**`layers.first_line_width`** (`perimeters.md`, regla 7; `supports_more.md`, SM14): todos los cordones de la primera
+capa con ese ancho, en mm o en % de la altura de la primera capa, por defecto 200 % (0,4 mm con 0,2): paredes (la
+externa también), rellenos, falda, borde, soporte, y con balsa su primera capa (la primera capa de la pieza sobre la
+balsa queda como las demás). 0: como las demás capas. La segunda capa ya no copia las paredes de la primera ni la
+capa a un período de relleno copia el relleno de la primera. **Cambia el G-code de siempre** en la primera capa
+cuando la altura de la primera capa no es 0,2 o `walls.width` no es 0,4, y en sus rellenos (que desde I9 eran de
+0,45). En el panel, en «Ancho de línea». Prueba: cubo de 20 mm con paredes de 0,45 y la externa de 0,6: la primera
+capa entera de 0,4 (paredes, rellenos, falda) y la segunda con la externa de 0,6; con primera capa de 0,3, 0,6; con
+0,5 mm, 0,5; con 0, 0,45 y 0,6 como las demás. Una prueba de boquillas (MM2) con primera capa de 0,15 fija 0. Toda la
+lista: 694 casos, todos pasan.
+
+**Sigue:** el resto de `walls` (`staggered`, `transition_*`, `spread_count`, `vertical_shell`).
 

@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <numbers>
 #include <sstream>
 #include <string>
@@ -305,4 +306,49 @@ TEST_CASE("walls: the outer wall with a width of its own (perimeters.md, walls.o
         for (const ToolpathPoint& p : t.points)
             if (p.p.y > 95.0 && p.p.y < 105.0)
                 CHECK_THAT(p.width, WithinAbs(0.45, 1e-6));
+}
+
+TEST_CASE("first layer: every bead layers.first_line_width wide (perimeters.md, rule 7)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 2;
+    s.skirt_loops = 1;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    const auto first_widths = [&m](const Settings& settings) {
+        const SlicedModel model = slice_model(m, settings);
+        std::set<double> walls, fills, skirt, above;
+        for (const Toolpath& t : model.walls[0].toolpaths)
+            for (const ToolpathPoint& p : t.points)
+                walls.insert(std::round(p.width * 1e6) / 1e6);
+        for (const auto* list : {&model.fills[0].solid, &model.fills[0].top, &model.fills[0].sparse})
+            for (const Toolpath& t : *list)
+                for (const ToolpathPoint& p : t.points)
+                    fills.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.skirt)
+            for (const ToolpathPoint& p : t.points)
+                skirt.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.walls[1].toolpaths)
+            if (t.index == 0)
+                above.insert(std::round(t.points.front().width * 1e6) / 1e6);
+        return std::array<std::set<double>, 4>{walls, fills, skirt, above};
+    };
+    // 200 % of a 0.2 mm first layer: 0.4 mm, the outer wall too; the second
+    // layer keeps its own widths.
+    auto w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.4});
+    CHECK(w[1] == std::set<double>{0.4});
+    CHECK(w[2] == std::set<double>{0.4});
+    CHECK(w[3].count(0.6) == 1);
+    s.first_layer_height = 0.3; // 0.6 mm
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.6});
+    CHECK(w[1] == std::set<double>{0.6});
+    s.first_line_width = {0.5, false};
+    CHECK(first_widths(s)[0] == std::set<double>{0.5});
+    s.first_line_width = {}; // 0: as the other layers
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.45, 0.6});
 }

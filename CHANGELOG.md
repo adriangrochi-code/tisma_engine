@@ -28,7 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
   `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
-  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
   `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
@@ -55,6 +55,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Los anchos de los rellenos en 0 salen de la boquilla** (`surfaces_infill.md`, I9): la capa de arriba de todo, una
   boquilla; el resto del relleno sólido y el poco denso, 1,125 boquillas (0,45 mm con 0,4). Antes seguían a
   `walls.width`. **Cambia el G-code de siempre** en los rellenos.
+- **La primera capa lleva su ancho** (`layers.first_line_width`, 200 % de su altura: 0,4 mm con 0,2): paredes,
+  rellenos, falda, borde y soporte. Antes, el de las paredes.
 - **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con
   un caudal máximo conocido, de la mitad a una vez y media, también en franjas de 2 mm.
 - **Una clave desconocida en `material` es un error**, como en los demás grupos (antes el grupo entero se ignoraba

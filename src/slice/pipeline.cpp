@@ -57,6 +57,13 @@ void rest_on_support(std::vector<Toolpath>& bridges, const Polygons& on, double 
     }
 }
 
+// The first layer's bead (layers.first_line_width, perimeters.md, rule 7):
+// mm, or a share of the first layer's height; 0, the walls'.
+double first_bead(const Settings& settings) {
+    return settings.first_line_width.value > 0.0 ? settings.first_line_width.of(settings.first_layer_height)
+                                                 : settings.wall_width;
+}
+
 // The raft (skirt_brim_raft.md, rules 3 and 9 to 14) under a part sliced
 // without it: raft_layers layers of support put before the part's, which go
 // up by their height and raft_gap. The raft follows the part's first layer
@@ -97,15 +104,17 @@ void add_raft(SlicedModel& out, const Settings& settings) {
         layers.push_back({z, z + h});
         z += h;
         regions[k] = k == 0 ? first_area : area;
-        const double bead = loop_spacing(width, h);
+        // The raft's first layer, on the bed, with the first layer's beads.
+        const double w = k == 0 && settings.first_line_width.value > 0.0 ? first_bead(settings) : width;
+        const double bead = loop_spacing(w, h);
         if (k + interfaces >= n) { // interface, the top one at 135
             const double angle = (n - 1 - k) % 2 == 0 ? 135.0 : 45.0;
-            fills[k].support_interface = rectilinear_fill(regions[k], bead, angle, width, true);
+            fills[k].support_interface = rectilinear_fill(regions[k], bead, angle, w, true);
         } else { // base, the top one at support.line_angle
             const double angle = settings.support_line_angle + ((n - interfaces - 1 - k) % 2 == 1 ? 90.0 : 0.0);
             const double spacing =
                 k == 0 ? bead / (settings.raft_first_layer_density / 100.0) : settings.support_spacing + bead;
-            fills[k].support = rectilinear_fill(regions[k], spacing, angle, width, true);
+            fills[k].support = rectilinear_fill(regions[k], spacing, angle, w, true);
         }
     }
     // The part goes up.
@@ -140,7 +149,7 @@ void add_raft(SlicedModel& out, const Settings& settings) {
     out.brim.clear();
     AdhesionShape shape = adhesion_shape(settings);
     shape.brim_width = 0.0;
-    out.skirt = skirt_loops(first_area, shape, settings.wall_width, settings.first_layer_height);
+    out.skirt = skirt_loops(first_area, shape, first_bead(settings), settings.first_layer_height);
 }
 
 // The bridges' beads are round (gcode_motion.md, rule 1): as thick as they
@@ -748,6 +757,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_height = settings.layer_height;
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
+        part.first_line_width = {}; // the raft's first layer has them
         SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers);
         add_raft(raft, settings);
         return raft;
@@ -1183,6 +1193,15 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
+    // The first layer: every bead first_bead wide, the outer one too (with
+    // a width of its own; 0 leaves the first layer as the others).
+    const bool first_own = settings.first_line_width.value > 0.0;
+    Settings first_settings = settings;
+    BeadingParams first_beading = beading;
+    if (first_own) {
+        first_settings.wall_width = first_beading.preferred_width = first_bead(settings);
+        first_settings.outer_wall_width = first_beading.outer_width = 0.0;
+    }
     std::vector<std::size_t> open(out.layers.size(), 0);
     std::vector<char> cut_away(out.layers.size(), 0);
     out.thin_area.assign(out.layers.size(), 0.0);
@@ -1213,7 +1232,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         source[l] = same ? source[l - 1] : l;
         copied[l] = same && shrink_at(l) == shrink_at(l - 1) && !fuzzed(l) && !fuzzed(l - 1) &&
                     (cut.empty() || cut[l] == cut[l - 1]) &&
-                    !(l == 1 && settings.first_layer_one_wall) &&
+                    !(l == 1 && (settings.first_layer_one_wall || first_own)) &&
                     !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
                     !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
     }
@@ -1245,7 +1264,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         if (settings.wall_count > 0) {
             // Only the outer wall on the first layer (walls_extra.md, rule 11).
             out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
-                                    settings, beading);
+                                    l == 0 ? first_settings : settings, l == 0 ? first_beading : beading);
             // What the walls leave, simplified as the contours are: each wall's
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).
@@ -1275,7 +1294,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (out.regions[l].empty() || (l == 0 && settings.first_layer_one_wall))
                 return;
             std::optional<LayerWalls> walls =
-                one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, settings, beading);
+                one_wall_on_top(out.regions[l], l < last ? skins[l + 1] : nothing, l == 0 ? first_settings : settings,
+                                l == 0 ? first_beading : beading);
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
@@ -1646,14 +1666,18 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     if (!out.regions.empty() && !frame) {
         const double first = out.layers.front().top - out.layers.front().bottom;
         const AdhesionShape shape = adhesion_shape(settings);
-        out.brim = brim_loops(out.regions.front(), shape, settings.wall_width, first);
-        out.skirt = skirt_loops(out.regions.front(), shape, settings.wall_width, first);
+        out.brim = brim_loops(out.regions.front(), shape, first_bead(settings), first);
+        out.skirt = skirt_loops(out.regions.front(), shape, first_bead(settings), first);
     }
     out.fills.resize(out.layers.size());
     // A layer with nothing but its surfaces to fill, the same as the layer a
     // fill period below (fill_period), has its fill (prismatic parts; the
     // speed report's V10).
     const std::size_t period = fill_period(fill);
+    // The first layer's lines first_bead wide (perimeters.md, rule 7).
+    FillParams first_fill = fill;
+    if (settings.first_line_width.value > 0.0)
+        first_fill.width = first_fill.top_width = first_fill.solid_width = first_fill.sparse_width = first_bead(settings);
     const auto plain = [&](std::size_t l) {
         return l >= branches.size() && (l >= banded.size() || std::all_of(banded[l].begin(), banded[l].end(),
                                                                          [](const Polygons& b) { return b.empty(); })) &&
@@ -1665,7 +1689,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     if (period > 0)
         tbb::parallel_for(period, out.layers.size(), [&](std::size_t l) {
             const LayerSurfaces &a = out.surfaces[l], &b = out.surfaces[l - period];
-            repeats[l] = plain(l) && plain(l - period) && a.bridge_angle == b.bridge_angle && a.top == b.top &&
+            // Not the first layer's fill: its lines have their own width.
+            repeats[l] = l > period && plain(l) && plain(l - period) && a.bridge_angle == b.bridge_angle && a.top == b.top &&
                          a.top_under == b.top_under && a.bottom == b.bottom && a.sparse == b.sparse &&
                          a.bridge == b.bridge;
         });
@@ -1673,7 +1698,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                       [&](std::size_t l) {
                           if (repeats[l])
                               return;
-                          out.fills[l] = fill_layer(out.surfaces[l], l, fill, out.layers[l].slice_z());
+                          out.fills[l] = fill_layer(out.surfaces[l], l, l == 0 ? first_fill : fill, out.layers[l].slice_z());
                           round_bridges(out.fills[l].bridge, fill.bridge_width, out.layers[l].top - out.layers[l].bottom);
                           if (!out.on_support[l].empty())
                               rest_on_support(out.fills[l].bridge, out.on_support[l], out.support_gap[l],
@@ -1748,7 +1773,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           // Its own bead width (supports_more.md, rule 18): a
                           // percentage is of the layer height; 0, the walls'.
                           const double h = out.layers[l].top - out.layers[l].bottom;
-                          const double width = settings.support_width.value <= 0.0 ? settings.wall_width
+                          // The first layer's, on the bed (supports_more.md, rule 18, SM14).
+                          const double width = l == 0 && settings.first_line_width.value > 0.0 ? first_bead(settings)
+                                               : settings.support_width.value <= 0.0 ? settings.wall_width
                                                : settings.support_width.percent ? settings.support_width.value / 100.0 * h
                                                                                 : settings.support_width.value;
                           if (settings.support_style == SupportStyle::Organic) {

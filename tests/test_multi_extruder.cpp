@@ -800,6 +800,7 @@ TEST_CASE("nozzles: turned off, every kind back to the print's extruders (MM2)",
     // A cube on the coarse extruder takes its widths.
     s.nozzle_diameters = {0.25, 0.6};
     s.fine_walls_coarse_infill = false;
+    s.first_line_width = {}; // the first layer's too (not 200 % of its height)
     const Shown coarse = shown(gcode_of(cube(2), s));
     REQUIRE(coarse.widths.count("Perimeter"));
     for (const double w : coarse.widths.at("Perimeter"))

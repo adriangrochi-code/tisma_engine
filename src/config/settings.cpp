@@ -636,8 +636,26 @@ Settings parse_checked(std::string_view text) {
     }
 
     read_group(root, "layers",
-               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height"},
+               {"height", "first_height", "detail_height", "detail_tolerance", "detail_margin", "heights", "cusp_height",
+                "first_line_width"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "first_line_width") {
+            // mm, or a percentage of the first layer's height (perimeters.md, rule 7).
+            if (g.at(n).is_string()) {
+                const std::string t = g.at(n).get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                    fail(k, "must be a number of mm or a percentage of the first layer's height like \"200%\"");
+                s.first_line_width = {p, true};
+                return;
+            }
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 40.0))
+                fail(k, "must be from 0 (walls.width) to 40 mm");
+            s.first_line_width = {v, false};
+            return;
+        }
         if (n == "heights") {
             const json& v = g.at(n);
             const char* what = "must be a list of [z, height] pairs in mm, sorted by z, heights from 0.01 to 10";
@@ -2505,6 +2523,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     std::vector<std::pair<std::string, std::string>> out = {
         {"layers.height", num(s.layer_height)},
         {"layers.first_height", num(s.first_layer_height)},
+        {"layers.first_line_width", s.first_line_width.percent ? num(s.first_line_width.value) + "%" : num(s.first_line_width.value)},
         {"layers.detail_height", num(s.detail_height)},
         {"layers.detail_tolerance", num(s.detail_tolerance)},
         {"layers.detail_margin", num(s.detail_margin)},
@@ -2984,6 +3003,8 @@ std::string settings_json(const Settings& s) {
         {"layers",
          {{"height", s.layer_height},
           {"first_height", s.first_layer_height},
+          {"first_line_width", s.first_line_width.percent ? ordered_json(json(s.first_line_width.value).dump() + "%")
+                                                         : ordered_json(s.first_line_width.value)},
           {"detail_height", s.detail_height},
           {"detail_tolerance", s.detail_tolerance},
           {"detail_margin", s.detail_margin},

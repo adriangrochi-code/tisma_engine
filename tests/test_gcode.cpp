@@ -1868,8 +1868,10 @@ TEST_CASE("fills: line widths of their own for the top, the solid and the sparse
     Settings s = test_printer();
     s.infill_density = 20.0;
     const auto widths = [&m](const Settings& settings) {
-        std::array<std::set<double>, 3> w; // top, solid, sparse
-        for (const LayerFill& f : slice_model(m, settings).fills) {
+        std::array<std::set<double>, 3> w; // top, solid, sparse, past the first layer
+        const SlicedModel sliced = slice_model(m, settings);
+        for (std::size_t l = 1; l < sliced.fills.size(); ++l) {
+            const LayerFill& f = sliced.fills[l];
             for (const Toolpath& t : f.top)
                 for (const ToolpathPoint& p : t.points)
                     w[0].insert(p.width);

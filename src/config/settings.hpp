@@ -118,6 +118,9 @@ struct CalibrationDate {
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
+    // The first layer's beads (layers.first_line_width, perimeters.md, rule
+    // 7): mm, or a percentage of the first layer's height; 0: walls.width.
+    Speed first_line_width{200.0, true};
     // Layer heights by zone (docs/LOCAL_LAYERS.md): the height of the fine
     // sub-layers where the part changes, layer_height elsewhere; 0: off.
     double detail_height = 0.0;

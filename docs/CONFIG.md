@@ -23,6 +23,7 @@ Reglas:
 |---|---|---|---|---|
 | `height` | número | 0.2 | 0,01 a 10 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
 | `first_height` | número | 0.2 | 0,01 a 10 | Alto de la primera capa, con los mismos topes que `height` |
+| `first_line_width` | número o texto | `"200%"` | 0 a 40 mm, o 0 a 1000 % | Ancho de todos los cordones de la primera capa (paredes, la externa también, rellenos, falda, borde, soporte y la primera capa de la balsa): en mm, o en % de `first_height` (`"200%"` con 0,2 da 0,4 mm). 0: como las demás capas. Ficha `perimeters.md`, regla 7; `supports_more.md`, SM14 |
 
 Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 
