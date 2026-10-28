@@ -15,7 +15,8 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
         CAPTURE(key);
         if (key.starts_with("compute.")) // a preference of the program, not of a profile
             continue;
-        if (key.starts_with("placement.") || key.starts_with("transform.")) // the command line's; the interface has tools
+        // The command line's: the interface has tools, and each object its menu.
+        if (key.starts_with("placement.") || key.starts_with("transform.") || key.starts_with("object."))
             continue;
         const std::optional<SettingPlace> place = setting_place(key);
         REQUIRE(place);

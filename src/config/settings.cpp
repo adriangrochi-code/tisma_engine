@@ -769,7 +769,7 @@ Settings parse_checked(std::string_view text) {
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
-            group == "belt" || group == "print" || group == "calibration")
+            group == "belt" || group == "print" || group == "calibration" || group == "object")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -990,6 +990,19 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
     });
+    read_group(root, "object", {"extruder", "wipe_into_infill", "wipe_into_object"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   const json& v = g.at(n);
+                   if (n == "extruder") {
+                       if (!v.is_number_integer() || v.get<long long>() < 1 || v.get<long long>() > kMaxExtruders)
+                           fail(k, "must be an extruder from 1 to " + std::to_string(kMaxExtruders));
+                       s.object_extruder = v.get<int>();
+                       return;
+                   }
+                   if (!v.is_boolean())
+                       fail(k, "must be true or false");
+                   (n == "wipe_into_infill" ? s.object_wipe_into_infill : s.object_wipe_into_object) = v.get<bool>();
+               });
     read_group(root, "placement", {"arrange", "center", "spacing", "drop_to_bed"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
@@ -2916,6 +2929,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
         {"placement.drop_to_bed", flag(s.placement_drop_to_bed)},
+        {"object.extruder", std::to_string(s.object_extruder)},
+        {"object.wipe_into_infill", flag(s.object_wipe_into_infill)},
+        {"object.wipe_into_object", flag(s.object_wipe_into_object)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
         {"transform.scale", num(s.transform_scale)},
         {"transform.scale_to_fit", s.transform_scale_to_fit ? json(*s.transform_scale_to_fit).dump() : std::string("none")},
@@ -3390,6 +3406,10 @@ std::string settings_json(const Settings& s) {
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
+        {"object",
+         {{"extruder", s.object_extruder},
+          {"wipe_into_infill", s.object_wipe_into_infill},
+          {"wipe_into_object", s.object_wipe_into_object}}},
         {"placement",
          {{"arrange", s.placement_arrange},
           {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)},
@@ -3933,6 +3953,11 @@ void check_settings(const Settings& s) {
                           s.extruders);
             throw SettingsError(text);
         }
+    if (s.object_extruder > s.extruders) {
+        std::snprintf(text, sizeof text, "object.extruder: extruder %d, but the machine has %d (machine.extruders)",
+                      s.object_extruder, s.extruders);
+        throw SettingsError(text);
+    }
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);

@@ -437,6 +437,18 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 | `slowdown_logic` | texto | `uniform` | `uniform`, `consistent_surface` | `consistent_surface`: lo mismo que `keep_outer_speed`, y además la pared que toca a la externa se frena al final, con ella (ficha `cooling_more.md`, regla 5, C3). `uniform`: solo la externa, si `keep_outer_speed`; si no, todo por igual |
 | `transition_distance` | número | 0 | ≥ 0 | Con `slowdown_logic` `consistent_surface`, los últimos mm de extrusión de una capa frenada vuelven a su velocidad (ficha `cooling_more.md`, regla 6, C4); el resto de la capa se frena un poco más para llegar igual al tiempo mínimo |
 
+### `object`
+
+El modelo de la línea de comandos como objeto (ficha `multi_extruder.md`, reglas 1 y 13): todos los objetos que da
+(las copias, las piezas de un corte o una separación) toman estos valores. En la interfaz cada objeto tiene los suyos
+en su menú.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `extruder` | entero | 1 | 1 a `machine.extruders` | Extrusor con que se imprime el objeto (las claves de `extruders` mandan sobre él para lo suyo) |
+| `wipe_into_infill` | booleano | `false` | — | Con una MMU de una sola boquilla, parte de la purga de un cambio va a imprimir el relleno poco denso de este objeto con el filamento nuevo |
+| `wipe_into_object` | booleano | `false` | — | Como `wipe_into_infill`, pero en todo el objeto |
+
 ### `placement`
 
 Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 a 4). La interfaz ubica

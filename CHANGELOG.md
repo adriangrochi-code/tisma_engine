@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Grupo `object`** (ficha `multi_extruder.md`, reglas 1 y 13): en la línea de comandos, el extrusor del modelo
+  (`object.extruder`) y si una purga va a su relleno o a todo él (`object.wipe_into_infill`, `object.wipe_into_object`).
+
 - **`placement.drop_to_bed`** (ficha `placement.md`, regla 3): con `false` la pieza queda donde viene en Z; lo que
   está debajo de la cama no se imprime, y un objeto que no la toca se rechaza («no extrusions on the first layer»).
 

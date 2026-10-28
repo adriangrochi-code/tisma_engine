@@ -350,6 +350,11 @@ struct Settings {
     // to the centre of the bed's box; without one, it stays where it is. The
     // interface places objects itself and does not use these.
     bool placement_arrange = true;
+    // The command line's model as an object (multi_extruder.md, rules 1 and
+    // 13): its extruder, from 1, and whether a change of filament purges
+    // into its sparse infill or into all of it.
+    int object_extruder = 1;
+    bool object_wipe_into_infill = false, object_wipe_into_object = false;
     bool placement_drop_to_bed = true; // the base to Z = 0; off: what is below is not printed (placement.md, rule 3)
     std::optional<std::array<double, 2>> placement_center;
     double placement_spacing = 6.0; // mm between the boxes of copies (placement.md, rule 2)

@@ -4,9 +4,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -432,5 +434,40 @@ TEST_CASE("slice --copies prints copies of the model, one by one with sequential
     f.close();
     CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "0"})
               .code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice: the object group gives the model its extruder (multi_extruder.md, rule 1)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_object";
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json";
+    const auto write = [&](const std::string& object) {
+        std::ofstream(config) << R"({"machine": {"max_feed_x": 200, "max_feed_y": 200, "max_feed_z": 12, "max_feed_e": 120,
+                                                 "corner_speed": 10, "extruders": 2},
+                                     "speed": {"walls": 60, "outer_wall": "50%", "infill": 80, "solid_infill": 80,
+                                               "top_solid_infill": 15, "support": 80, "travel": 130, "first_layer": 30},
+                                     "retraction": {"speed": 40}, "cooling": {"min_speed": 10},
+                                     "object": )" + object + "}";
+    };
+    const auto gcode = dir / "object.gcode";
+    const auto tools = [&] {
+        std::ifstream f(gcode);
+        std::set<std::string> out;
+        for (std::string line; std::getline(f, line);)
+            if (line.size() >= 2 && line[0] == 'T' && std::isdigit(static_cast<unsigned char>(line[1])))
+                out.insert(line.substr(0, line.find_first_of(" ;")));
+        return out;
+    };
+    write(R"({"extruder": 2})");
+    REQUIRE(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string()}).code == kExitOk);
+    CHECK(tools() == std::set<std::string>{"T1"});
+    write(R"({"extruder": 1})");
+    REQUIRE(run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string()}).code == kExitOk);
+    CHECK(tools() == std::set<std::string>{"T0"});
+    // An extruder the machine does not have.
+    write(R"({"extruder": 3})");
+    const Run bad = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string()});
+    CHECK(bad.code != kExitOk);
+    CHECK_THAT(bad.err, ContainsSubstring("object.extruder: extruder 3, but the machine has 2"));
     std::filesystem::remove_all(dir);
 }

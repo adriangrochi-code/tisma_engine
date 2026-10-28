@@ -7175,3 +7175,20 @@ llega a 15 (PL4). PL9 con un cubo de Z 50 a 70: rechazado.
 
 **Diferencia con la ficha:** PL9 da el código 1 en Tisma Slicer; el motor usa el 4, su código de modelo que no se
 puede imprimir (la regla pide un código distinto de 0).
+
+## 2026-10-28 (tarde): grupo `object`
+
+**Hecho:** `object.extruder`, `object.wipe_into_infill` y `object.wipe_into_object` (`multi_extruder.md`, reglas 1 y
+13): en la línea de comandos, cada objeto que da el modelo (él solo, sus copias, las piezas de un corte) los toma.
+Son los mismos campos que los objetos de la placa ya tenían en la interfaz, cada uno en su menú; por eso no están en
+el panel. `check_settings` rechaza un extrusor que la máquina no tiene.
+
+**Probado:** con dos extrusores, `object.extruder` 2 imprime todo con `T1` y 1 con `T0`; 3 da el error
+«object.extruder: extruder 3, but the machine has 2».
+
+**No hecho del grupo `mixing`:** `mixing.purge_infill_max` es la regla 35 de `color_mixing_plus.md`, que todavía no
+se empezó (sus reglas 33 y 34, la purga en el relleno de las mezclas, van antes). `filament.transmission_distance`
+también es de esa ficha.
+
+**Sigue:** `orient.method` y `orient.precision` (`orientation.md`), y los de pellets (`machine.feedstock`,
+`machine.high_flow_nozzle`, `extrusion.flow_by_speed`, `extrusion.section`; `pellets.md`).
