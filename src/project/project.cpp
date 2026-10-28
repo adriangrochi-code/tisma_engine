@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -90,6 +91,8 @@ std::string write_project(const Project& project) {
                                  {"shape", v.cylinder ? "cylinder" : "box"},
                                  {"offset", v.offset},
                                  {"size", v.size}};
+            if (v.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
+                item["turn"] = v.turn;
             if (!v.settings.empty())
                 item["settings"] = ordered_json::parse(v.settings);
             models.back()["volumes"].push_back(std::move(item));
@@ -291,6 +294,14 @@ static Project read_project_checked(std::string_view data) {
                     volume.cylinder = shape == "cylinder";
                     volume.offset = three(v, "offset", at);
                     volume.size = three(v, "size", at);
+                    if (v.contains("turn")) {
+                        const ordered_json& turn = v.at("turn");
+                        if (!turn.is_array() || turn.size() != 9 ||
+                            !std::all_of(turn.begin(), turn.end(), [](const ordered_json& c) { return c.is_number(); }))
+                            fail(at + ".turn: must be 9 numbers (a turn, by rows)");
+                        for (std::size_t c = 0; c < 9; ++c)
+                            volume.turn[c] = turn[c].get<double>();
+                    }
                     if (v.contains("settings")) {
                         if (!v.at("settings").is_object())
                             fail(at + ".settings: must be an object of groups");

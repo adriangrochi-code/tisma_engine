@@ -168,7 +168,7 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     ProjectModel& m = p.models.front();
     m.settings = R"({"walls":{"count":3}})";
     m.volumes.push_back({false, true, {5.0, 0.0, 2.0}, {8.0, 8.0, 4.0}, R"({"infill":{"density":60}})"});
-    m.volumes.push_back({true, false, {0.0, 0.0, -1.0}, {4.0, 4.0, 20.0}, ""});
+    m.volumes.push_back({true, false, {0.0, 0.0, -1.0}, {4.0, 4.0, 20.0}, "", {0, -1, 0, 1, 0, 0, 0, 0, 1}});
     m.ranges.push_back({4.0, 6.0, R"({"layers":{"height":0.1}})"});
     const Project back = read_project(write_project(p));
     const ProjectModel& b = back.models.front();
@@ -181,6 +181,8 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     CHECK(b.volumes[0].settings == m.volumes[0].settings);
     CHECK(b.volumes[1].negative);
     CHECK(b.volumes[1].settings.empty());
+    CHECK(b.volumes[0].turn == m.volumes[0].turn); // upright: not written
+    CHECK(b.volumes[1].turn == m.volumes[1].turn); // a quarter turn about Z
     REQUIRE(b.ranges.size() == 1);
     CHECK(b.ranges[0].from == 4.0);
     CHECK(b.ranges[0].to == 6.0);

@@ -6560,3 +6560,34 @@ voladizo (`cut_at`), que la 0.9.0 no hacía.
 mensajes del negativo y de un rango con ajustes rotos (`[transform]`).
 
 **Sigue:** la lista de objetos con sus filas hijas y que los volúmenes sigan a la pieza al girarla o escalarla (P1).
+
+
+## 2026-10-28 — Los modificadores y negativos siguen a la pieza al girarla, escalarla y espejarla
+
+**Por qué:** lo que seguía de P1 (pedido del dueño de seguir con lo próximo): los volúmenes de una pieza solo la
+seguían al moverla.
+
+**Hecho:**
+- Un modificador o un negativo se define ahora en el marco del modelo, sobre su caja tal como viene en su archivo y en
+  sus milímetros, y `volume_mesh` lo lleva a la cama con el mismo mapa que `placed_mesh` (`placing`: escala, giro y
+  el corrimiento que dejó la primera esquina). Sin giro ni escala queda donde estaba: los proyectos de ayer abren igual.
+- Cada volumen tiene un giro propio (`PlateVolume::turn`), para los casos en que la malla de la pieza cambia de marco:
+  guardar el proyecto (la pieza se guarda como está en la cama) y espejar una pieza girada (que toma su giro en la
+  malla). `carried_volume` lleva el volumen al marco nuevo: el centro por el mapa, los ejes por el mapa y
+  normalizados (su estiramiento escala el tamaño), uno dado vuelta si el mapa espeja (una caja y un cilindro son su
+  propia imagen) y Gram-Schmidt si una escala despareja los torció. En el proyecto, `models[i].volumes[k].turn`
+  (nueve números por filas), escrito solo si no es el giro nulo.
+- Agregar un volumen desde el menú usa las medidas del modelo (`model_size`), no las de la pieza en la cama.
+- `--object-turn X,Y,Z` gira la primera pieza al abrir, después de `--object-add`, y la prueba `ui_object_volumes_turned`
+  (el cubo a 45° con un modificador y un negativo).
+
+**Medido:** `[plate]`: una caja de 4 mm a 5 mm del centro en +X queda en X 105; con la pieza girada 90° en Z, en Y 105;
+con escala 2, en Y 110, Z 10 y de 8 mm; guardada como está, en el mismo lugar con 8 mm; espejada en X, a −5 y derecha.
+`[project]`: `turn` va y vuelve. Exportar desde la interfaz el cubo con un modificador de 5 paredes y un negativo: sin
+giro, 333,11 mm de filamento (lo mismo que ayer); girado 45°, 334,91 mm; los dos pasan el verificador al exportar.
+
+**Falta:** la lista de objetos con sus filas hijas; los volúmenes al cortar o separar; editar el giro propio de un
+volumen en la ventana (hoy solo cambia al guardar o espejar).
+
+**No medido:** el dibujo de los volúmenes calcula en cada cuadro la caja del modelo (una pasada por sus vértices) por
+cada volumen; con mallas de millones de triángulos puede notarse.

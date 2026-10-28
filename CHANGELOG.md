@@ -30,7 +30,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   sobre la pieza, en los niveles Normal y Avanzado, para darle paredes, relleno o capas sólidas propios; se editan en
   la ventana «Ajustes de …» y se guardan en el proyecto. En el motor, la parte que va después gana donde dos se pisan.
 - **Modificadores, volúmenes negativos y rangos de alturas desde la interfaz:** clic derecho sobre la pieza (niveles
-  Normal y Avanzado), editados en la ventana «Ajustes de …» y guardados en el proyecto.
+  Normal y Avanzado), editados en la ventana «Ajustes de …» y guardados en el proyecto. Los modificadores y negativos
+  siguen a la pieza al moverla, girarla, escalarla y espejarla.
 - **Rangos de alturas en el motor** (`model_tools.md`, regla 6): un tramo de alturas de un objeto con sus ajustes,
   la altura de capa incluida (el tramo empieza una capa).
 - **Modificadores en el motor** (`model_tools.md`, reglas 3 a 5): donde un modificador toca las partes de su objeto,

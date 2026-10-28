@@ -33,14 +33,16 @@ struct Placement {
 
 // A modifier or a negative volume added to an object (settings_levels.md,
 // rule 10; model_tools.md, rules 2 and 3): a box or a cylinder, placed from
-// the object's box as it stands on the bed (the centre in X and Y, the bottom
-// in Z), with a modifier's own settings.
+// the model's own box, as its file has it (the centre in X and Y, the bottom
+// in Z), in the model's millimetres, with a modifier's own settings. It is
+// scaled, turned and set on the bed with the model.
 struct PlateVolume {
     enum class Kind { Modifier, Negative } kind = Kind::Modifier;
     enum class Shape { Box, Cylinder } shape = Shape::Box;
     std::array<double, 3> offset{0.0, 0.0, 0.0}; // mm: its box's centre in X and Y, its bottom in Z
     std::array<double, 3> size{10.0, 10.0, 10.0}; // mm
     std::string settings{};
+    Rotation turn = kNoRotation; // its own turn in the model's frame, about its centre
     friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
 };
 // A height range of an object (model_tools.md, rule 6): from and to over its
@@ -68,9 +70,27 @@ struct PlateObject {
     std::vector<PlateRange> ranges{};
 };
 
-// A volume's mesh over the object's box as placed on the bed (a cylinder of
-// 48 sides, its axis on Z), its faces out.
-TriangleMesh volume_mesh(const PlateVolume& volume, const BoundingBox& placed);
+// A volume's mesh where its object stands (a cylinder of 48 sides, its axis
+// on the model's Z), its faces out: `placed` is placed_mesh(object).
+TriangleMesh volume_mesh(const PlateVolume& volume, const PlateObject& object, const TriangleMesh& placed);
+
+// The model's size as its file has it, before its scale and turn, mm.
+std::array<double, 3> model_size(const PlateObject& object);
+
+// A map x' = a x + b between two frames of a model.
+struct Affine {
+    std::array<double, 9> a{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::array<double, 3> b{0.0, 0.0, 0.0};
+};
+// From the model's frame to the bed, as placed_mesh sets it down (placed:
+// placed_mesh(object)).
+Affine placing(const PlateObject& object, const TriangleMesh& placed);
+// The volume in the model's new frame when the model's mesh becomes `map`
+// of itself (saved as placed, or mirrored): `from` and `to` are the model's
+// box in the old frame and in the new. Its sizes stretch as the map does
+// along its axes; a mirror leaves it turned, not mirrored (a box and a
+// cylinder are their own mirror images).
+PlateVolume carried_volume(const PlateVolume& volume, const BoundingBox& from, const Affine& map, const BoundingBox& to);
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);

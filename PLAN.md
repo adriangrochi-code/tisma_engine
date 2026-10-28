@@ -756,7 +756,7 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   filas hijas (regla 11 de `settings_levels.md`), los demás grupos por objeto (velocidades, temperaturas, altura de
   capa), los negativos con corte, separar o copias, el plano libre y los conectores del corte, Separar en partes
   (reglas 18 y 19), los modificadores y negativos con la forma de un archivo (hoy caja o cilindro, agregados en la interfaz el
-  2026-10-28), la altura de capa de un rango cuando hay varios objetos con
+  2026-10-28; siguen a la pieza al moverla, girarla, escalarla y espejarla), la altura de capa de un rango cuando hay varios objetos con
   rangos distintos (hoy la pila de capas es de toda la placa), las copias en grilla (regla 15), y el
   puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,

@@ -2247,7 +2247,7 @@ bool App::init(std::string& error) {
     }
     if (!options_.object_add.empty() && !objects_.empty()) {
         PlateObject& o = objects_.front();
-        const std::array<double, 3> size = placed_size(o);
+        const std::array<double, 3> size = model_size(o);
         const std::array<double, 3> half{size[0] / 2.0, size[1] / 2.0, size[2] / 2.0};
         std::stringstream list(options_.object_add);
         for (std::string what; std::getline(list, what, ',');)
@@ -2260,6 +2260,10 @@ bool App::init(std::string& error) {
             else if (what == "range")
                 o.ranges.push_back({0.0, 2.0, with_own_key("", settings_, "layers.height")});
         selected_ = object_settings_ = 0;
+    }
+    if (options_.object_turn != std::array<double, 3>{0.0, 0.0, 0.0} && !objects_.empty()) {
+        objects_.front().place.rotation = from_euler_degrees(options_.object_turn);
+        plate_changed();
     }
     if (!options_.object_settings.empty() && !objects_.empty()) {
         try {
@@ -2845,7 +2849,7 @@ void App::open_project(const std::filesystem::path& path) {
             for (const ProjectVolume& v : m.volumes)
                 o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
                                      v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
-                                     v.settings});
+                                     v.settings, v.turn});
             for (const ProjectRange& r : m.ranges)
                 o.ranges.push_back({r.from, r.to, r.settings});
             const BoundingBox box = o.mesh.bounding_box();
@@ -2904,9 +2908,14 @@ void App::save_project_to(const std::filesystem::path& path) {
         p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
                             objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
                             objects_[i].settings});
-        for (const PlateVolume& v : objects_[i].volumes)
+        // The model is saved as placed: its volumes go with it.
+        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
+        const BoundingBox from = objects_[i].mesh.bounding_box(), to = placed_meshes_[i].bounding_box();
+        for (const PlateVolume& own : objects_[i].volumes) {
+            const PlateVolume v = carried_volume(own, from, to_bed, to);
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
-                                               v.offset, v.size, v.settings});
+                                               v.offset, v.size, v.settings, v.turn});
+        }
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
     }
@@ -3471,10 +3480,9 @@ void App::start_slice() {
     // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
     SliceVolumes volumes;
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        const BoundingBox box = placed_meshes_[i].bounding_box();
         for (std::size_t k = 0; k < objects_[i].volumes.size(); ++k) {
             const PlateVolume& v = objects_[i].volumes[k];
-            TriangleMesh shape = volume_mesh(v, box);
+            TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             if (v.kind == PlateVolume::Kind::Negative) {
                 for (std::size_t t = 0; t < shape.triangle_count(); ++t)
                     volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
@@ -6850,8 +6858,8 @@ void App::object_menu() {
     }
     ImGui::Separator();
     // A modifier, a negative volume or a height range (model_tools.md, rules
-    // 2, 3 and 6), over the middle of the model.
-    const std::array<double, 3> size = placed_size(o);
+    // 2, 3 and 6), over the middle of the model, in its own measures.
+    const std::array<double, 3> size = model_size(o);
     const std::array<double, 3> half{std::max(1.0, size[0] / 2.0), std::max(1.0, size[1] / 2.0), std::max(1.0, size[2] / 2.0)};
     if (ImGui::MenuItem(tr(T::AddModifier))) {
         o.volumes.push_back({PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {0.0, 0.0, size[2] / 4.0}, half,
@@ -7419,17 +7427,33 @@ void App::split_selected() {
 
 void App::mirror_selected(int axis) {
     PlateObject& o = objects_[std::size_t(selected_)];
+    const BoundingBox from = o.mesh.bounding_box();
+    // Its modifiers and negative volumes go where the mirror puts them: the
+    // map from the model's old frame to its new one.
+    Affine map;
     if (o.place.rotation == kNoRotation) {
         // On the model's own axis, which is the bed's: its scale stays.
         mirror_mesh(o.mesh, axis);
     } else {
         // Turned, the model takes its turn and size into its mesh first.
         TriangleMesh m = placed_mesh(o);
+        map = placing(o, m);
         mirror_mesh(m, axis);
         o.mesh = std::move(m);
         o.place.rotation = kNoRotation;
         o.place.scale = {1.0, 1.0, 1.0};
     }
+    // Then the mirror itself, about the centre of the mesh's box (mirror_mesh).
+    const BoundingBox to = o.mesh.bounding_box();
+    const double centre = axis == 0 ? 0.5 * (double(to.min.x) + to.max.x)
+                          : axis == 1 ? 0.5 * (double(to.min.y) + to.max.y)
+                                      : 0.5 * (double(to.min.z) + to.max.z);
+    const std::size_t a = std::size_t(axis);
+    for (std::size_t j = 0; j < 3; ++j)
+        map.a[3 * a + j] = -map.a[3 * a + j];
+    map.b[a] = 2.0 * centre - map.b[a];
+    for (PlateVolume& v : o.volumes)
+        v = carried_volume(v, from, map, to);
     plate_changed();
 }
 
@@ -7507,10 +7531,9 @@ void App::volumes_overlay() {
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
         if (objects_[i].volumes.empty())
             continue;
-        const BoundingBox box = placed_meshes_[i].bounding_box();
         for (const PlateVolume& v : objects_[i].volumes) {
             const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
-            const TriangleMesh shape = volume_mesh(v, box);
+            const TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             // The outline of every face but the cylinder's caps' spokes.
             for (std::size_t t = 0; t < shape.triangle_count(); ++t) {
                 ImVec2 a, b, c;

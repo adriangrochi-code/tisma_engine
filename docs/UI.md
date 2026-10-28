@@ -72,11 +72,13 @@ ajustes a la primera pieza al abrir, para las capturas.
 
 El mismo menú agrega **modificadores**, **volúmenes negativos** y **rangos de alturas** (`model_tools.md`, reglas 2,
 3 y 6). Un modificador o un negativo es una caja o un cilindro, con su lugar (desde el centro de la caja de la pieza en
-X e Y y desde su base en Z) y su tamaño; el modificador tiene sus ajustes. Un rango tiene desde y hasta (mm sobre la
-base de la pieza) y sus ajustes, la altura de capa incluida. Todo se edita en la ventana «Ajustes de …», se dibuja
-sobre la vista (los modificadores en naranja, los negativos en gris), viaja con la pieza al moverla y se guarda en el
-proyecto (`models[i].volumes` y `ranges`). Al cortar o separar, las piezas nuevas no los llevan. `--object-add
-modifier,negative,range` los agrega a la primera pieza al abrir, para las capturas.
+X e Y y desde su base en Z) y su tamaño, en las medidas del modelo tal como viene en su archivo; el modificador tiene
+sus ajustes. Un rango tiene desde y hasta (mm sobre la base de la pieza) y sus ajustes, la altura de capa incluida.
+Todo se edita en la ventana «Ajustes de …», se dibuja sobre la vista (los modificadores en naranja, los negativos en
+gris) y se guarda en el proyecto (`models[i].volumes` y `ranges`). Los modificadores y negativos siguen a la pieza al
+moverla, girarla, escalarla y espejarla (crecen con ella). Al cortar o separar, las piezas nuevas no los llevan.
+`--object-add modifier,negative,range` los agrega a la primera pieza al abrir, y `--object-turn X,Y,Z` la gira esos
+grados después, para las capturas.
 
 La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
 izquierda de la vista 3D, una columna con:

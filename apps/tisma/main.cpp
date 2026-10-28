@@ -100,6 +100,12 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--object-add") {
             options.object_add = value();
+        } else if (arg == "--object-turn") {
+            auto& d = options.object_turn;
+            if (std::sscanf(value(), "%lf,%lf,%lf", &d[0], &d[1], &d[2]) != 3) {
+                std::fprintf(stderr, "error: --object-turn takes three angles in degrees, as 0,0,45\n");
+                return 2;
+            }
         } else if (arg == "--object-settings") {
             options.object_settings = value();
         } else if (arg == "--measure") {

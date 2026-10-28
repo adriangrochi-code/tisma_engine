@@ -32,6 +32,7 @@ struct ProjectVolume {
     bool cylinder = false;
     std::array<double, 3> offset{0.0, 0.0, 0.0}, size{10.0, 10.0, 10.0};
     std::string settings{};
+    std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1}; // its own turn, by rows
 };
 struct ProjectRange {
     double from = 0.0, to = 2.0;

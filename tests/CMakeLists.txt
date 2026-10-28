@@ -302,7 +302,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --object-add modifier,negative,range
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_volumes.png)
-    set_tests_properties(ui_cut ui_measure ui_object_settings ui_object_volumes PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The same turned 45° about Z: the modifier and the negative turn with it.
+    add_test(NAME ui_object_volumes_turned
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --object-add modifier,negative
+              --object-turn 0,0,45 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_volumes_turned.png)
+    set_tests_properties(ui_cut ui_measure ui_object_settings ui_object_volumes ui_object_volumes_turned PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # More › Credits and sources, in English (credits.md, CR2 and CR4).
     add_test(NAME ui_credits
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
