@@ -901,6 +901,8 @@ const std::map<T, const char*>& row_keys() {
         {T::FuzzyDistance, "fuzzy.point_distance"}, {T::TopLayers, "surfaces.top_layers"},
         {T::BottomLayers, "surfaces.bottom_layers"}, {T::TopMinThickness, "surfaces.top_min_thickness"},
         {T::BottomMinThickness, "surfaces.bottom_min_thickness"}, {T::TopPattern, "surfaces.top_pattern"},
+        {T::BottomPattern, "surfaces.bottom_pattern"}, {T::BridgeAngle, "surfaces.bridge_angle"},
+        {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
         {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
@@ -5799,6 +5801,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 10.0, "%.2f mm", 0.01f);
         if (shown("surfaces.top_pattern"))
             changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        if (shown("surfaces.bottom_pattern"))
+            changed |= row(T::BottomPattern, s.monotonic_bottom, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+        mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : "—",
+           0.5f);
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "infill") {
         mm(T::InfillDensity, "infill.density", s.infill_density, 0.0, 100.0, "%.0f %%", 0.2f);
@@ -5824,6 +5830,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::InfillAngle, "infill.angle", s.infill_angle, -180.0, 180.0, "%.0f°", 0.5f);
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
+        flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);
+        mm(T::MaxLink, "infill.max_link", s.infill_max_link, 0.0, 1000.0, s.infill_max_link > 0.0 ? "%.0f mm" : "—", 0.5f);
         whole(T::SolidEvery, "infill.solid_every", s.infill_solid_every, 0, 100, "%d", tr(T::SolidEveryTip));
         mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 1000.0, "%.0f mm²", 1.0f,
            tr(T::SolidBelowAreaTip));

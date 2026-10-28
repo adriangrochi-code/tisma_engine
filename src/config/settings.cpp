@@ -1439,8 +1439,20 @@ Settings parse_checked(std::string_view text) {
         s.vase = g.at(n).get<bool>();
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
-                                  "bottom_min_thickness", "interface_shells", "top_width", "solid_width"},
+                                  "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
+                                  "bottom_pattern", "bridge_angle"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "bottom_pattern") {
+            s.monotonic_bottom = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
+            return;
+        }
+        if (n == "bridge_angle") {
+            const double v = number(g, n, k);
+            if (!(v >= -360.0 && v <= 360.0))
+                fail(k, "must be from -360 to 360 degrees");
+            s.bridge_angle = v;
+            return;
+        }
         if (n == "top_width" || n == "solid_width") {
             const double v = number(g, n, k);
             if (v < 0.0 || v > 10.0)
@@ -1473,8 +1485,22 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "infill", {"density", "angle", "pattern", "wall_overlap", "combine_layers", "combine_auto",
                                 "combine_max_height", "dense_under_top", "dense_density", "stress_density",
                                 "solid_every", "solid_below_area", "nonplanar", "nonplanar_amplitude",
-                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width"},
+                                "nonplanar_wavelength", "waves", "wave_amplitude", "wave_length", "width", "before_walls",
+                                "max_link"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "before_walls") {
+            if (!g.at(n).is_boolean())
+                fail(k, "must be true or false");
+            s.infill_before_walls = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "max_link") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 1000.0))
+                fail(k, "must be from 0 to 1000 mm");
+            s.infill_max_link = v;
+            return;
+        }
         if (n == "width") {
             const double v = number(g, n, k);
             if (v < 0.0 || v > 10.0)
@@ -2883,6 +2909,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
         {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+        {"surfaces.bottom_pattern", s.monotonic_bottom ? "monotonic" : "rectilinear"},
+        {"surfaces.bridge_angle", num(s.bridge_angle)},
         {"surfaces.top_width", num(s.top_width)},
         {"surfaces.solid_width", num(s.solid_width)},
         {"surfaces.top_min_thickness", num(s.top_min_thickness)},
@@ -2928,6 +2956,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"infill.pattern", pattern},
         {"infill.wall_overlap", num(s.infill_wall_overlap)},
         {"infill.width", num(s.infill_width)},
+        {"infill.before_walls", s.infill_before_walls ? "true" : "false"},
+        {"infill.max_link", num(s.infill_max_link)},
         {"infill.combine_layers", std::to_string(s.infill_combine_layers)},
         {"infill.combine_auto", flag(s.infill_combine_auto)},
         {"infill.dense_under_top", flag(s.infill_dense_under_top)},
@@ -3450,6 +3480,8 @@ std::string settings_json(const Settings& s) {
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
           {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
+          {"bottom_pattern", s.monotonic_bottom ? "monotonic" : "rectilinear"},
+          {"bridge_angle", s.bridge_angle},
           {"top_width", s.top_width},
           {"solid_width", s.solid_width},
           {"top_min_thickness", s.top_min_thickness},
@@ -3461,6 +3493,8 @@ std::string settings_json(const Settings& s) {
           {"pattern", pattern},
           {"wall_overlap", s.infill_wall_overlap},
           {"width", s.infill_width},
+          {"before_walls", s.infill_before_walls},
+          {"max_link", s.infill_max_link},
           {"combine_layers", s.infill_combine_layers},
           {"combine_auto", s.infill_combine_auto},
           {"dense_under_top", s.infill_dense_under_top},

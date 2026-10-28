@@ -1420,8 +1420,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     find_bridges(out.surfaces, out.regions, out.walls, settings.infill_density > 0.0, settings.wall_width,
                  others.empty() ? nullptr : &others);
     out.air_bridges.resize(out.surfaces.size());
-    for (std::size_t l = 0; l < out.surfaces.size(); ++l)
+    for (std::size_t l = 0; l < out.surfaces.size(); ++l) {
         out.air_bridges[l] = out.surfaces[l].bridge;
+        // A set direction for every bridge (surfaces.bridge_angle); 0: each its own.
+        if (settings.bridge_angle != 0.0 && !out.surfaces[l].bridge.empty())
+            out.surfaces[l].bridge_angle = settings.bridge_angle;
+    }
     // A solid layer every N (infill_patterns.md, rule 21): layers N, 2N...
     // fill all their sparse infill solid, as bridges over the sparse infill
     // below.
@@ -1748,6 +1752,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.top_width = settings.top_width > 0.0 ? settings.top_width : settings.nozzle_diameter;
     fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
+    fill.max_link = settings.infill_max_link;
+    fill.monotonic_bottom = settings.monotonic_bottom;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress

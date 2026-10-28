@@ -150,6 +150,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `top_width` | número | 0 | 0 a 10 | Ancho de los cordones de la capa de arriba de todo, en mm; 0: el diámetro de la boquilla, sin seguir a `walls.width` (ficha `surfaces_infill.md`, I9) |
 | `solid_width` | número | 0 | 0 a 10 | Ancho de los cordones del resto del relleno sólido, en mm; 0: 1,125 × la boquilla (I9) |
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores |
+| `bottom_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Las superficies de abajo, como `top_pattern`: líneas en orden monótono, sin unir (ficha `surfaces_infill.md`); las capas sólidas bajo una superficie de arriba siguen en zigzag. `rectilinear`: zigzag |
+| `bridge_angle` | número | 0 | −360 a 360 | Dirección de las líneas de todos los puentes, en grados (ficha `surfaces_infill.md`); 0: la de cada puente, según dónde se apoya |
 
 ### `infill`
 
@@ -159,6 +161,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
 | `width` | número | 0 | 0 a 10 | Ancho de los cordones del relleno poco denso, en mm (su separación sigue a la densidad); 0: 1,125 × la boquilla (ficha `surfaces_infill.md`, I9). Con boquillas distintas, en proporción a la del relleno |
 | `wall_overlap` | número | 25 | 0 a 100 | Cuánto entran en la pared interna, en % del ancho de cordón, las líneas sólidas que no se unen en zigzag (superficies superiores monotónicas). Con 25 %, el material depositado queda entre −0,5 % y +1,5 % del área |
+| `before_walls` | booleano | false | | En cada isla, los rellenos (el poco denso primero) antes que las paredes (ficha `gcode_motion.md`, regla 8, M8) |
+| `max_link` | número | 50 | 0 a 1000 | Largo máximo, en mm, del tramo que une dos líneas del relleno poco denso siguiendo el borde (ficha `surfaces_infill.md`, regla 7); 0: tres separaciones de líneas, como antes |
 | `nonplanar` | sí/no | no | — | Relleno ondulado: sube y baja en Z, igual en todas las capas, solo con patrones que se repiten capa a capa (`docs/NONPLANAR_INFILL.md`) |
 | `nonplanar_amplitude` | % | 250 | 0 a 500 | Altura de la onda, de valle a cresta, en % de la altura de capa |
 | `nonplanar_wavelength` | mm | 2 | 0,5 a 20 | Largo de la onda |

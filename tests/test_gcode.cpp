@@ -973,6 +973,65 @@ TEST_CASE("support: its own line width, in mm or of the layer height (supports_m
     CHECK(widths(s) == std::set<long>{300});
 }
 
+TEST_CASE("order: infill.before_walls lays an island's fills before its walls (gcode_motion.md, rule 8, M8)",
+          "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 6);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    // The order of the types of layer 15's extrusions, each once.
+    const auto order = [&] {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, s), s);
+        std::vector<std::string> types;
+        std::string type;
+        int layer = 0;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line == ";LAYER_CHANGE")
+                ++layer;
+            else if (line.rfind(";TYPE:", 0) == 0)
+                type = line.substr(6);
+            else if (layer == 15 && line.rfind("G1 X", 0) == 0 && line.find(" E") != std::string::npos &&
+                     (types.empty() || types.back() != type))
+                types.push_back(type);
+        }
+        return types;
+    };
+    std::vector<std::string> walls_first = order();
+    REQUIRE(walls_first.size() >= 3);
+    CHECK(walls_first.back() == "Internal infill");
+    s.infill_before_walls = true;
+    const std::vector<std::string> fills_first = order();
+    REQUIRE(fills_first.size() >= 3);
+    CHECK(fills_first.front() == "Internal infill");
+    CHECK((fills_first.back() == "External perimeter" || fills_first.back() == "Perimeter"));
+}
+
+TEST_CASE("surfaces.bridge_angle: every bridge's lines in the set direction", "[gcode]") {
+    // The table of surfaces_infill.md: a plank over two posts 10 mm apart.
+    IndexedMesh m;
+    add_box(m, 0, 0, 5, 10, 5);
+    add_box(m, 15, 0, 20, 10, 5);
+    add_box(m, 0, 0, 20, 10, 7, 5);
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    const auto directions = [&] {
+        const SlicedModel model = slice_model(m, s);
+        std::set<long> out; // degrees, 0 to 179
+        for (const LayerFill& f : model.fills)
+            for (const Toolpath& t : f.bridge)
+                for (std::size_t i = 1; i < t.points.size(); ++i) {
+                    const double dx = t.points[i].p.x - t.points[i - 1].p.x, dy = t.points[i].p.y - t.points[i - 1].p.y;
+                    if (std::hypot(dx, dy) > 2.0)
+                        out.insert((std::lround(std::atan2(dy, dx) * 180.0 / std::numbers::pi) + 360) % 180);
+                }
+        return out;
+    };
+    CHECK(directions() == std::set<long>{0}); // across the gap, from post to post
+    s.bridge_angle = 30.0;
+    CHECK(directions() == std::set<long>{30});
+}
+
 TEST_CASE("support: under whatever hangs in the first support.enforce_layers layers (supports_more.md, rule 1; SM1)",
           "[gcode][support]") {
     // The 70 degree wedge of supports_skirt.md: 10 mm in X at the bottom, 20 in

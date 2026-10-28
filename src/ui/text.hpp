@@ -1112,6 +1112,10 @@
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
     X(SubGcodeHeights, "G-code por altura", "G-code by height") \
     X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
+    X(BottomPattern, "Patrón de abajo", "Bottom pattern") \
+    X(BridgeAngle, "Dirección de los puentes", "Bridge direction") \
+    X(InfillBeforeWalls, "Relleno antes que las paredes", "Infill before walls") \
+    X(MaxLink, "Unión máxima del relleno", "Maximum infill link") \
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \

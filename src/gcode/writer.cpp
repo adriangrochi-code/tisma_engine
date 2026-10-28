@@ -3368,6 +3368,17 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // (arc_overhangs.md, rule 4).
                 for (Toolpath t : i.arcs)
                     lay(std::move(t), "Overhang perimeter", speed(s.arcs_speed > 0.0 ? s.arcs_speed : bridge_feed));
+                // The fills, the sparse infill first; with infill.before_walls
+                // before the walls (gcode_motion.md, rule 8, M8).
+                const auto fills = [&] {
+                    constexpr std::array<std::size_t, 7> kFirstSparse = {4, 0, 1, 2, 3, 5, 6};
+                    for (std::size_t j = 0; j < 7; ++j) {
+                        const std::size_t k = s.infill_before_walls ? kFirstSparse[j] : j;
+                        group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
+                    }
+                };
+                if (s.infill_before_walls)
+                    fills();
                 // From the inside out, or with walls.outer_first from the outer
                 // wall in (perimeters.md, rule 4).
                 if (s.walls_outer_first)
@@ -3380,8 +3391,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
                     lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
-                for (std::size_t k = 0; k < 7; ++k)
-                    group(i.fills[k], fill_type[k], fill_feed(k), SeamMode::Nearest, false, {}, k == 0 ? over_feed : 0.0);
+                if (!s.infill_before_walls)
+                    fills();
                 // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
                 group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
                 flush();

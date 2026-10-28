@@ -55,6 +55,33 @@ TEST_CASE("rectilinear lines on a grid fixed to the origin", "[infill]") {
     CHECK(rectilinear_fill({}, 1.0, 0.0, 0.4).empty());
 }
 
+TEST_CASE("infill.max_link: lines joined over a longer stretch of the boundary (surfaces_infill.md, rule 7)",
+          "[infill]") {
+    // A triangle whose top side is 10 degrees off the lines: the ends of two
+    // neighbouring lines on it lie spacing / sin(10 deg), almost 6 spacings,
+    // apart along it, past the 3 spacings the engine joined over before.
+    const Polygons wedge = {{{to_units(0), to_units(0)}, {to_units(40), to_units(0)}, {to_units(40), to_units(7)}}};
+    const std::size_t short_links = rectilinear_fill(wedge, 1.0, 0.0, 0.4, true).size();
+    const std::size_t long_links = rectilinear_fill(wedge, 1.0, 0.0, 0.4, true, false, false, 0.0, 0.0, 50.0).size();
+    CHECK(short_links >= 2);
+    CHECK(long_links < short_links);
+    CHECK(rectilinear_fill(wedge, 1.0, 0.0, 0.4, true, false, false, 0.0, 0.0, 1.0).size() >= short_links);
+}
+
+TEST_CASE("surfaces.bottom_pattern: monotonic bottom lines, unjoined; the solid under a top zig-zags", "[infill]") {
+    LayerSurfaces s;
+    s.bottom = square(0, 0, 10);
+    FillParams p;
+    p.monotonic_bottom = true;
+    const LayerFill mono = fill_layer(s, 0, p, 0.2);
+    REQUIRE_FALSE(mono.solid.empty());
+    for (const Toolpath& t : mono.solid)
+        CHECK(t.points.size() == 2);
+    p.monotonic_bottom = false;
+    const LayerFill zig = fill_layer(s, 0, p, 0.2);
+    CHECK(zig.solid.size() < mono.solid.size());
+}
+
 TEST_CASE("fill_layer: solid at 100%, sparse at the density, angles turn by layer", "[infill]") {
     LayerSurfaces s;
     s.bottom = square(0, 0, 10);

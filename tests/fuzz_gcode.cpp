@@ -489,6 +489,10 @@ int main(int argc, char** argv) {
         s.support_contact_loops = pick(3) == 0;
         s.support_enforce_layers = pick(4) == 0 ? pick(30) : 0;
         s.corner_smoothing = pick(3) == 0 ? 0.01 * double(pick(6)) : 0.0;
+        s.monotonic_bottom = pick(2) == 0;
+        s.infill_before_walls = pick(4) == 0;
+        s.infill_max_link = pick(3) == 0 ? double(pick(60)) : 50.0;
+        s.bridge_angle = pick(4) == 0 ? double(pick(180)) : 0.0;
         if (s.support_style == SupportStyle::Grid && pick(3) == 0) {
             s.support_style = SupportStyle::Snug;
             s.support_closing_radius = 0.25 * double(pick(12));
@@ -531,7 +535,7 @@ int main(int argc, char** argv) {
                 std::printf("\n");
                 std::printf("  vase %d scarf %d smooth %d start %.0f length %.2f entire %d segment %.2f inner %d overhangs %d staggered %d "
                             "overhang fan %d %.0f %.0f %.0f %.0f slowdown %d tail %.0f support pattern %d sheath %d interface %d "
-                            "%.1f contact %d enforce %d style %d closing %.2f corners %.2f\n",
+                            "%.1f contact %d enforce %d style %d closing %.2f corners %.2f bottom %d before %d link %.0f bridge %.0f\n",
                             int(s.vase), int(s.scarf), int(s.scarf_only_smooth), s.scarf_start_height, s.scarf_length,
                             int(s.scarf_entire_loop), s.scarf_max_segment, int(s.scarf_inner), int(s.detect_overhangs),
                             int(s.walls_staggered), int(s.dynamic_overhang_fan), s.overhang_fans[0],
@@ -539,7 +543,8 @@ int main(int argc, char** argv) {
                             s.transition_distance, int(s.support_pattern), int(s.support_sheath),
                             int(s.support_interface_pattern), s.support_interface_spacing,
                             int(s.support_contact_loops), s.support_enforce_layers, int(s.support_style),
-                            s.support_closing_radius, s.corner_smoothing);
+                            s.support_closing_radius, s.corner_smoothing, int(s.monotonic_bottom),
+                            int(s.infill_before_walls), s.infill_max_link, s.bridge_angle);
                 std::printf("  arcs %d overlap %.1f speed %.1f max %.2f\n", int(s.arcs), s.arcs_overlap, s.arcs_speed,
                             s.arcs_max_distance);
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),

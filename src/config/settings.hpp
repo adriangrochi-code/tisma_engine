@@ -238,6 +238,8 @@ struct Settings {
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
     bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
+    bool monotonic_bottom = true; // bottom surfaces too (surfaces.bottom_pattern, surfaces_infill.md)
+    double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
     double top_width = 0.0;    // the top surface; 0: one nozzle
@@ -583,6 +585,8 @@ struct Settings {
     Speed max_detour;                  // mm or % of the straight travel a route may add; 0: no limit
     bool walls_clockwise = false;      // every loop clockwise (rule 9)
     bool walls_outer_first = false;    // each island's walls from the outer one in (perimeters.md, rule 4)
+    bool infill_before_walls = false;  // each island's fills before its walls (gcode_motion.md, rule 8)
+    double infill_max_link = 50.0;     // mm along the walls two sparse lines may be joined over (surfaces_infill.md, rule 7)
     // The filament's own values of these (rule 10), by name
     // ("retraction.length", "travel.slope"...); one given replaces the
     // printer's, 0 included. with_filament_retraction applies them.

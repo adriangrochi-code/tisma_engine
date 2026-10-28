@@ -7056,5 +7056,16 @@ local (`tools/ci_linux.sh`) no corre ese riesgo: no se edita mientras compila.
 - `pressure_advance_in_gcode` y `pressure_advance_piece`: la ficha dice que el motor los hace solo si el dueño lo pide;
 - `thumbnails`: hace falta dibujar la pieza sin la interfaz y una biblioteca de imágenes revisada.
 
-**Sigue:** `machine.high_flow_nozzle`; `surfaces` (`bottom_pattern`, `bridge_angle`); `infill` (`before_walls`,
-`max_link`).
+**`surfaces` e `infill`:**
+- `surfaces.bottom_pattern` (`monotonic` por defecto, como la ficha): las superficies de abajo en líneas monótonas sin
+  unir, que llegan tan lejos como el zigzag. Con `infill.wall_overlap`, como las de arriba, una tira de 0,3 mm sin
+  paredes recibía líneas: la prueba de «nada que imprimir» lo encontró.
+- `surfaces.bridge_angle`: una dirección fija para todos los puentes (0, la de cada uno). En la mesa, las líneas a 30°.
+- `infill.before_walls` (`gcode_motion.md`, regla 8, M8): en cada isla, primero el relleno poco denso, después los
+  demás rellenos y al final las paredes.
+- `infill.max_link` (50 mm por defecto): el tramo de borde por el que se unen dos líneas del relleno poco denso. Antes,
+  tres separaciones. En una cuña con el borde a 10° de las líneas, ahora se unen.
+
+**Sigue:** `machine.high_flow_nozzle`, `object` (`extruder`, `wipe_into_infill`, `wipe_into_object`), `speed`
+(`max_flow`, `small_loops`), `extrusion` (pellets), `filament.transmission_distance`, `orient`, y los sueltos
+(`layers.first_line_width`, `mixing.purge_infill_max`, `placement.drop_to_bed`, `retraction.coast`).

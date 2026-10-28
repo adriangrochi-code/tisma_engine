@@ -29,10 +29,12 @@ struct DepthField;
 // With `overlap` (mm, for unjoined lines), the lines reach that far past the
 // region shrunk by half a bead, into the walls around it. `shift` (mm) moves
 // the grid across the lines (the cubic infill's planes with the height).
+// `max_join` (mm), when given, is how far apart along the boundary joined
+// ends may be instead (infill.max_link, surfaces_infill.md rule 7).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0, double shift = 0.0);
+                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -73,6 +75,8 @@ struct FillParams {
     double top_width = 0.0;            // the top surface's bead (surfaces.top_width); 0: width
     double solid_width = 0.0;          // the other solid infill's bead (surfaces.solid_width); 0: width
     double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
+    double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
+    bool monotonic_bottom = false; // bottom surfaces in monotonic order (surfaces.bottom_pattern)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
