@@ -350,6 +350,7 @@ struct Settings {
     // to the centre of the bed's box; without one, it stays where it is. The
     // interface places objects itself and does not use these.
     bool placement_arrange = true;
+    bool placement_drop_to_bed = true; // the base to Z = 0; off: what is below is not printed (placement.md, rule 3)
     std::optional<std::array<double, 2>> placement_center;
     double placement_spacing = 6.0; // mm between the boxes of copies (placement.md, rule 2)
     // What the command line does to the model before it places it

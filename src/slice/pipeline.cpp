@@ -946,6 +946,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
             min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
             min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
         }
+        if (!settings.placement_drop_to_bed) // what is under the bed is not printed (placement.md, PL5)
+            min_z = std::max(min_z, 0.0f);
         frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
         frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     }
@@ -1223,6 +1225,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         min_x = std::min(min_x, v.x), max_x = std::max(max_x, v.x);
         min_y = std::min(min_y, v.y), max_y = std::max(max_y, v.y);
     }
+    // Without placement.drop_to_bed, the layers start at the bed: what is
+    // under it is not printed (placement.md, rule 3, PL5).
+    if (!settings.placement_drop_to_bed)
+        min_z = std::max(min_z, 0.0f);
     // With layer heights by zone, the stack is the fine one (docs/LOCAL_LAYERS.md);
     // with variable heights, planned layer by layer (docs/VARIABLE_LAYERS.md).
     const int ratio = detail_ratio(settings);

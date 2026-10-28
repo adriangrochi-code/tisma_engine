@@ -7159,3 +7159,19 @@ En el panel, una ficha propia en Retracción («Coasting»); el fuzzer lo sortea
 
 **Probado:** CO1 en el cubo de las pruebas de retracción: en la capa 11 cada final sin E mide 0,500 mm, a 60 mm/s en
 los perímetros, 30 en el externo y la velocidad del relleno; sin coasting no hay ninguno; el filamento total baja.
+
+## 2026-10-28 (tarde): `placement.drop_to_bed`
+
+**Hecho:** `placement.drop_to_bed` (`placement.md`, regla 3; `true` por defecto, como hasta ahora). Con `false`:
+- las capas empiezan en Z = 0 y no en la base de la malla: lo que está debajo de la cama no se imprime (PL5);
+- los objetos de un corte o una separación no bajan cada uno a la cama;
+- una pieza que no toca la cama se rechaza antes de laminar: «an object has no extrusions on the first layer: its
+  base is at z …» (PL9; la línea de comandos sale con el código 4, el de un modelo que no se puede imprimir, sin
+  archivo); una que queda toda debajo, «the model is under the bed».
+Es de la línea de comandos, como el resto de `placement`; la interfaz ubica las piezas ella misma.
+
+**Probado:** PL5 con un cubo de Z −5 a 10: G-code de Z 0,2 a 10, verificado; con el ajuste encendido, el mismo cubo
+llega a 15 (PL4). PL9 con un cubo de Z 50 a 70: rechazado.
+
+**Diferencia con la ficha:** PL9 da el código 1 en Tisma Slicer; el motor usa el 4, su código de modelo que no se
+puede imprimir (la regla pide un código distinto de 0).

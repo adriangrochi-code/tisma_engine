@@ -99,6 +99,21 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
                       double(top) - double(bottom), kReach);
         return text;
     }
+    // Left where it is (placement.md, rule 3): a part off the bed has nothing
+    // on the first layer (PL9), one under it nothing at all.
+    if (!s.placement_drop_to_bed) {
+        if (top <= 0.0f)
+            return "the model is under the bed (placement.drop_to_bed is off)";
+        if (bottom > 1e-3f) {
+            char text[200];
+            std::snprintf(text, sizeof text,
+                          "an object has no extrusions on the first layer: its base is at z %.3f, off the bed "
+                          "(placement.drop_to_bed is off)",
+                          double(bottom));
+            return text;
+        }
+        bottom = std::max(bottom, 0.0f);
+    }
     if (s.max_height > 0.0 && double(top) - double(bottom) > s.max_height) {
         char text[160];
         std::snprintf(text, sizeof text, "the model is %.3f mm tall, more than machine.max_height (%.3f mm)",

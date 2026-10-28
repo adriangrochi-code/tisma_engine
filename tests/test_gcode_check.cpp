@@ -330,6 +330,37 @@ TEST_CASE("G-code check: a wipe's step whose E rounds to the last one's stays in
     CHECK(c.ok());
 }
 
+TEST_CASE("placement.drop_to_bed off: what is under the bed is not printed, a part off it is refused (placement.md, "
+          "PL5, PL9)",
+          "[gcode][check]") {
+    Settings s = test_printer();
+    s.placement_drop_to_bed = false;
+    // PL5: a 20 mm cube from Z -5 to 15, as it comes: 10 mm printed, from the bed.
+    IndexedMesh low;
+    add_box(low, 90, 90, -5, 110, 110, 10);
+    REQUIRE(unprintable_reason(low, s).empty());
+    const Output o = slice_and_write(low, s);
+    const GcodeCheck c = check_gcode(o.gcode, o.limits);
+    INFO(problems_of(c));
+    CHECK(c.ok());
+    CHECK_THAT(o.gcode, ContainsSubstring(";Z:0.200\n"));
+    CHECK(c.stats.max_z > 9.99);
+    CHECK(c.stats.max_z < 10.01);
+    // On by default: the same part drops to the bed, 15 mm tall (PL4).
+    s.placement_drop_to_bed = true;
+    const Output dropped = slice_and_write(low, s);
+    CHECK(check_gcode(dropped.gcode, dropped.limits).stats.max_z > 14.99);
+    // PL9: a cube from Z 50 to 70 off the bed is refused; one under it too.
+    s.placement_drop_to_bed = false;
+    IndexedMesh high;
+    add_box(high, 90, 90, 50, 110, 110, 70);
+    CHECK_THAT(unprintable_reason(high, s), ContainsSubstring("no extrusions on the first layer"));
+    IndexedMesh under;
+    add_box(under, 90, 90, -20, 110, 110, -1);
+    CHECK_THAT(unprintable_reason(under, s), ContainsSubstring("under the bed"));
+    CHECK(parse_settings(R"({"placement": {"drop_to_bed": false}})").placement_drop_to_bed == false);
+}
+
 TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {
     // The engine does not move parts in X and Y, but a part can only print
     // resting on the bed: Z in the G-code counts from the part's bottom.

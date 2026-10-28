@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`placement.drop_to_bed`** (ficha `placement.md`, regla 3): con `false` la pieza queda donde viene en Z; lo que
+  está debajo de la cama no se imprime, y un objeto que no la toca se rechaza («no extrusions on the first layer»).
+
 - **`retraction.coast`** (ficha `coasting.md`): el final de cada perímetro y de cada relleno se recorre a su velocidad
   sin extruir; la presión que queda en la boquilla lo termina. Menos gotas en la costura y menos hilos. En el panel,
   en Retracción, «Coasting».

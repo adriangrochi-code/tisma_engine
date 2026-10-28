@@ -439,7 +439,7 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 
 ### `placement`
 
-Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 y 4). La interfaz ubica
+Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 a 4). La interfaz ubica
 las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su panel.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -447,6 +447,7 @@ las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su p
 | `arrange` | booleano | `true` | — | Con una cama (`machine.bed`), el centro de la caja de la pieza va a `center`; `false` la deja donde viene en X e Y. Sin cama no se mueve nada, salvo que se dé `center` a mano (PL15). En Z la pieza siempre se apoya en la cama |
 | `center` | `[x, y]` o `null` | `null` | mm | Dónde queda el centro de la pieza; `null` es el centro de la caja de la cama |
 | `spacing` | número | 6 | 0 a 1000 | Con `slice --copies N`, las copias van en una grilla compacta con esta separación entre sus cajas, y el conjunto centrado como una pieza sola (ficha `placement.md`, regla 2, PL7 y PL8); en la impresión secuencial, al menos `sequential.clearance_radius` (ficha `sequential.md`, regla 2). Es lo que la ficha `sequential.md` llama `arrange.distance` |
+| `drop_to_bed` | booleano | `true` | — | Lleva la base de cada objeto a Z = 0: lo que flota baja y lo que está en parte debajo de la cama sube (ficha `placement.md`, regla 3, PL4). Con `false` la pieza queda donde viene en Z: lo que está debajo de Z = 0 no se imprime (PL5), y un objeto que no toca la cama es un error, «no extrusions on the first layer», sin archivo (PL9) |
 
 ### `transform`
 

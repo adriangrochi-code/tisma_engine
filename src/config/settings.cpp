@@ -990,7 +990,8 @@ Settings parse_checked(std::string_view text) {
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
     });
-    read_group(root, "placement", {"arrange", "center", "spacing"}, [&](const json& g, const std::string& n, const std::string& k) {
+    read_group(root, "placement", {"arrange", "center", "spacing", "drop_to_bed"},
+               [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
         if (n == "spacing") {
             const double d = number(g, n, k);
@@ -999,10 +1000,10 @@ Settings parse_checked(std::string_view text) {
             s.placement_spacing = d;
             return;
         }
-        if (n == "arrange") {
+        if (n == "arrange" || n == "drop_to_bed") {
             if (!v.is_boolean())
                 fail(k, "must be true or false");
-            s.placement_arrange = v.get<bool>();
+            (n == "arrange" ? s.placement_arrange : s.placement_drop_to_bed) = v.get<bool>();
             return;
         }
         if (v.is_null()) {
@@ -2914,6 +2915,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.unload_time", num(s.unload_time)},
         {"placement.spacing", num(s.placement_spacing)},
         {"placement.arrange", flag(s.placement_arrange)},
+        {"placement.drop_to_bed", flag(s.placement_drop_to_bed)},
         {"placement.center", s.placement_center ? json(*s.placement_center).dump() : std::string("bed")},
         {"transform.scale", num(s.transform_scale)},
         {"transform.scale_to_fit", s.transform_scale_to_fit ? json(*s.transform_scale_to_fit).dump() : std::string("none")},
@@ -3391,7 +3393,8 @@ std::string settings_json(const Settings& s) {
         {"placement",
          {{"arrange", s.placement_arrange},
           {"center", s.placement_center ? json(*s.placement_center) : json(nullptr)},
-          {"spacing", s.placement_spacing}}},
+          {"spacing", s.placement_spacing},
+          {"drop_to_bed", s.placement_drop_to_bed}}},
         {"transform",
          {{"scale", s.transform_scale},
           {"scale_to_fit", s.transform_scale_to_fit ? json(*s.transform_scale_to_fit) : json(nullptr)},
