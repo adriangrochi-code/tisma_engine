@@ -64,6 +64,49 @@ Tisma Slicer usa código de PrusaSlicer: se escriben desde la documentación pú
 7. **El perfil** de la impresora tiene que producir G-code de texto, no binario.
 8. **El código de acceso es un secreto:** se guarda como una contraseña, nunca se escribe en registros ni en mensajes.
 
+## Leer los límites de la impresora
+
+**Pedido del dueño (28-10-2026):** si al perfil le faltan datos y la impresora está conectada, se le preguntan al
+firmware y se pasan a la máquina.
+
+**Fuentes:**
+- Marlin: [M503](https://marlinfw.org/docs/gcode/M503.html) informa los valores en uso (los de la memoria, que pueden
+  no ser los guardados). La página de [M203](https://marlinfw.org/docs/gcode/M203.html) remite a M503 para ver las
+  velocidades máximas. [M115](https://marlinfw.org/docs/gcode/M115.html) da el firmware, la cinemática, la cantidad de
+  extrusores y, si el firmware se compiló con `M115_GEOMETRY_REPORT`, el volumen de trabajo (mínimo y máximo por eje).
+  La página de M503 no muestra el formato de la respuesta: se toma de respuestas reales, guardadas como prueba;
+- Klipper (Moonraker): el objeto [`toolhead`](https://moonraker.readthedocs.io/en/latest/printer_objects/) trae
+  `max_velocity`, `max_accel`, `square_corner_velocity`, `minimum_cruise_ratio`, `axis_minimum` y `axis_maximum`. El
+  objeto `configfile` trae la configuración en `settings`;
+- RepRapFirmware: pendiente de confirmar en la documentación de Duet3D antes de escribirlo.
+
+1. **Cuándo:** al conectar una impresora (USB o red), si el perfil tiene algún dato vacío de los de abajo. También con
+   un botón «Leer de la impresora» en Impresora › Límites, que lee todo aunque el perfil ya tenga datos.
+2. **Qué se pide:**
+   - Marlin por USB: `M115` y `M503`;
+   - Klipper: el objeto `toolhead` y `configfile.settings`.
+   La impresión en curso no se interrumpe: si la impresora está imprimiendo, se pregunta al terminar.
+3. **Qué se toma:**
+
+   | Dato del perfil | Marlin (`M503`) | Klipper |
+   |---|---|---|
+   | Velocidad máxima X, Y, Z, E | `M203 X Y Z E` (mm/s) | `max_velocity` (X e Y); Z y E de `configfile.settings` |
+   | Aceleración máxima X, Y, Z, E | `M201 X Y Z E` (mm/s²) | `max_accel` |
+   | Aceleraciones de impresión, retracción y viaje | `M204 P R T` | `max_accel` |
+   | Tirones | `M205 X Y Z E` | `square_corner_velocity` |
+   | Volumen de trabajo | `M115` con informe de geometría | `axis_minimum` y `axis_maximum` |
+   | Avance de presión | `M900 K`, si aparece | `pressure_advance` del extrusor en `configfile.settings` |
+
+4. **Sin pisar:** un dato que la persona escribió no se cambia solo. Los datos leídos se muestran en una lista («En el
+   perfil» / «En la impresora») para aceptar uno por uno o todos. Los datos vacíos se llenan solos, con un aviso de una
+   línea que dice cuántos se tomaron de la impresora.
+5. **Origen a la vista:** cada dato tomado de la impresora lo dice en su ayuda: «Leído de la impresora (Marlin 2.1.2,
+   28-10-2026)».
+6. **Respuesta incompleta:** un valor que no llega (por ejemplo, Marlin sin informe de geometría o con `M503`
+   desactivado) queda vacío, y la página lo dice: «La impresora no informa el tamaño de la cama: escribilo a mano».
+   Nunca se escribe 0 en lugar de un dato que falta.
+7. **Unidades:** se pasan a las del perfil. Marlin informa en las unidades en uso (`G21` mm, `G20` pulgadas).
+
 ## Programas que manejan impresoras (red)
 
 Para OctoPrint, Moonraker, la interfaz web de Prusa y la de Duet, el slicer hace cuatro cosas, cada una con la
@@ -228,3 +271,8 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | BD4 | El anuncio deja de llegar | A los 3 minutos sale de la lista, salvo que esté conectada |
 | CL1 | Reproducir `printer_connections/octoprint/probar.jsonl` contra el cliente del motor | Los pedidos del motor coinciden con las líneas `out` (método, ruta y encabezados, con los secretos aparte) |
 | CL2 | Revisar los archivos de `printer_connections/` | Ningún secreto real: solo `<secreto>` |
+| LM1 | Marlin por USB, perfil sin velocidades máximas; respuesta guardada de `M503` con `M203 X500 Y500 Z12 E120` | El perfil queda con 500, 500, 12 y 120 mm/s y el aviso «4 datos tomados de la impresora» |
+| LM2 | Lo mismo, con la velocidad X escrita a mano (300) | X sigue en 300; la lista muestra «En el perfil 300 / En la impresora 500» para elegir |
+| LM3 | Marlin sin informe de geometría | Tamaño de cama vacío, con el aviso de la regla 6; nunca 0 |
+| LM4 | Klipper, `toolhead` con `max_velocity` 300 y `max_accel` 3000 | Velocidad máxima X e Y 300 mm/s; aceleración 3000 mm/s² |
+| LM5 | Impresora imprimiendo al conectar | No se manda nada hasta que termina |
