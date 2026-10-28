@@ -149,6 +149,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
+  Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía
+  usando un puntero a la lista vieja. Lo mismo al guardar o borrar un perfil desde su fila.
+
 - **Píxeles negros con la oclusión ambiental fuerte:** con la fuerza de la oclusión pasada de 1 (llega a 1,5), la luz
   ambiente salía negativa en los rincones y esos píxeles quedaban negros (861 en la vista previa de un cubo con rayos);
   ahora nunca baja de un poco de luz.

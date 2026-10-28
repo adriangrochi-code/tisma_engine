@@ -757,6 +757,7 @@ private:
     std::shared_ptr<RayScene> ray_scene_;
     bool ray_checked_ = false;
     bool moire_checked_ = false;
+    bool catalog_printer_picked_ = false; // --pick-catalog-printer done
 
     // The connected printer: a serial port, or the simulated one.
     std::unique_ptr<device::Printer> printer_;
@@ -1551,6 +1552,17 @@ void App::printer_card() {
             catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
         ImGui::EndCombo();
     }
+    // --pick-catalog-printer: that row clicked, once the window is up.
+    if (!options_.pick_catalog_printer.empty() && !catalog_printer_picked_ && frames_ >= 2) {
+        catalog_printer_picked_ = true;
+        for (const PrinterModel& m : catalog.printers)
+            if (m.vendor + " " + m.model == options_.pick_catalog_printer)
+                from_catalog = &m;
+        if (!from_catalog) {
+            std::fprintf(stderr, "error: the catalog has no printer %s\n", options_.pick_catalog_printer.c_str());
+            failed_ = true;
+        }
+    }
     if (picked) {
         choose_profile(ProfileKind::Printer, *picked);
         bed_type_.clear();
@@ -1563,6 +1575,16 @@ void App::printer_card() {
         else
             add_catalog_profile(printer_profile(*from_catalog, from_catalog->nozzles.front()));
         bed_type_.clear();
+    }
+    // Adding reads the profile lists again: `chosen` pointed into the old
+    // ones (a catalog printer picked here crashed the app, 2026-10-28).
+    if (picked || from_catalog)
+        chosen = find_profile(ProfileKind::Printer, chosen_profile_[k]);
+    if (from_catalog && !options_.pick_catalog_printer.empty() &&
+        (!chosen || chosen->name.find(from_catalog->model) == std::string::npos)) {
+        std::fprintf(stderr, "error: %s was not chosen (chosen: %s)\n", options_.pick_catalog_printer.c_str(),
+                     chosen_profile_[k].c_str());
+        failed_ = true;
     }
     // The bed, on printers with several (rule 32): the maker's names.
     if (several_beds) {
@@ -3257,10 +3279,14 @@ void App::profile_row(ProfileKind kind) {
     };
     ImGui::SameLine(0, gap);
     if (icon_button("##save", "tisma_save", tr(T::SaveProfileTip), size)) {
-        if (chosen && !builtin)
+        if (chosen && !builtin) {
             save_profile_as(kind, chosen->name);
-        else
+            // The lists were read again: the old pointers point at nothing.
+            chosen = find_profile(kind, chosen_profile_[k], &builtin);
+            picked = nullptr;
+        } else {
             save_as();
+        }
     }
     ImGui::SameLine(0, gap);
     if (icon_button("##menu", "tisma_more", tr(T::More), size))
@@ -3276,6 +3302,7 @@ void App::profile_row(ProfileKind kind) {
             if (remove_profile(profiles_root(), kind, name)) {
                 load_profile_lists();
                 chosen_profile_[k].clear();
+                chosen = nullptr, picked = nullptr; // the lists were read again
                 notify(format(tr(T::ProfileDeleted), name.c_str()));
             }
         }
@@ -3525,6 +3552,10 @@ void App::add_catalog_profile(const Profile& catalog) {
         return;
     }
     load_profile_lists();
+    // Screenshots do not read the user's profiles: the one added stays in
+    // the list all the same.
+    if (!find_profile(profile.kind, profile.name))
+        user_profiles_[std::size_t(profile.kind)].push_back(profile);
     if (const Profile* saved = find_profile(profile.kind, profile.name))
         choose_profile(profile.kind, *saved);
     // The catalog's printers have no speeds of their own (printer_profile).

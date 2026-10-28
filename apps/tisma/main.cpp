@@ -54,7 +54,8 @@ constexpr const char* kUsage =
     "Every screenshot of the Prepare or Preview tab also checks the 3D view's own\n"
     "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
     "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
-    "skips that.\n";
+    "skips that. --pick-catalog-printer \"Vendor Model\" picks that printer in the\n"
+    "printer card's list, as a click on its row would (a test of that path).\n";
 
 } // namespace
 
@@ -261,6 +262,8 @@ int main(int argc, char** argv) {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--coarse") {
             options.coarse = true;
+        } else if (arg == "--pick-catalog-printer") {
+            options.pick_catalog_printer = value();
         } else if (arg == "--no-view-check") {
             options.view_check = false;
         } else if (arg == "--compare-view") {

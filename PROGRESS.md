@@ -7383,3 +7383,25 @@ Queda para estudiarlo con la tabla.
 
 **Sigue:** la respuesta sobre la zona de SM10; P13 (`walls.transition_margin`); el lector STEP (`step_reader.md`).
 
+## 2026-10-28 (noche): la impresora del catálogo cerraba la aplicación
+
+El equipo de fichas reprodujo el cierre que vio el dueño en Windows: en una carpeta de ajustes vacía, elegir en la
+lista de impresoras una del catálogo (CR-5 Pro H, Ender-3 V2, MK4) cierra la aplicación al instante
+(`std::bad_alloc`, en `App::printer_card`).
+
+**Causa:** agregar la impresora (`add_catalog_profile`) vuelve a leer todas las listas de perfiles
+(`load_profile_lists`), y la tarjeta seguía con `chosen`, un puntero a la lista vieja; enseguida copiaba su nombre de
+memoria liberada. Lo mismo pasaba en la fila de perfil al guardar o borrar.
+
+**Hecho:**
+- La tarjeta y la fila de perfil buscan de nuevo el perfil elegido después de cada lectura de las listas.
+- Un perfil agregado en la sesión queda en la lista aunque las capturas no lean los perfiles del usuario.
+- Prueba nueva `ui_catalog_printer_picked`: con una carpeta de ajustes vacía, `--pick-catalog-printer "Creality
+  CR-5 Pro H"` hace lo mismo que el clic en la fila, y falla si la impresora no queda elegida. Sin el arreglo, la
+  lectura de memoria liberada no siempre cierra el programa en Release; la ve la compilación con ASan de
+  `tools/ci_linux.sh`.
+
+**Sigue (informes del equipo de fichas de la misma tarde):** los campos de la página de la impresora que no
+responden al mouse; los campos numéricos que no toman lo escrito; las boquillas del fabricante al agregar una
+impresora; el ícono de la sección elegida en el tema claro; los textos y unidades de la revisión.
+

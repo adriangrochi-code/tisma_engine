@@ -137,6 +137,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                              PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
       endforeach()
     endforeach()
+    # A printer picked from the catalog in the printer card's list, on an empty
+    # settings folder (a crash, 2026-10-28: the card kept a pointer into the
+    # profile lists that adding the printer reads again).
+    add_test(NAME ui_catalog_printer_home_clean
+      COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home)
+    add_test(NAME ui_catalog_printer_picked
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pick-catalog-printer "Creality CR-5 Pro H"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    set_tests_properties(ui_catalog_printer_home_clean PROPERTIES FIXTURES_SETUP ui_catalog_home)
+    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines
