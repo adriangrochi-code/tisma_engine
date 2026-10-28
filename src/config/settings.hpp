@@ -136,6 +136,7 @@ struct Settings {
     double simplify_tolerance = 0.01;
     int wall_count = 3;      // walls from each outline; 0: no walls, all infill
     double wall_width = 0.4; // preferred bead width w*
+    double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md); 0: wall_width
     SeamMode seam = SeamMode::Aligned;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
     // on a ramp up from the layer below instead of a step.

@@ -42,7 +42,7 @@ LayerWalls layer_walls(const Polygons& input, const BeadingParams& params) {
     }
     if (params.wall_count > 0) {
         const double w = params.preferred_width;
-        const Polygons inner = offset(region, -params.wall_count * w);
+        const Polygons inner = offset(region, -(outer_bead(params) + (params.wall_count - 1) * w));
         out.infill = offset(offset(inner, -w / 4.0), w / 4.0); // drop what is narrower than w*/2
     }
     return out;

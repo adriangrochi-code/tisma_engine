@@ -260,3 +260,49 @@ TEST_CASE("walls: an overhang held from one side filled with perimeters (walls_e
     // The layer above is as without it.
     CHECK(length_of(runs, 41, "Overhang perimeter") == 0.0);
 }
+
+TEST_CASE("walls: the outer wall with a width of its own (perimeters.md, walls.outer_width)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    for (const WallGenerator generator : {WallGenerator::Variable, WallGenerator::Fixed}) {
+        s.wall_generator = generator;
+        const SlicedModel model = slice_model(m, s);
+        const LayerWalls& walls = model.walls[10];
+        // Each loop's width along the sides (the fixed loops have their
+        // points at the corners only) and the distance of its centre from
+        // the outline at X 90.
+        std::map<int, std::vector<double>> widths;
+        std::map<int, double> depth;
+        for (const Toolpath& t : walls.toolpaths)
+            for (const ToolpathPoint& p : t.points) {
+                if (generator == WallGenerator::Fixed || (p.p.y > 95.0 && p.p.y < 105.0))
+                    widths[t.index].push_back(p.width);
+                depth[t.index] = std::min(depth.count(t.index) ? depth[t.index] : 1e9, p.p.x - 90.0);
+            }
+        INFO((generator == WallGenerator::Fixed ? "fixed" : "variable"));
+        REQUIRE(widths.size() == 3);
+        for (const auto& [index, list] : widths)
+            for (const double w : list)
+                CHECK_THAT(w, WithinAbs(index == 0 ? 0.6 : 0.45, 1e-6));
+        CHECK_THAT(depth[0], WithinAbs(0.3, 0.002));
+        CHECK_THAT(depth[1], WithinAbs(0.825, 0.002));
+        CHECK_THAT(depth[2], WithinAbs(1.275, 0.002));
+        // The infill starts where the third loop ends: 0.6 + 2 x 0.45.
+        double min_x = 1e9;
+        for (const Polygon& ring : walls.infill)
+            for (const auto& q : ring)
+                min_x = std::min(min_x, to_mm(q.x));
+        CHECK_THAT(min_x - 90.0, WithinAbs(1.5, 0.002));
+    }
+    // At 0 the outer wall is as wide as the others.
+    s.outer_wall_width = 0.0;
+    s.wall_generator = WallGenerator::Variable;
+    const SlicedModel same = slice_model(m, s);
+    for (const Toolpath& t : same.walls[10].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            if (p.p.y > 95.0 && p.p.y < 105.0)
+                CHECK_THAT(p.width, WithinAbs(0.45, 1e-6));
+}

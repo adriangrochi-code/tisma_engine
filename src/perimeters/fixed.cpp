@@ -11,12 +11,17 @@
 
 namespace tisma {
 
-LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap_fill) {
+LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap_fill, double outer) {
     LayerWalls out;
+    if (!(outer > 0.0))
+        outer = width;
+    // Loop k's width, and the depth of its centre line from the outline.
+    const auto width_of = [&](std::size_t k) { return k == 0 ? outer : width; };
+    const auto depth_of = [&](int k) { return k == 0 ? outer / 2.0 : outer + (double(k) - 0.5) * width; };
     std::vector<Polygons> centres; // each loop's centre lines
     for (int k = 0; k < count; ++k) {
-        const double depth = width / 2.0 + double(k) * width;
-        Polygons centre = offset(offset(region, -(depth + width / 2.0)), width / 2.0);
+        const double depth = depth_of(k), wk = width_of(std::size_t(k));
+        Polygons centre = offset(offset(region, -(depth + wk / 2.0)), wk / 2.0);
         if (centre.empty())
             break;
         for (Polygon ring : centre) {
@@ -28,13 +33,13 @@ LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap
             t.closed = true;
             t.index = k;
             for (const auto& q : ring)
-                t.points.push_back({{to_mm(q.x), to_mm(q.y)}, width});
+                t.points.push_back({{to_mm(q.x), to_mm(q.y)}, wk});
             out.toolpaths.push_back(std::move(t));
         }
         centres.push_back(std::move(centre));
     }
     if (int(centres.size()) == count && count > 0)
-        out.infill = offset(centres.back(), -width / 2.0);
+        out.infill = offset(centres.back(), -width_of(centres.size() - 1) / 2.0);
     if (!gap_fill || region.empty())
         return out;
     // What the loops leave: outside the first loop's beads (thin parts,
@@ -43,9 +48,9 @@ LayerWalls fixed_walls(const Polygons& region, double width, int count, bool gap
     const auto Difference = [](const Polygons& a, const Polygons& b) {
         return Clipper2Lib::Difference(a, b, Clipper2Lib::FillRule::NonZero);
     };
-    Polygons left = centres.empty() ? region : Difference(region, offset(centres.front(), width / 2.0));
+    Polygons left = centres.empty() ? region : Difference(region, offset(centres.front(), outer / 2.0));
     for (std::size_t k = 0; k < centres.size(); ++k) {
-        const Polygons inner = offset(centres[k], -width / 2.0);
+        const Polygons inner = offset(centres[k], -width_of(k) / 2.0);
         const Polygons part = k + 1 < centres.size() ? Difference(inner, offset(centres[k + 1], width / 2.0))
                               : out.infill.empty()   ? inner
                                                      : Polygons{};

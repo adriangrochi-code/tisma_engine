@@ -943,7 +943,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
-        {T::SeamGap, "walls.seam_gap"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
+        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
@@ -5694,6 +5694,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::DetailMargin, "layers.detail_margin", s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
     } else if (id == "line_width") {
         mm(T::LineWidth, "walls.width", s.wall_width, 0.1, 2.0, "%.2f mm", 0.002f);
+        mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 2.0, s.outer_wall_width > 0.0 ? "%.2f mm" : "—",
+           0.002f);
         mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 2.0, s.top_width > 0.0 ? "%.2f mm" : "—", 0.002f);
         mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 2.0, s.solid_width > 0.0 ? "%.2f mm" : "—", 0.002f);
         mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 2.0, s.infill_width > 0.0 ? "%.2f mm" : "—", 0.002f);

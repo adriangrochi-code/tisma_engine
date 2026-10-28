@@ -161,7 +161,7 @@ double bridge_bead(const Settings& settings) {
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
-        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill);
+        return fixed_walls(region, settings.wall_width, count, settings.wall_gap_fill, settings.outer_wall_width);
     beading.wall_count = count;
     return layer_walls(region, beading);
 }
@@ -474,6 +474,7 @@ PartNozzles part_nozzles(const Settings& s, int tool) {
     const double walls = nozzle_of(s, kinds.walls > 0 ? kinds.walls : tool);
     const double infill = nozzle_of(s, kinds.infill > 0 ? kinds.infill : tool);
     p.settings.wall_width = s.wall_width * walls / s.nozzle_diameter;
+    p.settings.outer_wall_width = s.outer_wall_width * walls / s.nozzle_diameter;
     p.settings.nozzle_diameter = walls;
     p.sparse_width = sparse * infill / s.nozzle_diameter;
     p.infill_nozzle = infill;
@@ -1178,6 +1179,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     out.walls.resize(out.layers.size());
     BeadingParams beading;
     beading.preferred_width = settings.wall_width;
+    beading.outer_width = settings.outer_wall_width;
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);

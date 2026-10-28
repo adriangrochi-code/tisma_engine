@@ -19,7 +19,7 @@ const std::vector<SectionLayout>& print_layout() {
           {"fine_detail", T::SubFineDetail,
            {{"layers.detail_height", A}, {"layers.detail_tolerance", A}, {"layers.detail_margin", A}}},
           {"line_width", T::SubLineWidth,
-           {{"walls.width", N}, {"surfaces.top_width", A}, {"surfaces.solid_width", A}, {"infill.width", A}, {"walls.seam_gap", A}}},
+           {{"walls.width", N}, {"walls.outer_width", A}, {"surfaces.top_width", A}, {"surfaces.solid_width", A}, {"infill.width", A}, {"walls.seam_gap", A}}},
           {"seam", T::SubSeam,
            {{"walls.seam", B},
             {"walls.scarf", N},

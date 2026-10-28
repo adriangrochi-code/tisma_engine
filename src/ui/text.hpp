@@ -1010,6 +1010,7 @@
     X(DetectOverhangs, "Paredes en voladizo", "Overhang walls") \
     X(MinLineWidth, "Cordón más fino", "Thinnest bead") \
     X(SeamGap, "Hueco en la costura", "Seam gap") \
+    X(OuterWidth, "Ancho de la pared externa", "Outer wall width") \
     X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
     X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
     X(InfillWidth, "Ancho del relleno", "Infill width") \

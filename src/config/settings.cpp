@@ -714,7 +714,7 @@ Settings parse_checked(std::string_view text) {
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
-                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs"},
+                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -801,6 +801,12 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
+        if (n == "outer_width") {
+            if (!(v == 0.0 || (v >= 0.05 && v <= 40.0)))
+                fail(k, "must be 0 (walls.width) or from 0.05 to 40 mm");
+            s.outer_wall_width = v;
+            return;
+        }
         if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
             fail(k, "must be from 0.05 to 40 mm");
         s.wall_width = v;
@@ -2511,6 +2517,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"slicing.simplify_tolerance", num(s.simplify_tolerance)},
         {"walls.count", std::to_string(s.wall_count)},
         {"walls.width", num(s.wall_width)},
+        {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
         {"walls.scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
@@ -2991,6 +2998,7 @@ std::string settings_json(const Settings& s) {
         {"walls",
          {{"count", s.wall_count},
           {"width", s.wall_width},
+          {"outer_width", s.outer_wall_width},
           {"seam", seam},
           {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
           {"scarf_only_smooth", s.scarf_only_smooth},
@@ -3530,6 +3538,11 @@ void check_settings(const Settings& s) {
     if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
+    if (s.outer_wall_width > 0.0 && (s.outer_wall_width < 0.25 * nozzle || s.outer_wall_width > 4.0 * nozzle)) {
+        std::snprintf(text, sizeof text, "walls.outer_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
+                      s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
         throw SettingsError(text);
     }
 }
