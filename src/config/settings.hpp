@@ -144,6 +144,9 @@ struct Settings {
     // The ramp from n to n + 1 beads along a wall (walls.transition_length,
     // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
     Speed wall_transition_length{100.0, true};
+    // Odd bead counts only in corners no wider than this, degrees
+    // (walls.transition_angle, perimeters.md P14).
+    double wall_transition_angle = 10.0;
     double wall_width = 0.4; // preferred bead width w*
     double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;

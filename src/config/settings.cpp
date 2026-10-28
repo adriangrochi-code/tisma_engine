@@ -733,7 +733,7 @@ Settings parse_checked(std::string_view text) {
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
-                "spread_count", "transition_length"},
+                "spread_count", "transition_length", "transition_angle"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -801,6 +801,13 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                 fail(k, "must be a whole number from 0 to 1000");
             s.wall_count = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "transition_angle") {
+            const double v = number(g, n, k);
+            if (!(v >= 0.0 && v <= 179.0))
+                fail(k, "must be from 0 to 179 degrees");
+            s.wall_transition_angle = v;
             return;
         }
         if (n == "spread_count") {
@@ -2548,6 +2555,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"slicing.simplify_tolerance", num(s.simplify_tolerance)},
         {"walls.count", std::to_string(s.wall_count)},
         {"walls.spread_count", std::to_string(s.wall_spread_count)},
+        {"walls.transition_angle", num(s.wall_transition_angle)},
         {"walls.width", num(s.wall_width)},
         {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
@@ -3035,6 +3043,7 @@ std::string settings_json(const Settings& s) {
         {"walls",
          {{"count", s.wall_count},
           {"spread_count", s.wall_spread_count},
+          {"transition_angle", s.wall_transition_angle},
           {"width", s.wall_width},
           {"outer_width", s.outer_wall_width},
           {"seam", seam},

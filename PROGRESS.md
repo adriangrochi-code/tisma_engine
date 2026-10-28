@@ -6846,3 +6846,12 @@ Encontró, ya arreglado: los pedazos de un lazo subido (partido por voladizo o p
 subidos fuera del bloque no planar; con capas curvas la copia plana escalonaba; con altura variable un lazo subido
 pasaba el tope de la capa siguiente. 600 corridas (semilla 20261030), 0 fallas. Toda la lista: 700 casos, todos
 pasan.
+
+**`walls.transition_angle`** (`perimeters.md`, P14): una pared pasa por cantidades impares de cordones (con uno en
+el medio) solo en las esquinas del contorno no más abiertas que el ajuste, 10° por defecto. Es el marcado del
+centro de Kuipers et al. (sección 3.3) con α_max = 180° − el ajuste: en el eje de una cuña de punta θ el ángulo de
+bisectriz es 180° − θ. Antes el motor usaba α_max = 135° fijo (esquinas de hasta 45°). Prueba: cuñas de 5°, 10° y
+20° con el ajuste en 1°, 10° y 30° dan las cantidades de P14 (con 1°, 0 / 2 / 4 / 6; con 10°, todas en las cuñas
+de 5° y 10° y solo pares en la de 20°; con 30°, todas). El fuzzer con el escalonado: 1500 corridas (semilla
+20261031), 0 fallas. Toda la lista: 701 casos, todos pasan. **Sigue:** `walls.transition_margin` (P13) y
+`walls.vertical_shell` (W4).

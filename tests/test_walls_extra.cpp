@@ -522,3 +522,57 @@ TEST_CASE("walls: staggered perimeters, the odd inner loops half a layer up (sta
     CHECK_THAT(seen.at({49, 1}).z, WithinAbs(10.0, 1e-6));
     CHECK_THAT(per_mm(49, 1), WithinAbs(normal / 2.0, 0.0003));
 }
+
+namespace {
+
+// A wedge lying flat: its tip at (60, 100), opening along +X at `degrees`,
+// 30 mm long and 3 mm tall.
+IndexedMesh wedge(double degrees) {
+    const double half = 30.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    IndexedMesh m;
+    for (float z : {0.0f, 3.0f}) {
+        m.vertices.push_back({60.0f, 100.0f, z});
+        m.vertices.push_back({90.0f, float(100.0 - half), z});
+        m.vertices.push_back({90.0f, float(100.0 + half), z});
+    }
+    m.triangles = {{0, 2, 1}, {3, 4, 5}, {0, 1, 4}, {0, 4, 3}, {1, 2, 5}, {1, 5, 4}, {2, 0, 3}, {2, 3, 5}};
+    return m;
+}
+
+// The bead counts the wedge's walls go through at layer 5, crossing it at
+// every 0.25 mm along X while it is under 2.5 mm thick.
+std::set<int> counts_along(const SlicedModel& model, double degrees) {
+    std::set<int> out;
+    const double slope = 2.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    for (double x = 60.5; x < 90.0 && (x - 60.0) * slope < 2.5; x += 0.25) {
+        int n = 0;
+        for (const Toolpath& t : model.walls[5].toolpaths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& a = t.points[i].p;
+                const Point2d& b = t.points[(i + 1) % t.points.size()].p;
+                n += (a.x - x) * (b.x - x) < 0.0;
+            }
+        out.insert(n);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("walls: odd bead counts only in corners no wider than walls.transition_angle (perimeters.md, P14)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    const auto has_odd = [](const std::set<int>& counts) {
+        return std::any_of(counts.begin(), counts.end(), [](int n) { return n % 2 == 1; });
+    };
+    for (const double setting : {1.0, 10.0, 30.0}) {
+        s.wall_transition_angle = setting;
+        for (const double tip : {5.0, 10.0, 20.0}) {
+            INFO("setting " << setting << ", tip " << tip);
+            const std::set<int> counts = counts_along(slice_model(wedge(tip), s), tip);
+            REQUIRE(counts.size() > 1);
+            CHECK(has_odd(counts) == (tip <= setting));
+        }
+    }
+}

@@ -905,7 +905,7 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **`walls.transition_angle` y `walls.transition_margin`** (`perimeters.md` P13 y P14, medidas por el equipo de
+- [ ] **`walls.transition_margin`** (`walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
   fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
   sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2
