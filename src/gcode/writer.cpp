@@ -2208,6 +2208,16 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The profiles' own parameters (presets.md, rule 21): the material's one
+    // per extruder.
+    for (const auto& [name, value] : s.printer_parameters)
+        c.variables["custom_parameter_printer_" + name] = TemplateValue::parse(value);
+    for (const auto& [name, value] : s.print_parameters)
+        c.variables["custom_parameter_print_" + name] = TemplateValue::parse(value);
+    for (const auto& [name, value] : s.filament_parameters)
+        c.variables["custom_parameter_filament_" + name] = list({TemplateValue::parse(value)});
+    for (const auto& [name, value] : s.print_variables)
+        c.variables["print_" + name] = TemplateValue::parse(value);
     // The print's own (gcode_templates.md, rule 7).
     c.variables["total_layer_count"] = TemplateValue::of(static_cast<long long>(model.layers.size()));
     c.variables["num_extruders"] = TemplateValue::of(1LL);

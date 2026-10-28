@@ -168,6 +168,15 @@ TEST_CASE("settings: the specs' names for settings the engine has under another 
     CHECK_THROWS_AS(parse_settings(R"({"filament": {"transmission_distance": 5}})"), SettingsError);
     CHECK(engine_setting_key("support.angle_limit") == "support.threshold_angle");
     CHECK_FALSE(engine_setting_key("machine.e_mode"));
+    // The machine's limits, one value for X and Y (SETTINGS_V1.md).
+    const Settings m = parse_settings(R"({"machine": {"max_speed": 300, "max_acceleration": 5000}})");
+    CHECK(m.max_feed_x == 300.0);
+    CHECK(m.max_feed_y == 300.0);
+    CHECK(m.max_accel_x == 5000.0);
+    CHECK(m.max_accel_y == 5000.0);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_speed": 300, "max_feed_y": 200}})"),
+                      Catch::Matchers::ContainsSubstring("also given as machine.max_feed_y"));
+    CHECK_FALSE(engine_setting_key("machine.max_speed"));
 }
 
 TEST_CASE("bad settings name the key", "[settings]") {

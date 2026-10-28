@@ -188,6 +188,8 @@ que el perfil del filamento traiga su material. En el perfil de la impresora.
 | `max_feed_x`, `max_feed_y` | número | — (del perfil de la impresora) | > 0, o `null` | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo. Sin valor (`null`): no se sabe y no se aplica |
 | `max_feed_z` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para Z |
 | `max_feed_e` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para el extrusor |
+| `max_speed`, `max_acceleration` | número | — | > 0 | Los nombres de las fichas (`SETTINGS_V1.md`) para un solo límite en X e Y: `max_speed` pone `max_feed_x` y `max_feed_y`, `max_acceleration` pone `max_accel_x` y `max_accel_y`. Darlo junto con uno de esos es un error |
+| `custom_parameters` | objeto | `{}` | nombre: número, texto o verdadero/falso | Parámetros propios de la impresora para las plantillas, como `custom_parameter_printer_<nombre>` (ficha `presets.md`, reglas 21 y 22; `gcode_templates.md`). Listas u objetos adentro son un error. Los del material van en `material.custom_parameters` (o `extrusion.custom_parameters`), como `custom_parameter_filament_<nombre>[0]`; los de la impresión, en `print.custom_parameters`, como `custom_parameter_print_<nombre>` |
 | `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s². Se escribe después del G-code de inicio, con `travel_acceleration`, para que la impresora use lo que supone el tiempo estimado: `M204 P… T…` (Marlin y RepRapFirmware) o `SET_VELOCITY_LIMIT ACCEL=…` (Klipper, un solo valor) |
 | `travel_acceleration` | número | 1250 | > 0 | Aceleración de los viajes y las retracciones, en mm/s² |
 | `corner_speed` | número | — (del perfil de la impresora; respaldo 10) | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
@@ -695,6 +697,15 @@ de la pieza de prueba.
 |---|---|---|---|---|
 | `scale_x`, `scale_y`, `scale_z` | número | 100 | 50 a 200 | Escala del modelo en %, por eje, alrededor del centro de su base (Z desde abajo): la pieza queda donde estaba en la cama. Las comprobaciones de la cama y la altura ven la pieza escalada |
 | `hole_offset` | número | 0 | −5 a 5 | Cuánto crecen los agujeros, en mm sobre el radio (negativo: se achican). Solo los agujeros: los bordes de afuera no se mueven, y una isla dentro de un agujero se conserva |
+
+### `print`
+
+Valores propios del perfil de impresión para las plantillas de G-code (ficha `presets.md`, reglas 21 y 22).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `custom_parameters` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `custom_parameter_print_<nombre>`. Listas u objetos adentro son un error |
+| `variables` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `print_<nombre>` |
 
 ### `extrusion`
 

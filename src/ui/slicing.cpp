@@ -120,6 +120,8 @@ Settings without_gcode_settings(Settings s) {
     s.dynamic_overhang_fan = d.dynamic_overhang_fan, s.overhang_fans = d.overhang_fans;
     s.slowdown_logic = d.slowdown_logic, s.transition_distance = d.transition_distance;
     s.start_gcode = d.start_gcode, s.end_gcode = d.end_gcode, s.variables = d.variables;
+    s.printer_parameters = d.printer_parameters, s.filament_parameters = d.filament_parameters;
+    s.print_parameters = d.print_parameters, s.print_variables = d.print_variables;
     s.flow = d.flow, s.pressure_advance = d.pressure_advance, s.filament_max_flow = d.filament_max_flow;
     s.machine_max_flow = d.machine_max_flow, s.chamber_temperature = d.chamber_temperature;
     s.max_nozzle_temp = d.max_nozzle_temp, s.max_bed_temp = d.max_bed_temp, s.max_chamber_temp = d.max_chamber_temp;

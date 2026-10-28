@@ -181,6 +181,29 @@ void read_group(const json& root, const std::string& group_name, const std::vect
 
 Settings parse_checked(std::string_view text);
 
+// A flat object of numbers, texts and true/false (presets.md, rule 22), each
+// value as the templates read it.
+std::map<std::string, std::string> flat_parameters(const json& value, const std::string& key) {
+    if (!value.is_object())
+        fail(key, "must be a flat object of name: number, text or true/false");
+    std::map<std::string, std::string> out;
+    for (const auto& [name, v] : value.items()) {
+        if (v.is_string() || v.is_boolean() || v.is_number())
+            out[name] = v.dump(); // a text quoted and escaped, as the templates parse it
+        else
+            fail(key + "." + name, "must be a number, a text or true/false (unable to parse custom parameters)");
+    }
+    return out;
+}
+
+// The same object back, for writing the settings out.
+nlohmann::ordered_json flat_json(const std::map<std::string, std::string>& values) {
+    nlohmann::ordered_json out = nlohmann::ordered_json::object();
+    for (const auto& [name, v] : values)
+        out[name] = nlohmann::ordered_json::parse(v);
+    return out;
+}
+
 } // namespace
 
 // The flavors by name (machine.flavor).
@@ -477,9 +500,29 @@ constexpr std::array<std::pair<std::string_view, std::string_view>, 4> kSpecAlia
     {"machine.e_mode", "gcode.volumetric_e"},
 }};
 
+// The spec's machine limits for the time estimate (SETTINGS_V1.md), one
+// value for X and Y: the engine's two keys.
+constexpr std::array<std::array<std::string_view, 3>, 2> kSpecPairAliases = {{
+    {"max_speed", "max_feed_x", "max_feed_y"},
+    {"max_acceleration", "max_accel_x", "max_accel_y"},
+}};
+
 // Each spec name given moves to the engine's (a key given under both is an
 // error); a group left empty goes.
 void spec_aliases(json& root) {
+    if (const auto machine = root.find("machine"); machine != root.end() && machine->is_object())
+        for (const auto& [from, x, y] : kSpecPairAliases) {
+            const std::string key(from);
+            if (!machine->contains(key))
+                continue;
+            for (const std::string_view to : {x, y})
+                if (machine->contains(std::string(to)))
+                    fail("machine." + key, "is also given as machine." + std::string(to));
+            const json value = machine->at(key);
+            machine->erase(key);
+            (*machine)[std::string(x)] = value;
+            (*machine)[std::string(y)] = value;
+        }
     for (const auto& [from, to] : kSpecAliases) {
         const std::string fg(from.substr(0, from.find('.'))), fk(from.substr(from.find('.') + 1));
         const std::string tg(to.substr(0, to.find('.'))), tk(to.substr(to.find('.') + 1));
@@ -512,6 +555,10 @@ std::optional<std::string> engine_setting_key(std::string_view key) {
     for (const auto& [from, to] : kSpecAliases)
         if (key == from)
             return from == "machine.e_mode" ? std::nullopt : std::optional<std::string>(to); // a text, not the flag
+    for (const auto& pair : kSpecPairAliases)
+        if (key == "machine." + std::string(pair[0]))
+            return std::nullopt; // two keys
+
     if (!key.starts_with("material."))
         return std::string(key);
     const std::string name(key.substr(9));
@@ -598,7 +645,7 @@ void material_aliases(json& root) {
         "unloading_speed", "unloading_speed_start", "start_gcode", "end_gcode", "ramming", "purge_multiplier", "density",
         "cost", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "chamber_temperature",
         "chamber_min_temperature", "load_time", "unload_time", "toolchange_delay", "spool_weight", "shrinkage_xy",
-        "shrinkage_z", "type"};
+        "shrinkage_z", "type", "custom_parameters"};
     for (const auto& [key, value] : material.items()) {
         if (const auto t = temperatures.find(key); t != temperatures.end()) {
             variable(t->second, key, value);
@@ -641,7 +688,7 @@ Settings parse_checked(std::string_view text) {
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
             group == "acceleration" || group == "ironing" || group == "output" || group == "travel" || group == "resin" ||
-            group == "belt")
+            group == "belt" || group == "print")
             continue;
         if (std::find(kPlannedGroups.begin(), kPlannedGroups.end(), group) != kPlannedGroups.end())
             s.ignored_groups.push_back(group);
@@ -1494,10 +1541,15 @@ Settings parse_checked(std::string_view text) {
                 "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
+                "custom_parameters",
                 "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
                 "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
+                   if (n == "custom_parameters") {
+                       s.printer_parameters = flat_parameters(v, k);
+                       return;
+                   }
                    if (n == "calibrations") {
                        read_calibrations(v, k, s.printer_calibrations);
                        return;
@@ -2105,6 +2157,10 @@ Settings parse_checked(std::string_view text) {
                            (n == "fan_min" ? s.fan_min : n == "fan_max" ? s.fan_max : s.fan_bridges) = d;
                    }
                });
+    // The print profile's own template values (gcode_templates.md; presets.md, rule 21).
+    read_group(root, "print", {"custom_parameters", "variables"}, [&](const json& g, const std::string& n, const std::string& k) {
+        (n == "custom_parameters" ? s.print_parameters : s.print_variables) = flat_parameters(g.at(n), k);
+    });
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
@@ -2315,8 +2371,12 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "custom_parameters") {
+            s.filament_parameters = flat_parameters(g.at(n), k);
+            return;
+        }
         if (n == "type") {
             if (!g.at(n).is_string())
                 fail(k, "must be a string");
@@ -3321,6 +3381,7 @@ std::string settings_json(const Settings& s) {
           {"start_gcode", s.start_gcode},
           {"end_gcode", s.end_gcode},
           {"variables", variables},
+          {"custom_parameters", flat_json(s.printer_parameters)},
           {"max_feed_x", speed(s.max_feed_x)},
           {"max_feed_y", speed(s.max_feed_y)},
           {"max_feed_z", speed(s.max_feed_z)},
@@ -3503,8 +3564,10 @@ std::string settings_json(const Settings& s) {
           {"max_deflection", s.review_max_deflection}}},
         {"compensation",
          {{"scale_x", s.scale_x}, {"scale_y", s.scale_y}, {"scale_z", s.scale_z}, {"hole_offset", s.hole_offset}}},
+        {"print", {{"custom_parameters", flat_json(s.print_parameters)}, {"variables", flat_json(s.print_variables)}}},
         {"extrusion",
          {{"flow", s.flow},
+          {"custom_parameters", flat_json(s.filament_parameters)},
           {"pressure_advance", s.pressure_advance},
           {"max_flow", s.filament_max_flow},
           {"infill_max_speed", s.infill_max_speed},

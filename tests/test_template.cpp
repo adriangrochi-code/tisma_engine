@@ -169,6 +169,29 @@ TEST_CASE("templates in the G-code: the print's variables (rule 7, T6)", "[templ
     CHECK(at(g, ";T6 50 cube20 1 90 110 20 0 0 true true 0.2") != std::string::npos);
 }
 
+TEST_CASE("templates in the G-code: the profiles' own parameters (gcode_templates.md; presets.md, rules 21 and 22)",
+          "[template][gcode]") {
+    const Settings own = parse_settings(R"({"machine": {"custom_parameters": {"bed_probe": true, "zone": "A \"1\""}},
+                                            "material": {"custom_parameters": {"soak": 90}},
+                                            "print": {"custom_parameters": {"mode": 2}, "variables": {"tag": "fast"}}})");
+    Settings s = printer();
+    s.printer_parameters = own.printer_parameters, s.filament_parameters = own.filament_parameters;
+    s.print_parameters = own.print_parameters, s.print_variables = own.print_variables;
+    s.start_gcode = ";OWN {custom_parameter_printer_bed_probe} {custom_parameter_printer_zone} "
+                    "{custom_parameter_filament_soak[0] + 1} {custom_parameter_print_mode * 2} {print_tag}";
+    CHECK(at(gcode_of(s), ";OWN true A \"1\" 91 4 fast") != std::string::npos);
+    // Written out and read back the same.
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.printer_parameters == s.printer_parameters);
+    CHECK(back.filament_parameters == s.filament_parameters);
+    CHECK(back.print_parameters == s.print_parameters);
+    CHECK(back.print_variables == s.print_variables);
+    // Only flat values (rule 22).
+    CHECK_THROWS_WITH(parse_settings(R"({"print": {"custom_parameters": {"a": [1, 2]}}})"),
+                      Catch::Matchers::ContainsSubstring("unable to parse custom parameters"));
+    CHECK_THROWS(parse_settings(R"({"machine": {"custom_parameters": 3}})"));
+}
+
 TEST_CASE("templates in the G-code: the layer change and the end (rule 11, T8)", "[template][gcode]") {
     Settings s = printer();
     s.gcode_before_layer = ";BEFORE {layer_num} {layer_z}";

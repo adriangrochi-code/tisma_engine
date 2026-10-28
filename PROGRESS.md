@@ -6994,4 +6994,20 @@ un aviso en la primera capa de la tabla, Z 10,0 a 10,2, con 29,6 mm; R6 (35 mm):
 espera la respuesta; también pregunté por los lazos de contacto en la segunda capa de interfaz (SM10) y por el borde
 de la zona en grilla contra la columna (SM8).
 
-**Sigue:** `support.under_bridges` cuando llegue la respuesta; mientras, `fragment`, `machine`, `calibration`, ….
+**`fragment`** (7 claves): la ficha dice «después de la primera versión», como `fins` y `waam`; queda para entonces.
+
+**`machine`:**
+- `machine.max_speed` y `machine.max_acceleration` (`SETTINGS_V1.md`, un solo límite en X e Y) son alias de dos
+  claves del motor: `max_feed_x` y `max_feed_y`, y `max_accel_x` y `max_accel_y`. Darlos junto con una de esas es un
+  error.
+- `machine.custom_parameters`, `material.custom_parameters` y `print.custom_parameters` (`presets.md`, reglas 21 y
+  22) entran a las plantillas como `custom_parameter_printer_<nombre>`, `custom_parameter_filament_<nombre>[0]` y
+  `custom_parameter_print_<nombre>`. Solo valores planos; una lista u objeto adentro es un error al leer los
+  ajustes, no al exportar. `print.variables` entra como `print_<nombre>`. Todo se escribe y se vuelve a leer igual.
+
+**Quedan de `machine`:**
+- `feedstock` (pellets, P3);
+- `high_flow_nozzle` (multiextrusor, con los datos del archivo);
+- `process` (WAAM, después de la primera versión).
+
+**Sigue:** `machine.high_flow_nozzle` y `calibration` (`mode`, `start`, `step`, `end`, `band_height`), después `gcode`.

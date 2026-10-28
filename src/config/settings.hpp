@@ -294,6 +294,13 @@ struct Settings {
     // Values for [name], {name} and {name[i]} in the start and end G-code, given
     // by the caller: a single value is a list of one. Numbers keep their JSON text.
     std::map<std::string, std::vector<std::string>> variables;
+    // Own parameters for the G-code templates (gcode_templates.md; presets.md,
+    // rules 21 and 22), flat name: value (a number, a text or true/false):
+    // machine.custom_parameters, extrusion.custom_parameters (the material's)
+    // and print.custom_parameters, as custom_parameter_printer_<name>,
+    // custom_parameter_filament_<name>[0] and custom_parameter_print_<name>;
+    // print.variables as print_<name>.
+    std::map<std::string, std::string> printer_parameters, filament_parameters, print_parameters, print_variables;
     // Motion limits, for the time estimate. Like every speed, from the
     // printer's profile; 0: not known, not applied.
     double max_feed_x = 0.0, max_feed_y = 0.0, max_feed_z = 0.0, max_feed_e = 0.0; // mm/s
