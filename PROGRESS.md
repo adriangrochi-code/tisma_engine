@@ -6614,3 +6614,21 @@ cruz, como la imagen de la regla 11.
 
 **Falta:** los íconos de las filas; elegir una fila desde la vista 3D (un clic en un modificador); arrastrar filas.
 
+
+## 2026-10-28 — Ajustes de las fichas: los primeros alias (bloque nocturno)
+
+**Por qué:** la medición del equipo de fichas (`docs/spec/qa/2026-10-28-ajustes.md`, `spec/next` cc8d580,
+`tools/check_spec.py` limpio): el motor lee 368 de 479 claves del laminado. Anotada en `PLAN.md`; primero los alias.
+
+**Hecho:** `spec_aliases` (`src/config/settings.cpp`), como `material_aliases`: `support.angle_limit` →
+`support.threshold_angle`, `arrange.distance` → `placement.spacing`, `filament.pressure_advance` →
+`extrusion.pressure_advance` y `machine.e_mode` (`length` o `volume`) → `gcode.volumetric_e`; las cuatro con el mismo
+significado en la ficha y en el motor. Con los dos nombres a la vez es un error, y `engine_setting_key` también las
+traduce para el asistente. `docs/CONFIG.md`, «Otros nombres de las fichas».
+
+**Medido:** `[settings]` (1915 aserciones): las cuatro se leen, `length` apaga el E volumétrico, los dos nombres juntos
+y `machine.e_mode` `pellets` son errores, `filament.transmission_distance` sigue siendo desconocida.
+
+**Sigue:** las claves que faltan, por grupo; las más cortas primero: `cooling.enabled` y `cooling.full_fan_layer`,
+`speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap` y `support.buildplate_only`.
+
