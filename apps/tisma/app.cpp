@@ -1670,8 +1670,10 @@ void App::printer_card() {
                                                 ImGui::GetColorU32(ImGuiCol_Text),
                                                 nozzle_text(c.diameter, now && settings_.hardened_nozzle).c_str());
         }
-        // A printer not from the catalog: another size (rule 23).
-        if (nozzles.size() == 1 && nozzles.front().profile.empty() && ImGui::Selectable(tr(T::OtherNozzle)))
+        // Another size (rule 23), on a printer of the catalog too: its list
+        // has only the sizes with a source, often just the stock one, and the
+        // owner swaps nozzles (2026-10-28).
+        if (ImGui::Selectable(tr(T::OtherNozzle)))
             other = true;
         ImGui::EndCombo();
     }
@@ -3442,15 +3444,15 @@ void App::catalog_dialog() {
         ImGui::PushTextWrapPos(0.0f);
         const auto maybe = [](const std::optional<double>& v, const char* unit) {
             char text[32];
-            if (!v)
-                return std::string("-");
+            if (!v) // the catalog has no source for it
+                return std::string(tr(T::NotSet));
             std::snprintf(text, sizeof text, "%s", format("%g %s", *v, unit).c_str());
             return std::string(text);
         };
         const auto range = [](const std::optional<std::array<double, 2>>& r, const char* unit) {
             char text[48];
             if (!r)
-                return std::string("-");
+                return std::string(tr(T::NotSet));
             std::snprintf(text, sizeof text, "%s", format("%g–%g %s", (*r)[0], (*r)[1], unit).c_str());
             return std::string(text);
         };
@@ -3468,7 +3470,7 @@ void App::catalog_dialog() {
                                    : p.firmware == "reprap"  ? "RepRapFirmware"
                                    : p.firmware == "bambu"   ? "Bambu Lab"
                                    : p.firmware == "other"   ? tr(T::OwnFirmware)
-                                                             : "-";
+                                                             : tr(T::NotSet);
             loc::Text("%s: %s · %s: %s%s", tr(T::Firmware), firmware, tr(T::Extruder),
                         p.direct_drive ? tr(T::DirectDrive) : tr(T::Bowden),
                         p.enclosed ? (std::string(" · ") + tr(T::Enclosed)).c_str() : "");

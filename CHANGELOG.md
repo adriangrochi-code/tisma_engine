@@ -81,6 +81,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Otra boquilla también en las impresoras del catálogo** (pedido del dueño): la lista trae los tamaños que el
+  fabricante publica (a menudo solo el de fábrica) y ahora siempre ofrece «Otra boquilla…». La ficha del catálogo
+  dice «Sin dato» donde no hay fuente (firmware, velocidad máxima…), en vez de «-».
+
 - **Sin soporte bajo los puentes por defecto** (`support.under_bridges`): antes el soporte iba bajo todo lo que
   colgaba, también un puente entre dos pilares.
 - **Lazos de contacto en las dos capas de interfaz de arriba** (`support.interface_contact_loops`, ficha

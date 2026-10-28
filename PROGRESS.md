@@ -7438,7 +7438,12 @@ La tarjeta de los consejos es opaca y en Vista previa va arriba, bajo los botone
 de movimientos y la leyenda); el consejo del laminado se va cuando no hay laminado. Mirado en una captura a
 1440 × 900.
 
-**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; la leyenda que
+**Boquillas:** el catálogo solo tiene los tamaños con fuente; para la CR-5 Pro H, el fabricante publica solo 0,4 mm.
+Así que no se agregan tamaños inventados, pero la lista de boquillas ahora ofrece «Otra boquilla…» también en las
+impresoras del catálogo (antes, solo en las propias; la regla 23 de `settings_panel.md` lo decía así, se le avisa al
+equipo de fichas). La ficha del catálogo dice «Sin dato» en vez de «-».
+
+**No hecho todavía (de los mismos informes):** la leyenda que
 tapa la pieza en Vista previa; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
 `--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
 dos columnas, menú para guardar después de laminar).
