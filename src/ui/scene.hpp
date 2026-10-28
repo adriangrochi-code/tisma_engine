@@ -32,6 +32,14 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 // triangle's unit normal (3 floats), for flat shading.
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset);
 
+// A coarse copy of a mesh to draw while the view moves (PLAN.md, V6): vertex
+// clustering (Rossignac and Borrel 1993, "Multi-resolution 3D approximations
+// for rendering complex scenes"). The corners go to the mean of their cell of
+// a grid sized for about `target` triangles; a triangle with two corners in
+// one cell drops out, and a triangle repeated over the same cells is kept
+// once. Below `target` triangles, the mesh as it is.
+TriangleMesh clustered(const TriangleMesh& mesh, std::size_t target);
+
 // A coloured line vertex: position and 0xRRGGBB colour with alpha in the top
 // byte (0xAARRGGBB).
 struct LineVertex {

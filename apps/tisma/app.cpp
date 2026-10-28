@@ -466,6 +466,7 @@ private:
     void add_change_at(int layer, ChangeKind kind, std::string text = {});
     void part_labels();
     void update_ray_scene();
+    void update_coarse_model();
     void check_rays(const ViewFrame& f);
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
     void check_moire(int fb_w, int fb_h);
@@ -738,6 +739,18 @@ private:
         std::vector<float> nodes, primitives;
     };
     Background<RayBuild> ray_job_;
+    // The coarse copy of a large plate to draw while the view moves (PLAN.md
+    // V6), built on another thread for scene_version_, with each object's
+    // first vertex in it.
+    struct CoarseBuild {
+        std::uint64_t version = 0;
+        std::vector<float> vertices;
+        std::vector<std::size_t> objects;
+    };
+    Background<CoarseBuild> coarse_job_;
+    std::uint64_t coarse_version_ = 0;
+    std::vector<std::size_t> coarse_object_vertices_;
+    int moved_frame_ = -100; // the last frame the camera moved
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
     bool ray_preview_ = false, ray_failed_ = false;
     std::shared_ptr<RayScene> ray_scene_;
@@ -6907,9 +6920,12 @@ void App::viewport() {
             }
         } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
+            moved_frame_ = frames_;
         }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f))
+        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
+            moved_frame_ = frames_;
+        }
     }
     if (ImGui::IsItemDeactivated() && editing) {
         if (dragged_)
@@ -6922,8 +6938,10 @@ void App::viewport() {
         dragged_ = false;
     }
     if (ImGui::IsItemHovered()) {
-        if (io.MouseWheel != 0.0f)
+        if (io.MouseWheel != 0.0f) {
             camera_.zoom(io.MouseWheel);
+            moved_frame_ = frames_;
+        }
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
     }
@@ -9656,6 +9674,17 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
         }
         f.selected_offset = drag_offset_;
     }
+    // While the camera moves, a large plate's coarse copy (V6), the same
+    // model highlighted in it.
+    f.coarse = (options_.coarse || frames_ - moved_frame_ <= 2) && coarse_version_ == scene_version_ &&
+               !coarse_object_vertices_.empty();
+    if (f.coarse && f.selected_count > 0)
+        for (std::size_t k = 0; k + 1 < object_vertices_.size() && k + 1 < coarse_object_vertices_.size(); ++k)
+            if (object_vertices_[k] == f.selected_first) {
+                f.coarse_selected_first = coarse_object_vertices_[k];
+                f.coarse_selected_count = coarse_object_vertices_[k + 1] - coarse_object_vertices_[k];
+                break;
+            }
     // The calibration tab shows its sliced part, up to the chosen segment.
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
@@ -9725,6 +9754,42 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
         f.ao_radius = ray ? std::clamp(size * 0.12f, 2.0f, 60.0f) : std::clamp(size * 0.05f, 1.0f, 25.0f);
     }
     return f;
+}
+
+// A large plate's coarse copy for moving the view (PLAN.md V6): from a
+// million triangles, about 400 000 of them shared among the objects by their
+// size, clustered on another thread and uploaded when ready for the plate
+// as it is now.
+void App::update_coarse_model() {
+    constexpr std::size_t kCoarseFrom = 1000000, kCoarseTarget = 400000;
+    if (std::optional<CoarseBuild> b = coarse_job_.take(); b && b->version == scene_version_) {
+        renderer_.set_model_coarse(b->vertices);
+        coarse_object_vertices_ = std::move(b->objects);
+        coarse_version_ = b->version;
+    }
+    if (coarse_version_ == scene_version_ || coarse_job_.running())
+        return;
+    std::size_t total = 0;
+    for (const TriangleMesh& m : placed_meshes_)
+        total += m.triangle_count();
+    if (total < kCoarseFrom) { // small enough to draw as it is
+        renderer_.set_model_coarse({});
+        coarse_object_vertices_.clear();
+        coarse_version_ = scene_version_;
+        return;
+    }
+    coarse_job_.start([meshes = placed_meshes_, offset = offset_, version = scene_version_, total]() {
+        CoarseBuild out;
+        out.version = version;
+        for (const TriangleMesh& m : meshes) {
+            out.objects.push_back(out.vertices.size() / 6);
+            const std::size_t share = std::max<std::size_t>(1000, kCoarseTarget * m.triangle_count() / total);
+            const std::vector<float> v = mesh_vertices(clustered(m, share), offset);
+            out.vertices.insert(out.vertices.end(), v.begin(), v.end());
+        }
+        out.objects.push_back(out.vertices.size() / 6);
+        return out;
+    });
 }
 
 // Keeps the ray tracing scene in step with what the view shows: the model
@@ -10253,6 +10318,7 @@ void App::frame() {
 
         // The 3D view, under the panels.
         update_ray_scene();
+        update_coarse_model();
         const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
                                renderer_.has_ray_scene() && ray_scene_;
         if (check_now)
@@ -10335,6 +10401,7 @@ void App::frame() {
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
         const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
+                             (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              (options_.moire_check && !moire_checked_) || device_pending;
         if (frames_ == 2) {
             if (options_.view == "analysis")

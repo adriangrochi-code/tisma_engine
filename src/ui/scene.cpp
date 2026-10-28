@@ -6,7 +6,10 @@
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 namespace tisma::ui {
 namespace {
@@ -501,6 +504,77 @@ std::uint32_t kind_colour(LineKind kind) {
     case LineKind::Other: return 0x6C6C78;
     }
     return 0x808080;
+}
+
+TriangleMesh clustered(const TriangleMesh& mesh, std::size_t target) {
+    const std::size_t n = mesh.triangle_count();
+    if (n <= target || target == 0)
+        return mesh;
+    // A regular surface mesh has about two triangles per vertex: cells of
+    // side h hold one vertex each over the area A, so h = sqrt(2 A / target).
+    double area = 0.0;
+    for (std::size_t t = 0; t < n; ++t) {
+        const Vec3f &a = mesh.corner(t, 0), &b = mesh.corner(t, 1), &c = mesh.corner(t, 2);
+        const Vec3 u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+        area += 0.5 * double(length(cross(u, v)));
+    }
+    const BoundingBox box = mesh.bounding_box();
+    // No finer than 2^21 cells along an axis, the key's room.
+    const double extent = std::max({double(box.max.x - box.min.x), double(box.max.y - box.min.y),
+                                    double(box.max.z - box.min.z), 1e-3});
+    const double h = std::max(std::sqrt(2.0 * area / double(target)), extent / 2.0e6);
+    const auto cell_of = [&](const Vec3f& p) {
+        const auto at = [&](float x, float lo) { return std::uint64_t(std::max(0.0, std::floor((double(x) - lo) / h))); };
+        return at(p.x, box.min.x) | at(p.y, box.min.y) << 21 | at(p.z, box.min.z) << 42;
+    };
+    // Each cell's index, its corners' sum and count: an open-addressing table
+    // twice as large as the cells there may be.
+    std::size_t size = 1;
+    while (size < 4 * target)
+        size <<= 1;
+    std::vector<std::uint64_t> keys(size, ~std::uint64_t(0));
+    std::vector<std::uint32_t> slot_cell(size, 0);
+    std::vector<std::array<double, 3>> sum;
+    std::vector<std::uint32_t> count;
+    std::vector<std::uint32_t> corner_cell(3 * n);
+    for (std::size_t i = 0; i < 3 * n; ++i) {
+        const Vec3f& p = mesh.corners()[i];
+        const std::uint64_t key = cell_of(p);
+        std::size_t at = std::size_t((key * 0x9E3779B97F4A7C15ull) >> 20) & (size - 1);
+        while (keys[at] != key && keys[at] != ~std::uint64_t(0))
+            at = (at + 1) & (size - 1);
+        if (keys[at] != key) {
+            if (sum.size() * 2 >= size) // a full table: the grid was too fine for this shape
+                return mesh;
+            keys[at] = key;
+            slot_cell[at] = std::uint32_t(sum.size());
+            sum.push_back({0.0, 0.0, 0.0});
+            count.push_back(0);
+        }
+        const std::uint32_t c = slot_cell[at];
+        sum[c][0] += p.x, sum[c][1] += p.y, sum[c][2] += p.z;
+        ++count[c];
+        corner_cell[i] = c;
+    }
+    // The surviving triangles over their cells, each once, wound as they
+    // were (the smallest cell first, the order kept).
+    std::vector<std::array<std::uint32_t, 3>> kept;
+    kept.reserve(target * 2);
+    for (std::size_t t = 0; t < n; ++t) {
+        std::array<std::uint32_t, 3> c{corner_cell[3 * t], corner_cell[3 * t + 1], corner_cell[3 * t + 2]};
+        if (c[0] == c[1] || c[1] == c[2] || c[0] == c[2])
+            continue;
+        std::rotate(c.begin(), std::min_element(c.begin(), c.end()), c.end());
+        kept.push_back(c);
+    }
+    std::sort(kept.begin(), kept.end());
+    kept.erase(std::unique(kept.begin(), kept.end()), kept.end());
+    std::vector<Vec3f> corners;
+    corners.reserve(3 * kept.size());
+    for (const auto& c : kept)
+        for (const std::uint32_t k : c)
+            corners.push_back(Vec3f{float(sum[k][0] / count[k]), float(sum[k][1] / count[k]), float(sum[k][2] / count[k])});
+    return TriangleMesh(std::move(corners));
 }
 
 } // namespace tisma::ui

@@ -1116,7 +1116,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &paint_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -1155,6 +1155,17 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     grid_step_ = float(look.step);
     grid_major_every_ = std::max(look.major_every, 1);
     ray_signature_.clear();
+}
+
+void Renderer::set_model_coarse(const std::vector<float>& vertices) {
+    if (!ready_)
+        return;
+    upload(model_coarse_.vao, model_coarse_.vbo, vertices.data(), vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    model_coarse_.count = static_cast<int>(vertices.size() / 6);
 }
 
 void Renderer::set_model(const std::vector<float>& vertices) {
@@ -1310,11 +1321,16 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     }
     if (f.show_model && model_.count > 0) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
-        glBindVertexArray(model_.vao);
+        // While the view moves, the coarse copy if there is one (V6).
+        const bool coarse = f.coarse && model_coarse_.count > 0;
+        const Buffer& model = coarse ? model_coarse_ : model_;
+        glBindVertexArray(model.vao);
         // The chosen model in its own colour, the rest before and after it.
-        const GLint count = model_.count;
-        const GLint first = GLint(std::min<std::size_t>(f.selected_first, std::size_t(count)));
-        const GLint chosen = GLint(std::min<std::size_t>(f.selected_count, std::size_t(count - first)));
+        const GLint count = model.count;
+        const GLint first =
+            GLint(std::min<std::size_t>(coarse ? f.coarse_selected_first : f.selected_first, std::size_t(count)));
+        const GLint chosen = GLint(
+            std::min<std::size_t>(coarse ? f.coarse_selected_count : f.selected_count, std::size_t(count - first)));
         uniform(p_.mesh, "u_colour", f.model);
         uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         if (first > 0)

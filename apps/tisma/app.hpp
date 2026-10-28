@@ -66,6 +66,7 @@ struct AppOptions {
     std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
     int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)

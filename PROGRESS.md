@@ -7263,3 +7263,33 @@ En total, de unos 0,75 s a unos 0,57 s antes del primer cuadro con 2 millones de
 
 **Sigue:** armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo (lo de «Modelos grandes, lo que
 sigue»), y V6 (malla simplificada mientras se mueve) para los cuadros en una GPU real.
+
+## 2026-10-28 (noche): modelos grandes, carga en paralelo y V6
+
+**Hecho:**
+- La lectura del STL binario es paralela: cada faceta se escribe en su lugar; con una coordenada no finita, el error
+  sigue nombrando la primera faceta mala.
+- Girar las piezas, buscar su caja y apoyarlas en la cama va en paralelo (`turned`, `placed_mesh`, `placed_size`), sin
+  copias de más.
+- V6: con más de un millón de triángulos en la placa, un hilo aparte arma una copia simplificada (agrupamiento de
+  vértices de Rossignac y Borrel, 1993; unos 400 000 triángulos repartidos entre las piezas según su tamaño). La vista
+  OpenGL la dibuja mientras la cámara gira, se desplaza o acerca, y hasta dos cuadros después; la selección se dibuja
+  sobre la copia también. `--coarse` la fuerza, para capturas y mediciones.
+
+**Medido, abrir la cúpula en la interfaz** (2 003 996 triángulos, `TISMA_TIMING=1`, GL por software, CI quieto,
+antes → después): leer 150 → 132–150 ms; antes de la placa 55 → 18 ms; mallas puestas 120 → 75 ms; malla de la placa
+~70 → 61 ms; vértices 100 → 86 ms; subirlos 135 → 117 ms. En total, de unos 0,63 s a unos 0,50 s antes del primer
+cuadro.
+
+**Medido, cuadros** (`--bench-frames 3`, la misma cúpula, GL por software): 672 ms por cuadro con la malla entera, 159
+ms con la copia. La captura con `--coarse` se ve igual a la entera, salvo detalles de menos de un milímetro.
+
+**Probado:** una prueba de la copia (esfera de 129 600 triángulos: con el objetivo alto no cambia; con 10 000 queda
+entre 3 000 y 30 000 triángulos, la caja a menos de 1 mm y el volumen a menos de 5 %); la lectura en paralelo con
+100 000 facetas y dos malas. Toda la lista: 725 casos, pasan.
+
+**No probado:** en una GPU real (este contenedor solo tiene rasterizador por software). La vista Vulkan todavía no usa
+la copia.
+
+**Sigue:** la copia en la vista Vulkan; armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo; las
+claves `orient.*` y las de pellets.

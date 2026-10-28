@@ -69,8 +69,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Cambiado
 
 - **Abrir modelos grandes:** con 2 millones de triángulos, de unos 0,75 s a unos 0,57 s antes del primer cuadro
-  (la caja de la pieza sin armar la malla dos veces, una copia menos y los vértices de la vista en paralelo).
+  (la caja de la pieza sin armar la malla dos veces, una copia menos y los vértices de la vista en paralelo), y a
+  unos 0,50 s con la lectura del STL binario, el giro y el apoyo en la cama también en paralelo.
   `TISMA_TIMING=1` muestra cuánto tarda cada paso.
+- **Mover la vista con modelos grandes:** con más de un millón de triángulos en la placa, mientras la cámara gira, se
+  desplaza o acerca, la vista dibuja una copia simplificada de unos 400 000 triángulos, armada en otro hilo; al
+  soltar, vuelve la malla entera. Con GL por software y 2 millones de triángulos, de 672 a 159 ms por cuadro.
 
 - **Las superficies de abajo van en líneas monótonas** (`surfaces.bottom_pattern`, `monotonic` por defecto, como la
   ficha): sin unirlas en zigzag. Las capas sólidas bajo una superficie de arriba siguen en zigzag.

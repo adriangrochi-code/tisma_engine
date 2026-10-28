@@ -861,3 +861,32 @@ TEST_CASE("ui: the move slider draws the top layer up to a move (preview.md, rul
     // A cut past the layer's end draws it all.
     CHECK(preview_ranges(order, 0, 1, 0xFFFFFFFFu, 100, 100)[0].count == 25);
 }
+
+TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex clustering)", "[ui]") {
+    // A sphere of radius 20 in 360 x 180 steps: 129 600 triangles.
+    TriangleMesh sphere;
+    constexpr int kAround = 360, kUp = 180;
+    constexpr double kPi = 3.14159265358979323846;
+    const auto at = [&](int i, int j) {
+        const double a = 2.0 * kPi * i / kAround, b = kPi * j / kUp - kPi / 2.0;
+        return Vec3f{float(20.0 * std::cos(b) * std::cos(a)), float(20.0 * std::cos(b) * std::sin(a)),
+                     float(20.0 + 20.0 * std::sin(b))};
+    };
+    for (int i = 0; i < kAround; ++i)
+        for (int j = 0; j < kUp; ++j) {
+            sphere.add_triangle(at(i, j), at(i + 1, j), at(i + 1, j + 1));
+            sphere.add_triangle(at(i, j), at(i + 1, j + 1), at(i, j + 1));
+        }
+    // Small meshes stay as they are.
+    CHECK(clustered(sphere, 200000).triangle_count() == sphere.triangle_count());
+    const TriangleMesh coarse = clustered(sphere, 10000);
+    INFO(coarse.triangle_count());
+    CHECK(coarse.triangle_count() > 3000);
+    CHECK(coarse.triangle_count() < 30000);
+    // The same shape: its box within a cell, its volume within a few percent,
+    // still closed and wound outwards.
+    const BoundingBox a = sphere.bounding_box(), b = coarse.bounding_box();
+    CHECK(std::abs(a.min.x - b.min.x) < 1.0f);
+    CHECK(std::abs(a.max.z - b.max.z) < 1.0f);
+    CHECK_THAT(coarse.signed_volume(), Catch::Matchers::WithinRel(sphere.signed_volume(), 0.05));
+}

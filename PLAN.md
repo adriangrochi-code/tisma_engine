@@ -688,7 +688,8 @@ Va antes que lo demás de P1:
   llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una
 - [x] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
   pese; anotar los números (2026-10-28: `TISMA_TIMING`; de 0,75 a 0,57 s con 2 millones de triángulos; los cuadros,
-  en el rasterizador por software de este contenedor, no se pueden medir acá)
+  en el rasterizador por software de este contenedor, no se pueden medir acá; después, 0,50 s con la lectura, el giro
+  y el apoyo en paralelo, y V6: 159 en vez de 672 ms por cuadro al mover la vista)
 - [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
 
 ## Fichas nuevas (2026-10-26)
@@ -1002,7 +1003,9 @@ tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 - [ ] V4: el recorte en la GPU: un shader de cómputo por cuadro elige por capa lo que se ve (cámara, lo tapado, capas
   juntas de lejos) y dibuja con `vkCmdDrawIndirect`; menos vértices por cordón
 - [ ] V5: rayos primarios para la vista previa («tipo raycaster»), en cómputo
-- [ ] V6: malla simplificada del modelo mientras se mueve (Garland y Heckbert 1997)
+- [x] V6: malla simplificada del modelo mientras se mueve. Hecho 2026-10-28 en la vista OpenGL, por agrupamiento de
+  vértices en una grilla (Rossignac y Borrel 1993) en vez de Garland y Heckbert 1997: es lineal, en otro hilo, y
+  alcanza para los cuadros en movimiento. Falta usar la copia en la vista Vulkan
 - [ ] Greedy meshing en la vista previa (pedido del dueño, 2026-10-26): juntar los cordones vecinos del mismo tipo en
   menos instancias, como el mallado voraz junta las caras de los vóxeles (`docs/LARGE_MODELS.md`)
 - [ ] Armar los datos de la vista previa en el hilo del laminado (hoy, 120 a 180 ms en el de la interfaz)

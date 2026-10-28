@@ -32,7 +32,7 @@ constexpr const char* kUsage =
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
-    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl]\n"
+    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
     "                                   [--compare-view other.png]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
@@ -49,7 +49,8 @@ constexpr const char* kUsage =
     "progress: the view without its ambient occlusion and ray tracing yet, so auto\n"
     "takes OpenGL for now). --compare-view compares the 3D view with the one in\n"
     "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
-    "than 0.5% of its pixels differ by more than 24 levels.\n";
+    "than 0.5% of its pixels differ by more than 24 levels. --coarse draws a plate of\n"
+    "more than a million triangles as while the view moves: its coarse copy.\n";
 
 } // namespace
 
@@ -247,6 +248,8 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--bench-frames") {
             options.bench_frames = std::max(1, std::atoi(value()));
+        } else if (arg == "--coarse") {
+            options.coarse = true;
         } else if (arg == "--compare-view") {
             options.compare_view = value();
         } else if (arg == "--ray-check") {
