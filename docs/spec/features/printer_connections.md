@@ -106,6 +106,18 @@ firmware y se pasan a la máquina.
    desactivado) queda vacío, y la página lo dice: «La impresora no informa el tamaño de la cama: escribilo a mano».
    Nunca se escribe 0 en lugar de un dato que falta.
 7. **Unidades:** se pasan a las del perfil. Marlin informa en las unidades en uso (`G21` mm, `G20` pulgadas).
+8. **Por red, según la marca** (pedido del dueño: «leer más datos en la mayoría de las impresoras»):
+
+   | Conexión | Qué se puede leer | Fuente |
+   |---|---|---|
+   | Klipper (Moonraker) | Todo lo de la regla 3 | [printer_objects](https://moonraker.readthedocs.io/en/latest/printer_objects/) |
+   | OctoPrint (Marlin detrás) | `M115` y `M503` se mandan con `POST /api/printer/command`; la respuesta no viene en el pedido, llega por los mensajes en vivo (push) de OctoPrint, que el programa escucha | [API de OctoPrint](https://docs.octoprint.org/en/master/api/printer.html) |
+   | Elegoo (SDCP 3.0) | `Cmd 1` vuelve a publicar los atributos; trae `XYZsize` (tamaño máximo de impresión, mm). No trae velocidades ni aceleraciones | [SDCP V3.0.0](https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0), de Shenzhen CBD Technology |
+   | Bambu Lab (LAN) | Ningún límite de movimiento: el estado (`pushall`) trae `nozzle_diameter`, temperaturas y AMS, y `get_version` las versiones de cada módulo. `gcode_line` no devuelve la salida del comando. Los límites salen del perfil del catálogo | [OpenBambuAPI](https://github.com/Doridian/OpenBambuAPI) (comunidad; Bambu Lab no publica el protocolo) |
+   | RepRapFirmware, PrusaLink, Creality, Flashforge | Pendiente: confirmar en la documentación de cada uno qué informa y cómo | — |
+
+   Lo que una conexión no puede leer se dice en Límites: «Esta impresora no informa sus límites por red: vienen del
+   perfil».
 
 ## Programas que manejan impresoras (red)
 
@@ -176,6 +188,24 @@ las que no tienen, o tienen una lenta (las A1 y P1 de Bambu Lab mandan pocas im�
    DirectShow en Windows, AVFoundation en macOS y V4L2 en Linux. Se anota en `THIRD_PARTY.md` antes de usarla.
 7. **macOS:** el programa declara para qué usa la cámara y pide el permiso de cámara. Sin eso, macOS lo cierra al
    abrirla.
+
+## Cámara de la impresora
+
+1. **En el menú de la impresora** (pedido del dueño, 28-10-2026): la cámara de la impresora elegida también se ve en
+   la página Impresora de la barra de arriba, arriba a la derecha, con su estado («Conectando…», «Sin cámara», el
+   error). Un clic la agranda. Si la impresora no tiene cámara o no se puede leer, se dice por qué.
+2. **Cámara de cada marca:**
+
+   | Conexión | Cómo se obtiene | Fuente |
+   |---|---|---|
+   | Bambu Lab A1 y P1 | TCP al puerto 6000, imágenes JPEG de 1280 × 720 (regla 6 de Bambu Lab) | [OpenBambuAPI, video](https://github.com/Doridian/OpenBambuAPI/blob/main/video.md) (comunidad) |
+   | Bambu Lab X1 y P2S | `rtsps://<IP>:322/streaming/live/1`, usuario `bblp`, el código de acceso como contraseña | la misma |
+   | Bambu Lab H2S y H2D | Igual que X1, pero apagada de fábrica: se prende en la pantalla, «LAN Only Liveview». Si está apagada, el estado trae `ipcam.rtsp_url = "disable"` y el programa lo explica | la misma |
+   | Klipper (Moonraker) | `GET /server/webcams/list`: `stream_url` y `snapshot_url` de cada cámara, con giro y rotación | [webcams](https://moonraker.readthedocs.io/en/latest/external_api/webcams/) |
+   | OctoPrint | Ajustes: `webcam.streamUrl` y `webcam.snapshotUrl` | [settings](https://docs.octoprint.org/en/master/api/settings.html) |
+   | Elegoo (SDCP 3.0) | `Cmd 386` con `Enable` 1; la respuesta trae `VideoUrl` (RTSP). Código 1: «se superó el máximo de transmisiones» | [SDCP V3.0.0](https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0) |
+   | Prusa | Sin transmisión local documentada; Prusa Connect solo tiene la API para subir fotos | [Prusa Connect camera API](https://help.prusa3d.com/article/prusa-connect-camera-api_569012) |
+   | Otras | Pendiente | — |
 
 ## Botón principal
 
@@ -276,3 +306,7 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | LM3 | Marlin sin informe de geometría | Tamaño de cama vacío, con el aviso de la regla 6; nunca 0 |
 | LM4 | Klipper, `toolhead` con `max_velocity` 300 y `max_accel` 3000 | Velocidad máxima X e Y 300 mm/s; aceleración 3000 mm/s² |
 | LM5 | Impresora imprimiendo al conectar | No se manda nada hasta que termina |
+| LM6 | Bambu Lab por LAN, perfil sin velocidades | Límites del perfil sin cambios y el aviso «Esta impresora no informa sus límites por red» |
+| LM7 | Elegoo SDCP, simulador con `XYZsize` «256x256x256» | Volumen 256 × 256 × 256 mm si el perfil no lo tenía |
+| CM1 | Klipper con una cámara en `/server/webcams/list` | La cámara se ve en la página Impresora |
+| CM2 | Bambu Lab H2D con `ipcam.rtsp_url = "disable"` | «La cámara está apagada en la impresora: prendé LAN Only Liveview en su pantalla» |
