@@ -898,6 +898,13 @@ Con el PR #23 (2026-10-26):
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
 - [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
   (la API de C) e `INTEGRATION.md`
+- [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
+  `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
+  del laminado. Faltan, por grupo: `fins` 20, `support` 13, `waam` 10 (después de la primera versión), `walls` 9,
+  `cooling` 7, `fragment` 7, `machine` 7, `calibration` 5 (los nombres de las franjas: `mode`, `start`, `step`, `end`,
+  `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
+  2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
+  nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
 - [ ] Medición del equipo de fichas (2026-10-26, `dev` d3e814a contra Tisma Slicer, caja negra, cada uno con sus
   ajustes): en las piezas grandes el motor tarda 2 a 3 veces más (Benchy 7,0 s contra 3,3 s; Benchy al doble con
   gyroid 17,8 contra 5,8 s) y su G-code pesa hasta 3,3 veces más (Benchy 7,57 MB contra 2,29 MB). Cuenta para el
