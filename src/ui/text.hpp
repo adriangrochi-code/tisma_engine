@@ -1111,6 +1111,7 @@
     X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
     X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
     X(SubGcodeHeights, "G-code por altura", "G-code by height") \
+    X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \

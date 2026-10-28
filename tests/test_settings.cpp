@@ -269,6 +269,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(snug.support_style == SupportStyle::Snug);
     CHECK(snug.support_closing_radius == 0.5);
     CHECK(Settings{}.support_free_bridge_length == 16.0);
+    CHECK(parse_settings(R"({"gcode": {"corner_smoothing": 0.02}})").corner_smoothing == 0.02);
+    CHECK_THROWS(parse_settings(R"({"gcode": {"corner_smoothing": 0.1}})"));
     const Settings cal = parse_settings(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210,
                                                            "band_height": 4}})");
     REQUIRE(cal.changes.size() == 5);

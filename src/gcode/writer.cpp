@@ -4,6 +4,7 @@
 
 #include "gcode/arcs.hpp"
 #include "gcode/cooling.hpp"
+#include "gcode/corners.hpp"
 #include "gcode/dialect.hpp"
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
@@ -2889,6 +2890,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         auto lay = [&](Toolpath path, const char* type, double feed, ByShare fan = {}) {
             if (path.points.empty())
                 return;
+            // Inner walls' and infills' corners rounded (toolpath_time.md,
+            // rule 7); never the outer wall's, whose shape shows.
+            if (s.corner_smoothing > 0.0 && type && !path.wavy &&
+                (std::strcmp(type, "Perimeter") == 0 || std::strcmp(type, "Internal infill") == 0 ||
+                 std::strcmp(type, "Solid infill") == 0 || std::strcmp(type, "Top solid infill") == 0))
+                path = round_corners(path, s.corner_smoothing);
             if (const double h = base_height + path.gap; h != laid_height) {
                 steps.push_back({{}, nullptr, 0.0, h, {}, {}});
                 laid_height = h;

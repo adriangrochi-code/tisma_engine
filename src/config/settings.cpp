@@ -257,7 +257,7 @@ void add_calibration_changes(Settings& s) {
         s.changes.push_back(std::move(c));
     }
     std::stable_sort(s.changes.begin(), s.changes.end(),
-                     [](const HeightChange& a, const HeightChange& b) { return a.z < b.z; });
+                     [](const HeightChange& lhs, const HeightChange& rhs) { return lhs.z < rhs.z; });
 }
 
 // The same object back, for writing the settings out.
@@ -2380,7 +2380,7 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
                                "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
-                               "toolchange", "custom_template"},
+                               "toolchange", "custom_template", "corner_smoothing"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
             s.object_labels = choice<ObjectLabels>(
@@ -2400,7 +2400,7 @@ Settings parse_checked(std::string_view text) {
                                         : s.verbose_comments) = g.at(n).get<bool>();
             return;
         }
-        if (n != "resolution") {
+        if (n != "resolution" && n != "corner_smoothing") {
             if (!g.at(n).is_string())
                 fail(k, "must be a string");
             (n == "color_change" ? s.gcode_color_change
@@ -2413,6 +2413,12 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         const double v = number(g, n, k);
+        if (n == "corner_smoothing") {
+            if (!(v >= 0.0 && v <= 0.05))
+                fail(k, "must be from 0 to 0.05 mm");
+            s.corner_smoothing = v;
+            return;
+        }
         if (v < 0.0 || v > 1.0)
             fail(k, "must be from 0 to 1 mm");
         s.gcode_resolution = v;
@@ -3177,6 +3183,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.color_change", text(s.gcode_color_change)},
         {"gcode.pause", text(s.gcode_pause)},
         {"gcode.custom_template", text(s.gcode_custom_template)},
+        {"gcode.corner_smoothing", num(s.corner_smoothing)},
         {"gcode.before_layer", text(s.gcode_before_layer)},
         {"gcode.after_layer", text(s.gcode_after_layer)},
         {"gcode.between_objects", text(s.gcode_between_objects)},
@@ -3710,6 +3717,7 @@ std::string settings_json(const Settings& s) {
           {"color_change", s.gcode_color_change},
           {"pause", s.gcode_pause},
           {"custom_template", s.gcode_custom_template},
+          {"corner_smoothing", s.corner_smoothing},
           {"before_layer", s.gcode_before_layer},
           {"after_layer", s.gcode_after_layer},
           {"between_objects", s.gcode_between_objects},

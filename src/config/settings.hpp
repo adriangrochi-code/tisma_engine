@@ -749,6 +749,9 @@ struct Settings {
     // gcode
     // Points that move a path less than this go (docs/spec/features/gcode_extras.md); 0: every point is written.
     double gcode_resolution = 0.0125;
+    // mm an inner wall's or an infill's corner may be rounded off by
+    // (toolpath_time.md, rule 7); 0: sharp corners.
+    double corner_smoothing = 0.0;
     // E in mm3 of plastic instead of mm of filament (gcode_extras.md, rule 11).
     bool volumetric_e = false;
     // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).

@@ -7037,5 +7037,24 @@ el motor ya usaba, y Tisma Slicer escribe `M204 S`. Los dos valen en Klipper.
 la pausa. Un cambio con `"custom": true` escribe la plantilla después de `;CUSTOM_GCODE`, y la vista previa lo marca
 como G-code propio.
 
-**Sigue:** `machine.high_flow_nozzle`, `gcode` (`corner_smoothing`, `pressure_advance_in_gcode`,
-`pressure_advance_piece`, `thumbnails`).
+**`gcode.corner_smoothing`** (`toolpath_time.md`, regla 7):
+- Las esquinas de las paredes internas y de los rellenos se cambian por un arco tangente a sus dos tramos. El arco se
+  aparta del vértice a lo sumo el ajuste (hasta 0,05 mm) y no toma más del 45 % de ninguno de los dos tramos.
+- La pared externa no cambia.
+- TT7, en un cubo en lugar del Benchy:
+  - las líneas de la pared externa son las mismas que sin el ajuste;
+  - las internas tienen más puntos;
+  - en la prueba de unidad, ningún punto se aparta más del ajuste (cuadrado y zigzag abierto, cuyas puntas quedan).
+
+**De paso:** un aviso `-Wshadow` del commit de las franjas.
+
+**Encontrado en este bloque, no en el motor:** compilar un solo blanco mientras se editaba `settings.hpp` dejó objetos
+con dos versiones de `Settings`, y la interfaz se caía en el destructor. Se arregló compilando todo de nuevo. El CI
+local (`tools/ci_linux.sh`) no corre ese riesgo: no se edita mientras compila.
+
+**No hecho del grupo `gcode`:**
+- `pressure_advance_in_gcode` y `pressure_advance_piece`: la ficha dice que el motor los hace solo si el dueño lo pide;
+- `thumbnails`: hace falta dibujar la pieza sin la interfaz y una biblioteca de imágenes revisada.
+
+**Sigue:** `machine.high_flow_nozzle`; `surfaces` (`bottom_pattern`, `bridge_angle`); `infill` (`before_walls`,
+`max_link`).

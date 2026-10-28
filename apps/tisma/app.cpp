@@ -939,6 +939,7 @@ const std::map<T, const char*>& row_keys() {
         {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
         {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
         {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"},
+        {T::CornerSmoothing, "gcode.corner_smoothing"},
         {T::ScarfMode, "walls.scarf"}, {T::ScarfLength, "walls.scarf_length"},
         {T::ScarfEntire, "walls.scarf_entire_loop"}, {T::ScarfStart, "walls.scarf_start_height"},
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
@@ -6164,6 +6165,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::VolumetricE, "gcode.volumetric_e", s.volumetric_e);
         flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
         flag(T::GcodeArcs, "gcode.arcs", s.gcode_arcs);
+        mm(T::CornerSmoothing, "gcode.corner_smoothing", s.corner_smoothing, 0.0, 0.05,
+           s.corner_smoothing > 0.0 ? "%.3f mm" : "—", 0.0005f);
         flag(T::GcodeBinary, "gcode.binary", s.gcode_binary);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
