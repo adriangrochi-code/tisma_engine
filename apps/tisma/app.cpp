@@ -8381,14 +8381,26 @@ void App::tip(const std::string& id) {
 
 // The assistant, or else the tip on screen: a card at the bottom of the view.
 void App::help_windows() {
+    // The slice's tip goes with the slice (it stayed after the part was
+    // deleted, QA 2026-10-28).
+    if (tip_ == "slice" && !result_) {
+        tips_seen_.insert(tip_);
+        tip_.clear();
+    }
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
     const float width = 420.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + view_size_.y - 16.0f * scale_),
-                            ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+    // At the bottom of the view; in the preview, whose move slider and legend
+    // are down there, at the top under the view's buttons.
+    if (tab_ == Tab::Preview)
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 56.0f * scale_), ImGuiCond_Always,
+                                ImVec2(0.5f, 0.0f));
+    else
+        ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + view_size_.y - 16.0f * scale_),
+                                ImGuiCond_Always, ImVec2(0.5f, 1.0f));
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.96f);
+    ImGui::SetNextWindowBgAlpha(1.0f); // opaque: the controls under it showed through
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18.0f * scale_, 14.0f * scale_));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));

@@ -153,6 +153,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Los consejos tapaban controles:** la tarjeta era apenas transparente y en Vista previa caía sobre la barra de
+  movimientos y la leyenda. Ahora es opaca y en Vista previa va arriba; el consejo del laminado se va si ya no hay
+  laminado (quedaba después de borrar la pieza).
+
 - **La barra de estado nombraba un objeto borrado:** con un solo objeto en la placa, ahora dice el suyo.
 - **Las marcas de costura de la vista previa eran muy grandes:** puntos de 7 px fijos, que de lejos hacían una línea
   blanca gruesa sobre la pieza. Ahora miden lo que el cordón en pantalla (de 1 a 3,5 px).

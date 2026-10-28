@@ -7434,8 +7434,12 @@ máxima y ancho de la cama) y la altura de capa escrita «0,16». Sin los arregl
 la vista previa miden lo que el cordón en pantalla, de 1 a 3,5 px (antes, 7 px fijos: una línea blanca gruesa de
 lejos; comparado con capturas de antes y después). Sin prueba automática para estos dos.
 
-**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; los consejos
-que tapan controles; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
+La tarjeta de los consejos es opaca y en Vista previa va arriba, bajo los botones de la vista (abajo están la barra
+de movimientos y la leyenda); el consejo del laminado se va cuando no hay laminado. Mirado en una captura a
+1440 × 900.
+
+**No hecho todavía (de los mismos informes):** las boquillas del fabricante al agregar una impresora; la leyenda que
+tapa la pieza en Vista previa; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
 `--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
 dos columnas, menú para guardar después de laminar).
 
