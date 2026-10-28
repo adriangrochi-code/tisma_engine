@@ -6632,3 +6632,24 @@ y `machine.e_mode` `pellets` son errores, `filament.transmission_distance` sigue
 **Sigue:** las claves que faltan, por grupo; las más cortas primero: `cooling.enabled` y `cooling.full_fan_layer`,
 `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap` y `support.buildplate_only`.
 
+
+## 2026-10-28 — `cooling.full_fan_layer` y `cooling.enabled` (bloque nocturno)
+
+**Hecho:** dos claves de la medición del equipo de fichas (`cooling.md` y `cooling_more.md`, `tools/check_spec.py`
+limpio):
+- `cooling.full_fan_layer`: el ventilador sube en línea recta desde la primera capa con ventilador hasta esa capa
+  (regla 1). Va sobre lo que le toca a la capa, incluido `fan_always` y el máximo de una capa frenada; no sobre un
+  ventilador puesto por un cambio de altura.
+- `cooling.enabled`: apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa
+  (con `fan_always`, `fan_min`); el de los puentes y los cambios de altura siguen. **Interpretación propia**: la ficha
+  dice solo «activa el frenado y el ventilador automático»; la pregunta va al equipo de fichas.
+- Las dos en el panel (nivel Avanzado: Ventilador y Capas cortas), en `docs/CONFIG.md` y en el laminado por etapas de
+  la interfaz (`slicing.cpp`).
+
+**Medido:** C1: con ventilador de 100 %, capas 1 a 3 apagado, capa 4 `M106 S51`, 5 S102, 6 S153, 7 S204, 8 en adelante
+S255; con 40 %, S20 a S102; sin el ajuste, S102 desde la capa 4 (lo de la ficha). Con el enfriamiento apagado y
+`min_layer_time` 1000 s, ningún `M106 S` ni frenado. `[layout]`, `[settings]`, `[settings_view]`, `[ui]` y `[gcode]`:
+151 casos, todos pasan.
+
+**Sigue:** `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.buildplate_only`.
+
