@@ -1005,7 +1005,8 @@ const std::map<T, const char*>& row_keys() {
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
         {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
-        {T::BeforeWipe, "retraction.before_wipe"}, {T::FirmwareRetraction, "retraction.firmware"},
+        {T::BeforeWipe, "retraction.before_wipe"},
+        {T::Coast, "retraction.coast"}, {T::FirmwareRetraction, "retraction.firmware"},
         {T::LiftAbove, "retraction.lift_above"}, {T::LiftBelow, "retraction.lift_below"},
         {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
         {T::LiftBeforeObstacle, "travel.lift_before_obstacle"}, {T::AvoidCrossingWalls, "travel.avoid_crossing_walls"},
@@ -6275,6 +6276,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::TravelSlope, "travel.slope", s.travel_slope, 0.0, 89.0, "%.1f°", 0.1f);
         mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : "—", 0.01f);
         flag(T::LiftBeforeObstacle, "travel.lift_before_obstacle", s.lift_before_obstacle);
+    } else if (id == "coast") {
+        mm(T::Coast, "retraction.coast", s.coast, 0.0, 20.0, s.coast > 0.0 ? "%.2f mm" : "—", 0.01f);
     } else if (id == "material_retraction") {
         count(T::FilamentRetractionRow, "extrusion.retraction", s.filament_retraction.size());
     } else if (id == "needs") {

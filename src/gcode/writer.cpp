@@ -1521,6 +1521,32 @@ public:
         z_now_ = z_to;
     }
 
+    // Coasting (coasting.md, rule 1): a path's end run at its feed with no E;
+    // the pressure left in the nozzle lays it. As an extrusion for the
+    // layer's time, the slowdown and the wipe that may follow.
+    void coast(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
+        const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
+        walk(length);
+        const double z_to = written(z_value_ - drop_ + to.dz);
+        feed = melt_feed(feed, (from.width + to.width) / 2.0, height_);
+        if (bridge_ || tail_)
+            other_time_ += length / feed;
+        else
+            (surface_ ? surface_extruded_ : extruded_)[feed] += length;
+        if (logging_)
+            laid_.push_back({feed, length, surface_, bridge_});
+        char tx[kNumberCapacity], ty[kNumberCapacity];
+        const std::string_view x_text(tx, format_fixed(tx, to.p.x - offset_[0], 3)),
+            y_text(ty, format_fixed(ty, to.p.y - offset_[1], 3));
+        if (x_text == x_ && y_text == y_)
+            return;
+        move("G1", to.p.x, to.p.y, z_to != z_now_ ? std::optional<double>(z_to) : std::nullopt, std::nullopt,
+             paced(feed), x_text, y_text, "coast");
+        remember({x_value_, y_value_}, to.p);
+        x_value_ = to.p.x, y_value_ = to.p.y, known_ = true;
+        z_now_ = z_to;
+    }
+
     // An arc of a flat path of one width (gcode_extras.md, rule 10): G2
     // clockwise or G3 counter-clockwise to points[a.last], its centre (I, J)
     // from where it starts as written, and the E of its length. The time
@@ -2706,6 +2732,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     const double accel_solid = or_else(s.accel_solid_infill, accel_infill);
     const double accel_top = or_else(s.accel_top_solid_infill, accel_solid);
     const double accel_bridges = or_else(s.accel_bridges, s.accel_default);
+    // The kinds whose paths coast (coasting.md, rule 3): walls and infill.
+    const auto coasts = [](const char* type) {
+        if (!type)
+            return false;
+        for (const char* kind : {"Perimeter", "External perimeter", "Internal infill", "Solid infill", "Top solid infill"})
+            if (std::strcmp(type, kind) == 0)
+                return true;
+        return false;
+    };
     const auto acceleration_of = [&](const char* type, bool first, bool over_raft) {
         if (!(s.accel_default > 0.0))
             return 0.0;
@@ -3756,12 +3791,44 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                         std::strcmp(step.type, "Perimeter") == 0 && t.index == 1)));
             g.print_acceleration(acceleration_of(step.type, local(l) == 0, raft_of(l) > 0 && local(l) == raft_of(l)));
             g.nonplanar(t.wavy);
-            if (s.gcode_arcs && !t.wavy && t.points.size() > kArcMinSegments) {
+            // The path, a closed one back to its start.
+            std::vector<ToolpathPoint> points = t.points;
+            if (t.closed && points.size() > 2)
+                points.push_back(t.points.front());
+            // Its last retraction.coast mm with no E (coasting.md): walls and
+            // infill, not a piece the next path goes on from, not one shorter
+            // than three times that (rule 2).
+            std::vector<ToolpathPoint> coasted;
+            if (s.coast > 0.0 && !t.wavy && !s.vase && coasts(step.type) && points.size() >= 2) {
+                std::size_t next = k + 1;
+                while (next < steps.size() && steps[next].path.points.empty())
+                    ++next;
+                const bool goes_on = next < steps.size() &&
+                                     std::hypot(steps[next].path.points.front().p.x - points.back().p.x,
+                                                steps[next].path.points.front().p.y - points.back().p.y) < 1e-6;
+                double length = 0.0;
+                for (std::size_t i = 1; i < points.size(); ++i)
+                    length += std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+                if (!goes_on && length >= 3.0 * s.coast) {
+                    double left = s.coast;
+                    std::size_t i = points.size() - 1;
+                    for (;; --i) {
+                        const double piece = std::hypot(points[i].p.x - points[i - 1].p.x, points[i].p.y - points[i - 1].p.y);
+                        if (piece >= left) {
+                            const ToolpathPoint cut = between(points[i - 1], points[i], 1.0 - left / piece);
+                            coasted.push_back(cut);
+                            coasted.insert(coasted.end(), points.begin() + std::ptrdiff_t(i), points.end());
+                            points.resize(i);
+                            points.push_back(cut);
+                            break;
+                        }
+                        left -= piece;
+                    }
+                }
+            }
+            if (s.gcode_arcs && !t.wavy && (coasted.empty() ? t.points.size() : points.size()) > kArcMinSegments) {
                 // Arcs where the path follows a circle (gcode_extras.md, rule
-                // 10), straight moves between them; a closed path back to its start.
-                std::vector<ToolpathPoint> points = t.points;
-                if (t.closed && points.size() > 2)
-                    points.push_back(t.points.front());
+                // 10), straight moves between them.
                 std::size_t at = 0;
                 for (const ArcRun& run : fit_arcs(points, arc_tolerance)) {
                     for (; at < run.first; ++at)
@@ -3772,11 +3839,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 for (; at + 1 < points.size(); ++at)
                     g.extrude(points[at], points[at + 1], step.feed);
             } else {
-                for (std::size_t i = 1; i < t.points.size(); ++i)
-                    g.extrude(t.points[i - 1], t.points[i], step.feed);
-                if (t.closed && t.points.size() > 2)
-                    g.extrude(t.points.back(), t.points.front(), step.feed);
+                for (std::size_t i = 1; i < points.size(); ++i)
+                    g.extrude(points[i - 1], points[i], step.feed);
             }
+            for (std::size_t i = 1; i < coasted.size(); ++i)
+                g.coast(coasted[i - 1], coasted[i], step.feed);
             g.nonplanar(false);
             // After each kind, back to acceleration.default (speeds_accels.md,
             // the table): not between paths of the same kind.

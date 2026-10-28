@@ -1485,6 +1485,8 @@
     X(SumWallsThin, "%d cordones absorben la diferencia", "%d beads take the difference") \
     X(WallsStaggered, "Perímetros escalonados", "Staggered perimeters") \
     X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
+    X(SubCoast, "Coasting", "Coasting") \
+    X(Coast, "Final sin extruir", "End without extruding") \
     X(SumPrinterValues, "Los de la impresora", "The printer's") \
     X(SumMaterialValues, "%d del material", "%d of the material's") \
     X(FilamentRetractionRow, "Retracción y viajes del material", "The material's retraction and travel") \

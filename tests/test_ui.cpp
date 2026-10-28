@@ -641,6 +641,7 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
         {"extrusion.pressure_advance", [](Settings& s) { s.pressure_advance = 0.05; }},
         {"extrusion.max_flow", [](Settings& s) { s.filament_max_flow = 2.0, s.machine_max_flow = 3.0; }},
         {"speed.max_flow", [](Settings& s) { s.speed_max_flow = 2.5; }},
+        {"retraction.coast", [](Settings& s) { s.coast = 0.5; }},
         {"speed.small_loops", [](Settings& s) { s.small_loop_speed = {15.0, false}; }},
         {"machine.max_temps", [](Settings& s) { s.max_nozzle_temp = 300.0, s.max_bed_temp = 110.0; }},
         {"extrusion.chamber_temperature", [](Settings& s) { s.chamber_temperature = 40.0, s.max_chamber_temp = 60.0; }},

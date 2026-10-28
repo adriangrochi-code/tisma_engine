@@ -1954,7 +1954,8 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra"},
+                "before_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
+                "coast"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
                    // every extruder, or a list by extruder.
@@ -1992,6 +1993,13 @@ Settings parse_checked(std::string_view text) {
                         : n == "before_wipe"   ? s.before_wipe
                         : n == "lift_above"    ? s.lift_above
                                                : s.lift_below) = d;
+                       return;
+                   }
+                   if (n == "coast") { // coasting.md: 0 is off
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 20.0))
+                           fail(k, "must be from 0 (off) to 20 mm");
+                       s.coast = d;
                        return;
                    }
                    if (n == "speed" && g.at(n).is_null()) { // not set: from the printer's profile
@@ -3139,6 +3147,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.on_layer_change", flag(s.retract_layer_change)},
         {"retraction.wipe", flag(s.wipe)},
         {"retraction.before_wipe", num(s.before_wipe)},
+        {"retraction.coast", num(s.coast)},
         {"retraction.lift_above", num(s.lift_above)},
         {"retraction.lift_below", num(s.lift_below)},
         {"retraction.firmware", flag(s.firmware_retraction)},
@@ -3628,6 +3637,7 @@ std::string settings_json(const Settings& s) {
           {"on_layer_change", s.retract_layer_change},
           {"wipe", s.wipe},
           {"before_wipe", s.before_wipe},
+          {"coast", s.coast},
           {"lift_above", s.lift_above},
           {"lift_below", s.lift_below},
           {"firmware", s.firmware_retraction},

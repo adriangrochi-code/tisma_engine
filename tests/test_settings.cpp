@@ -300,6 +300,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"speed": {"max_flow": 12.5}})").speed_max_flow == 12.5);
     CHECK(parse_settings(R"({"speed": {"max_flow": 0}})").speed_max_flow == 0.0);
     CHECK_THROWS(parse_settings(R"({"speed": {"max_flow": -1}})"));
+    CHECK(parse_settings(R"({"retraction": {"coast": 0.5}})").coast == 0.5);
+    CHECK_THROWS(parse_settings(R"({"retraction": {"coast": 21}})"));
     CHECK(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 1000, "step": 1000, "end": 5000}})")
               .changes.size() == 5);
     CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);

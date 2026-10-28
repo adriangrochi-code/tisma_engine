@@ -580,6 +580,7 @@ struct Settings {
     bool retract_layer_change = false;
     bool wipe = false;
     double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
+    double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
     bool firmware_retraction = false; // G10 and G11
     // Travels (rules 5 and 8): a lift as a ramp, and the route inside the part.

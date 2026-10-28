@@ -7145,3 +7145,17 @@ el de la máquina.
 **Sigue:** `machine.high_flow_nozzle`, `object`, `extrusion` (pellets), `filament.transmission_distance`, `orient`,
 y los sueltos (`layers.first_line_width` ya leído; `mixing.purge_infill_max`, `placement.drop_to_bed`,
 `retraction.coast`).
+
+## 2026-10-28 (tarde): `retraction.coast`
+
+**Hecho:** coasting (`coasting.md`): los últimos `retraction.coast` mm de cada perímetro, del externo y de cada
+relleno (poco denso, sólido y de arriba) se escriben como `G1 X Y` sin E, a la velocidad del trazo (con el mismo tope
+de caudal). El corte se hace al escribir, sobre el trazo ya ordenado y antes de buscar arcos:
+- un trazo de menos de 3 veces el largo no cambia (regla 2);
+- un tramo de pared que sigue en el siguiente (una pared partida por un voladizo) no se corta: solo el final real;
+- no en modo vaso ni en los cordones no planares;
+- el tramo sin E cuenta para el tiempo de la capa y su enfriamiento, y la limpieza lo recorre.
+En el panel, una ficha propia en Retracción («Coasting»); el fuzzer lo sortea.
+
+**Probado:** CO1 en el cubo de las pruebas de retracción: en la capa 11 cada final sin E mide 0,500 mm, a 60 mm/s en
+los perímetros, 30 en el externo y la velocidad del relleno; sin coasting no hay ninguno; el filamento total baja.

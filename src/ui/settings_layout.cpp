@@ -319,6 +319,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"travel.slope", A},
             {"travel.max_lift", A},
             {"travel.lift_before_obstacle", A}}},
+          {"coast", T::SubCoast, {{"retraction.coast", A}}},
           {"material_retraction", T::SubMaterialRetraction, {{"extrusion.retraction", A}}},
           {"mmu_load", T::SubMmuLoad,
            {{"extrusion.loading_speed", A},
@@ -751,6 +752,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumNoRetract);
     if (id == "retract_travel")
         return s.retract_lift > 0.0 ? format(T::SumHop, number(s.retract_lift).c_str()) : tr(T::SumNoHop);
+    if (id == "coast")
+        return s.coast > 0.0 ? number(s.coast) + " mm" : tr(T::SumOff);
     if (id == "material_retraction")
         return s.filament_retraction.empty() ? tr(T::SumPrinterValues)
                                              : format(T::SumMaterialValues, int(s.filament_retraction.size()));
