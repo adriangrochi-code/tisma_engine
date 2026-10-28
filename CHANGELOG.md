@@ -82,6 +82,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Un resto de filamento ya no salta con la boquilla:** lo que sobraba de un pedazo de cordón demasiado corto para
+  escribirse se sumaba al primer tramo después de un viaje, en otro lugar de la pieza (lo encontró el fuzzer).
+
 - **Capas curvas:** donde la rampa de las caras de arriba termina, un tramo podía llevar el filamento del espesor de
   un lado y el verificador leer el del otro, y el G-code se rechazaba. El espesor se toma ahora donde el G-code pone
   la boquilla, con sus números redondeados.

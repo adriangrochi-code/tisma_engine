@@ -1296,6 +1296,11 @@ public:
                 const Point2d* planned_from = nullptr, bool force_retract = false, const char* next_type = nullptr) {
         const char* note = first_travel_ ? "travel to first layer point" : notes_of(next_type).travel;
         first_travel_ = false;
+        // The E of pieces too short to write stays where they were: it does
+        // not follow the nozzle to the next place (a tip of 0.02 mm of bead
+        // landed on the first move after a travel, fuzz seed 20261028 run 48).
+        total_e_ -= pending_;
+        pending_ = 0.0;
         extruder_off();
         if (resync_ && known_) {
             // From wherever the change's G-code left the head: retracted, up at

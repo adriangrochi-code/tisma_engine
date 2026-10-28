@@ -6781,5 +6781,8 @@ hace el motor. Las dos cosas tienen que entrar juntas o la pieza queda mal extru
 - **Fuzzer** (300 corridas, semilla 20261028): 1 falla, la corrida 48 (anillo, E volumétrica desde Z 1,31, capas
   variables): un tramo de 0,023 mm justo después de volver de una retracción pone 0,00126 mm³ donde se esperan
   0,00068. Sin este cambio esa corrida se rechazaba como no imprimible, así que es un caso que antes no se veía.
-  Queda para el próximo bloque.
+  **Arreglado** en el bloque de mantenimiento que siguió: no era la sección. El escritor guarda el filamento de los
+  pedazos demasiado cortos para escribirse (0,02 mm de cordón, acá) y lo suma al tramo siguiente; si en el medio hay
+  un viaje, ese filamento caía en otro lugar de la pieza. Ahora se descarta al viajar (y se resta del total). La
+  corrida 48 pasa; toda la lista, 697 casos, pasa.
 
