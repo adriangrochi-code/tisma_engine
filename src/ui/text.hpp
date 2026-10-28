@@ -744,7 +744,35 @@
     X(HelpNotes, "Notas", "Notes")                                                                                    \
     X(HelpLimitUsed, "Se usó el límite: %s", "The limit was used: %s")                                                \
     X(HelpTutorialSteps, "%d pasos, unos %d min", "%d steps, about %d min")                                           \
-    X(HelpGuidesSoon, "Las guías de calibración llegan con la página de calibraciones.", "The calibration guides come with the calibrations page.")                                                                                  \
+    X(GuidesFilament, "Del filamento: se repiten con cada filamento", "Filament: repeated with each filament")        \
+    X(GuidesPrinter, "De la impresora: al cambiar la máquina", "Printer: when the machine changes")                     \
+    X(GuideRepeat, "Cuándo repetirla: %s", "When to repeat it: %s")                                                  \
+    X(GuideBefore, "Antes conviene hacer: %s", "Better do first: %s")                                                 \
+    X(GuideSteps, "Pasos", "Steps")                                                                                   \
+    X(GuideLook, "Lo que ves", "What you see")                                                                        \
+    X(GuideMeans, "Qué significa", "What it means")                                                                   \
+    X(GuideResult, "Resultado", "Result")                                                                             \
+    X(GuideNow, "Ahora: %s", "Now: %s")                                                                               \
+    X(GuideStart, "Inicio de la prueba", "Test start")                                                                \
+    X(GuideStepPerBand, "Paso por franja", "Step per band")                                                           \
+    X(GuideBand, "Alto de franja (mm)", "Band height (mm)")                                                           \
+    X(GuideHeight, "Altura medida (mm)", "Measured height (mm)")                                                      \
+    X(GuideValue, "Valor leído en la pieza", "Value read on the print")                                               \
+    X(GuideLayers, "Capas de separación", "Layers of gap")                                                            \
+    X(GuideReadValue, "Leído: %s", "Read: %s")                                                                        \
+    X(GuideProposed, "Valor propuesto", "Proposed value")                                                             \
+    X(GuideFirmware, "Este resultado no va en el perfil: se guarda en la impresora.",                                 \
+      "This result does not go in the profile: it is saved in the printer.")                                          \
+    X(GuideTips, "Consejos", "Tips")                                                                                  \
+    X(GuideFrequency, "Frecuencia (Hz)", "Frequency (Hz)")                                                          \
+    X(GuideSend, "Mandar a la impresora", "Send to the printer")                                                      \
+    X(GuideSent, "Mandado a la impresora: %s", "Sent to the printer: %s")                                             \
+    X(GuideHow, "Cómo se hace", "How it is done")                                                                     \
+    X(GuideCalibrate, "Calibrar", "Calibrate")                                                                        \
+    X(ReviewFix, "¿Cómo lo arreglo?", "How do I fix it?")                                                            \
+    X(AssistantTutorials, "Ofrecer los tutoriales", "Offer the tutorials")                                            \
+    X(AssistantGlossary, "Definiciones del glosario junto a los ajustes", "Glossary definitions next to the settings") \
+    X(AssistantMaterial, "Ficha y avisos del material", "Material card and warnings")                                 \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \

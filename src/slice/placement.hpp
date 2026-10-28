@@ -15,7 +15,8 @@ namespace tisma {
 // box in X and Y moves to placement.center, or to the centre of the bed's
 // box; Z is left alone (the slicer lays the lowest point on the bed). Without
 // a bed, or with placement.arrange off, nothing moves (rules 1 and 4).
-void place_on_bed(TriangleMesh& mesh, const Settings& settings);
+// `follower` (the negative volumes) moves as the mesh does.
+void place_on_bed(TriangleMesh& mesh, const Settings& settings, TriangleMesh* follower = nullptr);
 
 // An object of the plate inside one mesh: its name and its triangles, from
 // `first`, `count` of them (the sequential printing slices each apart,

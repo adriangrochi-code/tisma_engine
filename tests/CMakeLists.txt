@@ -279,7 +279,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
               --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --tutorial first_print,1
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_tutorial.png)
-    set_tests_properties(ui_help_problem ui_material_card ui_tutorial PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A calibration guide with a guide before it not done (assistant.md, AS16, AS17).
+    add_test(NAME ui_calibration_guide
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --help-panel calibrations --help-item max_flow
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_calibration_guide.png)
+    set_tests_properties(ui_help_problem ui_material_card ui_tutorial ui_calibration_guide PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # Measure between the cube's bottom and top (model_tools.md, rule 20).
     add_test(NAME ui_measure
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

@@ -6382,3 +6382,79 @@ pasos del tutorial de prueba.
 
 **No probado:** el tiempo del clic en mallas de millones de triángulos (cada clic suelda la malla y arma sus aristas).
 
+
+## 2026-10-27 — Interfaz P1: el asistente, quinto paso (guías de calibración)
+
+**Hecho:**
+- Las guías de `calibrations.json` (`KnowledgeCalibration` en `src/ui/knowledge.*`), en su `order`. El lector acepta
+  los pasos como texto u objeto, `before` como texto, lista o null, `open` como id u objeto, y las fuentes de cada
+  guía como objetos o ids de las del archivo; sin fuentes propias, usa las del archivo. Los tipos exactos se
+  preguntaron al equipo de especificaciones.
+- La pestaña Calibraciones del panel de ayuda (regla 20, AS19), la página de cada guía (regla 21) con «Basado en» al
+  pie, el aviso «Antes conviene hacer» si la prueba anterior no tiene fecha (regla 22, AS16), el valor de ahora del
+  ajuste que fija y, en Flujo máximo, inicio + altura × paso con un 10 % menos y Aplicar con Deshacer, que fecha la
+  prueba (regla 23, AS17). Si el resultado va en la impresora, la guía lo dice.
+- «Cómo se hace» en la página de calibraciones y en la sección Calibración de la impresora; la acción `calibration` de
+  un problema abre la guía si existe.
+- Regla 9: un clic en los avisos del laminado los lista con «¿Cómo lo arreglo?» hacia su problema (tiempo de capa →
+  `overheating_small`, despegue → `first_layer_adhesion`, parte en el aire → `support_surface`).
+- Las preferencias `assistant.tutorials`, `assistant.glossary_tips` y `assistant.material_tips` (Más).
+- Los informes de investigación (no planar, calidad, arcos) dicen que los métodos se basan en los trabajos citados,
+  como pidió el equipo de especificaciones.
+
+**Probado:** `[assistant]` 170 comprobaciones en 15 casos; `ui_calibration_guide` y las demás capturas de la ayuda
+(29 pruebas). La CI de Linux completa del 0.10.0-alpha.2: gcc y clang 662 de 662; en ASan la última prueba (la más
+lenta, unos 5 min) quedó cortada por el límite de tiempo de la tarea, no por un fallo. Se corre entera de nuevo antes
+de este push.
+
+**Falta (sigue):** las fórmulas de las demás guías (esperan la tabla del equipo de especificaciones), mandar el
+comando del firmware con la impresora conectada (AS18), el orden de las guías en `new_material` (regla 24), y los
+avisos de hilos y esquinas que la revisión del motor todavía no da. Después, `model_tools.md` (partes, modificadores,
+ajustes por objeto).
+
+**Después, el mismo día (sexto paso):** el equipo de especificaciones respondió los tipos de `calibrations.json` y la
+tabla de cuentas (ficha en `spec/next` 7c5cfca). Cada guía con cuenta toma lo que escribe la persona: en las torres
+(flujo máximo, avance de presión, retracción, esquinas) la altura, con inicio + paso × ⌊altura / franja⌋, un 10 %
+menos en flujo máximo; en temperatura, flujo, enfriamiento, ángulo y VFA el valor leído; en soportes, capas × altura
+de capa. Inicio, paso y franja vienen de la última prueba generada; el valor propuesto se corrige antes de aplicar. Una
+variable de máquina que el perfil no tenía (`[temperature]`) se crea al fijarla. `[assistant]`: 199 comprobaciones
+(AS17, AS20, AS22). Avisado al equipo de especificaciones: el motor no tiene `material.nozzle_temp` (usa
+`machine.variables.temperature`) y su torre de flujo máximo por defecto no es la de `calibration_models.md`.
+
+**Después (séptimo paso):** las fechas de las calibraciones pasan a los perfiles, como pide la regla 22:
+`machine.calibrations` en el de la impresora y `extrusion.calibrations` en el del filamento, con la impresora; una
+fecha de filamento cuenta solo en su impresora. Se guardan por id de guía y por nombre de prueba (la sección
+Calibración de la impresora sigue leyendo por prueba), y Deshacer también saca la fecha. Las fechas viejas de las
+preferencias se siguen leyendo mientras el perfil no tenga. Prueba nueva en `[printer_card]` (AS21).
+
+**Después (pedidos del equipo de especificaciones):**
+- El grupo `material` de las fichas ya no se ignora: cada clave pasa al ajuste del motor que nombra (las temperaturas a
+  `machine.variables`, `flow_factor` a `extrusion.flow` en %, el resto a `extrusion`, con `extrusion.type` nuevo), y
+  una clave desconocida o repetida es un error. El asistente acepta esos nombres (`material.nozzle_temp`, como lo
+  escriben los datos de las guías de temperatura).
+- La torre de caudal máximo sigue `calibration_models.md`: de 5 a 25 de a 1 sin caudal conocido (CM7) y de 0,5 a 1,5
+  veces el conocido (CM6, aprobado por el dueño), las dos con franjas de 2 mm. Las franjas de menos de 3 mm no llevan
+  número: se leen por la altura.
+- Encontrado: el resto de `calibration_models.md` (las piezas y sus ajustes como ajustes del objeto) no está hecho;
+  quedó como ítem en `PLAN.md`.
+
+**Probado:** 668 de 668 en el árbol de trabajo (`ctest`), `[settings]` con la prueba nueva del grupo `material`.
+
+**Después (octavo paso):** la guía de input shaping toma la frecuencia, muestra el comando del firmware de la
+impresora (`SET_INPUT_SHAPER` en Klipper, `M593 F` en Marlin 2 y RepRapFirmware) y, con la impresora conectada, lo
+manda y fecha la guía (AS18). El paso de calibración del tutorial `new_material` abre la primera guía que falta en el
+orden temperatura, flujo máximo, avance de presión, flujo, retracción (regla 24). `[assistant]`: 211 comprobaciones en
+16 casos. No probado con una impresora real: el envío usa la misma cola de comandos que los controles de la página
+Impresora.
+
+**Después: volúmenes negativos (`model_tools.md`, regla 2).** El 3MF de un proyecto trae los volúmenes de tipo
+negativo en `ModelFile::negative`; la línea de comandos los escala, gira y centra con la pieza (alrededor del centro
+de la pieza, no del conjunto) y `slice_model` los corta en los mismos niveles y los resta de la región de cada capa
+antes del desplazamiento XY y de la compensación de agujeros. Las capas son las de la pieza: un negativo más alto no
+agrega capas. Con corte, separar o copias la línea de comandos todavía lo rechaza con un mensaje. MT1 (50 capas, X de
+90,2 a 109,8, 3000 mm³, contorno y agujero con dos perímetros cada uno) y MT3 (3600 mm³, el agujero de Z 3 a 7, piso y
+techo sólidos) en `[transform]`. El piso de MT3 a Z 2,6 debería ser un puente sobre el relleno vacío: el motor todavía
+no hace puentes internos (pendiente de I1). 670 de 670 en el árbol de trabajo.
+
+**Sigue:** partes con ajustes propios y ajustes por objeto (reglas 5, 7 y 8; MT7, MT8, MT11), después modificadores y
+rangos (P4).

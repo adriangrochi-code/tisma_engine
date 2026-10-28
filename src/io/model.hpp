@@ -25,6 +25,9 @@ struct ModelFile {
     std::string name;        // an STL's solid name or header; empty otherwise
     std::size_t objects = 1; // objects on the 3MF's build plate
     std::size_t parts = 1;   // parts of those objects (meshes, or the volumes a slicer project lists)
+    // A slicer project's negative volumes (model_tools.md, rule 2), in the
+    // same coordinates: taken away from the part when slicing.
+    TriangleMesh negative;
 };
 
 // A Wavefront OBJ file: its vertices ("v") and faces ("f", any number of
@@ -39,7 +42,8 @@ ModelFile parse_obj(std::string_view text);
 // the model's unit. Objects of type support, surface or other, and items
 // marked not printable, are left out; so are the volumes a slicer project
 // lists as not being parts (modifiers, blockers and the like, from
-// Metadata/Slic3r_PE_model.config). Throws ModelError.
+// Metadata/Slic3r_PE_model.config), but for the negative volumes, which go
+// to ModelFile::negative. Throws ModelError.
 ModelFile parse_3mf(std::string_view package);
 
 // The model in memory: a ZIP package is a 3MF; otherwise the extension says

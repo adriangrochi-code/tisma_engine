@@ -10,6 +10,39 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Guías de calibración en la ayuda** (ficha `assistant.md`): la pestaña Calibraciones con las guías del paquete en
+  orden, del filamento y de la impresora; cada guía dice para qué sirve, cuándo repetirla, qué prueba conviene hacer
+  antes, sus pasos, cómo leer la impresión, el resultado y sus fuentes («Basado en»). Con lo medido (la altura en
+  una torre, el bloque o el parche elegido, segundos, un ángulo, capas) calcula el valor nuevo del ajuste, con inicio,
+  paso y franja tomados de la última prueba generada, y ofrece aplicarlo después de corregirlo si hace falta. «Cómo se hace» abre la guía desde la página de calibraciones y desde la
+  sección Calibración de la impresora.
+- **Input shaping desde su guía:** con la impresora conectada, la guía manda la frecuencia elegida con el comando de
+  su firmware (Klipper, Marlin 2 o RepRapFirmware). El tutorial de material nuevo abre las guías en orden: la primera
+  que falta de temperatura, flujo máximo, avance de presión, flujo y retracción.
+- **«¿Cómo lo arreglo?» en los avisos del laminado**: un clic en los avisos los lista con un enlace al problema de la
+  ayuda que les corresponde.
+- **Preferencias del asistente** en Más: ofrecer los tutoriales, las definiciones del glosario junto a los ajustes y
+  la ficha y los avisos del material.
+
+- **Volúmenes negativos:** un proyecto 3MF con volúmenes negativos los resta de la pieza en cada capa que cruzan, sin
+  agregar capas ni mover la pieza (`model_tools.md`, regla 2). Todavía no con corte, separar o copias.
+- **El grupo `material` de las fichas:** `material.nozzle_temp`, `material.bed_temp`, `material.flow_factor`,
+  `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
+
+### Cambiado
+
+- **Torre de caudal máximo:** por defecto de 5 a 25 mm³/s de a 1, con franjas de 2 mm que se leen por su altura; con
+  un caudal máximo conocido, de la mitad a una vez y media, también en franjas de 2 mm.
+- **Una clave desconocida en `material` es un error**, como en los demás grupos (antes el grupo entero se ignoraba
+  con un aviso).
+- **Las fechas de las calibraciones van en los perfiles:** las de la impresora en el perfil de la impresora
+  (`machine.calibrations`) y las del filamento en el del filamento (`extrusion.calibrations`, con la impresora en que
+  se hicieron), en lugar de las preferencias de la interfaz. Las que ya estaban en las preferencias se siguen
+  mostrando.
+- Los informes de investigación dicen que los métodos que describen se basan en los trabajos citados.
+
 ## [0.10.0-alpha.2] - 2026-10-27
 
 ### Agregado

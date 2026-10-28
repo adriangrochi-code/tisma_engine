@@ -539,11 +539,20 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     REQUIRE(apply_calibration(CalibrationKind::Acceleration, 3000.0, t));
     CHECK(t.acceleration == 3000.0);
     CHECK(t.travel_acceleration == 3000.0); // raised to it
-    CHECK(automatic_calibration(CalibrationKind::MaxFlow, test_printer()).segments.front().value == 4.0);
+    // CM7: without a known max flow, 5 to 25 by 1 in 2 mm bands.
+    const CalibrationPrint common = automatic_calibration(CalibrationKind::MaxFlow, test_printer());
+    REQUIRE(common.segments.size() == 21);
+    CHECK(common.segments.front().value == 5.0);
+    CHECK(common.segments.back().value == 25.0);
+    CHECK(common.segments.front().z1 - common.segments.front().z0 == 2.0);
+    // CM6: around 20, 10 to 30 by 2 in 2 mm bands, 11 of them.
     t.machine_max_flow = 20.0;
     const CalibrationPrint around = automatic_calibration(CalibrationKind::MaxFlow, t);
+    REQUIRE(around.segments.size() == 11);
     CHECK(around.segments.front().value == 10.0);
     CHECK(around.segments.back().value == 30.0);
+    CHECK(around.segments[1].value == 12.0);
+    CHECK(around.segments.front().z1 - around.segments.front().z0 == 2.0);
     CHECK(automatic_calibration(CalibrationKind::Acceleration, t).segments.back().value == 6000.0);
     CHECK(automatic_calibration(CalibrationKind::Acceleration, test_printer()).segments.back().value == 5000.0);
 }

@@ -1,7 +1,10 @@
 #include "slice/transform.hpp"
 
 #include "cli/cli.hpp"
+#include "io/model.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "slice/pipeline.hpp"
+#include "surfaces/surfaces.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -237,11 +240,9 @@ std::string ascii_stl(const TriangleMesh& m) {
     return s.str();
 }
 
-Sliced slice_with(const TriangleMesh& model, const std::string& name, const std::string& groups) {
+Sliced slice_file(const std::filesystem::path& stl, const std::string& name, const std::string& groups) {
     const std::filesystem::path dir = test_temp_dir();
-    const std::filesystem::path stl = dir / (name + ".stl"), config = dir / (name + ".json"),
-                                gcode = dir / (name + ".gcode");
-    std::ofstream(stl) << ascii_stl(model);
+    const std::filesystem::path config = dir / (name + ".json"), gcode = dir / (name + ".gcode");
     std::ofstream(config) << R"({"machine": {"bed": [[0, 0], [200, 0], [200, 200], [0, 200]]},
                                  "adhesion": {"skirt_loops": 0}, "walls": {"count": 2},
                                  "infill": {"density": 0}, "surfaces": {"top_layers": 0, "bottom_layers": 0})"
@@ -259,6 +260,12 @@ Sliced slice_with(const TriangleMesh& model, const std::string& name, const std:
             r.x_lo = std::min(r.x_lo, x), r.x_hi = std::max(r.x_hi, x);
         }
     return r;
+}
+
+Sliced slice_with(const TriangleMesh& model, const std::string& name, const std::string& groups) {
+    const std::filesystem::path stl = test_temp_dir() / (name + ".stl");
+    std::ofstream(stl) << ascii_stl(model);
+    return slice_file(stl, name, groups);
 }
 
 double number_after(const std::string& text, const std::string& key) {
@@ -313,4 +320,88 @@ TEST_CASE("transform: the command line scales, turns, cuts and splits (MT14 to M
     std::ostringstream out, err;
     CHECK(run_cli(views, out, err) == kExitUsage);
     CHECK(err.str().find("--copies") != std::string::npos);
+}
+
+TEST_CASE("model tools: negative volumes take their volume away (MT1, MT3)", "[transform][cli]") {
+    const std::filesystem::path formats = std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats";
+    // The 3MF keeps the negative volume apart from the part.
+    const ModelFile through = read_model(formats / "box_negative.3mf");
+    CHECK(through.mesh.triangle_count() == 12);
+    CHECK(through.negative.triangle_count() == 12);
+    CHECK(through.parts == 1);
+    // MT1: 10 x 10 mm through the middle, taller than the box: 50 layers, X
+    // as the box's, 4000 - 1000 mm³, an outline and a hole on every layer.
+    Sliced r = slice_file(formats / "box_negative.3mf", "mt1", "");
+    REQUIRE(r.code == 0);
+    CHECK(number_after(r.out, "layers: ") == 50);
+    CHECK_THAT(r.x_lo, WithinAbs(90.2, 0.05));
+    CHECK_THAT(r.x_hi, WithinAbs(109.8, 0.05));
+    CHECK_THAT(number_after(r.out, "sliced_volume: "), WithinRel(3000.0, 1e-3));
+    {
+        Settings s;
+        s.wall_count = 2;
+        const IndexedMesh negative = weld_exact(through.negative);
+        const SlicedModel m =
+            slice_model(weld_exact(through.mesh), s, nullptr, nullptr, nullptr, nullptr, nullptr, &negative);
+        REQUIRE(m.regions.size() == 50);
+        for (const std::size_t l : {std::size_t(0), std::size_t(25), std::size_t(49)}) {
+            INFO(l);
+            CHECK(m.regions[l].size() == 2);
+            // Each loop with its two walls.
+            CHECK(m.walls[l].toolpaths.size() == 4);
+        }
+    }
+    // MT3: a closed 10 x 10 x 4 mm hole from Z 3 to 7: 4000 - 400 mm³; the
+    // layers through it have the hole, those above and below none.
+    r = slice_file(formats / "box_cavity.3mf", "mt3", "");
+    REQUIRE(r.code == 0);
+    CHECK(number_after(r.out, "layers: ") == 50);
+    CHECK_THAT(number_after(r.out, "sliced_volume: "), WithinRel(3600.0, 1e-3));
+    {
+        const ModelFile cavity = read_model(formats / "box_cavity.3mf");
+        const IndexedMesh negative = weld_exact(cavity.negative);
+        const SlicedModel m = slice_model(weld_exact(cavity.mesh), Settings{}, nullptr, nullptr, nullptr, nullptr, nullptr,
+                                          &negative);
+        REQUIRE(m.regions.size() == 50);
+        CHECK(m.regions[13].size() == 1); // Z 2.6 to 2.8
+        CHECK(m.regions[15].size() == 2); // Z 3.0 to 3.2
+        CHECK(m.regions[34].size() == 2); // Z 6.8 to 7.0
+        CHECK(m.regions[35].size() == 1); // Z 7.0 to 7.2
+        // With 3 solid layers above and below and no infill, the hole's
+        // floor and roof are solid where it is (100, 100), sparse beside it.
+        Settings solid;
+        solid.top_layers = solid.bottom_layers = 3;
+        solid.infill_density = 0.0;
+        const SlicedModel f = slice_model(weld_exact(cavity.mesh), solid, nullptr, nullptr, nullptr, nullptr, nullptr,
+                                          &negative);
+        const BoundingBox box = cavity.mesh.bounding_box();
+        const Clipper2Lib::Point64 centre(to_units((double(box.min.x) + box.max.x) / 2.0),
+                                          to_units((double(box.min.y) + box.max.y) / 2.0));
+        const auto holds = [&](const Polygons& area) {
+            for (const Clipper2Lib::Path64& p : area)
+                if (Clipper2Lib::PointInPolygon(centre, p) == Clipper2Lib::PointInPolygonResult::IsInside)
+                    return true;
+            return false;
+        };
+        const auto solid_at = [&](std::size_t l) {
+            const LayerSurfaces& u = f.surfaces[l];
+            return holds(u.top) || holds(u.top_under) || holds(u.bottom) || holds(u.bridge);
+        };
+        // Floor: Z 2.6, 2.8 and 3.0 (the top surface). MT3 wants Z 2.6 as a
+        // bridge over the unprinted infill: internal bridges are still to do
+        // (PLAN.md, I1 and K1), so here it is solid.
+        CHECK(solid_at(12));
+        CHECK(solid_at(13));
+        CHECK(holds(f.surfaces[14].top));
+        CHECK_FALSE(solid_at(11));
+        // Roof: Z 7.2 (a bridge), 7.4 and 7.6.
+        CHECK(holds(f.surfaces[35].bridge));
+        CHECK(solid_at(36));
+        CHECK(solid_at(37));
+        CHECK_FALSE(solid_at(38));
+    }
+    // Not yet with a cut, a split or copies.
+    r = slice_file(formats / "box_negative.3mf", "mt1b", R"("transform": {"split": true})");
+    CHECK(r.code == kExitUsage);
+    CHECK(r.err.find("negative volumes") != std::string::npos);
 }

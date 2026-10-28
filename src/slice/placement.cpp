@@ -9,7 +9,7 @@
 
 namespace tisma {
 
-void place_on_bed(TriangleMesh& mesh, const Settings& s) {
+void place_on_bed(TriangleMesh& mesh, const Settings& s, TriangleMesh* follower) {
     // Without a bed, only a centre given by hand moves it (placement.md, PL15).
     if (!s.placement_arrange || (s.bed.empty() && !s.placement_center) || mesh.empty())
         return;
@@ -29,6 +29,8 @@ void place_on_bed(TriangleMesh& mesh, const Settings& s) {
     if (dx == 0.0 && dy == 0.0)
         return;
     mesh.translate(float(dx), float(dy), 0.0f);
+    if (follower)
+        follower->translate(float(dx), float(dy), 0.0f);
 }
 
 std::vector<std::array<double, 2>> arrange_boxes(const std::vector<std::array<double, 2>>& sizes, std::array<double, 2> centre,

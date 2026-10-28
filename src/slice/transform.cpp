@@ -8,6 +8,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <utility>
 
 namespace tisma {
@@ -93,8 +94,9 @@ std::array<double, 3> box_centre(const TriangleMesh& mesh) {
             0.5 * (double(box.min.z) + box.max.z)};
 }
 
-void scale_mesh(TriangleMesh& mesh, double sx, double sy, double sz) {
-    const std::array<double, 3> c = box_centre(mesh);
+namespace {
+
+void scale_about(TriangleMesh& mesh, double sx, double sy, double sz, const std::array<double, 3>& c) {
     TriangleMesh out = mapped(mesh, [&](const Vec3f& v) {
         return Vec3f{float(c[0] + (v.x - c[0]) * sx), float(c[1] + (v.y - c[1]) * sy), float(c[2] + (v.z - c[2]) * sz)};
     });
@@ -102,20 +104,7 @@ void scale_mesh(TriangleMesh& mesh, double sx, double sy, double sz) {
     mesh = negative % 2 ? rebuilt(out, true) : std::move(out);
 }
 
-double fit_factor(const TriangleMesh& mesh, const std::array<double, 3>& size) {
-    const BoundingBox box = mesh.bounding_box();
-    if (box.empty)
-        return 1.0;
-    const double own[3] = {double(box.max.x) - box.min.x, double(box.max.y) - box.min.y, double(box.max.z) - box.min.z};
-    double f = std::numeric_limits<double>::infinity();
-    for (int k = 0; k < 3; ++k)
-        if (own[k] > 0.0)
-            f = std::min(f, size[std::size_t(k)] / own[k]);
-    return std::isfinite(f) ? f : 1.0;
-}
-
-void rotate_mesh(TriangleMesh& mesh, double x_degrees, double y_degrees, double z_degrees) {
-    const std::array<double, 3> c = box_centre(mesh);
+void rotate_about(TriangleMesh& mesh, double x_degrees, double y_degrees, double z_degrees, const std::array<double, 3>& c) {
     constexpr double kDegree = 3.14159265358979323846 / 180.0;
     const double cx = std::cos(x_degrees * kDegree), sx = std::sin(x_degrees * kDegree);
     const double cy = std::cos(y_degrees * kDegree), sy = std::sin(y_degrees * kDegree);
@@ -132,18 +121,51 @@ void rotate_mesh(TriangleMesh& mesh, double x_degrees, double y_degrees, double 
     });
 }
 
+} // namespace
+
+void scale_mesh(TriangleMesh& mesh, double sx, double sy, double sz) {
+    scale_about(mesh, sx, sy, sz, box_centre(mesh));
+}
+
+double fit_factor(const TriangleMesh& mesh, const std::array<double, 3>& size) {
+    const BoundingBox box = mesh.bounding_box();
+    if (box.empty)
+        return 1.0;
+    const double own[3] = {double(box.max.x) - box.min.x, double(box.max.y) - box.min.y, double(box.max.z) - box.min.z};
+    double f = std::numeric_limits<double>::infinity();
+    for (int k = 0; k < 3; ++k)
+        if (own[k] > 0.0)
+            f = std::min(f, size[std::size_t(k)] / own[k]);
+    return std::isfinite(f) ? f : 1.0;
+}
+
+void rotate_mesh(TriangleMesh& mesh, double x_degrees, double y_degrees, double z_degrees) {
+    rotate_about(mesh, x_degrees, y_degrees, z_degrees, box_centre(mesh));
+}
+
 void mirror_mesh(TriangleMesh& mesh, int axis) {
     scale_mesh(mesh, axis == 0 ? -1.0 : 1.0, axis == 1 ? -1.0 : 1.0, axis == 2 ? -1.0 : 1.0);
 }
 
-std::vector<TriangleMesh> apply_transform(TriangleMesh mesh, const Settings& s) {
+std::vector<TriangleMesh> apply_transform(TriangleMesh mesh, const Settings& s, TriangleMesh* follower) {
+    if (follower && !follower->empty() && (s.transform_cut_z || s.transform_split))
+        throw std::invalid_argument("negative volumes do not go with transform.cut_z or transform.split yet");
     double f = s.transform_scale;
     if (s.transform_scale_to_fit)
         f *= fit_factor(mesh, *s.transform_scale_to_fit);
-    if (f != 1.0)
-        scale_mesh(mesh, f, f, f);
-    if (s.transform_rotate != std::array<double, 3>{0.0, 0.0, 0.0})
-        rotate_mesh(mesh, s.transform_rotate[0], s.transform_rotate[1], s.transform_rotate[2]);
+    // About the part's centre; what follows it, about the same point.
+    if (f != 1.0) {
+        const std::array<double, 3> c = box_centre(mesh);
+        scale_about(mesh, f, f, f, c);
+        if (follower)
+            scale_about(*follower, f, f, f, c);
+    }
+    if (s.transform_rotate != std::array<double, 3>{0.0, 0.0, 0.0}) {
+        const std::array<double, 3> c = box_centre(mesh);
+        rotate_about(mesh, s.transform_rotate[0], s.transform_rotate[1], s.transform_rotate[2], c);
+        if (follower)
+            rotate_about(*follower, s.transform_rotate[0], s.transform_rotate[1], s.transform_rotate[2], c);
+    }
     std::vector<TriangleMesh> out;
     if (s.transform_cut_z && !mesh.empty()) {
         // The height counts from the part's lowest point, where it sits on the bed.

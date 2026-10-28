@@ -691,9 +691,26 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   `knowledge/` leídos (`src/ui/knowledge.*`), la búsqueda (AS2), los problemas con Aplicar y Deshacer, los
   procedimientos, el glosario junto a cada ajuste (regla 12, AS15) y la ficha del material con sus avisos. Cuarto
   paso (2026-10-27): los tutoriales guiados con anclas, eventos, ofertas y progreso guardado (reglas 15 a 18, AS12 a
-  AS14). Falta: las guías de calibración (20 a 24, AS16 a AS19), los enlaces desde la revisión previa (regla 9), las
-  preferencias `assistant.*`, el idioma de los archivos por carpeta (19, hecho en el lector pero sin datos en inglés) y
-  las anclas de Ingeniería por paso (hoy todas iluminan la pestaña Análisis)
+  AS14). Quinto paso (2026-10-27): las guías de calibración leídas de `calibrations.json`, la pestaña Calibraciones en
+  dos grupos, la página de cada guía con «Basado en» al pie, «Cómo se hace» en la página de calibraciones y en la
+  sección Calibración de la impresora, el aviso de la prueba que va antes (regla 22, AS16), el resultado de Flujo
+  máximo con Aplicar (AS17) y el aviso de que el resultado va en la impresora (regla 23); los enlaces «¿Cómo lo
+  arreglo?» desde los avisos (regla 9) y las preferencias `assistant.*`. Sexto paso (2026-10-27): las cuentas de la
+  tabla de la regla 23 para todas las guías (franja, valor leído, capas), inicio, paso y franja tomados de la última
+  prueba generada, el valor propuesto editable y la relación guía-prueba de la regla 20 (AS20 a AS22; ficha en
+  `spec/next` 7c5cfca). Séptimo paso (2026-10-27): las fechas de las calibraciones en los perfiles
+  (`machine.calibrations` y `extrusion.calibrations`, por id de guía y por prueba; AS21). Octavo paso
+  (2026-10-27): el comando de input shaping de cada firmware, mandado con la impresora conectada (AS18), y el paso de
+  calibración del tutorial `new_material` en el orden de las guías (regla 24). Falta: los avisos de la
+  revisión que el motor todavía no da (hilos, esquinas), el idioma de los archivos por carpeta (19,
+  hecho en el lector pero sin datos en inglés) y las anclas de Ingeniería por paso (hoy todas iluminan la pestaña
+  Análisis)
+- [ ] `calibration_models.md` (P1, encontrado el 2026-10-27): las piezas de las pruebas como dice la ficha (cilindro
+  de 50 mm para el caudal máximo, cajas huecas, torre de bloques de temperatura, retracción con dos pilares, números de
+  siete segmentos de la regla 6) y sus ajustes como ajustes del objeto (regla 3, pide ajustes por objeto de
+  `model_tools.md`). Hecho: los rangos del caudal máximo (CM6, CM7) con franjas de 2 mm. Falta el resto de las piezas
+  y rangos (las del motor son tubos cuadrados con otros rangos por defecto), y las pruebas que el motor no tiene:
+  esquinas, vibraciones y VFA
 - [ ] `settings_levels.md` y `settings_panel.md` (P1): niveles de ajustes, lista propia y secciones más finas.
   Primer paso hecho (2026-10-26, pedido del dueño: entre Cura y OrcaSlicer, simple y sin cargar de información): todos
   los ajustes del motor en secciones con ícono y tarjetas plegables con su resumen, niveles Básico, Normal y Avanzado,
@@ -724,9 +741,11 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
   con sus huecos; reglas 11 a 14, MT14 a MT18) y espejar en el motor (regla 16, MT20), en `src/slice/transform.*`.
   En la interfaz, Espejar, Cortar con un plano horizontal, Separar en piezas y Medir caras y vértices (reglas 13, 14,
-  16, 18 y 20 en parte). Falta: el plano libre y los conectores del corte, las aristas y círculos de Medir y Separar en
-  partes (reglas 18 a 20), partes, modificadores y ajustes por objeto (reglas 1 a 10) y las copias en grilla
-  (regla 15)
+  16, 18 y 20 en parte). Volúmenes negativos (2026-10-27, regla 2, MT1 y MT3): el 3MF los trae aparte, siguen a la
+  pieza al escalar, girar y centrar, y el laminado los resta de cada capa sin agregar capas. Falta: los negativos con
+  corte, separar o copias, el plano libre y los conectores del corte, Separar en partes (reglas 18 y 19), partes con
+  ajustes propios, modificadores y ajustes por objeto y por rango (reglas 3 a 10), las copias en grilla (regla 15), y el
+  puente del piso de MT3, que espera los puentes internos (I1)
 - [ ] `formats.md`: OBJ y 3MF (F1); el resto, P4. Hecho (2026-10-26): leer OBJ y 3MF (reglas 1, 5, 7 y 8; FM1 a FM3,
   FM9) en la línea de comandos y en la interfaz. Falta: AMF, STEP, SVG, ZIP (FM6, FM21), la reparación al abrir
   (regla 4) y escribir el proyecto 3MF y las exportaciones (reglas 6 a 16)

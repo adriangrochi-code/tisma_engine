@@ -105,6 +105,16 @@ struct Speed {
 };
 
 // The engine's own settings format, documented in docs/CONFIG.md.
+// When a calibration's result was applied (assistant.md, rule 22;
+// settings_panel.md, rule 38): the date (YYYY-MM-DD), the nozzle it was done
+// with, and for a filament's, on which printer.
+struct CalibrationDate {
+    std::string date;
+    double nozzle = 0.0;
+    std::string printer;
+    friend bool operator==(const CalibrationDate&, const CalibrationDate&) = default;
+};
+
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
@@ -615,6 +625,12 @@ struct Settings {
     double shrinkage_xy = 0.0, shrinkage_z = 0.0;
     bool abrasive = false;             // wears a brass nozzle
     bool needs_enclosure = false;
+    // The filament's material ("PLA", "PETG"...), for the assistant's card
+    // (assistant.md, rule 13); empty: found by the profile's name.
+    std::string filament_type;
+    // The calibrations done, by guide id or test name: the printer's in
+    // machine.calibrations, the filament's in extrusion.calibrations.
+    std::map<std::string, CalibrationDate> printer_calibrations, filament_calibrations;
     // The share of the purge each filament asks for (multi_extruder.md, rule
     // 12), %, by extruder; a shorter list repeats its last value.
     std::vector<double> purge_multiplier{100.0};
@@ -759,6 +775,13 @@ Settings with_filament_retraction(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
+
+// The engine's key for a key of the specs' `material` group
+// ("material.nozzle_temp" → "machine.variables.temperature",
+// "material.density" → "extrusion.density"); other keys as they are. None
+// for material.flow_factor (a factor where extrusion.flow is a %) and for a
+// key the engine does not know.
+std::optional<std::string> engine_setting_key(std::string_view key);
 
 // Whether a JSON text nests at most max_depth arrays and objects. Settings,
 // profiles, projects and load cases are untrusted files: a deeper one would

@@ -1,6 +1,7 @@
 #include "ui/printer_card.hpp"
 
 #include "catalog/catalog.hpp"
+#include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "ui/settings_layout.hpp"
 
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <set>
 
 using namespace tisma;
 using namespace tisma::ui;
@@ -113,4 +115,35 @@ TEST_CASE("printer card: the calibrations a printer has made (rule 38, SP29, SP3
     CHECK(calibration_state(nullptr, 0.4) == CalibrationState::Missing);
     CHECK(calibration_state(&flow, 0.4) == CalibrationState::Done);
     CHECK(calibration_state(&flow, 0.6) == CalibrationState::OtherNozzle);
+}
+
+TEST_CASE("printer page: the calibrations' dates in the profiles (assistant.md rule 22, AS21)", "[ui][printer_card]") {
+    Settings s;
+    s.nozzle_diameter = 0.4;
+    // A filament's in the filament profile, with its printer; a printer's in the printer's.
+    date_calibration(s, "flow", true, "2026-10-27", "Printer A");
+    date_calibration(s, "input_shaping", false, "2026-10-26", "Printer A");
+    REQUIRE(s.filament_calibrations.contains("flow"));
+    CHECK(s.filament_calibrations.at("flow").printer == "Printer A");
+    REQUIRE(s.printer_calibrations.contains("input_shaping"));
+    CHECK(s.printer_calibrations.at("input_shaping").printer.empty());
+    // AS21: flow dated, so the guide after it does not warn of it.
+    CHECK(calibrations_dated(s, "Printer A") == std::set<std::string>{"flow", "input_shaping"});
+    // On another printer the filament's date does not count.
+    CHECK(calibrations_dated(s, "Printer B") == std::set<std::string>{"input_shaping"});
+    const std::optional<CalibrationRecord> r = calibration_record(s, "flow", "Printer A", "Generic PLA");
+    REQUIRE(r);
+    CHECK(r->date == "2026-10-27");
+    CHECK(r->nozzle == 0.4);
+    CHECK(r->filament == "Generic PLA");
+    CHECK_FALSE(calibration_record(s, "flow", "Printer B", "Generic PLA"));
+    CHECK_FALSE(calibration_record(s, "max_flow", "Printer A", {}));
+    // They go through the settings' JSON, each in its profile.
+    const Settings back = parse_settings(settings_json(s));
+    CHECK(back.filament_calibrations == s.filament_calibrations);
+    CHECK(back.printer_calibrations == s.printer_calibrations);
+    CHECK(setting_kind("extrusion", "calibrations", {}) == ProfileKind::Filament);
+    CHECK(setting_kind("machine", "calibrations", {}) == ProfileKind::Printer);
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"calibrations": {"flow": {"nozzle": 0.4}}}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"extrusion": {"calibrations": []}})"), SettingsError);
 }

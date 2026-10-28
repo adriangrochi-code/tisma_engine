@@ -50,7 +50,9 @@ std::vector<TriangleMesh> split_mesh(const TriangleMesh& mesh);
 // The settings' transform group done to a model, in order (docs/CONFIG.md,
 // «transform»): scale and fit, turn, then the cut and the split, which give
 // several objects. One object when neither cuts nor splits it.
-std::vector<TriangleMesh> apply_transform(TriangleMesh mesh, const Settings& settings);
+// `follower` (the negative volumes) is scaled and turned with the mesh, about
+// the mesh's centre; with a cut or a split it throws std::invalid_argument.
+std::vector<TriangleMesh> apply_transform(TriangleMesh mesh, const Settings& settings, TriangleMesh* follower = nullptr);
 
 // Triangles that fill a simple polygon with simple holes inside it (outer
 // counter-clockwise, holes clockwise, as the section of a closed mesh comes),

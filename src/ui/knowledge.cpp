@@ -89,6 +89,60 @@ KnowledgeAction action_of(const json& a) {
     return out;
 }
 
+// A source as a file's: an object with its fields, or an id naming one of
+// the file's sources.
+KnowledgeSource source_of(const json& s, const std::vector<KnowledgeSource>& file_sources) {
+    if (s.is_string()) {
+        for (const KnowledgeSource& f : file_sources)
+            if (f.id == s.get<std::string>())
+                return f;
+        return {s.get<std::string>(), s.get<std::string>(), {}, {}};
+    }
+    if (!s.is_object())
+        throw KnowledgeError("a source that is neither an object nor an id");
+    return {text(s, "id"), text(s, "title"), text(s, "author"), text(s, "url")};
+}
+
+// A text, or a list of texts, as a list.
+std::vector<std::string> one_or_more(const json& o, const char* key) {
+    const auto it = o.find(key);
+    if (it != o.end() && it->is_string())
+        return {it->get<std::string>()};
+    return texts(o, key);
+}
+
+KnowledgeCalibration calibration_of(const json& c, const std::vector<KnowledgeSource>& file_sources) {
+    KnowledgeCalibration k;
+    k.id = text(c, "id", true);
+    k.name = text(c, "name", true);
+    k.group = text(c, "group");
+    k.order = int(number(c, "order").value_or(0.0));
+    k.before = one_or_more(c, "before");
+    k.why = text(c, "why");
+    k.repeat = text(c, "repeat");
+    if (const auto st = c.find("steps"); st != c.end() && !st->is_null())
+        for (const json& s : list(c, "steps"))
+            k.steps.push_back(s.is_string() ? KnowledgeStep{{}, s.get<std::string>()}
+                                            : KnowledgeStep{text(s, "title"), text(s, "text")});
+    if (const auto r = c.find("read"); r != c.end() && !r->is_null())
+        for (const json& x : list(c, "read"))
+            k.read.push_back({text(x, "look"), text(x, "means")});
+    if (const auto r = c.find("result"); r != c.end() && r->is_object()) {
+        k.result_key = text(*r, "key");
+        k.result_where = text(*r, "where");
+        k.result_text = text(*r, "text");
+    }
+    k.tips = one_or_more(c, "tips");
+    if (const auto o = c.find("open"); o != c.end() && o->is_object())
+        k.open = text(*o, "id");
+    else
+        k.open = text(c, "open");
+    if (const auto s = c.find("sources"); s != c.end() && s->is_array())
+        for (const json& x : *s)
+            k.sources.push_back(source_of(x, file_sources));
+    return k;
+}
+
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     std::ostringstream s;
@@ -115,9 +169,11 @@ void parse_knowledge_file(std::string_view source, Knowledge& into) {
     try {
         if (into.language.empty())
             into.language = text(root, "language");
+        std::vector<KnowledgeSource> file_sources;
         if (root.contains("sources") && root.at("sources").is_array())
             for (const json& s : root.at("sources"))
-                into.sources.push_back({text(s, "id"), text(s, "title"), text(s, "author"), text(s, "url")});
+                file_sources.push_back({text(s, "id"), text(s, "title"), text(s, "author"), text(s, "url")});
+        into.sources.insert(into.sources.end(), file_sources.begin(), file_sources.end());
         const std::string kind = format.substr(16);
         if (kind == "materials") {
             for (const json& m : list(root, "materials")) {
@@ -212,8 +268,17 @@ void parse_knowledge_file(std::string_view source, Knowledge& into) {
                 }
                 into.tutorials.push_back(std::move(k));
             }
+        } else if (kind == "calibrations") {
+            for (const json& c : list(root, "calibrations")) {
+                KnowledgeCalibration k = calibration_of(c, file_sources);
+                // A guide without sources of its own names the file's.
+                if (k.sources.empty())
+                    k.sources = file_sources;
+                into.calibrations.push_back(std::move(k));
+            }
+            std::stable_sort(into.calibrations.begin(), into.calibrations.end(),
+                             [](const KnowledgeCalibration& a, const KnowledgeCalibration& b) { return a.order < b.order; });
         }
-        // Calibration guides are read with the calibration page (rules 20 to 24).
     } catch (const json::exception& e) {
         throw KnowledgeError(e.what());
     }
@@ -222,7 +287,7 @@ void parse_knowledge_file(std::string_view source, Knowledge& into) {
 Knowledge load_knowledge(const std::filesystem::path& folder, std::string_view language) {
     Knowledge k;
     static constexpr const char* files[] = {"materials.json", "problems.json", "procedures.json", "glossary.json",
-                                            "tutorials.json"};
+                                            "tutorials.json", "calibrations.json"};
     std::error_code error;
     for (const char* name : files) {
         std::filesystem::path path = folder / std::string(language) / name;
@@ -286,8 +351,17 @@ std::vector<KnowledgeHit> search_knowledge(const Knowledge& k, std::string_view 
         add(Kind::Material, i, score(k.materials[i].name, k.materials[i].family + " " + k.materials[i].category));
     for (std::size_t i = 0; i < k.tutorials.size(); ++i)
         add(Kind::Tutorial, i, score(k.tutorials[i].name, {}));
+    for (std::size_t i = 0; i < k.calibrations.size(); ++i)
+        add(Kind::Calibration, i, score(k.calibrations[i].name, k.calibrations[i].why));
     std::stable_sort(hits.begin(), hits.end(), [](const KnowledgeHit& a, const KnowledgeHit& b) { return a.score > b.score; });
     return hits;
+}
+
+const KnowledgeCalibration* find_guide(const Knowledge& k, std::string_view id) {
+    for (const KnowledgeCalibration& c : k.calibrations)
+        if (c.id == id)
+            return &c;
+    return nullptr;
 }
 
 const KnowledgeTerm* term_for_setting(const Knowledge& k, std::string_view key) {

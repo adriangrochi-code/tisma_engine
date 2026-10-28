@@ -202,15 +202,33 @@ bool known_setting(const Settings& settings, std::string_view key) {
     return find_value(root, key) != nullptr;
 }
 
-std::optional<SettingChange> plan_setting(const Settings& settings, const SettingAction& action,
+std::optional<SettingChange> plan_setting(const Settings& settings, const SettingAction& asked,
                                           const SettingRange& range) {
+    // The specs' material.* keys are the engine's under other names.
+    SettingAction action = asked;
+    const std::optional<std::string> key = engine_setting_key(asked.key);
+    if (!key)
+        return std::nullopt;
+    action.key = *key;
+    if (!asked.of.empty()) {
+        const std::optional<std::string> of = engine_setting_key(asked.of);
+        if (!of)
+            throw AssistantError(asked.key + ": no setting " + asked.of + " to take the value from");
+        action.of = *of;
+    }
     ordered_json root = ordered_json::parse(settings_json(settings));
     const ordered_json* now = find_value(root, action.key);
+    const std::size_t dot = action.key.find('.');
+    const std::string group = dot == std::string::npos ? std::string() : action.key.substr(0, dot);
+    const std::string name = dot == std::string::npos ? std::string() : action.key.substr(dot + 1);
+    const bool variable = group == "machine" && name.starts_with("variables.");
+    // A machine variable the profile does not have yet is set as a new text
+    // (the temperature guides' [temperature]).
+    const ordered_json unset;
+    if (!now && variable && (action.op == SettingOp::Set || action.op == SettingOp::SetRelative))
+        now = &unset;
     if (!now)
         return std::nullopt;
-    const std::size_t dot = action.key.find('.');
-    const std::string group = action.key.substr(0, dot), name = action.key.substr(dot + 1);
-    const bool variable = group == "machine" && name.starts_with("variables.");
     const std::optional<ProfileKind> profile =
         setting_kind(group, variable ? "variables" : name, variable ? name.substr(10) : std::string());
     if (!profile)
@@ -243,6 +261,16 @@ std::optional<SettingChange> plan_setting(const Settings& settings, const Settin
     } else {
         after = changed(*now, action, value, of, range, change.clamped);
     }
+    if (variable && after.is_number()) {
+        char buffer[64];
+        std::snprintf(buffer, sizeof buffer, "%.4f", after.get<double>());
+        std::string text = buffer;
+        while (text.back() == '0')
+            text.pop_back();
+        if (text.back() == '.')
+            text.pop_back();
+        after = text;
+    }
     change.after = value_text(after);
     change.json = after.dump();
     return change;
@@ -251,6 +279,9 @@ std::optional<SettingChange> plan_setting(const Settings& settings, const Settin
 Settings apply_setting(const Settings& settings, const SettingChange& change) {
     ordered_json root = ordered_json::parse(settings_json(settings));
     ordered_json* now = find_value(root, change.key);
+    if (!now && change.key.starts_with("machine.variables.") && root.contains("machine") &&
+        root.at("machine").contains("variables"))
+        now = &root.at("machine").at("variables")[change.key.substr(18)];
     if (!now)
         throw SettingsError("settings: " + change.key + ": no such setting");
     *now = ordered_json::parse(change.json);
@@ -324,6 +355,125 @@ std::string material_warning_text(MaterialWarning warning, const MaterialInfo& m
         return how.empty() ? text : text + ": " + how;
     }
     }
+    return {};
+}
+
+std::string_view review_problem(std::string_view kind) {
+    // The review's warnings of rule 9 as the engine names them: travel in
+    // the air without a retraction leaves strings; short layers have no time
+    // to cool; a part that can come off the bed has too little first layer;
+    // a part that starts in the air is an overhang without support.
+    static constexpr std::pair<std::string_view, std::string_view> map[] = {
+        {"travel_no_retraction", "stringing"},  {"layer_time", "overheating_small"},
+        {"stability_peel", "first_layer_adhesion"}, {"stability_air", "support_surface"},
+        {"corner_lift", "warping"},
+    };
+    for (const auto& [k, problem] : map)
+        if (k == kind)
+            return problem;
+    return {};
+}
+
+namespace {
+// Rule 20's table, the engine's test first; a test with two guides opens
+// the first («Cómo se hace» of the temperature tower).
+constexpr std::pair<std::string_view, std::string_view> kTestGuides[] = {
+    {"first_layer", "first_layer"},       {"temperature", "temperature_tower"}, {"temperature", "stringing_temperature"},
+    {"max_flow", "max_flow"},             {"pressure_advance", "pressure_advance"}, {"flow", "flow"},
+    {"retraction", "retraction"},         {"corners", "cornering"},             {"vibrations", "input_shaping"},
+    {"vfa", "vfa"},                       {"dimensions", "dimensional"},
+};
+} // namespace
+
+std::string_view guide_for_test(std::string_view test) {
+    for (const auto& [t, guide] : kTestGuides)
+        if (t == test)
+            return guide;
+    return {};
+}
+
+std::string_view test_for_guide(std::string_view guide) {
+    for (const auto& [test, g] : kTestGuides)
+        if (g == guide)
+            return test;
+    return {};
+}
+
+std::vector<std::string> guides_missing(const std::vector<std::string>& before, const std::set<std::string>& done) {
+    std::vector<std::string> out;
+    for (const std::string& id : before)
+        if (!done.contains(id))
+            out.push_back(id);
+    return out;
+}
+
+std::optional<GuideFormula> guide_formula(std::string_view id) {
+    // The nozzle temperature is the start G-code's [temperature] variable,
+    // the filament's (docs/CONFIG.md, machine.variables).
+    static constexpr std::pair<std::string_view, GuideFormula> table[] = {
+        {"temperature_tower", {"machine.variables.temperature", GuideMeasure::Value}},
+        {"stringing_temperature", {"machine.variables.temperature", GuideMeasure::Value}},
+        {"max_flow", {"extrusion.max_flow", GuideMeasure::Height}},
+        {"pressure_advance", {"extrusion.pressure_advance", GuideMeasure::Height}},
+        {"retraction", {"retraction.length", GuideMeasure::Height}},
+        {"cornering", {"machine.corner_speed", GuideMeasure::Height}},
+        {"flow", {"extrusion.flow", GuideMeasure::Value}},
+        {"cooling", {"cooling.min_layer_time", GuideMeasure::Value}},
+        {"overhang_angle", {"support.threshold_angle", GuideMeasure::Value}},
+        {"supports", {"support.z_gap", GuideMeasure::Layers}},
+        {"vfa", {"speed.outer_wall", GuideMeasure::Value}},
+    };
+    for (const auto& [guide, formula] : table)
+        if (guide == id)
+            return formula;
+    return std::nullopt;
+}
+
+double band_value(double start, double step, double band, double height) {
+    return start + step * std::floor(height / (band > 0.0 ? band : 1.0) + 1e-9);
+}
+
+std::optional<GuideOutcome> guide_result(std::string_view id, const GuideInput& in, double layer_height) {
+    const std::optional<GuideFormula> f = guide_formula(id);
+    if (!f)
+        return std::nullopt;
+    switch (f->measure) {
+    case GuideMeasure::Height: {
+        const double value = band_value(in.start, in.step, in.band, in.measured);
+        // The low end of the guide's 10 to 20 % margin.
+        return GuideOutcome{value, id == "max_flow" ? value * 0.9 : value};
+    }
+    case GuideMeasure::Layers:
+        return GuideOutcome{in.measured, in.measured * layer_height};
+    case GuideMeasure::Value:
+        break;
+    }
+    return GuideOutcome{in.measured, in.measured};
+}
+
+std::optional<std::string> firmware_command(std::string_view id, GcodeFlavor flavor, double value) {
+    if (id != "input_shaping" || !(value > 0.0))
+        return std::nullopt;
+    char text[96];
+    switch (flavor) {
+    case GcodeFlavor::Klipper:
+        std::snprintf(text, sizeof text, "SET_INPUT_SHAPER SHAPER_FREQ_X=%.1f SHAPER_FREQ_Y=%.1f", value, value);
+        return std::string(text);
+    case GcodeFlavor::Marlin:
+    case GcodeFlavor::RepRapFirmware:
+        std::snprintf(text, sizeof text, "M593 F%.1f", value);
+        return std::string(text);
+    default:
+        return std::nullopt;
+    }
+}
+
+std::string_view next_material_guide(const std::set<std::string>& done) {
+    static constexpr std::string_view order[] = {"temperature_tower", "max_flow", "pressure_advance", "flow",
+                                                 "retraction"};
+    for (const std::string_view id : order)
+        if (!done.contains(std::string(id)))
+            return id;
     return {};
 }
 

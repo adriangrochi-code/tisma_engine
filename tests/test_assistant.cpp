@@ -6,6 +6,7 @@
 #include "ui/text.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
@@ -311,4 +312,121 @@ TEST_CASE("assistant: the guided tutorials, offered, moved on and resumed (AS12 
     GuideMemory no;
     no.dismissed.insert("first_print");
     CHECK(tutorials_to_offer(k, "first_start", no).empty());
+}
+
+TEST_CASE("assistant: the calibration guides read, in order (rules 20, 21, AS19)", "[ui][assistant]") {
+    const Knowledge k = load_knowledge(kKnowledge, "es");
+    CHECK(k.errors.empty());
+    REQUIRE(k.calibrations.size() == 5);
+    // In their order, whatever the file's.
+    CHECK(k.calibrations[0].id == "temperature_tower");
+    CHECK(k.calibrations[1].id == "max_flow");
+    CHECK(k.calibrations[3].id == "flow");
+    CHECK(k.calibrations[4].group == "printer");
+    // Steps as texts or as objects; `before` as a list, a text or null.
+    const KnowledgeCalibration& flow = *find_guide(k, "flow");
+    REQUIRE(flow.steps.size() == 2);
+    CHECK(flow.steps[0].title == "Imprimir");
+    CHECK(flow.steps[1].title.empty());
+    CHECK(flow.steps[1].text == "Elegí el más liso.");
+    CHECK(flow.before == std::vector<std::string>{"pressure_advance"});
+    CHECK(find_guide(k, "max_flow")->before == std::vector<std::string>{"temperature_tower"});
+    CHECK(find_guide(k, "input_shaping")->before.empty());
+    REQUIRE(flow.read.size() == 1);
+    CHECK(flow.read[0].means == "Falta material");
+    CHECK(flow.result_key == "extrusion.flow");
+    CHECK(find_guide(k, "input_shaping")->result_where == "printer_firmware");
+    CHECK(find_guide(k, "max_flow")->open == "drying");
+    // Its own sources by id; without them, the file's (AS19's «Basado en»).
+    REQUIRE(flow.sources.size() == 1);
+    CHECK(flow.sources[0].title == "Otra fuente de prueba");
+    CHECK(find_guide(k, "max_flow")->sources.size() == 2);
+    CHECK(find_guide(k, "no_such_guide") == nullptr);
+    // The search finds a guide too.
+    bool found = false;
+    for (const KnowledgeHit& h : search_knowledge(k, "flujo maximo"))
+        found |= h.kind == KnowledgeHit::Kind::Calibration && k.calibrations[h.index].id == "max_flow";
+    CHECK(found);
+    // An engine test has its guide, and back (rule 20).
+    CHECK(guide_for_test("temperature") == "temperature_tower");
+    CHECK(test_for_guide("max_flow") == "max_flow");
+    CHECK(test_for_guide("stringing_temperature") == "temperature");
+    CHECK(guide_for_test("dimensions") == "dimensional");
+    // AS22: a test without a guide.
+    CHECK(guide_for_test("acceleration").empty());
+    CHECK(guide_for_test("fit").empty());
+    CHECK(test_for_guide("cooling").empty());
+}
+
+TEST_CASE("assistant: a guide before the others and its result (AS16, AS17)", "[ui][assistant]") {
+    // AS16: the flow's guide without the pressure advance done warns of it.
+    CHECK(guides_missing({"pressure_advance"}, {}) == std::vector<std::string>{"pressure_advance"});
+    CHECK(guides_missing({"pressure_advance"}, {"pressure_advance"}).empty());
+    CHECK(guides_missing({"a", "b", "c"}, {"b"}) == std::vector<std::string>{"a", "c"});
+    // AS17: 19 mm with start 5 and step 0.5 (bands of 1 mm) is 14.5 mm³/s; 10 % less is offered.
+    const std::optional<GuideOutcome> r = guide_result("max_flow", {5.0, 0.5, 1.0, 19.0}, 0.2);
+    REQUIRE(r);
+    CHECK_THAT(r->value, Catch::Matchers::WithinAbs(14.5, 1e-9));
+    CHECK_THAT(r->proposed, Catch::Matchers::WithinAbs(13.05, 1e-9));
+    // AS20: the tower 5 to 25 by 1 in bands of 2 mm, 19 mm: 14, proposed 12.6.
+    const std::optional<GuideOutcome> tower = guide_result("max_flow", {5.0, 1.0, 2.0, 19.0}, 0.2);
+    REQUIRE(tower);
+    CHECK_THAT(tower->value, Catch::Matchers::WithinAbs(14.0, 1e-9));
+    CHECK_THAT(tower->proposed, Catch::Matchers::WithinAbs(12.6, 1e-9));
+    // A band's edge belongs to the band above.
+    CHECK_THAT(band_value(5.0, 1.0, 2.0, 18.0), Catch::Matchers::WithinAbs(14.0, 1e-9));
+    CHECK_THAT(band_value(5.0, 1.0, 0.0, 3.0), Catch::Matchers::WithinAbs(8.0, 1e-9));
+    // Applied to extrusion.max_flow as a set action (rule 7).
+    Settings s;
+    const std::optional<SettingChange> change = plan_setting(s, {"extrusion.max_flow", SettingOp::Set, "13.05", {}});
+    REQUIRE(change);
+    CHECK(apply_setting(s, *change).filament_max_flow == 13.05);
+    // The rest of rule 23's table: the band's value as it is, a value read,
+    // layers times the layer height.
+    CHECK(guide_result("pressure_advance", {0.0, 0.01, 1.0, 4.5}, 0.2)->proposed == Catch::Approx(0.04));
+    CHECK(guide_formula("retraction")->key == "retraction.length");
+    CHECK(guide_result("flow", {0, 0, 1, 97.0}, 0.2)->proposed == 97.0);
+    CHECK(guide_result("supports", {0, 0, 1, 2.0}, 0.2)->proposed == Catch::Approx(0.4));
+    CHECK(guide_formula("temperature_tower")->measure == GuideMeasure::Value);
+    CHECK(guide_formula("cornering")->measure == GuideMeasure::Height);
+    // Every key of the table is an engine setting.
+    for (const char* id : {"temperature_tower", "stringing_temperature", "max_flow", "pressure_advance", "retraction",
+                           "cornering", "flow", "cooling", "overhang_angle", "supports", "vfa"}) {
+        INFO(id);
+        const std::optional<SettingChange> c = plan_setting(s, {std::string(guide_formula(id)->key), SettingOp::Set, "10", {}});
+        CHECK(c);
+    }
+    // The tower's temperature goes in a [temperature] the profile did not have.
+    const std::optional<SettingChange> t = plan_setting(s, {"machine.variables.temperature", SettingOp::Set, "215", {}});
+    REQUIRE(t);
+    CHECK(t->profile == ProfileKind::Filament);
+    CHECK(apply_setting(s, *t).variables.at("temperature") == std::vector<std::string>{"215"});
+    // The specs' name for it, as the knowledge data writes it (material.nozzle_temp).
+    const std::optional<SettingChange> m = plan_setting(s, {"material.nozzle_temp", SettingOp::Set, "215", {}});
+    REQUIRE(m);
+    CHECK(m->key == "machine.variables.temperature");
+    CHECK_FALSE(plan_setting(s, {"material.zz_not_a_key", SettingOp::Set, "1", {}}));
+    // The firmware's and the measuring block's have no formula here.
+    CHECK_FALSE(guide_result("input_shaping", {}, 0.2));
+    CHECK_FALSE(guide_result("dimensional", {}, 0.2));
+}
+
+TEST_CASE("assistant: the review's warnings lead to their problems (rule 9)", "[ui][assistant]") {
+    CHECK(review_problem("layer_time") == "overheating_small");
+    CHECK(review_problem("stability_peel") == "first_layer_adhesion");
+    CHECK(review_problem("stability_air") == "support_surface");
+    CHECK(review_problem("thin_detail").empty());
+}
+
+TEST_CASE("assistant: the firmware's command and the new material's order (AS18, rule 24)", "[ui][assistant]") {
+    CHECK(firmware_command("input_shaping", GcodeFlavor::Klipper, 42.5) ==
+          "SET_INPUT_SHAPER SHAPER_FREQ_X=42.5 SHAPER_FREQ_Y=42.5");
+    CHECK(firmware_command("input_shaping", GcodeFlavor::Marlin, 40.0) == "M593 F40.0");
+    CHECK(firmware_command("input_shaping", GcodeFlavor::RepRapFirmware, 40.0) == "M593 F40.0");
+    CHECK_FALSE(firmware_command("input_shaping", GcodeFlavor::Repetier, 40.0));
+    CHECK_FALSE(firmware_command("input_shaping", GcodeFlavor::Klipper, 0.0));
+    CHECK_FALSE(firmware_command("max_flow", GcodeFlavor::Klipper, 10.0));
+    CHECK(next_material_guide({}) == "temperature_tower");
+    CHECK(next_material_guide({"temperature_tower", "max_flow"}) == "pressure_advance");
+    CHECK(next_material_guide({"temperature_tower", "max_flow", "pressure_advance", "flow", "retraction"}).empty());
 }
