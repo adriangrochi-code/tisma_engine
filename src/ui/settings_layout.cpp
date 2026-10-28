@@ -475,9 +475,7 @@ std::string number(double v, int decimals = 2) {
 }
 
 std::string format(T id, auto... args) {
-    char text[256];
-    std::snprintf(text, sizeof text, tr(id), args...);
-    return text;
+    return ui::format(tr(id), args...); // the language's decimal point
 }
 
 const char* seam_title(SeamMode mode) {
@@ -613,7 +611,7 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "walls")
         return s.wall_count == 0 ? tr(T::SumNoWalls) : s.wall_count == 1 ? tr(T::SumOneWall) : format(T::SumWalls, s.wall_count);
     if (id == "walls_thin")
-        return format(T::SumWallsThin, s.wall_spread_count);
+        return s.wall_spread_count == 1 ? tr(T::SumWallsThinOne) : format(T::SumWallsThin, s.wall_spread_count);
     if (id == "walls_more")
         return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +

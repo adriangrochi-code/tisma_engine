@@ -127,6 +127,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Números en la interfaz** (revisión de traducción del equipo de fichas, TR1 a TR5):
+  - en castellano, coma decimal en todos lados: los campos, la vista previa, la barra de estado y la calibración de la
+    impresora;
+  - en inglés, la coma para los miles («4,013»);
+  - la ficha de información en inglés dice «0 to 100»;
+  - «1 bead takes the change in width»;
+  - «%d per layer» en el análisis, y su comando en una línea propia.
+- **Recorrido de bienvenida:** el contador sigue el número del título («2 / 6» en «2. Elegí impresora…»).
+- **Vista previa:** la altura de la capa de arriba ya no queda tapada por el «+» de la barra de capas.
+
 - **`layers.first_line_width`** (lo encontró el equipo de fichas, BH1): con 20 mm o más en una boquilla de 0,4 el
   G-code salía del área permitida y la exportación fallaba con el código 6. Ahora, como `walls.width`, tiene que estar
   entre un cuarto y cuatro veces el diámetro de la boquilla, y el mensaje lo dice al revisar los ajustes.

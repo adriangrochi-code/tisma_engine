@@ -7192,3 +7192,31 @@ también es de esa ficha.
 
 **Sigue:** `orient.method` y `orient.precision` (`orientation.md`), y los de pellets (`machine.feedstock`,
 `machine.high_flow_nozzle`, `extrusion.flow_by_speed`, `extrusion.section`; `pellets.md`).
+
+## 2026-10-28 (noche): traducción y números de la interfaz
+
+El equipo de fichas revisó la interfaz como caja negra en los dos idiomas (23 pantallas cada uno, en `515d08f`).
+
+**Arreglado:**
+- **TR1:** en castellano, coma decimal en todos los números:
+  - los textos de ImGui pasan por `loc::Text`, `loc::TextDisabled`, etc., que escriben con `vformat` (cada número con
+    coma flotante sale con la coma; el resto como printf);
+  - los campos de arrastre muestran el valor con coma mientras no se los toca; al pasarles el ratón, tenerlos en foco
+    o editarlos vuelven al formato de ImGui (con punto), que es el que lee lo que se escribe;
+  - la sección de calibración de la impresora escribe sus valores con coma.
+  Los nombres de perfiles («0.20 mm») quedan como están.
+- **TR2:** en inglés los miles van con coma («4,013»); en castellano siguen con espacio.
+- **TR3:** la ficha de información en inglés pasa el rango y el valor por defecto de `docs/CONFIG.md` a inglés («0 to
+  100», «0.1»). La descripción sigue en castellano (ya avisado en la ficha).
+- **TR4:** «1 bead takes the change in width»; con más, «N beads share the change in width».
+- **TR5:** «%d per layer» en el análisis; el comando `tisma-engine analyze` va en una línea propia.
+- **UI1:** el recorrido numera sus pasos como sus títulos: la bienvenida sin número, «2 / 6» en «2. Elegí impresora…».
+- **UI2:** el «+» de la barra de capas tapaba el final de la altura de arriba: `SameLine` cuenta desde el borde de la
+  ventana y no desde su margen.
+
+**Probado:** una prueba de `vformat`, `grouped` y el resumen de paredes finas en los dos idiomas; capturas de la vista
+previa (es y en), la ficha de `infill.density` en inglés, el paso 2 del recorrido y la calibración de la impresora,
+revisadas a ojo. Toda la lista: 724 casos, pasan.
+
+**No probado:** los campos de ingreso de texto (`InputDouble`, en las guías de calibración) siguen con punto: ImGui
+escribe y lee su texto con él.
