@@ -64,7 +64,8 @@ El motor tiene que hacer lo mismo.
 ## Soportes (fase F5)
 
 - **Voladizos:** se soporta lo que cuelga más que el ángulo límite.
-- **Puentes cortos:** los que la impresora puede hacer (`support.free_bridge_length`) no llevan soporte.
+- **Puentes:** no llevan soporte, de cualquier largo, salvo con `support.under_bridges`. `support.free_bridge_length`
+  solo avisa de los puentes más largos (`print_review.md`).
 - **Separaciones:** el soporte deja una separación en Z y en XY con la pieza.
 - **Interfaz:** bajo la pieza, capas densas; abajo, una base menos densa.
 - **Retiro:** el soporte tiene que poder sacarse a mano. Más adelante: interfaz planchada y patrón concéntrico.

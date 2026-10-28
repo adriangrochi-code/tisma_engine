@@ -30,7 +30,7 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
    25,4 (prueba FM3). Para un STL en pulgadas, la interfaz tiene «Import STL (Imperial Units)».
 2. **STEP:** la pieza se convierte en triángulos al abrirla. Un bloque de 20 × 20 × 10 mm con un agujero de 4 mm de
    radio da 372 triángulos y 3497,8 mm³ (el exacto es 3497,3). El motor elige la finura de la conversión; la pieza
-   tiene que quedar cerrada.
+   tiene que quedar cerrada. El lector es propio, sin bibliotecas de terceros (`step_reader.md`).
 3. **SVG:** el dibujo se convierte en una pieza:
    - el contorno sale del trazado, con la regla de relleno del archivo (`evenodd` deja el agujero);
    - la medida es la del archivo (`20mm` × `10mm`);

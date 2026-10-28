@@ -79,8 +79,9 @@
     - `lines` y `automatic`: líneas a 90° de las de la base, a la separación de `support.interface_spacing` (0:
       juntas, una capa sólida);
     - `concentric`: lazos paralelos al borde de la zona, hacia adentro, a la separación de los cordones (prueba SM10).
-12. **Lazos de contacto:** con `support.interface_contact_loops`, la capa de interfaz de arriba empieza con lazos
-    cerrados por el borde de la zona y el resto va en líneas (prueba SM10).
+12. **Lazos de contacto:** con `support.interface_contact_loops`, las dos capas de interfaz de arriba (con 3 capas
+    de interfaz) empiezan con lazos cerrados por el borde de la zona y el resto va en líneas; las de más abajo, solo
+    líneas (prueba SM10).
 13. **Velocidad:** la interfaz va a `speed.support_interface` (prueba SM11).
 
 ### Estilo ajustado
@@ -133,7 +134,7 @@ sí. `speed.support` 60 mm/s.
 | SM5 | Estante | `support.z_gap` 0,2 / 0 | 0,2: la interfaz termina en Z 9,8; la primera capa de la losa (Z 10,2) lleva `Overhang perimeter` con 0,05224 mm de filamento por mm. 0: la interfaz llega a Z 10,0, la misma capa que la pieza; la primera capa de la losa lleva perímetros normales, 0,03385 mm de filamento por mm |
 | SM6 | Voladizo, capa 2 (Z 0,496) | `support.pattern` | `lines`: 158,8 mm, 60 % a 0° (con la vaina). `grid`: en capas de soporte alternas, 141,5 mm con el 79 % a 90° y 158,8 mm a 0°. `honeycomb`: 206 a 211 mm, a 0°, 90°, 60° y 120° |
 | SM7 | Voladizo, capa 2 | `support.sheath` sí / no | Sí: un lazo cerrado de 68,9 mm por el borde y 90,0 mm de líneas adentro. No: un solo zigzag de 123,1 mm, 81 % a 0° |
-| SM8 | Voladizo, capa 12 | `support.style` `grid` / `snug` | `grid`: base de X 100,0 a 111,4 e Y 88,6 a 111,4 (sobresale 1,4 mm de la losa). `snug`: de X 100,4 a 109,8 e Y 90,2 a 109,8 (el borde de la losa menos medio cordón); 136,6 mm contra 158,8 |
+| SM8 | Voladizo, capa 12 | `support.style` `grid` / `snug` | `grid`: base de X 100,0 a 111,4 e Y 88,6 a 111,4 (sobresale 1,4 mm de la losa; X 100,0 solo en las esquinas, fuera del largo de la columna: frente a la cara de la columna, de Y 89,8 a 110,2, el borde de la zona está en X 100,425). `snug`: de X 100,4 a 109,8 e Y 90,2 a 109,8 (el borde de la losa menos medio cordón); 136,6 mm contra 158,8 |
 | SM9 | Horquilla, capa 12 | `snug` con `support.closing_radius` 0,5 / 2; `grid` | 0,5: dos zonas separadas, cada una con su vaina de 36,4 mm. 2: una sola zona, vaina de 57,9 mm. `grid`: una zona con el margen de la grilla, vaina de 68,9 mm |
 | SM10 | Voladizo, interfaz (Z 7,0 a 7,8) | `support.interface_pattern`, `support.interface_spacing`, `support.interface_contact_loops` | `lines`: 743,0 mm por capa, 98 % a 90°; la última (Z 7,8) 642,5 mm. `automatic`: igual. `concentric`: 15 lazos por capa, cada uno 2,856 mm más largo que el de adentro (0,357 mm entre lazos). Separación 1 mm: 240,9 mm por capa. Lazos de contacto: en Z 7,8, dos lazos cerrados (92,7 y 51,6 mm) y 288,6 mm de líneas; en Z 7,6, un lazo de 71,6 mm y líneas |
 | SM11 | Voladizo | `speed.support_interface` 100 % / 50 % | Interfaz a 60 mm/s / 30 mm/s |
