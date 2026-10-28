@@ -23,8 +23,8 @@ que los cordones pedidos se cubren con menos cordones, de ancho variable, sin hu
 | `walls.min_line_width` | mm o % de `d` | 85 % | Ancho mínimo de un cordón: un detalle más fino se imprime con este ancho |
 | `walls.min_detail` | mm o % de `d` | 25 % | Un detalle más fino que esto no se imprime |
 | `walls.transition_length` | mm o % de `d` | 100 % | Largo del tramo en el que una pared pasa de N a N + 1 cordones |
-| `walls.transition_angle` | ° | 10 | En esquinas más agudas que esto no se hacen transiciones |
-| `walls.transition_margin` | mm o % de `d` | 25 % | Margen que evita pasar una y otra vez entre N y N + 1 cordones |
+| `walls.transition_angle` | ° | 10 | Una cuña cuyo ángulo de punta es mayor que esto no tiene transiciones a un número impar de cordones: los cordones van de a pares y no hay cordón en el centro (prueba P14) |
+| `walls.transition_margin` | mm o % de `d` | 25 % | Margen que evita pasar una y otra vez entre N y N + 1 cordones cuando el espesor oscila poco alrededor del punto de cambio (prueba P13) |
 | `walls.spread_count` | — | 1 | Cuántos cordones, desde el centro de la pared, absorben la diferencia de ancho |
 | `walls.outer_first` | — | no | Imprimir de afuera hacia adentro |
 | `walls.seam` | — | `aligned` | Dónde empieza cada perímetro cerrado (ver `SETTINGS_V1.md`) |
@@ -76,6 +76,8 @@ X = 100, Y = 100), con `walls.count` 3 salvo que se diga otra cosa. Las posicion
 | P10 | Cubo de P1 | `walls.outer_first` | Mismas vueltas que P1, en orden inverso: la externa primero |
 | P11 | Cuña en planta: triángulo de 30 mm de largo cuyo espesor crece de 0 (X = −15) a 3 mm (X = +15), 3 mm de alto | — | Tabla P11: el espesor cambia de a poco, así que las transiciones quedan a lo largo de la pieza |
 | P12 | Cubo de 20 × 20 × 10 mm, boquilla de 0,4, capas de 0,3, `walls.count` 3; ejes en la capa 5, medidos desde el borde | `walls.width` 0,5 y `walls.outer_width` 0; después `walls.width` 0,4 y `walls.outer_width` 0,6 | Primero: externo de 0,45 a 0,225; internos de 0,5 a 0,636 y 1,071. Después: externo de 0,6 a 0,300; internos de 0,4 a 0,736 y 1,071. Cada paso es el promedio de los dos anchos menos 0,0644 (`h·(1 − π/4)` con `h` = 0,3) |
+| P13 | Tira de 40 mm de largo y 3 mm de alto: un borde recto y el otro ondulado, espesor 1,15 + A · sen(2π·x / 5 mm); capas de 0,2, solo paredes; cordones que cruzan cada sección, capa 8 | A = 0,05; 0,1; 0,2. `walls.transition_margin` 0, 25 %, 50 % y 100 % | A = 0,05 y 0,1 con margen 0: 3 cordones en cada cresta (tramos de 1,25 y 1,75 mm), 2 en el resto. Con 25 % o más: 2 cordones en toda la tira. A = 0,2: 3 cordones en cada cresta (tramos de 1,0 mm) con cualquier margen, también 100 %. El margen saca solo las oscilaciones chicas |
+| P14 | Cuña en planta de 20 mm de largo, espesor de 0 en la punta, con ángulo de punta de 5°, 10° y 20°; solo paredes, capas de 0,2; cordones por sección, capa 8 | `walls.transition_angle` 1, 10 y 30 | Ángulo de 1°: en las tres cuñas solo números pares de cordones (0, 2, 4, 6…) y sin cordón en el centro. 10°: las cuñas de 5° y 10° pasan por todos los números (1, 2, 3, 4…); la de 20° sigue de a pares. 30°: las tres pasan por todos. Hay transición cuando el ángulo de la punta no pasa del ajuste |
 
 **Tabla P2.** Cordones de la capa 11 de cada pared: posición del eje respecto del centro de la pared (mm) y ancho
 (mm). E es el cordón externo y P uno interno. Las paredes de 2,9 mm o más dejan un hueco en el centro, que llena el
