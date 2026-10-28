@@ -157,6 +157,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Textos:** «Apagado» también para la piel difusa y el escudo contra corrientes (decían «No»); los resúmenes de
+  velocidades llevan la unidad en cada valor («40 mm/s · externa 30 mm/s»).
+
 - **Los consejos tapaban controles:** la tarjeta era apenas transparente y en Vista previa caía sobre la barra de
   movimientos y la leyenda. Ahora es opaca y en Vista previa va arriba; el consejo del laminado se va si ya no hay
   laminado (quedaba después de borrar la pieza).

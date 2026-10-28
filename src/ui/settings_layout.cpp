@@ -546,6 +546,8 @@ std::optional<double> variable(const Settings& s, const char* name) {
 }
 
 std::string speed_text(double v) { return v > 0.0 ? number(v, 0) : std::string("—"); }
+// A speed with its unit; 0, which takes another speed, as "automatic".
+std::string speed_unit(double v) { return v > 0.0 ? number(v, 0) + " mm/s" : std::string(tr(T::AutoValue)); }
 
 } // namespace
 
@@ -640,11 +642,11 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "first_layer")
         return format(T::SumSpeed, speed_text(s.first_layer_speed).c_str());
     if (id == "walls_surfaces")
-        return format(T::SumWallSpeed, speed_text(s.wall_speed).c_str(),
+        return format(T::SumWallSpeed, speed_unit(s.wall_speed).c_str(),
                       s.outer_wall_speed.percent ? (number(s.outer_wall_speed.value, 0) + " %").c_str()
-                                                 : speed_text(s.outer_wall_speed.value).c_str());
+                                                 : speed_unit(s.outer_wall_speed.value).c_str());
     if (id == "infill_support")
-        return format(T::SumTwoSpeeds, speed_text(s.infill_speed).c_str(), speed_text(s.support_speed).c_str());
+        return format(T::SumTwoSpeeds, speed_unit(s.infill_speed).c_str(), speed_unit(s.support_speed).c_str());
     if (id == "travel")
         return format(T::SumSpeed, speed_text(s.travel_speed).c_str());
     if (id == "limits") // 0: nothing caps the speeds
