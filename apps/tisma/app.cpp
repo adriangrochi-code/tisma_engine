@@ -9711,7 +9711,9 @@ void App::update_ray_scene() {
     if (std::optional<RayBuild> b = ray_job_.take(); b && b->version == scene_version_ && b->preview == want_preview) {
         ray_version_ = b->version;
         ray_preview_ = b->preview;
-        ray_failed_ = !renderer_.set_ray_scene(b->nodes, b->primitives);
+        // A scene cut at RayScene::kMaxPrimitives would light the rest wrong:
+        // too big, as one the GPU cannot hold.
+        ray_failed_ = (b->scene && b->scene->truncated()) || !renderer_.set_ray_scene(b->nodes, b->primitives);
         ray_scene_ = ray_failed_ ? nullptr : b->scene;
         if (ray_failed_)
             notify(tr(T::RayTooBig), true);

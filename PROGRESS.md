@@ -7220,3 +7220,28 @@ revisadas a ojo. Toda la lista: 724 casos, pasan.
 
 **No probado:** los campos de ingreso de texto (`InputDouble`, en las guías de calibración) siguen con punto: ImGui
 escribe y lee su texto con él.
+
+## 2026-10-28 (noche): modelos grandes, prioridad del dueño
+
+El dueño pidió, por el equipo de fichas, que los modelos grandes sean prioridad; queda como ítem propio en `PLAN.md`,
+antes de lo demás de P1. También informó que «con un objeto grande, al inclinar la cámara hacia abajo, la luz se
+rompe», y el equipo de fichas lo reprodujo con una cúpula ondulada mirada casi desde arriba.
+
+**Mirado:** la cúpula de la fórmula del equipo de fichas (2 003 996 triángulos), desde `--look 100,100,20,260,30,85`
+y a 30°, con oclusión ambiental y con ray tracing:
+- los cuadrados y el borde en escalones son la forma de la pieza: pasado r = 90 la altura es max(0, 2 sen · cos), una
+  grilla de bultos de 2 mm separados por zonas planas, que desde arriba se ven como cuadrados;
+- la misma cúpula sin la onda no muestra cuadrados ni escalones, con ninguna de las dos luces;
+- los anillos tenues alrededor de la cima son los pasos de 8 bits del color de un brillo suave: con las normales en
+  16 bits salen iguales (probado y descartado);
+- el mapa de sombras solo oscurece la cama.
+Se le pidió al equipo de fichas una captura del dueño, su GPU, si usa OpenGL o Vulkan y qué luz tiene puesta.
+
+**Arreglado de paso:** el ray tracing cortaba en silencio la escena en 4 194 304 primitivas
+(`RayScene::kMaxPrimitives`): con un modelo más grande, la luz de lo que quedaba afuera salía mal. Ahora la escena
+cortada cuenta como demasiado grande y la vista lo avisa, como cuando no entra en la GPU. Probado con una cúpula de
+4 210 796 triángulos en ray tracing: aparece el aviso. Sin prueba automática: hace falta una escena de más de 4
+millones de primitivas.
+
+**Sigue:** medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo
+que más pese.

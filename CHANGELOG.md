@@ -127,6 +127,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Ray tracing con modelos de más de 4 194 304 triángulos:** la escena se cortaba en silencio y los rayos pasaban por
+  donde faltaba, así que la luz salía mal en esas partes. Ahora la vista avisa que la escena es demasiado grande para
+  el ray tracing, como cuando no entra en la GPU.
+
 - **Números en la interfaz** (revisión de traducción del equipo de fichas, TR1 a TR5):
   - en castellano, coma decimal en todos lados: los campos, la vista previa, la barra de estado y la calibración de la
     impresora;

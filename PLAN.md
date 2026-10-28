@@ -676,6 +676,20 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   espiral, sobre capas de abajo planas; reglas 1 a 6 (la de varios objetos, en la interfaz: el motor lamina uno por
   vez). Varios objetos en modo vaso, uno por uno, con la impresión secuencial (2026-10-27)
 
+### Prioridad: modelos grandes (pedido del dueño, 2026-10-28)
+
+El dueño sigue sufriendo con los modelos grandes. Medición de caja negra del equipo de fichas, con GL por software (los
+tiempos absolutos son lentos, la escala vale): una cúpula ondulada de 180 × 180 × 61,8 mm y 4 008 000 triángulos (STL
+binario de 200 MB) tarda 7 a 14 s en abrirse con una captura, y la barra de estado dice «Vista 2471–3686 ms · 0 FPS».
+Va antes que lo demás de P1:
+- [ ] La luz se rompe al mirar desde arriba (informe del dueño, reproducido por el equipo de fichas con
+  `--look 100,100,20,260,30,85`): con oclusión ambiental, cuadrados oscuros en la cara de arriba y el borde en
+  escalones; a 30° se ve bien. Parece que la oclusión o el mapa de sombras se quedan sin resolución cuando la pieza
+  llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una
+- [ ] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
+  pese; anotar los números
+- [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
+
 ## Fichas nuevas (2026-10-26)
 
 Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pasa sobre ella.
