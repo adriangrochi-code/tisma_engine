@@ -989,7 +989,8 @@ const std::map<T, const char*>& row_keys() {
         {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
         {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
-        {T::OverhangFan3, "cooling.overhang_fan_3"},
+        {T::OverhangFan3, "cooling.overhang_fan_3"}, {T::SlowdownLogicRow, "cooling.slowdown_logic"},
+        {T::TransitionDistance, "cooling.transition_distance"},
         {T::PressureAdvance, "extrusion.pressure_advance"}, {T::FilamentMaxFlow, "extrusion.max_flow"},
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
@@ -6186,6 +6187,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MinLayerTime, "cooling.min_layer_time", s.min_layer_time, 0.0, 120.0, "%.0f s", 0.2f);
         mm(T::MinSpeed, "cooling.min_speed", s.min_print_speed, 0.0, 100.0, "%.0f mm/s", 0.5f);
         flag(T::KeepOuterSpeed, "cooling.keep_outer_speed", s.keep_outer_speed, tr(T::KeepOuterSpeedTip));
+        if (shown("cooling.slowdown_logic"))
+            changed |= row(T::SlowdownLogicRow, s.slowdown_logic,
+                           {{SlowdownLogic::Uniform, tr(T::SlowdownUniform)},
+                            {SlowdownLogic::ConsistentSurface, tr(T::SlowdownConsistentSurface)}});
+        if (s.slowdown_logic == SlowdownLogic::ConsistentSurface)
+            mm(T::TransitionDistance, "cooling.transition_distance", s.transition_distance, 0.0, 1000.0, "%.1f mm", 0.1f);
     } else if (id == "flow") {
         mm(T::FlowRow, "extrusion.flow", s.flow, 10.0, 300.0, "%.1f %%", 0.05f, tr(T::FlowTip));
         mm(T::BridgeFlowRatio, "extrusion.bridge_flow_ratio", s.bridge_flow_ratio, 0.1, 2.0, "%.2f", 0.01f);

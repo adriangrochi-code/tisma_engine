@@ -6883,4 +6883,43 @@ internas, el de la capa. El motor queda 1 a 3 puntos arriba de lo medido: la reg
 coincide con un apoyo medido algo mayor que `1 − d/w`. **Fuzzer:** el ajuste entra en 1 de cada 4 corridas, con
 valores al azar; 600 corridas (semilla 20261102), 0 fallas.
 
-**Sigue:** `cooling.slowdown_logic` `consistent_surface` (C3) y `cooling.transition_distance` (C4).
+**Arreglado de paso:** la prueba C2 tomaba una referencia a un mapa temporal (aviso de gcc, comportamiento
+indefinido en la prueba, no en el motor).
+
+**El frenado por tiempo mínimo, contra `cooling.md` regla 2.** Al leer C3 apareció que el motor no seguía la regla 2:
+- la primera etapa bajaba todas las extrusiones en la misma proporción, y la regla (y C3 con `uniform`, todo a 27,93)
+  pide una velocidad común `v`, sin bajar de `cooling.min_speed`, con las más lentas quietas;
+- frenaba también los puentes y los perímetros sobre el aire (K5 dice que no).
+
+Ahora las dos etapas son una velocidad común (la primera no baja de la mínima), y los puentes van aparte, con su
+tiempo junto al de los viajes. De paso, la segunda pasada de una capa frenada sumaba los tiempos de la capa anterior
+(solo afectaba el aviso de «ni a 1 mm/min»).
+
+**`cooling.slowdown_logic`** (regla 5) y **`cooling.transition_distance`** (regla 6):
+- con `consistent_surface`, la pared externa y la que la toca (índice de cordón 1) se frenan al final: primero lo
+  demás hasta la velocidad mínima, después esas dos con su propia velocidad común, y solo después todo junto más
+  abajo;
+- `cooling.keep_outer_speed` hace lo mismo con la externa sola;
+- con `consistent_surface` y `transition_distance` = d, los últimos d mm de extrusión de una capa frenada van a su
+  velocidad: la primera pasada anota cada extrusión, el plan cuenta esa cola como tiempo fijo, y la segunda corta el
+  movimiento donde empieza la cola.
+
+**Pruebas:**
+- C3 (cubo de 20 mm, capa 10), comparado con Tisma Slicer:
+
+  | Caso | Motor | Tisma Slicer |
+  |---|---|---|
+  | `uniform`, 15 s | todo a 27,82 | 27,93 |
+  | `consistent_surface`, 15 s | externo 30 y el que lo toca 60; el resto a 23,38 | 30 y 60; el resto a 23,58 |
+  | `consistent_surface`, 40 s | el resto a 10,0; los dos de superficie a 10,2 | 10,0 y 10,4 |
+  | `uniform`, 40 s | todo a 10,07 | 10,15 |
+
+- C4: los últimos 2,0, 5,0 y 10,0 mm del relleno a 80 mm/s; sin efecto con `uniform`.
+- K5 (la mesa, 60 y 300 s): el puente a su velocidad, el resto de la capa frenado.
+- Unidad: velocidad común, segunda etapa y las paredes de superficie al final.
+- Fuzzer: `consistent_surface` con cola de 0 a 9 mm en 1 de cada 3 corridas; 600 corridas (semilla 20261103), 0 fallas.
+- Toda la lista: 703 casos, todos pasan. Las dos pruebas de la vista que piden pantalla corren solo dentro de
+  `tools/ci_linux.sh`.
+
+**Sigue:** el resto de las claves de las fichas (`fragment`, `machine`, `calibration`, …), y `walls.transition_margin`
+cuando llegue la medición.

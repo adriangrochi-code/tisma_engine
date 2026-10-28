@@ -1025,16 +1025,35 @@ public:
     // Extrusion speeds of the layer being written go through this.
     void pace(const Slowdown& slowdown) { pace_ = slowdown; }
 
-    // What the layer's moves take: extruded length per feed, and the time of
-    // everything else (travels, retractions, lifts).
+    // What the layer's moves take: extruded length per feed, apart for the
+    // surface walls, and the time of everything else (travels, retractions,
+    // lifts, and the bridges, which are never slowed down: cooling.md, rule 2).
     void reset_times() {
         extruded_.clear();
-        outer_extruded_.clear();
+        surface_extruded_.clear();
         other_time_ = 0.0;
+        walked_ = 0.0;
+        laid_.clear();
     }
     const std::map<double, double>& extruded() const { return extruded_; }
-    const std::map<double, double>& outer_extruded() const { return outer_extruded_; } // the outer walls' part
+    const std::map<double, double>& surface_extruded() const { return surface_extruded_; }
     double other_time() const { return other_time_; }
+    // The paths that follow are surface walls (the outer wall, and the one
+    // that touches it with consistent_surface): slowed down last.
+    void surface(bool on) { surface_ = on; }
+    // The layer's extrusions in order, logged while `on` (feed, length, and
+    // whether a surface wall or a bridge), for the tail that goes back to
+    // its speed; and the extruded length so far.
+    struct Laid {
+        double feed, length;
+        bool surface, bridge;
+    };
+    void log_extrusions(bool on) { logging_ = on; }
+    const std::vector<Laid>& laid() const { return laid_; }
+    double walked() const { return walked_; }
+    // From `from` mm of extrusion on, the layer at its own speeds
+    // (cooling.transition_distance, cooling_more.md rule 6).
+    void fast_from(double from) { fast_from_ = from; }
 
     // The part-cooling fan (docs/spec/features/cooling.md, rules 3 and 4). A
     // layer's fan hangs on its time, known only once the layer is built: the
@@ -1303,9 +1322,9 @@ public:
             type_ = t;
             note_ = notes_of(t).extrude;
             tower_ = std::strcmp(t, "Wipe tower") == 0;
-            outer_ = std::strcmp(t, "External perimeter") == 0;
             // Overhang perimeters get the bridges' fan (walls_extra.md, rule 8).
             bridge_ = std::strcmp(t, "Bridge infill") == 0 || std::strcmp(t, "Overhang perimeter") == 0;
+            surface_ = false;
         }
     }
     // The fan of the paths that follow by their support (cooling_more.md,
@@ -1434,9 +1453,17 @@ public:
     }
 
     void extrude(const ToolpathPoint& from, const ToolpathPoint& to, double feed) {
+        const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
+        // A slowed layer's tail at its own speeds: the move cut where it starts.
+        if (pace_.stage != 0 && walked_ < fast_from_ - kTailCut && walked_ + length > fast_from_ + kTailCut) {
+            const ToolpathPoint mid = between(from, to, (fast_from_ - walked_) / length);
+            extrude(from, mid, feed);
+            extrude(mid, to, feed);
+            return;
+        }
+        walk(length);
         start_extrusion();
         const double width = (from.width + to.width) / 2.0;
-        const double length = std::hypot(to.p.x - from.p.x, to.p.y - from.p.y);
         // Z anti-aliasing (docs/ZAA.md): the nozzle at the surface, and the bead
         // as thick as what is left down to the layer's bottom, by the Z written.
         const double z_layer = written(z_value_ - drop_), z_from = written(z_value_ - drop_ + from.dz),
@@ -1463,9 +1490,12 @@ public:
         const double section = !(height_ > 0.0) ? bead_area(width, height) : bead_area(width, height_) * height / height_;
         const double e = section * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height);
-        extruded_[feed] += length;
-        if (outer_)
-            outer_extruded_[feed] += length;
+        if (bridge_ || tail_)
+            other_time_ += length / feed;
+        else
+            (surface_ ? surface_extruded_ : extruded_)[feed] += length;
+        if (logging_)
+            laid_.push_back({feed, length, surface_, bridge_});
         total_e_ += e;
         if (tower_)
             tower_e_ += e;
@@ -1502,11 +1532,15 @@ public:
             z_now_ = z_layer;
         }
         const double width = points[a.first].width, length = a.length();
+        walk(length);
         const double e = bead_area(width, height_) * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height_);
-        extruded_[feed] += length;
-        if (outer_)
-            outer_extruded_[feed] += length;
+        if (bridge_ || tail_)
+            other_time_ += length / feed;
+        else
+            (surface_ ? surface_extruded_ : extruded_)[feed] += length;
+        if (logging_)
+            laid_.push_back({feed, length, surface_, bridge_});
         total_e_ += e;
         if (tower_)
             tower_e_ += e;
@@ -1755,8 +1789,16 @@ private:
     // A slowed-down feed is rounded down to whole mm/min (as F is written), so
     // the layer lasts at least the minimum time.
     double paced(double feed) const {
-        return pace_.stage == 0 ? feed : std::max(1.0, std::floor(pace_.feed(feed, outer_) * 60.0)) / 60.0;
+        return pace_.stage == 0 || bridge_ || tail_ ? feed
+                                                    : std::max(1.0, std::floor(pace_.feed(feed, surface_) * 60.0)) / 60.0;
     }
+
+    // An extrusion of `length` mm starts: in the tail or not.
+    void walk(double length) {
+        tail_ = walked_ >= fast_from_ - kTailCut;
+        walked_ += length;
+    }
+    static constexpr double kTailCut = 1e-6; // mm
 
     // Before a travel of `length` mm: the travels' acceleration, or the short
     // ones' (speeds_accels.md, rule 11).
@@ -1906,7 +1948,7 @@ private:
     PrintTime time_;
     double position_[4] = {0.0, 0.0, 0.0, 0.0}; // X, Y, Z, E as written
     Slowdown pace_;
-    std::map<double, double> extruded_, outer_extruded_;
+    std::map<double, double> extruded_, surface_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
@@ -1970,7 +2012,12 @@ private:
     double width_value_ = std::numeric_limits<double>::quiet_NaN(); // the width width_ was last checked for
     long f_ = std::numeric_limits<long>::min(); // none written yet
     const char* type_ = nullptr;
-    bool outer_ = false; // the current type is the outer wall
+    bool surface_ = false; // the current paths are surface walls
+    double walked_ = 0.0;  // mm extruded in the layer so far
+    double fast_from_ = std::numeric_limits<double>::infinity();
+    bool tail_ = false;    // the current move is in the layer's tail, at its own speed
+    bool logging_ = false;
+    std::vector<Laid> laid_;
 };
 
 } // namespace
@@ -2880,15 +2927,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // fans at 0, 25, 50 and 75 %, in a straight line between, down to 0
         // at 100 % (cooling_more.md, rules 3 and 4).
         const auto by_share = [&](double share, double normal) {
-            ByShare out{dynamic_feed(share, normal)};
+            ByShare at{dynamic_feed(share, normal)};
             if (s.dynamic_overhang_fan) {
                 const double x = std::clamp(share, 0.0, 1.0) * 4.0;
                 const std::size_t k = std::min<std::size_t>(3, std::size_t(x));
                 const double next = k < 3 ? s.overhang_fans[k + 1] : 0.0;
-                out.fan = s.overhang_fans[k] + (x - double(k)) * (next - s.overhang_fans[k]);
-                out.weak = share > 0.75;
+                at.fan = s.overhang_fans[k] + (x - double(k)) * (next - s.overhang_fans[k]);
+                at.weak = share > 0.75;
             }
-            return out;
+            return at;
         };
         bool in_thick = false;
         const std::uint64_t seed = std::uint64_t(l) * 1000003u;
@@ -3652,6 +3699,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             }
             g.type(step.type);
             g.overhang_fan(step.fan, step.weak_fan);
+            // The surface walls, slowed down last (cooling_more.md, rule 5;
+            // docs/GLOSS.md): the outer wall, and with consistent_surface the
+            // wall that touches it.
+            g.surface(step.type && (s.keep_outer_speed || s.slowdown_logic == SlowdownLogic::ConsistentSurface) &&
+                      (std::strcmp(step.type, "External perimeter") == 0 ||
+                       (s.slowdown_logic == SlowdownLogic::ConsistentSurface &&
+                        std::strcmp(step.type, "Perimeter") == 0 && t.index == 1)));
             g.print_acceleration(acceleration_of(step.type, local(l) == 0, raft_of(l) > 0 && local(l) == raft_of(l)));
             g.nonplanar(t.wavy);
             if (s.gcode_arcs && !t.wavy && t.points.size() > kArcMinSegments) {
@@ -3748,26 +3802,47 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // Each layer is built in the emitter's buffer first. One faster than the
     // minimum layer time is built again from the same state with its
     // extrusions slowed down and the fan at its maximum
-    // (docs/spec/BEHAVIOR.md, "Enfriamiento"). Then its time sets its fan.
+    // (cooling.md, rule 2). Then its time sets its fan.
     std::array<double, 2> first_layer = {0.0, 0.0}; // its time, normal and silent
     const auto write = [&](std::size_t l, const std::vector<Step>& steps) {
         const Active& a = actives[l];
         const Emitter emitter_before = g;
+        // With consistent_surface, the layer's last transition_distance mm
+        // of extrusion at their own speeds (cooling_more.md, rule 6).
+        const double tail = s.slowdown_logic == SlowdownLogic::ConsistentSurface ? s.transition_distance : 0.0;
         g.reset_times();
+        g.log_extrusions(tail > 0.0);
         write_layer(l, a, steps);
+        g.log_extrusions(false);
+        std::map<double, double> rest = g.extruded(), surface = g.surface_extruded();
+        double other = g.other_time();
+        const double walked = g.walked();
+        if (tail > 0.0) {
+            double left = tail;
+            for (auto it = g.laid().rbegin(); it != g.laid().rend() && left > 0.0; ++it) {
+                const double part = std::min(left, it->length);
+                left -= part;
+                if (it->bridge)
+                    continue;
+                std::map<double, double>& from = it->surface ? surface : rest;
+                if ((from[it->feed] -= part) <= 1e-9)
+                    from.erase(it->feed);
+                other += part / it->feed;
+            }
+        }
         // A forced flow is never slowed down: the tower looks for the limit at that flow.
         const Slowdown slowdown = a.volumetric_flow > 0.0 || !s.cooling_enabled
                                       ? Slowdown{}
-                                      : s.keep_outer_speed
-                                      ? plan_slowdown(g.extruded(), g.outer_extruded(), g.other_time(), s.min_layer_time,
-                                                      s.min_print_speed)
-                                      : plan_slowdown(g.extruded(), g.other_time(), s.min_layer_time, s.min_print_speed);
+                                      : plan_slowdown(rest, surface, other, s.min_layer_time, s.min_print_speed);
         if (slowdown.stage != 0) {
             g = emitter_before;
+            g.reset_times();
             g.pace(slowdown);
+            g.fast_from(tail > 0.0 ? walked - tail : std::numeric_limits<double>::infinity());
             write_layer(l, a, steps);
             g.pace(Slowdown{});
-            const double reached = layer_time(g.extruded(), g.outer_extruded(), g.other_time(), slowdown);
+            g.fast_from(std::numeric_limits<double>::infinity());
+            const double reached = layer_time(g.extruded(), g.surface_extruded(), g.other_time(), slowdown);
             if (warnings && reached < s.min_layer_time * (1.0 - 1e-9)) {
                 char text[160];
                 std::snprintf(text, sizeof text, "the layer takes %.1f s even at 1 mm/min, less than the minimum of %.1f s",
@@ -3786,7 +3861,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                      : fan_off           ? 0.0
                      : !s.cooling_enabled ? (s.fan_always ? s.fan_min : 0.0)
                      : slowdown.stage     ? s.fan_max
-                                          : layer_fan(layer_time(g.extruded(), g.other_time(), Slowdown{}),
+                                          : layer_fan(layer_time(g.extruded(), g.surface_extruded(), g.other_time(),
+                                                                 Slowdown{}),
                                                       s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
                                                       s.fan_always);
         if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);

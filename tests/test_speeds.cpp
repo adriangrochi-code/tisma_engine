@@ -561,7 +561,7 @@ TEST_CASE("cooling: the walls' fan by how much of their bead rests on the layer 
     s.fan_min = s.fan_max = 1.0;
     for (const auto& [angle, expected] : {std::pair{27.0, 36L}, {25.0, 33L}, {20.0, 26L}}) {
         INFO(angle << " degrees, the layer's at 1 %");
-        const std::set<long>& outer = fans(angle).at("External perimeter");
+        const std::set<long> outer = fans(angle).at("External perimeter");
         CHECK(*outer.begin() >= expected - 2);
         CHECK(*outer.rbegin() <= expected + 2);
     }
@@ -573,6 +573,120 @@ TEST_CASE("cooling: the walls' fan by how much of their bead rests on the layer 
     s.fan_min = s.fan_max = 0.0;
     s.fan_always = false;
     CHECK(fans(60.0).at("External perimeter") == std::set<long>{0});
+}
+
+TEST_CASE("cooling: a short layer at one common speed, the surface walls last (cooling.md, rule 2; cooling_more.md, "
+          "rule 5, C3)",
+          "[gcode][speeds]") {
+    // C3's cube: 20 mm, 3 walls, 20 % infill, 3 solid layers; the outer wall
+    // at 30 mm/s, the inner ones at 60, the infill at 80; layer 10.
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.skirt_loops = 0;
+    // The feeds (mm/s) of layer 10's extrusions by type, and its time.
+    const auto layer = [&](double min_time) {
+        s.min_layer_time = min_time;
+        std::ostringstream out;
+        write_gcode(out, slice_model(cube(20.0f, 10.0f), s), s);
+        std::map<std::string, std::set<double>> feeds;
+        for (const Move& m : moves_of(out.str()))
+            if (extrudes(m) && m.z == "2.000")
+                feeds[m.type].insert(m.feed / 60.0);
+        return feeds;
+    };
+    // A type's one feed, within the 1 mm/min the slowed feeds are cut to.
+    const auto only = [](const std::set<double>& f, double expected, double tolerance) {
+        return !f.empty() && *f.begin() > expected - tolerance && *f.rbegin() < expected + tolerance;
+    };
+    // uniform, 15 s: everything at one speed (Tisma Slicer: 27.93 mm/s).
+    s.keep_outer_speed = false;
+    auto feeds = layer(15.0);
+    const double v = *feeds["External perimeter"].begin();
+    CHECK_THAT(v, WithinAbs(27.93, 0.3));
+    for (const char* type : {"External perimeter", "Perimeter", "Internal infill"}) {
+        INFO(type);
+        CHECK(only(feeds[type], v, 0.02));
+    }
+    // consistent_surface, 15 s: the outer wall (30) and the one that touches
+    // it (60) at their speeds, the rest at one (Tisma Slicer: 23.58).
+    s.slowdown_logic = SlowdownLogic::ConsistentSurface;
+    feeds = layer(15.0);
+    CHECK(feeds["External perimeter"] == std::set<double>{30.0});
+    REQUIRE(feeds["Perimeter"].size() == 2);
+    CHECK(*feeds["Perimeter"].rbegin() == 60.0);
+    const double rest = *feeds["Perimeter"].begin();
+    CHECK_THAT(rest, WithinAbs(23.58, 0.4));
+    CHECK(only(feeds["Internal infill"], rest, 0.02));
+    // 40 s: the rest at the minimum speed (10), the two walls a little over
+    // it (Tisma Slicer: 10.4).
+    feeds = layer(40.0);
+    CHECK(only(feeds["Internal infill"], 10.0, 0.001));
+    CHECK(only(feeds["External perimeter"], 10.3, 0.15));
+    CHECK(*feeds["Perimeter"].begin() == 10.0);
+    CHECK(*feeds["Perimeter"].rbegin() == *feeds["External perimeter"].begin());
+    // uniform, 40 s: everything at one speed (Tisma Slicer: 10.15).
+    s.slowdown_logic = SlowdownLogic::Uniform;
+    feeds = layer(40.0);
+    CHECK(only(feeds["Internal infill"], 10.1, 0.1));
+    CHECK(feeds["External perimeter"] == feeds["Internal infill"]);
+}
+
+TEST_CASE("cooling: with consistent_surface, a slowed layer's last mm at their speed (cooling_more.md, rule 6, C4)",
+          "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.skirt_loops = 0;
+    s.min_layer_time = 15.0;
+    s.slowdown_logic = SlowdownLogic::ConsistentSurface;
+    // How many mm at the end of layer 10 go at their own speed (the infill's
+    // 80 mm/s), and how long the layer's extrusions and travels take.
+    const auto tail = [&](double distance) {
+        s.transition_distance = distance;
+        std::ostringstream out;
+        write_gcode(out, slice_model(cube(20.0f, 10.0f), s), s);
+        std::vector<Move> layer;
+        for (const Move& m : moves_of(out.str()))
+            if (extrudes(m) && m.z == "2.000")
+                layer.push_back(m);
+        double fast = 0.0;
+        for (auto it = layer.rbegin(); it != layer.rend() && it->feed == 80.0 * 60.0; ++it)
+            fast += it->length();
+        return fast;
+    };
+    for (const double d : {2.0, 5.0, 10.0}) {
+        INFO(d << " mm");
+        CHECK_THAT(tail(d), WithinAbs(d, 0.01));
+    }
+    CHECK(tail(0.0) == 0.0);
+    // With uniform, no effect.
+    s.slowdown_logic = SlowdownLogic::Uniform;
+    s.keep_outer_speed = false;
+    CHECK(tail(5.0) == 0.0);
+}
+
+TEST_CASE("cooling: bridges and overhang perimeters are never slowed down (cooling.md, rule 2, K5)", "[gcode][speeds]") {
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    s.skirt_loops = 0;
+    s.bridge_speed = 60.0;
+    for (const double min_time : {60.0, 300.0}) {
+        INFO(min_time << " s");
+        s.min_layer_time = min_time;
+        std::ostringstream out;
+        write_gcode(out, slice_model(table(), s), s);
+        std::set<double> bridges, others;
+        std::string bridge_z;
+        for (const Move& m : moves_of(out.str()))
+            if (extrudes(m) && (m.type == "Bridge infill" || m.type == "Overhang perimeter"))
+                bridges.insert(m.feed / 60.0), bridge_z = m.z;
+        REQUIRE_FALSE(bridges.empty());
+        for (const Move& m : moves_of(out.str()))
+            if (extrudes(m) && m.z == bridge_z && m.type != "Bridge infill" && m.type != "Overhang perimeter")
+                others.insert(m.feed / 60.0);
+        CHECK(bridges == std::set<double>{60.0});
+        REQUIRE_FALSE(others.empty());
+        CHECK(*others.rbegin() < 10.0); // the rest of the layer slowed down
+    }
 }
 
 TEST_CASE("flow equalizer: the flow changes at most speed.flow_slope_down or _up per second (speeds_accels.md, rules "

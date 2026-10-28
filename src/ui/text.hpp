@@ -1086,6 +1086,10 @@
     X(Overhang3, "Apoyado tres cuartos", "Three quarters supported") \
     X(SumBySupport, "Según el apoyo", "By support") \
     X(SubOverhangFan, "Ventilador en voladizos", "Overhang fan") \
+    X(SlowdownLogicRow, "Cómo frenar", "How to slow down") \
+    X(SlowdownUniform, "Todo por igual", "Everything alike") \
+    X(SlowdownConsistentSurface, "Superficie pareja", "Consistent surface") \
+    X(TransitionDistance, "Final de capa a su velocidad", "Layer end at its speed") \
     X(DynamicOverhangFan, "Ventilador según el apoyo", "Fan by support") \
     X(OverhangFan0, "Ventilador sin apoyo", "Fan unsupported") \
     X(OverhangFan1, "Ventilador apoyado un cuarto", "Fan a quarter supported") \

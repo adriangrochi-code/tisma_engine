@@ -48,6 +48,9 @@ enum class LimitsUsage { TimeOnly, Emit, Ignore };
 enum class ScarfMode { Nowhere, Contours, Everywhere };
 enum class SupportStyle { Grid, Organic };
 enum class FuzzyMode { None, External, All };
+// How a short layer slows down (cooling_more.md, rule 5): everything alike,
+// or the outer wall and the one that touches it last.
+enum class SlowdownLogic { Uniform, ConsistentSurface };
 
 // How the walls are made (walls_extra.md, rule 1): beads of variable width
 // that fill the region (Kuipers et al. 2020), or loops of one width with gap
@@ -636,6 +639,12 @@ struct Settings {
     // The outer walls keep their speed while the rest slows down for the
     // minimum layer time, when that is enough (docs/GLOSS.md): an even sheen.
     bool keep_outer_speed = true;
+    // consistent_surface: the wall that touches the outer one is slowed down
+    // last too (cooling_more.md, rule 5).
+    SlowdownLogic slowdown_logic = SlowdownLogic::Uniform;
+    // mm: with consistent_surface, a slowed layer's last extrusions at their
+    // own speeds (cooling_more.md, rule 6).
+    double transition_distance = 0.0;
 
     // compensation (docs/CALIBRATION.md): the model is scaled around the centre
     // of its footprint and its bottom before slicing; holes grow by hole_offset.

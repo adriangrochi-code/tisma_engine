@@ -118,6 +118,7 @@ Settings without_gcode_settings(Settings s) {
     s.fan_bridges = d.fan_bridges, s.fan_off_layers = d.fan_off_layers;
     s.full_fan_layer = d.full_fan_layer, s.cooling_enabled = d.cooling_enabled;
     s.dynamic_overhang_fan = d.dynamic_overhang_fan, s.overhang_fans = d.overhang_fans;
+    s.slowdown_logic = d.slowdown_logic, s.transition_distance = d.transition_distance;
     s.start_gcode = d.start_gcode, s.end_gcode = d.end_gcode, s.variables = d.variables;
     s.flow = d.flow, s.pressure_advance = d.pressure_advance, s.filament_max_flow = d.filament_max_flow;
     s.machine_max_flow = d.machine_max_flow, s.chamber_temperature = d.chamber_temperature;

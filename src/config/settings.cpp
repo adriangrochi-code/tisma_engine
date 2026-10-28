@@ -2005,8 +2005,14 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
                 "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer", "dynamic_overhang_fan",
-                "overhang_fan_0", "overhang_fan_1", "overhang_fan_2", "overhang_fan_3"},
+                "overhang_fan_0", "overhang_fan_1", "overhang_fan_2", "overhang_fan_3", "slowdown_logic", "transition_distance"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "slowdown_logic") {
+                       s.slowdown_logic = choice<SlowdownLogic>(g, n, k, {{"uniform", SlowdownLogic::Uniform},
+                                                                         {"consistent_surface",
+                                                                          SlowdownLogic::ConsistentSurface}});
+                       return;
+                   }
                    if (n == "keep_outer_speed" || n == "fan_always" || n == "enabled" || n == "dynamic_overhang_fan") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
@@ -2032,10 +2038,12 @@ Settings parse_checked(std::string_view text) {
                        if (!(d > 0.0))
                            fail(k, "must be greater than 0");
                        s.min_print_speed = d;
-                   } else if (n == "min_layer_time" || n == "fan_below_time") {
+                   } else if (n == "min_layer_time" || n == "fan_below_time" || n == "transition_distance") {
                        if (d < 0.0)
                            fail(k, "must not be negative");
-                       (n == "fan_below_time" ? s.fan_below_time : s.min_layer_time) = d;
+                       (n == "fan_below_time"        ? s.fan_below_time
+                        : n == "transition_distance" ? s.transition_distance
+                                                     : s.min_layer_time) = d;
                    } else {
                        if (d < 0.0 || d > 100.0)
                            fail(k, "must be a percentage from 0 to 100");
@@ -2930,6 +2938,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.overhang_fan_3", num(s.overhang_fans[3])},
         {"cooling.enabled", s.cooling_enabled ? "true" : "false"},
         {"cooling.keep_outer_speed", s.keep_outer_speed ? "true" : "false"},
+        {"cooling.slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
+        {"cooling.transition_distance", num(s.transition_distance)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
         {"zaa.enabled", s.zaa ? "true" : "false"},
         {"zaa.min_thickness", num(s.zaa_min_thickness)},
@@ -3397,7 +3407,9 @@ std::string settings_json(const Settings& s) {
           {"overhang_fan_2", s.overhang_fans[2]},
           {"overhang_fan_3", s.overhang_fans[3]},
           {"enabled", s.cooling_enabled},
-          {"keep_outer_speed", s.keep_outer_speed}}},
+          {"keep_outer_speed", s.keep_outer_speed},
+          {"slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
+          {"transition_distance", s.transition_distance}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"fuzzy",

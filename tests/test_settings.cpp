@@ -240,6 +240,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(o.overhang_fans == std::array<double, 4>{100.0, 0.0, 0.0, 40.0});
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"overhang_fan_2": 101}})"),
                       ContainsSubstring("cooling.overhang_fan_2: must be a percentage"));
+    CHECK(c.slowdown_logic == SlowdownLogic::Uniform);
+    const Settings cs = parse_settings(R"({"cooling": {"slowdown_logic": "consistent_surface", "transition_distance": 5}})");
+    CHECK(cs.slowdown_logic == SlowdownLogic::ConsistentSurface);
+    CHECK(cs.transition_distance == 5.0);
+    CHECK_THROWS(parse_settings(R"({"cooling": {"slowdown_logic": "even"}})"));
+    CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),
+                      ContainsSubstring("cooling.transition_distance: must not be negative"));
     const Settings m = parse_settings(R"({"machine": {"max_feed_x": 300, "max_feed_z": 8, "acceleration": 2000,
                                                       "travel_acceleration": 3000, "corner_speed": 0}})");
     CHECK(m.max_feed_x == 300.0);
