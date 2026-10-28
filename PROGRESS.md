@@ -6786,3 +6786,26 @@ hace el motor. Las dos cosas tienen que entrar juntas o la pieza queda mal extru
   un viaje, ese filamento caía en otro lugar de la pieza. Ahora se descarta al viajar (y se resta del total). La
   corrida 48 pasa; toda la lista, 697 casos, pasa.
 
+
+## 2026-10-28 (madrugada): mantenimiento
+
+**Revisado:** `tools/ci_linux.sh` sobre `f1e167a` (pasa); el fuzzer, 300 corridas con la semilla 20261028 sobre el
+modelo del cordón y 2000 con la semilla 20261029 sobre el arreglo que siguió; las capas por zona y las torres con el
+modelo nuevo.
+
+**Encontrado y arreglado:**
+- **Filamento que saltaba con la boquilla** (semilla 20261028, corrida 48): ver arriba.
+- **Capas curvas, el primer viaje de la impresión** (semilla 20261029, corridas 41 y 225; ya fallaba en `f1e167a`, no
+  es del modelo nuevo): ese viaje queda como lo dice el G-code plano, porque todavía no se sabe dónde está la
+  boquilla; si la capa es curva ahí, la primera extrusión arrancaba fuera de la superficie. Ahora le sigue un
+  movimiento a la Z de la superficie. Prueba nueva en `[curved]`.
+- **Tope de velocidad del verificador con caudal forzado** (torre de caudal): contaba el cordón más angosto como un
+  rectángulo; con la sección redondeada pide más velocidad (839 contra 800 mm/s). Ahora usa la misma sección.
+
+**`walls.spread_count`** (`perimeters.md`, regla 3, tabla P2), que había quedado como diferencia del modelo del
+cordón: el corte usa el esquema de Kuipers et al. que carga la diferencia en los N cordones del medio (N = el ajuste,
+1 por defecto). Las filas de 1,2 y 1,5 mm de P2 dan los números de la ficha (0,450 / 0,386 / 0,450 a ±0,375;
+0,450 / 0,364 / 0,364 / 0,450). En el panel, en «Paredes, más». Toda la lista: 698 casos, todos pasan.
+
+**Fuzzer, 2000 corridas (semilla 20261029):** 22 rechazadas como no imprimibles, 2 fallas (las de capas curvas, ya
+arregladas).
