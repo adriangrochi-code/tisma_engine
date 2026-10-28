@@ -943,7 +943,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
-        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
+        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
@@ -5764,6 +5764,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
+        whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 20);
         if (shown("walls.top_one_wall"))
             changed |= row(T::TopOneWallRow, s.top_one_wall,
                            {{TopOneWall::None, tr(T::TopOneWallNone)},

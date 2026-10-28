@@ -709,7 +709,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
         // layer: up to what the machine moves.
         const bool thinner = s.scarf != ScarfMode::Nowhere || s.zaa;
         const double needed = thinner ? std::numeric_limits<double>::infinity()
-                                      : forced / std::max(narrow * height * min_flow, 1e-9);
+                                      : forced / std::max(bead_area(narrow, height) * min_flow, 1e-9);
         limits.max_feed = std::max(limits.max_feed, machine > 0.0 ? std::min(machine, needed) : needed);
     }
     const double r = s.filament_diameter / 2.0;

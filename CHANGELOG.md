@@ -28,7 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Más ajustes de las fichas:** `cooling.full_fan_layer` (el ventilador sube de a poco), `cooling.enabled`,
   `speed.support_interface`, `acceleration.wipe_tower`, `support.bottom_z_gap`, `support.bottom_interface_layers`,
-  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
+  `support.buildplate_only` (solo soporte desde la cama), `walls.outer_first`, `walls.outer_width` (ancho propio de la pared externa), `walls.spread_count` (cuántos cordones del medio absorben la diferencia de ancho), `layers.first_line_width` (ancho de la primera capa, 200 % de su altura), anchos de línea propios (`surfaces.top_width`, `surfaces.solid_width`, `infill.width`), y los nombres de las fichas
   `support.angle_limit`, `arrange.distance`, `filament.pressure_advance` y `machine.e_mode`.
 - **La pestaña Objetos** (`settings_levels.md`, reglas 11 y 13), junto a Impresión y Material: las piezas de la placa
   y, debajo de cada una, sus grupos de ajustes propios, modificadores, volúmenes negativos y rangos de alturas; la fila
@@ -51,6 +51,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **Paredes finas de tres cordones o más:** solo los del medio cambian de ancho; los demás quedan nominales
+  (`walls.spread_count` 1, `perimeters.md` P2). Antes todos se repartían la diferencia.
 
 - **El cordón de las fichas** (`perimeters.md` regla 1, `gcode_motion.md` regla 1): el filamento sale de la sección
   con costados redondeados, `(w − h)·h + π·(h/2)²`, y los cordones vecinos se solapan `h·(1 − π/4)` (con 0,45 × 0,2,

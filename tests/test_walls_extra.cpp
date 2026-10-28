@@ -430,9 +430,10 @@ TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[
         {0.5, {0.0}, {0.500}},
         {0.7, {-0.164, 0.164}, {0.371, 0.371}},
         {1.0, {-0.239, 0.239}, {0.521, 0.521}},
-        // From three beads on, only the middle one takes the difference in
-        // Tisma Slicer (walls.spread_count 1: 1.2 gives 0.450, 0.386, 0.450);
-        // the engine still shares it among all (PLAN.md).
+        // From three beads on, only the middle ones take the difference
+        // (walls.spread_count 1, rule 3).
+        {1.2, {-0.375, 0.0, 0.375}, {0.450, 0.386, 0.450}},
+        {1.5, {-0.525, -0.161, 0.161, 0.525}, {0.450, 0.364, 0.364, 0.450}},
     };
     for (const auto& [thickness, centres, widths] : rows) {
         INFO("thickness " << thickness);

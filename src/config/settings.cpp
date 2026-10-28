@@ -732,7 +732,8 @@ Settings parse_checked(std::string_view text) {
                {"count", "width", "seam", "scarf", "scarf_only_smooth", "scarf_start_height", "scarf_length",
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "top_one_wall",
-                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width"},
+                "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
+                "spread_count"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -799,6 +800,13 @@ Settings parse_checked(std::string_view text) {
             if (!v.is_number_integer() || v.get<long long>() < 0 || v.get<long long>() > 1000)
                 fail(k, "must be a whole number from 0 to 1000");
             s.wall_count = static_cast<int>(v.get<long long>());
+            return;
+        }
+        if (n == "spread_count") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 1 || v.get<long long>() > 100)
+                fail(k, "must be a whole number from 1 to 100");
+            s.wall_spread_count = static_cast<int>(v.get<long long>());
             return;
         }
         if (n == "min_line_width" || n == "min_detail" || n == "seam_gap") {
@@ -2535,6 +2543,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"slicing.first_layer_shrink", num(s.first_layer_shrink)},
         {"slicing.simplify_tolerance", num(s.simplify_tolerance)},
         {"walls.count", std::to_string(s.wall_count)},
+        {"walls.spread_count", std::to_string(s.wall_spread_count)},
         {"walls.width", num(s.wall_width)},
         {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
@@ -3018,6 +3027,7 @@ std::string settings_json(const Settings& s) {
           {"simplify_tolerance", s.simplify_tolerance}}},
         {"walls",
          {{"count", s.wall_count},
+          {"spread_count", s.wall_spread_count},
           {"width", s.wall_width},
           {"outer_width", s.outer_wall_width},
           {"seam", seam},

@@ -1198,6 +1198,10 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     BeadingParams beading;
     beading.preferred_width = settings.wall_width;
     beading.outer_width = outer_bead(settings);
+    // Only the middle beads take the difference (perimeters.md, rule 3,
+    // table P2): Kuipers et al.'s inward distributed scheme with N of them.
+    beading.scheme = BeadingScheme::InwardDistributed;
+    beading.inward_beads = double(settings.wall_spread_count);
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);
     beading.min_width = settings.wall_min_line_width.of(settings.nozzle_diameter);
