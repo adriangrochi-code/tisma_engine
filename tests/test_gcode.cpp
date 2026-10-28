@@ -449,6 +449,32 @@ TEST_CASE("cooling: bridges and overhang perimeters get their own fan, and the l
     CHECK(other_moves > 0);
 }
 
+TEST_CASE("warnings: a bridge longer than support.free_bridge_length over nothing (print_review.md, rule 2; R5, R6)",
+          "[gcode][warnings]") {
+    // Two pillars 30 mm apart joined by a plank from Z 10 to 12.
+    IndexedMesh m;
+    add_box(m, 0, 0, 5, 10, 10);
+    add_box(m, 35, 0, 40, 10, 10);
+    add_box(m, 0, 0, 40, 10, 12, 10);
+    Settings s = test_printer();
+    const SlicedModel model = slice_model(m, s);
+    const auto bridges = [&](double free) {
+        std::vector<Warning> out;
+        for (const Warning& w : model_warnings(model, free))
+            if (w.kind == "long_bridge")
+                out.push_back(w);
+        return out;
+    };
+    const std::vector<Warning> by_default = bridges(s.support_free_bridge_length); // 16 mm
+    REQUIRE(by_default.size() == 1);
+    CHECK(by_default.front().layer == 50); // the plank's first layer, Z 10 to 10.2
+    CHECK(by_default.front().value > 29.0);
+    CHECK(by_default.front().value <= 30.0);
+    CHECK_THAT(by_default.front().message, ContainsSubstring("between Z 10.00"));
+    CHECK(bridges(35.0).empty());
+    CHECK(bridges(0.0).empty()); // 0: not checked
+}
+
 TEST_CASE("warnings: details thinner than a bead, layers that cannot reach the minimum time", "[gcode][warnings]") {
     IndexedMesh m;
     add_box(m, 0, 0, 10, 10, 1);

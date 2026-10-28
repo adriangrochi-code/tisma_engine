@@ -1909,7 +1909,7 @@ Settings parse_checked(std::string_view text) {
                 "tree_angle", "tree_angle_preferred", "tree_branch_diameter", "tree_branch_diameter_angle",
                 "tree_double_wall_diameter", "tree_branch_distance", "tree_tip_diameter", "tree_top_rate",
                 "synchronize_layers", "pattern", "sheath", "interface_pattern", "interface_spacing",
-                "interface_contact_loops", "enforce_layers", "closing_radius"},
+                "interface_contact_loops", "enforce_layers", "closing_radius", "free_bridge_length"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "synchronize_layers" || n == "sheath" || n == "interface_contact_loops") {
                        if (!g.at(n).is_boolean())
@@ -1939,11 +1939,11 @@ Settings parse_checked(std::string_view text) {
                        s.support_enforce_layers = static_cast<int>(v.get<long long>());
                        return;
                    }
-                   if (n == "closing_radius") {
+                   if (n == "closing_radius" || n == "free_bridge_length") {
                        const double d = number(g, n, k);
-                       if (!(d >= 0.0 && d <= 100.0))
-                           fail(k, "must be from 0 to 100 mm");
-                       s.support_closing_radius = d;
+                       if (!(d >= 0.0 && d <= (n == "closing_radius" ? 100.0 : 1000.0)))
+                           fail(k, n == "closing_radius" ? "must be from 0 to 100 mm" : "must be from 0 to 1000 mm");
+                       (n == "closing_radius" ? s.support_closing_radius : s.support_free_bridge_length) = d;
                        return;
                    }
                    if (n == "interface_spacing") {
@@ -2973,6 +2973,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"support.bottom_interface_layers", std::to_string(s.support_bottom_interface_layers)},
         {"support.style", support_style_name(s.support_style)},
         {"support.closing_radius", num(s.support_closing_radius)},
+        {"support.free_bridge_length", num(s.support_free_bridge_length)},
         {"support.tree_angle", num(s.tree_angle)},
         {"support.tree_angle_preferred", num(s.tree_angle_preferred)},
         {"support.tree_branch_diameter", num(s.tree_branch_diameter)},
@@ -3449,6 +3450,7 @@ std::string settings_json(const Settings& s) {
           {"bottom_interface_layers", s.support_bottom_interface_layers},
           {"style", support_style_name(s.support_style)},
           {"closing_radius", s.support_closing_radius},
+          {"free_bridge_length", s.support_free_bridge_length},
           {"tree_angle", s.tree_angle},
           {"tree_angle_preferred", s.tree_angle_preferred},
           {"tree_branch_diameter", s.tree_branch_diameter},

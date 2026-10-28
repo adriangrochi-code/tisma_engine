@@ -909,7 +909,7 @@ const std::map<T, const char*>& row_keys() {
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
         {T::Supports, "support.enabled"}, {T::SupportAutomatic, "support.automatic"},
         {T::SupportBuildplateOnly, "support.buildplate_only"}, {T::SupportEnforceLayers, "support.enforce_layers"},
-        {T::SupportClosingRadius, "support.closing_radius"},
+        {T::SupportClosingRadius, "support.closing_radius"}, {T::SupportFreeBridge, "support.free_bridge_length"},
         {T::SupportAngle, "support.threshold_angle"}, {T::SkirtLoops, "adhesion.skirt_loops"},
         {T::SkirtDistance, "adhesion.skirt_distance"}, {T::BrimWidth, "adhesion.brim_width"},
         {T::SpeedWalls, "speed.walls"}, {T::SpeedOuterWall, "speed.outer_wall"}, {T::SpeedInfill, "speed.infill"},
@@ -5926,6 +5926,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SupportAutomatic, "support.automatic", s.support_automatic, tr(T::SupportAutomaticTip));
         flag(T::SupportBuildplateOnly, "support.buildplate_only", s.support_buildplate_only);
         whole(T::SupportEnforceLayers, "support.enforce_layers", s.support_enforce_layers, 0, 1000);
+        mm(T::SupportFreeBridge, "support.free_bridge_length", s.support_free_bridge_length, 0.0, 1000.0,
+           s.support_free_bridge_length > 0.0 ? "%.0f mm" : "—", 0.5f);
         if (shown("support.style"))
             changed |= row(T::SupportStyle, s.support_style,
                            {{SupportStyle::Grid, tr(T::SupportGrid)},

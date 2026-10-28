@@ -612,6 +612,9 @@ struct Settings {
     int support_enforce_layers = 0;
     // mm: with snug, gaps narrower than twice this between support zones close.
     double support_closing_radius = 2.0;
+    // mm a bridge can span over nothing (SETTINGS_V1.md); longer, a warning
+    // (print_review.md, rule 2).
+    double support_free_bridge_length = 16.0;
     bool support_sheath = true;
     SupportInterfacePattern support_interface_pattern = SupportInterfacePattern::Lines;
     double support_interface_spacing = 0.0; // mm; 0: solid

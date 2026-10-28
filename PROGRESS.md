@@ -6983,5 +6983,15 @@ con los huecos cerrados por `closing_radius` (antes, siempre por un cordón).
 - un `for` sobre un miembro de un `SlicedModel` temporal (se destruye antes del lazo);
 - antes, la referencia a un mapa temporal en C2.
 
-**Sigue:** `support.under_bridges` (S6) y `support.free_bridge_length` (R5, R6); después `fragment`, `machine`,
-`calibration`, ….
+**`support.free_bridge_length`** y el aviso de puentes largos (`print_review.md`, regla 2): para cada capa, el
+tramo más largo de las líneas de puente sin nada debajo (ni la capa de abajo agrandada medio cordón, ni soporte),
+recortando las líneas como caminos abiertos con Clipper2. Si pasa el ajuste (16 mm por defecto, `SETTINGS_V1.md`),
+un aviso `long_bridge` por cada serie de capas seguidas, con el rango de Z. R5 (tabla de 40 mm sobre pilares a 30 mm):
+un aviso en la primera capa de la tabla, Z 10,0 a 10,2, con 29,6 mm; R6 (35 mm): nada.
+
+**Pregunta al equipo de fichas** (enviada): `supports_skirt.md` dice que los puentes no llevan soporte salvo con
+`support.under_bridges`, y `BEHAVIOR.md` que los más cortos que `free_bridge_length` no lo llevan. `under_bridges`
+espera la respuesta; también pregunté por los lazos de contacto en la segunda capa de interfaz (SM10) y por el borde
+de la zona en grilla contra la columna (SM8).
+
+**Sigue:** `support.under_bridges` cuando llegue la respuesta; mientras, `fragment`, `machine`, `calibration`, ….

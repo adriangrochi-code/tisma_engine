@@ -259,6 +259,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     const Settings snug = parse_settings(R"({"support": {"style": "snug", "closing_radius": 0.5}})");
     CHECK(snug.support_style == SupportStyle::Snug);
     CHECK(snug.support_closing_radius == 0.5);
+    CHECK(Settings{}.support_free_bridge_length == 16.0);
+    CHECK(parse_settings(R"({"support": {"free_bridge_length": 35}})").support_free_bridge_length == 35.0);
     CHECK_THROWS(parse_settings(R"({"support": {"enforce_layers": 1.5}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"cooling": {"transition_distance": -1}})"),
                       ContainsSubstring("cooling.transition_distance: must not be negative"));

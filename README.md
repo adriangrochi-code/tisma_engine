@@ -69,6 +69,8 @@ Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los a
 - `thin_detail`: área en mm² de una capa más fina que el cordón más fino, que no se imprime;
 - `layer_time`: segundos que dura una capa que no llega al tiempo mínimo ni a 1 mm/min;
 - `open_contours`: contornos abiertos descartados en la capa;
+- `long_bridge`: el tramo más largo, en mm, de un puente sin nada debajo, si pasa `support.free_bridge_length`; uno por
+  cada serie de capas seguidas;
 - `gpu_fallback`: la GPU falló y se laminó con la CPU (sin capa: `layer` y `z` son `null`).
 
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede

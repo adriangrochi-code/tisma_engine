@@ -1053,6 +1053,7 @@
     X(SupportGrid, "Grilla", "Grid") \
     X(SupportSnug, "Ajustado", "Snug") \
     X(SupportClosingRadius, "Radio de cierre", "Closing radius") \
+    X(SupportFreeBridge, "Puente sin soporte", "Free bridge length") \
     X(SupportOrganic, "Árbol (orgánico)", "Tree (organic)") \
     X(SupportStyleTip, "Árbol: ramas redondas que se juntan hacia la cama; menos marcas en la pieza y se quitan fácil", \
       "Tree: round branches that join on their way to the bed; fewer marks on the part, easy to remove") \

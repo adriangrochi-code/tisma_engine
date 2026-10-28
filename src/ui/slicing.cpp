@@ -304,7 +304,7 @@ std::shared_ptr<const SlicedModel> Slicer::cut(const TriangleMesh& mesh, const S
         out.error = std::move(reason);
         return nullptr;
     }
-    std::vector<Warning> warnings = model_warnings(*model);
+    std::vector<Warning> warnings = model_warnings(*model, settings.support_free_bridge_length);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
     warnings = stability_warnings(*model, settings);
     out.warnings.insert(out.warnings.end(), warnings.begin(), warnings.end());
