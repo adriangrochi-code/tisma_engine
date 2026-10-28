@@ -127,8 +127,8 @@ struct VulkanView::Impl {
     std::array<VkPipeline, kPipes> pipes{};
 
     // What is drawn.
-    Buffer plate_v, grid_v, model_v, paint_v, extrusions_v, travels_v;
-    std::uint32_t plate_count = 0, grid_count = 0, grid_outline = 0, model_count = 0, paint_count = 0,
+    Buffer plate_v, grid_v, model_v, model_coarse_v, paint_v, extrusions_v, travels_v;
+    std::uint32_t plate_count = 0, grid_count = 0, grid_outline = 0, model_count = 0, model_coarse_count = 0, paint_count = 0,
                   travel_count = 0;
     float grid_step = 10.0f;
     int grid_major_every = 5;
@@ -849,17 +849,22 @@ struct VulkanView::Impl {
             }
         }
         if (f.show_model && model_count > 0) {
+            // While the view moves, the coarse copy if there is one (V6).
+            const bool coarse = f.coarse && model_coarse_count > 0;
+            const std::uint32_t count = coarse ? model_coarse_count : model_count;
             // The chosen model in its own colour, the rest before and after it.
-            const std::uint32_t first = std::uint32_t(std::min<std::size_t>(f.selected_first, model_count));
-            const std::uint32_t chosen = std::uint32_t(std::min<std::size_t>(f.selected_count, model_count - first));
-            bind(Mesh, &model_v);
+            const std::uint32_t first =
+                std::uint32_t(std::min<std::size_t>(coarse ? f.coarse_selected_first : f.selected_first, count));
+            const std::uint32_t chosen = std::uint32_t(
+                std::min<std::size_t>(coarse ? f.coarse_selected_count : f.selected_count, count - first));
+            bind(Mesh, coarse ? &model_coarse_v : &model_v);
             draw = {};
             copy(draw.colour, f.model);
             push(draw);
             if (first > 0)
                 vkCmdDraw(c, first, 1, 0, 0);
-            if (first + chosen < model_count)
-                vkCmdDraw(c, model_count - first - chosen, 1, first + chosen, 0);
+            if (first + chosen < count)
+                vkCmdDraw(c, count - first - chosen, 1, first + chosen, 0);
             if (chosen > 0) {
                 copy(draw.colour, f.model_selected);
                 copy(draw.extra, f.selected_offset);
@@ -937,7 +942,7 @@ struct VulkanView::Impl {
         if (picture_set)
             ImGui_ImplVulkan_RemoveTexture(picture_set);
         picture_set = VK_NULL_HANDLE;
-        for (Buffer* b : {&plate_v, &grid_v, &model_v, &paint_v, &extrusions_v, &travels_v})
+        for (Buffer* b : {&plate_v, &grid_v, &model_v, &model_coarse_v, &paint_v, &extrusions_v, &travels_v})
             free_buffer(*b);
         for (Buffer& u : uniforms)
             free_buffer(u);
@@ -1012,6 +1017,17 @@ void VulkanView::set_model(const std::vector<float>& vertices) {
     v.guard([&] {
         v.upload(v.model_v, vertices.data(), vertices.size() * sizeof(float));
         v.model_count = std::uint32_t(vertices.size() / 6);
+    });
+}
+
+void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
+    Impl& v = *impl_;
+    if (!v.ready)
+        return;
+    v.model_coarse_count = 0;
+    v.guard([&] {
+        v.upload(v.model_coarse_v, vertices.data(), vertices.size() * sizeof(float));
+        v.model_coarse_count = std::uint32_t(vertices.size() / 6);
     });
 }
 
@@ -1109,6 +1125,7 @@ bool VulkanView::init(const VulkanDevice&, std::string& error) {
 void VulkanView::shutdown() {}
 void VulkanView::set_bed(const BedPolygon&, const BedLook&) {}
 void VulkanView::set_model(const std::vector<float>&) {}
+void VulkanView::set_model_coarse(const std::vector<float>&) {}
 void VulkanView::set_paint(const std::vector<float>&, const std::vector<Renderer::PaintGroup>&) {}
 void VulkanView::set_preview(const PreviewBuffers&) {}
 void VulkanView::clear_preview() {}

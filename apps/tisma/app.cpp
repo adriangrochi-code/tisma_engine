@@ -9764,6 +9764,7 @@ void App::update_coarse_model() {
     constexpr std::size_t kCoarseFrom = 1000000, kCoarseTarget = 400000;
     if (std::optional<CoarseBuild> b = coarse_job_.take(); b && b->version == scene_version_) {
         renderer_.set_model_coarse(b->vertices);
+        vk_view_.set_model_coarse(b->vertices);
         coarse_object_vertices_ = std::move(b->objects);
         coarse_version_ = b->version;
     }
@@ -9774,6 +9775,7 @@ void App::update_coarse_model() {
         total += m.triangle_count();
     if (total < kCoarseFrom) { // small enough to draw as it is
         renderer_.set_model_coarse({});
+        vk_view_.set_model_coarse({});
         coarse_object_vertices_.clear();
         coarse_version_ = scene_version_;
         return;
@@ -10296,6 +10298,7 @@ void App::frame() {
     int fb_w = 0, fb_h = 0;
     glfwGetFramebufferSize(window_, &fb_w, &fb_h);
     const Vec3 clear = vec(theme_.window);
+    update_coarse_model(); // for both views, before the frame that reads it
     ViewFrame f = view_frame(fb_w, fb_h);
     if (vulkan_) {
         // The 3D view first, into its picture, then the window and the panels.
@@ -10318,7 +10321,6 @@ void App::frame() {
 
         // The 3D view, under the panels.
         update_ray_scene();
-        update_coarse_model();
         const bool check_now = options_.ray_check && !ray_checked_ && render_mode_ == RenderMode::RayTraced &&
                                renderer_.has_ray_scene() && ray_scene_;
         if (check_now)

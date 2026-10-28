@@ -7288,8 +7288,29 @@ ms con la copia. La captura con `--coarse` se ve igual a la entera, salvo detall
 entre 3 000 y 30 000 triángulos, la caja a menos de 1 mm y el volumen a menos de 5 %); la lectura en paralelo con
 100 000 facetas y dos malas. Toda la lista: 725 casos, pasan.
 
-**No probado:** en una GPU real (este contenedor solo tiene rasterizador por software). La vista Vulkan todavía no usa
-la copia.
+**No probado:** en una GPU real (este contenedor solo tiene rasterizador por software).
 
-**Sigue:** la copia en la vista Vulkan; armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo; las
-claves `orient.*` y las de pellets.
+**Sigue:** armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo; las claves `orient.*` y las de
+pellets.
+
+## 2026-10-28 (noche): la luz con Vulkan, informe del dueño
+
+El dueño precisó el error de la luz: le pasa con **Vulkan**, en Preparar (antes de laminar), con su modelo grande de
+prueba, al inclinar la cámara para mirar desde arriba: bajan mucho los cuadros por segundo y aparece «un efecto visual
+raro». No tiene captura.
+
+**Hecho:**
+- La vista Vulkan también dibuja la copia simplificada mientras la cámara se mueve (V6). La copia se arma para las
+  dos vistas; antes solo la pedía el camino de OpenGL, y con Vulkan una captura con `--coarse` esperaba para siempre.
+  Con lavapipe (Vulkan por software) y la cúpula de 2 millones de triángulos: 1 174 ms por cuadro con la malla entera,
+  355 ms con la copia (el CI corría a la vez).
+
+**Mirado, sin reproducir el efecto:** la cúpula con Vulkan y con OpenGL, desde arriba (85°, 88° de cerca) y a 30°: las
+dos vistas dan la misma imagen; la vista Vulkan no tiene oclusión ni sombras todavía (V3), así que su luz es solo la
+rápida. Se probó un filtro del brillo para bultos más chicos que un píxel (Toksvig 2005 con las derivadas de normales
+promediadas por esquina, Tokuyoshi y Kaplanyan 2019): en la cúpula no cambia casi nada (sus bultos ocupan varios
+píxeles) y sumaba 0,5 s al abrir 2 millones de triángulos; se dejó afuera hasta saber si el efecto del dueño es un
+brillo que titila.
+
+**Sigue:** preguntarle al dueño cómo era el efecto (titileo de puntos brillantes al mover, franjas o anillos, la pieza
+cortada o hueca, cuadros oscuros, colores mal) y su GPU.

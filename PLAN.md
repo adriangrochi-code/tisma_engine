@@ -1003,9 +1003,9 @@ tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 - [ ] V4: el recorte en la GPU: un shader de cómputo por cuadro elige por capa lo que se ve (cámara, lo tapado, capas
   juntas de lejos) y dibuja con `vkCmdDrawIndirect`; menos vértices por cordón
 - [ ] V5: rayos primarios para la vista previa («tipo raycaster»), en cómputo
-- [x] V6: malla simplificada del modelo mientras se mueve. Hecho 2026-10-28 en la vista OpenGL, por agrupamiento de
-  vértices en una grilla (Rossignac y Borrel 1993) en vez de Garland y Heckbert 1997: es lineal, en otro hilo, y
-  alcanza para los cuadros en movimiento. Falta usar la copia en la vista Vulkan
+- [x] V6: malla simplificada del modelo mientras se mueve. Hecho 2026-10-28 en las vistas OpenGL y Vulkan, por
+  agrupamiento de vértices en una grilla (Rossignac y Borrel 1993) en vez de Garland y Heckbert 1997: es lineal, en
+  otro hilo, y alcanza para los cuadros en movimiento
 - [ ] Greedy meshing en la vista previa (pedido del dueño, 2026-10-26): juntar los cordones vecinos del mismo tipo en
   menos instancias, como el mallado voraz junta las caras de los vóxeles (`docs/LARGE_MODELS.md`)
 - [ ] Armar los datos de la vista previa en el hilo del laminado (hoy, 120 a 180 ms en el de la interfaz)

@@ -36,6 +36,7 @@ public:
     // As Renderer's.
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices);
+    void set_model_coarse(const std::vector<float>& vertices);
     void set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups);
     void set_preview(const PreviewBuffers& preview);
     void clear_preview();
