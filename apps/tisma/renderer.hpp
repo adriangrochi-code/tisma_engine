@@ -127,6 +127,15 @@ public:
     // The preview's extrusions the last frame drew (lit pass).
     std::size_t drawn_extrusions() const { return drawn_extrusions_; }
 
+    // What the view keeps on the GPU, in bytes (--draw-stats): the preview's
+    // instances and travels, the meshes (model, its coarse copy, paint, bed),
+    // and the targets (G-buffer, occlusion, rays, colour, multisampling, the
+    // shadow map). The ray scene's textures are not counted.
+    struct Bytes {
+        std::size_t instances = 0, travels = 0, meshes = 0, targets = 0;
+    };
+    Bytes bytes() const;
+
 private:
     struct Buffer {
         unsigned vao = 0, vbo = 0;

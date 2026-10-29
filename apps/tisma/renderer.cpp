@@ -1170,6 +1170,20 @@ void Renderer::resize(int width, int height, int samples) {
     scene_changed();
 }
 
+Renderer::Bytes Renderer::bytes() const {
+    Bytes b;
+    b.instances = std::size_t(extrusions_.count) * sizeof(PreviewInstance);
+    b.travels = std::size_t(travels_.count) * sizeof(LineVertex);
+    b.meshes = std::size_t(model_.count + model_coarse_.count + paint_.count) * 6 * sizeof(float) +
+               std::size_t(plate_.count) * 3 * sizeof(float) + std::size_t(grid_.count) * sizeof(LineVertex);
+    // Per pixel: normal 4, depth 4, occlusion 2 + 2 + 4, rays 8 + 8, colour 4,
+    // and the multisampled colour and depth (4 + 4 a sample) or a depth of 4.
+    const std::size_t pixel = 36 + (samples_ > 1 ? std::size_t(samples_) * 8 : 4);
+    b.targets = std::size_t(width_) * std::size_t(height_) * pixel +
+                std::size_t(shadow_size_) * std::size_t(shadow_size_) * 4;
+    return b;
+}
+
 void Renderer::scene_changed() {
     ray_signature_.clear();
     drawn_.clear();

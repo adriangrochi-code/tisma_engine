@@ -892,6 +892,7 @@ private:
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
     long long draw_frame_ = 0; // --draw-stats
+    std::array<std::size_t, 4> draw_bytes_{}; // the view's buffers last printed (--draw-stats)
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
     bool gl_loaded_ = false;
@@ -10838,6 +10839,16 @@ void App::frame() {
             const DrawStats panels = take_draw_stats();
             std::printf("draw-stats: frame %lld: view %lld calls, %lld vertices; panels %lld calls, %lld vertices\n",
                         draw_frame_++, view.calls, view.vertices, panels.calls, panels.vertices);
+            const Renderer::Bytes bytes = renderer_.bytes();
+            const std::array<std::size_t, 4> now{bytes.instances, bytes.travels, bytes.meshes, bytes.targets};
+            if (now != draw_bytes_) { // a line when they change
+                draw_bytes_ = now;
+                const auto mb = [](std::size_t b) { return double(b) / (1024.0 * 1024.0); };
+                std::printf("draw-stats: buffers: preview instances %.1f MB (%zu B each), travels %.1f MB, meshes "
+                            "%.1f MB, targets %.1f MB\n",
+                            mb(bytes.instances), sizeof(PreviewInstance), mb(bytes.travels), mb(bytes.meshes),
+                            mb(bytes.targets));
+            }
             std::fflush(stdout);
         }
     }

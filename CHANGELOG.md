@@ -13,7 +13,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - **`tisma --draw-stats`:** cuántas llamadas de dibujo y cuántos vértices pide cada cuadro, los de la vista 3D y los de
-  los paneles por separado, para medir la vista previa en cualquier placa de video. Y el paso `slice` de
+  los paneles por separado, para medir la vista previa en cualquier placa de video; y cuánto ocupa la vista en la
+  placa (instancias de la vista previa, recorridos, mallas y destinos de dibujo). Y el paso `slice` de
   `--ui-script` (lamina como el botón y abre la Vista previa), que ahora corre también sin `--screenshot`.
 
 - **`--ui-script`: `expect-toast TEXTO`** espera un aviso con ese texto, y `click` sobre una casilla la marca o

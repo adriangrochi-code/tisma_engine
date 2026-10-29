@@ -7560,3 +7560,17 @@ antes se veían las caras de atrás de un cordón cortado por el plano cercano, 
 2 622 a 1 371 ms por cuadro con oclusión ambiental y de 2 624 a 1 424 ms en `fast`; 1,49 M de vértices por cuadro
 completo (antes, el doble). Pasan las 773 pruebas. **No medido:** una GPU de verdad, y Vulkan antes y después.
 **Sigue:** paso 4, la memoria.
+
+## 2026-10-29: la memoria de la vista previa (paso 4, medido)
+
+El equipo de fichas retiró el paso 1: el «cuadro pesado» era el último de su corrida, que junta los dibujos de
+`--bench-frames` sin cambiar de cuadro. Midió además que el RSS crece unos 3,6 KB por cordón con llvmpipe y pensó
+que podía ser VRAM. No lo es: lo que la vista sube a la placa es una instancia de 56 B por cordón (el prisma lo arma
+el shader) y los destinos de dibujo, de tamaño fijo. Lo que crece es llvmpipe, que guarda en RAM los vértices ya
+transformados (unos 25 flotantes de salidas por vértice). Con la esfera de 80 mm en `fast`, de Preparar a Vista
+previa: con 36 vértices por cordón, +318 MB; con 18 (paso 3), +200 MB.
+
+`--draw-stats` imprime ahora también lo que ocupa la vista, cada vez que cambia: con esa esfera, 5,2 MB de
+instancias (56 B cada una), 0,2 MB de recorridos, 0,2 MB de mallas y 55,8 MB de destinos (G-buffer, oclusión, rayos,
+color, multimuestreo y el mapa de sombras). Las texturas de la escena de rayos no se cuentan. Para s200 (672 k
+cordones), unos 38 MB de instancias.
