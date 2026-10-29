@@ -30,6 +30,11 @@ teléfono».
   `SM_MAXIMUMTOUCHES` (contactos que soporta la pantalla, 0 si no hay), `SM_DIGITIZER` (bits `NID_INTEGRATED_TOUCH`,
   `NID_READY`…), `SM_CONVERTIBLESLATEMODE` (0 = modo tableta; cuando cambia llega `WM_SETTINGCHANGE` con
   «ConvertibleSlateMode»);
+- Windows 11 sin modo tableta: `https://learn.microsoft.com/en-us/uwp/api/windows.ui.viewmanagement.uiviewsettings`
+  («In Windows 11, Tablet mode is removed and new functionality is included for keyboard attach and detach
+  postures»); problemas de detección reportados por Mozilla: `https://bugzilla.mozilla.org/show_bug.cgi?id=1735765`
+  y `https://bugzilla.mozilla.org/show_bug.cgi?id=1750584`;
+- cómo se toman las tabletas: A List Apart, sobre Hoober y Shank (`https://alistapart.com/1-9-tablet-zones-jpg/`);
 - GLFW, que usa la interfaz hoy, no tiene entrada táctil (en el foro de GLFW, 2025, sigue sin soporte; el backend de
   Dear ImGui para GLFW avisa que solo en Windows distingue toque de mouse). SDL3 (licencia zlib) tiene eventos de dedo
   (`SDL_EVENT_FINGER_DOWN/MOTION/UP`, `https://wiki.libsdl.org/SDL3/CategoryTouch`).
@@ -78,15 +83,31 @@ teléfono».
 
 ## Reglas: modo táctil
 
-10. **Cuándo:** con `auto`, el modo táctil se prende si la pantalla es táctil y la computadora está en modo tableta
-    (en Windows, `SM_MAXIMUMTOUCHES` > 0 y `SM_CONVERTIBLESLATEMODE` = 0), y se apaga al volver a modo notebook, con un
-    aviso de una línea que permite deshacerlo. En una pantalla táctil sin modo tableta, se ofrece una vez: «Esta
-    pantalla es táctil. ¿Usar la interfaz táctil?». `on` y `off` lo fijan.
-11. **Forma:** la de la app de teléfono (`MOBILE.md` del motor), adaptada a pantalla ancha:
-    - barra de abajo con las pestañas grandes (Preparar, Vista previa, Impresora…) y el botón principal (Laminar,
-      después Guardar o Imprimir) grande abajo a la derecha;
-    - los ajustes en una hoja que sube desde abajo o se abre al costado, con los títulos grandes y sin flechas
-      (el pedido de diseño del 28-10-2026 vale igual);
+10. **Cuándo:** con `auto`, el modo táctil sigue a la computadora, como pidió el dueño (29-10-2026): en una Surface,
+    al sacar el teclado la interfaz pasa sola a táctil, y al ponerlo vuelve.
+    - Windows 11 ya no tiene «modo tableta»: lo reemplazó por posturas con y sin teclado (nota de Microsoft en
+      `UIViewSettings`). La señal es `UIViewSettings.GetPreferredInteractionMode` (táctil o mouse) con su aviso
+      `PreferredInteractionModeChanged`; una aplicación de escritorio la pide para su ventana.
+    - Windows 10 y respaldo: `SM_CONVERTIBLESLATEMODE` (0 = tableta) y el aviso `WM_SETTINGCHANGE` con
+      «ConvertibleSlateMode».
+    - Las dos fallan en algunos equipos (Mozilla lo reporta para Firefox en Windows 11, bugs 1735765 y 1750584). Por
+      eso: el cambio se avisa con una línea que permite deshacerlo, y se prueba en una Surface real (TC3) antes de
+      darlo por bueno.
+    - Además, sin postura: en una pantalla táctil sin teclado conectado, se ofrece una vez: «Esta pantalla es táctil.
+      ¿Usar la interfaz táctil?». `on` y `off` lo fijan.
+11. **Forma:** parecida a la app de teléfono (`mobile_app.md`), para que quien usa las dos no tenga que aprender otra
+    cosa, pero pensada para tener la tableta en la mano:
+    - **abajo, una barra con las secciones:** Placa (preparar), Laminado (vista previa) e Impresora. Siempre visible;
+      cambiar de sección es un toque;
+    - **al alcance de los pulgares:** con la tableta tomada con las dos manos, los pulgares llegan a los bordes de abajo
+      y de los costados. Ahí van la barra, el botón principal (Laminar, después Guardar o Imprimir, abajo a la derecha)
+      y las herramientas de la pieza (columna al costado izquierdo). Arriba quedan solo cosas que se miran: el nombre,
+      el estado, la búsqueda;
+    - **sentado también:** el uso de tabletas es casi siempre sentado (A List Apart, sobre los estudios de Hoober y
+      Shank: 88 % sentado), con la tableta apoyada o en la mano; la interfaz no supone una sola forma de tomarla, y nada
+      importante queda en el centro de arriba;
+    - los ajustes en una hoja que sube desde abajo o se abre al costado, con títulos grandes y sin flechas (el pedido
+      de diseño del 28-10-2026 vale igual);
     - blancos de al menos 48 × 48 px (más que los 24 × 24 de WCAG; las guías de Apple piden 44 × 44 pt y las
       de Android, 48 × 48 dp, para dedos), con 8 px entre blancos vecinos;
     - números con botones − y + grandes y un deslizador, además de poder escribir; el teclado de la pantalla se abre
@@ -98,7 +119,21 @@ teléfono».
     (i); los menús que se abren al pasar, se abren al tocar.
 14. **Mover, rotar y escalar con el dedo:** manijas grandes sobre la pieza y, además, los mismos deslizadores del
     pedido del 28-10-2026.
-15. **Entrada táctil:** GLFW no da toques. Opciones para el equipo del motor, que decide:
+15. **Sección Impresora (táctil y escritorio):** al tocar Impresora en la barra se ve la impresora elegida:
+    - estado, temperaturas, avance, capa y tiempo que falta, en letra grande;
+    - la cámara grande (`printer_connections.md`, «Cámara de la impresora»), que se agranda a pantalla completa con un
+      toque;
+    - pausar, seguir y cancelar (cancelar pide confirmación);
+    - con varias impresoras, se pasa de una a otra deslizando.
+16. **Cámara en Tisma Cloud:** en la misma sección, un interruptor «Ver esta impresora desde Tisma Cloud» prende el
+    puente de `cloud.md` (reglas 12 a 17) para esa impresora: el estado y la cámara llegan a nuestros servidores y se
+    ven desde la app del teléfono o la página, desde cualquier lugar.
+    - Solo con la sesión iniciada y con el permiso explícito de la persona; se puede apagar en cualquier momento.
+    - Como dice `cloud.md`, regla 15: nunca se suben imágenes si nadie mira.
+    - Mientras se sube, se ve un indicador «Compartiendo cámara» con cuántas imágenes por minuto y cuántos datos van.
+    - Es también la forma de probar el servicio de cámara de Tisma Cloud (pedido del dueño): la página de la cuenta
+      muestra, para cada impresora compartida, la última imagen, cuándo llegó y la demora.
+17. **Entrada táctil:** GLFW no da toques. Opciones para el equipo del motor, que decide:
     - A: en Windows, leer los mensajes de puntero (`WM_POINTER*`) de la ventana propia; en Linux y macOS, seguir con
       mouse y trackpad;
     - B: pasar la capa de ventana a SDL3 (zlib), que da eventos de dedo en los tres sistemas.
@@ -117,5 +152,8 @@ teléfono».
 | AC7 | `--dump-ui` de cada pantalla | Cada control con nombre, rol y valor; ninguno sin nombre |
 | TC1 | `ui.touch_mode` `on`, 1280 × 800 | Barra de abajo, botón principal abajo a la derecha, blancos de 48 px o más |
 | TC2 | Modo táctil, gestos simulados: un dedo, dos dedos, pellizco, doble toque, mantener | Girar, mover, acercar, encuadrar, menú del clic derecho |
-| TC3 | Windows convertible: plegar a modo tableta con `auto` | La interfaz pasa a táctil y vuelve al desplegar |
+| TC3 | Surface u otro convertible con Windows 11 y con Windows 10, `auto`: sacar el teclado y ponerlo | La interfaz pasa a táctil y vuelve; si la señal de Windows no llega, la persona puede cambiarlo con un toque |
+| TC5 | Modo táctil, tableta tomada con las dos manos | La barra, el botón principal y las herramientas se alcanzan con los pulgares sin soltar la tableta |
+| TC6 | Sección Impresora con una impresora con cámara | Estado grande, cámara que se agranda, pausar/seguir/cancelar |
+| TC7 | «Ver esta impresora desde Tisma Cloud» encendido; abrir la impresora desde la app del teléfono | Estado y cámara llegan; con la app cerrada no se sube ninguna imagen; el indicador muestra imágenes por minuto y datos |
 | TC4 | Modo táctil, ayuda (i) | Sale al mantener apretado, no hace falta mouse |
