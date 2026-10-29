@@ -8138,6 +8138,11 @@ BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y l
 - **BH9:** `.amf`, `.step`, `.stp`, `.svg` y `.zip` dan «AMF files are not supported yet: save the model as STL, OBJ
   or 3MF» (un AMF comprimido tampoco se toma por 3MF).
 
-Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, BH11 (soportes de resina con normales invertidas), BH12, BH13,
-UI26 y los totales de filamento por extrusor.
+- **BH11 (resina):** una caja con todas las caras al revés (volumen −4800) recibía un solo pilar: `orient_consistently`
+  deja como están los archivos al revés pero coherentes (el FDM los lee igual), y los soportes de resina leen las
+  normales. `scaled_mesh` da vuelta la malla entera si su volumen es negativo (entera, para que la cáscara de una
+  cavidad siga hacia adentro). Prueba: el cubo al revés da los mismos píxeles en la base, los pilares y la pieza; por la
+  línea de comandos, los dos `.goo` de la caja de 30 × 20 × 8 difieren en un solo byte de la cabecera.
+
+Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, BH12, BH13, UI26 y los totales de filamento por extrusor.
 

@@ -240,6 +240,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Las teclas detrás de un cuadro (UI25):** con un cuadro, un menú o una ventana emergente abiertos, los atajos del
   plato y de la vista no actúan: Ctrl+A y Supr detrás del catálogo borraban el modelo.
 - **TR20:** el menú de los enlaces dice «Copiar enlace» en español.
+- **Resina con las normales al revés (BH11):** una pieza «de adentro para afuera» recibe los mismos soportes y la misma
+  base que la derecha (antes, un solo pilar bajo una caja).
 
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).

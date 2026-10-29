@@ -779,6 +779,19 @@ TEST_CASE("resin RS1: supports and a pad under a cube", "[resin][resin_supports]
     CHECK_THAT(double(lit_of(pixels(bare, 20, s), s).count) * px, WithinAbs(19.6, 3.0));
 }
 
+TEST_CASE("resin: an inside-out part gets the same supports (the spec team's BH11)", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_supports = true;
+    s.resin_pad = true;
+    IndexedMesh inside_out = cube();
+    for (auto& t : inside_out.triangles)
+        std::swap(t[1], t[2]);
+    const ResinPrint right = slice_resin(cube(), s), wrong = slice_resin(inside_out, s);
+    REQUIRE(right.layers.size() == wrong.layers.size());
+    for (const std::size_t l : {std::size_t(20), std::size_t(100), std::size_t(160)})
+        CHECK(lit_of(pixels(wrong, l, s), s).count == lit_of(pixels(right, l, s), s).count);
+}
+
 TEST_CASE("resin: the preview of a print, the outlines of each layer", "[resin][resin_supports]") {
     Settings s = base();
     s.resin_supports = true;
