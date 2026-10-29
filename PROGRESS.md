@@ -7960,3 +7960,19 @@ h × (w − (1 − π/4) × h), y la ficha pone `rectangle` por defecto «como h
 valor por defecto de todo el G-code.
 
 **Sigue:** `machine.feedstock` (PE1 y PE9) y lo demás de la lista.
+
+## 2026-10-29 (noche): BH3, UI24 y TR18 del informe nocturno del equipo de fichas
+
+- **BH3:** `extrusion.infill_max_speed` 0,002 mm/s (0,12 mm/min) escribía `F0` en 154 líneas y el G-code no pasaba su
+  chequeo. Ahora ninguna extrusión va a menos de 1 mm/min (`melt_feed`) y ninguna F escrita es menor que 1. El
+  ejemplo del informe lamina y pasa; prueba nueva con el tope en las dos velocidades de relleno.
+- **UI24:** con «Capas curvas» apagado se veían todas sus filas. Ahora (`setting_applies`, regla 6 de
+  `settings_panel.md`) no se ve ninguna; la forma solo en `wave`; amplitud y largo de onda en `wave` sin ajuste al
+  cabezal; dirección en `ridges` y `twisted`; giro en `twisted`; pendiente del cono en `conical` sin ajuste; el caudal
+  parejo solo con `uniform`. Mirado con `--dump-ui` en cuatro modos (filas: solo `curved.mode` apagado; `wave`/`egg`
+  sin ajuste: forma, ajuste, amplitud y largo; `twisted` con ajuste: forma, ajuste, dirección y giro; `conical`:
+  ajuste y pendiente). Sin prueba automática.
+- **TR18:** «Ajustar al cabezal» / "Fit to the print head", «Perfil del cabezal» / "Print head profile", un perfil
+  vacío dice «Sin medir» y un ángulo libre sin medir «Sin dato».
+
+Pasan las 210 pruebas de interfaz, textos, ajustes y G-code.

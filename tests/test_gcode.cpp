@@ -1695,6 +1695,25 @@ TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 1
     CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
 }
 
+TEST_CASE("a speed cap under 1 mm/min writes F1, not F0 (the spec team's BH3)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.infill_max_speed = 0.002; // 0.12 mm/min
+    s.infill_max_crossing_speed = 0.002;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    for (const std::string& line : lines_of(out.str())) {
+        CAPTURE(line);
+        const std::size_t f = line.find(" F");
+        if (f != std::string::npos && line.rfind("G", 0) == 0)
+            CHECK(std::stod(line.substr(f + 2)) >= 1.0);
+    }
+    CHECK(out.str().find(" F1\n") != std::string::npos);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
 TEST_CASE("pellets: the flow by the move's speed (pellets.md, rule 5, PE7)", "[gcode][pellets]") {
     const std::vector<std::array<double, 2>> table{{20.0, 110.0}, {60.0, 100.0}};
     CHECK_THAT(flow_at_speed(table, 40.0), Catch::Matchers::WithinAbs(1.05, 1e-12)); // PE7

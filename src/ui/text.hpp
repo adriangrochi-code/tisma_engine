@@ -1291,7 +1291,7 @@
     X(CurvedEgg, "Huevera", "Egg crate") \
     X(CurvedRidges, "Crestas", "Ridges") \
     X(CurvedTwisted, "Crestas torcidas", "Twisted ridges") \
-    X(CurvedFitHead, "Ajustar a la cabeza", "Fit to the head") \
+    X(CurvedFitHead, "Ajustar al cabezal", "Fit to the print head") \
     X(CurvedAmplitude, "Amplitud", "Amplitude") \
     X(CurvedWavelength, "Largo de onda", "Wavelength") \
     X(CurvedAngle, "Dirección de las crestas", "Ridge direction") \
@@ -1312,7 +1312,7 @@
     X(HeadFreeAngleY, "Ángulo libre a lo largo de Y", "Free angle along Y") \
     X(HeadClearanceHeight, "Altura libre", "Clearance height") \
     X(HeadClearanceRadius, "Radio libre", "Clearance radius") \
-    X(HeadProfile, "Perfil de la cabeza", "Head profile") \
+    X(HeadProfile, "Perfil del cabezal", "Print head profile") \
     X(SecResin, "Resina", "Resin") \
     X(SubResinLayers, "Resina: capas", "Resin: layers") \
     X(SubResinDisplay, "Pantalla de resina", "Resin display") \

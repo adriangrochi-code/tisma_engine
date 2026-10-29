@@ -346,6 +346,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   esfera de un millón de triángulos: de 300 a 177 ms), y el clic de Medir sobre una superficie curva en mallas
   grandes (de 0,87 a 0,18 s con un millón de triángulos).
 
+### Arreglado
+
+- **Un tope de velocidad de menos de 1 mm/min** (por ejemplo `extrusion.infill_max_speed` 0,002) escribía `F0` y el
+  G-code no pasaba su chequeo; ahora va a `F1`.
+- **Capas curvas:** con el modo apagado ya no se ven sus filas, y cada una solo en los modos y formas que la usan.
+- **Textos de «No planar»:** «cabezal» en todos lados, «Sin medir» para un perfil vacío y «Sin dato» para un ángulo
+  libre sin medir.
+
 ## [0.10.0-alpha.2] - 2026-10-27
 
 ### Agregado

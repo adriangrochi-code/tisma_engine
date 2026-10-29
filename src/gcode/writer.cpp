@@ -1596,8 +1596,8 @@ public:
             e_text_.assign(e_text);
         }
         const double f = paced(feed);
-        if (std::lround(f * 60.0) != f_) {
-            f_ = std::lround(f * 60.0);
+        if (std::max(1L, std::lround(f * 60.0)) != f_) {
+            f_ = std::max(1L, std::lround(f * 60.0));
             text_ += " F";
             append_integer(text_, f_);
         }
@@ -1789,6 +1789,9 @@ private:
     // cap (it looks for the limit) as far as the machine moves; else no faster
     // than the hot end and the filament melt, rounded down to whole mm/min.
     double melt_feed(double feed, double width, double height) const {
+        // Never under 1 mm/min, the least F can say: a cap of 0.002 mm/s
+        // (extrusion.infill_max_speed) wrote F0 (the spec team's BH3).
+        feed = std::max(feed, 1.0 / 60.0);
         const double section = bead_area(width, height);
         if (forced_flow_ > 0.0 && section * flow_ > 0.0)
             return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (section * flow_) * 60.0)) / 60.0);
@@ -1945,7 +1948,7 @@ private:
             text_.resize(start); // no E to write: a retraction is no move at all
             return;
         }
-        const long f = std::lround(feed * 60.0);
+        const long f = std::max(1L, std::lround(feed * 60.0)); // F0 is no feed
         if (f != f_) {
             text_ += " F";
             append_integer(text_, f);

@@ -4470,6 +4470,26 @@ bool App::setting_applies(std::string_view key) const {
         return s.scarf != ScarfMode::Nowhere;
     if (key == "layers.detail_tolerance" || key == "layers.detail_margin")
         return s.detail_height > 0.0;
+    // Curved layers (nonplanar.md): nothing while off, and each row only for
+    // the modes and shapes that use it (the spec team's UI24).
+    if (key.starts_with("curved.") && key != "curved.mode") {
+        if (s.curved_mode == CurvedMode::Disabled)
+            return false;
+        const bool wave = s.curved_mode == CurvedMode::Wave;
+        if (key == "curved.pattern")
+            return wave;
+        if (key == "curved.amplitude" || key == "curved.wavelength")
+            return wave && !s.curved_fit_head;
+        if (key == "curved.angle")
+            return wave && s.curved_pattern != CurvedPattern::Egg;
+        if (key == "curved.twist")
+            return wave && s.curved_pattern == CurvedPattern::Twisted;
+        if (key == "curved.cone_angle")
+            return s.curved_mode == CurvedMode::Conical && !s.curved_fit_head;
+        if (key == "curved.uniform_flow")
+            return s.curved_flow == CurvedFlow::Uniform;
+        return true;
+    }
     if (key == "fuzzy.thickness" || key == "fuzzy.point_distance")
         return s.fuzzy_mode != FuzzyMode::None ||
                std::any_of(objects_.begin(), objects_.end(),
@@ -6894,11 +6914,19 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MaxChamberTemp, "machine.max_chamber_temp", s.max_chamber_temp, 0.0, 600.0, "%.0f °C", 0.5f);
     } else if (id == "head") {
         // The print head around the nozzle (nonplanar.md, rule 6).
-        mm(T::HeadFreeAngleX, "head.free_angle_x", s.head_free_angle_x, 0.0, 89.0, s.head_free_angle_x > 0.0 ? "%.0f°" : "—", 0.5f);
-        mm(T::HeadFreeAngleY, "head.free_angle_y", s.head_free_angle_y, 0.0, 89.0, s.head_free_angle_y > 0.0 ? "%.0f°" : "—", 0.5f);
+        // An angle not measured says so, not a bare dash (the spec team's TR18).
+        mm(T::HeadFreeAngleX, "head.free_angle_x", s.head_free_angle_x, 0.0, 89.0,
+           s.head_free_angle_x > 0.0 ? "%.0f°" : tr(T::NotSet), 0.5f);
+        mm(T::HeadFreeAngleY, "head.free_angle_y", s.head_free_angle_y, 0.0, 89.0,
+           s.head_free_angle_y > 0.0 ? "%.0f°" : tr(T::NotSet), 0.5f);
         mm(T::HeadClearanceHeight, "head.clearance_height", s.head_clearance_height, 0.1, 1000.0, "%.1f mm", 0.1f);
         mm(T::HeadClearanceRadius, "head.clearance_radius", s.head_clearance_radius, 0.1, 1000.0, "%.1f mm", 0.1f);
-        count(T::HeadProfile, "head.profile", s.head_profile.size());
+        if (!s.head_profile.empty()) {
+            count(T::HeadProfile, "head.profile", s.head_profile.size());
+        } else if (shown("head.profile")) { // «Sin medir», not «0 en la lista» (TR18)
+            label_cell(T::HeadProfile, tr(T::ListEditTip));
+            loc::TextDisabled("%s", tr(T::SumNotMeasured));
+        }
     } else if (id == "belt") {
         // A belt printer (belt_printer.md).
         flag(T::BeltEnabled, "belt.enabled", s.belt_enabled, tr(T::BeltEnabledTip));
