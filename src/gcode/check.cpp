@@ -368,6 +368,8 @@ private:
             to[a] = !v ? position_[a] : relative ? position_[a] + *v : *v;
         }
         if (const std::optional<double>& f = param['F' - 'A']) {
+            if (*f > 0.0)
+                feed_ = *f / 60.0;
             if (*f <= 0.0)
                 problem("feed rate F" + text(*f) + " is not positive");
             else if (!custom_ && *f / 60.0 > limits_.max_feed * (1.0 + 1e-9) + 1.0 / 60.0)
@@ -491,8 +493,8 @@ private:
                 // rule 3); in a nonplanar block ;HEIGHT is the bead's own, the
                 // layer's is the last one out of it.
                 const double base = nonplanar_ && layer_height_ > 0.0 ? layer_height_ : *height_;
-                const double per_mm =
-                    (base > 0.0 ? bead_area(*width_, base) * thickness / base : 0.0) / limits_.filament_area * flow_;
+                const double per_mm = (base > 0.0 ? bead_area(*width_, base) * thickness / base : 0.0) /
+                                      limits_.filament_area * flow_ * flow_at_speed(limits_.flow_by_speed, feed_);
                 const double expected = per_mm * length;
                 // ;HEIGHT, written to 3 decimals, may hide half the last one:
                 // much of a bead a few thousandths thick (a scarf ramp's foot,
@@ -578,6 +580,7 @@ private:
 
     const GcodeLimits& limits_;
     double retract_length_, flow_;
+    double feed_ = 0.0; // the last F, mm/s
     std::size_t next_change_ = 0;
     GcodeCheck out_;
     std::size_t line_ = 0;
@@ -730,6 +733,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     // section of the filament is 1, and the retractions are its volume.
     const double area = std::numbers::pi * r * r, e_scale = s.volumetric_e ? area : 1.0;
     limits.filament_area = s.volumetric_e ? 1.0 : area;
+    limits.flow_by_speed = s.flow_by_speed;
     limits.retract_length = s.retract_length * e_scale;
     limits.restart_extra = s.restart_extra * e_scale;
     limits.wipe = s.wipe;

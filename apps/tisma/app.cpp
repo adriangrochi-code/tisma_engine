@@ -1216,6 +1216,7 @@ const std::map<T, const char*>& row_keys() {
         {T::UnloadingSpeed, "extrusion.unloading_speed"}, {T::UnloadingSpeedStart, "extrusion.unloading_speed_start"},
         {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
         {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
+        {T::FlowBySpeedRow, "extrusion.flow_by_speed"},
         {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
         {T::UnloadTime, "extrusion.unload_time"}, {T::InterlockBeams, "interlocking.beams"},
         {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
@@ -6822,6 +6823,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             mm(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.front(), 0.0, 10000.0, "%.0f mm³", 0.5f);
         else
             count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
+        count(T::FlowBySpeedRow, "extrusion.flow_by_speed", s.flow_by_speed.size()); // pellets.md, rule 5
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {

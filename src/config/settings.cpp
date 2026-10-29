@@ -2516,8 +2516,27 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "flow_by_speed") { // pellets.md, rule 5
+            const json& v = g.at(n);
+            const char* what = "must be a list of up to 100 [speed, %] points, speeds from 0 to 10000 mm/s and "
+                               "% from 10 to 300";
+            if (!v.is_array() || v.size() > 100)
+                fail(k, what);
+            std::vector<std::array<double, 2>> points;
+            for (const json& p : v) {
+                if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                    fail(k, what);
+                const double speed = p[0].get<double>(), share = p[1].get<double>();
+                if (!(speed >= 0.0 && speed <= 10000.0) || !(share >= 10.0 && share <= 300.0))
+                    fail(k, what);
+                points.push_back({speed, share});
+            }
+            std::stable_sort(points.begin(), points.end(), [](const auto& a, const auto& b) { return a[0] < b[0]; });
+            s.flow_by_speed = std::move(points);
+            return;
+        }
         if (n == "custom_parameters") {
             s.filament_parameters = flat_parameters(g.at(n), k);
             return;
@@ -2832,6 +2851,21 @@ double fastest_extrusion(const Settings& s) {
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
 }
 
+double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed) {
+    if (points.empty())
+        return 1.0;
+    if (speed <= points.front()[0])
+        return points.front()[1] / 100.0;
+    for (std::size_t i = 1; i < points.size(); ++i)
+        if (speed <= points[i][0]) {
+            const auto& a = points[i - 1];
+            const auto& b = points[i];
+            const double t = b[0] > a[0] ? (speed - a[0]) / (b[0] - a[0]) : 1.0;
+            return (a[1] + t * (b[1] - a[1])) / 100.0;
+        }
+    return points.back()[1] / 100.0;
+}
+
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
     auto speed = [](double v) { return v > 0.0 ? json(v).dump() : std::string("null"); }; // 0: not set
@@ -2924,6 +2958,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.cooling_initial_speed", num(s.cooling_initial_speed)},
         {"extrusion.cooling_final_speed", num(s.cooling_final_speed)},
         {"extrusion.ramming", json(s.ramming).dump()},
+        {"extrusion.flow_by_speed", json(s.flow_by_speed).dump()},
         {"extrusion.toolchange_delay", num(s.toolchange_delay)},
         {"extrusion.load_time", num(s.load_time)},
         {"extrusion.unload_time", num(s.unload_time)},
@@ -3800,6 +3835,7 @@ std::string settings_json(const Settings& s) {
           {"cooling_initial_speed", s.cooling_initial_speed},
           {"cooling_final_speed", s.cooling_final_speed},
           {"ramming", s.ramming},
+          {"flow_by_speed", s.flow_by_speed},
           {"toolchange_delay", s.toolchange_delay},
           {"load_time", s.load_time},
           {"unload_time", s.unload_time},

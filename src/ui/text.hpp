@@ -1407,6 +1407,7 @@
     X(CoolingInitialSpeed, "Velocidad del primero", "First move's speed") \
     X(CoolingFinalSpeed, "Velocidad del último", "Last move's speed") \
     X(RammingRow, "Compresión antes de descargar", "Ramming before unloading") \
+    X(FlowBySpeedRow, "Flujo según la velocidad", "Flow by speed") \
     X(ToolchangeDelay, "Espera después de descargar", "Wait after unloading") \
     X(LoadTime, "Tiempo de carga", "Load time") \
     X(UnloadTime, "Tiempo de descarga", "Unload time") \

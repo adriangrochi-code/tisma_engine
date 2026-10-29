@@ -831,7 +831,8 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
   impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)
 - [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
-  `walls.width` (40 mm); falta `machine.feedstock` y el resto de la ficha
+  `walls.width` (40 mm); (2026-10-29) `extrusion.flow_by_speed` (regla 5, PE7); falta `machine.feedstock` y
+  `extrusion.section` (preguntado al equipo de fichas: la sección del motor ya es la redonda)
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 

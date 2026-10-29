@@ -7941,3 +7941,22 @@ de 72 MB. También arreglado un aviso de `-Wshadow` en `vk_view.cpp` (de la matr
 pruebas de interfaz, vista, placa y malla.
 
 **Sigue:** mandar los vértices a la vista (unos 130 ms con la cúpula) sin frenar el cuadro.
+
+## 2026-10-29 (noche): `extrusion.flow_by_speed` (pellets.md, regla 5)
+
+Una lista de puntos `[velocidad, %]` (hasta 100; velocidad de 0 a 10 000 mm/s, % de 10 a 300), ordenada por velocidad:
+la E de cada extrusión va por el % de la velocidad con la que se escribe, ya frenada por el tiempo mínimo de capa y
+por el tope de caudal, en línea recta entre los puntos y la del extremo más allá. El tope de caudal sigue mirando el
+volumen sin la corrección. El chequeo del G-code hace la misma cuenta con la F de cada movimiento, así que el G-code
+pasa su chequeo. En el panel, una fila de lista en la tarjeta de flujo del material (se edita en el archivo, como la
+compresión del MMU). Pruebas: PE7 (a 40 mm/s entre `[20, 110]` y `[60, 100]`, el 105 %), los extremos, cada E de una
+caja contra la de sin corrección por el factor de su F, y la lectura con sus errores. Pasan las 792 pruebas.
+
+Del informe de ajustes que no lee el motor (`docs/spec/qa/2026-10-28-ajustes.md`), medido hoy en `dev`: faltan
+`walls.transition_margin` (pregunta al equipo de fichas: la tabla P13 no da una regla sola), `walls.vertical_shell`,
+`machine.feedstock`, `machine.high_flow_nozzle`, `machine.process`, `gcode.pressure_advance_in_gcode`,
+`gcode.pressure_advance_piece`, `gcode.thumbnails` y `extrusion.section`. La sección: la del motor ya es la redonda,
+h × (w − (1 − π/4) × h), y la ficha pone `rectangle` por defecto «como hoy»; queda preguntado antes de cambiar el
+valor por defecto de todo el G-code.
+
+**Sigue:** `machine.feedstock` (PE1 y PE9) y lo demás de la lista.

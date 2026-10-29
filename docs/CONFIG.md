@@ -753,6 +753,7 @@ ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes que
 | `cooling_moves` | entero | 4 | 0 a 100 | Idas y vueltas de enfriamiento de la punta en el tubo de la MMU |
 | `cooling_initial_speed`, `cooling_final_speed` | número | 2,2, 3,4 | más de 0 a 1000 | Velocidad del filamento en el primero y el último movimiento de enfriamiento, en mm/s |
 | `ramming` | lista | de 7 a 11 en 11 pasos | hasta 100 caudales de 0 a 100 | Caudal de la compresión antes de descargar, en mm³/s, uno por cada cuarto de segundo (los valores por defecto son propios del motor) |
+| `flow_by_speed` | lista de `[velocidad, %]` | `[]` | hasta 100 puntos; velocidad de 0 a 10000 mm/s, % de 10 a 300 | El flujo según la velocidad del tramo (`pellets.md`, regla 5): cada extrusión por el % de la velocidad con la que se escribe (después del frenado por tiempo de capa y del tope de caudal), en línea recta entre los puntos y el del extremo más allá de ellos. El tope de caudal mira el volumen sin esta corrección. Vacía: sin corrección |
 | `toolchange_delay` | número | 0 | 0 a 1000 | Espera después de descargar, en s (`G4`) |
 | `load_time`, `unload_time` | número | 0 | 0 a 1000 | Tiempo que tarda la carga y la descarga, en s, para la estimación del tiempo (no se escribe nada) |
 | `purge_multiplier` | número o lista | 100 | 0 a 1000 | % del volumen de purga (`wipe_tower.purge_volumes`) que pide el filamento al entrar, uno para todos o uno por extrusor (ficha `multi_extruder.md`, regla 12) |

@@ -853,6 +853,7 @@ public:
             e_scale_ = filament_area_;
         // The melt limit: the lowest of the hot end's, the filament's and the
         // print's own (speed.max_flow, gcode_motion.md, rule 4); 0: none.
+        flow_by_speed_ = s.flow_by_speed;
         for (const double limit : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
@@ -1490,8 +1491,8 @@ public:
         // bead), the layer's bead by the share of its height that is there
         // (z_antialiasing.md rule 3, staggered_perimeters.md ST1).
         const double section = !(height_ > 0.0) ? bead_area(width, height) : bead_area(width, height_) * height / height_;
-        const double e = section * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height);
+        const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -1561,8 +1562,8 @@ public:
         }
         const double width = points[a.first].width, length = a.length();
         walk(length);
-        const double e = bead_area(width, height_) * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height_);
+        const double e = bead_area(width, height_) * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -1814,6 +1815,10 @@ private:
         }
     }
 
+    // extrusion.flow_by_speed at the speed the move is written at, past the
+    // slowdown and the melt limit (pellets.md, rule 5).
+    double speed_flow(double feed) const { return flow_at_speed(flow_by_speed_, paced(feed)); }
+
     // A slowed-down feed is rounded down to whole mm/min (as F is written), so
     // the layer lasts at least the minimum time.
     double paced(double feed) const {
@@ -1978,6 +1983,7 @@ private:
     Slowdown pace_;
     std::map<double, double> extruded_, surface_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
+    std::vector<std::array<double, 2>> flow_by_speed_;
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;

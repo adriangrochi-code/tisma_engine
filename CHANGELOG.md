@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`extrusion.flow_by_speed`** (impresoras de pellets): el flujo según la velocidad de cada tramo, con una lista de
+  puntos `[velocidad, %]`.
 - **Menú del botón derecho en la placa:** fuera de los modelos, «Agregar modelo…», «Agregar forma» (cubo, cilindro y
   esfera de 20 mm) y «Organizar».
 - **Deslizadores en Mover, Girar y Escalar**, bajo cada número: la cama de punta a punta, −180° a 180°, 10 % a 1000 %.

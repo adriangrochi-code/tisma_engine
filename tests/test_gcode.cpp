@@ -1695,6 +1695,52 @@ TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 1
     CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
 }
 
+TEST_CASE("pellets: the flow by the move's speed (pellets.md, rule 5, PE7)", "[gcode][pellets]") {
+    const std::vector<std::array<double, 2>> table{{20.0, 110.0}, {60.0, 100.0}};
+    CHECK_THAT(flow_at_speed(table, 40.0), Catch::Matchers::WithinAbs(1.05, 1e-12)); // PE7
+    CHECK_THAT(flow_at_speed(table, 5.0), Catch::Matchers::WithinAbs(1.10, 1e-12));  // the ends hold past them
+    CHECK_THAT(flow_at_speed(table, 300.0), Catch::Matchers::WithinAbs(1.00, 1e-12));
+    CHECK(flow_at_speed({}, 40.0) == 1.0);
+
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream plain, by_speed;
+    write_gcode(plain, model, s);
+    s.flow_by_speed = table;
+    write_gcode(by_speed, model, s);
+    // Each extrusion's E by the F it is written at.
+    const auto es = [](const std::string& gcode) {
+        std::vector<std::array<double, 2>> out;
+        double feed = 0.0;
+        for (const std::string& line : lines_of(gcode)) {
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+                continue;
+            if (const std::size_t f = line.find(" F"); f != std::string::npos)
+                feed = std::stod(line.substr(f + 2)) / 60.0;
+            const std::size_t e = line.find(" E");
+            if (e != std::string::npos && line.find(" X") != std::string::npos && std::stod(line.substr(e + 2)) > 0.0)
+                out.push_back({std::stod(line.substr(e + 2)), feed});
+        }
+        return out;
+    };
+    const auto a = es(plain.str()), b = es(by_speed.str());
+    REQUIRE(a.size() == b.size());
+    REQUIRE(a.size() > 100);
+    std::size_t changed = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        CHECK(a[i][1] == b[i][1]); // the speeds stay
+        const double factor = flow_at_speed(table, b[i][1]);
+        // E is written to 5 decimals, and a piece too short to move takes its E to the next.
+        CHECK_THAT(b[i][0], Catch::Matchers::WithinAbs(a[i][0] * factor, 2e-5 + 0.02 * a[i][0]));
+        changed += factor != 1.0;
+    }
+    CHECK(changed > 0);
+    CHECK(check_gcode(by_speed.str(), gcode_limits(model, s)).ok());
+}
+
 TEST_CASE("extras: the part grows by the filament's shrinkage (gcode_extras.md, rule 4, X3)", "[gcode][extras]") {
     IndexedMesh m;
     add_box(m, -10, -10, 10, 10, 10);

@@ -298,7 +298,7 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.slowdown_logic", A}, {"cooling.transition_distance", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
          {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}, {"extrusion.purge_multiplier", A},
-                    {"extrusion.min_purge_on_tower", A}}},
+                    {"extrusion.min_purge_on_tower", A}, {"extrusion.flow_by_speed", A}}},
           {"pressure", T::SubPressure, {{"extrusion.pressure_advance", A}}},
           {"max_flow", T::SubMaxFlow,
            {{"extrusion.max_flow", N}, {"extrusion.infill_max_speed", A}, {"extrusion.infill_max_crossing_speed", A}}}}},

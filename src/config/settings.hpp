@@ -760,6 +760,10 @@ struct Settings {
     double cooling_initial_speed = 2.2, cooling_final_speed = 3.4;
     std::vector<double> ramming{7.0, 7.4, 7.8, 8.2, 8.6, 9.0, 9.4, 9.8, 10.2, 10.6, 11.0};
     double toolchange_delay = 0.0, load_time = 0.0, unload_time = 0.0;
+    // The flow by the move's speed (extrusion.flow_by_speed, pellets.md,
+    // rule 5): [mm/s, %] points by speed, a straight line between them and
+    // the end values past them; empty: none.
+    std::vector<std::array<double, 2>> flow_by_speed;
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;
@@ -826,6 +830,9 @@ void require_speeds(const Settings& settings);
 // The fastest an extrusion is asked to go, mm/s: the fastest extrusion speed,
 // capped by speed.max when that is set.
 double fastest_extrusion(const Settings& settings);
+
+// extrusion.flow_by_speed at this speed (mm/s), as a factor: 1 with no points.
+double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed);
 
 // Every setting as "group.key" and its value, for the end of the G-code.
 std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);
