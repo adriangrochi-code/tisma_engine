@@ -56,7 +56,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.min_detail", A},
             {"walls.spread_count", A},
             {"walls.transition_length", A},
-            {"walls.transition_angle", A}}},
+            {"walls.transition_angle", A},
+            {"walls.transition_margin", A}}},
           {"walls_more", T::SubWallsMore,
            {{"walls.staggered_inner_seams", A},
             {"walls.staggered", A},
@@ -85,14 +86,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"infill.before_walls", A},
             {"infill.max_link", A}}},
           {"combine", T::SubCombine,
-           {{"infill.combine_layers", A}, {"infill.combine_auto", A}, {"infill.combine_max_height", A}}},
-          {"wavy", T::SubWavy,
-           {{"infill.nonplanar", N},
-            {"infill.nonplanar_amplitude", N},
-            {"infill.nonplanar_wavelength", N},
-            {"infill.waves", N},
-            {"infill.wave_amplitude", A},
-            {"infill.wave_length", A}}}}},
+           {{"infill.combine_layers", A}, {"infill.combine_auto", A}, {"infill.combine_max_height", A}}}}},
         {"speed", T::SecSpeed, "section_speed.svg",
          {{"first_layer", T::SubFirstLayerSpeed,
            {{"speed.first_layer", N}, {"speed.first_layer_infill", A}, {"speed.first_layer_over_raft", A}}},
@@ -174,6 +168,32 @@ const std::vector<SectionLayout>& print_layout() {
             {"adhesion.raft_expansion", A},
             {"adhesion.raft_first_layer_density", A},
             {"adhesion.raft_first_layer_expansion", A}}}}},
+        {"nonplanar", T::SecNonplanar, "section_nonplanar.svg",
+         {{"curved", T::SubCurved,
+           {{"curved.mode", N},
+            {"curved.pattern", N},
+            {"curved.fit_head", N},
+            {"curved.amplitude", A},
+            {"curved.wavelength", A},
+            {"curved.angle", A},
+            {"curved.twist", A},
+            {"curved.cone_angle", A}}},
+          {"curved_more", T::SubCurvedMore,
+           {{"curved.flat_below", A},
+            {"curved.ramp_height", A},
+            {"curved.flat_top", A},
+            {"curved.segment_length", A},
+            {"curved.max_slope", A},
+            {"curved.flow_policy", A},
+            {"curved.uniform_flow", A},
+            {"curved.overhang_threshold", A}}},
+          {"wavy", T::SubWavy,
+           {{"infill.nonplanar", N},
+            {"infill.nonplanar_amplitude", N},
+            {"infill.nonplanar_wavelength", N},
+            {"infill.waves", N},
+            {"infill.wave_amplitude", A},
+            {"infill.wave_length", A}}}}},
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}, {"sequential.enabled", N}}},
           {"multi_material", T::SubMultiMaterial,
@@ -207,24 +227,6 @@ const std::vector<SectionLayout>& print_layout() {
             {"resin.hollow_closing", A},
             {"resin.hollow_infill", A},
             {"resin.hollow_infill_cell", A}}},
-          {"curved", T::SubCurved,
-           {{"curved.mode", N},
-            {"curved.pattern", N},
-            {"curved.fit_head", N},
-            {"curved.amplitude", A},
-            {"curved.wavelength", A},
-            {"curved.angle", A},
-            {"curved.twist", A},
-            {"curved.cone_angle", A}}},
-          {"curved_more", T::SubCurvedMore,
-           {{"curved.flat_below", A},
-            {"curved.ramp_height", A},
-            {"curved.flat_top", A},
-            {"curved.segment_length", A},
-            {"curved.max_slope", A},
-            {"curved.flow_policy", A},
-            {"curved.uniform_flow", A},
-            {"curved.overhang_threshold", A}}},
           {"interlocking", T::SubInterlocking,
            {{"interlocking.beams", N},
             {"interlocking.beam_width", A},
@@ -297,7 +299,8 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.slowdown_logic", A}, {"cooling.transition_distance", A}}}}},
         {"flow", T::SecFlow, "section_flow.svg",
          {{"flow", T::SubFlow, {{"extrusion.flow", N}, {"extrusion.bridge_flow_ratio", A}, {"extrusion.purge_multiplier", A},
-                    {"extrusion.min_purge_on_tower", A}}},
+                    {"extrusion.min_purge_on_tower", A}, {"extrusion.flow_by_speed", A},
+                    {"extrusion.section", A}, {"extrusion.feedstock", A}}},
           {"pressure", T::SubPressure, {{"extrusion.pressure_advance", A}}},
           {"max_flow", T::SubMaxFlow,
            {{"extrusion.max_flow", N}, {"extrusion.infill_max_speed", A}, {"extrusion.infill_max_crossing_speed", A}}}}},
@@ -382,12 +385,6 @@ const std::vector<SectionLayout>& printer_layout() {
             {"sequential.clearance_radius", A},
             {"sequential.clearance_height", A}}},
           {"enclosure", T::SubEnclosure, {{"machine.enclosed", N}, {"machine.max_chamber_temp", N}}},
-          {"head", T::SubHead,
-           {{"head.free_angle_x", N},
-            {"head.free_angle_y", N},
-            {"head.clearance_height", N},
-            {"head.clearance_radius", N},
-            {"head.profile", A}}},
           {"belt", T::SubBelt, {{"belt.enabled", N}, {"belt.angle", N}, {"belt.belt_is_z", N}}},
           {"resin_display", T::SubResinDisplay,
            {{"machine.display_pixels_x", N},
@@ -399,6 +396,13 @@ const std::vector<SectionLayout>& printer_layout() {
             {"resin.printer_name", A}}},
           {"stability", T::SubStability,
            {{"review.nozzle_force", A}, {"review.bed_adhesion", A}, {"review.max_deflection", A}}}}},
+        {"nonplanar", T::SecNonplanar, "section_nonplanar.svg",
+         {{"head", T::SubHead,
+           {{"head.free_angle_x", N},
+            {"head.free_angle_y", N},
+            {"head.clearance_height", N},
+            {"head.clearance_radius", N},
+            {"head.profile", A}}}}},
         {"nozzle", T::SecNozzle, "section_nozzle.svg",
          {{"nozzle_size", T::SubNozzle,
            {{"machine.nozzle_diameter", B},
@@ -406,7 +410,8 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.min_layer_height", N},
             {"machine.max_layer_height", N}}},
           {"extruder", T::SubExtruder,
-           {{"machine.filament_diameter", B}, {"machine.max_flow", N}, {"machine.relative_extrusion", N}}},
+           {{"machine.feedstock", A}, {"machine.filament_diameter", B}, {"machine.max_flow", N}, {"machine.relative_extrusion", N},
+            {"machine.high_flow_nozzle", A}}},
           {"extruders", T::SubExtruders,
            {{"machine.extruders", N},
             {"machine.extruder_offset", A},
@@ -713,7 +718,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "wipe_tower")
         return s.wipe_tower ? format(T::SumMm, number(s.wipe_tower_width).c_str()) : tr(T::SumOff);
     if (id == "wipe_tower_more")
-        return number(s.wipe_tower_extra_spacing, 0) + " % · " + number(s.wipe_tower_extra_flow, 0) + " %";
+        return format(T::SumSpacingFlow, number(s.wipe_tower_extra_spacing, 0).c_str(),
+                      number(s.wipe_tower_extra_flow, 0).c_str()); // what each % is (TR10)
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)
@@ -819,9 +825,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : std::string(tr(T::NotSet));
     if (id == "accelerations")
         return format(T::SumAccel, number(s.acceleration, 0).c_str());
-    if (id == "max_temps")
-        return format(T::SumMaxTemps, s.max_nozzle_temp > 0.0 ? number(s.max_nozzle_temp, 0).c_str() : "—",
-                      s.max_bed_temp > 0.0 ? number(s.max_bed_temp, 0).c_str() : "—");
+    if (id == "max_temps") { // «Sin dato» for a maximum not known, as the rows say (the spec team's TR19)
+        const auto temp = [&](double v) { return v > 0.0 ? number(v, 0) + " °C" : std::string(tr(T::NotSet)); };
+        if (!(s.max_nozzle_temp > 0.0) && !(s.max_bed_temp > 0.0))
+            return tr(T::NotSet);
+        return format(T::SumMaxTemps, temp(s.max_nozzle_temp).c_str(), temp(s.max_bed_temp).c_str());
+    }
     if (id == "firmware") {
         switch (s.flavor) {
         case GcodeFlavor::Marlin:

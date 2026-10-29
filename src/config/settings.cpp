@@ -3,18 +3,22 @@
 
 #include "config/settings.hpp"
 #include "gcode/dialect.hpp"
+#include "geom/bead.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -229,7 +233,9 @@ void add_calibration_changes(Settings& s) {
         double lo, hi;
         const char* what;
     };
-    const Range range = b.mode == CalibrationMode::Temperature       ? Range{0.0, 500.0, "from 0 to 500 C"}
+    // A temperature band never turns the heater off (the spec team's BH10):
+    // from 150 C, the coolest nozzle the catalog takes.
+    const Range range = b.mode == CalibrationMode::Temperature       ? Range{150.0, 500.0, "from 150 to 500 C"}
                         : b.mode == CalibrationMode::PressureAdvance ? Range{0.0, 2.0, "from 0 to 2"}
                         : b.mode == CalibrationMode::Retraction      ? Range{0.0, 50.0, "from 0 to 50 mm"}
                         : b.mode == CalibrationMode::MaxFlow         ? Range{0.5, 1000.0, "from 0.5 to 1000 mm3/s"}
@@ -747,12 +753,70 @@ void material_aliases(json& root) {
     }
 }
 
+// What makes a bed's outline no bed (the spec team's BH14): no area (its
+// points on one line), or sides that cross. Repeated points are fine.
+const char* bed_problem(const std::vector<std::array<double, 2>>& bed) {
+    if (bed.empty())
+        return nullptr;
+    std::vector<std::array<double, 2>> p;
+    for (const auto& q : bed)
+        if (p.empty() || q != p.back())
+            p.push_back(q);
+    while (p.size() > 1 && p.front() == p.back())
+        p.pop_back();
+    double area = 0.0;
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const auto& a = p[i];
+        const auto& b = p[(i + 1) % p.size()];
+        area += a[0] * b[1] - b[0] * a[1];
+    }
+    double lo[2] = {p.front()[0], p.front()[1]}, hi[2] = {lo[0], lo[1]};
+    for (const auto& q : p)
+        for (int a = 0; a < 2; ++a)
+            lo[a] = std::min(lo[a], q[std::size_t(a)]), hi[a] = std::max(hi[a], q[std::size_t(a)]);
+    const auto side = [](const std::array<double, 2>& a, const std::array<double, 2>& b, const std::array<double, 2>& c) {
+        const double v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        return v > 0.0 ? 1 : v < 0.0 ? -1 : 0;
+    };
+    const std::size_t n = p.size();
+    for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = i + 2; j < n; ++j) {
+            if (i == 0 && j == n - 1)
+                continue; // the closing side meets the first at a corner
+            const auto &a = p[i], &b = p[(i + 1) % n], &c = p[j], &d = p[(j + 1) % n];
+            if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0)
+                return "crosses itself: its points must go around the bed in order";
+        }
+    // Twice the area, against the box's: a sliver of a bed is no bed either.
+    if (p.size() < 3 || std::abs(area) <= 1e-9 * std::max(1.0, (hi[0] - lo[0]) * (hi[1] - lo[1])))
+        return "has no area: its points are on one line";
+    return nullptr;
+}
+
+} // namespace
+
+std::string json_error(std::string_view text, std::size_t byte) {
+    if (text.find_first_not_of(" \t\r\n") == std::string_view::npos)
+        return "the file is empty";
+    const std::size_t at = std::min<std::size_t>(byte > 0 ? byte - 1 : 0, text.size());
+    std::size_t line = 1, column = 1;
+    for (std::size_t i = 0; i < at; ++i) {
+        if (text[i] == '\n')
+            ++line, column = 1;
+        else
+            ++column;
+    }
+    return "not valid JSON at line " + std::to_string(line) + ", column " + std::to_string(column);
+}
+
+namespace {
+
 Settings parse_checked(std::string_view text) {
     json root;
     try {
         root = json::parse(text.begin(), text.end());
     } catch (const json::parse_error& e) {
-        throw SettingsError(std::string("settings: not valid JSON: ") + e.what());
+        throw SettingsError("settings: " + json_error(text, e.byte));
     }
     if (!root.is_object())
         throw SettingsError("settings: the top level must be an object");
@@ -875,7 +939,7 @@ Settings parse_checked(std::string_view text) {
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
-                "spread_count", "transition_length", "transition_angle"},
+                "spread_count", "transition_length", "transition_angle", "transition_margin"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -959,10 +1023,12 @@ Settings parse_checked(std::string_view text) {
             s.wall_spread_count = static_cast<int>(v.get<long long>());
             return;
         }
-        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length") {
+        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length" ||
+            n == "transition_margin") {
             Speed& target = n == "min_line_width"      ? s.wall_min_line_width
                             : n == "seam_gap"          ? s.wall_seam_gap
                             : n == "transition_length" ? s.wall_transition_length
+                            : n == "transition_margin" ? s.wall_transition_margin
                                                        : s.wall_min_detail;
             if (g.at(n).is_string()) {
                 const std::string t = g.at(n).get<std::string>();
@@ -986,9 +1052,11 @@ Settings parse_checked(std::string_view text) {
             s.outer_wall_width = v;
             return;
         }
-        if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
-            fail(k, "must be from 0.05 to 40 mm");
-        s.wall_width = v;
+        if (!(v == 0.0 || (v >= 0.05 && v <= 40.0))) // and a quarter to four nozzles (check_settings; pellets.md)
+            fail(k, "must be 0 (from the nozzle) or from 0.05 to 40 mm");
+        s.wall_width_auto = v == 0.0;
+        if (v > 0.0)
+            s.wall_width = v;
     });
     read_group(root, "object", {"extruder", "wipe_into_infill", "wipe_into_object"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -1420,7 +1488,8 @@ Settings parse_checked(std::string_view text) {
              : n == "wait_after_cure"    ? s.resin_wait_after_cure
                                          : s.resin_wait_after_lift) = in(0.0, 600.0);
         else if (n == "light_pwm" || n == "bottom_light_pwm")
-            (n == "light_pwm" ? s.resin_light_pwm : s.resin_bottom_light_pwm) = int(in(0.0, 255.0, true));
+            // From 1: 0 is the light off, and nothing would cure (the spec team's BH13).
+            (n == "light_pwm" ? s.resin_light_pwm : s.resin_bottom_light_pwm) = int(in(1.0, 255.0, true));
         else if (n == "antialiasing")
             s.resin_antialiasing = int(in(1.0, 16.0, true));
         else if (n == "density")
@@ -1663,8 +1732,9 @@ Settings parse_checked(std::string_view text) {
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "custom_parameters",
-                "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
-                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations"},
+                "extruders", "extruder_offset", "single_extruder_mmu", "high_flow_nozzle", "display_pixels_x", "display_pixels_y",
+                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
+                "feedstock"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "custom_parameters") {
@@ -1673,6 +1743,10 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (n == "calibrations") {
                        read_calibrations(v, k, s.printer_calibrations);
+                       return;
+                   }
+                   if (n == "feedstock") { // pellets.md, rule 1
+                       s.feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
                        return;
                    }
                    if (n == "technology") {
@@ -1727,6 +1801,18 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (n == "nozzle_diameter")
                        s.nozzle_diameters.clear(); // the same for all
+                   if (n == "high_flow_nozzle") { // one value, or one per extruder
+                       std::vector<bool> list;
+                       for (const json& x : v.is_array() ? v : json::array({v})) {
+                           if (!x.is_boolean())
+                               fail(k, "must be true or false, or a list of them by extruder");
+                           list.push_back(x.get<bool>());
+                       }
+                       if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                           fail(k, "must be true or false, or a list of them by extruder");
+                       s.high_flow_nozzle = std::move(list);
+                       return;
+                   }
                    if (n == "single_extruder_mmu") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -1807,8 +1893,8 @@ Settings parse_checked(std::string_view text) {
                            v.get<bool>();
                    } else if (n == "max_flow" || n == "max_nozzle_temp" || n == "max_bed_temp" || n == "max_chamber_temp") {
                        const double d = number(g, n, k);
-                       if (d < 0.0 || d > (n == "max_flow" ? 1000.0 : 600.0))
-                           fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 600 C");
+                       if (d < 0.0 || d > (n == "max_flow" ? 10000.0 : 600.0)) // pellets.md: 10 000 mm3/s
+                           fail(k, n == "max_flow" ? "must be from 0 to 10000 mm3/s" : "must be from 0 to 600 C");
                        (n == "max_flow"          ? s.machine_max_flow
                         : n == "max_nozzle_temp" ? s.max_nozzle_temp
                         : n == "max_bed_temp"    ? s.max_bed_temp
@@ -1855,6 +1941,8 @@ Settings parse_checked(std::string_view text) {
                                fail(k, what);
                            bed.push_back({p[0].get<double>(), p[1].get<double>()});
                        }
+                       if (const char* why = bed_problem(bed))
+                           fail(k, why);
                        s.bed = std::move(bed);
                    } else if (n == "min_layer_height" || n == "max_layer_height") {
                        const double d = number(g, n, k);
@@ -2516,8 +2604,35 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "feedstock") { // pellets.md, rule 1
+            s.material_feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
+            return;
+        }
+        if (n == "section") { // pellets.md, rule 4
+            s.bead_section = choice<BeadSection>(g, n, k, {{"rounded", BeadSection::Rounded}, {"rectangle", BeadSection::Rectangle}});
+            return;
+        }
+        if (n == "flow_by_speed") { // pellets.md, rule 5
+            const json& v = g.at(n);
+            const char* what = "must be a list of up to 100 [speed, %] points, speeds from 0 to 10000 mm/s and "
+                               "% from 10 to 300";
+            if (!v.is_array() || v.size() > 100)
+                fail(k, what);
+            std::vector<std::array<double, 2>> points;
+            for (const json& p : v) {
+                if (!p.is_array() || p.size() != 2 || !p[0].is_number() || !p[1].is_number())
+                    fail(k, what);
+                const double speed = p[0].get<double>(), share = p[1].get<double>();
+                if (!(speed >= 0.0 && speed <= 10000.0) || !(share >= 10.0 && share <= 300.0))
+                    fail(k, what);
+                points.push_back({speed, share});
+            }
+            std::stable_sort(points.begin(), points.end(), [](const auto& a, const auto& b) { return a[0] < b[0]; });
+            s.flow_by_speed = std::move(points);
+            return;
+        }
         if (n == "custom_parameters") {
             s.filament_parameters = flat_parameters(g.at(n), k);
             return;
@@ -2624,8 +2739,8 @@ Settings parse_checked(std::string_view text) {
         }
         const double v = number(g, n, k);
         if (n == "max_flow" || n == "chamber_temperature" || n == "chamber_min_temperature") {
-            if (v < 0.0 || v > (n == "max_flow" ? 1000.0 : 200.0))
-                fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 200 C");
+            if (v < 0.0 || v > (n == "max_flow" ? 10000.0 : 200.0)) // pellets.md: 10 000 mm3/s
+                fail(k, n == "max_flow" ? "must be from 0 to 10000 mm3/s" : "must be from 0 to 200 C");
             (n == "max_flow"              ? s.filament_max_flow
              : n == "chamber_temperature" ? s.chamber_temperature
                                           : s.chamber_min_temperature) = v;
@@ -2752,6 +2867,9 @@ Settings parse_checked(std::string_view text) {
                    (n == "start" ? s.calibration.start : n == "step" ? s.calibration.step : s.calibration.end) = d;
                });
     add_calibration_changes(s);
+    // walls.width 0: from the nozzle, whichever group set it (BH4).
+    if (s.wall_width_auto)
+        s.wall_width = auto_wall_width(s.nozzle_diameter);
     return s;
 }
 
@@ -2832,6 +2950,27 @@ double fastest_extrusion(const Settings& s) {
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
 }
 
+double extruded_section(BeadSection section, double width, double height) {
+    if (section == BeadSection::Rectangle)
+        return width > 0.0 && height > 0.0 ? width * height : 0.0;
+    return bead_area(width, height);
+}
+
+double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed) {
+    if (points.empty())
+        return 1.0;
+    if (speed <= points.front()[0])
+        return points.front()[1] / 100.0;
+    for (std::size_t i = 1; i < points.size(); ++i)
+        if (speed <= points[i][0]) {
+            const auto& a = points[i - 1];
+            const auto& b = points[i];
+            const double t = b[0] > a[0] ? (speed - a[0]) / (b[0] - a[0]) : 1.0;
+            return (a[1] + t * (b[1] - a[1])) / 100.0;
+        }
+    return points.back()[1] / 100.0;
+}
+
 std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
     auto num = [](double v) { return json(v).dump(); };
     auto speed = [](double v) { return v > 0.0 ? json(v).dump() : std::string("null"); }; // 0: not set
@@ -2858,7 +2997,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.count", std::to_string(s.wall_count)},
         {"walls.spread_count", std::to_string(s.wall_spread_count)},
         {"walls.transition_angle", num(s.wall_transition_angle)},
-        {"walls.width", num(s.wall_width)},
+        {"walls.width", s.wall_width_auto ? "0" : num(s.wall_width)},
         {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
@@ -2877,6 +3016,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.seam_gap", s.wall_seam_gap.percent ? num(s.wall_seam_gap.value) + "%" : num(s.wall_seam_gap.value)},
         {"walls.transition_length", s.wall_transition_length.percent ? num(s.wall_transition_length.value) + "%"
                                                                      : num(s.wall_transition_length.value)},
+        {"walls.transition_margin", s.wall_transition_margin.percent ? num(s.wall_transition_margin.value) + "%"
+                                                                     : num(s.wall_transition_margin.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
         {"sequential.enabled", flag(s.sequential)},
@@ -2896,6 +3037,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.toolchange_restart_extra", json(s.toolchange_restart_extra).dump()},
         {"gcode.toolchange", text(s.gcode_toolchange)},
         {"machine.single_extruder_mmu", flag(s.single_extruder_mmu)},
+        {"machine.high_flow_nozzle", s.high_flow_nozzle.size() == 1 ? flag(s.high_flow_nozzle.front())
+                                                                    : json(s.high_flow_nozzle).dump()},
         {"extruders.wipe_tower", std::to_string(s.extruder_wipe_tower)},
         {"wipe_tower.enabled", flag(s.wipe_tower)},
         {"wipe_tower.x", num(s.wipe_tower_x)},
@@ -2924,6 +3067,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.cooling_initial_speed", num(s.cooling_initial_speed)},
         {"extrusion.cooling_final_speed", num(s.cooling_final_speed)},
         {"extrusion.ramming", json(s.ramming).dump()},
+        {"extrusion.flow_by_speed", json(s.flow_by_speed).dump()},
+        {"extrusion.section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
+        {"extrusion.feedstock", s.material_feedstock == Feedstock::Pellet ? "pellet" : "filament"},
         {"extrusion.toolchange_delay", num(s.toolchange_delay)},
         {"extrusion.load_time", num(s.load_time)},
         {"extrusion.unload_time", num(s.unload_time)},
@@ -3064,6 +3210,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
         {"machine.technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+        {"machine.feedstock", s.feedstock == Feedstock::Pellet ? "pellet" : "filament"},
         {"belt.enabled", flag(s.belt_enabled)},
         {"belt.angle", num(s.belt_angle)},
         {"belt.belt_is_z", flag(s.belt_is_z)},
@@ -3375,7 +3522,7 @@ std::string settings_json(const Settings& s) {
          {{"count", s.wall_count},
           {"spread_count", s.wall_spread_count},
           {"transition_angle", s.wall_transition_angle},
-          {"width", s.wall_width},
+          {"width", s.wall_width_auto ? 0.0 : s.wall_width},
           {"outer_width", s.outer_wall_width},
           {"seam", seam},
           {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},
@@ -3405,6 +3552,9 @@ std::string settings_json(const Settings& s) {
           {"transition_length", s.wall_transition_length.percent
                                     ? ordered_json(json(s.wall_transition_length.value).dump() + "%")
                                     : ordered_json(s.wall_transition_length.value)},
+          {"transition_margin", s.wall_transition_margin.percent
+                                    ? ordered_json(json(s.wall_transition_margin.value).dump() + "%")
+                                    : ordered_json(s.wall_transition_margin.value)},
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
@@ -3611,7 +3761,10 @@ std::string settings_json(const Settings& s) {
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
+          {"high_flow_nozzle", s.high_flow_nozzle.size() == 1 ? json(bool(s.high_flow_nozzle.front()))
+                                                              : json(s.high_flow_nozzle)},
           {"technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+          {"feedstock", s.feedstock == Feedstock::Pellet ? "pellet" : "filament"},
           {"calibrations", calibrations(s.printer_calibrations)},
           {"display_pixels_x", s.display_pixels_x},
           {"display_pixels_y", s.display_pixels_y},
@@ -3800,6 +3953,9 @@ std::string settings_json(const Settings& s) {
           {"cooling_initial_speed", s.cooling_initial_speed},
           {"cooling_final_speed", s.cooling_final_speed},
           {"ramming", s.ramming},
+          {"flow_by_speed", s.flow_by_speed},
+          {"section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
+          {"feedstock", s.material_feedstock == Feedstock::Pellet ? "pellet" : "filament"},
           {"toolchange_delay", s.toolchange_delay},
           {"load_time", s.load_time},
           {"unload_time", s.unload_time},
@@ -3834,6 +3990,8 @@ std::string settings_json(const Settings& s) {
 }
 
 Settings load_settings(const std::filesystem::path& path) {
+    if (std::error_code ec; std::filesystem::is_directory(path, ec))
+        throw SettingsError("settings: '" + path.string() + "' is a folder, not a settings file");
     std::ifstream in(path, std::ios::binary);
     if (!in)
         throw SettingsError("settings: cannot open '" + path.string() + "'");
@@ -3969,6 +4127,25 @@ void check_settings(const Settings& s) {
     if (s.outer_wall_width > 0.0 && (s.outer_wall_width < 0.25 * nozzle || s.outer_wall_width > 4.0 * nozzle)) {
         std::snprintf(text, sizeof text, "walls.outer_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
                       s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
+    // The other beads by the same rule: 10 mm of infill or support from a 0.4
+    // nozzle sliced and passed the G-code check (the spec team's BH5).
+    for (const auto& [key, width] : std::initializer_list<std::pair<const char*, double>>{
+             {"infill.width", s.infill_width},
+             {"surfaces.solid_width", s.solid_width},
+             {"surfaces.top_width", s.top_width},
+             {"support.width", s.support_width.value > 0.0 ? s.support_width.of(s.layer_height) : 0.0}})
+        if (width > 0.0 && (width < 0.25 * nozzle || width > 4.0 * nozzle)) {
+            std::snprintf(text, sizeof text, "%s: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", key,
+                          width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+            throw SettingsError(text);
+        }
+    // The thin walls' least bead: a minimum, so only its top (the spec team's
+    // BH5, again: 9 mm on a 0.4 nozzle laid an over-wide bead).
+    if (const double least = s.wall_min_line_width.of(nozzle); least > 4.0 * nozzle) {
+        std::snprintf(text, sizeof text, "walls.min_line_width: %.3g mm cannot come out of a %.3g mm nozzle (up to %.3g mm)",
+                      least, nozzle, 4.0 * nozzle);
         throw SettingsError(text);
     }
     // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt

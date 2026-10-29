@@ -1,0 +1,13 @@
+# The Slice button at the bottom right slices (no slice step here: the
+# click must do it); then the same place offers Export G-code and a menu
+# with the other ways to save.
+menu slice
+wait 60
+expect-control export
+# In Preview, the move slider and the panel do not cover each other (UI23).
+slice
+wait 10
+expect-apart export moves
+expect-apart save_more moves
+menu save_more
+menu project

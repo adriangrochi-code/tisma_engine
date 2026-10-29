@@ -142,6 +142,14 @@ TEST_CASE("ASCII STL accepts upper case, CRLF, several solids and a missing ends
     CHECK(f.mesh.corner(1, 0) == Vec3f{0, 0, 1});
 }
 
+TEST_CASE("ASCII STL after a UTF-8 byte order mark is text (the spec team's BH17)", "[stl]") {
+    const StlFile f = parse_stl("\xEF\xBB\xBFsolid a\nfacet normal 0 0 1 outer loop vertex 0 0 0 vertex 1 0 0 vertex 0 1 0 "
+                                "endloop endfacet\nendsolid a\n");
+    CHECK(f.format == StlFormat::Ascii);
+    CHECK(f.name == "a");
+    CHECK(f.mesh.triangle_count() == 1);
+}
+
 TEST_CASE("ASCII STL with 'solid' and no facets is an empty mesh", "[stl]") {
     const StlFile f = parse_stl("solid empty\nendsolid empty\n");
     CHECK(f.format == StlFormat::Ascii);

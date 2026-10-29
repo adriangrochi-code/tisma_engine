@@ -448,6 +448,9 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
 - [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [x] Puente o voladizo punto por punto (`supports_skirt.md`, regla 3, S11; 2026-10-29): la U, los dos pilares y el
+  marco sin soporte; un pilar de un lado, uno central, uno en una esquina y la L con soporte; la V de 30°, puente. La
+  condición de cruzar los dos apoyos a 60° o más la confirmó el equipo de fichas (llega a la ficha con `aa0c7c3`)
 - [ ] En GPU: voladizos y proyección, si conviene. Hecho en parte (2026-10-26, pedido del dueño):
   - la columna del soporte va en una grilla de bits de un octavo de cordón (`src/geom/bitgrid.*`); el cierre por un
     cordón es dilatar y erosionar con un disco, y cuesta lo mismo aunque la pieza tenga ruido;
@@ -669,7 +672,10 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
 - [x] Modelos grandes en la interfaz (pedido del dueño, 2026-10-26): arrastrar no rehace la malla en cada cuadro, y el
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
 - [ ] Modelos grandes, lo que sigue: armar el árbol de cajas y la malla de la placa en segundo plano; los campos de
-  giro y escala sin rehacer toda la placa en cada cambio
+  giro y escala sin rehacer toda la placa en cada cambio (2026-10-29: hecho lo segundo, con un modelo de 200 000
+  triángulos o más la vista lo dibuja con una matriz mientras se arrastra y la placa se rehace al soltar; hecho el
+  árbol de cajas en otro hilo; la malla de la placa ya no se arma para la vista, solo para laminar; falta mandar
+  los vértices a la vista sin frenar el cuadro)
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 - [x] Modo vaso (`vase_mode.md`, pedido del dueño de una pared en espiral, 2026-10-26): una sola pared que sube en
@@ -710,16 +716,27 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
 `settings_panel.md` antes de los que la contradicen):
 - [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
   abrir y cerrar (como OrcaSlicer), y más juntas
-- [ ] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
+- [x] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
-- [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
-  a la impresora conectada
-- [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
-  agregar modelos y formas
-- [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
-- [ ] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles)
+  (2026-10-29: en Impresión, entre Adhesión y Otros, con Capas curvas, su transición y caudal, y Relleno ondulado; en
+  la impresora, después de Máquina, con Cabezal)
+- [x] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
+  a la impresora conectada (2026-10-29: un panel abajo a la derecha de la vista, en Preparar y Vista previa; antes de
+  laminar, Laminar; después, el tiempo estimado, «Exportar G-code» y un menú con «Mandar a la impresora» y «Guardar el
+  proyecto»; Laminar y Exportar salieron de la barra de arriba)
+- [x] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
+  agregar modelos y formas (2026-10-29: clic derecho en la placa, fuera de los modelos, con «Agregar modelo…»,
+  «Agregar forma» —cubo, cilindro y esfera de 20 mm— y «Organizar»; un deslizador bajo cada número de Mover (la cama
+  de punta a punta), Girar (−180° a 180°) y Escalar (10 % a 1000 %, por proporción))
+- [x] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida (2026-10-29: el catálogo de
+  impresoras, después el de filamentos, cada uno con su paso; cerrarlos sin elegir sigue al siguiente)
+- [x] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):
+  la leyenda se pliega (solo los tipos, sin tiempos, partes, filamento ni totales) y la barra de movimientos ya no queda
+  debajo de ella (va a su derecha, o adentro si no hay lugar); se pliega sola si completa taparía más del 45 % del ancho
+  de la vista, y al encuadrar en Vista previa la pieza va entre la leyenda y la barra de capas; al pasar entre Preparar
+  y Vista previa se reencuadra si la cámara no se tocó desde el último encuadre.
 - [ ] La columna de valores corrida en Windows con escala de pantalla (no reproducido al 100 %)
-- [ ] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas
+- [x] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas: las filas de ajustes (2026-10-29); los botones y menús, más adelante
 
 ## Fichas nuevas (2026-10-26)
 
@@ -814,7 +831,12 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
   impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)
 - [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
-  `walls.width` (40 mm); falta `machine.feedstock` y el resto de la ficha
+  `walls.width` (40 mm); (2026-10-29) `extrusion.flow_by_speed` (regla 5, PE7) y `extrusion.section` (regla 4,
+  PE2, PE3, PE5: la redonda por defecto, medida en Tisma Slicer; la rectangular como opción), `machine.feedstock`
+  y `extrusion.feedstock` (regla 1, PE1, PE9: el aviso si no coinciden) y los topes de caudal a 10 000 mm³/s;
+  la lista de materiales y el catálogo, filtrados por alimentación y por el diámetro de las impresoras instaladas
+  (regla 1 y `profiles.md` regla 5); el aviso del tope de caudal (regla 6, PE6), PE8 y PE4 (`M200` solo con pellets,
+  respuesta del equipo de fichas); falta tener pellets en el catálogo
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 
@@ -950,7 +972,7 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **`walls.transition_margin`** (`walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
+- [x] **`walls.transition_margin`** (hecho el 2026-10-29 con la tabla P13b: corte fijo de 0,155 mm; `walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
   fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
   sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2

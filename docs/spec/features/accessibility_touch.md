@@ -140,6 +140,45 @@ teléfono».
     - B: pasar la capa de ventana a SDL3 (zlib), que da eventos de dedo en los tres sistemas.
     Cualquiera que se elija se anota en `THIRD_PARTY.md` y en la decisión del plan.
 
+## Reglas: modo simple con pictogramas
+
+Pedido del dueño (29-10-2026): «integrar pictogramas para que se pueda habilitar para gente con síndrome de Down o
+autismo, para hacer que la interfaz sea lo más accesible posible».
+
+**Fuentes:**
+- W3C, «Making Content Usable for People with Cognitive and Learning Disabilities» (COGA, nota del grupo de trabajo,
+  `https://www.w3.org/TR/coga-usable/`): objetivos y patrones de diseño para discapacidades cognitivas y de
+  aprendizaje; es una guía, no una norma; pide incluir a las personas en las pruebas;
+- lectura fácil: norma UNE 153101:2018 EX (España, «Lectura fácil. Pautas y recomendaciones para la elaboración de
+  documentos»);
+- pictogramas: **propios** (decisión del dueño, 29-10-2026: «dibujos propios, que sean simples y entendibles»), en
+  `docs/spec/pictograms/` con su guía de estilo. No se usan conjuntos de terceros: ARASAAC (CC BY-NC-SA) no permite
+  uso comercial y Tisma tiene planes pagos; Mulberry (CC BY-SA) se descartó para tener un solo estilo.
+
+18. **Encendido:** Preferencias › Accesibilidad › «Modo simple con pictogramas» (`ui.easy_mode`). También se ofrece
+    en el primer inicio, junto con el idioma. Se apaga y se prende sin perder nada.
+19. **Pictogramas:** cada sección, botón y ajuste visible lleva su pictograma al lado del texto, siempre el mismo para
+    la misma cosa, en el mismo lugar. El texto no se quita: pictograma y palabra juntos.
+20. **Menos cosas a la vez:** el modo simple muestra solo el camino básico, en pasos, una acción por pantalla:
+    1. Abrir el modelo (o elegir uno de la biblioteca).
+    2. Elegir la impresora y el filamento.
+    3. Elegir cómo imprimir: «Rápido», «Normal» o «Lindo» (los perfiles de calidad), y «Con soporte» sí o no.
+    4. Laminar y mirar la vista previa.
+    5. Imprimir o guardar.
+    Cada paso muestra en qué número va («Paso 2 de 5») y tiene «Volver» y «Seguir» grandes. Los ajustes avanzados no
+    se ven, pero quedan como están.
+21. **Textos en lectura fácil:** frases cortas, una idea por frase, palabras comunes, sin dobles negaciones, sin
+    porcentajes difíciles («la mitad» antes que «50 %» cuando se puede), números con su unidad en palabras la primera
+    vez. Los avisos dicen qué pasó y qué hacer, con un pictograma: «La pieza es más grande que la cama. Achicala o
+    elegí otra impresora».
+22. **Previsible y tranquilo:** nada cambia solo sin avisar; sin animaciones que distraigan (`ui.reduce_motion`
+    prendido por defecto en este modo); sin sonidos fuertes; sin límites de tiempo; los colores suaves del tema claro;
+    lo destructivo (borrar, cancelar una impresión) pide confirmación con pictograma y siempre se puede deshacer.
+23. **Ayuda a mano:** en cada paso, un botón «¿Qué hago acá?» con la explicación en lectura fácil, con pictogramas y
+    un dibujo (las fichas de `setting_info.md` tienen su versión en lectura fácil para los ajustes del modo simple).
+24. **Pruebas con personas:** antes de dar el modo por terminado, se prueba con personas con síndrome de Down y con
+    personas autistas, y con quienes las acompañan (COGA lo pide); lo que digan se anota como cambios a esta ficha.
+
 ## Pruebas
 
 | # | Caso | Resultado |
@@ -158,3 +197,7 @@ teléfono».
 | TC6 | Sección Impresora con una impresora con cámara | Estado grande, cámara que se agranda, pausar/seguir/cancelar |
 | TC7 | «Ver esta impresora desde Tisma Cloud» encendido; abrir la impresora desde la app del teléfono | Estado y cámara llegan; con la app cerrada no se sube ninguna imagen; el indicador muestra imágenes por minuto y datos |
 | TC4 | Modo táctil, ayuda (i) | Sale al mantener apretado, no hace falta mouse |
+| EM1 | `ui.easy_mode` sí, cargar un cubo e imprimir | Cinco pasos, «Paso N de 5», un pictograma junto a cada texto, sin ajustes avanzados a la vista |
+| EM2 | Aviso de pieza más grande que la cama en modo simple | Frase corta en lectura fácil con pictograma y qué hacer |
+| EM3 | Apagar y prender el modo simple | Los ajustes no cambian |
+| EM4 | Revisar los pictogramas de la interfaz | Todos salen de `docs/spec/pictograms/`, con el estilo de su README; ninguno de terceros |

@@ -31,6 +31,26 @@ TEST_CASE("welding merges -0 with 0 and keeps distinct points apart", "[mesh]") 
     CHECK(m.triangles[0][0] != m.triangles[2][0]);
 }
 
+TEST_CASE("welding on all cores gives the serial weld's mesh", "[mesh]") {
+    // A grid of triangles whose corners repeat up to six times, in a
+    // scrambled order, with -0 among them: the same vertices, numbered alike.
+    TriangleMesh soup;
+    const int n = 120;
+    std::uint32_t mix = 12345;
+    auto at = [](int i, int j) { return Vec3f{float(i) * 0.5f, float(j) * 0.25f, i == 0 ? -0.0f : float(i + j) * 0.1f}; };
+    for (int k = 0; k < n * n; ++k) {
+        mix = mix * 1103515245u + 12345u;
+        const int i = int(mix % std::uint32_t(n)), j = int((mix >> 12) % std::uint32_t(n));
+        soup.add_triangle(at(i, j), at(i + 1, j), at(i, j + 1));
+        soup.add_triangle(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1));
+    }
+    const IndexedMesh serial = weld_exact(soup); // below the size for all cores
+    const IndexedMesh parallel = weld_exact_parallel(soup);
+    CHECK(parallel.vertices == serial.vertices);
+    CHECK(parallel.triangles == serial.triangles);
+    CHECK(weld_exact_parallel(TriangleMesh{}).vertices.empty());
+}
+
 TEST_CASE("welding an empty mesh", "[mesh]") {
     const IndexedMesh m = weld_exact(TriangleMesh{});
     CHECK(m.vertices.empty());

@@ -50,6 +50,7 @@ struct FrameBlock {
     std::int32_t flags[4];
     float grid[4];
     float colours[16][4];
+    float face_eye[4]; // what the preview's drawn faces face (preview_face_eye)
 };
 
 // Each draw's values, as view_common.glsl's Draw push constants.
@@ -58,6 +59,7 @@ struct DrawBlock {
     float extra[4] = {};
     std::uint32_t preview[4] = {};
     float range[4] = {};
+    float model[3][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}}; // rows of an affine map of the mesh's points
 };
 
 struct CompositeBlock {
@@ -119,6 +121,7 @@ struct VulkanView::Impl {
     int width = 0, height = 0;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     Image colour_ms, depth, resolved, picture;
+    std::vector<double> shown; // the frame in the picture (frame_key); empty: none
     VkRenderPass scene_pass = VK_NULL_HANDLE, composite_pass = VK_NULL_HANDLE;
     VkFramebuffer scene_fb = VK_NULL_HANDLE, composite_fb = VK_NULL_HANDLE;
     VkDescriptorSet picture_set = VK_NULL_HANDLE; // ImGui's texture, the same through resizes
@@ -133,7 +136,11 @@ struct VulkanView::Impl {
     float grid_step = 10.0f;
     int grid_major_every = 5;
     std::vector<Renderer::PaintGroup> paint_groups;
-    PreviewDrawOrder order; // its instances on the GPU
+    // The extrusions in drawing order, and as seen from far (docs/LARGE_MODELS.md); their instances on the GPU.
+    PreviewOrders orders;
+    Vec3 preview_lo{0, 0, 0}, preview_hi{0, 0, 0}; // the extrusions' box
+    float layer_height = 0.0f;                    // their mean layer height, mm
+    int drawn_group = 1;                          // the last frame's group of layers drawn as one
     std::vector<std::size_t> layer_extrusions, layer_travels;
     float min_feed = 0, max_feed = 0, min_width = 0, max_width = 0, min_height = 0, max_height = 0;
     std::size_t drawn = 0;
@@ -791,6 +798,8 @@ struct VulkanView::Impl {
         fb.grid[0] = grid_step, fb.grid[1] = float(grid_major_every);
         for (std::size_t k = 0; k < kLineKinds && k < 16; ++k)
             copy(fb.colours[k], f.kind_colours[k], 1.0f);
+        const std::array<float, 4> face_eye = preview_face_eye(f);
+        std::memcpy(fb.face_eye, face_eye.data(), sizeof fb.face_eye);
         std::memcpy(uniforms[slot].mapped, &fb, sizeof fb);
 
         VkClearValue clears[3] = {};
@@ -870,6 +879,9 @@ struct VulkanView::Impl {
             if (chosen > 0) {
                 copy(draw.colour, f.model_selected);
                 copy(draw.extra, f.selected_offset);
+                for (int r = 0; r < 3; ++r)
+                    for (int k = 0; k < 4; ++k)
+                        draw.model[r][k] = f.selected_model[std::size_t(4 * k + r)];
                 push(draw);
                 vkCmdDraw(c, chosen, 1, first, 0);
             }
@@ -900,8 +912,23 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden)) {
-                vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
+            const Mat4 clip = f.projection * f.view;
+            // From far, where a layer is under a quarter of a pixel high, the
+            // walls of a group of layers are drawn as one (merged_layers).
+            const bool whole = preview_far(orders.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
+            const int group =
+                whole ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo, preview_hi, layer_height)) : 1;
+            const PreviewDrawOrder* walls = orders.far_walls(group, whole);
+            drawn_group = walls ? group : 1;
+            std::vector<PreviewRange> draws =
+                preview_draws(walls ? *walls : orders.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
+            if (walls) {
+                const std::vector<PreviewRange> rest =
+                    preview_draws(orders.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
+                draws.insert(draws.end(), rest.begin(), rest.end());
+            }
+            for (const PreviewRange& r : draws) {
+                vkCmdDraw(c, kPreviewVertices, std::uint32_t(r.count), 0, std::uint32_t(r.first));
                 drawn += r.count;
             }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
@@ -990,6 +1017,7 @@ void VulkanView::shutdown() {
 
 void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.plate_count = v.grid_count = v.grid_outline = 0;
@@ -1012,6 +1040,7 @@ void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
 
 void VulkanView::set_model(const std::vector<float>& vertices) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.model_count = 0;
@@ -1023,6 +1052,7 @@ void VulkanView::set_model(const std::vector<float>& vertices) {
 
 void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.model_coarse_count = 0;
@@ -1034,6 +1064,7 @@ void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
 
 void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.paint_count = 0;
@@ -1046,15 +1077,25 @@ void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector
 
 void VulkanView::set_preview(const PreviewBuffers& p) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     clear_preview();
     v.guard([&] {
-        PreviewDrawOrder order = preview_draw_order(p);
-        v.upload(v.extrusions_v, order.instances.data(), order.instances.size() * sizeof(PreviewInstance));
-        order.instances = {}; // on the GPU now
+        PreviewOrders orders = preview_orders(p);
+        v.preview_lo = Vec3{1e30f, 1e30f, 1e30f}, v.preview_hi = Vec3{-1e30f, -1e30f, -1e30f};
+        for (const PreviewInstance& e : p.extrusions) {
+            const float r = std::max(e.width, e.height);
+            v.preview_lo = Vec3{std::min({v.preview_lo.x, e.x0 - r, e.x1 - r}), std::min({v.preview_lo.y, e.y0 - r, e.y1 - r}),
+                                std::min({v.preview_lo.z, e.z0 - r, e.z1 - r})};
+            v.preview_hi = Vec3{std::max({v.preview_hi.x, e.x0 + r, e.x1 + r}), std::max({v.preview_hi.y, e.y0 + r, e.y1 + r}),
+                                std::max({v.preview_hi.z, e.z0 + r, e.z1 + r})};
+        }
+        v.layer_height = orders.full.layer_z.empty() ? 0.0f : orders.full.layer_z.back() / float(orders.full.layer_z.size());
+        v.upload(v.extrusions_v, orders.instances.data(), orders.instances.size() * sizeof(PreviewInstance));
+        orders.instances = {}; // on the GPU now
         v.upload(v.travels_v, p.travels.data(), p.travels.size() * sizeof(LineVertex));
-        v.order = std::move(order);
+        v.orders = std::move(orders);
         v.travel_count = std::uint32_t(p.travels.size());
         v.layer_extrusions = p.layer_extrusions;
         v.layer_travels = p.layer_travels;
@@ -1066,18 +1107,26 @@ void VulkanView::set_preview(const PreviewBuffers& p) {
 
 void VulkanView::clear_preview() {
     Impl& v = *impl_;
-    v.order = {};
+    v.shown.clear();
+    v.orders = {};
     v.layer_extrusions.clear();
     v.layer_travels.clear();
     v.travel_count = 0;
 }
 
 void VulkanView::record(void* command_buffer, int frame, const ViewFrame& f) {
+    // The picture stays from one window frame to the next: with the same
+    // frame and the same data, it is already this one.
+    Impl& v = *impl_;
+    std::vector<double> key = frame_key(f);
+    if (v.ready && key == v.shown)
+        return;
     // Only the targets can fail, before anything is recorded: then the view
     // stops, and the window goes on.
-    Impl& v = *impl_;
     if (!v.guard([&] { v.record(static_cast<VkCommandBuffer>(command_buffer), frame, f, true); }))
         v.ready = false;
+    else
+        v.shown = std::move(key);
 }
 
 bool VulkanView::take_time(double& ms) {
@@ -1090,6 +1139,7 @@ bool VulkanView::take_time(double& ms) {
 
 double VulkanView::bench(const ViewFrame& f, int n) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready || n < 1)
         return 0.0;
     double ms = 0.0;
@@ -1152,6 +1202,7 @@ std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
 
 std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame& f, int& width, int& height) {
     Impl& v = *impl_;
+    v.shown.clear();
     width = height = 0;
     if (!v.ready)
         return {};
@@ -1166,6 +1217,7 @@ std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame& f, int& widt
 ImTextureID VulkanView::texture() const { return ImTextureID(impl_->picture_set); }
 
 std::size_t VulkanView::drawn_extrusions() const { return impl_->drawn; }
+int VulkanView::drawn_group() const { return impl_->drawn_group; }
 
 } // namespace tisma::ui
 
@@ -1198,6 +1250,7 @@ std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame&, int& width,
 }
 ImTextureID VulkanView::texture() const { return ImTextureID(0); }
 std::size_t VulkanView::drawn_extrusions() const { return 0; }
+int VulkanView::drawn_group() const { return 1; }
 bool VulkanView::take_time(double&) { return false; }
 double VulkanView::bench(const ViewFrame&, int) { return 0.0; }
 

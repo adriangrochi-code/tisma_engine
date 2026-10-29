@@ -31,8 +31,9 @@ constexpr const char* kUsage =
     "                                   [--ortho] [--labels]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
-    "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
+    "                                   [--ray-samples N] [--ray-check] [--moire-check] [--term-while-starting]\n"
     "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
+    "                                   [--draw-stats] [--dump-ui rows.json] [--first-run]\n"
     "                                   [--compare-view other.png] [--no-view-check]\n"
     "                                   [--ui-script steps.txt] [--pick-catalog-printer NAME]]\n"
     "\n"
@@ -52,6 +53,14 @@ constexpr const char* kUsage =
     "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
     "than 0.5% of its pixels differ by more than 24 levels. --coarse draws a plate of\n"
     "more than a million triangles as while the view moves: its coarse copy.\n"
+    "--draw-stats prints each frame's OpenGL draw calls and the vertices they ask\n"
+    "for, the 3D view's and the panels' apart.\n"
+    "--dump-ui writes, with --screenshot, every setting row drawn: its key,\n"
+    "label, value, rectangle and whether its label is cut.\n"
+    "--first-run starts as on the first run: the printer's catalog, then the\n"
+    "filament's, then the assistant.\n"
+    "--term-while-starting sends the program a SIGTERM before its window opens:\n"
+    "it should end as the close button does (a test).\n"
     "Every screenshot of the Prepare or Preview tab also checks the 3D view's own\n"
     "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
     "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
@@ -269,6 +278,12 @@ int main(int argc, char** argv) {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--coarse") {
             options.coarse = true;
+        } else if (arg == "--first-run") {
+            options.first_run = true;
+        } else if (arg == "--dump-ui") {
+            options.dump_ui = value();
+        } else if (arg == "--draw-stats") {
+            options.draw_stats = true;
         } else if (arg == "--ui-script") {
             options.ui_script = value();
         } else if (arg == "--pick-catalog-printer") {
@@ -281,6 +296,8 @@ int main(int argc, char** argv) {
             options.ray_check = true;
         } else if (arg == "--moire-check") {
             options.moire_check = true;
+        } else if (arg == "--term-while-starting") {
+            options.term_while_starting = true;
         } else if (arg == "--color") {
             const std::string_view c = value();
             // The preview's views, in the order of preview.md (rule 1).

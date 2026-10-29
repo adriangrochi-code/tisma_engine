@@ -74,32 +74,46 @@ MeasureFeature plane_feature(const TriangleMesh& mesh, std::size_t triangle) {
     return f;
 }
 
-MeasureFeature surface_feature(const TriangleMesh& source, std::size_t triangle) {
-    const IndexedMesh mesh = weld_exact(source);
+MeasureMesh measure_mesh(const TriangleMesh& source) {
+    MeasureMesh out;
+    out.mesh = weld_exact(source);
+    const IndexedMesh& mesh = out.mesh;
     const std::size_t n = mesh.triangles.size();
-    if (triangle >= n)
-        return plane_feature(source, triangle);
-    std::vector<Point3> normal(n);
+    out.normal.resize(n);
     for (std::size_t t = 0; t < n; ++t) {
         const auto& tri = mesh.triangles[t];
         const Point3 a = of(mesh.vertices[tri[0]]), b = of(mesh.vertices[tri[1]]), c = of(mesh.vertices[tri[2]]);
-        normal[t] = unit(cross3(sub(b, a), sub(c, a)));
+        out.normal[t] = unit(cross3(sub(b, a), sub(c, a)));
     }
     // Each vertex's triangles, one after another (a million triangles in a
     // few milliseconds): the triangles across an edge are those of one end
     // that have the other.
-    std::vector<std::uint32_t> first(mesh.vertices.size() + 1, 0), around(3 * n);
+    out.first.assign(mesh.vertices.size() + 1, 0);
+    out.around.resize(3 * n);
     for (const auto& tri : mesh.triangles)
         for (const std::uint32_t i : tri)
-            ++first[i + 1];
-    for (std::size_t i = 1; i < first.size(); ++i)
-        first[i] += first[i - 1];
-    {
-        std::vector<std::uint32_t> at(first.begin(), first.end() - 1);
-        for (std::size_t t = 0; t < n; ++t)
-            for (const std::uint32_t i : mesh.triangles[t])
-                around[at[i]++] = std::uint32_t(t);
-    }
+            ++out.first[i + 1];
+    for (std::size_t i = 1; i < out.first.size(); ++i)
+        out.first[i] += out.first[i - 1];
+    std::vector<std::uint32_t> at(out.first.begin(), out.first.end() - 1);
+    for (std::size_t t = 0; t < n; ++t)
+        for (const std::uint32_t i : mesh.triangles[t])
+            out.around[at[i]++] = std::uint32_t(t);
+    return out;
+}
+
+MeasureFeature surface_feature(const TriangleMesh& source, std::size_t triangle) {
+    return surface_feature(source, measure_mesh(source), triangle);
+}
+
+MeasureFeature surface_feature(const TriangleMesh& source, const MeasureMesh& prepared, std::size_t triangle) {
+    const IndexedMesh& mesh = prepared.mesh;
+    const std::vector<Point3>& normal = prepared.normal;
+    const std::vector<std::uint32_t>& first = prepared.first;
+    const std::vector<std::uint32_t>& around = prepared.around;
+    const std::size_t n = mesh.triangles.size();
+    if (triangle >= n)
+        return plane_feature(source, triangle);
     // The smooth stretch around the triangle.
     const double smooth = std::cos(25.0 * kDegree);
     std::vector<char> in(n, 0);

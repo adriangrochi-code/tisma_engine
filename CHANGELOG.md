@@ -10,7 +10,55 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.10.0-alpha.3] - 2026-10-29
+
 ### Agregado
+
+- **Fichas de información para principiantes:** el botón (i) abre un cuadro en el centro con un dibujo de lo que hace
+  el ajuste y una explicación (qué es, qué cambia y un ejemplo con valores). Todos los ajustes la tienen (432), en
+  español y en inglés; los que el motor guarda pero todavía no usan lo dicen.
+- **Calibración más simple:** la pestaña es una lista corta de pruebas, como un menú: primero las cuatro básicas en
+  orden (primera capa, temperatura, flujo, retracción), después las demás. Cada una dice «Hecha» si ya se hizo con esta
+  impresora y este filamento; al tocarla se abre su ficha en el centro con un dibujo, qué hace, por qué va primero, cómo
+  se lee y **Crear**. Arriba, el filamento elegido con sus temperaturas y **Continuar** con la siguiente básica
+  pendiente; la ficha de la torre de temperatura dice qué rango va a probar con ese filamento.
+- **Lo básico en el tutorial de inicio:** cuatro pasos con dibujo antes de los de uso: cómo se imprime una pieza (capas
+  y G-code), capas, paredes y relleno, lo que cuelga y lo que se pega (soportes, primera capa, borde), y el material y su
+  temperatura.
+- **Materiales que toma la impresora:** el catálogo y la lista de perfiles de Filamento ofrecen solo pellets en una
+  impresora de pellets y, con filamento, los del diámetro de las impresoras instaladas; el catálogo dice por qué está
+  vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.
+- **`M200` en impresoras de pellets** con E en mm³: `M200 D1.75 S1` en Marlin, `M200 D1.75` en RepRapFirmware, y en
+  Klipper el aviso `volumetric_e`. Las de filamento siguen sin `M200`.
+- **Filamento por extrusor en el pie del G-code:** con varios extrusores, `filament used [mm]`, `[cm3]`, `[g]` y
+  `filament cost` dan un valor por extrusor separado por comas (0 si no se usa), como lo leen los hosts; los totales
+  siguen siendo uno.
+- **Aviso `flow_limit`:** cuando el tope de caudal baja la velocidad de las paredes, el relleno o las superficies, el
+  laminado dice de cuánto a cuánto.
+
+- **`extrusion.flow_by_speed`** (impresoras de pellets): el flujo según la velocidad de cada tramo, con una lista de
+  puntos `[velocidad, %]`.
+- **`extrusion.section`:** la E de un cordón con la sección redonda (como siempre, y como Tisma Slicer) o rectangular.
+- **`machine.high_flow_nozzle`:** la boquilla de alto caudal, una o por extrusor, en los datos del archivo.
+- **`machine.feedstock` y `extrusion.feedstock`** (`filament` o `pellet`), con un aviso si el material no es para la
+  impresora, y los topes de caudal de la máquina y del filamento hasta
+  10 000 mm³/s, para impresoras de pellets.
+- **`walls.transition_margin`:** las paredes no pasan a un cordón más en oscilaciones chicas del espesor (de hasta
+  0,155 mm sobre el cambio).
+- **Menú del botón derecho en la placa:** fuera de los modelos, «Agregar modelo…», «Agregar forma» (cubo, cilindro y
+  esfera de 20 mm) y «Organizar».
+- **Deslizadores en Mover, Girar y Escalar**, bajo cada número: la cama de punta a punta, −180° a 180°, 10 % a 1000 %.
+
+- **`tisma --dump-ui filas.json`** (con `--screenshot`): cada fila de ajustes dibujada, con su clave, su etiqueta, el
+  valor guardado, su rectángulo y si la columna le corta la etiqueta; para revisar textos y campos sin mirar la imagen.
+
+- **`tisma --draw-stats`:** cuántas llamadas de dibujo y cuántos vértices pide cada cuadro, los de la vista 3D y los de
+  los paneles por separado, para medir la vista previa en cualquier placa de video; y cuánto ocupa la vista en la
+  placa (instancias de la vista previa, recorridos, mallas y destinos de dibujo). Y el paso `slice` de
+  `--ui-script` (lamina como el botón y abre la Vista previa), que ahora corre también sin `--screenshot`.
+
+- **`--ui-script`: `expect-toast TEXTO`** espera un aviso con ese texto, y `click` sobre una casilla la marca o
+  desmarca.
 
 - **`tisma --ui-script pasos.txt`:** pruebas de la interfaz con mouse y teclado de verdad: clic en el campo de un
   ajuste, escribir, teclas, y `expect` con el valor guardado; sale con 1 si un paso falla. Pruebas nuevas de la página
@@ -80,6 +128,65 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **Piezas grandes más rápidas:** la esfera de un millón de triángulos lamina en 1,45 a 1,6 s, cuando antes tardaba de
+  2,0 a 2,2 s, con el mismo G-code salvo algún último decimal. Cambios:
+  - Orientar los triángulos ya no arma listas que no necesita, y ordena en paralelo.
+  - Soldar los vértices, agrupar los triángulos por capa y armar las aristas usan todos los núcleos.
+  - Las capas que no se repiten no recorren la malla otra vez.
+  - El diagrama de Voronoi de las paredes calcula exacto dónde termina un segmento nuevo, y mide distancias sin
+    `hypot`.
+  - El contorno de cada objeto en la cama se saca sin copiar su malla.
+- **El panel de ajustes es una sola lista** que se recorre con la barra o la rueda (pedido del dueño): cada sección con
+  su título y sus tarjetas siempre abiertas, sin plegar; los íconos de la izquierda llevan a cada sección. El nivel
+  Personalizado sigue eligiendo qué ajustes se ven. Sin recuadros grises: títulos y ajustes sobre el fondo del panel, y
+  sin las líneas «N ajustes más en Avanzado».
+- **Buscar un ajuste** está en el panel de ajustes, debajo de la impresora y la boquilla (pedido del dueño); Ctrl+F
+  lo sigue abriendo, también desde la página de la impresora.
+- **Ancho de los cordones por defecto:** `walls.width` 0 (lo que viene si no se pone) es automático, 1,125 × la boquilla:
+  0,45 mm con 0,4 en lugar de 0,4 mm, como dice la ficha y hace Tisma Slicer. Las paredes pasan de 2 a 3 cordones
+  entre 1,15 y 1,2 mm, de 3 a 4 entre 1,45 y 1,5 y de 4 a 5 entre 1,95 y 2 (antes, unos 0,1 a 0,2 mm antes). Si la
+  boquilla cambia, el ancho automático la sigue.
+- **Modelos grandes:** girar, escalar o mover uno de 200 000 triángulos o más con sus campos o deslizadores ya no
+  rehace toda la placa en cada cuadro: la vista lo muestra en su lugar nuevo y la placa se rehace al soltar (con 2
+  millones de triángulos, 20 pasos de escala: 76 → 17 s).
+- **Modelos grandes:** el primer clic o pincel sobre un modelo de 200 000 triángulos o más ya no espera a que se arme su
+  árbol de búsqueda: se arma en segundo plano al abrirlo o cambiarlo (con 2 millones de triángulos, de 608 ms a 0,1 ms).
+- **Modelos grandes:** abrir o cambiar la placa ya no arma una copia entera de las mallas (con 2 millones de
+  triángulos, unos 100 ms y 72 MB menos).
+
+- **«No planar»:** sección propia en los ajustes de impresión (capas curvas, relleno ondulado) y en los de la
+  impresora (el cabezal).
+
+- **Vista previa de lejos (OpenGL y Vulkan):** cuando una capa mide menos de un cuarto de píxel, las paredes de 2 o 4 capas se
+  dibujan como una sola; la imagen es la misma y el cuadro tarda menos de la mitad en la prueba.
+
+- **Laminar abajo a la derecha:** el botón está en un panel abajo a la derecha de la vista; después de laminar, el
+  mismo lugar muestra el tiempo, «Exportar G-code» y un menú para mandarlo a la impresora o guardar el proyecto.
+
+- **Soportes bajo puentes:** se decide punto por punto. Una losa sobre tres paredes en U ya no lleva soporte; una
+  sobre dos paredes en L, un pilar de un lado o uno central sí, en toda la zona que cuelga.
+
+- **La primera vez se elige la impresora y el filamento** antes del recorrido de bienvenida (pedido del dueño): se abre
+  el catálogo de impresoras («paso 1 de 2»), después el de filamentos, y al cerrarlos, elegido o no, el recorrido.
+  `tisma --first-run` arranca así aunque ya haya preferencias.
+
+- **La ventana descansa cuando no pasa nada:** sin mouse ni teclado por 3 s, sin trabajos en marcha ni impresora
+  conectada, se despierta con un evento o cada 2 s en vez de diez veces por segundo; un laminado u otro trabajo que
+  termina la despierta. Con la esfera de 80 mm laminada (llvmpipe), en 30 s de reposo: de 38 % de CPU y 260 cuadros a
+  2 % y 15.
+
+- **La vista previa dibuja la mitad de los vértices** (OpenGL y Vulkan): de cada cordón, solo los dos costados y la
+  punta que miran al ojo (o a la luz, en la sombra); los otros quedan siempre detrás. La imagen no cambia. Con una
+  esfera de 80 mm laminada (OpenGL, llvmpipe), de 2,6 a 1,4 s por cuadro completo.
+
+- **La vista 3D quieta no se vuelve a dibujar** (OpenGL y Vulkan): si la cámara, las capas, los colores y los datos no
+  cambiaron, se muestra la imagen anterior. Con una esfera de 80 mm laminada (OpenGL, llvmpipe), de 406 llamadas de
+  dibujo por cuadro a 1; mover la vista dibuja todo como antes.
+
+- **Medir en piezas grandes:** la herramienta prepara la malla una vez por pieza y no en cada clic. Con 2 millones de
+  triángulos, el primer clic tarda lo mismo (unos 0,35 s) y los siguientes, de 0,1 a 26 ms (antes, 0,36 a 0,44 s cada
+  uno).
 
 - **Otra boquilla también en las impresoras del catálogo** (pedido del dueño): la lista trae los tamaños que el
   fabricante publica (a menudo solo el de fábrica) y ahora siempre ofrece «Otra boquilla…». La ficha del catálogo
@@ -157,6 +264,82 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Coma decimal en los campos que se escriben:** los de las guías de calibración y el de «Otra…» boquilla mostraban
+  `0.25` en español; ahora muestran `0,25`, como el resto, y aceptan coma o punto al escribir.
+- **Una señal de cierre mientras `tisma` arranca** (al cerrar la sesión, por ejemplo) ya no lo termina sin guardar:
+  el manejador está puesto antes de abrir la ventana. Lo encontró la prueba de SIGTERM en la compilación con ASan.
+- **Las salidas no pisan las entradas (BH15, BH16):** `-o`, `--warnings`, `--vtk` y `--mesh` no pueden ser el
+  modelo, los ajustes, el caso de carga ni otra salida (también por `./` o un enlace): error con código 2. Un enlace
+  se sigue y se escribe el archivo al que apunta; un dispositivo, una tubería o una carpeta no se reemplazan.
+- **Una carpeta como modelo o como ajustes (BH18)** dice «is a folder», con código 2, en lugar de un error interno.
+- **JSON inválido (TR21):** «not valid JSON at line L, column C» o «the file is empty», en lugar del texto de la
+  biblioteca; en la interfaz en español, los errores de carga conocidos salen en español («OBJ, línea 9: el vértice 99
+  todavía no está definido (hay 8)»).
+- **STL ASCII con BOM UTF-8 (BH17):** se lee como texto.
+- **Camas imposibles (BH14):** un `machine.bed` sin área (puntos en línea) o con lados que se cruzan es un error de los
+  ajustes, con código 2.
+- **`--copies` con una pieza que no se imprime (BH7):** da «nothing would be printed» como con una sola copia; un camino más
+  corto que `gcode.resolution` no cuenta como algo impreso.
+- **Calibración de temperatura con el calefactor apagado (BH10):** las franjas van de 150 a 500 °C (`start` 0, o un
+  paso que llega a una temperatura fría, es un error), y el chequeo del G-code rechaza extruir con la boquilla en 0
+  (`M104 S0` o `M109 S0` sin otra temperatura después).
+- **`walls.min_line_width`** no puede pasar de cuatro boquillas (BH5).
+- **AMF, STEP, SVG y ZIP (BH9):** dicen que todavía no se leen, en lugar de «STL truncado».
+- **Las teclas detrás de un cuadro (UI25):** con un cuadro, un menú o una ventana emergente abiertos, los atajos del
+  plato y de la vista no actúan: Ctrl+A y Supr detrás del catálogo borraban el modelo.
+- **TR20:** el menú de los enlaces dice «Copiar enlace» en español.
+- **Resina con las normales al revés (BH11):** una pieza «de adentro para afuera» recibe los mismos soportes y la misma
+  base que la derecha (antes, un solo pilar bajo una caja).
+- **`resin.light_pwm` y `bottom_light_pwm` 0 (BH13):** son un error (la luz apagada no cura nada); van de 1 a 255.
+- **Análisis (BH12):** un soporte que no toca la pieza porque el vóxel es tan grande como ella dice «try a smaller
+  voxel»; un desplazamiento de más de una décima de la pieza da el aviso `large_displacement` (el análisis es lineal).
+- **`--copies` que no entran (BH8):** «100 copies do not fit on the bed (machine.bed): 81 fit», en lugar de un punto
+  fuera de la cama.
+- **Los avisos emergentes (UI26)** van arriba del panel Laminar, por delante de las tarjetas de los tutoriales, y
+  los largos se parten en líneas dentro de la vista.
+
+- **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
+  palabra del archivo («aligned»).
+
+- **UI23:** en Vista previa, la barra de movimientos ya no tapa «Exportar G-code»: el panel va encima.
+
+- **Preferencias (UI21):** la impresora y el filamento elegidos la primera vez se guardan al elegirlos, y un cierre
+  de sesión o un apagado (SIGTERM) cierra el programa guardando, como el botón de la ventana.
+- **Formas (UI22):** se llaman «Cubo», «Cilindro» y «Esfera», sin «.stl».
+
+- **Topes del panel (UI20):** 33 campos numéricos se cortaban antes del máximo documentado (alto de la primera capa,
+  retracción, temperaturas de cámara y cama, anchos, capas sólidas…); ahora llegan a todo su rango, y una prueba
+  compara cada tope con `docs/CONFIG.md`.
+- **TR16:** el botón de la conexión dice «Abrir la pestaña Impresora», como el texto de al lado.
+
+- **Un modelo grande quedaba con su copia simplificada después de mover la vista una vez** (más de un millón de
+  triángulos): la copia de mover la cámara se mostraba para siempre, con menos detalle, porque el programa contaba los
+  cuadros solo en las capturas. Ahora vuelve el modelo completo apenas la cámara se detiene.
+
+- **La leyenda de la vista previa tapaba la barra de movimientos**, y tapaba media pieza en ventanas chicas: la barra
+  va ahora a la derecha de la leyenda, o adentro de ella si no hay lugar, y un botón («−») pliega la leyenda a los tipos
+  de línea solos. En una vista angosta se pliega sola (si completa taparía más del 45 % del ancho), y al encuadrar en
+  Vista previa la pieza va entre la leyenda y la barra de capas; al pasar a Vista previa con la cámara sin tocar, se
+  reencuadra.
+
+- **Impresión por USB: un trabajo terminado se leía un instante como «imprimiendo al 100 %».** El progreso completo
+  llega ahora junto con el fin del trabajo.
+
+- **Los campos «mm o %» ignoraban la unidad escrita** (ancho de cordón, costura, detalle mínimo, separación y ancho
+  del soporte, velocidad de la pared externa y otros): «0,3 mm» en un campo en % quedaba como 0,3 %. Ahora «mm» o «%»
+  escritos con el número cambian la unidad; un número solo sigue en la unidad que muestra el campo.
+
+- **Límites del panel más estrechos que los del archivo de ajustes:** el desplazamiento XY (±10 mm), la corrección
+  de agujeros (±5 mm), la altura de capa (0,01 a 10 mm), la cantidad de paredes (hasta 1000) y la altura del relleno
+  combinado se recortaban en silencio. Ahora valen los rangos de `docs/CONFIG.md`, y un valor escrito fuera de ellos
+  queda en el límite con un aviso («Máximo: 1000»).
+
+- **El volumen de purga no se podía escribir:** la fila solo decía cuántos valores tenía. Ahora un número vale para
+  todos los pares de filamentos, como en el archivo; una lista con valores distintos se sigue editando en el archivo.
+
+- **Etiquetas cortadas en Soportes** con el panel angosto: «Capas con soporte forzado» y «Ángulo de voladizo» (con 0
+  el campo dice «Automático»). Una etiqueta que no entra muestra su texto completo al pasar el mouse.
+
 - **Lo escrito en algunos campos se perdía** (el ancho y el fondo de la cama, los porcentajes): el campo tomaba su
   identidad de la dirección de una copia local, que puede cambiar de un cuadro a otro; entonces el campo «cambiaba» a
   mitad de la escritura. Ahora cada fila se identifica por su ajuste.
@@ -184,8 +367,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Datos que faltan, mostrados como ceros:** las velocidades, aceleraciones y tirones máximos sin dato de la
   impresora dicen «Sin dato» (el motor ya no los usaba como tope); la capa mínima y la máxima sin valor dicen
   «Automático» (salen de la boquilla); los resúmenes con «—» dicen «Sin dato» o «Sin límite».
-- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»); el archivo guarda el nombre
-  como siempre.
+- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»), también en los avisos que
+  aparecen abajo al guardar o cambiar un perfil; el archivo guarda el nombre como siempre.
 
 - **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
   Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía
@@ -245,6 +428,25 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Más rápido:** escribir el G-code con `walls.detect_overhangs` en piezas con voladizos todo alrededor (una
   esfera de un millón de triángulos: de 300 a 177 ms), y el clic de Medir sobre una superficie curva en mallas
   grandes (de 0,87 a 0,18 s con un millón de triángulos).
+
+### Arreglado
+
+- **Anchos fuera de la boquilla (BH5):** `infill.width`, `surfaces.solid_width`, `surfaces.top_width` y
+  `support.width` ahora se controlan como `walls.width`: de un cuarto a cuatro veces la boquilla, o un error que lo
+  dice. Antes un relleno de 10 mm con boquilla de 0,4 laminaba sin aviso.
+- **Sin temperatura de boquilla (BH6):** la línea de comandos avisa cuando ni los ajustes ni el G-code de inicio
+  calientan la boquilla.
+- **Textos del panel (TR8, TR10, TR11, TR15, TR19):** ningún campo vacío muestra un guion suelto: dice «Automático»,
+  «Sin límite», «Apagado» o «Sin dato» según lo que hace el 0; la lista de calibraciones lleva las unidades; los
+  resúmenes dicen qué es cada número («Separación 100 % · flujo 100 %», «Boquilla 260 °C · cama Sin dato»); lo
+  apagado dice «Apagado» en todas las tarjetas; «Filamento mínimo» de la falda ya no empuja el botón (i) afuera.
+- **Perímetros escalonados con capas de alturas distintas:** un G-code bueno no pasaba su chequeo cuando la última capa
+  era más fina que la de abajo (el tope del chequeo no contaba la media capa de los cordones levantados).
+- **Un tope de velocidad de menos de 1 mm/min** (por ejemplo `extrusion.infill_max_speed` 0,002) escribía `F0` y el
+  G-code no pasaba su chequeo; ahora va a `F1`.
+- **Capas curvas:** con el modo apagado ya no se ven sus filas, y cada una solo en los modos y formas que la usan.
+- **Textos de «No planar»:** «cabezal» en todos lados, «Sin medir» para un perfil vacío y «Sin dato» para un ángulo
+  libre sin medir.
 
 ## [0.10.0-alpha.2] - 2026-10-27
 
@@ -1087,7 +1289,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...HEAD
+[0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1

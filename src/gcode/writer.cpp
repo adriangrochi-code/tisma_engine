@@ -853,6 +853,8 @@ public:
             e_scale_ = filament_area_;
         // The melt limit: the lowest of the hot end's, the filament's and the
         // print's own (speed.max_flow, gcode_motion.md, rule 4); 0: none.
+        flow_by_speed_ = s.flow_by_speed;
+        section_ = s.bead_section;
         for (const double limit : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
@@ -1489,16 +1491,17 @@ public:
         // Off the layer's Z (Z anti-aliasing, a scarf ramp, a wavy or raised
         // bead), the layer's bead by the share of its height that is there
         // (z_antialiasing.md rule 3, staggered_perimeters.md ST1).
-        const double section = !(height_ > 0.0) ? bead_area(width, height) : bead_area(width, height_) * height / height_;
-        const double e = section * length / filament_area_ * flow_;
+        const double section = !(height_ > 0.0) ? extruded_section(section_, width, height)
+                                                : extruded_section(section_, width, height_) * height / height_;
         feed = melt_feed(feed, width, height);
+        const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
             (surface_ ? surface_extruded_ : extruded_)[feed] += length;
         if (logging_)
             laid_.push_back({feed, length, surface_, bridge_});
-        total_e_ += e;
+        count_e(e);
         if (tower_)
             tower_e_ += e;
         pending_ += e;
@@ -1561,15 +1564,15 @@ public:
         }
         const double width = points[a.first].width, length = a.length();
         walk(length);
-        const double e = bead_area(width, height_) * length / filament_area_ * flow_;
         feed = melt_feed(feed, width, height_);
+        const double e = extruded_section(section_, width, height_) * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
             (surface_ ? surface_extruded_ : extruded_)[feed] += length;
         if (logging_)
             laid_.push_back({feed, length, surface_, bridge_});
-        total_e_ += e;
+        count_e(e);
         if (tower_)
             tower_e_ += e;
         pending_ += e;
@@ -1595,8 +1598,8 @@ public:
             e_text_.assign(e_text);
         }
         const double f = paced(feed);
-        if (std::lround(f * 60.0) != f_) {
-            f_ = std::lround(f * 60.0);
+        if (std::max(1L, std::lround(f * 60.0)) != f_) {
+            f_ = std::max(1L, std::lround(f * 60.0));
             text_ += " F";
             append_integer(text_, f_);
         }
@@ -1619,6 +1622,15 @@ public:
     }
 
     double total_e() const { return total_e_; }
+    // The filament each extruder pushed, by extruder from 0 (the footer's lists).
+    const std::vector<double>& tool_e() const { return tool_e_; }
+    void count_e(double e) {
+        total_e_ += e;
+        const std::size_t t = std::size_t(std::max(tool_ - 1, 0)); // tool_ counts from 1 (0: none chosen yet)
+        if (tool_e_.size() <= t)
+            tool_e_.resize(t + 1, 0.0);
+        tool_e_[t] += e;
+    }
     double tower_e() const { return tower_e_; } // of it, on the wipe tower
 
     // MakerWare's M103 after the extrusions (before a travel, and at the end).
@@ -1735,7 +1747,7 @@ private:
         tool_back_ = false;
         const double back = retracted_amount_ + extra;
         e_ = relative_ ? back : e_ + back;
-        total_e_ += extra;
+        count_e(extra);
         move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
         other_time_ += back / feed;
     }
@@ -1788,7 +1800,10 @@ private:
     // cap (it looks for the limit) as far as the machine moves; else no faster
     // than the hot end and the filament melt, rounded down to whole mm/min.
     double melt_feed(double feed, double width, double height) const {
-        const double section = bead_area(width, height);
+        // Never under 1 mm/min, the least F can say: a cap of 0.002 mm/s
+        // (extrusion.infill_max_speed) wrote F0 (the spec team's BH3).
+        feed = std::max(feed, 1.0 / 60.0);
+        const double section = extruded_section(section_, width, height);
         if (forced_flow_ > 0.0 && section * flow_ > 0.0)
             return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (section * flow_) * 60.0)) / 60.0);
         if (max_flow_ > 0.0 && section * flow_ > 0.0) {
@@ -1813,6 +1828,10 @@ private:
             width_.assign(width_text);
         }
     }
+
+    // extrusion.flow_by_speed at the speed the move is written at, past the
+    // slowdown and the melt limit (pellets.md, rule 5).
+    double speed_flow(double feed) const { return flow_at_speed(flow_by_speed_, paced(feed)); }
 
     // A slowed-down feed is rounded down to whole mm/min (as F is written), so
     // the layer lasts at least the minimum time.
@@ -1940,7 +1959,7 @@ private:
             text_.resize(start); // no E to write: a retraction is no move at all
             return;
         }
-        const long f = std::lround(feed * 60.0);
+        const long f = std::max(1L, std::lround(feed * 60.0)); // F0 is no feed
         if (f != f_) {
             text_ += " F";
             append_integer(text_, f);
@@ -1978,6 +1997,8 @@ private:
     Slowdown pace_;
     std::map<double, double> extruded_, surface_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
+    std::vector<std::array<double, 2>> flow_by_speed_;
+    BeadSection section_ = BeadSection::Rounded;
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;
@@ -2016,6 +2037,7 @@ private:
     double flow_ = 1.0;
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
+    std::vector<double> tool_e_;
     double tower_e_ = 0.0;   // mm of filament laid on the wipe tower
     double drop_ = 0.0;      // mm the extrusions lie under the layer's top (the wipe tower's)
     bool on_tower_ = false;  // the nozzle is down on the wipe tower
@@ -2101,6 +2123,67 @@ std::string chamber_gcode(GcodeFlavor flavor, double celsius) {
                                           : "M141 S" + t + " ; the chamber";
 }
 
+std::optional<Warning> heating_warning(const Settings& s) {
+    // No nozzle temperature and nothing in the start G-code that heats it:
+    // the print would extrude cold (the spec team's BH6; the interface always
+    // gives one, the command line may not). A start macro may heat it, so a
+    // warning, not an error.
+    const auto number = [&](const char* variable) {
+        const auto it = s.variables.find(variable);
+        return it == s.variables.end() || it->second.empty() ? 0.0 : std::atof(it->second.front().c_str());
+    };
+    if (s.machine_technology != MachineTechnology::Fdm || number("temperature") > 0.0 ||
+        number("first_layer_temperature") > 0.0)
+        return std::nullopt;
+    for (const HeightChange& c : s.changes)
+        if (c.temperature)
+            return std::nullopt;
+    const std::string g = s.start_gcode + "\n" + s.filament_start_gcode;
+    for (const char* heats : {"M104", "M109", "HEATER", "PRINT_START", "START_PRINT", "[temperature", "{temperature"})
+        if (g.find(heats) != std::string::npos)
+            return std::nullopt;
+    return Warning{"no_heating", -1, 0.0,
+                   "the G-code never heats the nozzle: no machine.variables.temperature and no M104 or M109 in the "
+                   "start G-code",
+                   0.0};
+}
+
+std::optional<Warning> melt_limit_warning(const Settings& s) {
+    double limit = 0.0;
+    for (const double l : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
+        if (l > 0.0)
+            limit = limit > 0.0 ? std::min(limit, l) : l;
+    if (limit <= 0.0 || s.flow <= 0.0 || s.layer_height <= 0.0)
+        return std::nullopt;
+    const double nozzle = s.nozzle_diameter;
+    const auto width = [&](double w, double automatic) { return w > 0.0 ? w : automatic * nozzle; };
+    const struct {
+        const char* kind;
+        double speed, width;
+    } kinds[] = {
+        {"walls", s.wall_speed, s.wall_width},
+        {"infill", s.infill_speed, width(s.infill_width, 1.125)},
+        {"solid infill", s.solid_infill_speed, width(s.solid_width, 1.125)},
+        {"top surfaces", s.top_solid_infill_speed, width(s.top_width, 1.0)},
+    };
+    std::string message;
+    double slowest = 0.0;
+    char text[96];
+    for (const auto& k : kinds) {
+        const double section = extruded_section(s.bead_section, k.width, s.layer_height) * s.flow / 100.0;
+        if (k.speed <= 0.0 || section <= 0.0 || k.speed * section <= limit)
+            continue;
+        const double capped = limit / section;
+        std::snprintf(text, sizeof text, "%s%s %.1f -> %.1f mm/s", message.empty() ? "" : ", ", k.kind, k.speed, capped);
+        message += text;
+        slowest = slowest > 0.0 ? std::min(slowest, capped) : capped;
+    }
+    if (message.empty())
+        return std::nullopt;
+    std::snprintf(text, sizeof text, "the melt limit of %g mm3/s slows ", limit);
+    return Warning{"flow_limit", -1, 0.0, text + message, slowest};
+}
+
 std::vector<Warning> capability_warnings(const Settings& s) {
     std::vector<Warning> out;
     const auto number = [&](const char* variable) {
@@ -2111,6 +2194,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
         out.push_back({kind, -1, 0.0, std::move(message), value});
     };
     char text[200];
+    // A filament on a pellet printer, or the other way round (pellets.md,
+    // rule 1, PE9): a warning; the slicing is the same.
+    if (s.material_feedstock != s.feedstock && s.machine_technology == MachineTechnology::Fdm)
+        add("feedstock",
+            s.feedstock == Feedstock::Pellet ? "this material is for filament and the printer melts pellets"
+                                             : "this material is for pellets and the printer takes filament",
+            0.0);
     if (const double t = number("temperature"); s.max_nozzle_temp > 0.0 && t > s.max_nozzle_temp) {
         std::snprintf(text, sizeof text, "the filament wants %.0f C at the nozzle; the printer reaches %.0f C", t,
                       s.max_nozzle_temp);
@@ -2621,6 +2711,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     if (!start_gcode.empty())
         out << start_gcode << "\n";
+    // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start
+    // G-code, the firmware's command for it; Marlin's M200 D S1, and
+    // RepRapFirmware's M200 D, whose S came only in 3.5. Not on a filament
+    // printer: there the user puts it in the start G-code (gcode_extras.md, X11).
+    const bool marlin = s.flavor == GcodeFlavor::Marlin || s.flavor == GcodeFlavor::MarlinLegacy;
+    const bool volumetric_command = s.volumetric_e && s.feedstock == Feedstock::Pellet &&
+                                    (marlin || s.flavor == GcodeFlavor::RepRapFirmware);
+    if (volumetric_command) {
+        char text[64];
+        std::snprintf(text, sizeof text, "M200 D%g%s", s.filament_diameter, marlin ? " S1" : "");
+        out << text << (s.verbose_comments ? " ; extrusion in mm3\n" : "\n");
+    }
     if (heat && s.extruders > 1 && dialect.wait != Dialect::Wait::None) {
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
@@ -2654,6 +2756,13 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     if (warnings) {
         const std::vector<Warning> capability = capability_warnings(s);
         warnings->insert(warnings->end(), capability.begin(), capability.end());
+        if (std::optional<Warning> melt = melt_limit_warning(s))
+            warnings->push_back(std::move(*melt));
+        // A dialect with no such command (Klipper's has none): the firmware has to expect it.
+        if (s.volumetric_e && s.feedstock == Feedstock::Pellet && !volumetric_command)
+            warnings->push_back({"volumetric_e", -1, 0.0,
+                                 "E is in mm3 and this firmware has no command for it: check that it expects E in mm3",
+                                 0.0});
     }
     out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n");
     if (dialect.e_mode)
@@ -4158,11 +4267,24 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const double r = s.filament_diameter / 2.0;
         const double mm = g.total_e(), cm3 = mm * std::numbers::pi * r * r / 1000.0;
         const double grams = cm3 * s.filament_density, cost = grams * s.filament_cost / 1000.0;
-        out << "; filament used [mm] = " << fixed(mm, 2) << "\n";
-        out << "; filament used [cm3] = " << fixed(cm3, 2) << "\n";
+        // With several extruders, one value for each, 0 for one not used, as
+        // hosts read them (the spec team's black-box report).
+        const auto by_tool = [&](double scale, double total) {
+            if (s.extruders <= 1)
+                return fixed(total, 2);
+            std::string text;
+            for (int t = 0; t < s.extruders; ++t) {
+                const double e = std::size_t(t) < g.tool_e().size() ? g.tool_e()[std::size_t(t)] : 0.0;
+                text += (t ? ", " : "") + fixed(e * scale, 2);
+            }
+            return text;
+        };
+        const double to_cm3 = std::numbers::pi * r * r / 1000.0;
+        out << "; filament used [mm] = " << by_tool(1.0, mm) << "\n";
+        out << "; filament used [cm3] = " << by_tool(to_cm3, cm3) << "\n";
         if (s.filament_density > 0.0)
-            out << "; filament used [g] = " << fixed(grams, 2) << "\n";
-        out << "; filament cost = " << fixed(cost, 2) << "\n";
+            out << "; filament used [g] = " << by_tool(to_cm3 * s.filament_density, grams) << "\n";
+        out << "; filament cost = " << by_tool(to_cm3 * s.filament_density * s.filament_cost / 1000.0, cost) << "\n";
         out << "; total filament used [g] = " << fixed(grams, 2) << "\n";
         out << "; total filament cost = " << fixed(cost, 2) << "\n";
         out << "; total filament used for wipe tower [g] = "

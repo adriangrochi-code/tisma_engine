@@ -1,0 +1,7 @@
+# The Move card's sliders span the bed (256 mm here): a click a quarter of
+# the way across X and three quarters across Y moves the model about there
+# (the slider's grab takes a little of its width).
+slide move_x 0.25
+expect-place x 50..70
+slide move_y 0.75
+expect-place y 186..206

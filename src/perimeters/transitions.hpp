@@ -35,7 +35,18 @@ struct TransitionSettings {
     // Ramp length t(n); a negative value means the preferred width w*
     // (Section 3.4: t(n) = w*).
     double transition_length = -1.0;
+    // walls.transition_margin (perimeters.md P13): above 0, a stretch of the
+    // centre at n + 1 beads (n at least 2), with fewer all around it, whose
+    // thickest point passes the change to n + 1 by at most kMarginSwing
+    // stays at n, whatever its length.
+    double margin = 0.0;
 };
+
+// The swing past a change that walls.transition_margin flattens, mm: the
+// spec team's black-box measure (P13b) puts the cut between 0.15 and 0.16 mm
+// of thickness, the same with 0.45 and 0.6 mm walls, and the same at 25 %
+// and 100 % (the margin's size does not move it).
+inline constexpr double kMarginSwing = 0.155;
 
 struct TransitionResult {
     // Bead count per node of the (modified) graph: integer counts on the centre,

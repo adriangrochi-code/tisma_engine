@@ -73,9 +73,14 @@ enum class IroningSurfaces { Top, Topmost, Solid };
 enum class CurvedMode { Disabled, Wave, Conical, Overhangs, Stress, Surface, Automatic };
 enum class CurvedPattern { Egg, Ridges, Twisted };
 enum class CurvedFlow { Preserve, Uniform, Off };
+// The section a bead's E is counted with (extrusion.section, pellets.md,
+// rule 4): a rectangle with round sides, h (w - (1 - pi/4) h), or w x h.
+enum class BeadSection { Rounded, Rectangle };
 // What the printer is: one that extrudes filament, or a resin printer with
 // a display (resin.md).
 enum class MachineTechnology { Fdm, Msla };
+// What an FDM printer melts (machine.feedstock, pellets.md, rule 1).
+enum class Feedstock { Filament, Pellet };
 
 // The most extruders a machine has: as many as the colour channel of the
 // painting tells apart (kPaintMaxMark, docs/PAINTING.md).
@@ -169,10 +174,18 @@ struct Settings {
     // The ramp from n to n + 1 beads along a wall (walls.transition_length,
     // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
     Speed wall_transition_length{100.0, true};
+    // Flatten the small swings past a change in the bead count
+    // (walls.transition_margin, perimeters.md P13): mm, or a share of the
+    // nozzle; 0: none.
+    Speed wall_transition_margin{25.0, true};
     // Odd bead counts only in corners no wider than this, degrees
     // (walls.transition_angle, perimeters.md P14).
     double wall_transition_angle = 10.0;
-    double wall_width = 0.4; // preferred bead width w*
+    // The preferred bead width w*. walls.width 0, the default, is automatic:
+    // 1.125 nozzles (perimeters.md; 0.45 with 0.4, as Tisma Slicer: the
+    // spec team's BH4), kept so by parse_settings and the panel.
+    double wall_width = 0.45;
+    bool wall_width_auto = true;
     double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
@@ -393,6 +406,9 @@ struct Settings {
     // One extruder that changes filaments (an MMU): a change purges the
     // filament (rule 12).
     bool single_extruder_mmu = false;
+    // A high-flow nozzle, by extruder (machine.high_flow_nozzle,
+    // multi_extruder.md): written in the file's data, nothing else.
+    std::vector<bool> high_flow_nozzle{false};
     // The MMU's change on the wipe tower (rule 15), mm: its cooling tube
     // (how long, how far from the nozzle), where a filament parks, and the
     // correction of the load; more motor current during the swap (read).
@@ -456,6 +472,9 @@ struct Settings {
     // The printer's kind: the interface shows the settings of that kind and
     // slices for it (an MSLA printer gets a GOO file).
     MachineTechnology machine_technology = MachineTechnology::Fdm;
+    // Filament, or pellets through a screw (machine.feedstock): the slicing is
+    // the same; machine.filament_diameter is then the firmware's virtual one.
+    Feedstock feedstock = Feedstock::Filament;
     // An MSLA resin printer (docs/spec/features/resin.md): its display's
     // pixels, the size of the area it lights (mm), and whether the images are
     // mirrored. The defaults are an Elegoo Mars 5's.
@@ -760,6 +779,14 @@ struct Settings {
     double cooling_initial_speed = 2.2, cooling_final_speed = 3.4;
     std::vector<double> ramming{7.0, 7.4, 7.8, 8.2, 8.6, 9.0, 9.4, 9.8, 10.2, 10.6, 11.0};
     double toolchange_delay = 0.0, load_time = 0.0, unload_time = 0.0;
+    // The flow by the move's speed (extrusion.flow_by_speed, pellets.md,
+    // rule 5): [mm/s, %] points by speed, a straight line between them and
+    // the end values past them; empty: none.
+    std::vector<std::array<double, 2>> flow_by_speed;
+    BeadSection bead_section = BeadSection::Rounded;
+    // What the material is made for (extrusion.feedstock, pellets.md, rule
+    // 1): one that differs from machine.feedstock gives a warning.
+    Feedstock material_feedstock = Feedstock::Filament;
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;
@@ -827,6 +854,15 @@ void require_speeds(const Settings& settings);
 // capped by speed.max when that is set.
 double fastest_extrusion(const Settings& settings);
 
+// The section of a bead w wide and h high as extrusion.section counts it.
+double extruded_section(BeadSection section, double width, double height);
+
+// walls.width 0: 1.125 nozzles (perimeters.md).
+inline double auto_wall_width(double nozzle) { return 1.125 * nozzle; }
+
+// extrusion.flow_by_speed at this speed (mm/s), as a factor: 1 with no points.
+double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed);
+
 // Every setting as "group.key" and its value, for the end of the G-code.
 std::vector<std::pair<std::string, std::string>> describe(const Settings& settings);
 
@@ -891,6 +927,11 @@ Settings with_filament_retraction(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
+
+// What is wrong with JSON that does not parse, in words: "the file is empty",
+// or "not valid JSON at line L, column C" from the parser's byte position
+// (the spec team's TR21: the library's own text reached the dialogs).
+std::string json_error(std::string_view text, std::size_t byte);
 
 // The settings of an object or a part (model_tools.md, rules 5, 7 and 8):
 // `own`, a JSON object of groups with the profile's keys, over `base`. Only

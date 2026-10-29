@@ -460,6 +460,8 @@ TEST_CASE("resin: what does not fit, and the settings read and written", "[resin
     CHECK(again.resin_absolute_correction == -0.02);
     CHECK(again.resin_printer_name == "SATURN");
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"light_pwm": 300}})"), SettingsError);
+    CHECK_THROWS_WITH(parse_settings(R"({"resin": {"light_pwm": 0}})"), ContainsSubstring("resin.light_pwm")); // the light off (BH13)
+    CHECK_THROWS_AS(parse_settings(R"({"resin": {"bottom_light_pwm": 0}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"bottom_layers": 2.5}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"machine": {"display_pixels_x": 0}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"printer_name": "a name far longer than thirty-one bytes"}})"),
@@ -777,6 +779,19 @@ TEST_CASE("resin RS1: supports and a pad under a cube", "[resin][resin_supports]
     // The feet, twice the pillar's diameter (less the elephant's foot on the first layer).
     CHECK_THAT(double(lit_of(pixels(bare, 0, s), s).count) * px, WithinAbs(25 * 3.14159 * 0.8 * 0.8, 6.0));
     CHECK_THAT(double(lit_of(pixels(bare, 20, s), s).count) * px, WithinAbs(19.6, 3.0));
+}
+
+TEST_CASE("resin: an inside-out part gets the same supports (the spec team's BH11)", "[resin][resin_supports]") {
+    Settings s = base();
+    s.resin_supports = true;
+    s.resin_pad = true;
+    IndexedMesh inside_out = cube();
+    for (auto& t : inside_out.triangles)
+        std::swap(t[1], t[2]);
+    const ResinPrint right = slice_resin(cube(), s), wrong = slice_resin(inside_out, s);
+    REQUIRE(right.layers.size() == wrong.layers.size());
+    for (const std::size_t l : {std::size_t(20), std::size_t(100), std::size_t(160)})
+        CHECK(lit_of(pixels(wrong, l, s), s).count == lit_of(pixels(right, l, s), s).count);
 }
 
 TEST_CASE("resin: the preview of a print, the outlines of each layer", "[resin][resin_supports]") {

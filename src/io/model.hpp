@@ -46,8 +46,9 @@ ModelFile parse_obj(std::string_view text);
 // to ModelFile::negative. Throws ModelError.
 ModelFile parse_3mf(std::string_view package);
 
-// The model in memory: a ZIP package is a 3MF; otherwise the extension says
-// (".obj"); otherwise it is an STL. Throws ModelError.
+// The model in memory: AMF, STEP, SVG and ZIP are not read yet and say so;
+// a ZIP package is a 3MF; otherwise the extension says (".obj"); otherwise it
+// is an STL. Throws ModelError.
 ModelFile parse_model(std::string_view data, std::string_view extension);
 
 // Reads and parses a model file. Throws ModelError.

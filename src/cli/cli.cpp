@@ -1,6 +1,7 @@
 #include "cli/cli.hpp"
 
 #include "io/model.hpp"
+#include "io/paths.hpp"
 #include "io/stl.hpp"
 #include "slice/placement.hpp"
 #include "io/ply.hpp"
@@ -62,7 +63,12 @@ constexpr std::string_view kUsage =
 // path once complete, so a process stopped half way never leaves a partial
 // file under the real name. False (and no temporary left) on failure.
 bool write_file(const std::string& path, const std::function<void(std::ostream&)>& write) {
-    const std::filesystem::path target(path), part(path + ".part");
+    // A link's file, next to it (BH16); never over a device or a folder.
+    const std::filesystem::path target = write_target(path);
+    if (!output_problem(target).empty())
+        return false;
+    std::filesystem::path part = target;
+    part += ".part";
     std::error_code ignored;
     {
         std::ofstream f(part, std::ios::binary);
@@ -166,6 +172,39 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         return std::nullopt;
     }
     return out;
+}
+
+// No output over an input or another output, nor over something that is not
+// a regular file (the spec team's BH15 and BH16: -o m.stl replaced the
+// model, --warnings equal to -o wrote over the G-code, -o /dev/full replaced
+// the device). False, with the problem in err.
+bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
+    const std::pair<const char*, const std::string*> inputs[] = {
+        {"the model", &a.model}, {"--config", &a.config}, {"--case", &a.analysis_case}};
+    const std::pair<const char*, const std::string*> outputs[] = {
+        {"-o", &a.output}, {"--warnings", &a.warnings}, {"--vtk", &a.vtk}, {"--mesh", &a.mesh}};
+    for (std::size_t i = 0; i < std::size(outputs); ++i) {
+        const auto& [name, path] = outputs[i];
+        if (path->empty())
+            continue;
+        // -o may be a folder: the file gets its name there (gcode_templates.md, rule 15).
+        const bool folder = i == 0 && std::filesystem::is_directory(*path);
+        if (const std::string why = output_problem(write_target(*path)); !why.empty() && !folder) {
+            err << "error: " << name << " '" << *path << "' " << why << "\n";
+            return false;
+        }
+        for (const auto& [other, input] : inputs)
+            if (!input->empty() && same_file(*path, *input)) {
+                err << "error: " << name << " '" << *path << "' is the same file as " << other << ": it would be lost\n";
+                return false;
+            }
+        for (std::size_t j = 0; j < i; ++j)
+            if (!outputs[j].second->empty() && same_file(*path, *outputs[j].second)) {
+                err << "error: " << name << " and " << outputs[j].first << " are the same file\n";
+                return false;
+            }
+    }
+    return true;
 }
 
 void print_mesh_summary(const ModelFile& stl, double seconds, std::ostream& out) {
@@ -315,6 +354,10 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     }
     mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
     if (copies > 1) {
+        if (const std::size_t fit = copies_that_fit(mesh, copies, settings); fit < copies) {
+            err << "error: " << copies << " copies do not fit on the bed (machine.bed): " << fit << " fit\n";
+            return false;
+        }
         mesh = place_copies(mesh, copies, settings, name, &objects);
     } else {
         place_on_bed(mesh, settings, negative);
@@ -380,6 +423,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         err << kUsage;
         return kExitUsage;
     }
+    if (!outputs_are_safe(*parsed, err))
+        return kExitInput;
     Settings settings;
     try {
         settings = load_settings(parsed->config);
@@ -519,6 +564,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     warnings.insert(warnings.end(), model.begin(), model.end());
     const std::vector<Warning> stability = stability_warnings(sliced, settings);
     warnings.insert(warnings.end(), stability.begin(), stability.end());
+    if (const std::optional<Warning> cold = heating_warning(settings))
+        warnings.push_back(*cold);
     // Into a folder: the name from output.filename_format, first without the
     // print's time and weight, then with them (gcode_templates.md, rule 15).
     std::filesystem::path target = parsed->output;
@@ -572,7 +619,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "write_ms: " << exported.write_seconds * 1000.0 << "\n";
     out << "check_ms: " << exported.check_seconds * 1000.0 << "\n";
     out << "gcode_check: ok (" << exported.check.stats.lines << " lines, " << exported.check.stats.layers
-        << " layers, " << exported.check.stats.filament << " mm of filament)\n";
+        << " layers, " << exported.check.stats.filament << " mm of filament net of retractions)\n";
     out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {
@@ -591,6 +638,8 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         err << kUsage;
         return kExitUsage;
     }
+    if (!outputs_are_safe(*parsed, err))
+        return kExitInput;
     Settings settings;
     AnalysisCase analysis;
     try {

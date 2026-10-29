@@ -1,0 +1,6 @@
+# Sliced and left alone, the view draws its picture once and then only shows
+# it again: one draw call (the copy into the window), not the whole preview
+# each frame (the QA team's preview plan, step 2).
+slice
+wait 10
+expect-view-calls 1

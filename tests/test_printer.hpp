@@ -28,5 +28,11 @@ inline tisma::Settings test_printer(tisma::Settings s = {}) {
     fill(s.max_speed, 80.0);
     fill(s.retract_speed, 40.0);
     fill(s.min_print_speed, 10.0);
+    // Its beads 0.4 wide, as the tests were measured: walls.width is
+    // automatic (1.125 nozzles) only when nothing sets it (BH4).
+    if (s.wall_width_auto) {
+        s.wall_width = 0.4;
+        s.wall_width_auto = false;
+    }
     return s;
 }

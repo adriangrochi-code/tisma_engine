@@ -2,6 +2,7 @@
 
 #include "slice/curved.hpp"
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -21,6 +22,10 @@ struct GcodeLimits {
     double min_z = 0.0;           // below the bed only with a negative machine.z_offset
     double max_feed = 0.0;        // the fastest move, mm/s
     double filament_area = 1.0;   // mm2
+    // extrusion.flow_by_speed (pellets.md, rule 5): each extrusion's E by
+    // its F.
+    std::vector<std::array<double, 2>> flow_by_speed;
+    BeadSection section = BeadSection::Rounded; // extrusion.section
     double retract_length = 0.0;  // mm of filament
     // retraction_travel.md: the filament pushed past each retraction undone
     // (rule 1), a retraction partly while the nozzle wipes (rule 3), and G10

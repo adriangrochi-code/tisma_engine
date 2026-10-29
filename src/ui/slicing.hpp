@@ -142,6 +142,11 @@ inline Fit fit(const Revision& made, const Revision& now) {
     return made.settings != now.settings ? Fit::OutOfDate : Fit::Current;
 }
 
+// Called from a background job's thread when it ends, if set (the window
+// sets glfwPostEmptyEvent): an idle window wakes to take the result instead
+// of waiting for its next event.
+inline std::atomic<void (*)()> g_background_done{nullptr};
+
 // A function run on its own thread, whose result the drawing thread picks up
 // when it is ready. Starting again waits for the run before.
 template <class Result>
@@ -156,6 +161,8 @@ public:
         thread_ = std::thread([this, function = std::move(function)]() mutable {
             result_ = function();
             done_ = true;
+            if (void (*wake)() = g_background_done.load())
+                wake();
         });
     }
     bool running() const { return thread_.joinable() && !done_; }

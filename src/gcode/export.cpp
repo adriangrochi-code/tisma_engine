@@ -5,6 +5,7 @@
 
 #include "gcode/binary.hpp"
 #include "gcode/writer.hpp"
+#include "io/paths.hpp"
 #include "slice/pipeline.hpp"
 
 #include <chrono>
@@ -24,13 +25,20 @@ double seconds_since(std::chrono::steady_clock::time_point start) {
 GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& model, const Settings& settings,
                          std::vector<Warning>* warnings) {
     GcodeExport out;
-    std::filesystem::path part = path, rejected = path;
+    // A link's file, next to it; never over a device or a folder (the spec
+    // team's BH16: -o /dev/full replaced the device node).
+    const std::filesystem::path target = write_target(path);
+    if (const std::string why = output_problem(target); !why.empty()) {
+        out.error = "'" + path.string() + "' " + why;
+        return out;
+    }
+    std::filesystem::path part = target, rejected = target;
     part += ".part";
     rejected += ".rejected";
     std::error_code ignored;
     // Whatever happens next, nothing is left under the requested name: an
     // older G-code there would be printed by mistake (docs/GCODE_CHECK.md).
-    std::filesystem::remove(path, ignored);
+    std::filesystem::remove(target, ignored);
     const auto start = std::chrono::steady_clock::now();
     {
         std::ofstream file(part, std::ios::binary);
@@ -117,10 +125,10 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
                     "); kept as '" + rejected.string() + "'";
         return out;
     }
-    std::filesystem::rename(part, path, ec);
+    std::filesystem::rename(part, target, ec);
     if (ec) {
         std::filesystem::remove(part, ignored);
-        out.error = "cannot rename '" + part.string() + "' to '" + path.string() + "': " + ec.message();
+        out.error = "cannot rename '" + part.string() + "' to '" + target.string() + "': " + ec.message();
         return out;
     }
     out.written = true;

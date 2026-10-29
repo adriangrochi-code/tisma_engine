@@ -7,8 +7,11 @@
 #include "ui/icons.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
+#include "ui/plate.hpp"
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
+#include "ui/setting_guide.hpp"
+#include "ui/settings_layout.hpp"
 #include "ui/text.hpp"
 #include "test_temp.hpp"
 
@@ -24,6 +27,7 @@
 #include <functional>
 #include <fstream>
 #include <numbers>
+#include <set>
 #include <string>
 
 using namespace tisma;
@@ -181,6 +185,10 @@ TEST_CASE("ui: a model goes to the middle of the bed, on it", "[ui]") {
     CHECK(v[2] == cube.corner(0, 0).z + 3);
     const TriangleMesh moved = translated(cube, {1, 2, 3});
     CHECK(moved.bounding_box().min.y == cube.bounding_box().min.y + 2);
+    // Several meshes: as their joined mesh gives them.
+    const std::vector<TriangleMesh> both{cube, moved};
+    CHECK(mesh_vertices(both, {0, 1, 0}) == mesh_vertices(plate_mesh(both), {0, 1, 0}));
+    CHECK(mesh_vertices(std::vector<TriangleMesh>{}, {}).empty());
 }
 
 TEST_CASE("ui: the bed's grid follows its polygon", "[ui]") {
@@ -551,6 +559,69 @@ TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {
     set_language(before);
 }
 
+TEST_CASE("ui: the engine's load errors in Spanish (the spec team's TR21)", "[ui]") {
+    const Language before = language();
+    set_language(Language::Spanish);
+    CHECK(translated_error("binary STL is truncated: header announces 540029472 facets (27001473684 bytes) but the file has 300 bytes") ==
+          "el STL binario está cortado: la cabecera anuncia 540029472 caras (27001473684 bytes) y el archivo tiene 300 bytes");
+    CHECK(translated_error("OBJ, line 9: vertex 99 is not defined yet (8 so far)") ==
+          "OBJ, línea 9: el vértice 99 todavía no está definido (hay 8)");
+    CHECK(translated_error("/home/a/b.tisma: project: cut short in a chunk header") ==
+          "/home/a/b.tisma: proyecto: cortado en la cabecera de un bloque");
+    CHECK(translated_error("3MF: not a ZIP package") == "3MF: no es un paquete ZIP");
+    CHECK(translated_error("binary STL: facet 12 has a non-finite coordinate") ==
+          "STL binario: la cara 12 tiene una coordenada no finita");
+    CHECK(translated_error("x.gcode: no extrusions found") == "x.gcode: no tiene extrusiones");
+    CHECK(translated_error("settings: not valid JSON at line 2, column 24") == "ajustes: JSON inválido en la línea 2, columna 24");
+    CHECK(translated_error("something new") == "something new"); // unknown: as it is
+    set_language(Language::English);
+    CHECK(translated_error("3MF: not a ZIP package") == "3MF: not a ZIP package");
+    set_language(before);
+}
+
+TEST_CASE("ui: a typed number reads a comma or a point (TR1)", "[ui]") {
+    CHECK(typed_number("0,25") == 0.25);
+    CHECK(typed_number("0.25") == 0.25);
+    CHECK(typed_number(" 12 ") == 12.0);
+    CHECK(typed_number("-1,5e2") == -150.0);
+    CHECK(!typed_number(""));
+    CHECK(!typed_number("1,2,3"));
+    CHECK(!typed_number("abc"));
+    CHECK(!typed_number("12 mm"));
+    CHECK(!typed_number("1e999"));
+}
+
+TEST_CASE("ui: every setting explains itself to a beginner, in both languages", "[ui]") {
+    // The owner's requests, 2026-10-29: a longer explanation with an example,
+    // first for the basic settings and then for every one.
+    const Language before = language();
+    std::set<std::string_view> keys;
+    for (const SettingsTab tab : {SettingsTab::Print, SettingsTab::Material, SettingsTab::Printer})
+        for (const SectionLayout& section : settings_layout(tab))
+            for (const SubsectionLayout& sub : section.subsections)
+                for (const SettingEntry& e : sub.settings)
+                    keys.insert(e.key);
+    REQUIRE(keys.size() > 400);
+    for (const std::string_view key : keys) {
+        INFO(key);
+        set_language(Language::Spanish);
+        const std::string_view es = setting_guide(key);
+        set_language(Language::English);
+        const std::string_view en = setting_guide(key);
+        CHECK(es.size() > 120);
+        CHECK(en.size() > 100);
+        CHECK(es != en);
+    }
+    // And every explanation is of a real setting, once.
+    std::set<std::string_view> seen;
+    for (std::size_t i = 0; i < setting_guide_count(); ++i) {
+        INFO(setting_guide_key(i));
+        CHECK(keys.contains(setting_guide_key(i)));
+        CHECK(seen.insert(setting_guide_key(i)).second);
+    }
+    set_language(before);
+}
+
 TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
     const std::filesystem::path dir = test_temp_dir() / "tisma_ui_files";
     std::filesystem::remove_all(dir);
@@ -900,6 +971,35 @@ TEST_CASE("view: the preview's nearest layers are drawn first, for the depth tes
     CHECK(preview_draws(PreviewDrawOrder{}, 0, 3, some, 1.0f).empty());
 }
 
+TEST_CASE("view: the preview leaves out the layers outside the view", "[ui]") {
+    // The identity as the view and projection: what is shown is -1 to 1 on each axis.
+    const Mat4 clip = identity();
+    CHECK_FALSE(box_outside(clip, {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f}));
+    CHECK_FALSE(box_outside(clip, {0.5f, 0.5f, 0.5f, 3.0f, 3.0f, 3.0f})); // partly in
+    CHECK(box_outside(clip, {1.5f, -0.5f, -0.5f, 3.0f, 0.5f, 0.5f}));       // right of the view
+    CHECK(box_outside(clip, {-0.5f, -0.5f, -9.0f, 0.5f, 0.5f, -2.0f}));     // behind the near plane
+    CHECK(box_outside(clip, {1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f})); // empty
+
+    // Four layers of 3 extrusions; layers 2 and 3 are far to the right.
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 3, 6, 9, 12};
+    order.layer_hidden = {12, 12, 12, 12, 12};
+    order.layer_z = {0.2f, 0.4f, 0.6f, 0.8f};
+    order.layer_box = {{-0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.2f}, {-0.5f, -0.5f, 0.2f, 0.5f, 0.5f, 0.4f},
+                       {5.0f, -0.5f, 0.4f, 6.0f, 0.5f, 0.6f}, {5.0f, -0.5f, 0.6f, 6.0f, 0.5f, 0.8f}};
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    CHECK(total(preview_draws(order, 0, 3, 0x6u, -5.0f)) == 12);              // without the view: all
+    const std::vector<PreviewRange> seen = preview_draws(order, 0, 3, 0x6u, -5.0f, kWholeLayer, kWholeLayer, &clip);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].first == 0);
+    CHECK(seen[0].count == 6);
+}
+
 TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex clustering)", "[ui]") {
     // A sphere of radius 20 in 360 x 180 steps: 129 600 triangles.
     TriangleMesh sphere;
@@ -927,4 +1027,69 @@ TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex c
     CHECK(std::abs(a.min.x - b.min.x) < 1.0f);
     CHECK(std::abs(a.max.z - b.max.z) < 1.0f);
     CHECK_THAT(coarse.signed_volume(), Catch::Matchers::WithinRel(sphere.signed_volume(), 0.05));
+}
+
+TEST_CASE("preview: far away, the walls of a group of layers are drawn as one", "[ui][preview]") {
+    // 10 layers 0.2 mm high, each an outer and an inner wall; layer 5 also
+    // has a top skin.
+    PreviewBuffers p;
+    p.layer_extrusions.push_back(0);
+    for (std::uint32_t l = 0; l < 10; ++l) {
+        const float z = 0.2f * float(l + 1);
+        for (const LineKind k : {LineKind::OuterWall, LineKind::InnerWall})
+            p.extrusions.push_back({0, 0, z, 10, 0, z, 0.4f, 0.2f, 30, std::uint32_t(k) | (l << 8)});
+        if (l == 5)
+            p.extrusions.push_back({0, 1, z, 10, 1, z, 0.4f, 0.2f, 30, std::uint32_t(LineKind::TopSolidInfill) | (l << 8)});
+        p.layer_extrusions.push_back(p.extrusions.size());
+    }
+    const PreviewDrawOrder full = preview_draw_order(p);
+    REQUIRE(full.instances.size() == 21);
+    const PreviewDrawOrder far = merged_layers(full, 2);
+    // Walls in layers 9, 7, 5, 3 and 1, two layers high (the walls of the
+    // layers below are right under them); the skin is among the others.
+    CHECK(far.instances.size() == 10);
+    CHECK(far.layer_shown.size() == 11);
+    for (std::size_t l = 0; l < 10; ++l)
+        CHECK(far.layer_shown[l + 1] - far.layer_shown[l] == (l % 2 == 1 ? 2u : 0u));
+    for (const PreviewInstance& e : far.instances)
+        CHECK_THAT(e.height, Catch::Matchers::WithinAbs(0.4, 1e-6));
+    const PreviewDrawOrder others = other_than_walls(full);
+    REQUIRE(others.instances.size() == 1);
+    CHECK(others.layer_shown[6] - others.layer_shown[5] == 1);
+    // A wall that steps out more than half a pixel from the one above stays.
+    PreviewBuffers dome = p;
+    for (PreviewInstance& e : dome.extrusions)
+        if ((e.kind_layer >> 8) % 2 == 0)
+            e.y0 = e.y1 = -1.0f;
+    CHECK(merged_layers(preview_draw_order(dome), 2).instances.size() == 20);
+    // The top layer keeps its walls; nothing hidden to draw.
+    CHECK(far.layer_shown[10] - far.layer_shown[9] == 2);
+    CHECK(far.layer_hidden.front() == far.layer_hidden.back());
+    // A group of 1 is the same order.
+    CHECK(merged_layers(full, 1).instances.size() == full.instances.size());
+}
+
+TEST_CASE("preview: the group of layers drawn as one by a layer's size on the screen", "[ui][preview]") {
+    CHECK(far_group(2.0f) == 1);
+    CHECK(far_group(0.3f) == 1);
+    CHECK(far_group(0.25f) == 2);
+    CHECK(far_group(0.1f) == 4);
+    CHECK(far_group(0.05f) == 4);
+    CHECK(far_group(0.01f) == 4);
+}
+
+TEST_CASE("preview: the far-away order stands for every layer uncut when nothing is hidden", "[ui][preview]") {
+    PreviewBuffers p;
+    p.layer_extrusions.push_back(0);
+    for (std::uint32_t l = 0; l < 4; ++l) {
+        const float z = 0.2f * float(l + 1);
+        p.extrusions.push_back({0, 0, z, 10, 0, z, 0.4f, 0.2f, 30, std::uint32_t(LineKind::OuterWall) | (l << 8)});
+        p.layer_extrusions.push_back(p.extrusions.size());
+    }
+    const PreviewDrawOrder order = preview_draw_order(p); // nothing marked hidden, as a G-code file
+    const std::uint32_t some = 1u << unsigned(LineKind::OuterWall);
+    CHECK_FALSE(preview_whole(order, 0, 3, some));
+    CHECK(preview_far(order, 0, 3, some));
+    CHECK_FALSE(preview_far(order, 0, 2, some));    // a cut from the top
+    CHECK_FALSE(preview_far(order, 0, 3, some, 0)); // the move slider
 }

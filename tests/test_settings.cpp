@@ -181,6 +181,10 @@ TEST_CASE("settings: the specs' names for settings the engine has under another 
 
 TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings("{"), ContainsSubstring("not valid JSON"));
+    CHECK_THROWS_WITH(parse_settings("{\n  \"layers\": {\"height\": }\n}"),
+                      ContainsSubstring("not valid JSON at line 2, column 24"));
+    CHECK_THROWS_WITH(parse_settings("{\n  \"layers\": {\"height\": }\n}"), !ContainsSubstring("json.exception"));
+    CHECK_THROWS_WITH(parse_settings("  \n"), ContainsSubstring("the file is empty"));
     CHECK_THROWS_WITH(parse_settings("[]"), ContainsSubstring("top level"));
     CHECK_THROWS_WITH(parse_settings(R"({"layer": {}})"), ContainsSubstring("layer: unknown group"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"hieght": 0.2}})"), ContainsSubstring("layers.hieght: unknown setting"));
@@ -191,7 +195,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"layers": 3})"), ContainsSubstring("must be an object"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 40 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0.01}})"),
+                      ContainsSubstring("walls.width: must be 0 (from the nozzle) or from 0.05 to 40 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
@@ -290,7 +295,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS(parse_settings(R"({"calibration": {"band_height": 0}})"));
     // A band's value within what a height change takes: no M104 S1000.
     CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 1000}})"),
-                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 0 to 500 C"));
+                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 150 to 500 C"));
+    // Nor a band with the heater off (the spec team's BH10): start 0, or a step that reaches a cold value.
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature"}})"), ContainsSubstring("calibration.start"));
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 210, "step": -100, "end": 0}})"),
+                      ContainsSubstring("calibration.end: gives 10.0"));
     CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "retraction", "start": 1, "step": 2, "end": 80}})"),
                       ContainsSubstring("calibration.end"));
     CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 0}})"));
@@ -323,6 +332,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(b.bed[2][0] == 100.0);
     CHECK(b.max_height == 150.0);
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
+    // A bed with no area or with sides that cross is a settings error (the spec team's BH14).
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [100, 100], [200, 200]]}})"),
+                      ContainsSubstring("machine.bed: has no area"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [200, 200], [200, 0], [0, 200]]}})"),
+                      ContainsSubstring("machine.bed: crosses itself"));
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [0, 200], [200, 200], [200, 0]]}})")); // clockwise
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [0, 0], [200, 0], [200, 200], [0, 200], [0, 0]]}})"));
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [200, 0], [200, 200], [100, 100], [0, 200]]}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1], [2]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_height": -1}})"), ContainsSubstring("machine.max_height: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
@@ -410,7 +427,7 @@ TEST_CASE("slice_model applies XY offset and the first-layer shrink", "[settings
 TEST_CASE("slice_model builds the walls of every layer and leaves the middle for infill", "[settings]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings s; // 3 walls of 0.4 mm
-    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    s.wall_width = s.outer_wall_width = 0.4; // 0.4 mm beads (as measured), the outer wall as the others
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(sliced.walls.size() == sliced.layers.size());
     for (const LayerWalls& w : sliced.walls) {
@@ -521,7 +538,18 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("extrusion.chamber_temperature"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"abrasive": 1}})"),
                       ContainsSubstring("extrusion.abrasive: must be true or false"));
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_flow": 2000}})"), ContainsSubstring("machine.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_flow": 20000}})"), ContainsSubstring("machine.max_flow"));
+    CHECK(parse_settings(R"({"machine": {"max_flow": 2000}})").machine_max_flow == 2000.0); // pellets.md
+    CHECK(parse_settings(R"({"extrusion": {"max_flow": 5000}})").filament_max_flow == 5000.0);
+    CHECK(parse_settings("{}").feedstock == Feedstock::Filament);
+    CHECK(parse_settings("{}").high_flow_nozzle == std::vector<bool>{false}); // multi_extruder.md
+    CHECK(parse_settings(R"({"machine": {"high_flow_nozzle": true}})").high_flow_nozzle == std::vector<bool>{true});
+    CHECK(parse_settings(settings_json(parse_settings(R"({"machine": {"high_flow_nozzle": [true, false]}})"))).high_flow_nozzle ==
+          std::vector<bool>{true, false});
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"high_flow_nozzle": 1}})"), ContainsSubstring("machine.high_flow_nozzle"));
+    CHECK(parse_settings(settings_json(parse_settings(R"({"machine": {"feedstock": "pellet"}})"))).feedstock ==
+          Feedstock::Pellet);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"feedstock": "granules"}})"), ContainsSubstring("machine.feedstock"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_nozzle_temp": 900}})"),
                       ContainsSubstring("machine.max_nozzle_temp"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"enclosed": "yes"}})"),
@@ -574,6 +602,33 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.6}})")));
     CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": "1000%"}})")));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
+    // The other beads too (the spec team's BH5).
+    for (const char* bad : {R"({"infill": {"width": 10}})", R"({"surfaces": {"solid_width": 5}})",
+                            R"({"surfaces": {"top_width": 0.05}})", R"({"support": {"enabled": true, "width": 10}})"})
+        CHECK_THROWS_WITH(check_settings(parse_settings(bad)), ContainsSubstring("cannot come out of a 0.4 mm nozzle"));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"infill": {"width": 0.6}, "surfaces": {"solid_width": 0.5}})")));
+    // And the thin walls' least bead, a minimum: only its top.
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"walls": {"min_line_width": 9.092}})")),
+                      ContainsSubstring("walls.min_line_width: 9.09 mm cannot come out of a 0.4 mm nozzle"));
+    CHECK_THROWS(check_settings(parse_settings(R"({"walls": {"min_line_width": "500%"}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": 0}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": "150%"}})")));
+}
+
+TEST_CASE("extrusion.flow_by_speed and extrusion.section (pellets.md, rules 4 and 5)", "[settings]") {
+    const Settings s = parse_settings(R"({"extrusion": {"flow_by_speed": [[60, 100], [20, 110]]}})");
+    REQUIRE(s.flow_by_speed.size() == 2);
+    CHECK(s.flow_by_speed[0] == std::array<double, 2>{20.0, 110.0}); // by speed
+    CHECK(parse_settings(settings_json(s)).flow_by_speed == s.flow_by_speed);
+    CHECK(parse_settings("{}").flow_by_speed.empty());
+    CHECK(parse_settings("{}").bead_section == BeadSection::Rounded);
+    CHECK(parse_settings(R"({"extrusion": {"section": "rectangle"}})").bead_section == BeadSection::Rectangle);
+    CHECK(parse_settings(settings_json(parse_settings(R"({"extrusion": {"section": "rectangle"}})"))).bead_section ==
+          BeadSection::Rectangle);
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"section": "round"}})"), ContainsSubstring("extrusion.section"));
+    for (const char* bad : {R"([[20]])", R"([[20, 5]])", R"([[20, 400]])", R"([[-1, 100]])", R"([[20000, 100]])", R"(5)"})
+        CHECK_THROWS_WITH(parse_settings(std::string(R"({"extrusion": {"flow_by_speed": )") + bad + "}}"),
+                          ContainsSubstring("extrusion.flow_by_speed"));
 }
 
 TEST_CASE("walls.spread_count and walls.transition_length (perimeters.md)", "[settings]") {

@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -151,7 +152,7 @@ static AnalysisCase parse_analysis_case_checked(std::string_view text) {
     try {
         root = json::parse(text.begin(), text.end());
     } catch (const json::parse_error& e) {
-        throw SettingsError(std::string("case: not valid JSON: ") + e.what());
+        throw SettingsError("case: " + json_error(text, e.byte));
     }
     if (!root.is_object())
         throw SettingsError("case: the top level must be an object");
@@ -260,6 +261,8 @@ AnalysisCase parse_analysis_case(std::string_view text) {
 }
 
 AnalysisCase load_analysis_case(const std::filesystem::path& path) {
+    if (std::error_code ec; std::filesystem::is_directory(path, ec))
+        throw SettingsError("case: '" + path.string() + "' is a folder, not a load case");
     std::ifstream in(path, std::ios::binary);
     if (!in)
         throw SettingsError("case: cannot open '" + path.string() + "'");

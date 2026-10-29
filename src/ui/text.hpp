@@ -18,6 +18,8 @@
       "Write the G-code, read it back from the disk and check it (Ctrl+E)")                                           \
     X(ExportNeedsSlice, "Primero hay que laminar", "Slice first")                                                     \
     X(More, "Más", "More")                                                                                            \
+    X(CopyLink, "Copiar enlace", "Copy Link")                                                                         \
+    X(OpenLink, "Abrir '%s'", "Open '%s'")                                                                           \
     X(Printer, "Impresora", "Printer")                                                                                \
     X(Filament, "Filamento", "Filament")                                                                              \
     X(Print, "Impresión", "Print")                                                                                    \
@@ -50,6 +52,10 @@
     X(StartGcode, "G-code de inicio", "Start G-code")                                                                 \
     X(EndGcode, "G-code de fin", "End G-code")                                                                        \
     X(FilamentDiameter, "Diámetro", "Diameter")                                                                       \
+    X(FeedstockRow, "Alimentación", "Feedstock") \
+    X(MaterialFeedstockRow, "Material para", "Material for") \
+    X(FeedstockFilament, "Filamento", "Filament") \
+    X(FeedstockPellet, "Pellets", "Pellets") \
     X(NozzleTemp, "Temperatura de boquilla", "Nozzle temperature")                                                    \
     X(BedTemp, "Temperatura de cama", "Bed temperature")                                                              \
     X(TempTip, "Va al G-code de inicio como [temperature] y [bed_temperature]",                                       \
@@ -132,7 +138,7 @@
     X(SupportAutomatic, "Soporte automático", "Automatic support")                                                     \
     X(SupportAutomaticTip, "Apagado, solo hay soporte bajo las caras pintadas con Pintar > Soportes",                   \
       "When off, support goes only under the faces painted with Paint > Supports")                                    \
-    X(SupportAngle, "Ángulo de voladizo (0: automático)", "Overhang angle (0: automatic)")                           \
+    X(SupportAngle, "Ángulo de voladizo", "Overhang angle")                                                           \
     X(SkirtLoops, "Vueltas de falda", "Skirt loops")                                                                  \
     X(SkirtDistance, "Distancia de la falda", "Skirt distance")                                                       \
     X(BrimWidth, "Ancho del borde", "Brim width")                                                                     \
@@ -161,6 +167,12 @@
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
     X(ToolAdd, "Agregar modelo", "Add a model")                                                                       \
     X(ToolAddTip, "Agregar un modelo a la placa; se ordenan todos", "Add a model to the plate; all of them are arranged") \
+    X(AddShape, "Agregar forma", "Add a shape")                                                                       \
+    X(ShapeCube, "Cubo", "Cube")                                                                                      \
+    X(ShapeSphere, "Esfera", "Sphere")                                                                                \
+    X(SendToPrinter, "Mandar a la impresora", "Send to the printer")                                                  \
+    X(SendToPrinterNone, "Mandar a la impresora (sin conectar)", "Send to the printer (not connected)")               \
+    X(SaveOptions, "Más formas de guardar", "More ways to save")                                                      \
     X(ToolRemoveTip, "Quitar el modelo elegido (Supr)", "Remove the chosen model (Delete)")                           \
     X(ToolDuplicateTip, "Duplicar el modelo elegido", "Duplicate the chosen model")                                   \
     X(ToolMoveTip, "Mover (M): arrastrá el modelo sobre la cama o escribí su posición", "Move (M): drag the model on the bed or type its position") \
@@ -201,28 +213,44 @@
       "Welcome to Tisma")\
     X(Tour0, "En un minuto te muestro cómo pasar de un modelo a una pieza impresa. Podés volver a ver esto desde el menú de los tres puntos > Tutorial.",\
       "In a minute, how to go from a model to a printed part. You can see this again from the three-dot menu > Tutorial.")\
-    X(Tour1Title, "1. Abrí un modelo",\
-      "1. Open a model")\
+    X(TourSliceTitle, "Cómo se imprime una pieza",\
+      "How a part is printed")\
+    X(TourSlice, "La impresora no entiende un modelo 3D: sigue instrucciones, punto por punto. Laminar corta el modelo en capas finas, como fetas, y en cada capa dibuja el camino que hace la boquilla mientras derrite plástico. Esas instrucciones son el G-code, el archivo que va a la impresora.",\
+      "The printer does not understand a 3D model: it follows instructions, point by point. Slicing cuts the model into thin layers and, on each one, draws the path the nozzle takes while it melts plastic. Those instructions are the G-code, the file that goes to the printer.")\
+    X(TourLayersTitle, "Capas, paredes y relleno",\
+      "Layers, walls and infill")\
+    X(TourLayers, "Cada capa tiene paredes, que son el contorno de la pieza, y adentro un relleno con huecos que ahorra plástico y tiempo. Arriba y abajo, unas capas macizas cierran la pieza. Capas más finas, más detalle y más tiempo; más paredes y más relleno, más fuerza.",\
+      "Each layer has walls, the outline of the part, and inside an infill with gaps that saves plastic and time. On top and at the bottom, solid layers close the part. Thinner layers mean more detail and more time; more walls and infill, more strength.")\
+    X(TourSupportTitle, "Lo que cuelga y lo que se pega",\
+      "What overhangs and what sticks")\
+    X(TourSupport, "Cada capa se apoya en la de abajo: lo que sobresale en el aire necesita soportes, columnas que se sacan al final. Y todo empieza con la primera capa pegada a la cama; si la pieza tiene poca base, un borde alrededor la ayuda a no despegarse.",\
+      "Each layer rests on the one below: whatever sticks out into the air needs supports, columns removed at the end. And everything starts with the first layer stuck to the bed; if the part has a small base, a brim around it helps it stay down.")\
+    X(TourMaterialTitle, "El material y su temperatura",\
+      "The material and its temperature")\
+    X(TourMaterial, "Cada plástico se derrite a su temperatura: el PLA, el más fácil, entre 195 y 220 °C con la cama a unos 60 °C; el PETG y el ABS piden más. La caja del rollo dice su rango. Elegí tu filamento en el perfil de Material y, para afinarlo, usá Calibración: la torre de temperatura y la de retracción.",\
+      "Each plastic melts at its own temperature: PLA, the easiest, between 195 and 220 °C with the bed at about 60 °C; PETG and ABS ask for more. The spool's box gives its range. Choose your filament in the Material profile and, to fine-tune it, use Calibration: the temperature tower and the retraction test.")\
+    X(Tour1Title, "Abrí un modelo",\
+      "Open a model")\
     X(Tour1, "Arrastrá un STL a la ventana o usá Abrir. El modelo queda centrado y apoyado en la cama. Con Agregar sumás más modelos a la placa.",\
       "Drop an STL on the window or use Open. The model sits centred on the bed. Add puts more models on the plate.")\
-    X(Tour2Title, "2. Elegí impresora, filamento y perfil",\
-      "2. Choose printer, filament and profile")\
+    X(Tour2Title, "Elegí impresora, filamento y perfil",\
+      "Choose printer, filament and profile")\
     X(Tour2, "Arriba del panel de la izquierda: la impresora, el filamento y el perfil de impresión. El catálogo trae los de muchas marcas.",\
       "At the top of the left panel: the printer, the filament and the print profile. The catalog has those of many brands.")\
-    X(Tour3Title, "3. Ajustá lo que necesites",\
-      "3. Adjust what you need")\
-    X(Tour3, "Cada ajuste tiene un botón (i) al lado de su nombre: dice qué hace, su valor por defecto y su rango.",\
-      "Each setting has an (i) button beside its name: what it does, its default and its range.")\
-    X(Tour4Title, "4. Ubicá y prepará la pieza",\
-      "4. Place and prepare the part")\
+    X(Tour3Title, "Ajustá lo que necesites",\
+      "Adjust what you need")\
+    X(Tour3, "Cada ajuste tiene un botón (i) al lado de su nombre: abre una ficha con un dibujo, qué hace, qué cambia en la pieza y un ejemplo.",\
+      "Each setting has an (i) button beside its name: it opens a card with a drawing, what it does, what it changes in the part and an example.")\
+    X(Tour4Title, "Ubicá y prepará la pieza",\
+      "Place and prepare the part")\
     X(Tour4, "La columna a la izquierda de la vista mueve, gira, escala, apoya, ordena y pinta los modelos. Cada herramienta explica cómo se usa la primera vez.",\
       "The column at the left of the view moves, turns, scales, lays flat, arranges and paints the models. Each tool explains itself the first time.")\
-    X(Tour5Title, "5. Laminá y revisá",\
-      "5. Slice and check")\
+    X(Tour5Title, "Laminá y revisá",\
+      "Slice and check")\
     X(Tour5, "Laminar arma el G-code y lo verifica. Vista previa muestra cada capa tal como se va a imprimir.",\
       "Slice makes the G-code and checks it. Preview shows every layer as it will print.")\
-    X(Tour6Title, "6. Imprimí",\
-      "6. Print")\
+    X(Tour6Title, "Imprimí",\
+      "Print")\
     X(Tour6, "Exportar G-code lo guarda en un archivo; Impresora lo manda por USB y muestra cómo va.",\
       "Export G-code saves it to a file; Printer sends it over USB and shows how it goes.")\
     X(TipMoveTitle, "Mover",\
@@ -358,9 +386,30 @@
     X(DeviceCannotOpen, "No se pudo abrir el puerto: %s", "Cannot open the port: %s")                                 \
     X(DeviceResends, "%zu líneas reenviadas", "%zu lines sent again")                                                 \
     X(CalibrationTitle, "Calibración de la impresora", "Printer calibration")                                         \
-    X(CalibrationHint, "Tocá Crear: la pieza se arma y se lamina sola, con rangos elegidos desde tus ajustes. Imprimila, mirala y elegí lo que salió mejor.", \
-      "Press Create: the part is built and sliced by itself, with ranges chosen from your settings. Print it, look at it and pick what came out best.") \
+    X(CalibrationHint, "Elegí una prueba: se abre su ficha, con qué hace y cómo se lee. Al crearla, la pieza se arma y se lamina sola.", \
+      "Pick a test: its card opens, with what it does and how to read it. Created, the part is built and sliced by itself.") \
+    X(CalSectionBasic, "Básicas, en este orden", "The basics, in this order")                                       \
+    X(CalSectionMore, "Más pruebas", "More tests")                                                                    \
+    X(CalHowToRead, "Cómo se lee", "How to read it")                                                                  \
+    X(CalYourFilament, "Tu filamento: %s · boquilla %s · cama %s", "Your filament: %s · nozzle %s · bed %s")       \
+    X(CalNoFilament, "el de los ajustes", "the one in the settings")                                                 \
+    X(CalTowerRange, "Con tu filamento, la torre prueba de %s a %s, de a 5 °C.",                                      \
+      "With your filament, the tower tries %s to %s, 5 °C apart.")                                                     \
+    X(CalContinue, "Continuar: %s", "Continue: %s")                                                                   \
+    X(CalAllBasicDone, "Las cuatro básicas están hechas con este filamento.", "The four basic ones are done with this filament.") \
+    X(CalWhyFirst, "Por qué primero", "Why first")                                                                    \
     X(Create, "Crear", "Create")                                                                                      \
+    X(CalBasicIntro, "Con estas cuatro pruebas cortas, en este orden y con el rollo que vas a usar, casi cualquier filamento imprime bien. Cada una arma su pieza sola: imprimila, mirala y elegí la que salió mejor.",\
+      "With these four short tests, in this order and with the spool you will use, almost any filament prints well. Each one builds its own part: print it, look at it and pick the one that came out best.")\
+    X(CalBasicFirstLayer, "La cama bien nivelada y la boquilla a la altura justa: si la primera capa no se pega pareja, nada de lo demás sale bien.",\
+      "The bed level and the nozzle at the right height: if the first layer does not stick evenly, nothing else comes out well.")\
+    X(CalBasicTemperature, "La mejor temperatura para tu rollo, dentro del rango que dice su caja: una torre que prueba de a 5 °C.",\
+      "The best temperature for your spool, within the range on its box: a tower that tries it 5 °C at a time.")\
+    X(CalBasicFlow, "Cuánto plástico empujar: ni huecos entre las líneas ni de más.",\
+      "How much plastic to push: no gaps between the lines and no excess.")\
+    X(CalBasicRetraction, "Cuánto tirar del filamento antes de cada viaje para que no queden hilos.",\
+      "How far to pull the filament back before each travel so no strings are left.")\
+    X(CalBasicDone, "Hecha", "Done")\
     X(CalDimensionsWhat, "Corrige la escala en X, Y y Z y el tamaño de los agujeros.", "Corrects the scale in X, Y and Z and the size of holes.") \
     X(CalTemperatureWhat, "Voladizos, techo plano, resistencia entre capas y detalle, a cada temperatura.",             \
       "Overhangs, a flat roof, layer strength and detail, at each temperature.")                                       \
@@ -600,6 +649,8 @@
     X(Density, "Densidad", "Density")                                                                                 \
     X(NeedsEnclosure, "Necesita impresora cerrada", "Needs an enclosed printer")                                      \
     X(CatalogEmpty, "Sin resultados", "No results")                                                                   \
+    X(CatalogNoMaterial, "El catálogo no tiene materiales para la alimentación o el diámetro de filamento de esta impresora", \
+      "The catalog has no material for this printer's feedstock or filament diameter")                                \
     X(ProfileAdded, "Agregado a tus perfiles: %s", "Added to your profiles: %s")                                      \
     X(SpeedFallback, "La impresora no trae velocidades: se usan las de una Ender 3 de fábrica (revisalas en "         \
       "Impresora › Velocidades)",                                                                                     \
@@ -798,6 +849,7 @@
     X(SecSupport, "Soportes", "Support") \
     X(SecAdhesion, "Adhesión", "Adhesion") \
     X(SecOther, "Otros", "Others") \
+    X(SecNonplanar, "No planar", "Non-planar") \
     X(SecTemperature, "Temperaturas", "Temperatures") \
     X(SecCooling, "Enfriamiento", "Cooling") \
     X(SecFlow, "Flujo", "Flow") \
@@ -836,7 +888,7 @@
     X(ArcsSpeed, "Velocidad de los arcos", "Arc speed") \
     X(ArcsMaxDistance, "Hasta qué distancia", "Up to") \
     X(SumArcs, "Arcos a %s mm/s", "Arcs at %s mm/s") \
-    X(SumNoArcs, "Sin arcos", "No arcs") \
+    X(SumNoArcs, "Apagado", "Off") \
     X(SubSupportPattern, "Patrón", "Pattern") \
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \
@@ -914,7 +966,7 @@
     X(CalibratedCount, "%d de %d calibradas", "%d of %d calibrated") \
     X(CalibrateInOrder, "Calibrar en orden", "Calibrate in order") \
     X(CalibrateButton, "Calibrar", "Calibrate") \
-    X(OpenInDevices, "Abrir en Dispositivos", "Open in Devices") \
+    X(OpenInDevices, "Abrir la pestaña Impresora", "Open the Printer tab") \
     X(ConnectionNone, "Sin conectar. La conexión por USB está en la pestaña Impresora.", "Not connected. The USB connection is in the Printer tab.") \
     X(ConnectionNow, "Conectada por USB: %s", "Connected by USB: %s") \
     X(NotesHint, "Notas sobre esta impresora: arreglos, repuestos, lo que sirvió…", "Notes about this printer: fixes, spare parts, what worked…") \
@@ -972,7 +1024,7 @@
     X(SumLayersN, "%d capas", "%d layers") \
     X(SumSkirt, "%d vueltas a %s mm", "%d loops at %s mm") \
     X(SumNoSkirt, "Sin falda", "No skirt") \
-    X(SumNoBrim, "Sin borde", "No brim") \
+    X(SumNoBrim, "Apagado", "Off") \
     X(SumNormalPrint, "Normal", "Normal") \
     X(SumResolution, "Resolución %s mm", "Resolution %s mm") \
     X(SumTemp, "%d °C", "%d °C") \
@@ -996,7 +1048,7 @@
     X(SumHardened, "%s mm · acero endurecido", "%s mm · hardened steel") \
     X(SumFeeds, "%s mm/s en X e Y", "%s mm/s in X and Y") \
     X(SumAccel, "%s mm/s²", "%s mm/s²") \
-    X(SumMaxTemps, "%s °C · %s °C", "%s °C · %s °C") \
+    X(SumMaxTemps, "Boquilla %s · cama %s", "Nozzle %s · bed %s") \
     X(SumLines, "%d líneas · %d líneas", "%d lines · %d lines") \
     X(SumVariables, "%d variables", "%d variables") \
     X(ScarfMode, "Costura en bufanda", "Scarf seam") \
@@ -1016,6 +1068,7 @@
     X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
     X(TransitionLength, "Largo de las transiciones", "Transition length") \
     X(TransitionAngle, "Ángulo de las transiciones", "Transition angle") \
+    X(TransitionMargin, "Margen de transición", "Transition margin") \
     X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
     X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
     X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
@@ -1041,12 +1094,18 @@
     X(NotSet, "Sin dato", "Not set") \
     X(AutoValue, "Automático", "Automatic") \
     X(NoLimit, "Sin límite", "No limit") \
+    X(SetupPrinter, "Para empezar, elegí tu impresora (paso 1 de 2; se puede cambiar después).", "To start, choose your printer (step 1 of 2; it can be changed later).") \
+    X(SetupFilament, "Ahora, el filamento que vas a usar (paso 2 de 2).", "Now the filament you will use (step 2 of 2).") \
+    X(LegendLess, "Menos detalle", "Less detail") \
+    X(LegendMore, "Más detalle: tiempos, filamento y totales", "More detail: times, filament and totals") \
+    X(ValueMax, "Máximo: %s", "Maximum: %s") \
+    X(ValueMin, "Mínimo: %s", "Minimum: %s") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
     X(SupportPatternRow, "Patrón de la base", "Base pattern") \
-    X(SupportEnforceLayers, "Soporte forzado en las primeras capas", "Enforce support for the first layers") \
+    X(SupportEnforceLayers, "Capas con soporte forzado", "Layers of enforced support") \
     X(SupportSheath, "Vaina", "Sheath") \
     X(SupportInterfacePatternRow, "Patrón de la interfaz", "Interface pattern") \
     X(SupportInterfaceSpacing, "Separación de la interfaz", "Interface spacing") \
@@ -1130,7 +1189,7 @@
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
-    X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \
+    X(SkirtMinFilament, "Filamento mínimo", "Minimum filament") \
     X(AutoTemperatures, "Temperaturas automáticas", "Automatic temperatures") \
     X(SubOutputFile, "Archivo de salida", "Output file") \
     X(FilenameFormat, "Nombre del archivo", "File name") \
@@ -1278,7 +1337,7 @@
     X(CurvedEgg, "Huevera", "Egg crate") \
     X(CurvedRidges, "Crestas", "Ridges") \
     X(CurvedTwisted, "Crestas torcidas", "Twisted ridges") \
-    X(CurvedFitHead, "Ajustar a la cabeza", "Fit to the head") \
+    X(CurvedFitHead, "Ajustar al cabezal", "Fit to the print head") \
     X(CurvedAmplitude, "Amplitud", "Amplitude") \
     X(CurvedWavelength, "Largo de onda", "Wavelength") \
     X(CurvedAngle, "Dirección de las crestas", "Ridge direction") \
@@ -1299,7 +1358,7 @@
     X(HeadFreeAngleY, "Ángulo libre a lo largo de Y", "Free angle along Y") \
     X(HeadClearanceHeight, "Altura libre", "Clearance height") \
     X(HeadClearanceRadius, "Radio libre", "Clearance radius") \
-    X(HeadProfile, "Perfil de la cabeza", "Head profile") \
+    X(HeadProfile, "Perfil del cabezal", "Print head profile") \
     X(SecResin, "Resina", "Resin") \
     X(SubResinLayers, "Resina: capas", "Resin: layers") \
     X(SubResinDisplay, "Pantalla de resina", "Resin display") \
@@ -1394,10 +1453,15 @@
     X(CoolingInitialSpeed, "Velocidad del primero", "First move's speed") \
     X(CoolingFinalSpeed, "Velocidad del último", "Last move's speed") \
     X(RammingRow, "Compresión antes de descargar", "Ramming before unloading") \
+    X(FlowBySpeedRow, "Flujo según la velocidad", "Flow by speed") \
+    X(BeadSectionRow, "Sección del cordón", "Bead section") \
+    X(BeadSectionRounded, "Redondeada", "Rounded") \
+    X(BeadSectionRectangle, "Rectangular", "Rectangle") \
     X(ToolchangeDelay, "Espera después de descargar", "Wait after unloading") \
     X(LoadTime, "Tiempo de carga", "Load time") \
     X(UnloadTime, "Tiempo de descarga", "Unload time") \
     X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
+    X(HighFlowNozzle, "Boquilla de alto caudal", "High-flow nozzle") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
     X(LimitsIgnore, "No usarlos", "Do not use them") \
@@ -1417,6 +1481,7 @@
     X(ShrinkageZ, "Contracción en Z", "Shrinkage in Z") \
     X(SumNoShrinkage, "Sin compensar", "Not compensated") \
     X(SumShrinkage, "XY %s %% · Z %s %%", "XY %s %% · Z %s %%") \
+    X(SumSpacingFlow, "Separación %s %% · flujo %s %%", "Spacing %s %% · flow %s %%") \
     X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \
@@ -1513,7 +1578,9 @@
     X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
 
 #include <cstdarg>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace tisma::ui {
 
@@ -1548,5 +1615,15 @@ std::string grouped(unsigned long long n);
 
 // A number written by printf ("0.20") with the language's decimal point.
 std::string localized(std::string number);
+
+// The engine's own messages (a file that does not load, bad settings) in
+// the language: known ones by their pattern, a path or a "3MF, line 4:"
+// before them kept or translated, the rest as they are (the spec team's
+// TR21: the open-file dialog mixed languages).
+std::string translated_error(std::string_view message);
+
+// A number typed in a field, with ',' or '.' for the decimal point and
+// spaces around it; empty when it is not one number.
+std::optional<double> typed_number(std::string_view text);
 
 } // namespace tisma::ui

@@ -184,6 +184,47 @@ TEST_CASE("catalog: filament profiles from a data sheet", "[catalog]") {
     CHECK(parse_profile(profile_file_json(abs)).kind == ProfileKind::Filament);
 }
 
+TEST_CASE("catalog: only the materials the printer takes are offered", "[catalog]") {
+    // pellets.md, rule 1; profiles.md, rule 5.
+    const std::string pellets = replaced(kFilaments, R"("name": "ABS", "material": "ABS",)",
+                                         R"("name": "ABS", "material": "ABS", "feedstock": "pellet",)");
+    const Catalog c = parse_catalog(replaced(kPrinters, R"("model": "Delta 180",)",
+                                             R"("model": "Delta 180", "filament_diameter": 2.85,)"),
+                                    replaced(pellets, R"("name": "PETG Clear", "material": "PETG",)",
+                                             R"("name": "PETG Clear", "material": "PETG", "diameter": 2.85,)"));
+    const FilamentModel& abs = *find_filaments(c, "bolt abs").front();
+    const FilamentModel& petg = *find_filaments(c, "petg").front();
+    const FilamentModel& pla = *find_filaments(c, "tough pla").front();
+    CHECK(abs.feedstock == Feedstock::Pellet);
+    CHECK(pla.feedstock == Feedstock::Filament);
+    CHECK(filament_profile(abs).settings.material_feedstock == Feedstock::Pellet);
+    CHECK(filament_profile(pla).settings.material_feedstock == Feedstock::Filament);
+
+    // A pellet printer: pellets of any size, never filament.
+    CHECK(filament_offered(abs, Feedstock::Pellet, {1.75}));
+    CHECK_FALSE(filament_offered(pla, Feedstock::Pellet, {}));
+    // A filament printer: never pellets; the diameters its printers use, any when none is known.
+    CHECK_FALSE(filament_offered(abs, Feedstock::Filament, {}));
+    CHECK(filament_offered(pla, Feedstock::Filament, {}));
+    CHECK(filament_offered(petg, Feedstock::Filament, {}));
+    CHECK(filament_offered(pla, Feedstock::Filament, {1.75}));
+    CHECK_FALSE(filament_offered(petg, Feedstock::Filament, {1.75}));
+    CHECK(filament_offered(petg, Feedstock::Filament, {1.75, 2.85}));
+    CHECK(material_offered(filament_profile(petg).settings, Feedstock::Filament, {2.85}));
+    CHECK_FALSE(material_offered(filament_profile(abs).settings, Feedstock::Filament, {2.85}));
+
+    // The diameter comes from the catalog printer a profile was made from.
+    const PrinterModel* delta = printer_of_profile(c, printer_profile_name(c.printers[1], 0.4));
+    REQUIRE(delta);
+    CHECK(delta->filament_diameter == 2.85);
+    CHECK(printer_of_profile(c, "Acme Cube 220 0.6 mm") == &c.printers[0]);
+    CHECK(printer_of_profile(c, "Acme Cube 220 0.8 mm") == nullptr); // not one of its nozzles
+    CHECK(printer_of_profile(c, "My printer") == nullptr);
+
+    fails(kPrinters, replaced(kFilaments, R"("name": "ABS",)", R"("name": "ABS", "feedstock": "granules",)"),
+          "Bolt ABS: feedstock");
+}
+
 TEST_CASE("catalog: capabilities in detail reach the profiles", "[catalog]") {
     const std::string printers = replaced(kPrinters, R"("multi_material": "4 filaments",)",
                                           R"("multi_material": "4 filaments", "kinematics": "corexy", "max_flow": 32,

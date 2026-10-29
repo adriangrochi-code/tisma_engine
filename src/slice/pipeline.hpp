@@ -17,6 +17,7 @@
 
 #include <optional>
 #include <string>
+#include <span>
 #include <vector>
 
 namespace tisma {
@@ -97,6 +98,10 @@ struct SlicedModel {
 // bottom, so it stays where it was on the bed, and grown by the filament's
 // shrinkage. The mesh itself when the scales are all 100 % and nothing shrinks.
 IndexedMesh compensated(const IndexedMesh& mesh, const Settings& settings);
+
+// The convex hull of points seen from above, counter-clockwise: an object's
+// outline on the bed (the labels, sequential printing).
+Polygon outline_of(std::span<const Vec3f> points);
 // Another mesh (a negative volume, a modifier) moved as compensated() moves
 // `part`: about the part's centre and bottom.
 IndexedMesh compensated_like(const IndexedMesh& mesh, const IndexedMesh& part, const Settings& settings);

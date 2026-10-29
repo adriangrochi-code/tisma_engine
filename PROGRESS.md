@@ -7461,3 +7461,1002 @@ dirección queda solo para las filas sin clave.
 **Error de proceso:** el empuje de b75877f salió con ese CI en rojo (se leyó el resultado y se empujó en el mismo
 paso). Este arreglo va con el CI completo antes de empujar.
 
+
+## 2026-10-29: mantenimiento
+
+Bloque de mantenimiento programado (cada 8 horas).
+
+**Revisado, sin hallazgos:** `origin/main` y `origin/dev` ya estaban mezclados; la compilación sin avisos con gcc y
+clang; el fuzzer del G-code con 2000 casos y semilla nueva (291028): 26 rechazados como no imprimibles, 0 fallas.
+
+**Encontrado y arreglado:**
+- La fila de ajustes que perdía lo escrito con ASan (entrada anterior): ahora la identifica su clave. El CI completo
+  pasó antes de empujar.
+- **Medir en piezas grandes:** cada clic armaba de nuevo la malla indexada, las normales y los vecinos de toda la pieza.
+  Ahora se arma una vez por pieza y por versión de la escena (`measure_mesh`, `MeasureMesh`). En la cúpula de
+  2.003.996 triángulos: preparar 353 ms una vez; cada clic de 0,1 a 26 ms (antes, de 360 a 438 ms por clic). Las
+  pruebas `[measure]` pasan sin cambios.
+- Los avisos de abajo (guardar o cambiar un perfil) mostraban el nombre del perfil con punto decimal; ahora con coma en
+  español, como las listas.
+
+**No probado:** releídas las entradas «No probado» de los últimos días; siguen abiertas la escala de pantalla de
+Windows (la columna de valores corrida) y el efecto de luz con Vulkan en una GPU real (acá solo lavapipe). Las dos
+necesitan la máquina del dueño.
+
+**Sigue:** los pedidos de diseño del dueño anotados en `PLAN.md` (ajustes en una página, Laminar abajo a la derecha,
+menú para guardar, asistente de la primera impresora), la zona de interfaz de SM10 y P13.
+
+## 2026-10-29: barrido de campos del equipo de fichas
+
+El equipo de fichas pasó `--ui-script` por los 153 ajustes numéricos de `docs/CONFIG.md` (en b75877f): 120 bien, 33
+no. Arreglado:
+
+1. **Unidades en los campos «mm o %»:** una fila nueva (`unit_row`) para los once valores que son mm (o mm/s) o un %
+   de otro. Lee el texto que se escribió al soltar el campo (`typed_text`, con el estado de texto de ImGui): «mm» o
+   «%» cambian la unidad; un número solo queda en la unidad que el campo muestra. Esto es una decisión de la
+   interfaz: en el archivo, un número solo es mm, pero en el campo la unidad está a la vista.
+2. **Límites:** `slicing.xy_offset` ±10, `compensation.hole_offset` ±5, `layers.height` 0,01 a 10, `walls.count`
+   hasta 1000 y `infill.combine_max_height` hasta 1000 %, como `docs/CONFIG.md` y el lector. Un valor escrito fuera
+   del rango deja un aviso con el límite (`note_clamp`); vale para todas las filas numéricas.
+3. **`wipe_tower.purge_volumes`:** campo de un número para todos los pares (la diagonal en 0, como el lector), si
+   todos los pares son iguales; si no, sigue la cuenta.
+4. **Etiquetas cortadas:** dos textos más cortos, y la etiqueta completa al pasar el mouse si no entra.
+5. **`--ui-script`:** `click` sobre una casilla da en la casilla (antes, en el medio de la celda), y `expect-toast`.
+
+Prueba nueva `ui_script_unit_fields`: «0,3 mm» y «90 %» en el mismo campo, un número solo en cada unidad, los cuatro
+límites, el aviso «Máximo: 1000», una casilla y un campo debajo de ella, y la purga. Pasan las 150 pruebas de
+interfaz y ajustes.
+
+**No hecho:** el resto de los límites del panel no se comparó uno por uno con `docs/CONFIG.md` (solo los informados);
+la idea es sacarlos del lector en vez de repetirlos. `calibration.band_height` y `placement.spacing` no tienen fila:
+Ordenar usa `placement.spacing` sin dejar cambiarlo, y el alto de las franjas de calibración no se elige en la
+interfaz. Quedan pendientes.
+
+## 2026-10-29: vista previa paso a paso, paso 2 (la vista quieta no se dibuja)
+
+El equipo de fichas mandó un plan para la vista previa con modelos grandes, pedido del dueño (FPS de ~600 a ~10 en
+una GTX 1060 después de laminar): una técnica por commit, cada una medida antes y después por ellos, con la imagen
+igual. Su línea de base en b75877f (llvmpipe, 1280 × 800): esfera de 80 mm, 461 llamadas y 6,0 M de vértices por
+cuadro; esfera de 200 mm, 1 061 llamadas y 24,3 M; y cada tanto un cuadro unas 7 veces más pesado con la cámara quieta.
+
+**Medir:** `tisma --draw-stats` imprime por cuadro las llamadas de dibujo y los vértices de la vista y, aparte, los
+de los paneles (envuelve los punteros del cargador propio de OpenGL). Para medir en la aplicación sin captura, el paso
+`slice` de `--ui-script` lamina como el botón y abre la Vista previa; el script corría solo con `--screenshot` porque
+esperaba el contador de cuadros de la captura (arreglado).
+
+**Paso 1 (el cuadro pesado periódico):** no se reproduce acá. Con la esfera de prueba escalada a 80 mm (2 208
+triángulos), laminada, en Vista previa, oclusión ambiental o `fast`: un cuadro de 1 210 llamadas cuando cambia la
+vista y después 406 en cada cuadro, sin picos. Se le preguntó al equipo de fichas cada cuántos cuadros vuelve y en qué
+condiciones.
+
+**Paso 2:** `Renderer::draw` guarda la clave del cuadro (`frame_key`: cámara, rectángulo, capas, colores, modo,
+muestras, todo lo de `ViewFrame`) y no dibuja la escena si la clave y los datos son los mismos: solo copia la imagen a
+la ventana. Cualquier `set_*` de datos la borra (`scene_changed`; también `set_model_coarse` y `set_paint`, que antes
+no reiniciaban la oclusión). Con rayos que todavía promedian, se dibuja. En Vulkan, la imagen que ImGui muestra se
+conserva: `VulkanView::record` no graba nada si la clave es la misma. `--bench-frames` fuerza el dibujo (`redraw`).
+
+Medido (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm laminada, oclusión ambiental, cámara quieta): de 406 llamadas
+por cuadro a 1; en el mismo tiempo, 2 290 cuadros en vez de 150. Prueba nueva `ui_script_idle_view` (paso
+`expect-view-calls 1`); sin el arreglo da 106 con la esfera chica. Pasan las 772 pruebas.
+
+**No medido:** Vulkan en una placa de verdad (acá lavapipe; las pruebas de Vulkan pasan, pero `--draw-stats` cuenta
+solo OpenGL). **Sigue:** paso 1 con los datos del equipo de fichas; paso 3, menos vértices por cordón.
+
+## 2026-10-29: vista previa paso a paso, paso 3 (la mitad de los vértices)
+
+Cada cordón era un prisma de 36 vértices: cuatro costados y dos puntas, todos dibujados. Los costados del rombo son
+paralelos de a pares, así que desde un punto se ven a lo sumo dos, y una sola punta: el shader de vértices (OpenGL y
+Vulkan, la misma lógica) elige esas caras con el signo de la normal por el vector hacia el ojo, y dibuja 18 vértices
+(`kPreviewVertices`). Con una cámara ortográfica cuenta la dirección hacia el ojo (`preview_face_eye`, por la última
+fila de la proyección); en el mapa de sombras, la dirección hacia la luz.
+
+**La imagen:** capturas de la esfera de 80 mm laminada, antes y después, comparadas píxel por píxel sin la barra de
+estado (que trae el tiempo de la vista): de costado con oclusión, en ortográfica y con Vulkan, 0 píxeles distintos;
+de cerca en `fast`, con rayos y con Vulkan casi al ras de la cama, 8, 4 y 27 píxeles sueltos en bordes (empates de
+profundidad). Con la cámara adentro de la pieza (la vista desde arriba a 70 mm, dentro de la esfera) cambia una banda:
+antes se veían las caras de atrás de un cordón cortado por el plano cercano, ahora no.
+
+**Medido** (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm, 82 275 cordones dibujados, `--bench-frames 10`): de
+2 622 a 1 371 ms por cuadro con oclusión ambiental y de 2 624 a 1 424 ms en `fast`; 1,49 M de vértices por cuadro
+completo (antes, el doble). Pasan las 773 pruebas. **No medido:** una GPU de verdad, y Vulkan antes y después.
+**Sigue:** paso 4, la memoria.
+
+## 2026-10-29: la memoria de la vista previa (paso 4, medido)
+
+El equipo de fichas retiró el paso 1: el «cuadro pesado» era el último de su corrida, que junta los dibujos de
+`--bench-frames` sin cambiar de cuadro. Midió además que el RSS crece unos 3,6 KB por cordón con llvmpipe y pensó
+que podía ser VRAM. No lo es: lo que la vista sube a la placa es una instancia de 56 B por cordón (el prisma lo arma
+el shader) y los destinos de dibujo, de tamaño fijo. Lo que crece es llvmpipe, que guarda en RAM los vértices ya
+transformados (unos 25 flotantes de salidas por vértice). Con la esfera de 80 mm en `fast`, de Preparar a Vista
+previa: con 36 vértices por cordón, +318 MB; con 18 (paso 3), +200 MB.
+
+`--draw-stats` imprime ahora también lo que ocupa la vista, cada vez que cambia: con esa esfera, 5,2 MB de
+instancias (56 B cada una), 0,2 MB de recorridos, 0,2 MB de mallas y 55,8 MB de destinos (G-buffer, oclusión, rayos,
+color, multimuestreo y el mapa de sombras). Las texturas de la escena de rayos no se cuentan. Para s200 (672 k
+cordones), unos 38 MB de instancias.
+
+## 2026-10-29: carrera al terminar una impresión por USB (encontrada por el CI)
+
+`tools/ci_linux.sh` en af8aafa falló en ASan, en «device: the host prints a job to the simulated printer, line by
+line, with resends»: el estado era Printing (3) cuando la prueba ya veía el progreso en 1. `GcodeHost` ponía el
+progreso en 1 al confirmarse la última línea y recién en la vuelta siguiente del bucle pasaba a Idle; con la máquina
+cargada (ASan y mediciones al mismo tiempo) la prueba leyó el estado en ese hueco. Ahora, tras la última línea, el
+progreso completo llega con el fin del trabajo (`finish_job`, bajo el mismo candado que el estado). Las pruebas
+`[device]` pasan 40 veces seguidas. No se empujó nada con el CI en rojo.
+
+El CI siguiente (31d9a5c) falló en gcc en `ui_script_idle_view`: «the slice failed». El paso `slice` del script
+pedía laminar en el primer cuadro y fallaba si en el siguiente no había laminado ni resultado; con las pruebas en
+paralelo, el modelo todavía se cargaba en segundo plano y `start_slice` no hacía nada. Ahora el paso pide laminar en
+cada cuadro hasta que arranca, y falla con un error del laminado o si en 2000 cuadros nunca arrancó. Las pruebas de
+interfaz pasan dos veces seguidas con 8 en paralelo.
+
+## 2026-10-29: la ventana en reposo (pedido del dueño: menos CPU y RAM)
+
+El equipo de fichas confirmó los pasos 2 y 3 en a01b32b (llvmpipe, `fast`): s80, de 6,04 M a 3,04 M vértices por
+cuadro completo, de 1 600 a 858 ms y de 883 a 622 MB de RSS; s200, de 24,3 M a 12,2 M, de 5 500 a 3 165 ms y de 2 706
+a 1 667 MB; en reposo, la vista hace 1 llamada de 3 vértices. Y vio que, quieta, la ventana igual dibujaba los paneles
+unas diez veces por segundo.
+
+Era la espera del bucle: `glfwWaitEventsTimeout(0.1)`. Ahora espera 0,1 s solo si hubo mouse o teclado en los
+últimos 3 s (un tooltip aparece tras una demora sin evento) o hay una impresora conectada (su estado llega de su
+propio hilo); si no, hasta 2 s. Los trabajos de fondo (`Background`: laminado, vóxeles, rayos, malla gruesa)
+despiertan la ventana al terminar (`g_background_done`, `glfwPostEmptyEvent`). Lo que ya contaba como ocupado
+(laminado en marcha, avisos, un campo en uso, rayos que promedian, la captura) sigue sin esperar.
+
+Medido con la esfera de 80 mm laminada, `fast`, llvmpipe, 30 s sin tocar nada: CPU del proceso de 38,4 % a 2,2 % y de
+260 a 15 cuadros. Pasan las 773 pruebas.
+
+## 2026-10-29 (noche): recorte por capas en la vista previa
+
+Bloque nocturno. `preview_draw_order` guarda la caja de cada capa (los cordones con medio ancho a los costados, sus
+puntas y sus ingletes, y la altura que cuelgan), y `preview_draws` deja afuera una capa cuya caja queda entera del
+otro lado de un mismo plano del volumen de visión (`box_outside`). La vista lo hace con la cámara, y el mapa de
+sombras con la de la luz (lo que está fuera de pantalla igual hace sombra). OpenGL y Vulkan.
+
+**La imagen:** las siete capturas de la esfera de 80 mm (oclusión de costado y desde arriba, `fast` de cerca,
+ortográfica, rayos, Vulkan de costado y al ras) son idénticas a las de antes, píxel por píxel.
+
+**Medido** (OpenGL, llvmpipe, `--bench-frames 5`): de cerca, de 82 275 cordones dibujados a 39 868 y a 55 948
+según la vista; el tiempo, igual (1 208 contra 1 210 ms y 874 contra 893 ms): en llvmpipe el costo está en los
+píxeles, y los triángulos fuera de pantalla ya se descartaban baratos. En una placa de verdad ahorra el trabajo de
+vértices de esas capas; no medido. Pruebas nuevas de `box_outside` y del recorte en `preview_draws`.
+
+**Sigue** (paso 5 del plan del equipo de fichas): capas juntas de lejos y el mallado voraz; S11, la regla del puente
+punto por punto, cuando la ficha llegue a `dev`.
+
+## 2026-10-29 (noche): `--dump-ui`
+
+Bloque nocturno. `tisma --dump-ui filas.json --screenshot …` escribe las filas de ajustes del cuadro de la captura:
+clave, etiqueta (en el idioma elegido), valor como lo escribe el archivo de ajustes, rectángulo del campo en píxeles
+de la ventana, y `cut` si la columna de la etiqueta la corta (lo que el equipo de fichas buscaba a mano en el barrido
+de campos). Imprime «dump-ui: N rows, M with the label cut» y sale con 1 si no hubo filas. Prueba `ui_dump_rows`.
+Los botones, listas y menús que no son filas de ajustes quedan para después (el ítem de `PLAN.md` queda marcado
+solo para las filas).
+
+## 2026-10-29 (noche): la leyenda de la vista previa
+
+Bloque nocturno, un ítem de `PLAN.md` (la leyenda que tapa la pieza). Con la esfera de 80 mm laminada a 1200 × 760,
+la leyenda ocupaba unos 460 × 520 px y tapaba la barra de movimientos, que se ubicaba sin mirarla.
+- La barra de movimientos usa el rectángulo de la leyenda del cuadro anterior (`legend_rect_`): va entre la leyenda y
+  la barra de capas si hay al menos 120 px, y si no, adentro de la leyenda bajo «Capa N de M», con ancho fijo (para que
+  el ancho de la leyenda no se persiga a sí mismo).
+- Un botón «−» / «+» junto a «Capa N de M» pliega la leyenda: los tipos con su casilla y su color, sin las columnas de
+  tiempo, parte y filamento, y de los totales solo el tiempo estimado. Por defecto, completa (regla 2 de `preview.md`).
+
+Mirado en capturas (la barra adentro de la leyenda, la leyenda completa después de un cuadro de acomodo). Pasan las
+138 pruebas de vista e interfaz. **Falta:** encuadrar la pieza en lo que la leyenda y los paneles dejan libre; el
+plegado no se probó con un clic (el script no tiene un paso para botones sin clave).
+
+Siguiente bloque, misma leyenda: se pliega sola si, completa, taparía más del 45 % del ancho de la vista
+(`legend_full_w_`, su ancho la última vez que se dibujó completa), salvo que se haya elegido con el botón
+(`legend_choice_`). La tabla de totales pasó a columnas de ancho fijo: con columnas que se estiran, una ventana que
+se ajusta a lo que tiene nunca se angostaba (plegada seguía de 460 px; ahora, 350). Al encuadrar en Vista previa, la
+pieza se ajusta al ancho que la leyenda deja y la cámara se corre la mitad de lo tapado. Mirado en capturas a
+1200 × 760 (plegada, la barra adentro) y a 1900 × 1060 (completa, la barra abajo a la derecha, la pieza libre). Falta
+reencuadrar al pasar a Vista previa.
+
+## 2026-10-29 (noche): la copia gruesa quedaba para siempre (encontrado leyendo el código)
+
+Buscando cómo reencuadrar al pasar a Vista previa: `moved_frame_` y la condición de la copia gruesa (V6, «se movió
+hace 2 cuadros o menos») usaban `frames_`, que solo avanza en el modo captura. En la aplicación, `frames_` queda en 0:
+después del primer giro, zoom o paneo, `moved_frame_ = 0` y la condición se cumplía siempre, así que un plato de más
+de un millón de triángulos se dibujaba con su copia simplificada aunque la cámara estuviera quieta. Puede ser parte
+del «efecto visual raro» que el dueño vio con piezas grandes (V6 es del 2026-10-28). Ahora se cuenta con
+`ImGui::GetFrameCount()`, que avanza siempre.
+
+Pasos nuevos de `--ui-script`: `orbit DX DY` (la cámara girada como por un arrastre) y `expect-coarse yes|no`. Con la
+cúpula de 2 003 996 triángulos y captura: tras `orbit 30 0`, copia gruesa; 10 cuadros después, el modelo completo.
+Sin prueba en el CI: hace falta un modelo de más de un millón de triángulos (100 MB), que no va al repositorio.
+
+## 2026-10-29 (noche): encuadre al pasar a Vista previa
+
+Al pasar entre Preparar y Vista previa, si la cámara quedó como la dejó el último encuadre (`camera_framed_`: lo
+borran el giro, el paneo, la rueda y los botones de acercar), se encuadra de nuevo. En Vista previa el encuadre deja
+afuera la leyenda (a la izquierda) y la barra de capas (150 px a la derecha) y centra la pieza entre las dos; espera
+a que la leyenda lleve 3 cuadros dibujada (`legend_since_`), porque una ventana que se ajusta a su contenido tarda dos
+cuadros en tener su tamaño y el plegado automático uno más (en el primer cuadro medía 24 px). Mirado en capturas a
+1200 × 760: la esfera entera entre la leyenda plegada y la barra de capas. Pasan las 775 pruebas.
+
+## 2026-10-29 (noche): la primera vez, impresora y filamento antes del recorrido
+
+Pedido del dueño de `PLAN.md`. Sin preferencias guardadas (o con `--first-run`), el programa abre el catálogo de
+impresoras con «Para empezar, elegí tu impresora (paso 1 de 2…)»; al cerrarlo (con «Agregar a mis perfiles»,
+Cancelar, Escape o la X) abre el de filamentos (paso 2 de 2), y al cerrar ese, el recorrido de bienvenida
+(`first_run_next`). Mirado en tres capturas con `--first-run` y Escape (catálogo de impresoras, de filamentos,
+bienvenida). Pasan las pruebas de interfaz y textos. Sin prueba automática del orden (el script no puede preguntar
+qué ventana está abierta).
+
+## 2026-10-29 (noche): menú del botón derecho en la placa
+
+Primera mitad del pedido del dueño «mover, girar y escalar con deslizadores; un menú con el botón derecho para agregar
+modelos y formas». Un clic derecho (sin arrastrar) sobre la placa, fuera de los modelos, abre un menú con «Agregar
+modelo…» (el mismo explorador que el botón +), «Agregar forma» (cubo, cilindro y esfera de 20 mm, cada uno un modelo
+más en la placa, que se ordena) y «Organizar». Sobre un modelo sigue abriéndose su propio menú. Las formas salen de
+`src/mesh/shapes.*` (diseño propio: caja de 12 triángulos, cilindro de 64 lados, esfera de 32 bandas por 64 gajos,
+paradas en Z = 0 y centradas en X e Y).
+
+Pasos nuevos de `--ui-script`: `right-click-plate` (falla si hay un modelo bajo el punto), `menu NOMBRE` (pasa el
+ratón por la entrada de un menú abierto, por un nombre en inglés, y hace clic: así se abren los submenús) y
+`expect-objects N TEXTO`. Prueba `ui_script_plate_menu`: agrega un cubo y una esfera al cubo de prueba y comprueba
+3 modelos. Prueba de las formas: cerradas (volumen del cubo 1000 mm³, el del cilindro el del polígono inscrito, la
+esfera entre el 98 % y el 100 % de la bola), paradas en la cama. Mirado en la captura.
+
+Segunda mitad, el mismo bloque: bajo cada número de las tarjetas Mover, Girar y Escalar, un deslizador tan ancho como
+la etiqueta y el campo. Mover va de un borde de la cama al otro (su caja), Girar de −180° a 180° por eje, Escalar de
+10 % a 1000 % en escala logarítmica (100 % en el medio; con «Los tres ejes juntos», los tres). Un valor fuera de los
+extremos queda como está hasta que se mueve el deslizador. Pasos nuevos `slide NOMBRE FRACCIÓN` (clic a esa fracción
+del ancho) y `expect-place x|y|scale VALOR` (o `A..B`). Pruebas `ui_script_move_sliders` (un cuarto de X da 57,8 mm,
+tres cuartos de Y 198,2 mm, en una cama de 256) y `ui_script_scale_sliders` (tres cuartos: 354 %). Girar no tiene
+prueba automática (mirado en la captura).
+
+**Sigue:** el botón Laminar abajo a la derecha con su menú de guardar, o el paso 5 de la vista previa.
+
+## 2026-10-29 (noche): puente o voladizo punto por punto (S11)
+
+La ficha llegó a `dev` con el PR #43 (`supports_skirt.md`, regla 3; `tools/check_spec.py` pasa). Antes, una isla de
+voladizo era puente entera si la capa de abajo tocaba su contorno en dos tramos separados o en un anillo
+(`is_bridge`), así que una losa sobre tres paredes en U (un solo tramo seguido) llevaba soporte. Ahora
+`bridged_part` decide punto por punto: para cada una de 8 direcciones (cada 22,5°) gira el plano y recorre filas de
+medio cordón; entre el final de un tramo apoyado y el comienzo del siguiente, si la capa no se corta en el medio, la
+franja es puente, sin largo máximo. Lo que queda de la isla, sin restos de menos de un cordón, lleva soporte.
+
+Diferencia con la ficha, preguntada al equipo de fichas: con la regla tal cual, en la L la mitad cercana a la
+esquina sería puente (a 45°, desde (5, 5) se llega a las dos paredes), pero S11 pide soporte en toda la L. Mientras
+llega la respuesta, cada apoyo tiene que cruzarse de frente: el borde de la capa de abajo a 30° o menos de
+perpendicular a la línea. Con eso la L queda voladizo.
+
+**Medido**, por fuera, con las siete losas de S11 (20 × 20 × 2 mm a Z 8–10, soporte encendido), líneas de soporte
+antes → ahora: dos pilares 0 → 0, U 42 → 0, marco 0 → 0, pilar de un lado 42 → 42, pilar central 42 → 42, pilar en
+una esquina 42 → 42, L 42 → 42. Prueba nueva con las mismas formas como polígonos (y una losa que pasa de los pilares:
+lo de afuera cuelga). Tiempos iguales con soporte: esfera de prueba 0,16 → 0,17 s, esfera ×4 0,86 → 0,87 s. Sin
+medir: una pieza con muchas islas de voladizo y una capa de miles de aristas (cada fila recorre todas las aristas de
+la capa).
+
+Respuesta del equipo de fichas, el mismo bloque: gana S11 (la L es voladizo, decisión del dueño) y la ficha suma la
+condición de cruzar cada apoyo a 60° o más (`aa0c7c3` en `spec/next`, todavía no en `dev`), la misma que se usó.
+Línea nueva de S11, agregada a la prueba: dos paredes en V que abren 30° son puente adentro de la V y voladizo
+afuera.
+
+**Sigue:** el botón Laminar abajo a la derecha o el paso 5 de la vista previa.
+
+## 2026-10-29 (noche): Laminar abajo a la derecha
+
+Pedido del dueño de `PLAN.md`. Laminar y Exportar salieron de la barra de arriba y pasaron a un panel abajo a la
+derecha de la vista (en Vista previa, a la izquierda de la barra de capas). Antes de laminar, o con el laminado
+desactualizado, muestra Laminar (Laminando… mientras corre). Después, el tiempo estimado, «Exportar G-code» (o el
+archivo de resina) y, al lado, un botón con el menú de las otras formas: «Mandar a la impresora» (solo con una
+impresora conectada y libre; si no, dice «sin conectar») y «Guardar el proyecto». Los anclajes del recorrido
+(`slice_button`, `send_button`) siguen a los botones.
+
+Paso nuevo de `--ui-script`: `expect-control NOMBRE` (un control con nombre está en pantalla). Prueba
+`ui_script_slice_panel`: clic en Laminar del panel, sin el paso `slice`, y aparece Exportar; después el menú y
+«Guardar el proyecto». Control: sin el clic, Exportar no aparece y el script falla. Pasan las 151 pruebas de interfaz.
+Mirado en capturas de Preparar y Vista previa a 1200 × 760. Sin probar: «Mandar a la impresora» con una impresora
+(la simulada de las pruebas del dispositivo no se conecta desde el script).
+
+**Sigue:** el paso 5 de la vista previa (capas lejanas juntas, mallado voraz).
+
+## 2026-10-29 (noche): UI20, los topes del panel según `docs/CONFIG.md`, y TR16
+
+Informe del equipo de fichas (UI20, misma clase que UI16): 24 campos del panel se cortaban por debajo del máximo de
+`docs/CONFIG.md` (por ejemplo, `layers.first_height` en 1 mm con 0,01 a 10, `retraction.length` en 20 con 0 a 50).
+En vez de arreglar solo esos, `tools/check_ui_limits.py` (prueba `ui_limits_check`) lee los topes de cada fila
+numérica del panel (`mm(...)` y `whole(...)` en `apps/tisma/app.cpp`) y los compara con la columna de rango de su
+fila en `docs/CONFIG.md`; «más de 0 a N» deja el mínimo libre por encima de 0. Con el código de antes encuentra 33:
+los 24 del informe y 9 más (`walls.outer_width` 2 → 40, `surfaces.top_min_thickness` y `bottom_min_thickness`
+10 → 100, `infill.dense_density` desde 0, `speed.max_flow` 200 → 1000, `fuzzy.thickness` 2 → 5,
+`fuzzy.point_distance` 5 → 20, `machine.min_layer_height` y `max_layer_height` 2 → 10). Ahora, 186 rangos y ninguno
+corto. `--dump-ui` también escribe el mínimo y el máximo de cada fila numérica (`min`, `max`).
+
+Prueba `ui_script_wide_limits`, el caso del informe: 9,1 en el alto de la primera capa queda 9,1 (antes, 1,0), y 45
+en la retracción queda 45. TR16: el botón de la conexión decía «Abrir en Dispositivos» y el texto, «la pestaña
+Impresora»; ahora el botón dice «Abrir la pestaña Impresora».
+
+**No cubierto:** las filas que no son `mm` ni `whole` (velocidades en mm/s o %, `unit_row`, listas) no las mira el
+verificador; tampoco si cada tope muestra su aviso.
+
+## 2026-10-29 (noche): paso 5 de la vista previa, capas juntas de lejos (sin terminar)
+
+`merged_layers` (`src/ui/scene.*`): para ver la pieza de lejos, donde una capa es más fina que un píxel, las paredes
+(externa, interna y en voladizo) de un grupo de capas se dibujan solo en la de arriba del grupo, con el alto del grupo;
+lo demás que se ve (pieles de arriba, puentes, soporte) queda como está, para no abrir huecos donde la pieza tapaba lo
+de adentro. Los grupos se cuentan desde la última capa, que siempre conserva las suyas. Prueba con 10 capas: con grupos
+de 2, 21 cordones pasan a 11 y las paredes tienen 0,4 mm de alto.
+
+**Sin terminar:** todavía no se usa. Falta subir esas versiones a la vista (OpenGL y Vulkan), elegir el grupo por el
+tamaño de una capa en pantalla, comparar imágenes de lejos y medir.
+
+Siguiente bloque, en OpenGL: la vista guarda en la GPU, después de la vista previa completa, lo que no es pared una
+vez (`other_than_walls`) y las paredes de grupos de 2 y de 4 capas (`preview_orders`). Con toda la pieza a la vista,
+`layer_pixels` mide cuánto ocupa una capa en pantalla en su punto más cercano al ojo, y `far_group` elige el grupo
+más grande que queda por debajo de medio píxel. Primer intento con un píxel entero y sacando toda pared de las capas
+de abajo: en la cúpula de la esfera, donde cada capa se corre hacia adentro, se veían anillos de piel y paredes
+internas (2084 píxeles distintos a 700 mm). Ahora una pared de una capa de abajo se saca solo si tiene una del mismo
+tipo de la capa de arriba a menos de medio píxel; si no, queda.
+
+**Medido** (esfera ×4 de 80 mm, 1200 × 760, oclusión ambiental, llvmpipe; el binario de antes contra el de ahora, con
+la misma cámara; píxeles de la vista que difieren en más de 24 de 255): a 700 mm, sin grupo, 0 (máximo 9); a 1400 mm,
+grupos de 2, 82 275 → 57 166 cordones, 578 → 221 ms por cuadro, 0 píxeles (máximo 19); a 2600 mm, grupos de 4,
+82 275 → 45 240 cordones, 474 → 213 ms, 0 (máximo 5); de cerca (180 mm), igual imagen a imagen. Los tiempos de antes
+se tomaron con la CI corriendo en la misma máquina: valen el orden, no el número. Memoria de la GPU para las
+instancias: 5,2 → 9,1 MB (las paredes de cada grupo se guardan otra vez). Los grupos de 8 solo servían con la pieza a
+más de 2,6 m y costaban más memoria: no se arman.
+
+**Falta:** Vulkan (sigue dibujando todas las capas), medir con una pieza grande de verdad y el mallado voraz.
+
+Siguiente bloque: lo mismo en Vulkan (`vk_view.cpp`). Misma esfera, mismas cámaras, binario de antes contra el de
+ahora (con la CI corriendo en la misma máquina): a 1400 mm, grupos de 2, 581 → 416 ms, 0 píxeles distintos en más
+de 24 (máximo 23); a 2600 mm, grupos de 4, 483 → 294 ms (máximo 8); de cerca, la misma imagen y el mismo tiempo.
+`--bench-frames` dice el grupo dibujado («layers by N») en las dos vistas.
+
+**Falta:** medir con una pieza grande de verdad y el mallado voraz.
+
+Pieza grande: el G-code de la esfera de 200 mm (`bench/s200.gcode`, 1000 capas, 569 113 cordones a la vista) abierto en
+el visor nunca junta capas, ni a 3200 mm: las versiones de lejos se arman, pero la condición «toda la pieza» no se
+cumple. `preview_far` ya acepta las vistas sin nada marcado como tapado (prueba nueva), pero este G-code sí tiene
+cordones tapados y la leyenda deja afuera algún tipo. Contar como dibujados los tipos que la pieza no tiene rompía las
+pruebas del orden de dibujo y no lo arreglaba: queda para el próximo bloque ver qué tipo es.
+
+Siguiente bloque: no era la vista. Con un G-code abierto, `--bench-frames` mide antes de que llegue la cámara de
+`--look` (la pieza encuadrada de cerca, 0,73 píxeles por capa); en los cuadros de la captura, con 0,07 píxeles por
+capa, sí junta de a 4. El G-code laminado de un STL de 200 mm (la esfera ×10) a 3200 mm: 208 220 cordones dibujados
+con grupos de 4, la imagen igual a la de la versión anterior de la vista (diferencia 0). No hay número de antes: el
+binario de comparación ya tenía el cambio. Sin probar: la medición de un G-code abierto con `--look` (habría que
+medir después de que llegue la cámara).
+
+Arreglado después (2026-10-29, noche): la vista no se da por quieta mientras hay un encuadre pendiente (en Vista
+previa espera a la leyenda, y `--look` se pone al encuadrar). El G-code de 200 mm a 3200 mm: 202 184 cordones con
+grupos de 4, 752 ms por cuadro. Pasan las 194 pruebas de interfaz y de vista.
+
+## 2026-10-29 (noche): «No planar» como sección propia
+
+Pedido del dueño de `PLAN.md`. En la columna de Impresión, una sección «No planar» entre Adhesión y Otros, con las
+tarjetas Capas curvas y su transición y caudal (antes en Otros) y Relleno ondulado (antes en Resistencia: los dos
+rellenos que suben y bajan en Z). En la impresora, «No planar» después de Máquina, con la tarjeta Cabezal (ángulos
+libres, altura y radio libres, perfil). Ícono propio (`assets/icons/section_nonplanar.svg`, dos ondas, trazo gris
+como los demás). Un ícono nuevo tiene que estar en la lista `kIcons` de `apps/tisma/app.cpp`: sin eso se dibuja un
+cuadrado negro (pasó en la primera captura). Pasan las pruebas de interfaz; mirado en capturas de las dos secciones.
+
+## 2026-10-29 (noche): UI21 y UI22 (equipo de fichas)
+
+- **UI21:** lo elegido en el primer uso se perdía si el programa terminaba por SIGTERM (un cierre de sesión, un
+  apagado) o se caía: `interface.json` solo se escribía al cerrar la ventana. Ahora se escribe al agregar un perfil del
+  catálogo y al terminar el primer uso, y SIGTERM y SIGINT cierran el programa como el botón de la ventana (la ventana
+  despierta al menos cada 2 s). Prueba `ui_sigterm_keeps_preferences` (`tests/ui_sigterm.sh`): HOME vacío, SIGTERM a
+  los 6 s, sale con 0 y deja `interface.json`; con el binario de antes sale con 143 y sin preferencias.
+- **UI22:** las formas del menú de la placa se llamaban «Cubo.stl»: no tienen archivo, ahora «Cubo», «Cilindro»,
+  «Esfera».
+
+## 2026-10-29 (noche): un ícono que falta hace fallar la prueba
+
+Al agregar la sección «No planar» el ícono salió como un cuadrado negro (faltaba en `kIcons`) y ninguna prueba lo
+notó. Ahora `icon()` dice una vez «error: the icon "…" is not loaded» por cada ícono pedido que no se cargó, y la
+ejecución termina con 1: cualquier prueba de interfaz que dibuje esa pantalla falla. Las columnas de secciones dibujan
+todos sus íconos, así que las de Impresión siempre se revisan y las de la impresora con las pruebas de su página.
+Control: sin `section_nonplanar` en la lista, `--section print/nonplanar` sale con 1 y el mensaje. Pasan las 167
+pruebas de interfaz.
+
+## 2026-10-29 (noche): UI23, el panel de Laminar bajo la barra de movimientos
+
+Informe del equipo de fichas: en Vista previa a 1440 × 900 la barra de movimientos (abajo a la derecha, cuando no va
+dentro de la leyenda) tapaba «Exportar G-code» y el botón de su menú: los dos se anclaban en la misma esquina. Ahora
+el panel va encima de la barra (`moves_top_`, la altura de su ventana en este cuadro). Paso nuevo de `--ui-script`:
+`expect-apart A B` (dos controles con nombre en pantalla, ninguno sobre el otro); la barra se llama `moves`. La prueba
+`ui_script_slice_panel` pasa a 1440 × 900 y lo comprueba; con el panel otra vez en la esquina, falla («they overlap»).
+
+## 2026-10-29 (noche): el costo del filtro de moiré, medido (sin cambio)
+
+Esfera ×4 sobre llvmpipe, OpenGL, oclusión ambiental, 1200 × 760, a 700 mm: con el filtro 1419 ms por cuadro, sin
+él 1003 ms (un 29 %). Dos ideas descartadas por la medición:
+- Pasar el promedio de las 16 muestras al sombreador de vértices (es por cordón salvo la dirección de la mirada): a esa
+  distancia cada cordón ocupa menos de un píxel, y sus 18 vértices harían más cuentas que sus píxeles.
+- 8 muestras en vez de 16: 1494 → 1378 ms a 700 mm y lo mismo a 400 mm (2088 → 2099); la imagen casi igual (ningún
+  píxel más de 24). No paga lo que cambia.
+
+**Sigue:** medir qué parte del sombreador pesa (las derivadas, `bead_seen` con sus `asin` y `atan`) antes de tocar
+otra cosa; con las capas juntas de lejos, el filtro ya trabaja sobre menos cordones.
+
+Siguiente bloque: sin `bead_seen` dentro del bucle, 1370 ms (con el filtro entero, 1334; sin filtro, 958): no es lo
+que pesa. En llvmpipe los fragmentos van de a cuatro y una condición que cumple uno la pagan todos, así que el bucle
+cuesta casi entero; en una GPU de verdad no tiene por qué. Queda medirlo en la máquina del dueño (la barra de estado
+dice el tiempo de la vista) antes de cambiar nada.
+
+## 2026-10-29 (noche): girar y escalar modelos grandes sin rehacer la placa (sin terminar)
+
+Medido con la cúpula de 2 003 996 triángulos: cada cambio de un campo de giro o escala rehace la placa en 340 a 500 ms
+(las mallas ubicadas 110 a 145, la malla de la placa 70 a 110, los vértices de la vista 105, mandarlos 50 a 145).
+Con los deslizadores eso pasa en cada cuadro del arrastre: 2 o 3 cuadros por segundo.
+
+Primer paso: la vista dibuja el modelo elegido con una matriz (`ViewFrame::selected_model`; en OpenGL `u_model`, en
+Vulkan tres filas más en el bloque de cada dibujo, SPIR-V regenerado). Con la identidad no cambia nada: pasan las 126
+pruebas de vista, OpenGL contra Vulkan incluidas.
+
+**Sigue:** en la aplicación, mientras se arrastra un campo de giro, escala o posición de un modelo grande, poner en
+esa matriz el paso de su malla de ahora a la nueva (la caja de la malla girada sin armarla) y rehacer la placa una sola
+vez al soltar.
+
+Hecho, el mismo bloque: `placement_map` (`src/ui/plate.*`) da el paso de la malla del archivo a la cama como lo haría
+`placed_mesh`, sin armarla (dos pasadas por sus esquinas para las cajas), y `between` el paso de una ubicación a otra.
+Mientras un campo de un modelo de 200 000 triángulos o más está activo, la vista dibuja su malla vieja con ese paso;
+al soltar, la placa se rehace una vez. Paso nuevo de `--ui-script`: `drag NOMBRE A B N` (un deslizador arrastrado de A
+a B en N cuadros). La cúpula, escala arrastrada en 20 cuadros: 22 armados de la placa y 76 s → 3 armados y 16,7 s,
+la misma escala al final (274,80 %) y la misma imagen (salvo el tiempo de la vista en la barra de estado). Prueba
+nueva de `placement_map` y `between` contra `placed_mesh`. Pasan las 179 pruebas de interfaz, placa y vista. Sin
+prueba automática del camino con un modelo grande (hace falta uno de 200 000 triángulos).
+
+## 2026-10-29 (noche): TR17, los valores de las listas por su nombre en la ficha de información
+
+Informe del equipo de fichas: la ficha de un ajuste de lista mostraba los valores por la palabra del archivo
+(«Por defecto: "aligned"», «Rango: aligned, nearest, random, rear») y la lista de al lado, «Alineada». Ahora, la
+primera vez que se dibuja cada lista, se anota qué palabra escribe el archivo para cada opción (se pone cada valor y
+se lee con `describe`), y la ficha cambia esas palabras por los nombres de la lista en la explicación, el valor por
+defecto (sin comillas) y el rango; la línea de la clave sigue igual. Vale para todas las listas del panel; una fila
+cuyo valor no está en los ajustes queda como antes. Mirado con `--info walls.seam` en español («Por defecto:
+Alineada», «Rango: Alineada, Más cercana, Aleatoria, Atrás») y en inglés («Default: Aligned»). Sin prueba automática:
+el texto está en una ventana emergente que `--dump-ui` no lee.
+
+## 2026-10-29 (noche): el árbol de cajas de un modelo grande, en otro hilo
+
+De «Modelos grandes, lo que sigue»: el árbol de cajas de cada modelo (el que usan el clic, el menú del botón derecho y
+el pincel) se armaba en el primer clic después de abrir o cambiar la placa. Ahora, con 200 000 triángulos o más, se
+arma en otro hilo apenas se arma la placa (`update_indexes`, cada cuadro); el clic lo toma hecho o espera lo que le
+falta, y uno de una placa vieja se descarta por su número (`plate_version_`). La copia de las mallas ubicadas que usa
+ese hilo es la misma que la de la copia liviana de la vista (`placed_copy`, compartida mientras alguno la tiene).
+
+Medido con la cúpula de 2 003 996 triángulos (`TISMA_TIMING`, paso nuevo `click-model` de `--ui-script`, un clic en
+el medio de la vista): el primer clic, de 608 ms a 0,1 ms. Prueba nueva `ui_script_click_large_model`, con una esfera de
+239 200 triángulos hecha al probar (`tools/make_test_sphere.py` acepta los pasos); falla si el árbol se arma en el clic
+(comprobado). Pasan las 128 pruebas de interfaz y vista.
+
+**Sigue:** la malla de la placa y los vértices de la vista en otro hilo (unos 300 ms con la cúpula al abrirla).
+
+## 2026-10-29 (noche): la malla de la placa, solo cuando hace falta
+
+Al armar la placa se juntaban todas las mallas ubicadas en una (`mesh_`) para sacar de ella la caja y los vértices de
+la vista; esa copia se guardaba aunque solo el laminador, el análisis y los rayos la usan. Ahora los vértices salen de
+las mallas ubicadas una tras otra (`mesh_vertices` de varias mallas, con prueba contra la de la malla junta), la caja
+de la placa de sus cajas, y la malla junta se arma en esos tres casos (`plate_now`). Con la cúpula de 2 003 996
+triángulos ese paso pasa de 80–138 ms a 21–28 ms (medido con la CI corriendo al lado), y la memoria baja en una copia
+de 72 MB. También arreglado un aviso de `-Wshadow` en `vk_view.cpp` (de la matriz del modelo elegido). Pasan las 193
+pruebas de interfaz, vista, placa y malla.
+
+**Sigue:** mandar los vértices a la vista (unos 130 ms con la cúpula) sin frenar el cuadro.
+
+## 2026-10-29 (noche): `extrusion.flow_by_speed` (pellets.md, regla 5)
+
+Una lista de puntos `[velocidad, %]` (hasta 100; velocidad de 0 a 10 000 mm/s, % de 10 a 300), ordenada por velocidad:
+la E de cada extrusión va por el % de la velocidad con la que se escribe, ya frenada por el tiempo mínimo de capa y
+por el tope de caudal, en línea recta entre los puntos y la del extremo más allá. El tope de caudal sigue mirando el
+volumen sin la corrección. El chequeo del G-code hace la misma cuenta con la F de cada movimiento, así que el G-code
+pasa su chequeo. En el panel, una fila de lista en la tarjeta de flujo del material (se edita en el archivo, como la
+compresión del MMU). Pruebas: PE7 (a 40 mm/s entre `[20, 110]` y `[60, 100]`, el 105 %), los extremos, cada E de una
+caja contra la de sin corrección por el factor de su F, y la lectura con sus errores. Pasan las 792 pruebas.
+
+Del informe de ajustes que no lee el motor (`docs/spec/qa/2026-10-28-ajustes.md`), medido hoy en `dev`: faltan
+`walls.transition_margin` (pregunta al equipo de fichas: la tabla P13 no da una regla sola), `walls.vertical_shell`,
+`machine.feedstock`, `machine.high_flow_nozzle`, `machine.process`, `gcode.pressure_advance_in_gcode`,
+`gcode.pressure_advance_piece`, `gcode.thumbnails` y `extrusion.section`. La sección: la del motor ya es la redonda,
+h × (w − (1 − π/4) × h), y la ficha pone `rectangle` por defecto «como hoy»; queda preguntado antes de cambiar el
+valor por defecto de todo el G-code.
+
+**Sigue:** `machine.feedstock` (PE1 y PE9) y lo demás de la lista.
+
+## 2026-10-29 (noche): BH3, UI24 y TR18 del informe nocturno del equipo de fichas
+
+- **BH3:** `extrusion.infill_max_speed` 0,002 mm/s (0,12 mm/min) escribía `F0` en 154 líneas y el G-code no pasaba su
+  chequeo. Ahora ninguna extrusión va a menos de 1 mm/min (`melt_feed`) y ninguna F escrita es menor que 1. El
+  ejemplo del informe lamina y pasa; prueba nueva con el tope en las dos velocidades de relleno.
+- **UI24:** con «Capas curvas» apagado se veían todas sus filas. Ahora (`setting_applies`, regla 6 de
+  `settings_panel.md`) no se ve ninguna; la forma solo en `wave`; amplitud y largo de onda en `wave` sin ajuste al
+  cabezal; dirección en `ridges` y `twisted`; giro en `twisted`; pendiente del cono en `conical` sin ajuste; el caudal
+  parejo solo con `uniform`. Mirado con `--dump-ui` en cuatro modos (filas: solo `curved.mode` apagado; `wave`/`egg`
+  sin ajuste: forma, ajuste, amplitud y largo; `twisted` con ajuste: forma, ajuste, dirección y giro; `conical`:
+  ajuste y pendiente). Sin prueba automática.
+- **TR18:** «Ajustar al cabezal» / "Fit to the print head", «Perfil del cabezal» / "Print head profile", un perfil
+  vacío dice «Sin medir» y un ángulo libre sin medir «Sin dato».
+
+Pasan las 210 pruebas de interfaz, textos, ajustes y G-code.
+
+## 2026-10-29: mantenimiento (08:41), `extrusion.section` y `walls.transition_margin`
+
+**Mantenimiento.** `tisma_fuzz_gcode 2000` con la semilla 20261029: 2000 corridas, 27 rechazadas por no imprimibles,
+1 falla (corrida 354): «move to Z7.064 is out of 0 to 7.00167». Perímetros escalonados con alturas de capa variables
+(capas de hasta 0,45 mm abajo y una última más fina) y sin salto: el bucle levantado media capa de la capa anterior a
+la última pasaba el tope del chequeo, que sumaba esa media capa solo con el relleno ondulado. El G-code estaba bien; el
+tope del chequeo (`gcode_limits`) ahora suma la media capa más gruesa de los bucles levantados también sin ondas.
+Prueba nueva con capas de 0,4 y una última de 0,15. De paso: cambiar un encabezado mientras compila deja objetos con
+la versión vieja de `Settings` (un `free` inválido en `~Settings`); se arregla tocando el encabezado y compilando
+otra vez (anotado para no confundirlo con un error del motor).
+
+**`extrusion.section`** (`pellets.md`, regla 4): el equipo de fichas midió en Tisma Slicer que la E de cada cordón es la
+de la sección redonda (0,033849 mm de E por mm a 0,45 × 0,2), así que el valor por defecto es `rounded`, como el motor
+hacía siempre, y `rectangle` (w × h) es la opción. Cuentan con ella la E del escritor, el tope de caudal y el chequeo;
+los anchos y las separaciones no cambian. Pruebas PE2 (6,2363 mm de E por mm), PE3 (5,6786), PE5 (3,7854 mm³ por mm)
+y cada E de una caja con las dos secciones.
+
+**`walls.transition_margin`** (`perimeters.md`, P13 y P13b): el equipo de fichas midió que el corte no depende del
+margen (25 % y 100 % cortan igual) ni del ancho de la pared (0,45 y 0,6 mm), y está entre 0,15 y 0,16 mm de espesor
+por encima del cambio. Con margen mayor que 0, un tramo de N + 1 cordones entre dos anclas opuestas cuyo punto más
+grueso pasa el cambio por 0,155 mm o menos queda en N, sea del largo que sea (`kMarginSwing`,
+`flatten_small_swings`); con 0, como antes. Se mira por tramos conexos del centro con la misma cantidad y solo menos
+alrededor, no a lo largo de una cadena: el borde ondulado ramifica el centro en las crestas, y con amplitud 0,15 las
+dos anclas de una cresta quedaban en cadenas distintas. Una cresta que llega a N + 2 se aplana a N + 1 y después,
+otra vuelta, a N; una isla del centro (donde el borde ondulado se inclina más que `walls.transition_angle`, lo de
+alrededor no es centro) toma la cantidad del centro más cercano a través de lo que no es centro, hasta 5 anchos de
+cordón; una pared pareja no tiene ninguno y queda como está. Solo desde 2
+cordones (lo medido va de 2 a 3, 3 a 4 y 4 a 5): con 25 % por defecto, una cuña fina perdía su único cordón. Por defecto 25 %. Prueba con la tira ondulada de P13 (40 mm, λ = 5): con
+amplitud 0,05, 0,1 y 0,15, margen 0 da tramos de 3 cordones y 25 % y 100 % ninguno; con 0,2 y 0,25 quedan los de 3 con
+cualquier margen. No imita el salto de largo de los tramos con margen 0 (de 1,6 a 1,0 mm entre 0,15 y 0,16).
+
+**Sigue:** `machine.feedstock` (PE1, PE9) y lo demás de la lista de ajustes que no lee el motor.
+
+## 2026-10-29: `machine.feedstock` (pellets.md, regla 1, PE1)
+
+`machine.feedstock` (`filament` por defecto, o `pellet`) se lee, se guarda y está en la tarjeta del extrusor del
+panel; el laminado es el mismo. Los topes de `machine.max_flow` y `extrusion.max_flow` pasan de 1000 a 10 000 mm³/s
+(«Topes que cambian» de la ficha), en el lector, `docs/CONFIG.md` y el panel. Prueba PE1: una caja de 100 mm en una
+impresora de pellets (boquilla de 5 mm, capas de 2,5, cordones de 6) lamina en 4 capas y su G-code pasa el chequeo.
+PE9: el equipo de fichas agregó `extrusion.feedstock` (en el perfil del material; sin la clave, filamento). Si no
+coincide con `machine.feedstock`, `capability_warnings` da el aviso «feedstock» («this material is for filament and
+the printer melts pellets», o al revés) y lamina igual; prueba con los cuatro casos. Como los demás avisos del
+laminado, el texto va en inglés. Falta filtrar la lista de materiales por esa clave (con los perfiles, P3).
+
+La prueba X1 leía todo comentario con «filament» y un número; el bloque de ajustes del final ahora trae `; feedstock = filament`: lee solo las líneas del resumen. Pasan las 797 pruebas.
+
+La corrida del fuzzer que fallaba (semilla 20261029, 355 corridas, con la 354) pasa ahora: 0 fallas, 8 rechazadas por
+no imprimibles.
+
+## 2026-10-29: `machine.high_flow_nozzle` (multi_extruder.md)
+
+Uno, o uno por extrusor; no cambia el laminado. Va en los ajustes del final del G-code y como `high_flow_nozzle=0`
+o `1` por extrusor (separados por coma) en el bloque de la impresora del G-code binario; en el panel, un interruptor
+en la tarjeta del extrusor (o una fila de lista con varios). Prueba de lectura, de ida y vuelta y del error.
+
+De la lista de ajustes de las fichas que el motor no lee quedan: `walls.vertical_shell`, `machine.process` (WAAM,
+después de la primera versión), `gcode.pressure_advance_in_gcode`, `gcode.pressure_advance_piece` y
+`gcode.thumbnails` (el formato de los comentarios todavía no está en la ficha).
+
+## 2026-10-29: BH4, el ancho de los cordones por defecto
+
+Informe del equipo de fichas: en tiras planas (40 × T × 3 mm, solo paredes, capa 0,2, boquilla 0,4) el motor pasaba de
+2 a 3 cordones hacia 1,05 mm, de 3 a 4 hacia 1,29 y de 4 a 5 hacia 1,75; Tisma Slicer y la ficha, entre 1,15 y 1,2,
+1,45 y 1,5, y 1,95 y 2. Reproducido con 3 y con 10 paredes. No eran las transiciones: con `walls.width` 0,45 el motor
+da exactamente los puntos de Tisma Slicer. El ancho por defecto del motor era 0,4; la ficha dice 0: automático,
+1,125 × la boquilla. Ahora `walls.width` 0 es el valor por defecto y vale 1,125 × la boquilla al leer los ajustes
+(`wall_width_auto`, también si la boquilla viene de otro grupo), y en el panel el ancho automático sigue a la boquilla
+hasta que se cambia a mano (la fila dice «Automático»). `docs/CONFIG.md`: «0,05 a 40, o 0 (automático)».
+
+Las pruebas medidas con 0,4 lo dicen ahora: la impresora de pruebas (`test_printer`) pone 0,4 si nada lo pone, como
+hace con las velocidades, y las que arman `Settings` a mano (superficies, piel difusa, análisis, `slice_model`)
+ponen 0,4. Prueba nueva: el ancho automático (0,45; 0,675 con boquilla de 0,6; 0,9 con 0,8) y las tiras del informe
+con el ancho por defecto (1,0 y 1,15: 2; 1,2 y 1,45: 3; 1,5 y 1,95: 4; 2,0: 5). Pasan las 798 pruebas.
+
+## 2026-10-29: textos del panel (TR8, TR10, TR11, TR15, TR19)
+
+Del informe del equipo de fichas sobre las páginas en español:
+- **TR8, guiones sueltos:** los 31 campos que mostraban «—» con 0 dicen ahora lo que hace el 0 según `docs/CONFIG.md`:
+  «Automático» (sale de otro valor: anchos, ángulo de puente, velocidades derivadas, `max_link`, `bottom_z_gap`,
+  `max_lift`…), «Sin límite» (topes de velocidad, caudal y rampas, desvío, `lift_above`/`lift_below`), «Apagado»
+  (`coast`, suavizado de esquinas, filamento mínimo de la falda, espera de cámara, largo libre de puente) o
+  «Sin dato» (densidad). `support.interface_spacing` muestra su 0,00 mm (0 es un valor: líneas juntas). Las
+  velocidades de cada tipo en 0 dicen «Automático».
+- **TR15:** la lista de calibraciones lleva la unidad de cada valor (%, mm, mm/s, mm³/s, mm/s², s) y «Sin dato» o
+  «Sin límite» en lugar del guion.
+- **TR10 y TR19.2:** «Más de la torre de purga» dice «Separación 100 % · flujo 100 %»; «Temperaturas máximas» dice
+  «Boquilla 260 °C · cama 110 °C», con «Sin dato» en lo que no se sabe (y solo «Sin dato» si no se sabe ninguna).
+- **TR11:** «Sin borde» y «Sin arcos» pasan a «Apagado», como la balsa y las demás tarjetas.
+- **TR19.1:** «Filamento mínimo de la falda» pasa a «Filamento mínimo» (la tarjeta ya es la de la falda): el botón (i)
+  vuelve a entrar en la columna.
+- El título violeta de «Modo silencioso» es el color de cuando el mouse está encima (la captura lo tenía ahí), no una
+  marca de cambio.
+
+Mirado con `--dump-ui` (la fila de la falda, ninguna etiqueta cortada). Pasan las 136 pruebas de interfaz, textos y
+límites.
+
+## 2026-10-29: BH5 y BH6 (búsqueda de bugs del equipo de fichas)
+
+- **BH5:** `infill.width` 10, `surfaces.solid_width` 5 o `support.width` 10 con boquilla de 0,4 laminaban y el G-code
+  pasaba su chequeo (`;WIDTH:10.0`). `check_settings` controla ahora esos anchos y `surfaces.top_width` con la misma
+  regla que `walls.width` (de un cuarto a cuatro boquillas): «infill.width: 10 mm cannot come out of a 0.4 mm nozzle
+  (0.1 to 1.6 mm)». Prueba con los cuatro y un caso bueno.
+- **BH6:** sin `machine.variables.temperature` (ni `first_layer_temperature`, ni un cambio por altura con
+  temperatura) y sin nada en el G-code de inicio que caliente (M104, M109, una macro `PRINT_START`/`START_PRINT`, un
+  calentador, o la variable de temperatura), la línea de comandos da el aviso `no_heating` (`heating_warning`). En la
+  línea de comandos y no en los avisos del G-code: la interfaz siempre pone una temperatura. Prueba de los casos;
+  la prueba del JSON de avisos de la línea de comandos ahora espera ese aviso (sus ajustes no tienen temperatura).
+
+Pasan las 798 pruebas.
+
+## 2026-10-29: la lista de materiales según la impresora (pellets.md regla 1, profiles.md regla 5)
+
+- El catálogo de filamentos tiene la clave `feedstock` (`filament` si falta, o `pellet`), y el perfil que se hace de
+  una entrada lleva su `extrusion.feedstock`.
+- `filament_offered` y `material_offered`: pellets para una impresora de pellets; con filamento, nunca pellets y solo
+  los diámetros de las impresoras instaladas, o todos si no se sabe. `printer_of_profile` encuentra el modelo del
+  catálogo del que se hizo un perfil de impresora (por su nombre con una de sus boquillas): los perfiles de impresora
+  no guardan el diámetro del filamento (`machine.filament_diameter` es del perfil de filamento).
+- En la interfaz: el catálogo de filamentos y la lista de perfiles de Filamento usan ese filtro (el elegido queda
+  siempre), y el catálogo vacío lo explica. Prueba de interfaz nueva con una LulzBot TAZ 6 (2,85 mm): el catálogo
+  queda vacío, porque hoy solo tiene filamentos de 1,75 mm (mirado en la captura).
+- Prueba nueva del catálogo: la clave, el perfil, los dos filtros, `printer_of_profile` y una alimentación mal escrita.
+
+- **Regla 6 y PE6:** `melt_limit_warning` da un aviso `flow_limit` por laminado cuando el tope de caudal (el menor de
+  `machine.max_flow`, `extrusion.max_flow` y `speed.max_flow`) baja la velocidad de las paredes, el relleno, el
+  relleno sólido o las superficies superiores, con su ancho y `layers.height`: «the melt limit of 500 mm3/s slows walls
+  60.0 -> 36.6 mm/s». Prueba PE6 (cubo de 100 mm, boquilla de 5 mm, capa de 2,5, cordón de 6: ninguna pared pasa de
+  500 / 13,6587 mm/s, y un solo aviso) y PE8 (boquilla de 0,4 con capa de 2,5: error, como antes).
+- **PE4 queda en espera:** pide `M200 D1.75 S1` con `machine.e_mode` `volume`, y X11 (`gcode_extras.md`) dice que no
+  se escribe `M200`. Le pregunté al equipo de fichas cuál vale (propuesta: solo con `machine.feedstock` `pellet`).
+
+**Sigue:** PE4 cuando conteste el equipo de fichas; pellets y filamentos de 2,85 mm en el catálogo (datos oficiales).
+
+## 2026-10-29: BH10 y la extensión de BH5 (búsqueda de bugs del equipo de fichas)
+
+- **BH10 (seguridad):** `calibration.mode` `temperature` con `start` 0 (lo que queda si no se pone) escribía
+  `M104 S0` en la primera franja y toda la pieza se extruía con el calefactor apagado; con `start` 210, `step` −100 la
+  última franja quedaba en 10 °C. Las franjas de temperatura van ahora de 150 a 500 °C (150, la boquilla más fría que
+  acepta el catálogo): «calibration.start: gives 0.0: the bands' values must be from 150 to 500 C» (código 2, como las
+  otras calibraciones). Además, el chequeo del G-code sigue la temperatura de cada extrusor (`M104`/`M109` con `S`, y
+  `T` si lo dice) y da «extrudes with the nozzle's heater set to 0» si extruye uno que quedó en 0; vale también para
+  el G-code del usuario. Pruebas: los dos casos del informe, el daño `M104 S0` en el cubo y el caso bueno (otra
+  temperatura después, y un `M104 T1 S0` de otro extrusor).
+- **BH5, `walls.min_line_width`:** 9,092 mm con boquilla de 0,4 laminaba un cordón demasiado ancho. Es un mínimo, así
+  que solo se controla el tope: hasta cuatro boquillas.
+
+Quedan del informe: BH7 (`--copies` saltea el aviso de «nada que imprimir», y el filamento del resumen del chequeo),
+BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y los totales de filamento por extrusor.
+
+## 2026-10-29: BH9, UI25 y TR20 (segunda ronda del equipo de fichas)
+
+- **UI25:** con el catálogo del primer arranque abierto y el foco fuera del buscador, Ctrl+A y Supr llegaban al plato
+  y borraban el modelo. Los atajos del plato, las flechas de las capas y del corte, las teclas de la vista, Ctrl+O,
+  Ctrl+F y Ctrl+Alt+1 a 4 no actúan si hay un cuadro, un menú o una ventana emergente abiertos (`no_popup`,
+  `plate_keys`). Prueba de interfaz nueva (`modal_keys`): falla sin el arreglo («the plate holds 0 objects») y pasa
+  con él. Para eso, el guion de interfaz tiene dos pasos nuevos (`click-at x y`, `expect-objects n`) y la tecla
+  `delete`. El cierre raro que el equipo vio después (2 de 14 repeticiones) partía de ese estado; no lo reproduje.
+- **TR20:** el menú del clic derecho de los enlaces (de ImGui) dice «Copiar enlace», y su ayuda «Abrir '…'».
+- **BH9:** `.amf`, `.step`, `.stp`, `.svg` y `.zip` dan «AMF files are not supported yet: save the model as STL, OBJ
+  or 3MF» (un AMF comprimido tampoco se toma por 3MF).
+
+- **BH11 (resina):** una caja con todas las caras al revés (volumen −4800) recibía un solo pilar: `orient_consistently`
+  deja como están los archivos al revés pero coherentes (el FDM los lee igual), y los soportes de resina leen las
+  normales. `scaled_mesh` da vuelta la malla entera si su volumen es negativo (entera, para que la cáscara de una
+  cavidad siga hacia adentro). Prueba: el cubo al revés da los mismos píxeles en la base, los pilares y la pieza; por la
+  línea de comandos, los dos `.goo` de la caja de 30 × 20 × 8 difieren en un solo byte de la cabecera.
+
+- **BH13:** `resin.light_pwm` y `resin.bottom_light_pwm` van de 1 a 255 (0 es la luz apagada); el panel también.
+- **BH12:** «fixture 'fixture 1' touches no part of the model: the model is only 0 voxels of 50 mm, try a smaller
+  voxel» cuando la pieza tiene menos de 27 vóxeles; y el aviso `large_displacement` cuando la pieza se mueve más de
+  una décima de su tamaño (1e30 N). Pruebas de los dos.
+
+- **BH8:** `copies_that_fit` cuenta cuántas copias deja `place_copies` dentro de la caja de la cama; la línea de
+  comandos dice «100 copies do not fit on the bed (machine.bed): 81 fit» (cubo de 20 mm, cama de 250). Prueba.
+
+- **UI26:** los avisos emergentes se apilan arriba del panel Laminar (antes lo tapaban), van por delante de las
+  tarjetas de los tutoriales y se parten en líneas dentro de la vista (el de «Agregado a tus perfiles…» cruzaba el
+  panel de ajustes). Mirado en la captura; pasan las 116 pruebas de interfaz.
+
+Quedan: BH7 (no lo reproduje; pedí el archivo) y los totales de filamento por extrusor (espera una ficha).
+
+## 2026-10-29: las salidas y las entradas (BH15 a BH18, TR21 en parte)
+
+- **BH15 y BH16 (se perdían datos):** `slice … -o m.stl` reemplazaba el modelo por el G-code, `--warnings` igual a
+  `-o` escribía uno sobre el otro, `-o /dev/full` (como root) reemplazaba el dispositivo por un archivo, y `-o` a un
+  enlace reemplazaba el enlace. Módulo nuevo `src/io/paths.*`: `write_target` sigue los enlaces, `output_problem`
+  rechaza lo que existe y no es un archivo común, `same_file` compara por archivo (`equivalent`) o por la ruta
+  absoluta. La línea de comandos revisa cada salida contra cada entrada y contra las otras salidas (código 2), y
+  `write_file` y `export_gcode` escriben el `.part` junto al archivo real. `-o` puede seguir siendo una carpeta
+  (`output.filename_format`). Prueba de la línea de comandos con todos los casos, `/dev/null` incluido.
+- **BH18:** una carpeta como modelo, ajustes o caso de carga dice «'…' is a folder, not a model» (o «not a settings
+  file», «not a load case»), código 2; antes, «internal: std::bad_alloc».
+- **TR21 (la parte del motor):** el JSON que no se lee dice «not valid JSON at line 2, column 24» o «the file is
+  empty» (`json_error`), en los ajustes, los perfiles y el caso de carga. Falta traducir al español los errores de
+  carga en el cuadro de la interfaz.
+- **BH17:** un STL ASCII que empieza con el BOM de UTF-8 se lee como texto.
+
+## 2026-10-29: el buscador de ajustes en el panel (pedido del dueño)
+
+El campo «Buscar un ajuste (Ctrl+F)» pasó de la barra superior al panel de ajustes, en una barra debajo de la
+impresora y la boquilla, a todo el ancho del panel; la lista de resultados se abre debajo, como antes. Ctrl+F lo
+enfoca, y desde la página de la impresora vuelve al panel. En la barra superior queda el botón de ayuda. Mirado en la
+captura.
+
+## 2026-10-29: PE4, `M200` en las impresoras de pellets
+
+El equipo de fichas respondió: X11 (`gcode_extras.md`, sin `M200`) es el caso de filamento medido en Tisma Slicer, y
+la regla 3 de `pellets.md` vale solo con pellets. Con `machine.e_mode` `volume` y `machine.feedstock` `pellet`, después
+del G-code de inicio va `M200 D1.75 S1` en Marlin y `M200 D1.75` en RepRapFirmware (`D` distinto de 0 activa la E en
+volumen desde RRF 1.19; `S` existe recién desde 3.5, según la documentación pública de Duet que citó el equipo); en
+Klipper y los demás, nada y el aviso `volumetric_e`. Prueba PE4: la línea justo después del inicio, 13,6587 mm³ de E
+por mm de una pared de 6 × 2,5 mm, RRF sin `S`, Klipper con el aviso, y filamento sin `M200`.
+
+## 2026-10-29: BH7
+
+Con el archivo del equipo de fichas (un cubo de 0,15 mm al revés, más bajo que la primera capa, soportes activos):
+una copia daba «nothing would be printed» y `--copies 2` laminaba un G-code con solo la falda y un «External
+perimeter» sin extrusión. Las copias van centradas en la cama y el redondeo dejaba un camino de pared de dos puntos a
+menos de `gcode.resolution`, que el escritor junta en nada. `unprintable_reason` cuenta ahora un camino solo si mide
+más que la resolución (y que 0,01 mm). La línea del chequeo dice «mm of filament net of retractions» (el número es
+neto de las retracciones; el pie del G-code da el filamento usado). Prueba con un camino de 5 µm.
+
+## 2026-10-29: el panel de ajustes, una sola lista (pedido del dueño)
+
+El dueño pidió que el panel no tenga tarjetas que se despliegan, sino títulos y ajustes, para bajar con la barra o la
+rueda, como Orca Slicer:
+- todas las secciones de la pestaña van una debajo de la otra en una lista, cada una con su título;
+- las tarjetas muestran siempre su título y sus ajustes: sin flecha, sin resumen, sin plegar (`settings_card`);
+- la columna de íconos sigue: un clic baja la lista hasta la sección (`jump_section_`), y se ilumina la que está a la
+  vista (la última cuyo título pasó el tercio de arriba, o la última si la lista llegó al fondo); `--section` y la
+  búsqueda también bajan hasta su sección;
+- el botón «Ver todo junto» ya no hace falta y no está; `--single-column` saca la columna de íconos;
+- el nivel Personalizado y «Elegir ajustes…» siguen igual, para que cada persona vea solo lo que quiere.
+
+Mirado en capturas (la lista al empezar y con `--section print/speed`). Pasan las 116 pruebas de interfaz.
+
+## 2026-10-29: BH14, camas imposibles
+
+Un `machine.bed` con los puntos en una línea daba «the model is outside the bed», y uno cruzado (un moño) «the skirt
+goes off the bed», los dos con código 4. `bed_problem` lo revisa al leer los ajustes (código 2): primero los lados
+que se cruzan («crosses itself: its points must go around the bed in order»; un moño simétrico tiene área 0, por eso
+va primero) y después el área («has no area: its points are on one line»). Los puntos repetidos y el sentido horario
+siguen valiendo; una cama cóncava también. Pruebas de los cinco casos.
+
+Después, también pedido del dueño: sin los recuadros grises de los apartados (los títulos y los ajustes van sobre el
+fondo blanco del panel; el título de la sección pasa al violeta del tema, que se lee sobre blanco y sobre oscuro) y
+sin las líneas «N ajustes más en Avanzado · Mostrar todos» (con un nivel más alto se ven más ajustes, y eso se
+entiende solo). Mirado en capturas con el tema claro y el oscuro.
+
+## 2026-10-29: el filamento de cada extrusor en el pie del G-code
+
+Del informe del equipo de fichas (comportamiento: un valor por extrusor, separado por comas, 0 para uno sin usar): el
+escritor cuenta la E de cada herramienta (`count_e`, `tool_e`), y con más de un extrusor `; filament used [mm]`,
+`[cm3]`, `[g]` y `; filament cost` dan la lista; `total filament used [g]` y `total filament cost` siguen con el total.
+Prueba con la torre de purga de dos extrusores: dos valores, los dos mayores que 0, y los gramos suman el total.
+
+Con la ficha nueva del equipo (`settings_panel.md`, reglas 1 a 4, spec/next 2f38602; todavía no está en `main`): la
+lista abre en la sección que estaba a la vista al cerrar (`ui.section`, por pestaña), y al pasar de Impresión a
+Material y de vuelta, cada pestaña vuelve a la suya; `ui.single_column` y `--single-column` quedan retirados (se leen
+y no hacen nada). La página de la impresora ya usa las mismas tarjetas siempre abiertas; falta saber si sus
+secciones también van en una sola lista con Calibración, Conexión y Notas (pregunta al equipo de fichas). La vuelta a
+la sección guardada no tiene prueba automática: las capturas no leen las preferencias.
+
+## 2026-10-29: TR21, los errores de carga en español
+
+`translated_error` (`src/ui/text.*`) pasa al español los mensajes del motor que llegan al cuadro «No se pudo abrir el
+archivo» y a los demás de error (`App::fail`): una tabla de plantillas con `{}` (STL cortado, cara no finita, vértice
+no definido, no es ZIP, sin caras, sin extrusiones, JSON inválido, carpeta, formato sin leer, no se puede abrir…) y
+los lugares que van delante («OBJ, línea 9: », «3MF: », «proyecto: », «ajustes: », una ruta). Un mensaje que no
+conoce queda como está. En inglés no cambia nada. Prueba con los seis casos del informe.
+
+## 2026-10-29: fichas de información para principiantes (pedido del dueño)
+
+El botón (i) abre ahora un cuadro flotante en el centro, más ancho: el nombre del ajuste, un dibujo propio
+(`apps/tisma/illustrations.*`, 18 dibujos hechos con líneas y figuras: capas finas y gruesas, primera capa, paredes,
+techo y piso, relleno en tres densidades, costura, soporte bajo un voladizo, falda, borde, boquilla y cama calientes,
+ventilador, retracción, salto, boquilla, filamento, cama) y una explicación para quien nunca usó un laminador, en tres
+partes: qué es, qué cambia en la pieza y un ejemplo con valores (`src/ui/setting_guide.*`, en español y en inglés).
+Los 26 ajustes del nivel Básico la tienen; los demás muestran el significado corto de `docs/CONFIG.md`, como antes.
+Prueba: cada ajuste básico tiene explicación en los dos idiomas, y cada explicación es de un ajuste básico. Mirado en
+capturas (`--info layers.height`, `support.enabled`, `infill.density`, `walls.count`).
+
+El tutorial de inicio tiene ahora cuatro pasos de conceptos básicos, cada uno con su dibujo, entre la bienvenida y los
+pasos de uso: cómo se imprime una pieza (laminar, capas, G-code), capas, paredes y relleno, lo que cuelga y lo que se
+pega (soportes, primera capa, borde), y el material y su temperatura (con la torre de temperatura y la de retracción).
+Los títulos de los pasos ya no llevan número: el contador «2 / 10» dice dónde está. La tarjeta es más ancha (500) en el
+tutorial. Pasan las 118 pruebas de interfaz.
+
+**Sigue (pedidos del dueño):** fichas largas para todos los ajustes, no solo los básicos; un tutorial de calibración
+básica (qué filamento y a qué temperatura, la retracción, y qué calibraciones conviene hacer primero). Hecho en la
+entrada siguiente.
+
+## 2026-10-29: una ficha para cada ajuste y la calibración como menú (pedidos del dueño)
+
+**Fichas para todos los ajustes.** Las 432 claves de las tres pestañas tienen su explicación larga en español y en
+inglés (qué es, qué cambia y un ejemplo). Las 406 que faltaban se redactaron en nueve grupos (máquina, resina,
+material, soportes, paredes, relleno, velocidad, G-code y varios extrusores), un archivo por grupo en
+`src/ui/guides/*.inc` que `setting_guide.cpp` incluye en su tabla. Las fuentes: `docs/CONFIG.md`, los demás documentos
+de `docs/` y los comentarios de `settings.hpp`. Las de ajustes que el motor guarda pero todavía no usa lo dicen. Unas
+220 tienen dibujo (`picture_for`). La prueba ahora pide explicación para cada clave del panel en los dos idiomas, y que
+cada explicación sea de una clave del panel, sin repetidas. La prueba encontró una clave sin ficha, `changes`.
+
+**La calibración como menú.** El dueño pidió una lista concisa como el menú de calibración de otros laminadores, con
+la información en una ventana al tocar cada prueba, y después sacar la tabla de cuatro materiales y detectar el
+filamento elegido. La pestaña queda así:
+- arriba, el filamento elegido con sus temperaturas y **Continuar** con la siguiente básica pendiente;
+- **Básicas, en este orden**: primera capa, temperatura, flujo y retracción;
+- **Más pruebas**: las demás, y los pasos del extrusor.
+
+Cada fila tiene el nombre, «Hecha» y una flecha. La ficha se abre en el centro con:
+- un dibujo;
+- qué hace, por qué va primero y cómo se lee;
+- en la de temperatura, el rango que va a probar la torre con ese filamento (el mismo que arma **Crear**);
+- los botones **Crear**, **Cómo se hace**, **Continuar** y **Cerrar**.
+
+La prueba activa sigue guiando debajo de su fila, como antes. El panel pasa de 450 a 380 de ancho. Se miró en
+capturas: la lista, la ficha de temperatura y la ficha de un ajuste avanzado (`--info adhesion.skirt_layers`). Pasan
+las 137 pruebas de interfaz y calibración.
+
+**Sigue:** ver en Windows la lista y las fichas.
+
+## 2026-10-29: SIGTERM mientras arranca (encontrado por el CI)
+
+El CI de Linux en `957aa5f` falló una vez en `ui_sigterm_keeps_preferences`, en la compilación con ASan: «exit
+143». `tisma` ponía el manejador de SIGTERM y SIGINT después de `init()` (ventana, contexto gráfico, fuentes,
+catálogo). Con ASan y la máquina cargada, el arranque pasó los 6 s de la prueba, y la señal lo mató sin guardar las
+preferencias. Se reprodujo a mano con la señal a 0,05 s y a 1 s. Ahora el manejador va al principio de `run()`: una
+señal durante el arranque deja que termine `init()`, no entra al bucle y `shutdown()` guarda. Prueba nueva,
+`ui_sigterm_while_starting`: con `--term-while-starting`, `tisma` se manda SIGTERM a sí mismo apenas pone el
+manejador, antes de abrir la ventana. Un primer intento con la señal a los 0,05 s falló en el CI con ASan: en ese
+tiempo el proceso todavía no llega a `main()` (cargador y ASan), y ninguna espera fija evita esa carrera.
+
+## 2026-10-29: mantenimiento (16:40)
+
+Bloque de mantenimiento programado (cada 8 horas). Ninguna otra sesión trabajaba en `dev`; `origin/main` y
+`origin/dev` no traían nada nuevo.
+
+**Revisado, sin hallazgos:**
+- El fuzzer del G-code con 2000 casos y semilla nueva (2026102916): 23 rechazados como no imprimibles, 0 fallas.
+- Sin avisos de UBSan ni de ASan en el CI.
+- Seis fichas nuevas tomadas al azar, contra su fila de `docs/CONFIG.md` (velocidad sobre puentes, flujo del
+  planchado, para qué es el material, aceleración de la torre de purga y de los viajes cortos, G-code final del
+  filamento): coinciden.
+
+**Encontrado y arreglado (el día, con el CI):**
+- Con clang no compilaba la tabla de fichas: medir unos 860 textos largos en tiempo de compilación pasa su límite de
+  pasos `constexpr`. Es un arreglo constante común ahora. Dos conversiones de signo que avisaba clang, arregladas.
+- SIGTERM durante el arranque (entrada anterior), con su prueba hecha determinista.
+
+**Encontrado y arreglado (en el bloque):**
+- **Coma decimal en los campos que se escriben.** Era el «No probado» del 2026-10-28. Los campos de las guías de
+  calibración y el de «Otra…» boquilla eran `InputDouble` de ImGui, que solo escribe y lee punto. Ahora son campos de
+  texto (`loc::InputNumber`) que muestran el número con la coma del idioma y leen coma o punto (`typed_number`, con
+  su prueba).
+- **El deslizador de Rotar con clics** (era «No probado» en el PR #46, mirado solo en captura). `expect-place` lee
+  ahora `turn_x`, `turn_y` y `turn_z`. Prueba `ui_script_rotate_sliders`: un clic a tres cuartos de Z gira 98,8°, y X
+  queda en 0.
+
+**Medido** (4 núcleos, corridas alternadas con un binario del 26-10, el mismo `d.json`):
+
+| | 26-10 | Ahora |
+|---|---|---|
+| Esfera de 1 millón de triángulos, `slice` completo (leer, laminar, escribir) | 2,17 a 2,49 s | 1,95 a 2,04 s |
+| Benchy, `slice` completo | 5,67 a 5,98 s | 0,81 a 0,83 s |
+| Análisis del cubo (`analyze`, comando completo) | 0,30 a 0,33 s | 0,27 a 0,31 s |
+
+La esfera tarda más que los 1,4 s anotados antes para laminar solo, porque acá se mide el comando entero y la máquina de
+hoy es más lenta (el binario viejo también tarda más que lo anotado entonces). Sin regresiones; no se buscó acelerar
+nada en este bloque.
+
+Nota: `-o /dev/null` ya no sirve para medir: desde BH16 una salida que no es un archivo común es un error (código 2).
+
+**No probado:** siguen abiertas la escala de pantalla de Windows y el efecto de luz con Vulkan en una GPU real.
+
+## 2026-10-29: la esfera más rápida (pregunta del dueño)
+
+El dueño preguntó cómo bajar más el tiempo de la esfera de un millón de triángulos. Se midió por fases, con
+callgrind y con relojes puestos a mano solo para medir, sin dejarlos en el código. Con la máquina cargada:
+
+| Fase | Tiempo |
+|---|---|
+| Leer | ~90 ms |
+| Soldar | ~130 ms |
+| Orientar (un núcleo) | ~440 ms |
+| Cortar las 500 capas | ~300 ms |
+| Paredes (eje medio, en paralelo) | ~1,4 s |
+| Resto de la capa | ~300 ms |
+| Escribir y verificar | ~380 ms |
+
+En instrucciones, las paredes son el 50 %, y `VoronoiDiagram::locate` con sus distancias (`hypot`) el 27 %: 1,6
+millones de búsquedas con 33,6 millones de pasos, unas 30 por búsqueda y 60 mil que llegan al tope de 100.
+
+**Hecho:**
+- **Orientar** (`orient_consistently`): armaba una lista de vecinos por triángulo (un millón de vectores) antes de
+  saber si había algo que girar, y ordenaba las aristas en un núcleo. Ahora revisa primero y arma los vínculos solo
+  si hace falta, y ordena con `tbb::parallel_sort` (el orden es total: mismo resultado). Pasó de 441 a unos 130 ms.
+- **Capas iguales** (`same_sections`): sale enseguida cuando ninguna capa cruza lo mismo que la de abajo, porque su
+  recorrido de la malla solo podía borrar marcas que no había.
+- **Voronoi, el borde del cono:** cuando el sitio nuevo es un segmento, la función de la búsqueda salta en los lados
+  de su cono de influencia. Ahora esos cortes se calculan exactos, porque son recta o parábola contra recta. Si la
+  parte del sitio nuevo termina en un corte, el nodo va ahí, del lado no tomado, sin búsqueda: 55.597 búsquedas de 1,6
+  millones, y las evaluaciones bajan de 35,9 a 33,5 millones.
+  - Resolver además solo dentro del tramo continuo (la primera versión) cambiaba algunas raíces casi planas por
+    nanómetros, y la prueba contra el eje medio de Boost fallaba en la estrella. Esa parte quedó fuera.
+
+**Medido** (4 núcleos, corridas alternadas, comando `slice` completo, mismo `d.json`):
+
+| | Antes | Orientar y capas | Además, el cono |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos | 1,84 a 2,12 s | 1,60 a 1,80 s | 1,59 a 1,63 s |
+| Benchy | 0,83 a 0,92 s | — | 0,70 a 0,81 s |
+
+El G-code de la esfera y de la esfera de 200 segmentos es igual byte a byte. En el Benchy cambian 7 líneas, en el
+quinto decimal de E. Pasan las 693 pruebas del motor y las 50 del diagrama y del eje medio, con la comparación contra
+Boost.
+
+**Sigue (lo que queda por ganar en la esfera):**
+- Lo grande sigue en `locate`. Hay que entender por qué una raíz casi plana elegida distinto cambia el eje medio de la
+  estrella; con eso se podría resolver cada tramo por separado y convergir en pocos pasos.
+- Soldar en paralelo: unos 80 ms.
+- `hypot` por `sqrt` en las distancias del Voronoi: 8 % de las instrucciones; cambia el último bit.
+
+## 2026-10-29: piezas grandes, segunda vuelta (pedido del dueño)
+
+El dueño pidió seguir mejorando el rendimiento en modelos grandes. Se midió por fases en la esfera de un millón de
+triángulos, con el reloj y el tiempo de CPU de cada fase (relojes puestos a mano solo para medir), y se fue por los
+tramos que corrían en un solo núcleo. Al empezar la vuelta:
+
+| Fase | Reloj | CPU |
+|---|---|---|
+| Paredes | 593 ms | 2330 ms (3,9 veces: bien repartida) |
+| Cortar las capas | 210 ms | 390 ms |
+| Orientar | 100 ms | 250 ms |
+| Contorno de los objetos, después de laminar | ~85 ms | un núcleo |
+| Leer | ~85 ms | un núcleo |
+| Soldar | ~110 ms | un núcleo |
+| Escribir | ~185 ms | un núcleo |
+
+**Hecho** (el G-code de la esfera, del Benchy y de la esfera chica, igual byte a byte salvo donde se dice):
+- **`sqrt` en lugar de `std::hypot`** en las distancias del diagrama de Voronoi. `hypot` era un octavo de las
+  instrucciones, y protege de un desborde que estas coordenadas no alcanzan. Cambia el último decimal en 2 líneas de
+  la esfera y 12 del Benchy. Pasan la prueba contra Boost y las del diagrama. Esfera: de 1,60–1,72 a 1,44–1,56 s.
+- **Soldar en paralelo** desde 300 000 esquinas: una tabla compartida con compare-and-swap, que guarda la primera
+  esquina de cada punto, y una suma prefija que numera igual que la versión en serie. Pasa de 120–145 a 95–110 ms; lo
+  limita la memoria, no los núcleos. Una prueba compara las dos versiones.
+- **Orientar:** armar las aristas y buscar las que no coinciden, en paralelo. Pasa de 95 a 80–90 ms: ahora lo limita
+  el ordenamiento, que recorre memoria.
+- **Cortar las capas:** los rangos de nivel de cada triángulo y el agrupado por nivel, en paralelo. El agrupado va por
+  32 trozos fijos, así que el orden dentro de cada nivel es el mismo con cualquier cantidad de hilos. Pasa de 210 a
+  145 ms.
+- **El contorno de cada objeto:** después de laminar se copiaba la malla entera del objeto (un millón de triángulos) y
+  se ordenaban todos sus vértices en un núcleo, solo para su altura y su contorno. Ahora se toman los vértices tal
+  como están, y la envolvente descarta antes de ordenar los puntos que quedan dentro del octógono de los extremos (Akl
+  y Toussaint 1978). Unos 80 ms menos. Prueba nueva con 20 000 puntos.
+
+**Probado y descartado:**
+- Resolver el Voronoi por tramos continuos cambia la costura en 4 capas de la esfera, y en ellas la pared interior es
+  más corta: hay un cambio real de geometría que las pruebas del diagrama no ven.
+- Un conjunto hash lineal para orientar no gana nada frente al ordenamiento, porque lo limita la memoria.
+- El asignador de memoria de oneTBB (`tbbmalloc`) en lugar del del sistema: sin diferencia medible (1,37–1,67 contra
+  1,44–1,94 s).
+
+**Medido** (4 núcleos, corridas alternadas, comando `slice` completo):
+
+| | Antes de hoy | Lo subido al mediodía | Ahora |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos | 2,01 a 2,21 s | 1,63 a 1,93 s | 1,45 a 1,60 s |
+
+Pasan las 695 pruebas del motor.
+
+**Sigue:**
+- Las paredes son el 40 % del tiempo, aunque ya usan bien los núcleos. Queda entender por qué una raíz casi plana
+  elegida distinto cambia la pared, y buscar menos pasos en `locate`.
+- Leer el STL y escribir el G-code siguen en un núcleo: ~85 y ~185 ms.
+
+## 2026-10-29: release 0.10.0-alpha.3 (pedido del dueño)
+
+El dueño pidió una build de Windows para probar, un ejecutable, sin esperar al lunes. Se publica `0.10.0-alpha.3`
+con lo de hoy: el panel de ajustes como una lista, las fichas para todos los ajustes, la calibración como menú, el
+tutorial con lo básico, las correcciones y las dos vueltas de rendimiento en modelos grandes. El flujo
+`release.yml` compila en Windows y en Linux y publica `tisma-engine-0.10.0-alpha.3-windows-x64.zip`, con
+`tisma.exe` (la interfaz) y `tisma-engine.exe`, al fusionar la PR `dev` → `alpha`.
+
