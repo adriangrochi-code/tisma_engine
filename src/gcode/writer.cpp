@@ -1501,7 +1501,7 @@ public:
             (surface_ ? surface_extruded_ : extruded_)[feed] += length;
         if (logging_)
             laid_.push_back({feed, length, surface_, bridge_});
-        total_e_ += e;
+        count_e(e);
         if (tower_)
             tower_e_ += e;
         pending_ += e;
@@ -1572,7 +1572,7 @@ public:
             (surface_ ? surface_extruded_ : extruded_)[feed] += length;
         if (logging_)
             laid_.push_back({feed, length, surface_, bridge_});
-        total_e_ += e;
+        count_e(e);
         if (tower_)
             tower_e_ += e;
         pending_ += e;
@@ -1622,6 +1622,15 @@ public:
     }
 
     double total_e() const { return total_e_; }
+    // The filament each extruder pushed, by extruder from 0 (the footer's lists).
+    const std::vector<double>& tool_e() const { return tool_e_; }
+    void count_e(double e) {
+        total_e_ += e;
+        const std::size_t t = std::size_t(std::max(tool_ - 1, 0)); // tool_ counts from 1 (0: none chosen yet)
+        if (tool_e_.size() <= t)
+            tool_e_.resize(t + 1, 0.0);
+        tool_e_[t] += e;
+    }
     double tower_e() const { return tower_e_; } // of it, on the wipe tower
 
     // MakerWare's M103 after the extrusions (before a travel, and at the end).
@@ -1738,7 +1747,7 @@ private:
         tool_back_ = false;
         const double back = retracted_amount_ + extra;
         e_ = relative_ ? back : e_ + back;
-        total_e_ += extra;
+        count_e(extra);
         move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
         other_time_ += back / feed;
     }
@@ -2028,6 +2037,7 @@ private:
     double flow_ = 1.0;
     double height_ = 0.2;
     double e_ = 0.0, total_e_ = 0.0, pending_ = 0.0;
+    std::vector<double> tool_e_;
     double tower_e_ = 0.0;   // mm of filament laid on the wipe tower
     double drop_ = 0.0;      // mm the extrusions lie under the layer's top (the wipe tower's)
     bool on_tower_ = false;  // the nozzle is down on the wipe tower
@@ -4257,11 +4267,24 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const double r = s.filament_diameter / 2.0;
         const double mm = g.total_e(), cm3 = mm * std::numbers::pi * r * r / 1000.0;
         const double grams = cm3 * s.filament_density, cost = grams * s.filament_cost / 1000.0;
-        out << "; filament used [mm] = " << fixed(mm, 2) << "\n";
-        out << "; filament used [cm3] = " << fixed(cm3, 2) << "\n";
+        // With several extruders, one value for each, 0 for one not used, as
+        // hosts read them (the spec team's black-box report).
+        const auto by_tool = [&](double scale, double total) {
+            if (s.extruders <= 1)
+                return fixed(total, 2);
+            std::string text;
+            for (int t = 0; t < s.extruders; ++t) {
+                const double e = std::size_t(t) < g.tool_e().size() ? g.tool_e()[std::size_t(t)] : 0.0;
+                text += (t ? ", " : "") + fixed(e * scale, 2);
+            }
+            return text;
+        };
+        const double to_cm3 = std::numbers::pi * r * r / 1000.0;
+        out << "; filament used [mm] = " << by_tool(1.0, mm) << "\n";
+        out << "; filament used [cm3] = " << by_tool(to_cm3, cm3) << "\n";
         if (s.filament_density > 0.0)
-            out << "; filament used [g] = " << fixed(grams, 2) << "\n";
-        out << "; filament cost = " << fixed(cost, 2) << "\n";
+            out << "; filament used [g] = " << by_tool(to_cm3 * s.filament_density, grams) << "\n";
+        out << "; filament cost = " << by_tool(to_cm3 * s.filament_density * s.filament_cost / 1000.0, cost) << "\n";
         out << "; total filament used [g] = " << fixed(grams, 2) << "\n";
         out << "; total filament cost = " << fixed(cost, 2) << "\n";
         out << "; total filament used for wipe tower [g] = "

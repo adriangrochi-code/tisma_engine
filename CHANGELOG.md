@@ -17,6 +17,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.
 - **`M200` en impresoras de pellets** con E en mm³: `M200 D1.75 S1` en Marlin, `M200 D1.75` en RepRapFirmware, y en
   Klipper el aviso `volumetric_e`. Las de filamento siguen sin `M200`.
+- **Filamento por extrusor en el pie del G-code:** con varios extrusores, `filament used [mm]`, `[cm3]`, `[g]` y
+  `filament cost` dan un valor por extrusor separado por comas (0 si no se usa), como lo leen los hosts; los totales
+  siguen siendo uno.
 - **Aviso `flow_limit`:** cuando el tope de caudal baja la velocidad de las paredes, el relleno o las superficies, el
   laminado dice de cuánto a cuánto.
 

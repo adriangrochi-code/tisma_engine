@@ -8226,3 +8226,10 @@ fondo blanco del panel; el título de la sección pasa al violeta del tema, que 
 sin las líneas «N ajustes más en Avanzado · Mostrar todos» (con un nivel más alto se ven más ajustes, y eso se
 entiende solo). Mirado en capturas con el tema claro y el oscuro.
 
+## 2026-10-29: el filamento de cada extrusor en el pie del G-code
+
+Del informe del equipo de fichas (comportamiento: un valor por extrusor, separado por comas, 0 para uno sin usar): el
+escritor cuenta la E de cada herramienta (`count_e`, `tool_e`), y con más de un extrusor `; filament used [mm]`,
+`[cm3]`, `[g]` y `; filament cost` dan la lista; `total filament used [g]` y `total filament cost` siguen con el total.
+Prueba con la torre de purga de dos extrusores: dos valores, los dos mayores que 0, y los gramos suman el total.
+
