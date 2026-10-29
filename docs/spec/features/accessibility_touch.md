@@ -151,14 +151,9 @@ autismo, para hacer que la interfaz sea lo más accesible posible».
   aprendizaje; es una guía, no una norma; pide incluir a las personas en las pruebas;
 - lectura fácil: norma UNE 153101:2018 EX (España, «Lectura fácil. Pautas y recomendaciones para la elaboración de
   documentos»);
-- pictogramas:
-  - ARASAAC (Gobierno de Aragón, autor Sergio Palao): más de 11 000 pictogramas, licencia CC BY-NC-SA: **no permite
-    uso comercial**. Tisma tiene planes pagos (`cloud.md`), así que solo se puede usar con un permiso escrito del
-    Gobierno de Aragón, o en una versión sin nada pago. Decide el dueño;
-  - Mulberry Symbols: licencia CC BY-SA (la versión, 2.0 UK o 4.0, se confirma en el archivo de la descarga antes de
-    usarlos); permite uso comercial con atribución, y los pictogramas cambiados se comparten con la misma licencia;
-  - pictogramas propios, dibujados para Tisma (impresora, cama, boquilla, filamento, laminar…), que ningún conjunto
-    general tiene: hacen falta igual.
+- pictogramas: **propios** (decisión del dueño, 29-10-2026: «dibujos propios, que sean simples y entendibles»), en
+  `docs/spec/pictograms/` con su guía de estilo. No se usan conjuntos de terceros: ARASAAC (CC BY-NC-SA) no permite
+  uso comercial y Tisma tiene planes pagos; Mulberry (CC BY-SA) se descartó para tener un solo estilo.
 
 18. **Encendido:** Preferencias › Accesibilidad › «Modo simple con pictogramas» (`ui.easy_mode`). También se ofrece
     en el primer inicio, junto con el idioma. Se apaga y se prende sin perder nada.
@@ -205,4 +200,4 @@ autismo, para hacer que la interfaz sea lo más accesible posible».
 | EM1 | `ui.easy_mode` sí, cargar un cubo e imprimir | Cinco pasos, «Paso N de 5», un pictograma junto a cada texto, sin ajustes avanzados a la vista |
 | EM2 | Aviso de pieza más grande que la cama en modo simple | Frase corta en lectura fácil con pictograma y qué hacer |
 | EM3 | Apagar y prender el modo simple | Los ajustes no cambian |
-| EM4 | Revisar los créditos | Cada conjunto de pictogramas usado con su autor y licencia; ninguno con «NC» si hay planes pagos y no hay permiso escrito |
+| EM4 | Revisar los pictogramas de la interfaz | Todos salen de `docs/spec/pictograms/`, con el estilo de su README; ninguno de terceros |
