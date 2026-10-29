@@ -596,6 +596,8 @@ private:
     Theme theme_ = dark_theme();
     ImFont* font_ = nullptr;
     std::map<std::string, ImTextureID> icons_;
+    bool icons_loaded_ = false;
+    mutable std::set<std::string> missing_icons_; // asked for and not loaded (icon())
     // The settings panel: its tab, level, the section chosen in each tab, the
     // cards open (the first of each section at first), each card's height in
     // the last frame (for its background), Basic's «Show all» until the
@@ -935,6 +937,10 @@ private:
 
 ImTextureRef App::icon(const char* name) const {
     const auto it = icons_.find(name);
+    // An icon missing from kIcons or assets/icons draws a black square: said
+    // once, and the run fails (the tests see it).
+    if (it == icons_.end() && name && *name && icons_loaded_ && missing_icons_.insert(name).second)
+        std::fprintf(stderr, "error: the icon \"%s\" is not loaded (kIcons in apps/tisma/app.cpp, assets/icons)\n", name);
     return ImTextureRef(it == icons_.end() ? ImTextureID(0) : it->second);
 }
 
@@ -2447,6 +2453,7 @@ bool App::init(std::string& error) {
             continue;
         icons_[name] = texture(image, true);
     }
+    icons_loaded_ = true;
     const Image logo = rasterize_svg(embedded("tisma.svg"), int(std::lround(96.0f * scale_)));
     if (!logo.rgba.empty())
         logo_ = texture(logo, false);
@@ -11376,6 +11383,7 @@ int App::run() {
     std::signal(SIGINT, on_stop_signal);
     while (!glfwWindowShouldClose(window_) && !quit_ && !g_stop_signal)
         frame();
+    failed_ = failed_ || !missing_icons_.empty();
     shutdown();
     return failed_ ? 1 : 0;
 }

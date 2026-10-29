@@ -7842,3 +7842,12 @@ cuadrado negro (pasó en la primera captura). Pasan las pruebas de interfaz; mir
   los 6 s, sale con 0 y deja `interface.json`; con el binario de antes sale con 143 y sin preferencias.
 - **UI22:** las formas del menú de la placa se llamaban «Cubo.stl»: no tienen archivo, ahora «Cubo», «Cilindro»,
   «Esfera».
+
+## 2026-10-29 (noche): un ícono que falta hace fallar la prueba
+
+Al agregar la sección «No planar» el ícono salió como un cuadrado negro (faltaba en `kIcons`) y ninguna prueba lo
+notó. Ahora `icon()` dice una vez «error: the icon "…" is not loaded» por cada ícono pedido que no se cargó, y la
+ejecución termina con 1: cualquier prueba de interfaz que dibuje esa pantalla falla. Las columnas de secciones dibujan
+todos sus íconos, así que las de Impresión siempre se revisan y las de la impresora con las pruebas de su página.
+Control: sin `section_nonplanar` en la lista, `--section print/nonplanar` sale con 1 y el mensaje. Pasan las 167
+pruebas de interfaz.
