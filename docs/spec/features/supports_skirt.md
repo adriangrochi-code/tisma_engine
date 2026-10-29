@@ -31,6 +31,11 @@
    - en automático, una cara cuyo borde sobresale, de una capa a la siguiente, más de medio ancho de cordón. Con capas
      de altura `h` y cordón de ancho `w`, eso es una inclinación menor que `atan(2h / w)`: 41,6° con `h` = 0,2 y `w` =
      0,45. Es la regla que coincide con las pruebas S1 a S3;
+   - **qué es puente y qué es voladizo** (decisión del dueño, 28-10-2026): es puente solo lo que está agarrado por dos
+     lados separados, o rodeado. Lo que cuelga de un solo lado (un pilar de un lado, un pilar en el medio, una
+     esquina, dos paredes en L que se tocan) es voladizo y lleva soporte en toda su zona. Es una diferencia buscada
+     con Tisma Slicer, que trata como puente toda cara que se apoya en algo y solo soporta una franja de ~1,4 mm a cada
+     lado de los bordes libres (prueba S11);
    - los puentes (tramos sostenidos en los dos extremos, ver `surfaces_infill.md`) no llevan soporte, salvo con
      `support.under_bridges` (prueba S6). No importa el largo: `support.free_bridge_length` no cambia el soporte, solo
      el aviso de `print_review.md` (prueba S10).
@@ -83,3 +88,4 @@ inclinación indicada, medida desde la horizontal.
 | S8 | Cubo de S7 | `adhesion.skirt_loops` 3, `adhesion.skirt_distance` 2, `adhesion.skirt_layers` 2 | Tres vueltas en las capas 1 y 2; la externa con el eje a 2,89 mm de la pieza; 287,0 mm por capa |
 | S9 | Cubo de S7 | sin falda, `adhesion.brim_width` 5 | Borde de 14 vueltas en la primera capa: la externa con el eje a 4,82 mm de la pieza (borde a 5,02 mm); 1340,4 mm |
 | S10 | Dos pilares de 5 × 20 × 10 mm separados 10, 20 y 30 mm, con una tabla de 2 mm encima | Soporte encendido; `support.free_bridge_length` 0, 16 y 40; `support.under_bridges` no y sí | Con `under_bridges` no: ningún soporte en los tres puentes, con cualquier `free_bridge_length`. Con sí: soporte bajo los tres, igual con cualquier valor |
+| S11 | Losa de 20 × 20 × 2 mm (Z 8 a 10) apoyada de distintas formas, 3 capas sólidas abajo | `support.under_bridges` no | Sin soporte: dos pilares opuestos (puente de 10 mm), tres paredes en U, un marco que la rodea. Con soporte en toda la zona que cuelga (voladizo): un pilar de un lado, un pilar central, un pilar en una esquina, dos paredes en L. En Tisma Slicer (medido el 28-10-2026) estos cuatro llevan solo una franja bajo los bordes libres (X 108,75 a 111,25 con el borde en 110) y el interior sin soporte: diferencia buscada |
