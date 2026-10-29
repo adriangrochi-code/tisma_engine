@@ -305,8 +305,9 @@ de abajo los propone la ficha, con los nombres que ya usa el motor.
       torre de purga para cinta y la vista del G-code «diseñado» y «crudo»;
     - **IDEX/IQEX en paralelo** (copia, espejo, varias piezas a la vez): `multi_extruder.md`; ficha propia cuando
       llegue esa fase;
-    - **textura en relieve** («Texture Displacement») y **pestaña de diseño CAD**: fichas propias; la de CAD encaja
-      con las formas paramétricas pendientes (`model_tools.md`).
+    - **textura en relieve** («Texture Displacement»): ficha propia;
+    - **pestaña de diseño CAD**: `cad_design.md`, basada en SolidCraft y dentro del mismo programa, con herramientas de
+      dibujo técnico.
 
 ## Pruebas
 

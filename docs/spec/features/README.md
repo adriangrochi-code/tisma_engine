@@ -85,6 +85,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`credits.md`](credits.md): «Basado en…» en cada función que sale de otra fuente y la página Créditos y fuentes, con las licencias de terceros | P1 | Para revisar |
 | [`plugins.md`](plugins.md): complementos en cualquier lenguaje con un `plugin.json` y JSON por la entrada y la salida; momentos `mesh`, `layers`, `review`, `gcode` y acciones; ajustes que dibuja el motor; instalar soltando un archivo; fallas que no frenan el laminado | después de la primera versión | Para revisar |
 | [`orca_2_5.md`](orca_2_5.md): lo nuevo de OrcaSlicer 2.5 para el motor, por etapas: limpiar hacia adentro, retracción después del barrido, paredes sin apoyo al final, costura precisa, polyholes, expansión de la superficie de arriba, orden y ángulo de arriba y abajo, gyroid adaptativo, relleno suavizado, separado y de varias líneas, espiral hacia adentro, orejas de borde, ventilador de la primera capa, mismo G-code para la misma entrada, plantillas y línea de comandos | O1 a O8, después de cada grupo | Para revisar |
+| [`cad_design.md`](cad_design.md): espacio Diseño dentro del programa, basado en SolidCraft: bocetos con restricciones, operaciones en una línea de tiempo, parámetros, línea de comandos, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar, STEP, mandar a la placa y volver a editar | después de la primera versión, experimental | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
