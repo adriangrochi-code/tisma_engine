@@ -8351,3 +8351,51 @@ Nota: `-o /dev/null` ya no sirve para medir: desde BH16 una salida que no es un 
 
 **No probado:** siguen abiertas la escala de pantalla de Windows y el efecto de luz con Vulkan en una GPU real.
 
+## 2026-10-29: la esfera más rápida (pregunta del dueño)
+
+El dueño preguntó cómo bajar más el tiempo de la esfera de un millón de triángulos. Se midió por fases, con
+callgrind y con relojes puestos a mano solo para medir, sin dejarlos en el código. Con la máquina cargada:
+
+| Fase | Tiempo |
+|---|---|
+| Leer | ~90 ms |
+| Soldar | ~130 ms |
+| Orientar (un núcleo) | ~440 ms |
+| Cortar las 500 capas | ~300 ms |
+| Paredes (eje medio, en paralelo) | ~1,4 s |
+| Resto de la capa | ~300 ms |
+| Escribir y verificar | ~380 ms |
+
+En instrucciones, las paredes son el 50 %, y `VoronoiDiagram::locate` con sus distancias (`hypot`) el 27 %: 1,6
+millones de búsquedas con 33,6 millones de pasos, unas 30 por búsqueda y 60 mil que llegan al tope de 100.
+
+**Hecho:**
+- **Orientar** (`orient_consistently`): armaba una lista de vecinos por triángulo (un millón de vectores) antes de
+  saber si había algo que girar, y ordenaba las aristas en un núcleo. Ahora revisa primero y arma los vínculos solo
+  si hace falta, y ordena con `tbb::parallel_sort` (el orden es total: mismo resultado). Pasó de 441 a unos 130 ms.
+- **Capas iguales** (`same_sections`): sale enseguida cuando ninguna capa cruza lo mismo que la de abajo, porque su
+  recorrido de la malla solo podía borrar marcas que no había.
+- **Voronoi, el borde del cono:** cuando el sitio nuevo es un segmento, la función de la búsqueda salta en los lados
+  de su cono de influencia. Ahora esos cortes se calculan exactos, porque son recta o parábola contra recta. Si la
+  parte del sitio nuevo termina en un corte, el nodo va ahí, del lado no tomado, sin búsqueda: 55.597 búsquedas de 1,6
+  millones, y las evaluaciones bajan de 35,9 a 33,5 millones.
+  - Resolver además solo dentro del tramo continuo (la primera versión) cambiaba algunas raíces casi planas por
+    nanómetros, y la prueba contra el eje medio de Boost fallaba en la estrella. Esa parte quedó fuera.
+
+**Medido** (4 núcleos, corridas alternadas, comando `slice` completo, mismo `d.json`):
+
+| | Antes | Orientar y capas | Además, el cono |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos | 1,84 a 2,12 s | 1,60 a 1,80 s | 1,59 a 1,63 s |
+| Benchy | 0,83 a 0,92 s | — | 0,70 a 0,81 s |
+
+El G-code de la esfera y de la esfera de 200 segmentos es igual byte a byte. En el Benchy cambian 7 líneas, en el
+quinto decimal de E. Pasan las 693 pruebas del motor y las 50 del diagrama y del eje medio, con la comparación contra
+Boost.
+
+**Sigue (lo que queda por ganar en la esfera):**
+- Lo grande sigue en `locate`. Hay que entender por qué una raíz casi plana elegida distinto cambia el eje medio de la
+  estrella; con eso se podría resolver cada tramo por separado y convergir en pocos pasos.
+- Soldar en paralelo: unos 80 ms.
+- `hypot` por `sqrt` en las distancias del Voronoi: 8 % de las instrucciones; cambia el último bit.
+
