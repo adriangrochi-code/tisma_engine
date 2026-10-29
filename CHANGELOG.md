@@ -254,6 +254,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Coma decimal en los campos que se escriben:** los de las guías de calibración y el de «Otra…» boquilla mostraban
+  `0.25` en español; ahora muestran `0,25`, como el resto, y aceptan coma o punto al escribir.
 - **Una señal de cierre mientras `tisma` arranca** (al cerrar la sesión, por ejemplo) ya no lo termina sin guardar:
   el manejador está puesto antes de abrir la ventana. Lo encontró la prueba de SIGTERM en la compilación con ASan.
 - **Las salidas no pisan las entradas (BH15, BH16):** `-o`, `--warnings`, `--vtk` y `--mesh` no pueden ser el

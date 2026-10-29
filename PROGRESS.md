@@ -8309,3 +8309,45 @@ señal durante el arranque deja que termine `init()`, no entra al bucle y `shutd
 manejador, antes de abrir la ventana. Un primer intento con la señal a los 0,05 s falló en el CI con ASan: en ese
 tiempo el proceso todavía no llega a `main()` (cargador y ASan), y ninguna espera fija evita esa carrera.
 
+## 2026-10-29: mantenimiento (16:40)
+
+Bloque de mantenimiento programado (cada 8 horas). Ninguna otra sesión trabajaba en `dev`; `origin/main` y
+`origin/dev` no traían nada nuevo.
+
+**Revisado, sin hallazgos:**
+- El fuzzer del G-code con 2000 casos y semilla nueva (2026102916): 23 rechazados como no imprimibles, 0 fallas.
+- Sin avisos de UBSan ni de ASan en el CI.
+- Seis fichas nuevas tomadas al azar, contra su fila de `docs/CONFIG.md` (velocidad sobre puentes, flujo del
+  planchado, para qué es el material, aceleración de la torre de purga y de los viajes cortos, G-code final del
+  filamento): coinciden.
+
+**Encontrado y arreglado (el día, con el CI):**
+- Con clang no compilaba la tabla de fichas: medir unos 860 textos largos en tiempo de compilación pasa su límite de
+  pasos `constexpr`. Es un arreglo constante común ahora. Dos conversiones de signo que avisaba clang, arregladas.
+- SIGTERM durante el arranque (entrada anterior), con su prueba hecha determinista.
+
+**Encontrado y arreglado (en el bloque):**
+- **Coma decimal en los campos que se escriben.** Era el «No probado» del 2026-10-28. Los campos de las guías de
+  calibración y el de «Otra…» boquilla eran `InputDouble` de ImGui, que solo escribe y lee punto. Ahora son campos de
+  texto (`loc::InputNumber`) que muestran el número con la coma del idioma y leen coma o punto (`typed_number`, con
+  su prueba).
+- **El deslizador de Rotar con clics** (era «No probado» en el PR #46, mirado solo en captura). `expect-place` lee
+  ahora `turn_x`, `turn_y` y `turn_z`. Prueba `ui_script_rotate_sliders`: un clic a tres cuartos de Z gira 98,8°, y X
+  queda en 0.
+
+**Medido** (4 núcleos, corridas alternadas con un binario del 26-10, el mismo `d.json`):
+
+| | 26-10 | Ahora |
+|---|---|---|
+| Esfera de 1 millón de triángulos, `slice` completo (leer, laminar, escribir) | 2,17 a 2,49 s | 1,95 a 2,04 s |
+| Benchy, `slice` completo | 5,67 a 5,98 s | 0,81 a 0,83 s |
+| Análisis del cubo (`analyze`, comando completo) | 0,30 a 0,33 s | 0,27 a 0,31 s |
+
+La esfera tarda más que los 1,4 s anotados antes para laminar solo, porque acá se mide el comando entero y la máquina de
+hoy es más lenta (el binario viejo también tarda más que lo anotado entonces). Sin regresiones; no se buscó acelerar
+nada en este bloque.
+
+Nota: `-o /dev/null` ya no sirve para medir: desde BH16 una salida que no es un archivo común es un error (código 2).
+
+**No probado:** siguen abiertas la escala de pantalla de Windows y el efecto de luz con Vulkan en una GPU real.
+
