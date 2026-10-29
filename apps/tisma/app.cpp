@@ -506,6 +506,7 @@ private:
     std::filesystem::path profiles_root() const;
     void load_profile_lists();
     void profile_row(ProfileKind kind);
+    std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
     void fill_speeds();
@@ -3645,6 +3646,31 @@ void App::save_profile_as(ProfileKind kind, std::string name) {
 
 // The profile row at the top of a settings section: the list, save, and a
 // menu with save as and delete.
+// The filament diameters of the installed printers, the one chosen and the
+// user's (profiles.md, rule 5), from the catalog models they were made from;
+// empty, any diameter, when one of them is not from the catalog.
+std::vector<double> App::printer_diameters() const {
+    std::vector<double> out;
+    const Catalog* catalog = nullptr;
+    try {
+        catalog = &builtin_catalog();
+    } catch (const std::exception&) {
+        return out;
+    }
+    const std::size_t k = std::size_t(ProfileKind::Printer);
+    std::vector<std::string> names{chosen_profile_[k]};
+    for (const Profile& p : user_profiles_[k])
+        names.push_back(p.name);
+    for (const std::string& name : names) {
+        const PrinterModel* p = printer_of_profile(*catalog, name);
+        if (!p)
+            return {};
+        if (std::find(out.begin(), out.end(), p->filament_diameter) == out.end())
+            out.push_back(p->filament_diameter);
+    }
+    return out;
+}
+
 void App::profile_row(ProfileKind kind) {
     const std::size_t k = std::size_t(kind);
     ImGui::PushID(int(k));
@@ -3658,14 +3684,20 @@ void App::profile_row(ProfileKind kind) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
     const Profile* picked = nullptr;
     if (ImGui::BeginCombo("##profile", preview.c_str())) {
+        // Only the materials the printer takes (pellets.md, rule 1; profiles.md,
+        // rule 5), and the one chosen.
+        const std::vector<double> diameters = kind == ProfileKind::Filament ? printer_diameters() : std::vector<double>{};
+        const auto listed = [&](const Profile& p) {
+            return kind != ProfileKind::Filament || chosen == &p || material_offered(p.settings, settings_.feedstock, diameters);
+        };
         ImGui::SeparatorText(tr(T::BuiltinProfiles));
         for (const Profile& p : builtin_profiles_[k])
-            if (ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
+            if (listed(p) && ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
                 picked = &p;
-        if (!user_profiles_[k].empty()) {
+        if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), listed)) {
             ImGui::SeparatorText(tr(T::MyProfiles));
             for (const Profile& p : user_profiles_[k])
-                if (ImGui::Selectable((shown_name(p.name) + "##u" + p.name).c_str(), chosen == &p))
+                if (listed(p) && ImGui::Selectable((shown_name(p.name) + "##u" + p.name).c_str(), chosen == &p))
                     picked = &p;
         }
         if (kind != ProfileKind::Print) {
@@ -3764,10 +3796,15 @@ void App::catalog_dialog() {
             catalog_pick_ = -1, catalog_nozzle_ = 0;
         const std::vector<const PrinterModel*> found_printers =
             printers ? find_printers(*catalog, catalog_query_) : std::vector<const PrinterModel*>{};
-        const std::vector<const FilamentModel*> found_filaments =
+        // The filaments the printer takes (pellets.md, rule 1; profiles.md, rule 5).
+        const std::vector<double> diameters = printers ? std::vector<double>{} : printer_diameters();
+        const auto offered = [&](const FilamentModel& f) { return filament_offered(f, settings_.feedstock, diameters); };
+        std::vector<const FilamentModel*> found_filaments =
             printers ? std::vector<const FilamentModel*>{} : find_filaments(*catalog, catalog_query_);
+        std::erase_if(found_filaments, [&](const FilamentModel* f) { return !offered(*f); });
         const int found = int(printers ? found_printers.size() : found_filaments.size());
-        const int total = int(printers ? catalog->printers.size() : catalog->filaments.size());
+        const int total = int(printers ? catalog->printers.size()
+                                       : std::count_if(catalog->filaments.begin(), catalog->filaments.end(), offered));
         if (catalog_pick_ >= found)
             catalog_pick_ = -1;
         if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())
@@ -3789,8 +3826,11 @@ void App::catalog_dialog() {
                 catalog_pick_ = i, catalog_nozzle_ = 0;
             ImGui::PopID();
         }
-        if (found == 0)
-            loc::TextDisabled("%s", tr(T::CatalogEmpty));
+        if (found == 0) {
+            ImGui::PushTextWrapPos(0.0f);
+            loc::TextDisabled("%s", tr(total == 0 ? T::CatalogNoMaterial : T::CatalogEmpty));
+            ImGui::PopTextWrapPos();
+        }
         ImGui::EndChild();
         ImGui::SameLine();
         ImGui::BeginChild("##catalog_entry", ImVec2(0, -footer), ImGuiChildFlags_Borders);

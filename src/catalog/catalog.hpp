@@ -41,6 +41,7 @@ struct PrinterModel {
 struct FilamentModel {
     std::string vendor, name, material; // material: the base polymer ("PLA", "PETG", "PA-CF", ...)
     double diameter = 1.75;
+    Feedstock feedstock = Feedstock::Filament; // pellets have no diameter (pellets.md)
     std::optional<double> density;      // g/cm3
     std::optional<std::array<double, 2>> nozzle_temp, bed_temp, fan, print_speed; // C, C, %, mm/s
     std::optional<double> nozzle_recommended, bed_recommended;
@@ -80,6 +81,16 @@ bool allowed_source(std::string_view url);
 // The entries whose vendor and name hold every word of the query (any case).
 std::vector<const PrinterModel*> find_printers(const Catalog& catalog, std::string_view query);
 std::vector<const FilamentModel*> find_filaments(const Catalog& catalog, std::string_view query);
+
+// The materials offered (pellets.md, rule 1; profiles.md, rule 5): pellets for
+// a pellet printer; for a filament printer, filaments of one of the diameters
+// its printers use, or of any diameter when none is known.
+bool filament_offered(const FilamentModel& filament, Feedstock feedstock, const std::vector<double>& diameters);
+bool material_offered(const Settings& material, Feedstock feedstock, const std::vector<double>& diameters);
+
+// The catalog printer a profile was made from (its name is
+// printer_profile_name of one of its nozzles), if any.
+const PrinterModel* printer_of_profile(const Catalog& catalog, std::string_view profile_name);
 
 // "Vendor Model 0.4 mm", "Vendor Name".
 std::string printer_profile_name(const PrinterModel& printer, double nozzle);

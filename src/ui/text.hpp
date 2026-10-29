@@ -610,6 +610,8 @@
     X(Density, "Densidad", "Density")                                                                                 \
     X(NeedsEnclosure, "Necesita impresora cerrada", "Needs an enclosed printer")                                      \
     X(CatalogEmpty, "Sin resultados", "No results")                                                                   \
+    X(CatalogNoMaterial, "El catálogo no tiene materiales para la alimentación o el diámetro de filamento de esta impresora", \
+      "The catalog has no material for this printer's feedstock or filament diameter")                                \
     X(ProfileAdded, "Agregado a tus perfiles: %s", "Added to your profiles: %s")                                      \
     X(SpeedFallback, "La impresora no trae velocidades: se usan las de una Ender 3 de fábrica (revisalas en "         \
       "Impresora › Velocidades)",                                                                                     \

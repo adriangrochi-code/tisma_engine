@@ -147,8 +147,18 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
               --pick-catalog-printer "Creality CR-5 Pro H"
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    # A 2.85 mm printer: the filament catalog offers only that diameter, and
+    # says why it is empty (pellets.md, rule 1; profiles.md, rule 5).
+    add_test(NAME ui_catalog_filament_by_diameter
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pick-catalog-printer "LulzBot TAZ 6" --catalog filament
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_filament_285.png)
     set_tests_properties(ui_catalog_printer_home_clean PROPERTIES FIXTURES_SETUP ui_catalog_home)
-    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+    set_tests_properties(ui_catalog_filament_by_diameter PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+                         RESOURCE_LOCK ui_catalog_home ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     # Fields edited with the mouse and the keyboard, as a person does

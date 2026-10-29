@@ -8086,3 +8086,18 @@ límites.
   la prueba del JSON de avisos de la línea de comandos ahora espera ese aviso (sus ajustes no tienen temperatura).
 
 Pasan las 798 pruebas.
+
+## 2026-10-29: la lista de materiales según la impresora (pellets.md regla 1, profiles.md regla 5)
+
+- El catálogo de filamentos tiene la clave `feedstock` (`filament` si falta, o `pellet`), y el perfil que se hace de
+  una entrada lleva su `extrusion.feedstock`.
+- `filament_offered` y `material_offered`: pellets para una impresora de pellets; con filamento, nunca pellets y solo
+  los diámetros de las impresoras instaladas, o todos si no se sabe. `printer_of_profile` encuentra el modelo del
+  catálogo del que se hizo un perfil de impresora (por su nombre con una de sus boquillas): los perfiles de impresora
+  no guardan el diámetro del filamento (`machine.filament_diameter` es del perfil de filamento).
+- En la interfaz: el catálogo de filamentos y la lista de perfiles de Filamento usan ese filtro (el elegido queda
+  siempre), y el catálogo vacío lo explica. Prueba de interfaz nueva con una LulzBot TAZ 6 (2,85 mm): el catálogo
+  queda vacío, porque hoy solo tiene filamentos de 1,75 mm (mirado en la captura).
+- Prueba nueva del catálogo: la clave, el perfil, los dos filtros, `printer_of_profile` y una alimentación mal escrita.
+
+**Sigue:** pellets.md PE4, PE6 y PE8; pellets y filamentos de 2,85 mm en el catálogo (datos oficiales).
