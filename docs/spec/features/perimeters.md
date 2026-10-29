@@ -156,6 +156,11 @@ donde no se midió entre medio) quedan. Con margen 0 ya se ve el mismo salto: en
 1,15 pasa de 1,6 a 1,0 mm. El margen elige además hacia qué lado aplana: casi siempre al menor número de cordones,
 pero con 1,45 y A = 0,15 y margen 25 % toda la tira quedó en 4.
 
+Con paredes de 0,6 mm (mismo método, boquilla 0,4; el cambio de 2 a 3 cordones queda en 1,47 mm): con A = 0,1 y 0,15
+el margen de 25 % o 100 % aplana la tira a 2 cordones; con A = 0,16 a 0,3 deja los tramos de 3 con cualquier margen
+(1,0 mm con 0,16 y 0,17; 0,9 mm con 0,21 a 0,25; 0,4 mm con 0,3). El corte queda entre 0,15 y 0,16 mm, igual que
+con 0,45: es una distancia fija sobre el punto de cambio, no una parte del ancho del cordón (que daría 0,21 mm).
+
 **Tabla P11.** Cuña de la prueba P11, capa 8: cordones que cruzan la sección X = c (posición en Y: ancho del G-code;
 E externo, P interno).
 
