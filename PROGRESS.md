@@ -8240,3 +8240,11 @@ y no hacen nada). La página de la impresora ya usa las mismas tarjetas siempre 
 secciones también van en una sola lista con Calibración, Conexión y Notas (pregunta al equipo de fichas). La vuelta a
 la sección guardada no tiene prueba automática: las capturas no leen las preferencias.
 
+## 2026-10-29: TR21, los errores de carga en español
+
+`translated_error` (`src/ui/text.*`) pasa al español los mensajes del motor que llegan al cuadro «No se pudo abrir el
+archivo» y a los demás de error (`App::fail`): una tabla de plantillas con `{}` (STL cortado, cara no finita, vértice
+no definido, no es ZIP, sin caras, sin extrusiones, JSON inválido, carpeta, formato sin leer, no se puede abrir…) y
+los lugares que van delante («OBJ, línea 9: », «3MF: », «proyecto: », «ajustes: », una ruta). Un mensaje que no
+conoce queda como está. En inglés no cambia nada. Prueba con los seis casos del informe.
+

@@ -556,6 +556,26 @@ TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {
     set_language(before);
 }
 
+TEST_CASE("ui: the engine's load errors in Spanish (the spec team's TR21)", "[ui]") {
+    const Language before = language();
+    set_language(Language::Spanish);
+    CHECK(translated_error("binary STL is truncated: header announces 540029472 facets (27001473684 bytes) but the file has 300 bytes") ==
+          "el STL binario está cortado: la cabecera anuncia 540029472 caras (27001473684 bytes) y el archivo tiene 300 bytes");
+    CHECK(translated_error("OBJ, line 9: vertex 99 is not defined yet (8 so far)") ==
+          "OBJ, línea 9: el vértice 99 todavía no está definido (hay 8)");
+    CHECK(translated_error("/home/a/b.tisma: project: cut short in a chunk header") ==
+          "/home/a/b.tisma: proyecto: cortado en la cabecera de un bloque");
+    CHECK(translated_error("3MF: not a ZIP package") == "3MF: no es un paquete ZIP");
+    CHECK(translated_error("binary STL: facet 12 has a non-finite coordinate") ==
+          "STL binario: la cara 12 tiene una coordenada no finita");
+    CHECK(translated_error("x.gcode: no extrusions found") == "x.gcode: no tiene extrusiones");
+    CHECK(translated_error("settings: not valid JSON at line 2, column 24") == "ajustes: JSON inválido en la línea 2, columna 24");
+    CHECK(translated_error("something new") == "something new"); // unknown: as it is
+    set_language(Language::English);
+    CHECK(translated_error("3MF: not a ZIP package") == "3MF: not a ZIP package");
+    set_language(before);
+}
+
 TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
     const std::filesystem::path dir = test_temp_dir() / "tisma_ui_files";
     std::filesystem::remove_all(dir);

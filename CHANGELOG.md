@@ -248,7 +248,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   se sigue y se escribe el archivo al que apunta; un dispositivo, una tubería o una carpeta no se reemplazan.
 - **Una carpeta como modelo o como ajustes (BH18)** dice «is a folder», con código 2, en lugar de un error interno.
 - **JSON inválido (TR21):** «not valid JSON at line L, column C» o «the file is empty», en lugar del texto de la
-  biblioteca.
+  biblioteca; en la interfaz en español, los errores de carga conocidos salen en español («OBJ, línea 9: el vértice 99
+  todavía no está definido (hay 8)»).
 - **STL ASCII con BOM UTF-8 (BH17):** se lee como texto.
 - **Camas imposibles (BH14):** un `machine.bed` sin área (puntos en línea) o con lados que se cruzan es un error de los
   ajustes, con código 2.

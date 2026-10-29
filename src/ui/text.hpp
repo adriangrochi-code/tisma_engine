@@ -1577,4 +1577,10 @@ std::string grouped(unsigned long long n);
 // A number written by printf ("0.20") with the language's decimal point.
 std::string localized(std::string number);
 
+// The engine's own messages (a file that does not load, bad settings) in
+// the language: known ones by their pattern, a path or a "3MF, line 4:"
+// before them kept or translated, the rest as they are (the spec team's
+// TR21: the open-file dialog mixed languages).
+std::string translated_error(std::string_view message);
+
 } // namespace tisma::ui

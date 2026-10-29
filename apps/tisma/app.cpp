@@ -3049,8 +3049,11 @@ void App::notify_undo(std::string text, std::function<void()> undo) {
 }
 
 void App::fail(T title, std::string message, std::vector<std::string> details) {
+    // The engine's words in the language (TR21).
     error_title_ = tr(title);
-    error_message_ = std::move(message);
+    error_message_ = translated_error(message);
+    for (std::string& d : details)
+        d = translated_error(d);
     error_details_ = std::move(details);
     error_open_ = true;
 }
