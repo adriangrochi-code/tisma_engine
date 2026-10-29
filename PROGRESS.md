@@ -7774,3 +7774,14 @@ Impresora»; ahora el botón dice «Abrir la pestaña Impresora».
 
 **No cubierto:** las filas que no son `mm` ni `whole` (velocidades en mm/s o %, `unit_row`, listas) no las mira el
 verificador; tampoco si cada tope muestra su aviso.
+
+## 2026-10-29 (noche): paso 5 de la vista previa, capas juntas de lejos (sin terminar)
+
+`merged_layers` (`src/ui/scene.*`): para ver la pieza de lejos, donde una capa es más fina que un píxel, las paredes
+(externa, interna y en voladizo) de un grupo de capas se dibujan solo en la de arriba del grupo, con el alto del grupo;
+lo demás que se ve (pieles de arriba, puentes, soporte) queda como está, para no abrir huecos donde la pieza tapaba lo
+de adentro. Los grupos se cuentan desde la última capa, que siempre conserva las suyas. Prueba con 10 capas: con grupos
+de 2, 21 cordones pasan a 11 y las paredes tienen 0,4 mm de alto.
+
+**Sin terminar:** todavía no se usa. Falta subir esas versiones a la vista (OpenGL y Vulkan), elegir el grupo por el
+tamaño de una capa en pantalla, comparar imágenes de lejos y medir.

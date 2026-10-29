@@ -489,6 +489,41 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
     return out;
 }
 
+PreviewDrawOrder merged_layers(const PreviewDrawOrder& order, int group) {
+    PreviewDrawOrder out;
+    const std::size_t layers = order.layer_z.size();
+    if (group < 2 || layers == 0 || order.layer_shown.size() != layers + 1) {
+        out = order;
+        return out;
+    }
+    const auto wall = [](const PreviewInstance& e) {
+        const LineKind k = LineKind(e.kind_layer & 0xFFu);
+        return k == LineKind::OuterWall || k == LineKind::InnerWall || k == LineKind::OverhangWall;
+    };
+    const std::size_t g = std::size_t(group);
+    out.layer_z = order.layer_z;
+    out.layer_box = order.layer_box;
+    out.layer_shown.assign(1, 0);
+    for (std::size_t l = 0; l < layers; ++l) {
+        const bool top = (layers - 1 - l) % g == 0; // the top layer of its group
+        // The group's height: from the layer under it to this one's top.
+        const float bottom = l >= g ? order.layer_z[l - g] : 0.0f;
+        for (std::size_t i = order.layer_shown[l]; i < order.layer_shown[l + 1]; ++i) {
+            PreviewInstance e = order.instances[i];
+            if (wall(e)) {
+                if (!top)
+                    continue;
+                e.height = std::max(e.height, order.layer_z[l] - bottom);
+                out.layer_box[l][2] = std::min(out.layer_box[l][2], bottom - e.width);
+            }
+            out.instances.push_back(e);
+        }
+        out.layer_shown.push_back(out.instances.size());
+    }
+    out.layer_hidden.assign(layers + 1, out.instances.size());
+    return out;
+}
+
 bool box_outside(const Mat4& m, const std::array<float, 6>& box) {
     if (box[0] > box[3])
         return true; // empty

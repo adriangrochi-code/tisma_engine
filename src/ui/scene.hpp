@@ -152,6 +152,13 @@ struct PreviewDrawOrder {
 };
 PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
 
+// The same part for a view from far away, where a layer is thinner than a
+// pixel (docs/LARGE_MODELS.md, step 5): the walls of `group` layers in a row
+// drawn as the top one's, as high as the group (the layers counted down from
+// the last, which keeps its own); the rest of the shown extrusions as they
+// are. Only the shown ones: it is drawn when all of the part is.
+PreviewDrawOrder merged_layers(const PreviewDrawOrder& order, int group);
+
 // What a view draws of it for layers lo to hi with the kinds of kind_mask:
 // the shown range and the hidden one, which is empty when all of the part is
 // drawn (from its first layer to its last, every kind but the hidden ones and

@@ -957,3 +957,37 @@ TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex c
     CHECK(std::abs(a.max.z - b.max.z) < 1.0f);
     CHECK_THAT(coarse.signed_volume(), Catch::Matchers::WithinRel(sphere.signed_volume(), 0.05));
 }
+
+TEST_CASE("preview: far away, the walls of a group of layers are drawn as one", "[ui][preview]") {
+    // 10 layers 0.2 mm high, each an outer and an inner wall; layer 5 also
+    // has a top skin.
+    PreviewBuffers p;
+    p.layer_extrusions.push_back(0);
+    for (std::uint32_t l = 0; l < 10; ++l) {
+        const float z = 0.2f * float(l + 1);
+        for (const LineKind k : {LineKind::OuterWall, LineKind::InnerWall})
+            p.extrusions.push_back({0, 0, z, 10, 0, z, 0.4f, 0.2f, 30, std::uint32_t(k) | (l << 8)});
+        if (l == 5)
+            p.extrusions.push_back({0, 1, z, 10, 1, z, 0.4f, 0.2f, 30, std::uint32_t(LineKind::TopSolidInfill) | (l << 8)});
+        p.layer_extrusions.push_back(p.extrusions.size());
+    }
+    const PreviewDrawOrder full = preview_draw_order(p);
+    REQUIRE(full.instances.size() == 21);
+    const PreviewDrawOrder far = merged_layers(full, 2);
+    // Walls in layers 9, 7, 5, 3 and 1, two layers high; the skin stays.
+    CHECK(far.instances.size() == 11);
+    CHECK(far.layer_shown.size() == 11);
+    for (std::size_t l = 0; l < 10; ++l) {
+        const std::size_t n = far.layer_shown[l + 1] - far.layer_shown[l];
+        CHECK(n == (l % 2 == 1 ? 2u : 0u) + (l == 5 ? 1u : 0u));
+    }
+    for (const PreviewInstance& e : far.instances) {
+        const LineKind k = LineKind(e.kind_layer & 0xFFu);
+        CHECK_THAT(e.height, Catch::Matchers::WithinAbs(k == LineKind::TopSolidInfill ? 0.2 : 0.4, 1e-6));
+    }
+    // The top layer keeps its walls; nothing hidden to draw.
+    CHECK(far.layer_shown[10] - far.layer_shown[9] == 2);
+    CHECK(far.layer_hidden.front() == far.layer_hidden.back());
+    // A group of 1 is the same order.
+    CHECK(merged_layers(full, 1).instances.size() == full.instances.size());
+}
