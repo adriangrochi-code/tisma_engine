@@ -3851,8 +3851,9 @@ void App::catalog_dialog() {
             printers ? std::vector<const FilamentModel*>{} : find_filaments(*catalog, catalog_query_);
         std::erase_if(found_filaments, [&](const FilamentModel* f) { return !offered(*f); });
         const int found = int(printers ? found_printers.size() : found_filaments.size());
-        const int total = int(printers ? catalog->printers.size()
-                                       : std::count_if(catalog->filaments.begin(), catalog->filaments.end(), offered));
+        const int total =
+            printers ? int(catalog->printers.size())
+                     : int(std::count_if(catalog->filaments.begin(), catalog->filaments.end(), offered));
         if (catalog_pick_ >= found)
             catalog_pick_ = -1;
         if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())

@@ -1967,7 +1967,7 @@ TEST_CASE("extras: the part grows by the filament's shrinkage (gcode_extras.md, 
     const auto size = [](const IndexedMesh& mesh) {
         std::array<float, 3> lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
         for (const Vec3f& v : mesh.vertices)
-            for (int a = 0; a < 3; ++a)
+            for (std::size_t a = 0; a < 3; ++a)
                 lo[a] = std::min(lo[a], (&v.x)[a]), hi[a] = std::max(hi[a], (&v.x)[a]);
         return std::array<double, 4>{hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], lo[2]};
     };
