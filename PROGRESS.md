@@ -8213,3 +8213,11 @@ rueda, como Orca Slicer:
 
 Mirado en capturas (la lista al empezar y con `--section print/speed`). Pasan las 116 pruebas de interfaz.
 
+## 2026-10-29: BH14, camas imposibles
+
+Un `machine.bed` con los puntos en una línea daba «the model is outside the bed», y uno cruzado (un moño) «the skirt
+goes off the bed», los dos con código 4. `bed_problem` lo revisa al leer los ajustes (código 2): primero los lados
+que se cruzan («crosses itself: its points must go around the bed in order»; un moño simétrico tiene área 0, por eso
+va primero) y después el área («has no area: its points are on one line»). Los puntos repetidos y el sentido horario
+siguen valiendo; una cama cóncava también. Pruebas de los cinco casos.
+

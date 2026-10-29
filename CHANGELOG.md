@@ -246,6 +246,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **JSON inválido (TR21):** «not valid JSON at line L, column C» o «the file is empty», en lugar del texto de la
   biblioteca.
 - **STL ASCII con BOM UTF-8 (BH17):** se lee como texto.
+- **Camas imposibles (BH14):** un `machine.bed` sin área (puntos en línea) o con lados que se cruzan es un error de los
+  ajustes, con código 2.
 - **`--copies` con una pieza que no se imprime (BH7):** da «nothing would be printed» como con una sola copia; un camino más
   corto que `gcode.resolution` no cuenta como algo impreso.
 - **Calibración de temperatura con el calefactor apagado (BH10):** las franjas van de 150 a 500 °C (`start` 0, o un

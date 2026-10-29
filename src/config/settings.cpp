@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -750,6 +751,46 @@ void material_aliases(json& root) {
             fail("material." + key, "unknown key (see docs/CONFIG.md, \"material\")");
         }
     }
+}
+
+// What makes a bed's outline no bed (the spec team's BH14): no area (its
+// points on one line), or sides that cross. Repeated points are fine.
+const char* bed_problem(const std::vector<std::array<double, 2>>& bed) {
+    if (bed.empty())
+        return nullptr;
+    std::vector<std::array<double, 2>> p;
+    for (const auto& q : bed)
+        if (p.empty() || q != p.back())
+            p.push_back(q);
+    while (p.size() > 1 && p.front() == p.back())
+        p.pop_back();
+    double area = 0.0;
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const auto& a = p[i];
+        const auto& b = p[(i + 1) % p.size()];
+        area += a[0] * b[1] - b[0] * a[1];
+    }
+    double lo[2] = {p.front()[0], p.front()[1]}, hi[2] = {lo[0], lo[1]};
+    for (const auto& q : p)
+        for (int a = 0; a < 2; ++a)
+            lo[a] = std::min(lo[a], q[std::size_t(a)]), hi[a] = std::max(hi[a], q[std::size_t(a)]);
+    const auto side = [](const std::array<double, 2>& a, const std::array<double, 2>& b, const std::array<double, 2>& c) {
+        const double v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        return v > 0.0 ? 1 : v < 0.0 ? -1 : 0;
+    };
+    const std::size_t n = p.size();
+    for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = i + 2; j < n; ++j) {
+            if (i == 0 && j == n - 1)
+                continue; // the closing side meets the first at a corner
+            const auto &a = p[i], &b = p[(i + 1) % n], &c = p[j], &d = p[(j + 1) % n];
+            if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0)
+                return "crosses itself: its points must go around the bed in order";
+        }
+    // Twice the area, against the box's: a sliver of a bed is no bed either.
+    if (p.size() < 3 || std::abs(area) <= 1e-9 * std::max(1.0, (hi[0] - lo[0]) * (hi[1] - lo[1])))
+        return "has no area: its points are on one line";
+    return nullptr;
 }
 
 } // namespace
@@ -1900,6 +1941,8 @@ Settings parse_checked(std::string_view text) {
                                fail(k, what);
                            bed.push_back({p[0].get<double>(), p[1].get<double>()});
                        }
+                       if (const char* why = bed_problem(bed))
+                           fail(k, why);
                        s.bed = std::move(bed);
                    } else if (n == "min_layer_height" || n == "max_layer_height") {
                        const double d = number(g, n, k);

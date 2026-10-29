@@ -332,6 +332,14 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(b.bed[2][0] == 100.0);
     CHECK(b.max_height == 150.0);
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
+    // A bed with no area or with sides that cross is a settings error (the spec team's BH14).
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [100, 100], [200, 200]]}})"),
+                      ContainsSubstring("machine.bed: has no area"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [200, 200], [200, 0], [0, 200]]}})"),
+                      ContainsSubstring("machine.bed: crosses itself"));
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [0, 200], [200, 200], [200, 0]]}})")); // clockwise
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [0, 0], [200, 0], [200, 200], [0, 200], [0, 0]]}})"));
+    CHECK_NOTHROW(parse_settings(R"({"machine": {"bed": [[0, 0], [200, 0], [200, 200], [100, 100], [0, 200]]}})"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"bed": [[0, 0], [1, 1], [2]]}})"), ContainsSubstring("machine.bed: must be empty or a list of at least 3"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_height": -1}})"), ContainsSubstring("machine.max_height: must not be negative"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"acceleration": 0}})"), ContainsSubstring("machine.acceleration: must be greater than 0"));
