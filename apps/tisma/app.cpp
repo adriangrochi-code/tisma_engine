@@ -11686,11 +11686,19 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, false);
         else if (k >= n + 5)
             next();
-    } else if (step.verb == "expect-place") { // the chosen model's x, y (mm) or scale (%): within 1, or in A..B
+    } else if (step.verb == "expect-place") {
+        // The chosen model's x, y (mm), scale (%) or turn_x, turn_y, turn_z
+        // (degrees, as the Rotate card shows them): within 1, or in A..B.
         if (selected_ < 0 || std::size_t(selected_) >= objects_.size())
             return fail_step("no model is chosen");
         const Placement& p = objects_[std::size_t(selected_)].place;
-        const double got = step.key == "x" ? p.x : step.key == "y" ? p.y : p.scale[0] * 100.0;
+        const std::array<double, 3> turn = euler_degrees(p.rotation);
+        const double got = step.key == "x"        ? p.x
+                           : step.key == "y"      ? p.y
+                           : step.key == "turn_x" ? turn[0]
+                           : step.key == "turn_y" ? turn[1]
+                           : step.key == "turn_z" ? turn[2]
+                                                  : p.scale[0] * 100.0;
         const std::size_t dots = step.value.find("..");
         const double lo = std::atof(step.value.c_str()) - (dots == std::string::npos ? 1.0 : 0.0);
         const double hi = dots == std::string::npos ? lo + 2.0 : std::atof(step.value.c_str() + dots + 2);
