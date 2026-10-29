@@ -7583,3 +7583,9 @@ progreso en 1 al confirmarse la última línea y recién en la vuelta siguiente 
 cargada (ASan y mediciones al mismo tiempo) la prueba leyó el estado en ese hueco. Ahora, tras la última línea, el
 progreso completo llega con el fin del trabajo (`finish_job`, bajo el mismo candado que el estado). Las pruebas
 `[device]` pasan 40 veces seguidas. No se empujó nada con el CI en rojo.
+
+El CI siguiente (31d9a5c) falló en gcc en `ui_script_idle_view`: «the slice failed». El paso `slice` del script
+pedía laminar en el primer cuadro y fallaba si en el siguiente no había laminado ni resultado; con las pruebas en
+paralelo, el modelo todavía se cargaba en segundo plano y `start_slice` no hacía nada. Ahora el paso pide laminar en
+cada cuadro hasta que arranca, y falla con un error del laminado o si en 2000 cuadros nunca arrancó. Las pruebas de
+interfaz pasan dos veces seguidas con 8 en paralelo.

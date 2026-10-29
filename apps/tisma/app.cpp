@@ -10677,12 +10677,15 @@ void App::script_input() {
             return fail_step("the setting is " + got);
         next();
     } else if (step.verb == "slice") { // as the Slice button, then the Preview tab
-        if (f == 0)
-            return start_slice();
+        if (!result_ && !slice_job_.running()) {
+            if (!error_title_.empty())
+                return fail_step("the slice failed: " + error_title_);
+            if (f > 2000)
+                return fail_step("the slice never started");
+            return start_slice(); // nothing until the model is loaded (in the background)
+        }
         if (slice_job_.running())
             return;
-        if (!result_)
-            return fail_step("the slice failed");
         set_tab(Tab::Preview);
         next();
     } else if (step.verb == "expect-view-calls") { // the last frame's view drew at most this many (--draw-stats)
