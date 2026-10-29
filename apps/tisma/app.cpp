@@ -302,6 +302,44 @@ void SetTooltip(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::SetTooltip("%s", t
 void SetItemTooltip(const char* fmt, ...) IM_FMTARGS(1);
 void SetItemTooltip(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::SetItemTooltip("%s", text.c_str())); }
 #undef TISMA_LOC_TEXT
+
+// A number typed in a text field, shown with the language's decimal point
+// and read with ',' or '.' (the spec team's TR1; ImGui's InputDouble
+// writes and reads only '.'). With `step`, '-' and '+' buttons after it.
+// True when the value changed.
+bool InputNumber(const char* label, double* v, const char* fmt, double step = 0.0) {
+    static std::map<ImGuiID, std::string> typing; // the text of a field in use, as typed
+    ImGui::PushID(label);
+    const ImGuiID id = ImGui::GetID("##text");
+    const auto it = typing.find(id);
+    std::string text = it != typing.end() ? it->second : format(fmt, *v);
+    bool changed = false;
+    float width = ImGui::CalcItemWidth();
+    if (step > 0.0)
+        width -= 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(std::max(1.0f, width));
+    if (ImGui::InputText("##text", &text))
+        if (const std::optional<double> typed = typed_number(text); typed && *typed != *v)
+            *v = *typed, changed = true;
+    if (ImGui::IsItemActive())
+        typing[id] = text;
+    else
+        typing.erase(id);
+    if (step > 0.0) {
+        ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        if (ImGui::Button("-", ImVec2(ImGui::GetFrameHeight(), 0)))
+            *v -= step, changed = true;
+        ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        if (ImGui::Button("+", ImVec2(ImGui::GetFrameHeight(), 0)))
+            *v += step, changed = true;
+    }
+    ImGui::PopID();
+    if (label[0] && !(label[0] == '#' && label[1] == '#')) {
+        ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted(label);
+    }
+    return changed;
+}
 } // namespace loc
 
 T kind_text(LineKind kind) {
@@ -1866,7 +1904,7 @@ void App::printer_card() {
     if (ImGui::BeginPopup("##other_nozzle")) {
         ImGui::TextUnformatted(tr(T::OtherNozzleTitle));
         ImGui::SetNextItemWidth(120.0f * scale_);
-        ImGui::InputDouble("mm", &other_nozzle_, 0.05, 0.1, "%.2f");
+        loc::InputNumber("mm", &other_nozzle_, "%.2f", 0.05);
         other_nozzle_ = std::clamp(other_nozzle_, 0.1, 3.0);
         if (ImGui::Button(tr(T::OkButton))) {
             choose_nozzle(other_nozzle_, {});
@@ -5390,7 +5428,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
         // AS18: with the printer connected, its firmware's command.
         if (firmware_command(g.id, settings_.flavor, 1.0)) {
             ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
-            ImGui::InputDouble(tr(T::GuideFrequency), &guide_input_.measured, 0.0, 0.0, "%g");
+            loc::InputNumber(tr(T::GuideFrequency), &guide_input_.measured, "%g");
             if (const std::optional<std::string> command =
                     firmware_command(g.id, settings_.flavor, guide_input_.measured)) {
                 loc::TextDisabled("%s", command->c_str());
@@ -5418,7 +5456,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
         const float field = ImGui::GetFontSize() * 7.0f;
         const auto input = [&](T label, double& v) {
             ImGui::SetNextItemWidth(field);
-            ImGui::InputDouble(tr(label), &v, 0.0, 0.0, "%g");
+            loc::InputNumber(tr(label), &v, "%g");
         };
         if (f->measure == GuideMeasure::Height) {
             input(T::GuideStart, guide_input_.start);
@@ -5441,7 +5479,7 @@ void App::help_guide(const KnowledgeCalibration& g) {
             std::snprintf(value, sizeof value, "%s", format("%g", std::round(r->value * 1e4) / 1e4).c_str());
             loc::TextColored(rgb(theme_.accent_hover), tr(T::GuideReadValue), value);
             ImGui::SetNextItemWidth(field);
-            ImGui::InputDouble(tr(T::GuideProposed), &*guide_proposed_, 0.0, 0.0, "%g");
+            loc::InputNumber(tr(T::GuideProposed), &*guide_proposed_, "%g");
             std::optional<SettingChange> change;
             try {
                 char proposed[32];

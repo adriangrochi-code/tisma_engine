@@ -1578,7 +1578,9 @@
     X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
 
 #include <cstdarg>
+#include <optional>
 #include <string>
+#include <string_view>
 
 namespace tisma::ui {
 
@@ -1619,5 +1621,9 @@ std::string localized(std::string number);
 // before them kept or translated, the rest as they are (the spec team's
 // TR21: the open-file dialog mixed languages).
 std::string translated_error(std::string_view message);
+
+// A number typed in a field, with ',' or '.' for the decimal point and
+// spaces around it; empty when it is not one number.
+std::optional<double> typed_number(std::string_view text);
 
 } // namespace tisma::ui

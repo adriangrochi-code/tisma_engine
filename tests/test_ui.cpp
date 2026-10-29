@@ -579,6 +579,18 @@ TEST_CASE("ui: the engine's load errors in Spanish (the spec team's TR21)", "[ui
     set_language(before);
 }
 
+TEST_CASE("ui: a typed number reads a comma or a point (TR1)", "[ui]") {
+    CHECK(typed_number("0,25") == 0.25);
+    CHECK(typed_number("0.25") == 0.25);
+    CHECK(typed_number(" 12 ") == 12.0);
+    CHECK(typed_number("-1,5e2") == -150.0);
+    CHECK(!typed_number(""));
+    CHECK(!typed_number("1,2,3"));
+    CHECK(!typed_number("abc"));
+    CHECK(!typed_number("12 mm"));
+    CHECK(!typed_number("1e999"));
+}
+
 TEST_CASE("ui: every setting explains itself to a beginner, in both languages", "[ui]") {
     // The owner's requests, 2026-10-29: a longer explanation with an example,
     // first for the basic settings and then for every one.

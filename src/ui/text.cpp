@@ -4,6 +4,8 @@
 
 #include <atomic>
 #include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -284,6 +286,20 @@ std::string spanish_error(std::string_view text) {
 
 std::string translated_error(std::string_view message) {
     return language() == Language::Spanish ? spanish_error(message) : std::string(message);
+}
+
+std::optional<double> typed_number(std::string_view text) {
+    std::string plain;
+    for (const char c : text)
+        if (c != ' ')
+            plain += c == ',' ? '.' : c;
+    if (plain.empty() || plain.find_first_not_of("0123456789.+-eE") != std::string::npos)
+        return std::nullopt;
+    char* end = nullptr;
+    const double v = std::strtod(plain.c_str(), &end);
+    if (end != plain.c_str() + plain.size() || !std::isfinite(v))
+        return std::nullopt;
+    return v;
 }
 
 } // namespace tisma::ui
