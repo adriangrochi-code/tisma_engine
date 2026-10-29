@@ -891,6 +891,7 @@ private:
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
+    long long draw_frame_ = 0; // --draw-stats
     bool quit_ = false;
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
@@ -2314,6 +2315,8 @@ bool App::init(std::string& error) {
             return false;
         }
         gl_loaded_ = true;
+        if (options_.draw_stats)
+            count_draws();
     }
     glfwSetWindowUserPointer(window_, this);
     glfwSetDropCallback(window_, [](GLFWwindow* w, int count, const char** paths) {
@@ -10577,7 +10580,7 @@ void App::check_view(int fb_w, int fb_h) {
 // mouse goes to the field's middle and clicks there, so a field drawn where it
 // cannot be clicked fails.
 void App::script_input() {
-    if (script_at_ >= script_.size() || frames_ < 3)
+    if (script_at_ >= script_.size() || ImGui::GetFrameCount() < 3)
         return;
     ImGuiIO& io = ImGui::GetIO();
     const ScriptStep& step = script_[script_at_];
@@ -10670,6 +10673,15 @@ void App::script_input() {
                     same ? "ok" : ("got " + got).c_str());
         if (!same)
             return fail_step("the setting is " + got);
+        next();
+    } else if (step.verb == "slice") { // as the Slice button, then the Preview tab
+        if (f == 0)
+            return start_slice();
+        if (slice_job_.running())
+            return;
+        if (!result_)
+            return fail_step("the slice failed");
+        set_tab(Tab::Preview);
         next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
         for (const Toast& toast : toasts_)
@@ -10805,8 +10817,15 @@ void App::frame() {
         if (check_now && renderer_.ray_samples() == 1)
             check_rays(f);
 
+        const DrawStats view = take_draw_stats();
         glViewport(0, 0, fb_w, fb_h);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        if (options_.draw_stats) {
+            const DrawStats panels = take_draw_stats();
+            std::printf("draw-stats: frame %lld: view %lld calls, %lld vertices; panels %lld calls, %lld vertices\n",
+                        draw_frame_++, view.calls, view.vertices, panels.calls, panels.vertices);
+            std::fflush(stdout);
+        }
     }
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
