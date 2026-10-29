@@ -10,8 +10,7 @@ namespace tisma {
 // A box sx by sy by sz.
 TriangleMesh make_box(double sx, double sy, double sz);
 
-// An upright cylinder of radius r and height h, with `sides` sides (at least
-// 3).
+// An upright cylinder of radius r and height h, with `sides` sides (at least 3).
 TriangleMesh make_cylinder(double r, double h, int sides = 64);
 
 // A sphere of radius r: `rings` bands from pole to pole (at least 2) and
