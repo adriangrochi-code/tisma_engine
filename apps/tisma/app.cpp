@@ -7897,10 +7897,35 @@ void App::plate_tools() {
         changed |= edited;
         return edited;
     };
+    // A slider under a number, as wide as the label and the field, for a
+    // change by eye (the owner's request); its ends are [lo, hi], the value
+    // kept as it is when it lies outside them until the slider is moved.
+    const auto slider = [&](const char* id, double& v, double lo, double hi, const char* fmt, bool log = false) {
+        ImGui::SetNextItemWidth(70.0f * scale_ + field - ImGui::GetStyle().WindowPadding.x + 14.0f * scale_);
+        double shown = std::clamp(v, lo, hi);
+        const bool moved = ImGui::SliderScalar(id, ImGuiDataType_Double, &shown, &lo, &hi, fmt,
+                                               log ? ImGuiSliderFlags_Logarithmic : ImGuiSliderFlags_None);
+        g_menu_rects[id + 2] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                      ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (!moved)
+            return false;
+        v = shown;
+        changed = true;
+        return true;
+    };
     if (tool_ == PlateTool::Move) {
         loc::TextDisabled("%s", tr(T::ToolMoveHint));
+        // The sliders span the bed's box.
+        double lo[2] = {-100.0, -100.0}, hi[2] = {100.0, 100.0};
+        for (std::size_t i = 0; i < settings_.bed.size(); ++i)
+            for (std::size_t k = 0; k < 2; ++k) {
+                const double c = settings_.bed[i][k];
+                lo[k] = i == 0 ? c : std::min(lo[k], c), hi[k] = i == 0 ? c : std::max(hi[k], c);
+            }
         number("X", o.place.x, 0.1, -10000.0, 10000.0, "%.2f mm");
+        slider("##move_x", o.place.x, lo[0], hi[0], "");
         number("Y", o.place.y, 0.1, -10000.0, 10000.0, "%.2f mm");
+        slider("##move_y", o.place.y, lo[1], hi[1], "");
     } else if (tool_ == PlateTool::Rotate) {
         std::array<double, 3> angles = euler_degrees(o.place.rotation);
         bool turned = false;
@@ -7918,6 +7943,7 @@ void App::plate_tools() {
                 o.place.rotation = rotated(o.place.rotation, k, 90.0);
                 changed = true;
             }
+            turned |= slider(k == 0 ? "##turn_x" : k == 1 ? "##turn_y" : "##turn_z", angles[std::size_t(k)], -180.0, 180.0, "");
             ImGui::PopID();
         }
         if (turned)
@@ -7943,6 +7969,8 @@ void App::plate_tools() {
             double lo = 0.001, hi = 100000.0;
             changed |= ImGui::DragScalar("##mm", ImGuiDataType_Double, &mm[k], 0.1f, &lo, &hi, field_text("##mm", "%.2f mm", mm[k]),
                                          ImGuiSliderFlags_AlwaysClamp);
+            // A tenth to ten times, by ratio.
+            slider(k == 0 ? "##scale_x" : k == 1 ? "##scale_y" : "##scale_z", percent[k], 10.0, 1000.0, "", true);
             double factor = 1.0;
             if (percent[k] != before_percent)
                 factor = percent[k] / before_percent;
@@ -10954,6 +10982,35 @@ void App::script_input() {
             io.AddMouseButtonEvent(0, true);
         else if (f == 1005)
             io.AddMouseButtonEvent(0, false);
+    } else if (step.verb == "slide") { // a click on a named slider, VALUE (0 to 1) of the way across
+        const auto it = g_menu_rects.find(step.key);
+        if (it == g_menu_rects.end())
+            return f >= 30 ? fail_step("no slider of that name is on the screen") : void();
+        const ImVec4 r = it->second;
+        const float t = float(std::atof(step.value.c_str()));
+        io.AddMousePosEvent(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
+        if (script_frame_ < 1000)
+            script_frame_ = 1000;
+        else if (f == 1002)
+            io.AddMouseButtonEvent(0, true);
+        else if (f == 1003)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 1005)
+            next();
+    } else if (step.verb == "expect-place") { // the chosen model's x, y (mm) or scale (%): within 1, or in A..B
+        if (selected_ < 0 || std::size_t(selected_) >= objects_.size())
+            return fail_step("no model is chosen");
+        const Placement& p = objects_[std::size_t(selected_)].place;
+        const double got = step.key == "x" ? p.x : step.key == "y" ? p.y : p.scale[0] * 100.0;
+        const std::size_t dots = step.value.find("..");
+        const double lo = std::atof(step.value.c_str()) - (dots == std::string::npos ? 1.0 : 0.0);
+        const double hi = dots == std::string::npos ? lo + 2.0 : std::atof(step.value.c_str() + dots + 2);
+        const bool ok = got >= lo && got <= hi;
+        std::printf("ui-script: expect-place %s %s: %s%.2f\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ",
+                    got);
+        if (!ok)
+            return fail_step("it is " + std::to_string(got));
+        next();
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
         const std::string last = objects_.empty() ? std::string() : objects_.back().name;

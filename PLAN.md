@@ -714,9 +714,10 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
 - [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
   a la impresora conectada
-- [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
-  agregar modelos y formas (2026-10-29: el menú, hecho: clic derecho en la placa, fuera de los modelos, con «Agregar
-  modelo…», «Agregar forma» —cubo, cilindro y esfera de 20 mm— y «Organizar». Faltan los deslizadores)
+- [x] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
+  agregar modelos y formas (2026-10-29: clic derecho en la placa, fuera de los modelos, con «Agregar modelo…»,
+  «Agregar forma» —cubo, cilindro y esfera de 20 mm— y «Organizar»; un deslizador bajo cada número de Mover (la cama
+  de punta a punta), Girar (−180° a 180°) y Escalar (10 % a 1000 %, por proporción))
 - [x] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida (2026-10-29: el catálogo de
   impresoras, después el de filamentos, cada uno con su paso; cerrarlos sin elegir sigue al siguiente)
 - [x] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):

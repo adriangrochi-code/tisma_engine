@@ -184,6 +184,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/plate_menu.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_plate_menu.png)
     set_tests_properties(ui_script_plate_menu PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The Move and Scale cards' sliders, clicked.
+    foreach(tool move scale)
+      add_test(NAME ui_script_${tool}_sliders
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool ${tool}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_sliders.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_sliders.png)
+      set_tests_properties(ui_script_${tool}_sliders PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines

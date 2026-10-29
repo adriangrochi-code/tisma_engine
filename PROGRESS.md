@@ -7701,4 +7701,12 @@ ratón por la entrada de un menú abierto, por un nombre en inglés, y hace clic
 3 modelos. Prueba de las formas: cerradas (volumen del cubo 1000 mm³, el del cilindro el del polígono inscrito, la
 esfera entre el 98 % y el 100 % de la bola), paradas en la cama. Mirado en la captura.
 
-**Sigue:** los deslizadores de mover, girar y escalar.
+Segunda mitad, el mismo bloque: bajo cada número de las tarjetas Mover, Girar y Escalar, un deslizador tan ancho como
+la etiqueta y el campo. Mover va de un borde de la cama al otro (su caja), Girar de −180° a 180° por eje, Escalar de
+10 % a 1000 % en escala logarítmica (100 % en el medio; con «Los tres ejes juntos», los tres). Un valor fuera de los
+extremos queda como está hasta que se mueve el deslizador. Pasos nuevos `slide NOMBRE FRACCIÓN` (clic a esa fracción
+del ancho) y `expect-place x|y|scale VALOR` (o `A..B`). Pruebas `ui_script_move_sliders` (un cuarto de X da 57,8 mm,
+tres cuartos de Y 198,2 mm, en una cama de 256) y `ui_script_scale_sliders` (tres cuartos: 354 %). Girar no tiene
+prueba automática (mirado en la captura).
+
+**Sigue:** el botón Laminar abajo a la derecha con su menú de guardar, o el paso 5 de la vista previa.
