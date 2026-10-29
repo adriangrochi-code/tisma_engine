@@ -1303,6 +1303,7 @@ const char* g_row_key = nullptr;
 // Each setting field drawn this frame, by key (a second field of the same
 // key as "key#2"): min x, min y, max x, max y, for --ui-script's clicks.
 std::map<std::string, ImVec4> g_field_rects;
+std::string g_last_field; // the last of them, for a field narrower than its cell
 // The last row's key, for its ID (RowId), and how many rows of each label
 // and key were drawn this frame.
 std::string g_last_row_key;
@@ -2000,6 +2001,8 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::TextUnformatted(tr(label));
     if (tip && ImGui::IsItemHovered())
         loc::SetTooltip("%s", tip);
+    else if (ImGui::IsItemHovered() && ImGui::GetItemRectMax().x > cell.x + column) // cut by the column
+        loc::SetTooltip("%s", tr(label));
     if (const char* info = row_key(label))
         info_button(label, info);
     if (g_row_tag) {
@@ -2027,12 +2030,14 @@ void label_cell(T label, const char* tip = nullptr) {
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
     g_last_row_key = key;
+    g_last_field.clear();
     if (!key.empty()) {
         std::string name = key;
         for (int n = 2; g_field_rects.contains(name); ++n)
             name = key + "#" + std::to_string(n);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         g_field_rects[name] = ImVec4(at.x, at.y, at.x + ImGui::GetContentRegionAvail().x, at.y + ImGui::GetFrameHeight());
+        g_last_field = name;
     }
 }
 
@@ -2060,11 +2065,64 @@ struct RowId {
     RowId& operator=(const RowId&) = delete;
 };
 
+// What was typed into the last field, once it is let go with Enter, Tab or a
+// click elsewhere (not Escape). ImGui reads only the number from it; the row
+// reads the rest: a unit, or a value beyond the limits.
+const std::string* typed_text() {
+    static ImGuiID active = 0;
+    static std::string text, done;
+    const ImGuiID item = ImGui::GetItemID();
+    if (const ImGuiInputTextState* state = ImGui::GetInputTextState(item)) {
+        active = item;
+        text.assign(state->TextA.Data, std::size_t(state->TextLen));
+    }
+    if (active != item || !ImGui::IsItemDeactivated())
+        return nullptr;
+    active = 0;
+    if (!ImGui::IsItemDeactivatedAfterEdit() || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        return nullptr;
+    done = text;
+    return &done;
+}
+
+// A typed number and its unit: '%', 'm' (mm or mm/s) or 0 (none). A decimal
+// comma reads as a point.
+struct Typed {
+    double value = 0.0;
+    char unit = 0;
+};
+std::optional<Typed> read_typed(std::string text) {
+    std::replace(text.begin(), text.end(), ',', '.');
+    const char* begin = text.c_str();
+    char* end = nullptr;
+    const double v = std::strtod(begin, &end);
+    if (end == begin || !std::isfinite(v))
+        return std::nullopt;
+    while (*end == ' ')
+        ++end;
+    const std::string rest(end);
+    return Typed{v, rest.starts_with("%") ? '%' : rest.starts_with("mm") ? 'm' : char(0)};
+}
+
+// A typed value the field cut to its limits, said once in a toast
+// ("Maximum: 50") so that it is not changed silently.
+std::string g_clamped;
+void note_clamp(const std::string* typed, double min, double max, const char* fmt) {
+    if (!typed)
+        return;
+    const std::optional<Typed> t = read_typed(*typed);
+    if (t && t->value > max)
+        g_clamped = format(tr(T::ValueMax), format(fmt, max).c_str());
+    else if (t && t->value < min)
+        g_clamped = format(tr(T::ValueMin), format(fmt, min).c_str());
+}
+
 bool row(T label, double& v, double min, double max, const char* fmt, float speed = 0.01f, const char* tip = nullptr) {
     label_cell(label, tip);
     const RowId id(label, &v);
     const bool changed =
         ImGui::DragScalar("##v", ImGuiDataType_Double, &v, speed, &min, &max, field_text("##v", fmt, v), ImGuiSliderFlags_AlwaysClamp);
+    note_clamp(typed_text(), min, max, fmt);
     return changed;
 }
 
@@ -2072,6 +2130,35 @@ bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* 
     label_cell(label, tip);
     const RowId id(label, &v);
     const bool changed = ImGui::DragInt("##v", &v, 0.1f, min, max, fmt, ImGuiSliderFlags_AlwaysClamp);
+    std::string as_double = fmt; // the limit is told as a double
+    if (const std::size_t d = as_double.find("%d"); d != std::string::npos)
+        as_double.replace(d, 2, "%.0f");
+    note_clamp(typed_text(), min, max, as_double.c_str());
+    return changed;
+}
+
+// A length (or speed) in mm, or a percentage of another, as the settings file
+// gives it. The field shows its unit; a number typed with "mm" or "%" (the
+// spec team's field sweep: "0,3 mm" was kept as 0.3 %) switches to it, and a
+// bare number keeps the unit shown. `empty`: what 0 shows, if it means "the
+// other's" or "no limit".
+bool unit_row(T label, Speed& v, double min, double mm_max, double percent_max, const char* mm_fmt, float mm_speed,
+              const char* empty = nullptr) {
+    label_cell(label);
+    const RowId id(label, &v);
+    double max = v.percent ? percent_max : mm_max;
+    const char* fmt = empty && v.value <= 0.0 ? empty : v.percent ? "%.0f %%" : mm_fmt;
+    bool changed = ImGui::DragScalar("##v", ImGuiDataType_Double, &v.value, v.percent ? 0.5f : mm_speed, &min, &max,
+                                     field_text("##v", fmt, v.value), ImGuiSliderFlags_AlwaysClamp);
+    if (const std::string* typed = typed_text()) {
+        if (const std::optional<Typed> t = read_typed(*typed); t && t->unit) {
+            v.percent = t->unit == '%';
+            max = v.percent ? percent_max : mm_max;
+            v.value = std::clamp(t->value, min, max);
+            changed = true;
+        }
+        note_clamp(typed, min, max, v.percent ? "%.0f %%" : mm_fmt);
+    }
     return changed;
 }
 
@@ -2079,6 +2166,10 @@ bool row(T label, bool& v, const char* tip = nullptr) {
     label_cell(label, tip);
     const RowId id(label, &v);
     const bool changed = ImGui::Checkbox("##v", &v);
+    if (!g_last_field.empty()) // a click in the middle of the cell misses the box
+        g_field_rects[g_last_field] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+    g_last_field.clear();
     return changed;
 }
 
@@ -2545,7 +2636,7 @@ bool App::init(std::string& error) {
             step.line = n;
             if (!(words >> step.verb) || step.verb[0] == '#')
                 continue;
-            if (step.verb == "type") {
+            if (step.verb == "type" || step.verb == "expect-toast") {
                 std::getline(words >> std::ws, step.value);
             } else {
                 words >> step.key;
@@ -5897,7 +5988,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // A speed in mm/s or a share of another (as the file gives it); 0: the other's.
     const auto share_row = [&](T label, const char* key, Speed& v) {
         if (shown(key))
-            changed |= row(label, v.value, 0.0, 1000.0, v.value <= 0.0 ? "—" : v.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
+            changed |= unit_row(label, v, 0.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f, "—");
     };
     const auto count = [&](T label, const char* key, std::size_t n) {
         if (!shown(key))
@@ -5908,7 +5999,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
 
     // Print: Quality.
     if (id == "layer_height") {
-        mm(T::LayerHeight, "layers.height", s.layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
+        mm(T::LayerHeight, "layers.height", s.layer_height, 0.01, 10.0, "%.2f mm", 0.002f);
         mm(T::FirstLayerHeight, "layers.first_height", s.first_layer_height, 0.04, 1.0, "%.2f mm", 0.002f);
     } else if (id == "variable_height") {
         if (shown("layers.heights"))
@@ -5924,14 +6015,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 2.0, s.outer_wall_width > 0.0 ? "%.2f mm" : "—",
            0.002f);
         if (shown("layers.first_line_width"))
-            changed |= row(T::FirstLineWidth, s.first_line_width.value, 0.0, s.first_line_width.percent ? 1000.0 : 40.0,
-                           s.first_line_width.percent ? "%.0f %%" : "%.2f mm", s.first_line_width.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 2.0, s.top_width > 0.0 ? "%.2f mm" : "—", 0.002f);
         mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 2.0, s.solid_width > 0.0 ? "%.2f mm" : "—", 0.002f);
         mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 2.0, s.infill_width > 0.0 ? "%.2f mm" : "—", 0.002f);
         if (shown("walls.seam_gap"))
-            changed |= row(T::SeamGap, s.wall_seam_gap.value, 0.0, s.wall_seam_gap.percent ? 1000.0 : 40.0,
-                           s.wall_seam_gap.percent ? "%.0f %%" : "%.2f mm", s.wall_seam_gap.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "seam") {
         if (shown("walls.seam"))
             changed |= row(T::Seam, s.seam,
@@ -5951,12 +6040,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::ScarfSmooth, "walls.scarf_only_smooth", s.scarf_only_smooth);
         flag(T::ScarfInner, "walls.scarf_inner", s.scarf_inner);
     } else if (id == "precision") {
-        mm(T::XyOffset, "slicing.xy_offset", s.xy_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+        mm(T::XyOffset, "slicing.xy_offset", s.xy_offset, -10.0, 10.0, "%+.3f mm", 0.001f);
         mm(T::FirstLayerShrink, "slicing.first_layer_shrink", s.first_layer_shrink, 0.0, 2.0, "%.3f mm", 0.001f);
         mm(T::ScaleXRow, "compensation.scale_x", s.scale_x, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::ScaleYRow, "compensation.scale_y", s.scale_y, 50.0, 150.0, "%.3f %%", 0.01f);
         mm(T::ScaleZRow, "compensation.scale_z", s.scale_z, 50.0, 150.0, "%.3f %%", 0.01f);
-        mm(T::HoleCorrection, "compensation.hole_offset", s.hole_offset, -2.0, 2.0, "%+.3f mm", 0.001f);
+        mm(T::HoleCorrection, "compensation.hole_offset", s.hole_offset, -5.0, 5.0, "%+.3f mm", 0.001f);
     } else if (id == "ironing") {
         flag(T::IroningEnabled, "ironing.enabled", s.ironing);
         if (shown("ironing.surfaces"))
@@ -5975,7 +6064,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     }
     // Print: Strength.
     else if (id == "walls") {
-        whole(T::Walls, "walls.count", s.wall_count, 0, 50);
+        whole(T::Walls, "walls.count", s.wall_count, 0, 1000);
         flag(T::DetectOverhangs, "walls.detect_overhangs", s.detect_overhangs);
         if (shown("walls.generator"))
             changed |= row(T::WallGeneratorRow, s.wall_generator,
@@ -5985,17 +6074,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_thin") {
         if (shown("walls.min_line_width"))
-            changed |= row(T::MinLineWidth, s.wall_min_line_width.value, 0.0, s.wall_min_line_width.percent ? 1000.0 : 40.0,
-                           s.wall_min_line_width.percent ? "%.0f %%" : "%.2f mm", s.wall_min_line_width.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::MinLineWidth, s.wall_min_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         if (shown("walls.min_detail"))
-            changed |= row(T::MinDetail, s.wall_min_detail.value, 0.0, s.wall_min_detail.percent ? 1000.0 : 40.0,
-                           s.wall_min_detail.percent ? "%.0f %%" : "%.2f mm", s.wall_min_detail.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::MinDetail, s.wall_min_detail, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 20);
         if (shown("walls.transition_length"))
-            changed |= row(T::TransitionLength, s.wall_transition_length.value, 0.0,
-                           s.wall_transition_length.percent ? 1000.0 : 40.0,
-                           s.wall_transition_length.percent ? "%.0f %%" : "%.2f mm",
-                           s.wall_transition_length.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         mm(T::TransitionAngle, "walls.transition_angle", s.wall_transition_angle, 0.0, 179.0, "%.0f°", 0.5f);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
@@ -6066,9 +6150,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::CombineAuto, "infill.combine_auto", s.infill_combine_auto, tr(T::CombineInfillTip));
         whole(T::CombineInfill, "infill.combine_layers", s.infill_combine_layers, 1, 10, "%d", tr(T::CombineInfillTip));
         if (shown("infill.combine_max_height"))
-            changed |= row(T::CombineMaxHeight, s.infill_combine_max_height.value, 1.0,
-                           s.infill_combine_max_height.percent ? 100.0 : 10.0,
-                           s.infill_combine_max_height.percent ? "%.0f %%" : "%.2f mm", 0.5f);
+            changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "wavy") {
         flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
         mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
@@ -6091,8 +6173,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
-            changed |= row(T::SpeedOuterWall, s.outer_wall_speed.value, 1.0, s.outer_wall_speed.percent ? 100.0 : 1000.0,
-                           s.outer_wall_speed.percent ? "%.0f %%" : "%.0f mm/s", 0.5f);
+            changed |= unit_row(T::SpeedOuterWall, s.outer_wall_speed, 1.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         // 0: the solid infill's.
@@ -6111,8 +6192,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
            0.5f);
         flag(T::AvoidCrossingWalls, "travel.avoid_crossing_walls", s.avoid_crossing_walls);
         if (shown("travel.max_detour"))
-            changed |= row(T::MaxDetour, s.max_detour.value, 0.0, 10000.0,
-                           s.max_detour.value <= 0.0 ? "—" : s.max_detour.percent ? "%.0f %%" : "%.1f mm", 0.1f);
+            changed |= unit_row(T::MaxDetour, s.max_detour, 0.0, 10000.0, 10000.0, "%.1f mm", 0.1f, "—");
     } else if (id == "limits") {
         mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
         mm(T::SpeedMaxFlow, "speed.max_flow", s.speed_max_flow, 0.0, 200.0,
@@ -6163,7 +6243,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SupportStyle::Snug, tr(T::SupportSnug)},
                             {SupportStyle::Organic, tr(T::SupportOrganic)}},
                            tr(T::SupportStyleTip));
-        mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0, "%.0f°", 0.5f);
+        mm(T::SupportAngle, "support.threshold_angle", s.support_angle, 0.0, 89.0,
+           s.support_angle > 0.0 ? "%.0f°" : tr(T::AutoValue), 0.5f);
     } else if (id == "tree") {
         mm(T::TreeBranchDiameter, "support.tree_branch_diameter", s.tree_branch_diameter, 0.1, 100.0, "%.1f mm", 0.05f);
         mm(T::TreeTipDiameter, "support.tree_tip_diameter", s.tree_tip_diameter, 0.1, 100.0, "%.2f mm", 0.01f);
@@ -6180,8 +6261,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
            s.support_bottom_z_gap > 0.0 ? "%.2f mm" : "—", 0.01f);
         if (shown("support.xy_gap"))
-            changed |= row(T::SupportXyGap, s.support_xy_gap.value, 0.0, s.support_xy_gap.percent ? 1000.0 : 10.0,
-                           s.support_xy_gap.percent ? "%.0f %%" : "%.2f mm", s.support_xy_gap.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
@@ -6205,8 +6285,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SupportSheath, "support.sheath", s.support_sheath);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
         if (shown("support.width"))
-            changed |= row(T::SupportWidth, s.support_width.value, 0.0, s.support_width.percent ? 1000.0 : 40.0,
-                           s.support_width.percent ? "%.0f %%" : "%.2f mm", s.support_width.percent ? 0.5f : 0.01f);
+            changed |= unit_row(T::SupportWidth, s.support_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         if (s.support_style == SupportStyle::Snug)
             mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
     } else if (id == "arcs") {
@@ -6372,7 +6451,34 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::WipeTowerBridging, "wipe_tower.bridging", s.wipe_tower_bridging, 1.0, 100.0, "%.1f mm", 0.05f);
         whole(T::WipeTowerExtruder, "extruders.wipe_tower", s.extruder_wipe_tower, 0, kMaxExtruders);
     } else if (id == "wipe_tower_more") {
-        count(T::PurgeVolumesRow, "wipe_tower.purge_volumes", s.purge_volumes.size());
+        // One volume for every two different filaments, as a number in the
+        // file (140 when not set); a list with different ones is edited in
+        // the file.
+        std::optional<double> each;
+        for (std::size_t i = 0; i < s.purge_volumes.size(); ++i)
+            for (std::size_t j = 0; j < s.purge_volumes[i].size(); ++j) {
+                const double x = s.purge_volumes[i][j];
+                if (i == j)
+                    continue;
+                if (!each)
+                    each = x;
+                else if (x != *each)
+                    each = -1.0; // not one for all
+            }
+        if (!each)
+            each = 140.0;
+        if (*each < 0.0)
+            each.reset();
+        if (each && shown("wipe_tower.purge_volumes")) {
+            if (row(T::PurgeVolumesRow, *each, 0.0, 10000.0, "%.0f mm³", 1.0f)) {
+                s.purge_volumes.assign(std::size_t(kMaxExtruders), std::vector<double>(std::size_t(kMaxExtruders), *each));
+                for (std::size_t i = 0; i < s.purge_volumes.size(); ++i)
+                    s.purge_volumes[i][i] = 0.0;
+                changed = true;
+            }
+        } else {
+            count(T::PurgeVolumesRow, "wipe_tower.purge_volumes", s.purge_volumes.size());
+        }
         mm(T::WipeTowerSpacing, "wipe_tower.extra_spacing", s.wipe_tower_extra_spacing, 50.0, 500.0, "%.0f %%", 0.5f);
         mm(T::WipeTowerFlow, "wipe_tower.extra_flow", s.wipe_tower_extra_flow, 50.0, 500.0, "%.0f %%", 0.5f);
         mm(T::WipeTowerCone, "wipe_tower.cone_angle", s.wipe_tower_cone_angle, 0.0, 90.0, "%.0f°", 0.5f);
@@ -9732,6 +9838,10 @@ void App::layout() {
     }
     help_windows();
     guide_overlay();
+    if (!g_clamped.empty()) {
+        notify(std::move(g_clamped));
+        g_clamped.clear();
+    }
     toasts();
     dialogs();
 
@@ -10561,6 +10671,14 @@ void App::script_input() {
         if (!same)
             return fail_step("the setting is " + got);
         next();
+    } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
+        for (const Toast& toast : toasts_)
+            if (toast.text.find(step.value) != std::string::npos) {
+                std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
+                return next();
+            }
+        if (f >= 30)
+            fail_step("no toast says \"" + step.value + "\"");
     } else {
         fail_step("unknown step");
     }

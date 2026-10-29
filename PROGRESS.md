@@ -7485,3 +7485,29 @@ necesitan la máquina del dueño.
 
 **Sigue:** los pedidos de diseño del dueño anotados en `PLAN.md` (ajustes en una página, Laminar abajo a la derecha,
 menú para guardar, asistente de la primera impresora), la zona de interfaz de SM10 y P13.
+
+## 2026-10-29: barrido de campos del equipo de fichas
+
+El equipo de fichas pasó `--ui-script` por los 153 ajustes numéricos de `docs/CONFIG.md` (en b75877f): 120 bien, 33
+no. Arreglado:
+
+1. **Unidades en los campos «mm o %»:** una fila nueva (`unit_row`) para los once valores que son mm (o mm/s) o un %
+   de otro. Lee el texto que se escribió al soltar el campo (`typed_text`, con el estado de texto de ImGui): «mm» o
+   «%» cambian la unidad; un número solo queda en la unidad que el campo muestra. Esto es una decisión de la
+   interfaz: en el archivo, un número solo es mm, pero en el campo la unidad está a la vista.
+2. **Límites:** `slicing.xy_offset` ±10, `compensation.hole_offset` ±5, `layers.height` 0,01 a 10, `walls.count`
+   hasta 1000 y `infill.combine_max_height` hasta 1000 %, como `docs/CONFIG.md` y el lector. Un valor escrito fuera
+   del rango deja un aviso con el límite (`note_clamp`); vale para todas las filas numéricas.
+3. **`wipe_tower.purge_volumes`:** campo de un número para todos los pares (la diagonal en 0, como el lector), si
+   todos los pares son iguales; si no, sigue la cuenta.
+4. **Etiquetas cortadas:** dos textos más cortos, y la etiqueta completa al pasar el mouse si no entra.
+5. **`--ui-script`:** `click` sobre una casilla da en la casilla (antes, en el medio de la celda), y `expect-toast`.
+
+Prueba nueva `ui_script_unit_fields`: «0,3 mm» y «90 %» en el mismo campo, un número solo en cada unidad, los cuatro
+límites, el aviso «Máximo: 1000», una casilla y un campo debajo de ella, y la purga. Pasan las 150 pruebas de
+interfaz y ajustes.
+
+**No hecho:** el resto de los límites del panel no se comparó uno por uno con `docs/CONFIG.md` (solo los informados);
+la idea es sacarlos del lector en vez de repetirlos. `calibration.band_height` y `placement.spacing` no tienen fila:
+Ordenar usa `placement.spacing` sin dejar cambiarlo, y el alto de las franjas de calibración no se elige en la
+interfaz. Quedan pendientes.

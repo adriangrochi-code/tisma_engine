@@ -153,8 +153,9 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                          TIMEOUT 300)
     # Fields edited with the mouse and the keyboard, as a person does
     # (--ui-script, tests/data/ui): the printer's page, and a number of the
-    # print settings typed with a decimal comma.
-    foreach(script printer_fields print_fields)
+    # print settings typed with a decimal comma; units, limits, a checkbox and
+    # the purge volume (unit_fields).
+    foreach(script printer_fields print_fields unit_fields)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760

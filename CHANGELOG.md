@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`--ui-script`: `expect-toast TEXTO`** espera un aviso con ese texto, y `click` sobre una casilla la marca o
+  desmarca.
+
 - **`tisma --ui-script pasos.txt`:** pruebas de la interfaz con mouse y teclado de verdad: clic en el campo de un
   ajuste, escribir, teclas, y `expect` con el valor guardado; sale con 1 si un paso falla. Pruebas nuevas de la página
   de la impresora y de un número de impresión escrito con coma.
@@ -160,6 +163,21 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
+
+- **Los campos «mm o %» ignoraban la unidad escrita** (ancho de cordón, costura, detalle mínimo, separación y ancho
+  del soporte, velocidad de la pared externa y otros): «0,3 mm» en un campo en % quedaba como 0,3 %. Ahora «mm» o «%»
+  escritos con el número cambian la unidad; un número solo sigue en la unidad que muestra el campo.
+
+- **Límites del panel más estrechos que los del archivo de ajustes:** el desplazamiento XY (±10 mm), la corrección
+  de agujeros (±5 mm), la altura de capa (0,01 a 10 mm), la cantidad de paredes (hasta 1000) y la altura del relleno
+  combinado se recortaban en silencio. Ahora valen los rangos de `docs/CONFIG.md`, y un valor escrito fuera de ellos
+  queda en el límite con un aviso («Máximo: 1000»).
+
+- **El volumen de purga no se podía escribir:** la fila solo decía cuántos valores tenía. Ahora un número vale para
+  todos los pares de filamentos, como en el archivo; una lista con valores distintos se sigue editando en el archivo.
+
+- **Etiquetas cortadas en Soportes** con el panel angosto: «Capas con soporte forzado» y «Ángulo de voladizo» (con 0
+  el campo dice «Automático»). Una etiqueta que no entra muestra su texto completo al pasar el mouse.
 
 - **Lo escrito en algunos campos se perdía** (el ancho y el fondo de la cama, los porcentajes): el campo tomaba su
   identidad de la dirección de una copia local, que puede cambiar de un cuadro a otro; entonces el campo «cambiaba» a
