@@ -420,6 +420,30 @@ TEST_CASE("walls: neighbouring beads overlap by h (1 - pi/4) (perimeters.md, rul
     CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
 }
 
+TEST_CASE("walls: the default bead width is 1.125 nozzles, and the counts change where Tisma Slicer's do (BH4)", "[walls]") {
+    CHECK(parse_settings("{}").wall_width == 0.45);
+    CHECK(parse_settings("{}").wall_width_auto);
+    CHECK_THAT(parse_settings(R"({"machine": {"nozzle_diameter": 0.6}})").wall_width, WithinAbs(0.675, 1e-12));
+    CHECK(parse_settings(R"({"walls": {"width": 0.4}})").wall_width == 0.4);
+    CHECK(parse_settings(R"({"walls": {"width": 0}, "machine": {"nozzle_diameter": 0.8}})").wall_width == 0.9);
+    CHECK(parse_settings(settings_json(parse_settings("{}"))).wall_width_auto); // written as 0
+    // Flat strips with the default width: the spec team's black-box counts.
+    Settings s = parse_settings(R"({"walls": {"count": 10}, "layers": {"height": 0.2, "first_height": 0.2}})");
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    for (const auto& [thickness, beads] : std::vector<std::pair<double, std::size_t>>{
+             {1.0, 2}, {1.15, 2}, {1.2, 3}, {1.45, 3}, {1.5, 4}, {1.95, 4}, {2.0, 5}}) {
+        INFO("thickness " << thickness);
+        const float half = float(thickness / 2.0);
+        const SlicedModel model = slice_model(boxes({{100.0f - half, 90, 0, 100.0f + half, 110, 3}}), s);
+        std::size_t n = 0;
+        for (const Toolpath& t : model.walls[8].toolpaths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                n += (t.points[i - 1].p.y - 100.0) * (t.points[i].p.y - 100.0) < 0.0;
+        CHECK(n == beads);
+    }
+}
+
 TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[walls]") {
     Settings s = base();
     s.wall_count = 3;
@@ -458,6 +482,25 @@ TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[
             CHECK_THAT(beads[i].second, WithinAbs(widths[i], 0.003));
         }
     }
+}
+
+TEST_CASE("walls: staggered loops under a thinner top layer stay inside the check's top (fuzzer, seed 20261029)", "[walls]") {
+    // Thick layers, then thin ones at the top, and no lift: half of a thick
+    // layer over the layer below the top passes the part's top.
+    Settings s = base();
+    s.wall_count = 3;
+    s.walls_staggered = true;
+    s.retract_lift = 0.0;
+    s.layer_height = 0.4;
+    s.first_layer_height = 0.2;
+    s.layer_heights = {{0.0, 0.4}, {6.0, 0.15}};
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 6.2f}});
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
 }
 
 TEST_CASE("walls: staggered perimeters, the odd inner loops half a layer up (staggered_perimeters.md, ST1)", "[walls]") {
@@ -561,6 +604,83 @@ std::set<int> counts_along(const SlicedModel& model, double degrees) {
 }
 
 } // namespace
+
+namespace {
+
+// The P13 strip: 40 mm along X from X 60, 3 mm tall, a straight edge at
+// Y 100 and a wavy one, 1.15 + a sin(2 pi x / 5) mm away.
+IndexedMesh wavy_strip(double amplitude) {
+    IndexedMesh m;
+    const int steps = 400;
+    for (float z : {0.0f, 3.0f})
+        for (int i = 0; i <= steps; ++i) {
+            const double x = 40.0 * i / steps;
+            const double t = 1.15 + amplitude * std::sin(2.0 * std::numbers::pi * x / 5.0);
+            m.vertices.push_back({float(60.0 + x), 100.0f, z});
+            m.vertices.push_back({float(60.0 + x), float(100.0 + t), z});
+        }
+    const auto v = [&](int layer, int i, int side) { return std::uint32_t(layer * 2 * (steps + 1) + 2 * i + side); };
+    for (int i = 0; i < steps; ++i) {
+        m.triangles.push_back({v(0, i, 0), v(0, i, 1), v(0, i + 1, 1)}); // bottom, facing down
+        m.triangles.push_back({v(0, i, 0), v(0, i + 1, 1), v(0, i + 1, 0)});
+        m.triangles.push_back({v(1, i, 0), v(1, i + 1, 1), v(1, i, 1)}); // top, facing up
+        m.triangles.push_back({v(1, i, 0), v(1, i + 1, 0), v(1, i + 1, 1)});
+        m.triangles.push_back({v(0, i, 0), v(0, i + 1, 0), v(1, i + 1, 0)}); // the straight side
+        m.triangles.push_back({v(0, i, 0), v(1, i + 1, 0), v(1, i, 0)});
+        m.triangles.push_back({v(0, i, 1), v(1, i + 1, 1), v(0, i + 1, 1)}); // the wavy side
+        m.triangles.push_back({v(0, i, 1), v(1, i, 1), v(1, i + 1, 1)});
+    }
+    for (const int i : {0, steps}) { // the ends
+        const bool start = i == 0;
+        m.triangles.push_back(start ? std::array<std::uint32_t, 3>{v(0, i, 0), v(1, i, 1), v(0, i, 1)}
+                                    : std::array<std::uint32_t, 3>{v(0, i, 0), v(0, i, 1), v(1, i, 1)});
+        m.triangles.push_back(start ? std::array<std::uint32_t, 3>{v(0, i, 0), v(1, i, 0), v(1, i, 1)}
+                                    : std::array<std::uint32_t, 3>{v(0, i, 0), v(1, i, 1), v(1, i, 0)});
+    }
+    return m;
+}
+
+// The most beads a section of the strip crosses at layer 8, every 0.05 mm
+// away from the ends.
+int most_beads(const SlicedModel& model) {
+    int most = 0;
+    for (double x = 63.0; x < 97.0; x += 0.05) {
+        int n = 0;
+        for (const Toolpath& t : model.walls[8].toolpaths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& a = t.points[i].p;
+                const Point2d& b = t.points[(i + 1) % t.points.size()].p;
+                n += (a.x - x) * (b.x - x) < 0.0;
+            }
+        most = std::max(most, n);
+    }
+    return most;
+}
+
+} // namespace
+
+TEST_CASE("walls: walls.transition_margin flattens small swings past a change (perimeters.md, P13, P13b)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.infill_density = 0.0;
+    for (const double a : {0.05, 0.1, 0.15}) {
+        INFO("amplitude " << a);
+        s.wall_transition_margin = {0.0, false};
+        CHECK(most_beads(slice_model(wavy_strip(a), s)) == 3); // margin 0: runs of 3 on the crests
+        for (const double margin : {25.0, 100.0}) {
+            s.wall_transition_margin = {margin, true};
+            CHECK(most_beads(slice_model(wavy_strip(a), s)) == 2);
+        }
+    }
+    for (const double a : {0.2, 0.25}) { // past the cut: they stay at every margin
+        INFO("amplitude " << a);
+        for (const double margin : {0.0, 25.0, 100.0}) {
+            s.wall_transition_margin = {margin, true};
+            CHECK(most_beads(slice_model(wavy_strip(a), s)) == 3);
+        }
+    }
+}
 
 TEST_CASE("walls: odd bead counts only in corners no wider than walls.transition_angle (perimeters.md, P14)", "[walls]") {
     Settings s = base();

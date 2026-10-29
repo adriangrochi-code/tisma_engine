@@ -1,0 +1,4 @@
+# A left click in the middle of the view, on the model: it is picked with the
+# box tree made on another thread (docs/LARGE_MODELS.md).
+wait 3
+click-model

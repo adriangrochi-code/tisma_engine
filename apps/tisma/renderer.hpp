@@ -31,6 +31,10 @@ struct ViewFrame {
     Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
+    // And turned and scaled by this (an affine map of its mesh's points): a
+    // large model while its rotation or scale field is dragged, before its
+    // mesh is redone.
+    Mat4 selected_model = identity();
     bool show_model = true;
     // The coarse copy of the model while the view moves (set_model_coarse,
     // PLAN.md V6), with the chosen model's vertices in it.
@@ -126,6 +130,7 @@ public:
 
     // The preview's extrusions the last frame drew (lit pass).
     std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+    int drawn_group() const { return drawn_group_; } // the last frame's group of layers drawn as one (merged_layers)
 
     // What the view keeps on the GPU, in bytes (--draw-stats): the preview's
     // instances and travels, the meshes (model, its coarse copy, paint, bed),
@@ -164,7 +169,10 @@ private:
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
-    PreviewDrawOrder order_; // the extrusions in drawing order (docs/LARGE_MODELS.md); its instances moved to the GPU
+    // The extrusions in drawing order, and as seen from far (docs/LARGE_MODELS.md); their instances moved to the GPU.
+    PreviewOrders orders_;
+    float layer_height_ = 0.0f; // the preview's mean layer height, mm
+    int drawn_group_ = 1;       // the last frame's group of layers drawn as one
     std::size_t drawn_extrusions_ = 0;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;

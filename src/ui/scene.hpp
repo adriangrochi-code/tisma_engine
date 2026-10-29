@@ -31,6 +31,9 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 // One vertex per triangle corner, moved by offset: position (3 floats) and the
 // triangle's unit normal (3 floats), for flat shading.
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset);
+// The meshes one after the other, as mesh_vertices(plate_mesh(meshes)) gives
+// them, without making the joined mesh.
+std::vector<float> mesh_vertices(const std::vector<TriangleMesh>& meshes, Vec3 offset);
 
 // A coarse copy of a mesh to draw while the view moves (PLAN.md, V6): vertex
 // clustering (Rossignac and Borrel 1993, "Multi-resolution 3D approximations
@@ -152,6 +155,46 @@ struct PreviewDrawOrder {
 };
 PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
 
+// The walls of the part for a view from far away, where a group of layers is
+// under half a pixel high (docs/LARGE_MODELS.md, step 5): those of `group`
+// layers in a row drawn as the top one's, as high as the group (the layers
+// counted down from the last, which keeps its own), except a lower layer's
+// wall farther than half a pixel (2 group layers) from every wall of its kind
+// of the top one. Only the shown ones: it is drawn when all of the part is,
+// with the rest of the shown extrusions as they are (other_than_walls).
+PreviewDrawOrder merged_layers(const PreviewDrawOrder& order, int group);
+// The shown extrusions but the walls, layer by layer.
+PreviewDrawOrder other_than_walls(const PreviewDrawOrder& order);
+
+// The largest group of layers drawn as one: groups of 8 only paid off with the
+// part metres away, and each group kept costs its walls again on the GPU.
+inline constexpr int kFarGroups = 4;
+
+// The group of layers to draw as one (merged_layers) when a layer is
+// `layer_pixels` high on the screen: 4 or 2 while the group stays under half
+// a pixel high, else 1 (every layer).
+int far_group(float layer_pixels);
+
+// How many pixels high a layer `layer_height` mm high is, at its nearest to the
+// eye within the box lo..hi, with `projection` drawing a view `view_height`
+// pixels high.
+float layer_pixels(const Mat4& projection, int view_height, Vec3 eye, Vec3 lo, Vec3 hi, float layer_height);
+
+// The orders a view keeps of a preview: all of it; from far, the shown
+// extrusions but the walls (others) and the walls of groups 2 and 4
+// (merged_layers). Their instances in one array, the full order's first, each
+// order's ranges counted in it.
+struct PreviewOrders {
+    PreviewDrawOrder full;
+    PreviewDrawOrder others;
+    std::array<PreviewDrawOrder, 2> far; // groups 2 and 4; empty with too few layers
+    std::vector<PreviewInstance> instances;
+    // The walls to draw, with `others`, instead of the full order: those of
+    // `group` when it has them and all of the part is drawn; else none.
+    const PreviewDrawOrder* far_walls(int group, bool whole) const;
+};
+PreviewOrders preview_orders(const PreviewBuffers& preview);
+
 // What a view draws of it for layers lo to hi with the kinds of kind_mask:
 // the shown range and the hidden one, which is empty when all of the part is
 // drawn (from its first layer to its last, every kind but the hidden ones and
@@ -162,6 +205,17 @@ struct PreviewRange {
     std::size_t first = 0, count = 0;
 };
 inline constexpr std::size_t kWholeLayer = std::size_t(-1);
+// Whether those layers and kinds are all of the part (from its first layer to
+// its last, every kind but the hidden ones and the travels, no cut): then what
+// the part hides stays out.
+bool preview_whole(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                   std::size_t top_shown = kWholeLayer, std::size_t top_hidden = kWholeLayer);
+// Whether a far-away order (merged_layers, other_than_walls) may stand for
+// those layers: all of the part, or every layer uncut when the preview marks
+// nothing hidden (a G-code file opened to view: the legend's kinds are then
+// left out by the shader, as in the full order).
+bool preview_far(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                 std::size_t top_shown = kWholeLayer, std::size_t top_hidden = kWholeLayer);
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                            std::uint32_t kind_mask, std::size_t top_shown = kWholeLayer,
                                            std::size_t top_hidden = kWholeLayer);

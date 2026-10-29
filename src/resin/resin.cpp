@@ -22,7 +22,8 @@ namespace tisma {
 namespace {
 
 // The mesh scaled by resin.scale_* about its box's centre in x and y and
-// from its base in z (rule 5), its base moved to z = 0 (on the platform).
+// from its base in z (rule 5), its base moved to z = 0 (on the platform),
+// wound with its normals outward.
 IndexedMesh scaled_mesh(const IndexedMesh& mesh, const Settings& s) {
     IndexedMesh out = mesh;
     if (out.vertices.empty())
@@ -40,6 +41,18 @@ IndexedMesh scaled_mesh(const IndexedMesh& mesh, const Settings& s) {
         v.z = float((double(v.z) - lo[2]) * s.resin_scale_z);
     }
     orient_consistently(out);
+    // An inside-out file wound alike all over stays as it is above; the
+    // supports read the normals, and found one pillar under a box (the spec
+    // team's BH11). Turned as a whole, so a cavity's shell stays inward.
+    double volume = 0.0; // six times the signed volume
+    for (const auto& t : out.triangles) {
+        const Vec3f &a = out.vertices[t[0]], &b = out.vertices[t[1]], &c = out.vertices[t[2]];
+        volume += double(a.x) * (double(b.y) * c.z - double(b.z) * c.y) - double(a.y) * (double(b.x) * c.z - double(b.z) * c.x) +
+                  double(a.z) * (double(b.x) * c.y - double(b.y) * c.x);
+    }
+    if (volume < 0.0)
+        for (auto& t : out.triangles)
+            std::swap(t[1], t[2]);
     return out;
 }
 

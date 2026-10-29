@@ -213,6 +213,10 @@ private:
 } // namespace
 
 StlFile parse_stl(std::string_view data) {
+    // An ASCII file saved with a UTF-8 byte order mark: text all the same
+    // (the spec team's BH17, read as binary before).
+    if (data.starts_with("\xEF\xBB\xBF") && looks_like_ascii(data.substr(3)))
+        return AsciiParser(data.substr(3)).parse();
     if (data.size() >= kPreambleSize) {
         const std::uint32_t count = load_le_u32(data.data() + kHeaderSize);
         const std::uint64_t expected = kPreambleSize + std::uint64_t(count) * kFacetSize;

@@ -54,6 +54,7 @@ add_executable(tisma WIN32
   main.cpp
   app.cpp
   file_browser.cpp
+  illustrations.cpp
   gl.cpp
   renderer.cpp
   vk_view.cpp

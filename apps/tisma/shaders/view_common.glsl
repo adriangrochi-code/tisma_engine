@@ -22,6 +22,7 @@ layout(push_constant) uniform Draw {
     uvec4 preview; // x: the line kinds drawn (bit k), y: colour by (0 kind, 1 speed, 2 width, 3 height),
                    // z, w: the first and the last layer shown
     vec4 range;    // xy: the colour ramp's range; z: 1 with the beads' grooves
+    vec4 model[3]; // rows of an affine map of a model's mesh: the chosen one turned and scaled before it is redone
 } draw;
 
 vec4 to_vulkan(vec4 p) {

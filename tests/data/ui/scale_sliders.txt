@@ -1,0 +1,4 @@
+# The Scale card's sliders go from 10 % to 1000 % by ratio: a click three
+# quarters of the way across makes the model about 3 times as big.
+slide scale_x 0.75
+expect-place scale 250..400

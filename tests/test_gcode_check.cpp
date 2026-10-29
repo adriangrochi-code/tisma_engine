@@ -163,6 +163,15 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         const std::size_t undo = g.find("\nG1 E", retract + 1);
         g.erase(undo + 1, g.find('\n', undo + 1) - undo);
     }, "while the filament is retracted");
+    // The heater set to 0 and the print going on (the spec team's BH10); set again, it is fine.
+    damaged([&](std::string& g) { g.insert(layer, "M104 S0\n"); }, "with the nozzle's heater set to 0");
+    {
+        std::string g = o.gcode;
+        g.insert(layer, "M104 S0\nM109 S210\nM104 T1 S0\n");
+        const GcodeCheck c = check_gcode(g, o.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+    }
 }
 
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
@@ -255,6 +264,19 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
     const SlicedModel model = slice_model(m, s);
     CHECK_THAT(unprintable_reason(model, s), ContainsSubstring("nothing would be printed"));
     CHECK(unprintable_reason(slice_model(cube(), test_printer()), test_printer()).empty());
+    // A path shorter than the G-code's resolution is not something printed:
+    // its moves merge away (the spec team's BH7).
+    SlicedModel tiny = slice_model(cube(), test_printer());
+    for (auto& f : tiny.fills)
+        f.top.clear(), f.solid.clear(), f.sparse.clear(), f.bridge.clear(), f.gaps.clear();
+    for (auto& w : tiny.walls) {
+        w.toolpaths.resize(1);
+        w.toolpaths.front().points = {{{10.0, 10.0}, 0.45}, {{10.005, 10.0}, 0.45}};
+    }
+    CHECK_THAT(unprintable_reason(tiny, test_printer()), ContainsSubstring("nothing would be printed"));
+    for (auto& w : tiny.walls)
+        w.toolpaths.front().points.push_back({{12.0, 10.0}, 0.45});
+    CHECK(unprintable_reason(tiny, test_printer()).empty());
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {

@@ -40,6 +40,10 @@ struct BeadingParams {
     // centre's marking with alpha_max = 180 - this (Kuipers et al. 2020,
     // Section 3.3). Degrees.
     double transition_angle = 45.0;
+    // Above 0, a swing to n + 1 beads whose thickest point passes the change
+    // by at most kMarginSwing stays at n (walls.transition_margin,
+    // perimeters.md P13 and P13b). mm.
+    double transition_margin = 0.0;
     // A bead on the centre (an odd count from 3 on) only once it would be
     // this many w* wide; the steps to an even count stay half a bead after
     // the last one. Table P2 of perimeters.md puts 2 beads in 1.1 mm and 3

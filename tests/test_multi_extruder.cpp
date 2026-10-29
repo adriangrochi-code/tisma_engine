@@ -504,6 +504,25 @@ TEST_CASE("wipe tower: the change over the tower, sparse up to the last change (
     const std::size_t at = weighed.find("; total filament used for wipe tower [g] = ");
     REQUIRE(at != std::string::npos);
     CHECK(std::atof(weighed.c_str() + at + 44) > 0.1);
+    // One value by extruder on the footer's lines, as hosts read them; the
+    // total is their sum.
+    {
+        const auto values = [&](const std::string& key) {
+            std::vector<double> out;
+            const std::size_t from = weighed.find(key);
+            REQUIRE(from != std::string::npos);
+            std::istringstream line(weighed.substr(from + key.size(), weighed.find('\n', from) - from - key.size()));
+            for (std::string v; std::getline(line, v, ',');)
+                out.push_back(std::stod(v));
+            return out;
+        };
+        const std::vector<double> mm = values("; filament used [mm] = "), g = values("; filament used [g] = ");
+        REQUIRE(mm.size() == std::size_t(dense.extruders));
+        REQUIRE(g.size() == mm.size());
+        CHECK(mm[0] > 0.0);
+        CHECK(mm[1] > 0.0);
+        CHECK_THAT(g[0] + g[1], Catch::Matchers::WithinAbs(values("; total filament used [g] = ").front(), 0.02));
+    }
     // The one change: over the tower, after the travel there.
     const std::size_t change = text.find("\nT1\n");
     REQUIRE(change != std::string::npos);

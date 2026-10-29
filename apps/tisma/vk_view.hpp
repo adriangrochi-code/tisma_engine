@@ -60,6 +60,7 @@ public:
 
     // The preview's extrusions the last record drew.
     std::size_t drawn_extrusions() const;
+    int drawn_group() const; // the last frame's group of layers drawn as one (merged_layers)
 
     // The view's time on the GPU, from timestamps written around its passes
     // and read when its frame in flight comes back: true once per new

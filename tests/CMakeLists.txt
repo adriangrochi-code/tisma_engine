@@ -147,15 +147,25 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
               --pick-catalog-printer "Creality CR-5 Pro H"
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    # A 2.85 mm printer: the filament catalog offers only that diameter, and
+    # says why it is empty (pellets.md, rule 1; profiles.md, rule 5).
+    add_test(NAME ui_catalog_filament_by_diameter
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pick-catalog-printer "LulzBot TAZ 6" --catalog filament
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_filament_285.png)
     set_tests_properties(ui_catalog_printer_home_clean PROPERTIES FIXTURES_SETUP ui_catalog_home)
-    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+    set_tests_properties(ui_catalog_filament_by_diameter PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+                         RESOURCE_LOCK ui_catalog_home ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     # Fields edited with the mouse and the keyboard, as a person does
     # (--ui-script, tests/data/ui): the printer's page, and a number of the
     # print settings typed with a decimal comma; units, limits, a checkbox and
-    # the purge volume (unit_fields).
-    foreach(script printer_fields print_fields unit_fields)
+    # the purge volume (unit_fields); values near the top of their range (wide_limits).
+    foreach(script printer_fields print_fields unit_fields wide_limits)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
@@ -163,6 +173,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
       set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # The setting rows as JSON (--dump-ui), for the spec team's text checks.
+    add_test(NAME ui_dump_rows
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --level advanced
+              --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.json
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.png)
+    set_tests_properties(ui_dump_rows PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A still view draws nothing new (idle_view): its draw calls counted.
     add_test(NAME ui_script_idle_view
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -170,6 +187,48 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/idle_view.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_idle_view.png)
     set_tests_properties(ui_script_idle_view PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A dialog takes every key: Delete behind the catalog leaves the model (UI25).
+    add_test(NAME ui_script_modal_keys
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --catalog printer
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
+    set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The plate's right-click menu adds a cube and a sphere as models.
+    add_test(NAME ui_script_plate_menu
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/plate_menu.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_plate_menu.png)
+    set_tests_properties(ui_script_plate_menu PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A SIGTERM (a logout, a shutdown) ends the program as its window's close
+    # button does: it exits with 0 and keeps the preferences (UI21).
+    add_test(NAME ui_sigterm_keeps_preferences
+      COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_home ${TISMA_XVFB_RUN}
+              $<TARGET_FILE:tisma>)
+    # And while it starts, before its window is up.
+    add_test(NAME ui_sigterm_while_starting
+      COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_start_home
+              ${TISMA_XVFB_RUN} $<TARGET_FILE:tisma> start)
+    set_tests_properties(ui_sigterm_keeps_preferences ui_sigterm_while_starting PROPERTIES
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
+    # The Slice button at the bottom right, then its save menu.
+    # At 1440 x 900, where the move slider is not in the legend (UI23).
+    add_test(NAME ui_script_slice_panel
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1600x1000x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1440x900
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/slice_panel.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_slice_panel.png)
+    set_tests_properties(ui_script_slice_panel PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The Move and Scale cards' sliders, clicked.
+    foreach(tool move rotate scale)
+      add_test(NAME ui_script_${tool}_sliders
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool ${tool}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_sliders.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_sliders.png)
+      set_tests_properties(ui_script_${tool}_sliders PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines
@@ -455,5 +514,24 @@ if(Python3_Interpreter_FOUND)
   # names (see CLEANROOM.md).
   if(EXISTS ${PROJECT_SOURCE_DIR}/docs/spec)
     add_test(NAME spec_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_spec.py ${PROJECT_SOURCE_DIR}/docs/spec)
+  endif()
+  # Every number of the settings panel reaches its whole range in docs/CONFIG.md.
+  add_test(NAME ui_limits_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_ui_limits.py ${PROJECT_SOURCE_DIR})
+  # A large model (239 200 triangles): its box tree is made on another
+  # thread right after the plate, and the first click on it finds it made
+  # (docs/LARGE_MODELS.md).
+  if(TARGET tisma AND TISMA_XVFB_RUN)
+    add_test(NAME ui_big_sphere_make
+      COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/make_test_sphere.py
+              ${CMAKE_CURRENT_BINARY_DIR}/big_sphere.stl 400 300)
+    set_tests_properties(ui_big_sphere_make PROPERTIES FIXTURES_SETUP big_sphere)
+    add_test(NAME ui_script_click_large_model
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/big_sphere.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/click_model.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_click_large_model.png)
+    set_tests_properties(ui_script_click_large_model PROPERTIES FIXTURES_REQUIRED big_sphere
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300 PASS_REGULAR_EXPRESSION "the box tree was made ahead"
+      FAIL_REGULAR_EXPRESSION "error: ")
   endif()
 endif()

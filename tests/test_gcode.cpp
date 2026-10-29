@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
+#include "geom/bead.hpp"
 #include "report/warnings.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -1605,8 +1606,8 @@ TEST_CASE("extras: filament used, weight and cost at the end (gcode_extras.md, r
         write_gcode(out, slice_model(m, settings), settings);
         std::map<std::string, double> values;
         for (const std::string& line : lines_of(out.str()))
-            if (const std::size_t eq = line.find(" = "); line.rfind("; ", 0) == 0 && eq != std::string::npos &&
-                                                         (line.find("filament") != std::string::npos))
+            if (const std::size_t eq = line.find(" = ");
+                eq != std::string::npos && (line.rfind("; filament ", 0) == 0 || line.rfind("; total filament ", 0) == 0))
                 values[line.substr(2, eq - 2)] = std::stod(line.substr(eq + 3));
         return values;
     };
@@ -1695,6 +1696,268 @@ TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 1
     CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
 }
 
+TEST_CASE("the command line warns when nothing heats the nozzle (the spec team's BH6)", "[gcode]") {
+    Settings s = test_printer();
+    REQUIRE(heating_warning(s));
+    CHECK(heating_warning(s)->kind == "no_heating");
+    Settings hot = s;
+    hot.variables["temperature"] = {"210"};
+    CHECK_FALSE(heating_warning(hot));
+    Settings started = s;
+    started.start_gcode = "M109 S215";
+    CHECK_FALSE(heating_warning(started));
+    started.start_gcode = "PRINT_START EXTRUDER=215"; // a firmware macro that heats
+    CHECK_FALSE(heating_warning(started));
+}
+
+TEST_CASE("a speed cap under 1 mm/min writes F1, not F0 (the spec team's BH3)", "[gcode]") {
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.infill_max_speed = 0.002; // 0.12 mm/min
+    s.infill_max_crossing_speed = 0.002;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    for (const std::string& line : lines_of(out.str())) {
+        CAPTURE(line);
+        const std::size_t f = line.find(" F");
+        if (f != std::string::npos && line.rfind("G", 0) == 0)
+            CHECK(std::stod(line.substr(f + 2)) >= 1.0);
+    }
+    CHECK(out.str().find(" F1\n") != std::string::npos);
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("pellets: a pellet printer slices like a filament one, and warns of a filament material (pellets.md, rule 1, PE1, PE9)", "[gcode][pellets]") {
+    // A 5 mm nozzle, 2.5 mm layers and 6 mm beads, on pellets.
+    const Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5,
+                                                                   "max_flow": 2000},
+                                                       "layers": {"height": 2.5, "first_height": 2.5},
+                                                       "walls": {"width": 6}})"));
+    CHECK(s.feedstock == Feedstock::Pellet);
+    REQUIRE_NOTHROW(check_settings(s));
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    CHECK(model.layers.size() == 4);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    // PE9: a filament material on it (or one without the key) warns, and still slices; a pellet one does not.
+    const auto feedstock_warnings = [](const Settings& settings) {
+        std::size_t n = 0;
+        for (const Warning& w : capability_warnings(settings))
+            n += w.kind == "feedstock";
+        return n;
+    };
+    CHECK(feedstock_warnings(s) == 1);
+    Settings pellet = s;
+    pellet.material_feedstock = Feedstock::Pellet;
+    CHECK(feedstock_warnings(pellet) == 0);
+    Settings filament_printer = pellet;
+    filament_printer.feedstock = Feedstock::Filament;
+    CHECK(feedstock_warnings(filament_printer) == 1); // the other way round
+    CHECK(feedstock_warnings(test_printer()) == 0);
+}
+
+TEST_CASE("pellets: E in mm3 with the firmware's command after the start G-code (pellets.md, rule 3, PE4)", "[gcode][pellets]") {
+    Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5, "max_flow": 2000,
+                                                             "e_mode": "volume"},
+                                                 "extrusion": {"feedstock": "pellet"},
+                                                 "layers": {"height": 2.5, "first_height": 2.5}, "walls": {"width": 6}})"));
+    s.relative_extrusion = true;
+    s.start_gcode = "G28 ; the start";
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    const auto gcode = [&](GcodeFlavor flavor, std::vector<Warning>* warnings = nullptr) {
+        Settings f = s;
+        f.flavor = flavor;
+        std::ostringstream out;
+        write_gcode(out, model, f, warnings);
+        return out.str();
+    };
+    const auto warned = [](const std::vector<Warning>& w) {
+        return std::count_if(w.begin(), w.end(), [](const Warning& x) { return x.kind == "volumetric_e"; });
+    };
+    // Marlin: M200 D1.75 S1 right after the start G-code, and 13.6587 mm3 of E per mm of a 6 by 2.5 mm wall.
+    std::vector<Warning> warnings;
+    const std::string marlin = gcode(GcodeFlavor::Marlin, &warnings);
+    CHECK_THAT(marlin, ContainsSubstring("G28 ; the start\nM200 D1.75 S1\n"));
+    CHECK(warned(warnings) == 0);
+    double width = 0.0, x = 0.0, y = 0.0;
+    std::size_t walls = 0;
+    for (const std::string& line : lines_of(marlin)) {
+        if (line.rfind(";WIDTH:", 0) == 0)
+            width = std::stod(line.substr(7));
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        const std::size_t ax = line.find(" X"), ay = line.find(" Y"), ae = line.find(" E");
+        const double nx = ax != std::string::npos ? std::stod(line.substr(ax + 2)) : x;
+        const double ny = ay != std::string::npos ? std::stod(line.substr(ay + 2)) : y;
+        const double length = std::hypot(nx - x, ny - y);
+        if (ae != std::string::npos && std::abs(width - 6.0) < 1e-9 && length > 20.0) {
+            CHECK_THAT(std::stod(line.substr(ae + 2)) / length, Catch::Matchers::WithinRel(13.6587, 0.002));
+            ++walls;
+        }
+        x = nx, y = ny;
+    }
+    CHECK(walls > 0);
+    // RepRapFirmware: M200 D1.75 (its S came in 3.5), no warning.
+    warnings.clear();
+    const std::string rrf = gcode(GcodeFlavor::RepRapFirmware, &warnings);
+    CHECK_THAT(rrf, ContainsSubstring("G28 ; the start\nM200 D1.75\n"));
+    CHECK(warned(warnings) == 0);
+    // Klipper has no such command: nothing, and a warning.
+    warnings.clear();
+    CHECK_THAT(gcode(GcodeFlavor::Klipper, &warnings), !ContainsSubstring("M200"));
+    CHECK(warned(warnings) == 1);
+    // A filament printer writes none (gcode_extras.md, X11).
+    s.feedstock = s.material_feedstock = Feedstock::Filament;
+    warnings.clear();
+    CHECK_THAT(gcode(GcodeFlavor::Marlin, &warnings), !ContainsSubstring("M200"));
+    CHECK(warned(warnings) == 0);
+}
+
+TEST_CASE("pellets: the bead's section, rounded or a rectangle (pellets.md, rule 4, PE2, PE3, PE5)", "[gcode][pellets]") {
+    const double filament = std::numbers::pi * 0.875 * 0.875; // 2.40528 mm2
+    // A 5 mm nozzle, 2.5 mm layers, 6 mm beads.
+    CHECK_THAT(extruded_section(BeadSection::Rectangle, 6.0, 2.5) / filament, Catch::Matchers::WithinAbs(6.2363, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 6.0, 2.5) / filament, Catch::Matchers::WithinAbs(5.6786, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 6.0, 2.5), Catch::Matchers::WithinAbs(13.6587, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 4.0, 1.0), Catch::Matchers::WithinAbs(3.7854, 1e-4)); // PE5
+
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream rounded, rectangle;
+    write_gcode(rounded, model, s);
+    s.bead_section = BeadSection::Rectangle;
+    write_gcode(rectangle, model, s);
+    // Each extrusion's E with the width and height it is written with.
+    const auto es = [](const std::string& gcode) {
+        std::vector<std::array<double, 3>> out;
+        double width = 0.0, height = 0.0;
+        for (const std::string& line : lines_of(gcode)) {
+            if (line.rfind(";WIDTH:", 0) == 0)
+                width = std::stod(line.substr(7));
+            else if (line.rfind(";HEIGHT:", 0) == 0)
+                height = std::stod(line.substr(8));
+            const std::size_t e = line.find(" E");
+            if (line.rfind("G1 ", 0) == 0 && e != std::string::npos && line.find(" X") != std::string::npos &&
+                std::stod(line.substr(e + 2)) > 0.0)
+                out.push_back({std::stod(line.substr(e + 2)), width, height});
+        }
+        return out;
+    };
+    const auto a = es(rounded.str()), b = es(rectangle.str());
+    REQUIRE(a.size() == b.size());
+    REQUIRE(a.size() > 100);
+    for (std::size_t i = 0; i < a.size(); i += 7) {
+        const double w = b[i][1], h = b[i][2];
+        CHECK_THAT(b[i][0], Catch::Matchers::WithinAbs(a[i][0] * w * h / bead_area(w, h), 2e-5 + 0.02 * b[i][0]));
+    }
+    CHECK(check_gcode(rectangle.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("pellets: the melt limit slows the walls and says how much (pellets.md, rule 6, PE6, PE8)", "[gcode][pellets]") {
+    // PE3 with machine.max_flow 500 and speed.walls 60: walls at 500 / 13.6587 = 36.6 mm/s at most, and a warning.
+    const Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5,
+                                                                   "max_flow": 500},
+                                                       "extrusion": {"feedstock": "pellet"},
+                                                       "layers": {"height": 2.5, "first_height": 2.5},
+                                                       "walls": {"width": 6}, "speed": {"walls": 60}})"));
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    std::vector<Warning> warnings;
+    write_gcode(out, model, s, &warnings);
+    double fastest = 0.0, feed = 0.0;
+    std::size_t moves = 0;
+    bool wall = false;
+    for (const std::string& line : lines_of(out.str())) {
+        if (line.rfind(";TYPE:", 0) == 0)
+            wall = line == ";TYPE:Perimeter" || line == ";TYPE:External perimeter";
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        if (const std::size_t f = line.find(" F"); f != std::string::npos)
+            feed = std::stod(line.substr(f + 2)) / 60.0;
+        if (wall && line.find(" E") != std::string::npos && line.find(" X") != std::string::npos)
+            fastest = std::max(fastest, feed), ++moves;
+    }
+    REQUIRE(moves > 0);
+    CHECK(fastest <= 500.0 / 13.6587);
+    CHECK(fastest > 36.0);
+    const auto melt = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "flow_limit"; });
+    REQUIRE(melt != warnings.end());
+    CHECK_THAT(melt->message, ContainsSubstring("walls 60.0 -> 36.6 mm/s"));
+    CHECK(std::count_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "flow_limit"; }) == 1);
+    CHECK_FALSE(melt_limit_warning(test_printer())); // no limit, no warning
+    Settings fits = s;
+    fits.wall_speed = 30.0; // the walls fit; the infill, faster, does not
+    REQUIRE(melt_limit_warning(fits));
+    CHECK_THAT(melt_limit_warning(fits)->message, !ContainsSubstring("walls"));
+    fits.machine_max_flow = 5000.0;
+    CHECK_FALSE(melt_limit_warning(fits));
+
+    // PE8: a 0.4 mm filament nozzle with 2.5 mm layers is still an error: the layer is thicker than the nozzle.
+    Settings filament = test_printer();
+    filament.layer_height = filament.first_layer_height = 2.5;
+    CHECK_THROWS_AS(check_settings(filament), SettingsError);
+}
+
+TEST_CASE("pellets: the flow by the move's speed (pellets.md, rule 5, PE7)", "[gcode][pellets]") {
+    const std::vector<std::array<double, 2>> table{{20.0, 110.0}, {60.0, 100.0}};
+    CHECK_THAT(flow_at_speed(table, 40.0), Catch::Matchers::WithinAbs(1.05, 1e-12)); // PE7
+    CHECK_THAT(flow_at_speed(table, 5.0), Catch::Matchers::WithinAbs(1.10, 1e-12));  // the ends hold past them
+    CHECK_THAT(flow_at_speed(table, 300.0), Catch::Matchers::WithinAbs(1.00, 1e-12));
+    CHECK(flow_at_speed({}, 40.0) == 1.0);
+
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream plain, by_speed;
+    write_gcode(plain, model, s);
+    s.flow_by_speed = table;
+    write_gcode(by_speed, model, s);
+    // Each extrusion's E by the F it is written at.
+    const auto es = [](const std::string& gcode) {
+        std::vector<std::array<double, 2>> out;
+        double feed = 0.0;
+        for (const std::string& line : lines_of(gcode)) {
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+                continue;
+            if (const std::size_t f = line.find(" F"); f != std::string::npos)
+                feed = std::stod(line.substr(f + 2)) / 60.0;
+            const std::size_t e = line.find(" E");
+            if (e != std::string::npos && line.find(" X") != std::string::npos && std::stod(line.substr(e + 2)) > 0.0)
+                out.push_back({std::stod(line.substr(e + 2)), feed});
+        }
+        return out;
+    };
+    const auto a = es(plain.str()), b = es(by_speed.str());
+    REQUIRE(a.size() == b.size());
+    REQUIRE(a.size() > 100);
+    std::size_t changed = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        CHECK(a[i][1] == b[i][1]); // the speeds stay
+        const double factor = flow_at_speed(table, b[i][1]);
+        // E is written to 5 decimals, and a piece too short to move takes its E to the next.
+        CHECK_THAT(b[i][0], Catch::Matchers::WithinAbs(a[i][0] * factor, 2e-5 + 0.02 * a[i][0]));
+        changed += factor != 1.0;
+    }
+    CHECK(changed > 0);
+    CHECK(check_gcode(by_speed.str(), gcode_limits(model, s)).ok());
+}
+
 TEST_CASE("extras: the part grows by the filament's shrinkage (gcode_extras.md, rule 4, X3)", "[gcode][extras]") {
     IndexedMesh m;
     add_box(m, -10, -10, 10, 10, 10);
@@ -1704,7 +1967,7 @@ TEST_CASE("extras: the part grows by the filament's shrinkage (gcode_extras.md, 
     const auto size = [](const IndexedMesh& mesh) {
         std::array<float, 3> lo{1e9f, 1e9f, 1e9f}, hi{-1e9f, -1e9f, -1e9f};
         for (const Vec3f& v : mesh.vertices)
-            for (int a = 0; a < 3; ++a)
+            for (std::size_t a = 0; a < 3; ++a)
                 lo[a] = std::min(lo[a], (&v.x)[a]), hi[a] = std::max(hi[a], (&v.x)[a]);
         return std::array<double, 4>{hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], lo[2]};
     };
@@ -2165,6 +2428,70 @@ TEST_CASE("support: a bridge is held at two ends or all round", "[support]") {
     std::reverse(inner.begin(), inner.end());
     CHECK_FALSE(is_bridge(Polygons{disc(6.0), inner}, Polygons{disc(4.8)}, reach));
     CHECK_FALSE(is_bridge(rect(0, 0, 1, 1), Polygons{}, reach));
+}
+
+TEST_CASE("support: bridge or overhang point by point (supports_skirt.md rule 3, S11)", "[support]") {
+    const auto rect = [](double x0, double y0, double x1, double y1) {
+        return Polygons{{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                         {to_units(x0), to_units(y1)}}};
+    };
+    const auto join = [](const std::vector<Polygons>& parts) {
+        Polygons all;
+        for (const Polygons& p : parts)
+            all.insert(all.end(), p.begin(), p.end());
+        return Clipper2Lib::Union(all, Clipper2Lib::FillRule::NonZero);
+    };
+    // A 20 x 20 slab over what holds it; its overhang is what lies more than
+    // `reach` from the layer below. The share of the overhang that is bridge.
+    const double reach = 0.3;
+    const Polygons slab = rect(0, 0, 20, 20);
+    const auto bridged = [&](const Polygons& below) {
+        const Polygons over = Clipper2Lib::Difference(slab, offset(below, reach), Clipper2Lib::FillRule::NonZero);
+        const double area = std::fabs(Clipper2Lib::Area(over));
+        const Polygons part = bridged_part(over, slab, below, 0.2);
+        return area > 0.0 ? std::fabs(Clipper2Lib::Area(part)) / area : 0.0;
+    };
+    // No support: two opposite pillars, three walls in a U, a frame.
+    CHECK(bridged(join({rect(0, 0, 5, 20), rect(15, 0, 20, 20)})) > 0.97);
+    CHECK(bridged(join({rect(0, 0, 2, 20), rect(18, 0, 20, 20), rect(0, 0, 20, 2)})) > 0.97);
+    CHECK(bridged(Clipper2Lib::Difference(slab, rect(2, 2, 18, 18), Clipper2Lib::FillRule::NonZero)) > 0.97);
+    // Support over all the hanging area: a pillar on one side, one in the
+    // middle, one in a corner, two walls in an L.
+    CHECK(bridged(rect(0, 0, 5, 20)) < 0.01);
+    CHECK(bridged(rect(8, 8, 12, 12)) < 0.01);
+    CHECK(bridged(rect(0, 0, 5, 5)) < 0.01);
+    CHECK(bridged(join({rect(0, 0, 2, 20), rect(0, 0, 20, 2)})) < 0.01);
+    // Two walls in a V opening 30° (from (10, 0), 15° each side of +Y): inside
+    // it, bridge from wall to wall; outside it, overhang.
+    const auto wall = [&](double side) {
+        const double a = side * 15.0 * std::numbers::pi / 180.0, w = 1.0;
+        const double dx = std::sin(a), dy = std::cos(a), nx = dy, ny = -dx;
+        const auto at = [&](double t, double u) {
+            return Clipper2Lib::Point64(to_units(10.0 + t * dx + u * nx), to_units(t * dy + u * ny));
+        };
+        Polygon p{at(0, -w), at(30, -w), at(30, w), at(0, w)};
+        if (Clipper2Lib::Area(p) < 0)
+            std::reverse(p.begin(), p.end());
+        return Polygons{p};
+    };
+    const Polygons v = Clipper2Lib::Intersect(join({wall(-1.0), wall(1.0)}), slab, Clipper2Lib::FillRule::NonZero);
+    const Polygons v_over = Clipper2Lib::Difference(slab, offset(v, reach), Clipper2Lib::FillRule::NonZero);
+    const Polygons v_bridge = bridged_part(v_over, slab, v, 0.2);
+    const auto inside = [](const Polygons& area, double x, double y) {
+        for (const Polygon& path : area)
+            if (Clipper2Lib::PointInPolygon(Clipper2Lib::Point64(to_units(x), to_units(y)), path) ==
+                Clipper2Lib::PointInPolygonResult::IsInside)
+                return true;
+        return false;
+    };
+    CHECK(inside(v_bridge, 10.0, 15.0));
+    CHECK(inside(v_bridge, 10.0, 8.0));
+    CHECK_FALSE(inside(v_bridge, 2.0, 15.0));
+    CHECK_FALSE(inside(v_bridge, 18.0, 15.0));
+    // A slab over two pillars and past them: the part past them hangs.
+    const double past = bridged(join({rect(0, 0, 5, 10), rect(15, 0, 20, 10)}));
+    CHECK(past > 0.1);
+    CHECK(past < 0.5);
 }
 
 TEST_CASE("walls: walls.outer_first prints each island's walls from the outer one in (perimeters.md, P10)", "[gcode]") {

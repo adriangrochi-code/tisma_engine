@@ -56,7 +56,7 @@ struct AppOptions {
     std::string level;   // the settings panel's level: basic, normal, advanced or custom; empty: the remembered one
     std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
     std::string search;  // a search for a setting, gone to as Enter would (settings_panel.md, rule 5)
-    bool single_column = false;   // the panel's «See all together» (rule 4)
+    bool single_column = false;   // accepted and ignored: the panel is one list always (settings_panel.md, rule 4)
     bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
     bool labels = false;          // the parts' names over them (E)
     bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
@@ -70,8 +70,10 @@ struct AppOptions {
     bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
     std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
     std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
+    std::string dump_ui;            // with screenshot: write the setting rows drawn (key, label, value, rectangle) as JSON
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    bool first_run = false;         // as on the first run: the printer's and filament's catalogs, then the assistant
     bool draw_stats = false;        // print each frame's OpenGL draw calls and vertices (view, then panels)
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)
@@ -79,6 +81,7 @@ struct AppOptions {
     std::string graphics = "auto";
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    bool term_while_starting = false; // a SIGTERM to itself before the window opens, for its test (UI21)
     std::string compare_view;       // with screenshot: compare the 3D view with this screenshot's (the other graphics')
     std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
     bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish

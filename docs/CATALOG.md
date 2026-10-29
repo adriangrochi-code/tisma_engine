@@ -51,6 +51,7 @@ que el programa no depende de archivos externos.
 |---|---|
 | `vendor`, `name`, `material` | Fabricante, nombre oficial y material base (`PLA`, `PETG`, `ABS`, `ASA`, `TPU`, `PA-CF`…) |
 | `diameter`, `density` | mm; g/cm³ |
+| `feedstock` | `filament` (si falta) o `pellet`; en los pellets no cuenta el diámetro |
 | `nozzle_temp`, `bed_temp` | `[mín, máx]` en °C |
 | `nozzle_temp_recommended`, `bed_temp_recommended` | Si el fabricante da un valor recomendado |
 | `fan` | `[mín, máx]` en %, solo si la hoja da números |
@@ -148,6 +149,17 @@ catálogo…**:
   enlaces;
 - en las impresoras, la boquilla;
 - **Agregar a mis perfiles** lo guarda como perfil del usuario y lo elige.
+
+Los materiales que se ofrecen, en el catálogo y en la lista de perfiles de Filamento, son los que toma la impresora
+(`pellets.md`, regla 1; `profiles.md`, regla 5):
+- con `machine.feedstock` `pellet`, solo los de pellets; con filamento, nunca los de pellets;
+- con filamento, los del diámetro de las impresoras instaladas (la elegida y las del usuario), que sale del modelo del
+  catálogo del que se hizo cada una (`printer_of_profile`); si alguna no viene del catálogo, el diámetro no se sabe y
+  se ofrecen todos;
+- el material elegido sigue en la lista aunque no coincida (el aviso `feedstock` lo dice);
+- si no queda ninguno, el catálogo lo explica: «El catálogo no tiene materiales para la alimentación o el diámetro de
+  filamento de esta impresora». Hoy pasa con las impresoras de 2,85 mm y con las de pellets: el catálogo no tiene
+  todavía filamentos de 2,85 mm ni pellets.
 
 `--catalog printer|filament` y `--catalog-search TEXTO` abren el catálogo en las capturas.
 

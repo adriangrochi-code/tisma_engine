@@ -65,6 +65,93 @@ bool is_bridge(const Polygons& island, const Polygons& below, double reach) {
     return stretches >= 2;
 }
 
+namespace {
+
+// An edge of a polygon turned into a direction's frame, mm.
+struct Edge {
+    double x0, y0, x1, y1;
+};
+
+// The edges of `paths` turned by -angle (radians), so that the direction at
+// `angle` runs along +x.
+std::vector<Edge> turned_edges(const Polygons& paths, double angle) {
+    const double c = std::cos(angle), s = std::sin(angle);
+    std::vector<Edge> out;
+    for (const Polygon& path : paths)
+        for (std::size_t i = 0; i < path.size(); ++i) {
+            const auto& a = path[i];
+            const auto& b = path[(i + 1) % path.size()];
+            const double ax = double(a.x) / kUnitsPerMm, ay = double(a.y) / kUnitsPerMm;
+            const double bx = double(b.x) / kUnitsPerMm, by = double(b.y) / kUnitsPerMm;
+            out.push_back({c * ax + s * ay, -s * ax + c * ay, c * bx + s * by, -s * bx + c * by});
+        }
+    return out;
+}
+
+// Where a row at height y crosses the edges, left to right, with whether the
+// edge there is within 30° of square to the row.
+struct Crossing {
+    double x;
+    bool square;
+};
+
+std::vector<Crossing> crossings(const std::vector<Edge>& edges, double y) {
+    std::vector<Crossing> out;
+    for (const Edge& e : edges)
+        if ((e.y0 <= y) != (e.y1 <= y)) { // half-open: a vertex on the row counts once
+            const double t = (y - e.y0) / (e.y1 - e.y0);
+            const double dx = e.x1 - e.x0, dy = e.y1 - e.y0;
+            out.push_back({e.x0 + t * dx, std::fabs(dy) >= std::cos(std::numbers::pi / 6.0) * std::hypot(dx, dy)});
+        }
+    std::sort(out.begin(), out.end(), [](const Crossing& a, const Crossing& b) { return a.x < b.x; });
+    return out;
+}
+
+} // namespace
+
+Polygons bridged_part(const Polygons& island, const Polygons& region, const Polygons& below, double row) {
+    if (island.empty() || below.empty() || row <= 0.0)
+        return {};
+    const Polygons held = Clipper2Lib::Intersect(region, below, Clipper2Lib::FillRule::NonZero);
+    if (held.empty())
+        return {};
+    Polygons spans; // rectangles of bridge, back in the bed's frame
+    constexpr int kDirections = 8;
+    for (int k = 0; k < kDirections; ++k) {
+        const double angle = std::numbers::pi * k / kDirections, c = std::cos(angle), s = std::sin(angle);
+        const std::vector<Edge> region_edges = turned_edges(region, angle), held_edges = turned_edges(held, angle);
+        double lo = INFINITY, hi = -INFINITY;
+        for (const Edge& e : turned_edges(island, angle))
+            lo = std::min(lo, e.y0), hi = std::max(hi, e.y0);
+        for (double y = lo + row / 2.0; y < hi; y += row) {
+            const std::vector<Crossing> walls = crossings(region_edges, y), ends = crossings(held_edges, y);
+            // Between the end of a held stretch and the start of the next,
+            // inside one stretch of the region, both met square on.
+            for (std::size_t i = 1; i + 1 < ends.size(); i += 2) {
+                const Crossing& from = ends[i];
+                const Crossing& to = ends[i + 1];
+                if (!from.square || !to.square || to.x - from.x <= 0.0)
+                    continue;
+                // The region holds the whole gap: no crossing of its edges in between.
+                const bool open = std::any_of(walls.begin(), walls.end(), [&](const Crossing& w) {
+                    return w.x > from.x + 1e-6 && w.x < to.x - 1e-6;
+                });
+                if (open)
+                    continue;
+                const double y0 = y - row / 2.0, y1 = y + row / 2.0;
+                const auto back = [&](double x, double yy) {
+                    return Clipper2Lib::Point64(to_units(c * x - s * yy), to_units(s * x + c * yy));
+                };
+                spans.push_back({back(from.x, y0), back(to.x, y0), back(to.x, y1), back(from.x, y1)});
+            }
+        }
+    }
+    if (spans.empty())
+        return {};
+    return Clipper2Lib::Intersect(island, Clipper2Lib::Union(spans, Clipper2Lib::FillRule::NonZero),
+                                  Clipper2Lib::FillRule::NonZero);
+}
+
 std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                           const SupportParams& params) {
     const std::size_t n = regions.size();
@@ -73,15 +160,17 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
         tbb::parallel_for(std::size_t(1), std::max<std::size_t>(n, 1), [&](std::size_t l) {
             if (over[l].empty())
                 return;
-            // Held past the reach allowed, by a bead more.
-            const double reach = (params.threshold_angle > 0.0
-                                      ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
-                                      : params.bead / 2.0) +
-                                 params.bead;
+            // Bridge point by point (rule 3, S11); what is left, less specks
+            // under a bead across, keeps its support.
             Polygons kept;
-            for (Polygons& island : split_islands(over[l]))
-                if (!is_bridge(island, regions[l - 1], reach))
-                    kept.insert(kept.end(), std::make_move_iterator(island.begin()), std::make_move_iterator(island.end()));
+            for (Polygons& island : split_islands(over[l])) {
+                const Polygons bridge = bridged_part(island, regions[l], regions[l - 1], params.bead / 2.0);
+                Polygons rest = bridge.empty() ? std::move(island)
+                                               : Clipper2Lib::Difference(island, bridge, Clipper2Lib::FillRule::NonZero);
+                if (!bridge.empty())
+                    rest = offset(offset(rest, -params.bead / 2.0), params.bead / 2.0);
+                kept.insert(kept.end(), std::make_move_iterator(rest.begin()), std::make_move_iterator(rest.end()));
+            }
             over[l] = std::move(kept);
         });
     if (params.enforce || params.block) {

@@ -1,0 +1,8 @@
+# The Rotate card's sliders go from -180° to 180°: a click three quarters of
+# the way across Z turns the model about 90° (the slider's grab takes a
+# little of its width), and the other axes stay as they were.
+slide turn_z 0.75
+expect-place turn_z 75..105
+expect-place turn_x 0
+slide turn_x 0.25
+expect-place turn_x -105..-75

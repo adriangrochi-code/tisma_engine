@@ -194,6 +194,11 @@ FilamentModel read_filament(const json& j, std::size_t index) {
     r.where = f.vendor + " " + f.name;
     f.material = r.text("material");
     f.diameter = r.number("diameter", 1.0, 3.5).value_or(1.75);
+    const std::string feedstock = r.text("feedstock", false);
+    if (feedstock == "pellet")
+        f.feedstock = Feedstock::Pellet;
+    else if (!feedstock.empty() && feedstock != "filament")
+        fail(r.where, "feedstock must be \"filament\" or \"pellet\"");
     f.density = r.number("density", 0.5, 3.0);
     f.nozzle_temp = r.range("nozzle_temp", 150.0, 500.0);
     f.nozzle_recommended = r.number("nozzle_temp_recommended", 150.0, 500.0);
@@ -305,6 +310,34 @@ std::vector<const FilamentModel*> find_filaments(const Catalog& catalog, std::st
         if (matches(f.vendor + " " + f.name + " " + f.material, query))
             out.push_back(&f);
     return out;
+}
+
+namespace {
+
+bool offered(Feedstock material, double diameter, Feedstock feedstock, const std::vector<double>& diameters) {
+    if (material != feedstock)
+        return false;
+    if (material == Feedstock::Pellet || diameters.empty())
+        return true;
+    return std::any_of(diameters.begin(), diameters.end(), [&](double d) { return std::abs(d - diameter) < 0.01; });
+}
+
+} // namespace
+
+bool filament_offered(const FilamentModel& f, Feedstock feedstock, const std::vector<double>& diameters) {
+    return offered(f.feedstock, f.diameter, feedstock, diameters);
+}
+
+bool material_offered(const Settings& m, Feedstock feedstock, const std::vector<double>& diameters) {
+    return offered(m.material_feedstock, m.filament_diameter, feedstock, diameters);
+}
+
+const PrinterModel* printer_of_profile(const Catalog& catalog, std::string_view name) {
+    for (const PrinterModel& p : catalog.printers)
+        for (const double nozzle : p.nozzles)
+            if (printer_profile_name(p, nozzle) == name)
+                return &p;
+    return nullptr;
 }
 
 std::string printer_profile_name(const PrinterModel& p, double nozzle) {
@@ -423,6 +456,7 @@ Profile filament_profile(const FilamentModel& f) {
     out.name = filament_profile_name(f);
     Settings& s = out.settings;
     s.filament_diameter = f.diameter;
+    s.material_feedstock = f.feedstock;
     const auto middle = [](const std::optional<std::array<double, 2>>& r) {
         return r ? std::optional<double>(round5(((*r)[0] + (*r)[1]) / 2.0)) : std::nullopt;
     };

@@ -160,6 +160,12 @@ TEST_CASE("formats: STL, OBJ or 3MF by the content and the extension", "[formats
     CHECK(parse_model(file(kFormats / "box.obj"), ".OBJ").format == ModelFormat::Obj);
     CHECK_THROWS_AS(read_model(kFormats / "missing.3mf"), ModelError);
     CHECK(std::string(format_name(ModelFormat::ThreeMf)) == "3MF");
+    // The formats not read yet say so, not that an STL is broken (the spec team's BH9).
+    CHECK_THROWS_WITH(parse_model("<?xml version=\"1.0\"?><amf unit=\"millimeter\"></amf>", ".amf"),
+                      ContainsSubstring("AMF files are not supported yet"));
+    CHECK_THROWS_WITH(parse_model(file(kFormats / "box.3mf"), ".AMF"), ContainsSubstring("AMF files")); // zipped
+    CHECK_THROWS_WITH(parse_model("ISO-10303-21;", ".step"), ContainsSubstring("STEP files are not supported yet"));
+    CHECK_THROWS_WITH(parse_model("ISO-10303-21;", ".stp"), ContainsSubstring("STEP files"));
 }
 
 TEST_CASE("formats: XML elements, attributes and references", "[formats]") {

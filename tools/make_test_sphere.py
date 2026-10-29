@@ -4,7 +4,10 @@ resting on z = 0 at x = y = 0, in 48 steps around and 24 from pole to pole
 (2 208 triangles), wound outwards. A curved part for the interface's view
 tests. Own design; the format is the public STL description.
 
-usage: make_test_sphere.py [out.stl]
+With AROUND and DOWN, a finer one of the same size: 2 x AROUND x (DOWN - 1)
+triangles (400 300: 239 200, a large model for the interface's tests).
+
+usage: make_test_sphere.py [out.stl [AROUND DOWN]]
 """
 
 import math
@@ -15,7 +18,7 @@ import sys
 RADIUS, AROUND, DOWN = 10.0, 48, 24
 
 
-def point(i, j):
+def point(i, j, AROUND=AROUND, DOWN=DOWN):
     """The point at step i around and j from the top pole."""
     theta = math.pi * j / DOWN
     phi = 2.0 * math.pi * (i % AROUND) / AROUND
@@ -23,10 +26,11 @@ def point(i, j):
             RADIUS + RADIUS * math.cos(theta))
 
 
-def triangles():
+def triangles(AROUND=AROUND, DOWN=DOWN):
     for j in range(DOWN):
         for i in range(AROUND):
-            a, b, c, d = point(i, j), point(i + 1, j), point(i, j + 1), point(i + 1, j + 1)
+            a, b, c, d = (point(i, j, AROUND, DOWN), point(i + 1, j, AROUND, DOWN), point(i, j + 1, AROUND, DOWN),
+                          point(i + 1, j + 1, AROUND, DOWN))
             if j > 0:
                 yield (a, c, b)  # outwards: counter-clockwise seen from outside
             if j < DOWN - 1:
@@ -44,7 +48,8 @@ def normal(t):
 def main():
     out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else \
         pathlib.Path(__file__).resolve().parent.parent / "tests" / "data" / "sphere.stl"
-    tris = list(triangles())
+    steps = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else (AROUND, DOWN)
+    tris = list(triangles(*steps))
     data = bytearray(b"tisma test sphere".ljust(80, b" "))
     data += struct.pack("<I", len(tris))
     for t in tris:

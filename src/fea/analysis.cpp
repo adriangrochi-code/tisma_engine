@@ -253,8 +253,14 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
                         used = fixture.box.contains(g.x0 + (i + kHexCorner[a][0]) * g.hx, g.y0 + (j + kHexCorner[a][1]) * g.hy,
                                                     g.z[std::size_t(k + kHexCorner[a][2])]);
                 }
-        if (!used)
-            out.warnings.push_back({"fixture_unused", "fixture '" + f.name + "' touches no part of the model"});
+        if (!used) {
+            std::string why = "fixture '" + f.name + "' touches no part of the model";
+            // A voxel as big as the part leaves too few to touch (the spec team's BH12).
+            if (out.part_voxels < 27)
+                why += ": the model is only " + std::to_string(out.part_voxels) + " voxels of " + format(p.voxel) +
+                       " mm, try a smaller voxel";
+            out.warnings.push_back({"fixture_unused", why});
+        }
         fixtures.push_back(fixture);
     }
     std::vector<SurfaceLoad> loads;
@@ -341,6 +347,15 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
         out.warnings.push_back({"nothing_held", "no fixture holds any part of the model"});
     if (c.loads.empty())
         out.warnings.push_back({"no_loads", "the case has no loads"});
+    // The analysis is linear, for small strains (structural_analysis.md):
+    // a part that moves more than a tenth of its size is past it (BH12).
+    if (g.nz > 0) {
+        const double size = std::max({g.nx * g.hx, g.ny * g.hy, g.z.back() - g.z.front()});
+        if (e.max_displacement > 0.1 * size)
+            out.warnings.push_back({"large_displacement", "the part moves " + format(e.max_displacement) +
+                                                              " mm, more than a tenth of its size: the analysis is "
+                                                              "linear, for small strains, and does not hold there"});
+    }
     return out;
 }
 

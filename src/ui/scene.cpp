@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 namespace tisma::ui {
@@ -100,10 +101,11 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset) {
     return out;
 }
 
-std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
-    // Each triangle's 18 floats in their own place, the triangles in
-    // parallel: a model of millions of triangles (the owner's large-model item).
-    std::vector<float> out(mesh.triangle_count() * 18);
+namespace {
+
+// Each triangle's 18 floats in their own place from out on, the triangles in
+// parallel: a model of millions of triangles (the owner's large-model item).
+void write_vertices(const TriangleMesh& mesh, Vec3 offset, float* out) {
     tbb::parallel_for(tbb::blocked_range<std::size_t>(0, mesh.triangle_count(), 4096),
                       [&](const tbb::blocked_range<std::size_t>& range) {
                           for (std::size_t t = range.begin(); t != range.end(); ++t) {
@@ -113,13 +115,33 @@ std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
                                   p[k] = Vec3{c.x, c.y, c.z} + offset;
                               }
                               const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
-                              float* at = out.data() + 18 * t;
+                              float* at = out + 18 * t;
                               for (const Vec3& v : p) {
                                   const float row[6] = {v.x, v.y, v.z, n.x, n.y, n.z};
                                   at = std::copy(row, row + 6, at);
                               }
                           }
                       });
+}
+
+} // namespace
+
+std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
+    std::vector<float> out(mesh.triangle_count() * 18);
+    write_vertices(mesh, offset, out.data());
+    return out;
+}
+
+std::vector<float> mesh_vertices(const std::vector<TriangleMesh>& meshes, Vec3 offset) {
+    std::size_t count = 0;
+    for (const TriangleMesh& m : meshes)
+        count += m.triangle_count();
+    std::vector<float> out(count * 18);
+    float* at = out.data();
+    for (const TriangleMesh& m : meshes) {
+        write_vertices(m, offset, at);
+        at += 18 * m.triangle_count();
+    }
     return out;
 }
 
@@ -489,6 +511,109 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
     return out;
 }
 
+PreviewDrawOrder merged_layers(const PreviewDrawOrder& order, int group) {
+    PreviewDrawOrder out;
+    const std::size_t layers = order.layer_z.size();
+    if (group < 2 || layers == 0 || order.layer_shown.size() != layers + 1) {
+        out = order;
+        return out;
+    }
+    const auto wall = [](const PreviewInstance& e) {
+        const LineKind k = LineKind(e.kind_layer & 0xFFu);
+        return k == LineKind::OuterWall || k == LineKind::InnerWall || k == LineKind::OverhangWall;
+    };
+    const std::size_t g = std::size_t(group);
+    out.hidden_kinds = order.hidden_kinds;
+    out.layer_z = order.layer_z;
+    out.layer_box = order.layer_box;
+    // The group is drawn when a layer is at most 1 / (4 g) pixels high: a pixel
+    // is then 4 g layers wide. A wall of a lower layer of the group within
+    // half of that of one of the same kind of the top layer is covered by it,
+    // stretched down;
+    // one farther out (a gentle slope, the dome of a sphere) stays, or the
+    // skin and walls inside would show through.
+    const float layer = order.layer_z.back() / float(layers);
+    const float near = 2.0f * float(g) * layer; // half a pixel
+    // The top layer of each group's walls, on a grid of `near` cells.
+    std::unordered_map<std::int64_t, std::vector<std::size_t>> cells;
+    const auto cell = [&](float x, float y) {
+        return (std::int64_t(std::floor(x / near)) << 32) ^ std::int64_t(std::uint32_t(std::int32_t(std::floor(y / near))));
+    };
+    const auto covered = [&](const PreviewInstance& e) {
+        // Its ends and middle each within `near` of a top layer's wall.
+        const float px[3] = {e.x0, 0.5f * (e.x0 + e.x1), e.x1}, py[3] = {e.y0, 0.5f * (e.y0 + e.y1), e.y1};
+        for (int k = 0; k < 3; ++k) {
+            bool found = false;
+            const std::int64_t cx = std::int64_t(std::floor(px[k] / near)), cy = std::int64_t(std::floor(py[k] / near));
+            for (std::int64_t dx = -1; dx <= 1 && !found; ++dx)
+                for (std::int64_t dy = -1; dy <= 1 && !found; ++dy) {
+                    const auto it = cells.find(((cx + dx) << 32) ^ std::int64_t(std::uint32_t(std::int32_t(cy + dy))));
+                    if (it == cells.end())
+                        continue;
+                    for (const std::size_t j : it->second) {
+                        const PreviewInstance& w = order.instances[j];
+                        if ((w.kind_layer & 0xFFu) != (e.kind_layer & 0xFFu))
+                            continue; // an outer wall by an outer wall, an inner by an inner
+                        const float sx = w.x1 - w.x0, sy = w.y1 - w.y0, len = sx * sx + sy * sy;
+                        const float t = len > 0.0f ? std::clamp(((px[k] - w.x0) * sx + (py[k] - w.y0) * sy) / len, 0.0f, 1.0f) : 0.0f;
+                        const float ex = w.x0 + t * sx - px[k], ey = w.y0 + t * sy - py[k];
+                        if (ex * ex + ey * ey <= near * near) {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+            if (!found)
+                return false;
+        }
+        return true;
+    };
+    // Groups from the top down; within each, the layers bottom up as before.
+    std::vector<std::vector<PreviewInstance>> by_layer(layers);
+    for (std::size_t top = layers; top-- > 0;) {
+        if ((layers - 1 - top) % g != 0)
+            continue;
+        const std::size_t first = top + 1 >= g ? top + 1 - g : 0;
+        const float bottom = first > 0 ? order.layer_z[first - 1] : 0.0f;
+        cells.clear();
+        for (std::size_t i = order.layer_shown[top]; i < order.layer_shown[top + 1]; ++i) {
+            const PreviewInstance& e = order.instances[i];
+            if (!wall(e))
+                continue;
+            // Every cell the segment passes, by its ends and steps of a cell.
+            const float dx = e.x1 - e.x0, dy = e.y1 - e.y0;
+            const int steps = 1 + int(std::sqrt(dx * dx + dy * dy) / near);
+            std::int64_t last = 0;
+            for (int k = 0; k <= steps; ++k) {
+                const float t = float(k) / float(steps);
+                const std::int64_t c = cell(e.x0 + t * dx, e.y0 + t * dy);
+                if (k > 0 && c == last)
+                    continue;
+                cells[c].push_back(i);
+                last = c;
+            }
+        }
+        for (std::size_t l = first; l <= top; ++l)
+            for (std::size_t i = order.layer_shown[l]; i < order.layer_shown[l + 1]; ++i) {
+                PreviewInstance e = order.instances[i];
+                if (!wall(e) || (l != top && covered(e)))
+                    continue;
+                if (l == top) {
+                    e.height = std::max(e.height, order.layer_z[l] - bottom);
+                    out.layer_box[l][2] = std::min(out.layer_box[l][2], bottom - e.width);
+                }
+                by_layer[l].push_back(e);
+            }
+    }
+    out.layer_shown.assign(1, 0);
+    for (std::size_t l = 0; l < layers; ++l) {
+        out.instances.insert(out.instances.end(), by_layer[l].begin(), by_layer[l].end());
+        out.layer_shown.push_back(out.instances.size());
+    }
+    out.layer_hidden.assign(layers + 1, out.instances.size());
+    return out;
+}
+
 bool box_outside(const Mat4& m, const std::array<float, 6>& box) {
     if (box[0] > box[3])
         return true; // empty
@@ -508,6 +633,100 @@ bool box_outside(const Mat4& m, const std::array<float, 6>& box) {
     return std::any_of(beyond.begin(), beyond.end(), [](bool b) { return b; });
 }
 
+bool preview_whole(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                   std::size_t top_shown, std::size_t top_hidden) {
+    if (order.layer_shown.size() < 2)
+        return false;
+    const std::size_t layers = order.layer_shown.size() - 1;
+    lo = std::min(lo, layers - 1);
+    hi = std::clamp(hi, lo, layers - 1);
+    const bool cut = top_shown != kWholeLayer || top_hidden != kWholeLayer;
+    const std::uint32_t kinds_drawn = kind_mask | order.hidden_kinds | (1u << unsigned(LineKind::Travel));
+    return lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu && !cut;
+}
+
+float layer_pixels(const Mat4& projection, int view_height, Vec3 eye, Vec3 lo, Vec3 hi, float layer_height) {
+    const float scale = projection[5] * float(view_height) * 0.5f; // pixels per unit at distance 1 (or anywhere, ortho)
+    if (projection[11] == 0.0f) // orthographic
+        return layer_height * scale;
+    const float dx = std::max({lo.x - eye.x, 0.0f, eye.x - hi.x}), dy = std::max({lo.y - eye.y, 0.0f, eye.y - hi.y}),
+                dz = std::max({lo.z - eye.z, 0.0f, eye.z - hi.z});
+    const float d = std::sqrt(dx * dx + dy * dy + dz * dz);
+    return d > 1e-3f ? layer_height * scale / d : 1e30f;
+}
+
+const PreviewDrawOrder* PreviewOrders::far_walls(int group, bool whole) const {
+    if (whole)
+        for (int k = 2, i = 0; k <= kFarGroups; k *= 2, ++i)
+            if (group == k && far[std::size_t(i)].layer_shown.size() > 1)
+                return &far[std::size_t(i)];
+    return nullptr;
+}
+
+PreviewOrders preview_orders(const PreviewBuffers& preview) {
+    PreviewOrders out;
+    out.full = preview_draw_order(preview);
+    out.instances = std::move(out.full.instances);
+    out.full.instances = {};
+    const std::size_t layers = out.full.layer_z.size();
+    if (layers < 4)
+        return out;
+    PreviewDrawOrder whole = out.full;
+    whole.instances.assign(out.instances.begin(), out.instances.begin() + std::ptrdiff_t(out.full.layer_shown.back()));
+    // Its instances after the full order's, its ranges counted there.
+    const auto append = [&](PreviewDrawOrder o) {
+        const std::size_t base = out.instances.size();
+        out.instances.insert(out.instances.end(), o.instances.begin(), o.instances.end());
+        o.instances = {};
+        for (std::size_t& v : o.layer_shown)
+            v += base;
+        for (std::size_t& v : o.layer_hidden)
+            v += base;
+        return o;
+    };
+    out.others = append(other_than_walls(whole));
+    for (int k = 2, i = 0; k <= kFarGroups && layers >= std::size_t(2 * k); k *= 2, ++i)
+        out.far[std::size_t(i)] = append(merged_layers(whole, k));
+    return out;
+}
+
+PreviewDrawOrder other_than_walls(const PreviewDrawOrder& order) {
+    PreviewDrawOrder out;
+    const std::size_t layers = order.layer_z.size();
+    out.hidden_kinds = order.hidden_kinds;
+    out.layer_z = order.layer_z;
+    out.layer_box = order.layer_box;
+    out.layer_shown.assign(1, 0);
+    for (std::size_t l = 0; l < layers && l + 1 < order.layer_shown.size(); ++l) {
+        for (std::size_t i = order.layer_shown[l]; i < order.layer_shown[l + 1]; ++i) {
+            const LineKind k = LineKind(order.instances[i].kind_layer & 0xFFu);
+            if (k != LineKind::OuterWall && k != LineKind::InnerWall && k != LineKind::OverhangWall)
+                out.instances.push_back(order.instances[i]);
+        }
+        out.layer_shown.push_back(out.instances.size());
+    }
+    out.layer_hidden.assign(out.layer_shown.size(), out.instances.size());
+    return out;
+}
+
+bool preview_far(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                 std::size_t top_shown, std::size_t top_hidden) {
+    if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
+        return false;
+    const std::size_t layers = order.layer_shown.size() - 1;
+    const bool nothing_hidden = order.layer_hidden.back() == order.layer_hidden.front();
+    return preview_whole(order, lo, hi, kind_mask, top_shown, top_hidden) ||
+           (nothing_hidden && lo == 0 && std::min(hi, layers - 1) == layers - 1 && top_shown == kWholeLayer &&
+            top_hidden == kWholeLayer);
+}
+
+int far_group(float layer_pixels) {
+    int group = 1;
+    while (group < kFarGroups && layer_pixels * float(group * 2) <= 0.5f)
+        group *= 2;
+    return group;
+}
+
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                            std::uint32_t kind_mask, std::size_t top_shown, std::size_t top_hidden) {
     if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
@@ -515,9 +734,7 @@ std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::s
     const std::size_t layers = order.layer_shown.size() - 1;
     lo = std::min(lo, layers - 1);
     hi = std::clamp(hi, lo, layers - 1);
-    const bool cut = top_shown != kWholeLayer || top_hidden != kWholeLayer;
-    const std::uint32_t kinds_drawn = kind_mask | order.hidden_kinds | (1u << unsigned(LineKind::Travel));
-    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu && !cut;
+    const bool whole = preview_whole(order, lo, hi, kind_mask, top_shown, top_hidden);
     const std::size_t shown_end = std::min(order.layer_shown[hi + 1],
                                            top_shown == kWholeLayer ? order.layer_shown[hi + 1] : order.layer_shown[hi] + top_shown);
     const std::size_t hidden_end =

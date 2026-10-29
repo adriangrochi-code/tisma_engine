@@ -117,7 +117,7 @@ TEST_CASE("fuzzy skin: the outer wall moves off its line by the thickness at mos
 
 TEST_CASE("fuzzy skin: holes are rough only in all mode (F2)", "[fuzzy]") {
     Settings s;
-    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    s.wall_width = s.outer_wall_width = 0.4; // 0.4 mm beads (as measured), the outer wall as the others
     s.gpu = GpuMode::Off;
     const IndexedMesh t = weld_exact(tube(10.0, 5.0, 5.0, 256));
     s.fuzzy_mode = FuzzyMode::External;
@@ -139,7 +139,7 @@ TEST_CASE("fuzzy skin: holes are rough only in all mode (F2)", "[fuzzy]") {
 
 TEST_CASE("fuzzy skin: painted, only where the paint is, with the mode off (rule 4)", "[fuzzy][paint]") {
     Settings s;
-    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    s.wall_width = s.outer_wall_width = 0.4; // 0.4 mm beads (as measured), the outer wall as the others
     s.gpu = GpuMode::Off;
     const TriangleMesh mesh = tube(10.0, 0.0, 5.0, 256);
     Painting p;

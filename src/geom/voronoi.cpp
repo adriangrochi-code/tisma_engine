@@ -26,10 +26,15 @@ double dist2(double ax, double ay, double bx, double by) {
 }
 
 // Distance from (x, y) to the closed segment from (ax, ay) to (bx, by).
+// The length of (x, y). Not std::hypot: it guards against overflow, which
+// the diagram's coordinates (units of 1 nm, a box radius at most a few
+// metres away) cannot reach, and it cost an eighth of a large slice.
+inline double norm(double x, double y) { return std::sqrt(x * x + y * y); }
+
 double segment_distance(double ax, double ay, double bx, double by, double x, double y) {
     const double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
     const double t = len2 > 0.0 ? std::clamp(((x - ax) * dx + (y - ay) * dy) / len2, 0.0, 1.0) : 0.0;
-    return std::hypot(x - (ax + t * dx), y - (ay + t * dy));
+    return norm(x - (ax + t * dx), y - (ay + t * dy));
 }
 
 } // namespace
@@ -94,7 +99,7 @@ VoronoiDiagram::VoronoiDiagram(double min_x, double min_y, double max_x, double 
     grid_scale_ = double(kGrid) / std::max({max_x - min_x, max_y - min_y, 1e-300});
     grid_.assign(std::size_t(kGrid) * kGrid, -1);
     const double cx = (min_x + max_x) / 2.0, cy = (min_y + max_y) / 2.0;
-    const double radius = std::max(std::hypot(max_x - min_x, max_y - min_y) / 2.0, 1.0);
+    const double radius = std::max(norm(max_x - min_x, max_y - min_y) / 2.0, 1.0);
     on_point_ = kOnPoint * radius;
     // Three dummy sites counter-clockwise at 90, 210 and 330 degrees; the
     // centre is their one node, with a ray to a far node between each pair.
@@ -164,7 +169,7 @@ bool VoronoiDiagram::violated(double x, double y, double r, std::int32_t site) c
     if (!in_cone(s, x, y))
         return false;
     const double dx = s.x2 - s.x, dy = s.y2 - s.y;
-    const double line = std::abs(dx * (y - s.y) - dy * (x - s.x)) / std::hypot(dx, dy);
+    const double line = std::abs(dx * (y - s.y) - dy * (x - s.x)) / norm(dx, dy);
     return line < r;
 }
 
@@ -269,11 +274,11 @@ bool VoronoiDiagram::split_point(std::int32_t h, std::int32_t site, double& px, 
             if (q == so.a || q == so.b)
                 continue; // q's own segment: the bisector runs through q itself
             // A parabola with focus q: it comes closest to q at its apex.
-            const double dx = so.x2 - so.x, dy = so.y2 - so.y, len = std::hypot(dx, dy);
+            const double dx = so.x2 - so.x, dy = so.y2 - so.y, len = norm(dx, dy);
             const double ux = dx / len, uy = dy / len;
             const double along = (sq.x - so.x) * ux + (sq.y - so.y) * uy;
             const double ox = so.x + along * ux, oy = so.y + along * uy;
-            const double depth = std::hypot(sq.x - ox, sq.y - oy);
+            const double depth = norm(sq.x - ox, sq.y - oy);
             if (depth <= on_point_)
                 continue;
             const double tu = (u.x - ox) * ux + (u.y - oy) * uy, tw = (w.x - ox) * ux + (w.y - oy) * uy;
@@ -360,7 +365,7 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
     double ox = 0.0, oy = 0.0, ux = 0.0, uy = 0.0, nx = 0.0, ny = 0.0, depth = 0.0, tu = 0.0, tw = 0.0;
     double px0 = 0.0, py0 = 0.0, dx0 = 0.0, dy0 = 0.0;
     auto unit = [](double& vx, double& vy) {
-        const double len = std::hypot(vx, vy);
+        const double len = norm(vx, vy);
         if (len > 0.0)
             vx /= len, vy /= len;
         return len > 0.0;
@@ -385,7 +390,7 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
             ux = tx, uy = ty;
             const double along = (q.x - t.x) * ux + (q.y - t.y) * uy;
             ox = t.x + along * ux, oy = t.y + along * uy;
-            depth = std::hypot(q.x - ox, q.y - oy);
+            depth = norm(q.x - ox, q.y - oy);
             if (depth > on_point_) {
                 parabola = true;
                 nx = (q.x - ox) / depth, ny = (q.y - oy) / depth;
@@ -458,34 +463,132 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
     }
     // Regula falsi with the Illinois change (the end kept twice in a row has
     // its value halved), always inside the bracket, with a bisection every
-    // third step so that a jump of f (at the edge of a cone of influence)
-    // cannot slow it down to a crawl. Stops when the bracket is shorter than
-    // kPlace (relative to the box) or f is zero.
+    // third step so that a jump of f cannot slow it down to a crawl. Stops
+    // when the bracket is shorter than kPlace (relative to the box) or the
+    // function is zero; the node goes where the bracket's upper end is.
     double ex, ey, fx, fy;
     at(0.0, ex, ey);
     at(1.0, fx, fy);
-    const double tolerance = kPlace * on_point_ / kOnPoint / std::max(std::hypot(fx - ex, fy - ey), 1e-300);
-    int kept = 0; // -1: lo kept last time, +1: hi kept
-    for (int k = 0; k < kBisection && hi - lo > tolerance; ++k) {
-        double t = (k % 3 == 2) ? (lo + hi) / 2.0 : (lo * fhi - hi * flo) / (fhi - flo);
-        if (!(t > lo && t < hi))
-            t = (lo + hi) / 2.0;
-        const double ft = f(t);
-        if (ft < 0.0) {
-            lo = t, flo = ft;
-            if (kept == -1)
-                fhi /= 2.0;
-            kept = -1;
-        } else {
-            hi = t, fhi = ft;
-            if (kept == 1)
-                flo /= 2.0;
-            kept = 1;
-            if (ft == 0.0)
+    const double tolerance = kPlace * on_point_ / kOnPoint / std::max(norm(fx - ex, fy - ey), 1e-300);
+    auto solve = [&](double a, double b, double fa, double fb, auto&& fn) {
+        int kept = 0; // -1: a kept last time, +1: b kept
+        for (int k = 0; k < kBisection && b - a > tolerance; ++k) {
+            double t = (k % 3 == 2) ? (a + b) / 2.0 : (a * fb - b * fa) / (fb - fa);
+            if (!(t > a && t < b))
+                t = (a + b) / 2.0;
+            const double ft = fn(t);
+            if (ft < 0.0) {
+                a = t, fa = ft;
+                if (kept == -1)
+                    fb /= 2.0;
+                kept = -1;
+            } else {
+                b = t, fb = ft;
+                if (kept == 1)
+                    fa /= 2.0;
+                kept = 1;
+                if (ft == 0.0)
+                    break;
+            }
+        }
+        at(b, x, y);
+    };
+    if (sn.kind == SiteKind::Segment) {
+        // A new segment: f jumps where the edge leaves its cone of influence,
+        // and a search would only creep up on the jump by halving. The edge
+        // crosses the cone's two side lines (through the segment's ends, at
+        // right angles to it) where a line or parabola meets a line: worked
+        // out exactly. Between those points the distances' difference is
+        // continuous, and the search runs only there.
+        const double sdx = sn.x2 - sn.x, sdy = sn.y2 - sn.y;
+        double cuts[4];
+        int count = 0;
+        const auto add = [&](double t) {
+            if (t > 0.0 && t < 1.0 && std::isfinite(t))
+                cuts[count++] = t;
+        };
+        for (const auto& [cx, cy] : {std::pair{sn.x, sn.y}, std::pair{sn.x2, sn.y2}}) {
+            // side(p) = (p - c) . d, zero on the side line.
+            if (parabola) {
+                // In tau: a2 tau^2 + a1 tau + a0, with t = (tau - tu) / (tw - tu).
+                const double nd = nx * sdx + ny * sdy, ud = ux * sdx + uy * sdy;
+                const double a2 = nd / (2.0 * depth), a1 = ud;
+                const double a0 = (ox - cx) * sdx + (oy - cy) * sdy + depth / 2.0 * nd;
+                if (tw == tu)
+                    continue;
+                if (a2 == 0.0) {
+                    if (a1 != 0.0)
+                        add((-a0 / a1 - tu) / (tw - tu));
+                    continue;
+                }
+                const double disc = a1 * a1 - 4.0 * a2 * a0;
+                if (disc < 0.0)
+                    continue;
+                // The root that does not lose digits, and the other from the product.
+                const double q = -0.5 * (a1 + std::copysign(std::sqrt(disc), a1));
+                if (q != 0.0) {
+                    add((q / a2 - tu) / (tw - tu));
+                    add((a0 / q - tu) / (tw - tu));
+                } else {
+                    add((0.0 - tu) / (tw - tu));
+                }
+            } else {
+                // A straight carrier: side is linear in t.
+                double s0, s1;
+                if (line) {
+                    s0 = (px0 + lu * dx0 - cx) * sdx + (py0 + lu * dy0 - cy) * sdy;
+                    s1 = (px0 + lw * dx0 - cx) * sdx + (py0 + lw * dy0 - cy) * sdy;
+                } else {
+                    s0 = (u.x - cx) * sdx + (u.y - cy) * sdy;
+                    s1 = (w.x - cx) * sdx + (w.y - cy) * sdy;
+                }
+                if (s0 != s1)
+                    add(s0 / (s0 - s1));
+            }
+        }
+        for (int i = 1; i < count; ++i) // at most four: in order by insertion
+            for (int j = i; j > 0 && cuts[j - 1] > cuts[j]; --j)
+                std::swap(cuts[j - 1], cuts[j]);
+        // Without the cone: the distances' difference, continuous along the edge.
+        auto g = [&](double t) {
+            double px, py;
+            at(t, px, py);
+            return distance(site, px, py) - distance(left, px, py);
+        };
+        // From t = 0 (inside the cone, taken), piece by piece: when every
+        // piece up to a cut is taken and the edge leaves the cone there, the
+        // new site's part ends at the cut.
+        double a = 0.0;
+        for (int i = 0; i <= count; ++i) {
+            const double b = i < count ? cuts[i] : 1.0;
+            if (b <= a)
+                continue;
+            double mx, my;
+            at((a + b) / 2.0, mx, my);
+            if (!in_cone(sn, mx, my)) {
+                if (a > 0.0) {
+                    // The new site's part ends where the edge leaves the cone:
+                    // the node on the side not taken, as the search placed it
+                    // (rounding can put the cut itself just inside).
+                    double t = a, step = tolerance;
+                    at(t, x, y);
+                    for (int k = 0; k < 64 && t < 1.0 && in_cone(sn, x, y); ++k, step *= 2.0) {
+                        t = std::min(1.0, a + step);
+                        at(t, x, y);
+                    }
+                    return;
+                }
+                break; // outside from the start: rounding; the search below decides
+            }
+            // The change inside a piece: the search below, over the whole
+            // edge as always (a piece can hold more than one root of the
+            // difference, and the one the search finds is the one kept).
+            if (b >= 1.0 || g(b) >= 0.0)
                 break;
+            a = b;
         }
     }
-    at(hi, x, y);
+    solve(lo, hi, flo, fhi, f);
 }
 
 // The node to start deleting from: for a point, in the cell of the nearest

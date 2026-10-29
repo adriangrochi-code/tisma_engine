@@ -539,6 +539,60 @@ Affine placing(const PlateObject& object, const TriangleMesh& placed) {
     return out;
 }
 
+Affine placement_map(const PlateObject& object) {
+    Affine out;
+    const std::vector<Vec3f>& c = object.mesh.corners();
+    if (c.empty())
+        return out;
+    const Turn turn = turn_of(object);
+    const Box3 box = box_of(c.size(), [&](std::size_t i) { return turn(c[i]); });
+    const Rotation& r = object.place.rotation;
+    const auto& s = object.place.scale;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            out.a[std::size_t(3 * i + j)] = r[std::size_t(3 * i + j)] * s[std::size_t(j)];
+    // turn(v) = a (v - centre); then moved as placed_mesh moves it.
+    const double centre[3] = {turn.cx, turn.cy, turn.cz};
+    const double moved[3] = {object.place.x - 0.5 * (double(box.lo.x) + double(box.hi.x)),
+                             object.place.y - 0.5 * (double(box.lo.y) + double(box.hi.y)), -double(box.lo.z)};
+    for (int i = 0; i < 3; ++i) {
+        double ac = 0.0;
+        for (int j = 0; j < 3; ++j)
+            ac += out.a[std::size_t(3 * i + j)] * centre[j];
+        out.b[std::size_t(i)] = moved[i] - ac;
+    }
+    return out;
+}
+
+Affine between(const Affine& from, const Affine& to) {
+    const auto& m = from.a;
+    const double det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) +
+                       m[2] * (m[3] * m[7] - m[4] * m[6]);
+    if (std::fabs(det) < 1e-12)
+        return to;
+    // The inverse by cofactors (linear algebra of any textbook).
+    const std::array<double, 9> inv{(m[4] * m[8] - m[5] * m[7]) / det, (m[2] * m[7] - m[1] * m[8]) / det,
+                                    (m[1] * m[5] - m[2] * m[4]) / det, (m[5] * m[6] - m[3] * m[8]) / det,
+                                    (m[0] * m[8] - m[2] * m[6]) / det, (m[2] * m[3] - m[0] * m[5]) / det,
+                                    (m[3] * m[7] - m[4] * m[6]) / det, (m[1] * m[6] - m[0] * m[7]) / det,
+                                    (m[0] * m[4] - m[1] * m[3]) / det};
+    Affine out;
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) {
+            double v = 0.0;
+            for (int k = 0; k < 3; ++k)
+                v += to.a[std::size_t(3 * i + k)] * inv[std::size_t(3 * k + j)];
+            out.a[std::size_t(3 * i + j)] = v;
+        }
+    for (int i = 0; i < 3; ++i) {
+        double v = to.b[std::size_t(i)];
+        for (int j = 0; j < 3; ++j)
+            v -= out.a[std::size_t(3 * i + j)] * from.b[std::size_t(j)];
+        out.b[std::size_t(i)] = v;
+    }
+    return out;
+}
+
 TriangleMesh volume_mesh(const PlateVolume& v, const PlateObject& object, const TriangleMesh& placed) {
     TriangleMesh m;
     if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())

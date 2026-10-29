@@ -209,8 +209,17 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     }
     // Something to extrude: a wall, infill of any kind, or gap fill. (The
     // skirt and the brim alone are not a print.)
-    auto has = [](const std::vector<Toolpath>& paths) {
-        return std::any_of(paths.begin(), paths.end(), [](const Toolpath& t) { return t.points.size() >= 2; });
+    // A path longer than the G-code's resolution: shorter, its moves merge
+    // into nothing and only a prime and a retraction are written (the spec
+    // team's BH7: a 0.15 mm cube with --copies 2 passed with no extrusion).
+    const double least = std::max(s.gcode_resolution, 0.01);
+    auto has = [least](const std::vector<Toolpath>& paths) {
+        return std::any_of(paths.begin(), paths.end(), [least](const Toolpath& t) {
+            double length = 0.0;
+            for (std::size_t i = 1; i < t.points.size() && length <= least; ++i)
+                length += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+            return length > least;
+        });
     };
     for (std::size_t l = 0; l < model.layers.size(); ++l) {
         if (l < model.walls.size() && has(model.walls[l].toolpaths))

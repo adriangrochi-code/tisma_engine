@@ -167,6 +167,7 @@ add_custom_command(
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
+  src/mesh/shapes.cpp
   src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
@@ -251,6 +252,7 @@ add_library(tisma_core
   src/io/xml.cpp
   src/io/model.cpp
   src/io/threemf.cpp
+  src/io/paths.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
@@ -288,6 +290,7 @@ if(TISMA_BUILD_UI)
     src/ui/icons.cpp
     src/ui/png.cpp
     src/ui/text.cpp
+    src/ui/setting_guide.cpp
     src/ui/files.cpp
     src/ui/slicing.cpp
     src/ui/presets.cpp

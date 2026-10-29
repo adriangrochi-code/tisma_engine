@@ -1,0 +1,10 @@
+# A right click on the plate, away from the model, opens the Add menu; its
+# shapes go on the plate as models of their own (the owner's request).
+right-click-plate
+menu shape
+menu cube
+expect-objects 2 Cube
+right-click-plate
+menu shape
+menu sphere
+expect-objects 3 Sphere
