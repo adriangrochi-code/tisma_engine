@@ -36,7 +36,9 @@
      esquina, dos paredes en L que se tocan) es voladizo y lleva soporte en toda su zona. Para decidirlo punto por
      punto: un punto de la zona es de puente si hay una dirección en la que, yendo hacia los dos lados desde ese punto,
      se llega a la pieza de abajo en los dos sentidos (las líneas del puente empiezan y terminan apoyadas). Los puntos
-     que no lo cumplen son de voladizo. Así, una losa sobre tres paredes en U es puente (de pared a pared enfrentada),
+     que no lo cumplen son de voladizo. Las direcciones se prueban cada 22,5° como mucho (8 en media vuelta);
+     no hay largo máximo: un puente largo sigue siendo puente (como en S10, donde `support.free_bridge_length` solo
+     cambia el aviso). Así, una losa sobre tres paredes en U es puente (de pared a pared enfrentada),
      aunque el contorno apoyado sea un solo tramo seguido; en una L, ningún punto tiene apoyo en los dos sentidos de
      una misma dirección, y es voladizo. Es una diferencia buscada
      con Tisma Slicer, que trata como puente toda cara que se apoya en algo y solo soporta una franja de ~1,4 mm a cada
