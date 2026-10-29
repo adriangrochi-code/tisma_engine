@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Fichas de información para principiantes:** el botón (i) abre un cuadro en el centro con un dibujo de lo que hace
+  el ajuste y una explicación (qué es, qué cambia y un ejemplo con valores). Los ajustes del nivel Básico ya la tienen.
 - **Materiales que toma la impresora:** el catálogo y la lista de perfiles de Filamento ofrecen solo pellets en una
   impresora de pellets y, con filamento, los del diámetro de las impresoras instaladas; el catálogo dice por qué está
   vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.

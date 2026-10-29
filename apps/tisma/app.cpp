@@ -12,6 +12,7 @@
 
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
+#include "illustrations.hpp"
 #include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
@@ -40,6 +41,7 @@
 #include "ui/scene.hpp"
 #include "ui/settings_layout.hpp"
 #include "ui/settings_view.hpp"
+#include "ui/setting_guide.hpp"
 #include "ui/printer_card.hpp"
 #include "ui/measure.hpp"
 #include "ui/knowledge.hpp"
@@ -1382,16 +1384,45 @@ void info_button(T label, const char* key) {
             loc::SetTooltip("%s", tr(T::Info));
         }
     }
+    // In the middle of the window, wide enough for a drawing and a few
+    // paragraphs a beginner can follow (the owner's request, 2026-10-29).
+    const float card_width = ImGui::GetFontSize() * 36.0f;
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(card_width, 0.0f));
     if (ImGui::BeginPopup("##info_card")) {
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.25f);
         loc::TextColored(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark), "%s", tr(label));
+        ImGui::PopFont();
+        const std::string_view key_name = label == T::NozzleTemp ? "machine.variables.temperature"
+                                          : label == T::BedTemp  ? "machine.variables.bed_temperature"
+                                                                 : std::string_view(key);
+        // The drawing of what it is about.
+        if (const Picture picture = picture_for(key_name); picture != Picture::None) {
+            ImGui::Spacing();
+            const float w = ImGui::GetContentRegionAvail().x, h = ImGui::GetFontSize() * 9.0f;
+            const ImVec2 box = ImGui::GetCursorScreenPos();
+            ImDrawList* card = ImGui::GetWindowDrawList();
+            card->AddRectFilled(box, ImVec2(box.x + w, box.y + h), ImGui::GetColorU32(ImGuiCol_FrameBg, 0.5f), 8.0f);
+            const ImU32 accent = ImGui::GetColorU32(ImGuiCol_CheckMark);
+            const PictureColors colours{ImGui::GetColorU32(ImGuiCol_Text), ImGui::GetColorU32(ImGuiCol_TextDisabled), accent,
+                                        ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f), ImGui::GetColorU32(ImGuiCol_FrameBg),
+                                        IM_COL32(229, 72, 77, 255), IM_COL32(90, 170, 230, 255)};
+            draw_picture(card, ImVec2(box.x + w * 0.1f, box.y + h * 0.06f), ImVec2(w * 0.8f, h * 0.88f), picture, colours);
+            ImGui::Dummy(ImVec2(w, h));
+        }
+        ImGui::Spacing();
         const auto& docs = setting_docs();
         const auto doc = docs.find(key);
-        if (label == T::NozzleTemp || label == T::BedTemp)
+        // The longer explanation for a beginner when there is one; else the short meaning.
+        if (const std::string_view guide = setting_guide(key_name); !guide.empty())
+            ImGui::TextUnformatted(guide.data(), guide.data() + guide.size());
+        else if (label == T::NozzleTemp || label == T::BedTemp)
             ImGui::TextUnformatted(tr(T::InfoTemperatures));
         else if (doc != docs.end())
             ImGui::TextUnformatted(with_choice_names(key, doc->second.meaning).c_str());
         ImGui::Spacing();
+        ImGui::Separator();
         loc::TextDisabled("%s: %s", tr(T::InfoKey), key);
         if (doc != docs.end() && !doc->second.default_value.empty())
             loc::TextDisabled("%s: %s", tr(T::InfoDefault),

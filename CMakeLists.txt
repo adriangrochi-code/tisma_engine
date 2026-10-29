@@ -290,6 +290,7 @@ if(TISMA_BUILD_UI)
     src/ui/icons.cpp
     src/ui/png.cpp
     src/ui/text.cpp
+    src/ui/setting_guide.cpp
     src/ui/files.cpp
     src/ui/slicing.cpp
     src/ui/presets.cpp

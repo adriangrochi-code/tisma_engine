@@ -8248,3 +8248,17 @@ no definido, no es ZIP, sin caras, sin extrusiones, JSON inválido, carpeta, for
 los lugares que van delante («OBJ, línea 9: », «3MF: », «proyecto: », «ajustes: », una ruta). Un mensaje que no
 conoce queda como está. En inglés no cambia nada. Prueba con los seis casos del informe.
 
+## 2026-10-29: fichas de información para principiantes (pedido del dueño)
+
+El botón (i) abre ahora un cuadro flotante en el centro, más ancho: el nombre del ajuste, un dibujo propio
+(`apps/tisma/illustrations.*`, 18 dibujos hechos con líneas y figuras: capas finas y gruesas, primera capa, paredes,
+techo y piso, relleno en tres densidades, costura, soporte bajo un voladizo, falda, borde, boquilla y cama calientes,
+ventilador, retracción, salto, boquilla, filamento, cama) y una explicación para quien nunca usó un laminador, en tres
+partes: qué es, qué cambia en la pieza y un ejemplo con valores (`src/ui/setting_guide.*`, en español y en inglés).
+Los 26 ajustes del nivel Básico la tienen; los demás muestran el significado corto de `docs/CONFIG.md`, como antes.
+Prueba: cada ajuste básico tiene explicación en los dos idiomas, y cada explicación es de un ajuste básico. Mirado en
+capturas (`--info layers.height`, `support.enabled`, `infill.density`, `walls.count`).
+
+**Sigue:** conceptos básicos en el tutorial de inicio, y un tutorial de calibración básica (qué filamento y a qué
+temperatura, la retracción, y qué calibraciones conviene hacer primero).
+
