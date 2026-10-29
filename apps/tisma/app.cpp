@@ -2028,14 +2028,28 @@ void App::printer_page() {
                 ImGui::TextUnformatted(calibration_title(kind));
                 ImGui::TableNextColumn();
                 if (const std::string_view key = calibration_key(kind); !key.empty()) {
-                    std::string value;
+                    // Each value with its unit, and «Sin dato» for none (the spec team's TR15).
+                    static const std::map<std::string_view, const char*> units = {
+                        {"compensation.scale_x", "%"},     {"resin.scale_x", "%"},
+                        {"slicing.first_layer_shrink", "mm"}, {"retraction.length", "mm"},
+                        {"retraction.speed", "mm/s"},       {"speed.max", "mm/s"},
+                        {"machine.max_flow", "mm³/s"},      {"machine.acceleration", "mm/s²"},
+                        {"extrusion.flow", "%"},           {"resin.exposure", "s"}};
+                    std::string value = tr(T::NotSet);
                     if (key == "machine.variables.temperature") {
                         const auto t = settings_.variables.find("temperature");
-                        value = t != settings_.variables.end() && !t->second.empty() ? t->second.front() + " °C" : "—";
-                    } else if (const auto v = values.find(std::string(key)); v != values.end()) {
+                        if (t != settings_.variables.end() && !t->second.empty())
+                            value = t->second.front() + " °C";
+                    } else if (const auto v = values.find(std::string(key)); v != values.end() && v->second != "null") {
                         const bool number = !v->second.empty() &&
                                             v->second.find_first_not_of("0123456789.-+eE") == std::string::npos;
-                        value = v->second == "null" ? "—" : number ? localized(v->second) : v->second;
+                        const auto unit = units.find(key);
+                        if (!number)
+                            value = v->second;
+                        else if (std::atof(v->second.c_str()) == 0.0 && (key == "speed.max" || key == "machine.max_flow"))
+                            value = tr(T::NoLimit); // 0: no cap
+                        else
+                            value = localized(v->second) + (unit != units.end() ? std::string(" ") + unit->second : "");
                     }
                     loc::TextDisabled("%s: %s", key_label(key).c_str(), value.c_str());
                 }
@@ -5486,7 +5500,7 @@ void App::material_card() {
         return;
     const auto range = [](const KnowledgeRange& r, const char* unit) {
         if (!r.known)
-            return std::string("—");
+            return std::string(tr(T::NotSet));
         char text[64];
         if (r.min == r.max)
             std::snprintf(text, sizeof text, "%s", format("%g %s", r.min, unit).c_str());
@@ -6266,7 +6280,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     // A speed in mm/s or a share of another (as the file gives it); 0: the other's.
     const auto share_row = [&](T label, const char* key, Speed& v) {
         if (shown(key))
-            changed |= unit_row(label, v, 0.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f, "—");
+            changed |= unit_row(label, v, 0.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f, tr(T::AutoValue));
     };
     const auto count = [&](T label, const char* key, std::size_t n) {
         if (!shown(key))
@@ -6295,13 +6309,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::LineWidth, "walls.width", s.wall_width, 0.05, 40.0, width_format.c_str(), 0.002f);
         if (s.wall_width != width)
             s.wall_width_auto = false;
-        mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 40.0, s.outer_wall_width > 0.0 ? "%.2f mm" : "—",
+        mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 40.0, s.outer_wall_width > 0.0 ? "%.2f mm" : tr(T::AutoValue),
            0.002f);
         if (shown("layers.first_line_width"))
             changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
-        mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 10.0, s.top_width > 0.0 ? "%.2f mm" : "—", 0.002f);
-        mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 10.0, s.solid_width > 0.0 ? "%.2f mm" : "—", 0.002f);
-        mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 10.0, s.infill_width > 0.0 ? "%.2f mm" : "—", 0.002f);
+        mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 10.0, s.top_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
+        mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 10.0, s.solid_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
+        mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 10.0, s.infill_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         if (shown("walls.seam_gap"))
             changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "seam") {
@@ -6387,7 +6401,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
         if (shown("surfaces.bottom_pattern"))
             changed |= row(T::BottomPattern, s.monotonic_bottom, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
-        mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : "—",
+        mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
            0.5f);
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
     } else if (id == "infill") {
@@ -6415,7 +6429,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "infill_more") {
         mm(T::WallOverlap, "infill.wall_overlap", s.infill_wall_overlap, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::InfillBeforeWalls, "infill.before_walls", s.infill_before_walls);
-        mm(T::MaxLink, "infill.max_link", s.infill_max_link, 0.0, 1000.0, s.infill_max_link > 0.0 ? "%.0f mm" : "—", 0.5f);
+        mm(T::MaxLink, "infill.max_link", s.infill_max_link, 0.0, 1000.0, s.infill_max_link > 0.0 ? "%.0f mm" : tr(T::AutoValue), 0.5f);
         whole(T::SolidEvery, "infill.solid_every", s.infill_solid_every, 0, 1000, "%d", tr(T::SolidEveryTip));
         mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 10000.0, "%.0f mm²", 1.0f,
            tr(T::SolidBelowAreaTip));
@@ -6462,10 +6476,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         // 0: the solid infill's.
-        mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::SpeedBridges, "speed.bridges", s.bridge_speed, 0.0, 1000.0, s.bridge_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
         share_row(T::SpeedOverBridges, "speed.over_bridges", s.over_bridges_speed);
         share_row(T::SpeedSmallLoops, "speed.small_loops", s.small_loop_speed);
-        mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : "—",
+        mm(T::SpeedGapFill, "speed.gap_fill", s.gap_fill_speed, 0.0, 1000.0, s.gap_fill_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
            0.5f);
     } else if (id == "infill_support") {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
@@ -6473,19 +6487,19 @@ bool App::card_rows(std::string_view id, bool& bed) {
         share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
-        mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : "—",
+        mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
            0.5f);
         flag(T::AvoidCrossingWalls, "travel.avoid_crossing_walls", s.avoid_crossing_walls);
         if (shown("travel.max_detour"))
-            changed |= unit_row(T::MaxDetour, s.max_detour, 0.0, 10000.0, 10000.0, "%.1f mm", 0.1f, "—");
+            changed |= unit_row(T::MaxDetour, s.max_detour, 0.0, 10000.0, 10000.0, "%.1f mm", 0.1f, tr(T::NoLimit));
     } else if (id == "limits") {
-        mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+        mm(T::SpeedMax, "speed.max", s.max_speed, 0.0, 1000.0, s.max_speed > 0.0 ? "%.0f mm/s" : tr(T::NoLimit), 0.5f);
         mm(T::SpeedMaxFlow, "speed.max_flow", s.speed_max_flow, 0.0, 1000.0,
-           s.speed_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+           s.speed_max_flow > 0.0 ? "%.1f mm³/s" : tr(T::NoLimit), 0.1f);
         mm(T::FlowSlopeUp, "speed.flow_slope_up", s.flow_slope_up, 0.0, 1000.0,
-           s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
+           s.flow_slope_up > 0.0 ? "%.1f mm³/s²" : tr(T::NoLimit), 0.05f);
         mm(T::FlowSlopeDown, "speed.flow_slope_down", s.flow_slope_down, 0.0, 1000.0,
-           s.flow_slope_down > 0.0 ? "%.1f mm³/s²" : "—", 0.05f);
+           s.flow_slope_down > 0.0 ? "%.1f mm³/s²" : tr(T::NoLimit), 0.05f);
     } else if (id == "overhang_speeds") {
         flag(T::DynamicOverhangs, "speed.dynamic_overhangs", s.dynamic_overhangs);
         const T labels[4] = {T::Overhang0, T::Overhang1, T::Overhang2, T::Overhang3};
@@ -6521,7 +6535,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SupportUnderBridges, "support.under_bridges", s.support_under_bridges);
         whole(T::SupportEnforceLayers, "support.enforce_layers", s.support_enforce_layers, 0, 1000);
         mm(T::SupportFreeBridge, "support.free_bridge_length", s.support_free_bridge_length, 0.0, 1000.0,
-           s.support_free_bridge_length > 0.0 ? "%.0f mm" : "—", 0.5f);
+           s.support_free_bridge_length > 0.0 ? "%.0f mm" : tr(T::SumOff), 0.5f);
         if (shown("support.style"))
             changed |= row(T::SupportStyle, s.support_style,
                            {{SupportStyle::Grid, tr(T::SupportGrid)},
@@ -6544,13 +6558,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "gap") {
         mm(T::SupportZGap, "support.z_gap", s.support_z_gap, 0.0, 5.0, "%.2f mm", 0.01f);
         mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
-           s.support_bottom_z_gap > 0.0 ? "%.2f mm" : "—", 0.01f);
+           s.support_bottom_z_gap > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.01f);
         if (shown("support.xy_gap"))
             changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
-              s.support_bottom_interface_layers < 0 ? "—" : "%d");
+              s.support_bottom_interface_layers < 0 ? tr(T::AutoValue) : "%d");
         flag(T::SyncSupportLayers, "support.synchronize_layers", s.support_synchronize_layers);
         if (shown("support.interface_pattern"))
             changed |= row(T::SupportInterfacePatternRow, s.support_interface_pattern,
@@ -6558,7 +6572,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {SupportInterfacePattern::Concentric, tr(T::ConcentricInfill)},
                             {SupportInterfacePattern::Automatic, tr(T::PatternAutomatic)}});
         mm(T::SupportInterfaceSpacing, "support.interface_spacing", s.support_interface_spacing, 0.0, 100.0,
-           s.support_interface_spacing > 0.0 ? "%.2f mm" : "—", 0.01f);
+           "%.2f mm", 0.01f);
         flag(T::SupportContactLoops, "support.interface_contact_loops", s.support_contact_loops);
     } else if (id == "pattern") {
         mm(T::SupportSpacing, "support.spacing", s.support_spacing, 0.5, 20.0, "%.2f mm", 0.01f);
@@ -6583,7 +6597,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SkirtDistance, "adhesion.skirt_distance", s.skirt_distance, 0.0, 50.0, "%.1f mm", 0.05f);
         whole(T::SkirtLayers, "adhesion.skirt_layers", s.skirt_layers, 1, 100);
         mm(T::SkirtMinFilament, "adhesion.skirt_min_filament", s.skirt_min_filament, 0.0, 100000.0,
-           s.skirt_min_filament > 0.0 ? "%.0f mm" : "—", 1.0f);
+           s.skirt_min_filament > 0.0 ? "%.0f mm" : tr(T::SumOff), 1.0f);
         if (shown("adhesion.draft_shield"))
             changed |= row(T::DraftShieldRow, s.draft_shield,
                            {{DraftShield::Disabled, tr(T::ShieldDisabled)},
@@ -6690,7 +6704,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {CurvedFlow::Uniform, tr(T::CurvedFlowUniform)},
                             {CurvedFlow::Off, tr(T::CurvedFlowOff)}});
         mm(T::CurvedUniformFlow, "curved.uniform_flow", s.curved_uniform_flow, 0.0, 1000.0,
-           s.curved_uniform_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+           s.curved_uniform_flow > 0.0 ? "%.1f mm³/s" : tr(T::AutoValue), 0.1f);
         mm(T::CurvedOverhangThreshold, "curved.overhang_threshold", s.curved_overhang_threshold, 10.0, 80.0, "%.0f°", 0.5f);
     } else if (id == "interlocking") {
         // Beams between materials (multi_extruder.md, rules 17 and 18).
@@ -6784,7 +6798,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::VerboseComments, "gcode.verbose_comments", s.verbose_comments);
         flag(T::GcodeArcs, "gcode.arcs", s.gcode_arcs);
         mm(T::CornerSmoothing, "gcode.corner_smoothing", s.corner_smoothing, 0.0, 0.05,
-           s.corner_smoothing > 0.0 ? "%.3f mm" : "—", 0.0005f);
+           s.corner_smoothing > 0.0 ? "%.3f mm" : tr(T::SumOff), 0.0005f);
         flag(T::GcodeBinary, "gcode.binary", s.gcode_binary);
     } else if (id == "slicing") {
         if (shown("slicing.fill_mode"))
@@ -6805,10 +6819,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "chamber") {
         mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 200.0, "%.0f °C", 0.5f);
         mm(T::ChamberMinTemp, "extrusion.chamber_min_temperature", s.chamber_min_temperature, 0.0, 200.0,
-           s.chamber_min_temperature > 0.0 ? "%.0f °C" : "—", 0.5f);
+           s.chamber_min_temperature > 0.0 ? "%.0f °C" : tr(T::SumOff), 0.5f);
     } else if (id == "price") {
         mm(T::FilamentDensity, "extrusion.density", s.filament_density, 0.0, 30.0,
-           s.filament_density > 0.0 ? "%.2f g/cm³" : "—", 0.005f);
+           s.filament_density > 0.0 ? "%.2f g/cm³" : tr(T::NotSet), 0.005f);
         mm(T::FilamentCost, "extrusion.cost", s.filament_cost, 0.0, 1e6, "%.2f", 0.1f);
         mm(T::SpoolWeight, "extrusion.spool_weight", s.spool_weight, 0.0, 1e6, "%.0f g", 1.0f);
     } else if (id == "shrinkage") {
@@ -6864,16 +6878,16 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {
         mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 10000.0,
-           s.filament_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
+           s.filament_max_flow > 0.0 ? "%.1f mm³/s" : tr(T::NoLimit), 0.1f);
         mm(T::InfillMaxSpeed, "extrusion.infill_max_speed", s.infill_max_speed, 0.0, 1000.0,
-           s.infill_max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+           s.infill_max_speed > 0.0 ? "%.0f mm/s" : tr(T::NoLimit), 0.5f);
         mm(T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed", s.infill_max_crossing_speed, 0.0, 1000.0,
-           s.infill_max_crossing_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+           s.infill_max_crossing_speed > 0.0 ? "%.0f mm/s" : tr(T::NoLimit), 0.5f);
     } else if (id == "retraction") {
         mm(T::Retraction, "retraction.length", s.retract_length, 0.0, 50.0, "%.2f mm", 0.01f);
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
-           s.unretract_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
+           s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
         mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
         flag(T::WipeRow, "retraction.wipe", s.wipe);
@@ -6882,14 +6896,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 10.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
-        mm(T::LiftAbove, "retraction.lift_above", s.lift_above, 0.0, 10000.0, s.lift_above > 0.0 ? "%.2f mm" : "—", 0.05f);
-        mm(T::LiftBelow, "retraction.lift_below", s.lift_below, 0.0, 10000.0, s.lift_below > 0.0 ? "%.2f mm" : "—", 0.05f);
+        mm(T::LiftAbove, "retraction.lift_above", s.lift_above, 0.0, 10000.0, s.lift_above > 0.0 ? "%.2f mm" : tr(T::NoLimit), 0.05f);
+        mm(T::LiftBelow, "retraction.lift_below", s.lift_below, 0.0, 10000.0, s.lift_below > 0.0 ? "%.2f mm" : tr(T::NoLimit), 0.05f);
         flag(T::RampingLift, "travel.ramping_lift", s.ramping_lift);
         mm(T::TravelSlope, "travel.slope", s.travel_slope, 0.0, 89.0, "%.1f°", 0.1f);
-        mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : "—", 0.01f);
+        mm(T::MaxLift, "travel.max_lift", s.max_lift, 0.0, 10.0, s.max_lift > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.01f);
         flag(T::LiftBeforeObstacle, "travel.lift_before_obstacle", s.lift_before_obstacle);
     } else if (id == "coast") {
-        mm(T::Coast, "retraction.coast", s.coast, 0.0, 20.0, s.coast > 0.0 ? "%.2f mm" : "—", 0.01f);
+        mm(T::Coast, "retraction.coast", s.coast, 0.0, 20.0, s.coast > 0.0 ? "%.2f mm" : tr(T::SumOff), 0.01f);
     } else if (id == "material_retraction") {
         count(T::FilamentRetractionRow, "extrusion.retraction", s.filament_retraction.size());
     } else if (id == "needs") {

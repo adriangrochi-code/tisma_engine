@@ -718,7 +718,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "wipe_tower")
         return s.wipe_tower ? format(T::SumMm, number(s.wipe_tower_width).c_str()) : tr(T::SumOff);
     if (id == "wipe_tower_more")
-        return number(s.wipe_tower_extra_spacing, 0) + " % · " + number(s.wipe_tower_extra_flow, 0) + " %";
+        return format(T::SumSpacingFlow, number(s.wipe_tower_extra_spacing, 0).c_str(),
+                      number(s.wipe_tower_extra_flow, 0).c_str()); // what each % is (TR10)
     if (id == "fuzzy")
         return s.fuzzy_mode == FuzzyMode::None       ? tr(T::FuzzyNone)
                : s.fuzzy_mode == FuzzyMode::External ? tr(T::FuzzyExternal)
@@ -824,9 +825,12 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : std::string(tr(T::NotSet));
     if (id == "accelerations")
         return format(T::SumAccel, number(s.acceleration, 0).c_str());
-    if (id == "max_temps")
-        return format(T::SumMaxTemps, s.max_nozzle_temp > 0.0 ? number(s.max_nozzle_temp, 0).c_str() : "—",
-                      s.max_bed_temp > 0.0 ? number(s.max_bed_temp, 0).c_str() : "—");
+    if (id == "max_temps") { // «Sin dato» for a maximum not known, as the rows say (the spec team's TR19)
+        const auto temp = [&](double v) { return v > 0.0 ? number(v, 0) + " °C" : std::string(tr(T::NotSet)); };
+        if (!(s.max_nozzle_temp > 0.0) && !(s.max_bed_temp > 0.0))
+            return tr(T::NotSet);
+        return format(T::SumMaxTemps, temp(s.max_nozzle_temp).c_str(), temp(s.max_bed_temp).c_str());
+    }
     if (id == "firmware") {
         switch (s.flavor) {
         case GcodeFlavor::Marlin:

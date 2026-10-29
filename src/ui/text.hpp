@@ -847,7 +847,7 @@
     X(ArcsSpeed, "Velocidad de los arcos", "Arc speed") \
     X(ArcsMaxDistance, "Hasta qué distancia", "Up to") \
     X(SumArcs, "Arcos a %s mm/s", "Arcs at %s mm/s") \
-    X(SumNoArcs, "Sin arcos", "No arcs") \
+    X(SumNoArcs, "Apagado", "Off") \
     X(SubSupportPattern, "Patrón", "Pattern") \
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \
@@ -983,7 +983,7 @@
     X(SumLayersN, "%d capas", "%d layers") \
     X(SumSkirt, "%d vueltas a %s mm", "%d loops at %s mm") \
     X(SumNoSkirt, "Sin falda", "No skirt") \
-    X(SumNoBrim, "Sin borde", "No brim") \
+    X(SumNoBrim, "Apagado", "Off") \
     X(SumNormalPrint, "Normal", "Normal") \
     X(SumResolution, "Resolución %s mm", "Resolution %s mm") \
     X(SumTemp, "%d °C", "%d °C") \
@@ -1007,7 +1007,7 @@
     X(SumHardened, "%s mm · acero endurecido", "%s mm · hardened steel") \
     X(SumFeeds, "%s mm/s en X e Y", "%s mm/s in X and Y") \
     X(SumAccel, "%s mm/s²", "%s mm/s²") \
-    X(SumMaxTemps, "%s °C · %s °C", "%s °C · %s °C") \
+    X(SumMaxTemps, "Boquilla %s · cama %s", "Nozzle %s · bed %s") \
     X(SumLines, "%d líneas · %d líneas", "%d lines · %d lines") \
     X(SumVariables, "%d variables", "%d variables") \
     X(ScarfMode, "Costura en bufanda", "Scarf seam") \
@@ -1148,7 +1148,7 @@
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
-    X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \
+    X(SkirtMinFilament, "Filamento mínimo", "Minimum filament") \
     X(AutoTemperatures, "Temperaturas automáticas", "Automatic temperatures") \
     X(SubOutputFile, "Archivo de salida", "Output file") \
     X(FilenameFormat, "Nombre del archivo", "File name") \
@@ -1440,6 +1440,7 @@
     X(ShrinkageZ, "Contracción en Z", "Shrinkage in Z") \
     X(SumNoShrinkage, "Sin compensar", "Not compensated") \
     X(SumShrinkage, "XY %s %% · Z %s %%", "XY %s %% · Z %s %%") \
+    X(SumSpacingFlow, "Separación %s %% · flujo %s %%", "Spacing %s %% · flow %s %%") \
     X(SumDensity, "%s g/cm³", "%s g/cm³") \
     X(ColorChangeGcode, "Cambio de color", "Colour change") \
     X(PauseGcode, "Pausa", "Pause") \

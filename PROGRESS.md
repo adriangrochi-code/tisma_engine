@@ -8050,3 +8050,25 @@ Las pruebas medidas con 0,4 lo dicen ahora: la impresora de pruebas (`test_print
 hace con las velocidades, y las que arman `Settings` a mano (superficies, piel difusa, análisis, `slice_model`)
 ponen 0,4. Prueba nueva: el ancho automático (0,45; 0,675 con boquilla de 0,6; 0,9 con 0,8) y las tiras del informe
 con el ancho por defecto (1,0 y 1,15: 2; 1,2 y 1,45: 3; 1,5 y 1,95: 4; 2,0: 5). Pasan las 798 pruebas.
+
+## 2026-10-29: textos del panel (TR8, TR10, TR11, TR15, TR19)
+
+Del informe del equipo de fichas sobre las páginas en español:
+- **TR8, guiones sueltos:** los 31 campos que mostraban «—» con 0 dicen ahora lo que hace el 0 según `docs/CONFIG.md`:
+  «Automático» (sale de otro valor: anchos, ángulo de puente, velocidades derivadas, `max_link`, `bottom_z_gap`,
+  `max_lift`…), «Sin límite» (topes de velocidad, caudal y rampas, desvío, `lift_above`/`lift_below`), «Apagado»
+  (`coast`, suavizado de esquinas, filamento mínimo de la falda, espera de cámara, largo libre de puente) o
+  «Sin dato» (densidad). `support.interface_spacing` muestra su 0,00 mm (0 es un valor: líneas juntas). Las
+  velocidades de cada tipo en 0 dicen «Automático».
+- **TR15:** la lista de calibraciones lleva la unidad de cada valor (%, mm, mm/s, mm³/s, mm/s², s) y «Sin dato» o
+  «Sin límite» en lugar del guion.
+- **TR10 y TR19.2:** «Más de la torre de purga» dice «Separación 100 % · flujo 100 %»; «Temperaturas máximas» dice
+  «Boquilla 260 °C · cama 110 °C», con «Sin dato» en lo que no se sabe (y solo «Sin dato» si no se sabe ninguna).
+- **TR11:** «Sin borde» y «Sin arcos» pasan a «Apagado», como la balsa y las demás tarjetas.
+- **TR19.1:** «Filamento mínimo de la falda» pasa a «Filamento mínimo» (la tarjeta ya es la de la falda): el botón (i)
+  vuelve a entrar en la columna.
+- El título violeta de «Modo silencioso» es el color de cuando el mouse está encima (la captura lo tenía ahí), no una
+  marca de cambio.
+
+Mirado con `--dump-ui` (la fila de la falda, ninguna etiqueta cortada). Pasan las 136 pruebas de interfaz, textos y
+límites.

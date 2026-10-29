@@ -359,6 +359,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- **Textos del panel (TR8, TR10, TR11, TR15, TR19):** ningún campo vacío muestra un guion suelto: dice «Automático»,
+  «Sin límite», «Apagado» o «Sin dato» según lo que hace el 0; la lista de calibraciones lleva las unidades; los
+  resúmenes dicen qué es cada número («Separación 100 % · flujo 100 %», «Boquilla 260 °C · cama Sin dato»); lo
+  apagado dice «Apagado» en todas las tarjetas; «Filamento mínimo» de la falda ya no empuja el botón (i) afuera.
 - **Perímetros escalonados con capas de alturas distintas:** un G-code bueno no pasaba su chequeo cuando la última capa
   era más fina que la de abajo (el tope del chequeo no contaba la media capa de los cordones levantados).
 - **Un tope de velocidad de menos de 1 mm/min** (por ejemplo `extrusion.infill_max_speed` 0,002) escribía `F0` y el
