@@ -199,6 +199,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Topes del panel (UI20):** 33 campos numéricos se cortaban antes del máximo documentado (alto de la primera capa,
+  retracción, temperaturas de cámara y cama, anchos, capas sólidas…); ahora llegan a todo su rango, y una prueba
+  compara cada tope con `docs/CONFIG.md`.
+- **TR16:** el botón de la conexión dice «Abrir la pestaña Impresora», como el texto de al lado.
+
 - **Un modelo grande quedaba con su copia simplificada después de mover la vista una vez** (más de un millón de
   triángulos): la copia de mover la cámara se mostraba para siempre, con menos detalle, porque el programa contaba los
   cuadros solo en las capturas. Ahora vuelve el modelo completo apenas la cámara se detiene.

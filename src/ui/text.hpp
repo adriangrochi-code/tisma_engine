@@ -920,7 +920,7 @@
     X(CalibratedCount, "%d de %d calibradas", "%d of %d calibrated") \
     X(CalibrateInOrder, "Calibrar en orden", "Calibrate in order") \
     X(CalibrateButton, "Calibrar", "Calibrate") \
-    X(OpenInDevices, "Abrir en Dispositivos", "Open in Devices") \
+    X(OpenInDevices, "Abrir la pestaña Impresora", "Open the Printer tab") \
     X(ConnectionNone, "Sin conectar. La conexión por USB está en la pestaña Impresora.", "Not connected. The USB connection is in the Printer tab.") \
     X(ConnectionNow, "Conectada por USB: %s", "Connected by USB: %s") \
     X(NotesHint, "Notas sobre esta impresora: arreglos, repuestos, lo que sirvió…", "Notes about this printer: fixes, spare parts, what worked…") \

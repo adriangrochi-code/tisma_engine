@@ -1,0 +1,14 @@
+# Numbers near the top of their docs/CONFIG.md range are kept, not cut to a
+# narrower panel limit (the spec team's UI20).
+click layers.first_height
+select-all
+type 9,1
+key enter
+wait 3
+expect layers.first_height 9.1
+click retraction.length
+select-all
+type 45
+key enter
+wait 3
+expect retraction.length 45

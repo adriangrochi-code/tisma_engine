@@ -7755,3 +7755,22 @@ Mirado en capturas de Preparar y Vista previa a 1200 × 760. Sin probar: «Manda
 (la simulada de las pruebas del dispositivo no se conecta desde el script).
 
 **Sigue:** el paso 5 de la vista previa (capas lejanas juntas, mallado voraz).
+
+## 2026-10-29 (noche): UI20, los topes del panel según `docs/CONFIG.md`, y TR16
+
+Informe del equipo de fichas (UI20, misma clase que UI16): 24 campos del panel se cortaban por debajo del máximo de
+`docs/CONFIG.md` (por ejemplo, `layers.first_height` en 1 mm con 0,01 a 10, `retraction.length` en 20 con 0 a 50).
+En vez de arreglar solo esos, `tools/check_ui_limits.py` (prueba `ui_limits_check`) lee los topes de cada fila
+numérica del panel (`mm(...)` y `whole(...)` en `apps/tisma/app.cpp`) y los compara con la columna de rango de su
+fila en `docs/CONFIG.md`; «más de 0 a N» deja el mínimo libre por encima de 0. Con el código de antes encuentra 33:
+los 24 del informe y 9 más (`walls.outer_width` 2 → 40, `surfaces.top_min_thickness` y `bottom_min_thickness`
+10 → 100, `infill.dense_density` desde 0, `speed.max_flow` 200 → 1000, `fuzzy.thickness` 2 → 5,
+`fuzzy.point_distance` 5 → 20, `machine.min_layer_height` y `max_layer_height` 2 → 10). Ahora, 186 rangos y ninguno
+corto. `--dump-ui` también escribe el mínimo y el máximo de cada fila numérica (`min`, `max`).
+
+Prueba `ui_script_wide_limits`, el caso del informe: 9,1 en el alto de la primera capa queda 9,1 (antes, 1,0), y 45
+en la retracción queda 45. TR16: el botón de la conexión decía «Abrir en Dispositivos» y el texto, «la pestaña
+Impresora»; ahora el botón dice «Abrir la pestaña Impresora».
+
+**No cubierto:** las filas que no son `mm` ni `whole` (velocidades en mm/s o %, `unit_row`, listas) no las mira el
+verificador; tampoco si cada tope muestra su aviso.
